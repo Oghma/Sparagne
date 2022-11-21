@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 config = "0.13.2"
+crossterm = "0.25.0"
 rusqlite = { version = "0.28.0", features = ["bundled"] }
 serde = "1.0.147"
 serde_derive = "1.0.147"
+tui = "0.19.0"
