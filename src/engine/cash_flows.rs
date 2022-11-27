@@ -4,7 +4,7 @@
 //! - [`UnBounded`]
 //! - [`Bounded`]
 //! - [`HardBounded`]
-use crate::entry::Entry;
+use super::entry::Entry;
 
 /// `CashFlow` trait. Base requirements for a `CashFlow`.
 trait CashFlow {
