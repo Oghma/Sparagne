@@ -208,6 +208,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_derive",
+ "thiserror",
  "tui",
 ]
 
