@@ -7,7 +7,7 @@
 use super::entry::Entry;
 
 /// `CashFlow` trait. Base requirements for a `CashFlow`.
-trait CashFlow {
+pub trait CashFlow {
     fn add_entry(&mut self, balance: f64, category: String, note: String) -> Result<(), &str> {
         let entry = Entry::new(balance, category, note);
         self.insert(entry)
@@ -18,14 +18,14 @@ trait CashFlow {
 
 /// An unlimited Cash flow. It has no upper limit.
 #[derive(Debug)]
-struct UnBounded {
+pub struct UnBounded {
     name: String,
     balance: f64,
     entries: Vec<Entry>,
 }
 
 impl UnBounded {
-    fn new(name: String, balance: f64) -> Self {
+    pub fn new(name: String, balance: f64) -> Self {
         Self {
             name,
             balance,
@@ -46,7 +46,7 @@ impl CashFlow for UnBounded {
 ///
 /// The **sum** of income **and** expenses cannot exceed max_balance.
 #[derive(Debug)]
-struct Bounded {
+pub struct Bounded {
     name: String,
     balance: f64,
     max_balance: f64,
@@ -54,7 +54,7 @@ struct Bounded {
 }
 
 impl Bounded {
-    fn new(name: String, balance: f64, max_balance: f64) -> Self {
+    pub fn new(name: String, balance: f64, max_balance: f64) -> Self {
         Self {
             name,
             balance,
@@ -80,7 +80,7 @@ impl CashFlow for Bounded {
 ///
 /// The **sum** of income cannot exceed max_balance. The expenses are ignored from the sum.
 #[derive(Debug)]
-struct HardBounded {
+pub struct HardBounded {
     name: String,
     balance: f64,
     max_balance: f64,
@@ -89,7 +89,7 @@ struct HardBounded {
 }
 
 impl HardBounded {
-    fn new(name: String, balance: f64, max_balance: f64) -> Self {
+    pub fn new(name: String, balance: f64, max_balance: f64) -> Self {
         Self {
             name,
             balance,
