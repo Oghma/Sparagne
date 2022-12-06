@@ -5,15 +5,21 @@
 //! - [`Bounded`]
 //! - [`HardBounded`]
 use super::entry::Entry;
+use super::errors::EngineError;
 
 /// `CashFlow` trait. Base requirements for a `CashFlow`.
 pub trait CashFlow {
-    fn add_entry(&mut self, balance: f64, category: String, note: String) -> Result<(), &str> {
+    fn add_entry(
+        &mut self,
+        balance: f64,
+        category: String,
+        note: String,
+    ) -> Result<(), EngineError> {
         let entry = Entry::new(balance, category, note);
         self.insert(entry)
     }
 
-    fn insert(&mut self, entry: Entry) -> Result<(), &str>;
+    fn insert(&mut self, entry: Entry) -> Result<(), EngineError>;
 }
 
 /// An unlimited Cash flow. It has no upper limit.
@@ -35,7 +41,7 @@ impl UnBounded {
 }
 
 impl CashFlow for UnBounded {
-    fn insert(&mut self, entry: Entry) -> Result<(), &str> {
+    fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
         self.balance += entry.amount;
         self.entries.push(entry);
         Ok(())
@@ -65,9 +71,9 @@ impl Bounded {
 }
 
 impl CashFlow for Bounded {
-    fn insert(&mut self, entry: Entry) -> Result<(), &str> {
+    fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
         if entry.amount > 0f64 && self.balance + entry.amount > self.max_balance {
-            Err("Max balance reached!")
+            Err(EngineError::MaxBalanceReached(self.name.clone()))
         } else {
             self.balance += entry.amount;
             self.entries.push(entry);
@@ -101,9 +107,9 @@ impl HardBounded {
 }
 
 impl CashFlow for HardBounded {
-    fn insert(&mut self, entry: Entry) -> Result<(), &str> {
+    fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
         if entry.amount > 0f64 && self.total_balance + entry.amount > self.max_balance {
-            Err("Max balance reached!")
+            Err(EngineError::MaxBalanceReached(self.name.clone()))
         } else {
             if entry.amount > 0f64 {
                 self.total_balance += entry.amount;
@@ -149,7 +155,7 @@ mod tests {
     fn fail_add_entry_bounded() {
         let mut flow = Bounded::new("Cash".to_string(), 0f64, 3f64);
         match flow.add_entry(4.44, "Income".to_string(), "Weekly".to_string()) {
-            Err(error) => assert_eq!(error, "Max balance reached!"),
+            Err(error) => assert_eq!(error, EngineError::MaxBalanceReached("Cash".to_string())),
             _ => panic!("Entry added"),
         }
         assert_eq!(flow.name, "Cash".to_string());
@@ -173,7 +179,7 @@ mod tests {
     fn fail_add_entry_hard_bounded() {
         let mut flow = HardBounded::new("Cash".to_string(), 0f64, 3f64);
         match flow.add_entry(4.44, "Income".to_string(), "Weekly".to_string()) {
-            Err(error) => assert_eq!(error, "Max balance reached!"),
+            Err(error) => assert_eq!(error, EngineError::MaxBalanceReached("Cash".to_string())),
             _ => panic!("Entry added"),
         }
         assert_eq!(flow.name, "Cash".to_string());
