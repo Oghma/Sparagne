@@ -19,6 +19,7 @@ pub trait CashFlow {
         self.insert(entry)
     }
 
+    fn archive(&mut self);
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError>;
 }
 
@@ -28,6 +29,7 @@ pub struct UnBounded {
     name: String,
     balance: f64,
     entries: Vec<Entry>,
+    archived: bool,
 }
 
 impl UnBounded {
@@ -36,11 +38,16 @@ impl UnBounded {
             name,
             balance,
             entries: Vec::new(),
+            archived: false,
         }
     }
 }
 
 impl CashFlow for UnBounded {
+    fn archive(&mut self) {
+        self.archived = true
+    }
+
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
         self.balance += entry.amount;
         self.entries.push(entry);
@@ -57,6 +64,7 @@ pub struct Bounded {
     balance: f64,
     max_balance: f64,
     entries: Vec<Entry>,
+    archived: bool,
 }
 
 impl Bounded {
@@ -66,11 +74,16 @@ impl Bounded {
             balance,
             max_balance,
             entries: Vec::new(),
+            archived: false,
         }
     }
 }
 
 impl CashFlow for Bounded {
+    fn archive(&mut self) {
+        self.archived = true
+    }
+
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
         if entry.amount > 0f64 && self.balance + entry.amount > self.max_balance {
             Err(EngineError::MaxBalanceReached(self.name.clone()))
@@ -92,6 +105,7 @@ pub struct HardBounded {
     max_balance: f64,
     total_balance: f64,
     entries: Vec<Entry>,
+    archived: bool,
 }
 
 impl HardBounded {
@@ -102,11 +116,16 @@ impl HardBounded {
             max_balance,
             total_balance: balance,
             entries: Vec::new(),
+            archived: false,
         }
     }
 }
 
 impl CashFlow for HardBounded {
+    fn archive(&mut self) {
+        self.archived = true
+    }
+
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
         if entry.amount > 0f64 && self.total_balance + entry.amount > self.max_balance {
             Err(EngineError::MaxBalanceReached(self.name.clone()))
@@ -184,5 +203,29 @@ mod tests {
         }
         assert_eq!(flow.name, "Cash".to_string());
         assert_eq!(flow.balance, 0f64);
+    }
+
+    #[test]
+    fn check_bounded_archived() {
+        let mut flow = Bounded::new("Cash".to_string(), 0f64, 3f64);
+        assert_eq!(flow.archived, false);
+        flow.archive();
+        assert_eq!(flow.archived, true);
+    }
+
+    #[test]
+    fn check_unbounded_archived() {
+        let mut flow = UnBounded::new("Cash".to_string(), 0f64);
+        assert_eq!(flow.archived, false);
+        flow.archive();
+        assert_eq!(flow.archived, true);
+    }
+
+    #[test]
+    fn check_hard_bounded_archived() {
+        let mut flow = HardBounded::new("Cash".to_string(), 0f64, 3f64);
+        assert_eq!(flow.archived, false);
+        flow.archive();
+        assert_eq!(flow.archived, true);
     }
 }
