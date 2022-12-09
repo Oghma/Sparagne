@@ -21,6 +21,13 @@ pub trait CashFlow {
 
     fn archive(&mut self);
     fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError>;
+    fn update_entry(
+        &mut self,
+        id: &uuid::Uuid,
+        balance: f64,
+        category: String,
+        note: String,
+    ) -> Result<(), EngineError>;
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError>;
 }
 
@@ -64,6 +71,28 @@ impl CashFlow for UnBounded {
         self.balance += entry.amount;
         self.entries.push(entry);
         Ok(())
+    }
+
+    fn update_entry(
+        &mut self,
+        id: &uuid::Uuid,
+        amount: f64,
+        category: String,
+        note: String,
+    ) -> Result<(), EngineError> {
+        match self.entries.iter().position(|entry| entry.id == *id) {
+            Some(index) => {
+                let entry = &mut self.entries[index];
+                self.balance = self.balance - entry.amount + amount;
+
+                entry.amount = amount;
+                entry.category = category;
+                entry.note = note;
+
+                Ok(())
+            }
+            None => Err(EngineError::KeyNotFound(id.to_string())),
+        }
     }
 }
 
@@ -114,6 +143,33 @@ impl CashFlow for Bounded {
             self.balance += entry.amount;
             self.entries.push(entry);
             Ok(())
+        }
+    }
+
+    fn update_entry(
+        &mut self,
+        id: &uuid::Uuid,
+        amount: f64,
+        category: String,
+        note: String,
+    ) -> Result<(), EngineError> {
+        match self.entries.iter().position(|entry| entry.id == *id) {
+            Some(index) => {
+                let entry = &mut self.entries[index];
+                let new_balance = self.balance - entry.amount + amount;
+
+                if new_balance > self.max_balance {
+                    return Err(EngineError::MaxBalanceReached(self.name.clone()));
+                }
+
+                self.balance = new_balance;
+                entry.amount = amount;
+                entry.category = category;
+                entry.note = note;
+
+                Ok(())
+            }
+            None => Err(EngineError::KeyNotFound(id.to_string())),
         }
     }
 }
@@ -170,6 +226,36 @@ impl CashFlow for HardBounded {
             self.balance += entry.amount;
             self.entries.push(entry);
             Ok(())
+        }
+    }
+
+    fn update_entry(
+        &mut self,
+        id: &uuid::Uuid,
+        amount: f64,
+        category: String,
+        note: String,
+    ) -> Result<(), EngineError> {
+        match self.entries.iter().position(|entry| entry.id == *id) {
+            Some(index) => {
+                let entry = &mut self.entries[index];
+                // Check if the entry or the update is an income and if the updates does not
+                // exceed `max_balance`
+                if entry.amount > 0f64 || amount > 0f64 {
+                    if self.total_balance - entry.amount + amount > self.max_balance {
+                        return Err(EngineError::MaxBalanceReached(self.name.clone()));
+                    }
+                    self.total_balance = self.total_balance - entry.amount + amount;
+                }
+
+                self.balance = self.balance - entry.amount + amount;
+                entry.amount = amount;
+                entry.category = category;
+                entry.note = note;
+
+                Ok(())
+            }
+            None => Err(EngineError::KeyNotFound(id.to_string())),
         }
     }
 }
@@ -303,5 +389,122 @@ mod tests {
 
         assert_eq!(flow.balance, 0f64);
         assert_eq!(flow.entries.is_empty(), true)
+    }
+
+    #[test]
+    fn update_entry_unbounded() {
+        let mut flow = unbounded_flow();
+        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+        let entry_id = flow.entries[0].id;
+
+        flow.update_entry(
+            &entry_id,
+            10f64,
+            String::from("Income"),
+            String::from("Monthly"),
+        )
+        .unwrap();
+        let entry = &flow.entries[0];
+
+        assert_eq!(flow.balance, 10f64);
+        assert_eq!(entry.amount, 10f64);
+        assert_eq!(entry.category, String::from("Income"));
+        assert_eq!(entry.note, String::from("Monthly"))
+    }
+
+    #[test]
+    fn update_entry_bounded() {
+        let mut flow = bounded_flow();
+        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+        let entry_id = flow.entries[0].id;
+
+        flow.update_entry(
+            &entry_id,
+            10f64,
+            String::from("Income"),
+            String::from("Monthly"),
+        )
+        .unwrap();
+        let entry = &flow.entries[0];
+
+        assert_eq!(flow.balance, 10f64);
+        assert_eq!(entry.amount, 10f64);
+        assert_eq!(entry.category, String::from("Income"));
+        assert_eq!(entry.note, String::from("Monthly"))
+    }
+
+    #[test]
+    fn update_entry_hard_bounded() {
+        let mut flow = hard_bounded_flow();
+        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+        let entry_id = flow.entries[0].id;
+
+        flow.update_entry(
+            &entry_id,
+            10f64,
+            String::from("Income"),
+            String::from("Monthly"),
+        )
+        .unwrap();
+        let entry = &flow.entries[0];
+
+        assert_eq!(flow.balance, 10f64);
+        assert_eq!(entry.amount, 10f64);
+        assert_eq!(entry.category, String::from("Income"));
+        assert_eq!(entry.note, String::from("Monthly"))
+    }
+
+    #[test]
+    #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
+    fn fail_update_entry_bounded() {
+        let mut flow = bounded_flow();
+        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+        let entry_id = flow.entries[0].id;
+
+        flow.update_entry(
+            &entry_id,
+            20f64,
+            String::from("Income"),
+            String::from("Monthly"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
+    fn fail_update_entry_hard_bounded() {
+        let mut flow = hard_bounded_flow();
+        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+        let entry_id = flow.entries[0].id;
+
+        flow.update_entry(
+            &entry_id,
+            20f64,
+            String::from("Income"),
+            String::from("Monthly"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
+    fn fail_update_income_expense_switch() {
+        let mut flow = hard_bounded_flow();
+        flow.add_entry(-1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+        let entry_id = flow.entries[0].id;
+
+        flow.update_entry(
+            &entry_id,
+            20f64,
+            String::from("Income"),
+            String::from("Monthly"),
+        )
+        .unwrap();
     }
 }
