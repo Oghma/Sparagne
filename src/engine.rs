@@ -26,8 +26,8 @@ impl Engine {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<(), errors::EngineError> {
         let flow = self.chash_flows.get_mut(&cash_flow).unwrap();
+    ) -> Result<uuid::Uuid, errors::EngineError> {
         flow.add_entry(amount, category, note)
     }
 
