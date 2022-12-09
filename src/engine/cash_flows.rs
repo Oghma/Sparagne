@@ -144,9 +144,21 @@ impl CashFlow for HardBounded {
 mod tests {
     use super::*;
 
+    fn bounded_flow() -> Bounded {
+        Bounded::new(String::from("Cash"), 0f64, 10f64)
+    }
+
+    fn unbounded_flow() -> UnBounded {
+        UnBounded::new(String::from("Cash"), 0f64)
+    }
+
+    fn hard_bounded_flow() -> HardBounded {
+        HardBounded::new(String::from("Cash"), 0f64, 10f64)
+    }
+
     #[test]
     fn add_entry_unbounded() {
-        let mut flow = UnBounded::new("Cash".to_string(), 0f64);
+        let mut flow = unbounded_flow();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
         let entry = &flow.entries[0];
@@ -159,7 +171,7 @@ mod tests {
 
     #[test]
     fn add_entry_bounded() {
-        let mut flow = Bounded::new("Cash".to_string(), 0f64, 10f64);
+        let mut flow = bounded_flow();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
         let entry = &flow.entries[0];
@@ -171,19 +183,16 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
     fn fail_add_entry_bounded() {
-        let mut flow = Bounded::new("Cash".to_string(), 0f64, 3f64);
-        match flow.add_entry(4.44, "Income".to_string(), "Weekly".to_string()) {
-            Err(error) => assert_eq!(error, EngineError::MaxBalanceReached("Cash".to_string())),
-            _ => panic!("Entry added"),
-        }
-        assert_eq!(flow.name, "Cash".to_string());
-        assert_eq!(flow.balance, 0f64);
+        let mut flow = bounded_flow();
+        flow.add_entry(20.44, "Income".to_string(), "Weekly".to_string())
+            .unwrap()
     }
 
     #[test]
     fn add_entry_hard_bounded() {
-        let mut flow = HardBounded::new("Cash".to_string(), 0f64, 10f64);
+        let mut flow = hard_bounded_flow();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
         let entry = &flow.entries[0];
@@ -195,19 +204,16 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
     fn fail_add_entry_hard_bounded() {
-        let mut flow = HardBounded::new("Cash".to_string(), 0f64, 3f64);
-        match flow.add_entry(4.44, "Income".to_string(), "Weekly".to_string()) {
-            Err(error) => assert_eq!(error, EngineError::MaxBalanceReached("Cash".to_string())),
-            _ => panic!("Entry added"),
-        }
-        assert_eq!(flow.name, "Cash".to_string());
-        assert_eq!(flow.balance, 0f64);
+        let mut flow = hard_bounded_flow();
+        flow.add_entry(20.44, "Income".to_string(), "Weekly".to_string())
+            .unwrap()
     }
 
     #[test]
     fn check_bounded_archived() {
-        let mut flow = Bounded::new("Cash".to_string(), 0f64, 3f64);
+        let mut flow = bounded_flow();
         assert_eq!(flow.archived, false);
         flow.archive();
         assert_eq!(flow.archived, true);
@@ -215,7 +221,7 @@ mod tests {
 
     #[test]
     fn check_unbounded_archived() {
-        let mut flow = UnBounded::new("Cash".to_string(), 0f64);
+        let mut flow = unbounded_flow();
         assert_eq!(flow.archived, false);
         flow.archive();
         assert_eq!(flow.archived, true);
@@ -223,7 +229,7 @@ mod tests {
 
     #[test]
     fn check_hard_bounded_archived() {
-        let mut flow = HardBounded::new("Cash".to_string(), 0f64, 3f64);
+        let mut flow = hard_bounded_flow();
         assert_eq!(flow.archived, false);
         flow.archive();
         assert_eq!(flow.archived, true);
