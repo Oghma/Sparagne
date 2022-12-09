@@ -6,6 +6,9 @@
 //! - [`HardBounded`]
 use super::entry::Entry;
 use super::errors::EngineError;
+pub use unbounded::UnBounded;
+
+mod unbounded;
 
 /// `CashFlow` trait. Base requirements for a `CashFlow`.
 pub trait CashFlow {
@@ -29,71 +32,6 @@ pub trait CashFlow {
         note: String,
     ) -> Result<(), EngineError>;
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError>;
-}
-
-/// An unlimited Cash flow. It has no upper limit.
-#[derive(Debug)]
-pub struct UnBounded {
-    name: String,
-    balance: f64,
-    entries: Vec<Entry>,
-    archived: bool,
-}
-
-impl UnBounded {
-    pub fn new(name: String, balance: f64) -> Self {
-        Self {
-            name,
-            balance,
-            entries: Vec::new(),
-            archived: false,
-        }
-    }
-}
-
-impl CashFlow for UnBounded {
-    fn archive(&mut self) {
-        self.archived = true
-    }
-
-    fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError> {
-        match self.entries.iter().position(|entry| entry.id == *id) {
-            Some(index) => {
-                let entry = self.entries.remove(index);
-                self.balance -= entry.amount;
-                Ok(())
-            }
-            None => Err(EngineError::KeyNotFound(id.to_string())),
-        }
-    }
-
-    fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
-        self.balance += entry.amount;
-        self.entries.push(entry);
-        Ok(())
-    }
-
-    fn update_entry(
-        &mut self,
-        id: &uuid::Uuid,
-        amount: f64,
-        category: String,
-        note: String,
-    ) -> Result<(), EngineError> {
-        match self.entries.iter().position(|entry| entry.id == *id) {
-            Some(index) => {
-                let entry = &mut self.entries[index];
-                self.balance = self.balance - entry.amount + amount;
-
-                entry.amount = amount;
-                entry.category = category;
-                entry.note = note;
-
-                Ok(())
-            }
-            None => Err(EngineError::KeyNotFound(id.to_string())),
-        }
-    }
 }
 
 /// A "soft" bounded by `max_balance` Cash flow.
@@ -268,25 +206,8 @@ mod tests {
         Bounded::new(String::from("Cash"), 0f64, 10f64)
     }
 
-    fn unbounded_flow() -> UnBounded {
-        UnBounded::new(String::from("Cash"), 0f64)
-    }
-
     fn hard_bounded_flow() -> HardBounded {
         HardBounded::new(String::from("Cash"), 0f64, 10f64)
-    }
-
-    #[test]
-    fn add_entry_unbounded() {
-        let mut flow = unbounded_flow();
-        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
-            .unwrap();
-        let entry = &flow.entries[0];
-        assert_eq!(flow.name, "Cash".to_string());
-        assert_eq!(flow.balance, 1.23);
-        assert_eq!(entry.amount, 1.23);
-        assert_eq!(entry.category, "Income".to_string());
-        assert_eq!(entry.note, "Weekly".to_string());
     }
 
     #[test]
@@ -340,14 +261,6 @@ mod tests {
     }
 
     #[test]
-    fn check_unbounded_archived() {
-        let mut flow = unbounded_flow();
-        assert_eq!(flow.archived, false);
-        flow.archive();
-        assert_eq!(flow.archived, true);
-    }
-
-    #[test]
     fn check_hard_bounded_archived() {
         let mut flow = hard_bounded_flow();
         assert_eq!(flow.archived, false);
@@ -368,18 +281,6 @@ mod tests {
     }
 
     #[test]
-    fn delete_entry_unbounded() {
-        let mut flow = unbounded_flow();
-        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
-            .unwrap();
-        let entry_id = flow.entries[0].id;
-        flow.delete_entry(&entry_id).unwrap();
-
-        assert_eq!(flow.balance, 0f64);
-        assert_eq!(flow.entries.is_empty(), true)
-    }
-
-    #[test]
     fn delete_entry_bounded() {
         let mut flow = bounded_flow();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
@@ -389,28 +290,6 @@ mod tests {
 
         assert_eq!(flow.balance, 0f64);
         assert_eq!(flow.entries.is_empty(), true)
-    }
-
-    #[test]
-    fn update_entry_unbounded() {
-        let mut flow = unbounded_flow();
-        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
-            .unwrap();
-        let entry_id = flow.entries[0].id;
-
-        flow.update_entry(
-            &entry_id,
-            10f64,
-            String::from("Income"),
-            String::from("Monthly"),
-        )
-        .unwrap();
-        let entry = &flow.entries[0];
-
-        assert_eq!(flow.balance, 10f64);
-        assert_eq!(entry.amount, 10f64);
-        assert_eq!(entry.category, String::from("Income"));
-        assert_eq!(entry.note, String::from("Monthly"))
     }
 
     #[test]
