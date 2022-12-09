@@ -21,13 +21,15 @@ pub trait CashFlow {
         balance: f64,
         category: String,
         note: String,
-    ) -> Result<(), EngineError> {
+    ) -> Result<uuid::Uuid, EngineError> {
         let entry = Entry::new(balance, category, note);
         self.insert(entry)
     }
 
     fn archive(&mut self);
+
     fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError>;
+
     fn update_entry(
         &mut self,
         id: &uuid::Uuid,
@@ -35,5 +37,6 @@ pub trait CashFlow {
         category: String,
         note: String,
     ) -> Result<(), EngineError>;
-    fn insert(&mut self, entry: Entry) -> Result<(), EngineError>;
+
+    fn insert(&mut self, entry: Entry) -> Result<uuid::Uuid, EngineError>;
 }

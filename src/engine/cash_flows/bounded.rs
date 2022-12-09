@@ -43,13 +43,15 @@ impl CashFlow for Bounded {
         }
     }
 
-    fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
+    fn insert(&mut self, entry: Entry) -> Result<uuid::Uuid, EngineError> {
         if entry.amount > 0f64 && self.balance + entry.amount > self.max_balance {
             Err(EngineError::MaxBalanceReached(self.name.clone()))
         } else {
             self.balance += entry.amount;
+            let entry_id = entry.id;
             self.entries.push(entry);
-            Ok(())
+
+            Ok(entry_id)
         }
     }
 
@@ -107,7 +109,7 @@ mod tests {
     fn fail_add_entry() {
         let mut flow = bounded();
         flow.add_entry(20.44, "Income".to_string(), "Weekly".to_string())
-            .unwrap()
+            .unwrap();
     }
 
     #[test]

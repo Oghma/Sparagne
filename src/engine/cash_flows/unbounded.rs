@@ -39,10 +39,12 @@ impl CashFlow for UnBounded {
         }
     }
 
-    fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
+    fn insert(&mut self, entry: Entry) -> Result<uuid::Uuid, EngineError> {
         self.balance += entry.amount;
+        let entry_id = entry.id;
         self.entries.push(entry);
-        Ok(())
+
+        Ok(entry_id)
     }
 
     fn update_entry(
