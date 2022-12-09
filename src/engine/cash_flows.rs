@@ -20,6 +20,7 @@ pub trait CashFlow {
     }
 
     fn archive(&mut self);
+    fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError>;
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError>;
 }
 
@@ -46,6 +47,17 @@ impl UnBounded {
 impl CashFlow for UnBounded {
     fn archive(&mut self) {
         self.archived = true
+    }
+
+    fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError> {
+        match self.entries.iter().position(|entry| entry.id == *id) {
+            Some(index) => {
+                let entry = self.entries.remove(index);
+                self.balance -= entry.amount;
+                Ok(())
+            }
+            None => Err(EngineError::KeyNotFound(id.to_string())),
+        }
     }
 
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
@@ -82,6 +94,17 @@ impl Bounded {
 impl CashFlow for Bounded {
     fn archive(&mut self) {
         self.archived = true
+    }
+
+    fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError> {
+        match self.entries.iter().position(|entry| entry.id == *id) {
+            Some(index) => {
+                let entry = self.entries.remove(index);
+                self.balance -= entry.amount;
+                Ok(())
+            }
+            None => Err(EngineError::KeyNotFound(id.to_string())),
+        }
     }
 
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
@@ -124,6 +147,17 @@ impl HardBounded {
 impl CashFlow for HardBounded {
     fn archive(&mut self) {
         self.archived = true
+    }
+
+    fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError> {
+        match self.entries.iter().position(|entry| entry.id == *id) {
+            Some(index) => {
+                let entry = self.entries.remove(index);
+                self.balance -= entry.amount;
+                Ok(())
+            }
+            None => Err(EngineError::KeyNotFound(id.to_string())),
+        }
     }
 
     fn insert(&mut self, entry: Entry) -> Result<(), EngineError> {
@@ -233,5 +267,41 @@ mod tests {
         assert_eq!(flow.archived, false);
         flow.archive();
         assert_eq!(flow.archived, true);
+    }
+
+    #[test]
+    fn delete_entry_hard_bounded() {
+        let mut flow = hard_bounded_flow();
+        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+        let entry_id = flow.entries[0].id;
+        flow.delete_entry(&entry_id).unwrap();
+
+        assert_eq!(flow.balance, 0f64);
+        assert_eq!(flow.entries.is_empty(), true)
+    }
+
+    #[test]
+    fn delete_entry_unbounded() {
+        let mut flow = unbounded_flow();
+        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+        let entry_id = flow.entries[0].id;
+        flow.delete_entry(&entry_id).unwrap();
+
+        assert_eq!(flow.balance, 0f64);
+        assert_eq!(flow.entries.is_empty(), true)
+    }
+
+    #[test]
+    fn delete_entry_bounded() {
+        let mut flow = bounded_flow();
+        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+        let entry_id = flow.entries[0].id;
+        flow.delete_entry(&entry_id).unwrap();
+
+        assert_eq!(flow.balance, 0f64);
+        assert_eq!(flow.entries.is_empty(), true)
     }
 }
