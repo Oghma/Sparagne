@@ -18,4 +18,6 @@ pub enum EngineError {
     MaxBalanceReached(String),
     #[error("\"{0}\" key not found!")]
     KeyNotFound(String),
+    #[error("\"{0}\" already present!")]
+    ExistingKey(String),
 }
