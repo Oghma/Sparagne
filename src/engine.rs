@@ -67,7 +67,11 @@ impl Engine {
         Ok(())
     }
 
-    pub fn flow_iter(&self) -> Iter<String, Box<dyn CashFlow>> {
+    pub fn iter_flow(&self) -> impl Iterator<Item = (&String, &Box<dyn CashFlow>)> {
+        self.chash_flows.iter().filter(|flow| !flow.1.archived())
+    }
+
+    pub fn iter_all_flow(&self) -> impl Iterator<Item = (&String, &Box<dyn CashFlow>)> {
         self.chash_flows.iter()
     }
 
