@@ -32,6 +32,16 @@ impl Engine {
             None => Err(EngineError::KeyNotFound(flow_name.clone())),
         }
     }
+
+    pub fn delete_flow_entry(
+        &mut self,
+        flow_name: &String,
+        entry_id: &uuid::Uuid,
+    ) -> Result<(), errors::EngineError> {
+        match self.chash_flows.get_mut(flow_name) {
+            Some(flow) => flow.delete_entry(entry_id),
+            None => Err(errors::EngineError::KeyNotFound(flow_name.clone())),
+        }
     }
 
     pub fn new_flow(
@@ -122,5 +132,16 @@ mod tests {
         engine
             .new_flow(String::from("Cash"), 1f64, Some(10f64), None)
             .unwrap();
+    }
+
+    #[test]
+    fn delete_entry() {
+        let (flow_name, mut engine) = engine();
+
+        let entry_id = engine
+            .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
+            .unwrap();
+
+        engine.delete_flow_entry(&flow_name, &entry_id).unwrap();
     }
 }
