@@ -60,4 +60,67 @@ impl Engine {
     pub fn flow_iter(&self) -> Iter<String, Box<dyn CashFlow>> {
         self.chash_flows.iter()
     }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn engine() -> (String, Engine) {
+        let mut engine = Engine::new();
+        engine
+            .new_flow(String::from("Cash"), 1f64, None, None)
+            .unwrap();
+
+        (String::from("Cash"), engine)
+    }
+
+    #[test]
+    fn add_flow_entry() {
+        let (flow_name, mut engine) = engine();
+
+        engine
+            .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
+            .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "KeyNotFound(\"Foo\")")]
+    fn fail_flow_entry() {
+        let (_, mut engine) = engine();
+        engine
+            .add_flow_entry(
+                &String::from("Foo"),
+                1.2,
+                String::from("Income"),
+                String::from(""),
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn new_flows() {
+        let mut engine = Engine::new();
+        engine
+            .new_flow(String::from("Cash"), 1f64, None, None)
+            .unwrap();
+
+        engine
+            .new_flow(String::from("Cash1"), 1f64, Some(10f64), None)
+            .unwrap();
+
+        engine
+            .new_flow(String::from("Cash2"), 1f64, Some(10f64), Some(true))
+            .unwrap();
+
+        assert_eq!(engine.chash_flows.is_empty(), false);
+    }
+
+    #[test]
+    #[should_panic(expected = "ExistingKey(\"Cash\")")]
+    fn fail_add_same_flow() {
+        let (_, mut engine) = engine();
+
+        engine
+            .new_flow(String::from("Cash"), 1f64, Some(10f64), None)
+            .unwrap();
+    }
 }
