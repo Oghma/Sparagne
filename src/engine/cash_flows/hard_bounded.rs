@@ -42,6 +42,10 @@ impl CashFlow for HardBounded {
         self.archived = true
     }
 
+    fn archived(&self) -> bool {
+        self.archived
+    }
+
     fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
