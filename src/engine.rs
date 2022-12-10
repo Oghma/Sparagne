@@ -70,6 +70,20 @@ impl Engine {
     pub fn flow_iter(&self) -> Iter<String, Box<dyn CashFlow>> {
         self.chash_flows.iter()
     }
+
+    pub fn update_flow_entry(
+        &mut self,
+        flow_name: &String,
+        entry_id: &uuid::Uuid,
+        amount: f64,
+        category: String,
+        note: String,
+    ) -> Result<(), errors::EngineError> {
+        match self.chash_flows.get_mut(flow_name) {
+            Some(flow) => flow.update_entry(entry_id, amount, category, note),
+            None => Err(errors::EngineError::KeyNotFound(flow_name.clone())),
+        }
+    }
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,5 +157,24 @@ mod tests {
             .unwrap();
 
         engine.delete_flow_entry(&flow_name, &entry_id).unwrap();
+    }
+
+    #[test]
+    fn update_entry() {
+        let (flow_name, mut engine) = engine();
+
+        let entry_id = engine
+            .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
+            .unwrap();
+
+        engine
+            .update_flow_entry(
+                &flow_name,
+                &entry_id,
+                -5f64,
+                String::from("Home"),
+                String::from(""),
+            )
+            .unwrap();
     }
 }
