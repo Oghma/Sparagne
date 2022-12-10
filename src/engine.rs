@@ -84,6 +84,23 @@ impl Engine {
             None => Err(errors::EngineError::KeyNotFound(flow_name.clone())),
         }
     }
+
+    pub fn delete_flow(&mut self, name: &String, archive: bool) -> Result<(), errors::EngineError> {
+        match self.chash_flows.get_mut(name) {
+            Some(flow) => {
+                if archive {
+                    flow.archive();
+                } else {
+                    self.chash_flows.remove(name);
+                }
+
+                Ok(())
+            }
+            None => Err(EngineError::KeyNotFound(name.clone())),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,5 +193,12 @@ mod tests {
                 String::from(""),
             )
             .unwrap();
+    }
+
+    #[test]
+    fn delete_flow() {
+        let (flow_name, mut engine) = engine();
+        engine.delete_flow(&flow_name, false).unwrap();
+        assert_eq!(engine.chash_flows.is_empty(), true);
     }
 }
