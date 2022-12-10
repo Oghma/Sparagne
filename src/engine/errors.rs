@@ -4,7 +4,7 @@
 //!
 //! - [`MaxBalanceReached`] thrown when a [`CashFlow`] or [`Wallet`] has reached
 //!     max balance.
-//! - [`KeyNotFound`] thrown when the [`CashFlow`] or [`Wallet`] are not found.
+//! - [`KeyNotFound`] thrown when an item are not found.
 //!
 //!  [`MaxBalanceReached`]: EngineError::MaxBalanceReached
 //!  [`KeyNotFound`]: EngineError::KeyNotFound
@@ -16,6 +16,8 @@ use thiserror::Error;
 pub enum EngineError {
     #[error("Max balance reached!")]
     MaxBalanceReached(String),
-    #[error("`{0}` key not found!")]
+    #[error("\"{0}\" key not found!")]
     KeyNotFound(String),
+    #[error("\"{0}\" already present!")]
+    ExistingKey(String),
 }

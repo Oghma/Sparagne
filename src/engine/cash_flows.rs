@@ -28,6 +28,8 @@ pub trait CashFlow {
 
     fn archive(&mut self);
 
+    fn archived(&self) -> bool;
+
     fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError>;
 
     fn update_entry(
