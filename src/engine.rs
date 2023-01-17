@@ -7,16 +7,19 @@ use std::collections::HashMap;
 mod cash_flows;
 mod entry;
 pub mod errors;
+mod sqlite3;
 
 /// Handle wallets and cash flow.
 pub struct Engine {
     chash_flows: HashMap<String, CashFlow>,
+    database: SQLite3,
 }
 
 impl Engine {
-    pub fn new() -> Self {
+    pub fn new(database: SQLite3) -> Self {
         Self {
             chash_flows: HashMap::new(),
+            database,
         }
     }
 
