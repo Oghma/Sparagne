@@ -21,8 +21,13 @@ pub struct SQLite3 {
 }
 
 impl SQLite3 {
-    pub fn new(path: &str) -> Self {
-        let connection = Connection::open(path).unwrap();
+    pub fn new(path: Option<&str>, memory: Option<bool>) -> Self {
+        let connection = match (path, memory) {
+            (Some(path), None) => Connection::open(path).unwrap(),
+            (None, Some(true)) => Connection::open_in_memory().unwrap(),
+            _ => panic!("One of `path` or `memory` should be initialized. Not both"),
+        };
+
         initialize(&connection);
         Self { connection }
     }
