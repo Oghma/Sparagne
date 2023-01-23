@@ -10,7 +10,7 @@ pub mod errors;
 
 /// Handle wallets and cash flow.
 pub struct Engine {
-    chash_flows: HashMap<String, Box<dyn CashFlow>>,
+    chash_flows: HashMap<String, CashFlow>,
 }
 
 impl Engine {
@@ -49,29 +49,24 @@ impl Engine {
         name: String,
         balance: f64,
         max_balance: Option<f64>,
-        hard_bounded: Option<bool>,
+        income_bounded: Option<bool>,
     ) -> Result<(), errors::EngineError> {
         if self.chash_flows.contains_key(&name) {
             return Err(errors::EngineError::ExistingKey(name));
         }
-
-        let flow: Box<dyn CashFlow> = match (max_balance, hard_bounded) {
-            (Some(mxb), Some(true)) => {
-                Box::new(cash_flows::HardBounded::new(name.clone(), balance, mxb))
-            }
-            (Some(mxb), _) => Box::new(cash_flows::Bounded::new(name.clone(), balance, mxb)),
-            (None, _) => Box::new(cash_flows::UnBounded::new(name.clone(), balance)),
-        };
-        self.chash_flows.insert(name, flow);
+        self.chash_flows.insert(
+            name.clone(),
+            CashFlow::new(name, balance, max_balance, income_bounded),
+        );
 
         Ok(())
     }
 
-    pub fn iter_flow(&self) -> impl Iterator<Item = (&String, &Box<dyn CashFlow>)> {
-        self.chash_flows.iter().filter(|flow| !flow.1.archived())
+    pub fn iter_flow(&self) -> impl Iterator<Item = (&String, &CashFlow)> {
+        self.chash_flows.iter().filter(|flow| !flow.1.archived)
     }
 
-    pub fn iter_all_flow(&self) -> impl Iterator<Item = (&String, &Box<dyn CashFlow>)> {
+    pub fn iter_all_flow(&self) -> impl Iterator<Item = (&String, &CashFlow)> {
         self.chash_flows.iter()
     }
 
@@ -91,13 +86,12 @@ impl Engine {
 
     pub fn delete_flow(&mut self, name: &String, archive: bool) -> Result<(), errors::EngineError> {
         match self.chash_flows.get_mut(name) {
-            Some(flow) => {
-                if archive {
-                    flow.archive();
-                } else {
-                    self.chash_flows.remove(name);
-                }
-
+            Some(flow) if archive => {
+                flow.archive();
+                Ok(())
+            }
+            Some(_) => {
+                self.chash_flows.remove(name);
                 Ok(())
             }
             None => Err(EngineError::KeyNotFound(name.clone())),
