@@ -2,6 +2,7 @@
 //!
 use super::entry::Entry;
 use super::errors::EngineError;
+use super::sqlite3::Queryable;
 
 /// A cash flow.
 ///
@@ -142,6 +143,43 @@ impl CashFlow {
                 Ok(())
             }
             None => Err(EngineError::KeyNotFound(id.to_string())),
+        }
+    }
+}
+
+impl Queryable for CashFlow {
+    fn table() -> &'static str
+    where
+        Self: Sized,
+    {
+        "cashFlows"
+    }
+
+    fn keys() -> Vec<&'static str>
+    where
+        Self: Sized,
+    {
+        vec!["name", "balance", "maxBalance", "incomeBalance", "archived"]
+    }
+
+    fn values(&self) -> Vec<&dyn rusqlite::ToSql> {
+        vec![
+            &self.name,
+            &self.balance,
+            &self.max_balance,
+            &self.income_balance,
+            &self.archived,
+        ]
+    }
+
+    fn from_row(row: &rusqlite::Row) -> Self {
+        Self {
+            name: row.get(0).unwrap(),
+            balance: row.get(1).unwrap(),
+            max_balance: row.get(2).unwrap(),
+            income_balance: row.get(3).unwrap(),
+            entries: Vec::new(),
+            archived: row.get(4).unwrap(),
         }
     }
 }
