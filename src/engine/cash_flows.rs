@@ -66,7 +66,7 @@ impl CashFlow {
         category: String,
         note: String,
     ) -> Result<String, EngineError> {
-        let entry = Entry::new(balance, category, note);
+        let entry = Entry::new(balance, category, note, self.name.clone());
         // If bounded, check constraints are respected
         if entry.amount > 0f64 {
             if let Some(bound) = self.max_balance {
