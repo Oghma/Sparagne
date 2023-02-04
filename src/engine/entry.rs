@@ -8,7 +8,7 @@ use super::sqlite3::Queryable;
 /// Represent a movement, an entry in cash flows or wallets.
 #[derive(Debug)]
 pub struct Entry {
-    pub id: Uuid,
+    pub id: String,
     pub amount: f64,
     pub category: String,
     pub note: String,
@@ -18,7 +18,7 @@ pub struct Entry {
 impl Entry {
     pub fn new(amount: f64, category: String, note: String) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().to_string(),
             amount,
             category,
             note,

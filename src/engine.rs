@@ -29,7 +29,7 @@ impl Engine {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<uuid::Uuid, errors::EngineError> {
+    ) -> Result<String, errors::EngineError> {
         match self.chash_flows.get_mut(flow_name) {
             Some(flow) => flow.add_entry(amount, category, note),
             None => Err(EngineError::KeyNotFound(flow_name.clone())),
@@ -39,7 +39,7 @@ impl Engine {
     pub fn delete_flow_entry(
         &mut self,
         flow_name: &String,
-        entry_id: &uuid::Uuid,
+        entry_id: &String,
     ) -> Result<(), errors::EngineError> {
         match self.chash_flows.get_mut(flow_name) {
             Some(flow) => flow.delete_entry(entry_id),
@@ -76,7 +76,7 @@ impl Engine {
     pub fn update_flow_entry(
         &mut self,
         flow_name: &String,
-        entry_id: &uuid::Uuid,
+        entry_id: &String,
         amount: f64,
         category: String,
         note: String,
