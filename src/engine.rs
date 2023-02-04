@@ -1,8 +1,9 @@
 //! This module is the core of the application. The `Engine` struct handles cash
 //! flows and wallets.
-use self::{cash_flows::CashFlow, errors::EngineError};
-use std::collections::hash_map::Iter;
 use std::collections::HashMap;
+
+use self::sqlite3::SQLite3;
+use self::{cash_flows::CashFlow, errors::EngineError};
 
 mod cash_flows;
 mod entry;
