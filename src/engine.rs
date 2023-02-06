@@ -2,6 +2,7 @@
 //! flows and wallets.
 use std::collections::HashMap;
 
+use self::entry::Entry;
 use self::sqlite3::SQLite3;
 use self::{cash_flows::CashFlow, errors::EngineError};
 
@@ -18,10 +19,27 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(database: SQLite3) -> Self {
+        let mut cash_flow = HashMap::new();
+
+        let cash_flows = database.select::<CashFlow, ()>(None, None, None);
+        for flow in cash_flows {
+            cash_flow.insert(flow.name.clone(), flow);
+        }
+
+        let entries = database.select::<Entry, ()>(None, None, None);
+        for entry in entries {
+            let flow = cash_flow.get_mut(&entry.cash_flow).unwrap();
+            flow.entries.push(entry);
+        }
+
         Self {
-            chash_flows: HashMap::new(),
+            chash_flows: cash_flow,
             database,
         }
+    }
+
+    pub fn builder() -> EngineBuilder {
+        EngineBuilder::default()
     }
 
     pub fn add_flow_entry(
@@ -103,12 +121,38 @@ impl Engine {
     }
 }
 
+#[derive(Default)]
+pub struct EngineBuilder {
+    sqlite3_path: Option<String>,
+    sqlite3_memory: Option<bool>,
+}
+
+impl EngineBuilder {
+    pub fn database(mut self, path: &String) -> EngineBuilder {
+        self.sqlite3_path = Some(path.clone());
+        self
+    }
+
+    pub fn memory(mut self) -> EngineBuilder {
+        self.sqlite3_memory = Some(true);
+        self
+    }
+
+    pub fn build(self) -> Engine {
+        let database = SQLite3::new(
+            self.sqlite3_path.as_ref().map(|s| &**s),
+            self.sqlite3_memory,
+        );
+        Engine::new(database)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn engine() -> (String, Engine) {
-        let mut engine = Engine::new();
+        let mut engine = Engine::builder().memory().build();
         engine
             .new_flow(String::from("Cash"), 1f64, None, None)
             .unwrap();
@@ -141,7 +185,7 @@ mod tests {
 
     #[test]
     fn new_flows() {
-        let mut engine = Engine::new();
+        let mut engine = Engine::builder().memory().build();
         engine
             .new_flow(String::from("Cash"), 1f64, None, None)
             .unwrap();
