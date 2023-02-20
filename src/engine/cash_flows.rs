@@ -213,7 +213,7 @@ mod tests {
         let mut flow = unbounded();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id;
+        let entry_id = flow.entries[0].id.clone();
         flow.delete_entry(&entry_id).unwrap();
 
         assert_eq!(flow.balance, 0f64);
@@ -225,7 +225,7 @@ mod tests {
         let mut flow = unbounded();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id;
+        let entry_id = flow.entries[0].id.clone();
 
         flow.update_entry(
             &entry_id,
@@ -256,7 +256,7 @@ mod tests {
         let mut flow = bounded();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id;
+        let entry_id = flow.entries[0].id.clone();
 
         flow.update_entry(
             &entry_id,
@@ -273,7 +273,7 @@ mod tests {
         let mut flow = bounded();
         flow.add_entry(-1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id;
+        let entry_id = flow.entries[0].id.clone();
 
         flow.update_entry(
             &entry_id,
