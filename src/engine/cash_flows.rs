@@ -65,7 +65,7 @@ impl CashFlow {
         balance: f64,
         category: String,
         note: String,
-    ) -> Result<String, EngineError> {
+    ) -> Result<&Entry, EngineError> {
         let entry = Entry::new(balance, category, note, self.name.clone());
         // If bounded, check constraints are respected
         if entry.amount > 0f64 {
@@ -82,17 +82,16 @@ impl CashFlow {
         }
 
         self.balance += entry.amount;
-        let entry_id = entry.id.clone();
         self.entries.push(entry);
 
-        Ok(entry_id)
+        Ok(&self.entries[self.entries.len() - 1])
     }
 
     pub fn archive(&mut self) {
         self.archived = true;
     }
 
-    pub fn delete_entry(&mut self, id: &String) -> Result<(), EngineError> {
+    pub fn delete_entry(&mut self, id: &String) -> Result<Entry, EngineError> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
@@ -102,7 +101,7 @@ impl CashFlow {
                     self.income_balance = self.income_balance.map(|balance| balance - entry.amount);
                 }
 
-                Ok(())
+                Ok(entry)
             }
             None => Err(EngineError::KeyNotFound(id.to_string())),
         }
@@ -114,7 +113,7 @@ impl CashFlow {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<(), EngineError> {
+    ) -> Result<&Entry, EngineError> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
                 let entry = &mut self.entries[index];
@@ -140,7 +139,7 @@ impl CashFlow {
                 entry.category = category;
                 entry.note = note;
 
-                Ok(())
+                Ok(entry)
             }
             None => Err(EngineError::KeyNotFound(id.to_string())),
         }
