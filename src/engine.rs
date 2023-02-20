@@ -50,7 +50,10 @@ impl Engine {
         note: String,
     ) -> Result<String, errors::EngineError> {
         match self.chash_flows.get_mut(flow_name) {
-            Some(flow) => flow.add_entry(amount, category, note),
+            Some(flow) => flow.add_entry(amount, category, note).and_then(|entry| {
+                self.database.insert(entry);
+                Ok(entry.id.clone())
+            }),
             None => Err(EngineError::KeyNotFound(flow_name.clone())),
         }
     }
@@ -61,7 +64,12 @@ impl Engine {
         entry_id: &String,
     ) -> Result<(), errors::EngineError> {
         match self.chash_flows.get_mut(flow_name) {
-            Some(flow) => flow.delete_entry(entry_id),
+            Some(flow) => flow.delete_entry(entry_id).and_then(|entry| {
+                self.database
+                    .delete(&entry)
+                    .update::<CashFlow>(flow, "name", &flow.name);
+                Ok(())
+            }),
             None => Err(errors::EngineError::KeyNotFound(flow_name.clone())),
         }
     }
@@ -76,10 +84,9 @@ impl Engine {
         if self.chash_flows.contains_key(&name) {
             return Err(errors::EngineError::ExistingKey(name));
         }
-        self.chash_flows.insert(
-            name.clone(),
-            CashFlow::new(name, balance, max_balance, income_bounded),
-        );
+        let flow = CashFlow::new(name.clone(), balance, max_balance, income_bounded);
+        self.database.insert(&flow);
+        self.chash_flows.insert(name, flow);
 
         Ok(())
     }
@@ -100,24 +107,32 @@ impl Engine {
         category: String,
         note: String,
     ) -> Result<(), errors::EngineError> {
-        match self.chash_flows.get_mut(flow_name) {
-            Some(flow) => flow.update_entry(entry_id, amount, category, note),
-            None => Err(errors::EngineError::KeyNotFound(flow_name.clone())),
+        if let Some(flow) = self.chash_flows.get_mut(flow_name) {
+            if let Ok(entry) = flow.update_entry(entry_id, amount, category, note) {
+                self.database
+                    .update::<Entry>(entry, "id", &entry.id)
+                    .update::<CashFlow>(flow, "name", flow_name);
+                return Ok(());
+            }
         }
+        Err(errors::EngineError::KeyNotFound(flow_name.clone()))
     }
 
     pub fn delete_flow(&mut self, name: &String, archive: bool) -> Result<(), errors::EngineError> {
-        match self.chash_flows.get_mut(name) {
-            Some(flow) if archive => {
+        if let Some(flow) = self.chash_flows.get_mut(name) {
+            if archive {
                 flow.archive();
-                Ok(())
-            }
-            Some(_) => {
+                self.database.update::<CashFlow>(flow, "name", name);
+            } else {
+                for entry in &flow.entries {
+                    self.database.delete(entry);
+                }
+                self.database.delete(flow);
                 self.chash_flows.remove(name);
-                Ok(())
             }
-            None => Err(EngineError::KeyNotFound(name.clone())),
+            return Ok(());
         }
+        Err(EngineError::KeyNotFound(name.clone()))
     }
 }
 
@@ -204,11 +219,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "ExistingKey(\"Cash\")")]
     fn fail_add_same_flow() {
-        let (_, mut engine) = engine();
-
-        engine
-            .new_flow(String::from("Cash"), 1f64, Some(10f64), None)
-            .unwrap();
+        let (flow_name, mut engine) = engine();
+        engine.new_flow(flow_name, 1f64, Some(10f64), None).unwrap();
     }
 
     #[test]
