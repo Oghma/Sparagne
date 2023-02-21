@@ -12,6 +12,7 @@ pub mod errors;
 mod sqlite3;
 
 /// Handle wallets and cash flow.
+#[derive(Debug)]
 pub struct Engine {
     chash_flows: HashMap<String, CashFlow>,
     database: SQLite3,
