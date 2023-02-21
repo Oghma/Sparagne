@@ -2,6 +2,7 @@
 //!
 use super::entry::Entry;
 use super::errors::EngineError;
+use super::sqlite3::Queryable;
 
 /// A cash flow.
 ///
@@ -64,8 +65,8 @@ impl CashFlow {
         balance: f64,
         category: String,
         note: String,
-    ) -> Result<uuid::Uuid, EngineError> {
-        let entry = Entry::new(balance, category, note);
+    ) -> Result<&Entry, EngineError> {
+        let entry = Entry::new(balance, category, note, self.name.clone());
         // If bounded, check constraints are respected
         if entry.amount > 0f64 {
             if let Some(bound) = self.max_balance {
@@ -81,17 +82,16 @@ impl CashFlow {
         }
 
         self.balance += entry.amount;
-        let entry_id = entry.id;
         self.entries.push(entry);
 
-        Ok(entry_id)
+        Ok(&self.entries[self.entries.len() - 1])
     }
 
     pub fn archive(&mut self) {
         self.archived = true;
     }
 
-    pub fn delete_entry(&mut self, id: &uuid::Uuid) -> Result<(), EngineError> {
+    pub fn delete_entry(&mut self, id: &String) -> Result<Entry, EngineError> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
@@ -101,7 +101,7 @@ impl CashFlow {
                     self.income_balance = self.income_balance.map(|balance| balance - entry.amount);
                 }
 
-                Ok(())
+                Ok(entry)
             }
             None => Err(EngineError::KeyNotFound(id.to_string())),
         }
@@ -109,11 +109,11 @@ impl CashFlow {
 
     pub fn update_entry(
         &mut self,
-        id: &uuid::Uuid,
+        id: &String,
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<(), EngineError> {
+    ) -> Result<&Entry, EngineError> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
                 let entry = &mut self.entries[index];
@@ -139,9 +139,46 @@ impl CashFlow {
                 entry.category = category;
                 entry.note = note;
 
-                Ok(())
+                Ok(entry)
             }
             None => Err(EngineError::KeyNotFound(id.to_string())),
+        }
+    }
+}
+
+impl Queryable for CashFlow {
+    fn table() -> &'static str
+    where
+        Self: Sized,
+    {
+        "cashFlows"
+    }
+
+    fn keys() -> Vec<&'static str>
+    where
+        Self: Sized,
+    {
+        vec!["name", "balance", "maxBalance", "incomeBalance", "archived"]
+    }
+
+    fn values(&self) -> Vec<&dyn rusqlite::ToSql> {
+        vec![
+            &self.name,
+            &self.balance,
+            &self.max_balance,
+            &self.income_balance,
+            &self.archived,
+        ]
+    }
+
+    fn from_row(row: &rusqlite::Row) -> Self {
+        Self {
+            name: row.get(0).unwrap(),
+            balance: row.get(1).unwrap(),
+            max_balance: row.get(2).unwrap(),
+            income_balance: row.get(3).unwrap(),
+            entries: Vec::new(),
+            archived: row.get(4).unwrap(),
         }
     }
 }
@@ -176,7 +213,7 @@ mod tests {
         let mut flow = unbounded();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id;
+        let entry_id = flow.entries[0].id.clone();
         flow.delete_entry(&entry_id).unwrap();
 
         assert_eq!(flow.balance, 0f64);
@@ -188,7 +225,7 @@ mod tests {
         let mut flow = unbounded();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id;
+        let entry_id = flow.entries[0].id.clone();
 
         flow.update_entry(
             &entry_id,
@@ -219,7 +256,7 @@ mod tests {
         let mut flow = bounded();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id;
+        let entry_id = flow.entries[0].id.clone();
 
         flow.update_entry(
             &entry_id,
@@ -236,7 +273,7 @@ mod tests {
         let mut flow = bounded();
         flow.add_entry(-1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id;
+        let entry_id = flow.entries[0].id.clone();
 
         flow.update_entry(
             &entry_id,
