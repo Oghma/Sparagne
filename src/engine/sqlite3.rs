@@ -28,7 +28,6 @@ impl SQLite3 {
             _ => panic!("One of `path` or `memory` should be initialized. Not both"),
         };
 
-        initialize(&connection);
         Self { connection }
     }
 
@@ -106,33 +105,4 @@ impl SQLite3 {
             .unwrap();
         self
     }
-}
-
-/// Initialize the database
-fn initialize(connection: &Connection) {
-    connection
-        .execute(
-            "CREATE TABLE IF NOT EXISTS entries (
-                 id TEXT PRIMARY KEY,
-                 amount REAL NOT NULL,
-                 note TEXT,
-                 category TEXT,
-                 cashFlow TEXT NOT NULL
-            )",
-            (),
-        )
-        .expect("Failed to populate database");
-
-    connection
-        .execute(
-            "CREATE TABLE IF NOT EXISTS cashFlows (
-                 name TEXT PRIMARY KEY,
-                 balance REAL NOT NULL,
-                 maxBalance REAL,
-                 incomeBalance REAL,
-                 archived BOOLEAN
-            )",
-            (),
-        )
-        .expect("Failed to populate database");
 }
