@@ -27,6 +27,18 @@ impl Entry {
     }
 }
 
+impl From<Model> for Entry {
+    fn from(entry: Model) -> Self {
+        Self {
+            id: entry.id,
+            amount: entry.amount,
+            category: entry.category.unwrap(),
+            note: entry.note.unwrap(),
+            cash_flow: entry.cash_flow_id,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "entries")]
 pub struct Model {
