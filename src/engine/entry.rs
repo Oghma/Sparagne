@@ -4,8 +4,6 @@
 use sea_orm::entity::prelude::*;
 use uuid::Uuid;
 
-use super::sqlite3::Queryable;
-
 /// Represent a movement, an entry in cash flows or wallets.
 #[derive(Debug)]
 pub struct Entry {
@@ -60,39 +58,3 @@ impl Related<super::cash_flows::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
-impl Queryable for Entry {
-    fn table() -> &'static str
-    where
-        Self: Sized,
-    {
-        "Entries"
-    }
-
-    fn keys() -> Vec<&'static str>
-    where
-        Self: Sized,
-    {
-        vec!["id", "amount", "category", "note", "cashFlow"]
-    }
-
-    fn values(&self) -> Vec<&dyn rusqlite::ToSql> {
-        vec![
-            &self.id,
-            &self.amount,
-            &self.category,
-            &self.note,
-            &self.cash_flow,
-        ]
-    }
-
-    fn from_row(row: &rusqlite::Row) -> Self {
-        Self {
-            id: row.get(0).unwrap(),
-            amount: row.get(1).unwrap(),
-            category: row.get(2).unwrap(),
-            note: row.get(3).unwrap(),
-            cash_flow: row.get(4).unwrap(),
-        }
-    }
-}
