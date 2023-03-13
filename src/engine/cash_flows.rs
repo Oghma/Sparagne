@@ -1,5 +1,7 @@
 //! The module contains the representation of a cash flow.
 //!
+use sea_orm::entity::prelude::*;
+
 use super::entry::Entry;
 use super::errors::EngineError;
 use super::sqlite3::Queryable;
@@ -145,6 +147,34 @@ impl CashFlow {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[sea_orm(table_name = "cash_flows")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub name: String,
+    #[sea_orm(column_type = "Double")]
+    pub balance: f64,
+    #[sea_orm(column_type = "Double", nullable)]
+    pub max_balance: Option<f64>,
+    #[sea_orm(column_type = "Double", nullable)]
+    pub income_balance: Option<f64>,
+    pub archived: bool,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(has_many = "super::entry::Entity")]
+    Entries,
+}
+
+impl Related<super::entry::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Entries.def()
+    }
+}
+
+impl ActiveModelBehavior for ActiveModel {}
 
 impl Queryable for CashFlow {
     fn table() -> &'static str

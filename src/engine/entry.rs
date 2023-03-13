@@ -1,6 +1,7 @@
 //! The module contains the `Entry` type representing an entry in cash flows and wallets.
 //!
 //! Both expenses and income are represented by `Entry` type.
+use sea_orm::entity::prelude::*;
 use uuid::Uuid;
 
 use super::sqlite3::Queryable;
@@ -27,6 +28,38 @@ impl Entry {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[sea_orm(table_name = "entries")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: String,
+    #[sea_orm(column_type = "Double")]
+    pub amount: f64,
+    pub note: Option<String>,
+    pub category: Option<String>,
+    pub cash_flow_id: String,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::cash_flows::Entity",
+        from = "Column::CashFlowId",
+        to = "super::cash_flows::Column::Name",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    CashFlows,
+}
+
+impl Related<super::cash_flows::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::CashFlows.def()
+    }
+}
+
+impl ActiveModelBehavior for ActiveModel {}
 
 impl Queryable for Entry {
     fn table() -> &'static str
