@@ -9,6 +9,7 @@ members = [".", "migration"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+axum = "0.6.11"
 config = "0.13.2"
 crossterm = "0.25.0"
 migration = { path = "migration" }
