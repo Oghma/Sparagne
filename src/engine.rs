@@ -1,5 +1,9 @@
 //! This module is the core of the application. The `Engine` struct handles cash
 //! flows and wallets.
+use migration::{Migrator, MigratorTrait};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
+};
 use std::collections::HashMap;
 
 use self::entry::Entry;
@@ -15,22 +19,24 @@ mod sqlite3;
 #[derive(Debug)]
 pub struct Engine {
     chash_flows: HashMap<String, CashFlow>,
-    database: SQLite3,
+    database: DatabaseConnection,
 }
 
 impl Engine {
-    pub fn new(database: SQLite3) -> Self {
+    pub async fn new(database: DatabaseConnection) -> Self {
         let mut cash_flow = HashMap::new();
 
-        let cash_flows = database.select::<CashFlow, ()>(None, None, None);
+        let cash_flows: Vec<cash_flows::Model> =
+            cash_flows::Entity::find().all(&database).await.unwrap();
+        let entries: Vec<entry::Model> = entry::Entity::find().all(&database).await.unwrap();
+
         for flow in cash_flows {
-            cash_flow.insert(flow.name.clone(), flow);
+            cash_flow.insert(flow.name.clone(), flow.into());
         }
 
-        let entries = database.select::<Entry, ()>(None, None, None);
         for entry in entries {
-            let flow = cash_flow.get_mut(&entry.cash_flow).unwrap();
-            flow.entries.push(entry);
+            let flow: &mut CashFlow = cash_flow.get_mut(&entry.cash_flow_id).unwrap();
+            flow.entries.push(entry.into());
         }
 
         Self {
@@ -43,7 +49,7 @@ impl Engine {
         EngineBuilder::default()
     }
 
-    pub fn add_flow_entry(
+    pub async fn add_flow_entry(
         &mut self,
         flow_name: &String,
         amount: f64,
@@ -51,31 +57,36 @@ impl Engine {
         note: String,
     ) -> Result<String, errors::EngineError> {
         match self.chash_flows.get_mut(flow_name) {
-            Some(flow) => flow.add_entry(amount, category, note).and_then(|entry| {
-                self.database.insert(entry);
+            Some(flow) => {
+                let entry = flow.add_entry(amount, category, note)?;
+                let entry_insert: entry::ActiveModel = entry.into();
+                println!("{:?}", &entry_insert);
+                entry_insert.insert(&self.database).await.unwrap();
                 Ok(entry.id.clone())
-            }),
+            }
             None => Err(EngineError::KeyNotFound(flow_name.clone())),
         }
     }
 
-    pub fn delete_flow_entry(
+    pub async fn delete_flow_entry(
         &mut self,
         flow_name: &String,
         entry_id: &String,
     ) -> Result<(), errors::EngineError> {
         match self.chash_flows.get_mut(flow_name) {
-            Some(flow) => flow.delete_entry(entry_id).and_then(|entry| {
-                self.database
-                    .delete(&entry)
-                    .update::<CashFlow>(flow, "name", &flow.name);
+            Some(flow) => {
+                flow.delete_entry(entry_id)?;
+                entry::Entity::delete_by_id(entry_id)
+                    .exec(&self.database)
+                    .await
+                    .unwrap();
                 Ok(())
-            }),
+            }
             None => Err(errors::EngineError::KeyNotFound(flow_name.clone())),
         }
     }
 
-    pub fn new_flow(
+    pub async fn new_flow(
         &mut self,
         name: String,
         balance: f64,
@@ -86,7 +97,17 @@ impl Engine {
             return Err(errors::EngineError::ExistingKey(name));
         }
         let flow = CashFlow::new(name.clone(), balance, max_balance, income_bounded);
-        self.database.insert(&flow);
+        let flow_mdodel: cash_flows::ActiveModel = (&flow).into();
+        println!("{:?}", &flow_mdodel);
+        flow_mdodel.insert(&self.database).await.unwrap();
+
+        let cash_flows: Vec<cash_flows::Model> = cash_flows::Entity::find()
+            .all(&self.database)
+            .await
+            .unwrap();
+
+        println!("{:?}", cash_flows);
+
         self.chash_flows.insert(name, flow);
 
         Ok(())
@@ -100,7 +121,7 @@ impl Engine {
         self.chash_flows.iter()
     }
 
-    pub fn update_flow_entry(
+    pub async fn update_flow_entry(
         &mut self,
         flow_name: &String,
         entry_id: &String,
@@ -108,27 +129,37 @@ impl Engine {
         category: String,
         note: String,
     ) -> Result<(), errors::EngineError> {
-        if let Some(flow) = self.chash_flows.get_mut(flow_name) {
-            if let Ok(entry) = flow.update_entry(entry_id, amount, category, note) {
-                self.database
-                    .update::<Entry>(entry, "id", &entry.id)
-                    .update::<CashFlow>(flow, "name", flow_name);
-                return Ok(());
+        match self.chash_flows.get_mut(flow_name) {
+            Some(flow) => {
+                let entry = flow.update_entry(entry_id, amount, category, note)?;
+                let entry_model: entry::ActiveModel = entry.into();
+                entry_model.update(&self.database).await.unwrap();
+                Ok(())
             }
+            None => Err(errors::EngineError::KeyNotFound(flow_name.clone())),
         }
-        Err(errors::EngineError::KeyNotFound(flow_name.clone()))
     }
 
-    pub fn delete_flow(&mut self, name: &String, archive: bool) -> Result<(), errors::EngineError> {
+    pub async fn delete_flow(
+        &mut self,
+        name: &String,
+        archive: bool,
+    ) -> Result<(), errors::EngineError> {
         if let Some(flow) = self.chash_flows.get_mut(name) {
             if archive {
                 flow.archive();
-                self.database.update::<CashFlow>(flow, "name", name);
+                let flow_model: cash_flows::ActiveModel = flow.into();
+                flow_model.update(&self.database).await.unwrap();
             } else {
-                for entry in &flow.entries {
-                    self.database.delete(entry);
-                }
-                self.database.delete(flow);
+                // TODO: Handle better when wallets are implemented
+                entry::Entity::delete_many()
+                    .filter(entry::Column::CashFlowId.eq(name))
+                    .exec(&self.database)
+                    .await
+                    .unwrap();
+
+                let flow_mdodel: cash_flows::ActiveModel = flow.into();
+                flow_mdodel.delete(&self.database).await.unwrap();
                 self.chash_flows.remove(name);
             }
             return Ok(());
@@ -167,28 +198,30 @@ impl EngineBuilder {
 mod tests {
     use super::*;
 
-    fn engine() -> (String, Engine) {
-        let mut engine = Engine::builder().memory().build();
+    async fn engine() -> (String, Engine) {
+        let mut engine = Engine::builder().memory().build().await;
         engine
             .new_flow(String::from("Cash"), 1f64, None, None)
+            .await
             .unwrap();
 
         (String::from("Cash"), engine)
     }
 
-    #[test]
-    fn add_flow_entry() {
-        let (flow_name, mut engine) = engine();
+    #[tokio::test]
+    async fn add_flow_entry() {
+        let (flow_name, mut engine) = engine().await;
 
         engine
             .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
+            .await
             .unwrap();
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "KeyNotFound(\"Foo\")")]
-    fn fail_flow_entry() {
-        let (_, mut engine) = engine();
+    async fn fail_flow_entry() {
+        let (_, mut engine) = engine().await;
         engine
             .add_flow_entry(
                 &String::from("Foo"),
@@ -196,51 +229,63 @@ mod tests {
                 String::from("Income"),
                 String::from(""),
             )
+            .await
             .unwrap();
     }
 
-    #[test]
-    fn new_flows() {
-        let mut engine = Engine::builder().memory().build();
+    #[tokio::test]
+    async fn new_flows() {
+        let mut engine = Engine::builder().memory().build().await;
         engine
             .new_flow(String::from("Cash"), 1f64, None, None)
+            .await
             .unwrap();
 
         engine
             .new_flow(String::from("Cash1"), 1f64, Some(10f64), None)
+            .await
             .unwrap();
 
         engine
             .new_flow(String::from("Cash2"), 1f64, Some(10f64), Some(true))
+            .await
             .unwrap();
 
         assert_eq!(engine.chash_flows.is_empty(), false);
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "ExistingKey(\"Cash\")")]
-    fn fail_add_same_flow() {
-        let (flow_name, mut engine) = engine();
-        engine.new_flow(flow_name, 1f64, Some(10f64), None).unwrap();
+    async fn fail_add_same_flow() {
+        let (flow_name, mut engine) = engine().await;
+        engine
+            .new_flow(flow_name, 1f64, Some(10f64), None)
+            .await
+            .unwrap();
     }
 
-    #[test]
-    fn delete_entry() {
-        let (flow_name, mut engine) = engine();
+    #[tokio::test]
+    async fn delete_entry() {
+        let (flow_name, mut engine) = engine().await;
 
         let entry_id = engine
             .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
+            .await
             .unwrap();
 
-        engine.delete_flow_entry(&flow_name, &entry_id).unwrap();
+        engine
+            .delete_flow_entry(&flow_name, &entry_id)
+            .await
+            .unwrap();
     }
 
-    #[test]
-    fn update_entry() {
-        let (flow_name, mut engine) = engine();
+    #[tokio::test]
+    async fn update_entry() {
+        let (flow_name, mut engine) = engine().await;
 
         let entry_id = engine
             .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
+            .await
             .unwrap();
 
         engine
@@ -251,13 +296,14 @@ mod tests {
                 String::from("Home"),
                 String::from(""),
             )
+            .await
             .unwrap();
     }
 
-    #[test]
-    fn delete_flow() {
-        let (flow_name, mut engine) = engine();
-        engine.delete_flow(&flow_name, false).unwrap();
+    #[tokio::test]
+    async fn delete_flow() {
+        let (flow_name, mut engine) = engine().await;
+        engine.delete_flow(&flow_name, false).await.unwrap();
         assert_eq!(engine.chash_flows.is_empty(), true);
     }
 }
