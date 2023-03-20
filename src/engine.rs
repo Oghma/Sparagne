@@ -6,14 +6,11 @@ use sea_orm::{
 };
 use std::collections::HashMap;
 
-use self::entry::Entry;
-use self::sqlite3::SQLite3;
 use self::{cash_flows::CashFlow, errors::EngineError};
 
 mod cash_flows;
 mod entry;
 pub mod errors;
-mod sqlite3;
 
 /// Handle wallets and cash flow.
 #[derive(Debug)]
