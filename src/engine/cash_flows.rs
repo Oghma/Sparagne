@@ -1,6 +1,6 @@
 //! The module contains the representation of a cash flow.
 //!
-use sea_orm::entity::prelude::*;
+use sea_orm::entity::{prelude::*, ActiveValue};
 
 use super::entry::Entry;
 use super::errors::EngineError;
@@ -187,6 +187,30 @@ impl Related<super::entry::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl From<&CashFlow> for ActiveModel {
+    fn from(flow: &CashFlow) -> Self {
+        Self {
+            name: ActiveValue::Set(flow.name.clone()),
+            balance: ActiveValue::Set(flow.balance),
+            max_balance: ActiveValue::Set(flow.max_balance),
+            income_balance: ActiveValue::Set(flow.income_balance),
+            archived: ActiveValue::Set(flow.archived),
+        }
+    }
+}
+
+impl From<&mut CashFlow> for ActiveModel {
+    fn from(flow: &mut CashFlow) -> Self {
+        Self {
+            name: ActiveValue::Set(flow.name.clone()),
+            balance: ActiveValue::Set(flow.balance),
+            max_balance: ActiveValue::Set(flow.max_balance),
+            income_balance: ActiveValue::Set(flow.income_balance),
+            archived: ActiveValue::Set(flow.archived),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
