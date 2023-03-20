@@ -170,27 +170,37 @@ impl Engine {
 
 #[derive(Default)]
 pub struct EngineBuilder {
-    sqlite3_path: Option<String>,
-    sqlite3_memory: Option<bool>,
+    url: String,
+    database_initialize: bool,
 }
 
 impl EngineBuilder {
-    pub fn database(mut self, path: &String) -> EngineBuilder {
-        self.sqlite3_path = Some(path.clone());
+    pub fn database(mut self, path: &str) -> EngineBuilder {
+        self.url = format!("sqlite:{}", path);
         self
     }
 
     pub fn memory(mut self) -> EngineBuilder {
-        self.sqlite3_memory = Some(true);
+        self.url = "sqlite::memory:".to_string();
+        self.database_initialize = true;
         self
     }
 
-    pub fn build(self) -> Engine {
-        let database = SQLite3::new(
-            self.sqlite3_path.as_ref().map(|s| &**s),
-            self.sqlite3_memory,
-        );
-        Engine::new(database)
+    pub fn database_initialize(mut self) -> EngineBuilder {
+        self.database_initialize = true;
+        self
+    }
+
+    pub async fn build(self) -> Engine {
+        let database = Database::connect(self.url)
+            .await
+            .expect("Failed to create db");
+
+        if self.database_initialize {
+            Migrator::up(&database, None).await.unwrap();
+        }
+
+        Engine::new(database).await
     }
 }
 
