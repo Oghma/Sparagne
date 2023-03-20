@@ -1,8 +1,9 @@
 //! The module contains the representation of a cash flow.
 //!
+use sea_orm::entity::{prelude::*, ActiveValue};
+
 use super::entry::Entry;
 use super::errors::EngineError;
-use super::sqlite3::Queryable;
 
 /// A cash flow.
 ///
@@ -146,39 +147,67 @@ impl CashFlow {
     }
 }
 
-impl Queryable for CashFlow {
-    fn table() -> &'static str
-    where
-        Self: Sized,
-    {
-        "cashFlows"
-    }
-
-    fn keys() -> Vec<&'static str>
-    where
-        Self: Sized,
-    {
-        vec!["name", "balance", "maxBalance", "incomeBalance", "archived"]
-    }
-
-    fn values(&self) -> Vec<&dyn rusqlite::ToSql> {
-        vec![
-            &self.name,
-            &self.balance,
-            &self.max_balance,
-            &self.income_balance,
-            &self.archived,
-        ]
-    }
-
-    fn from_row(row: &rusqlite::Row) -> Self {
+impl From<Model> for CashFlow {
+    fn from(cash_flow: Model) -> Self {
         Self {
-            name: row.get(0).unwrap(),
-            balance: row.get(1).unwrap(),
-            max_balance: row.get(2).unwrap(),
-            income_balance: row.get(3).unwrap(),
+            name: cash_flow.name,
+            balance: cash_flow.balance,
+            max_balance: cash_flow.max_balance,
+            income_balance: cash_flow.income_balance,
             entries: Vec::new(),
-            archived: row.get(4).unwrap(),
+            archived: cash_flow.archived,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[sea_orm(table_name = "cash_flows")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub name: String,
+    #[sea_orm(column_type = "Double")]
+    pub balance: f64,
+    #[sea_orm(column_type = "Double", nullable)]
+    pub max_balance: Option<f64>,
+    #[sea_orm(column_type = "Double", nullable)]
+    pub income_balance: Option<f64>,
+    pub archived: bool,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(has_many = "super::entry::Entity")]
+    Entries,
+}
+
+impl Related<super::entry::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Entries.def()
+    }
+}
+
+impl ActiveModelBehavior for ActiveModel {}
+
+impl From<&CashFlow> for ActiveModel {
+    fn from(flow: &CashFlow) -> Self {
+        Self {
+            name: ActiveValue::Set(flow.name.clone()),
+            balance: ActiveValue::Set(flow.balance),
+            max_balance: ActiveValue::Set(flow.max_balance),
+            income_balance: ActiveValue::Set(flow.income_balance),
+            archived: ActiveValue::Set(flow.archived),
+        }
+    }
+}
+
+impl From<&mut CashFlow> for ActiveModel {
+    fn from(flow: &mut CashFlow) -> Self {
+        Self {
+            name: ActiveValue::Set(flow.name.clone()),
+            balance: ActiveValue::Set(flow.balance),
+            max_balance: ActiveValue::Set(flow.max_balance),
+            income_balance: ActiveValue::Set(flow.income_balance),
+            archived: ActiveValue::Set(flow.archived),
         }
     }
 }
