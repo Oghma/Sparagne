@@ -1,7 +1,7 @@
 //! The module contains the `Entry` type representing an entry in cash flows and wallets.
 //!
 //! Both expenses and income are represented by `Entry` type.
-use sea_orm::entity::prelude::*;
+use sea_orm::{entity::prelude::*, ActiveValue};
 use uuid::Uuid;
 
 /// Represent a movement, an entry in cash flows or wallets.
@@ -70,3 +70,15 @@ impl Related<super::cash_flows::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl From<&Entry> for ActiveModel {
+    fn from(entry: &Entry) -> Self {
+        Self {
+            id: ActiveValue::Set(entry.id.clone()),
+            amount: ActiveValue::Set(entry.amount),
+            note: ActiveValue::Set(Some(entry.note.clone())),
+            category: ActiveValue::Set(Some(entry.category.clone())),
+            cash_flow_id: ActiveValue::Set(entry.cash_flow.clone()),
+        }
+    }
+}
