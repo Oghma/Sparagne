@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use self::{cash_flows::CashFlow, errors::EngineError};
 
-mod cash_flows;
+pub mod cash_flows;
 mod entry;
 pub mod errors;
 
