@@ -674,6 +674,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
 
 [[package]]
+name = "engine"
+version = "0.0.1"
+dependencies = [
+ "migration",
+ "sea-orm",
+ "serde",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
 name = "event-listener"
 version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -914,13 +925,13 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 name = "hodlTracker"
 version = "0.1.0"
 dependencies = [
- "axum",
  "config",
  "crossterm",
- "migration",
+ "engine",
  "sea-orm",
  "serde",
  "serde_derive",
+ "server",
  "thiserror",
  "tokio",
  "tui",
@@ -1959,6 +1970,16 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "server"
+version = "0.0.1"
+dependencies = [
+ "axum",
+ "engine",
+ "serde",
+ "tokio",
 ]
 
 [[package]]
