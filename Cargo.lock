@@ -674,6 +674,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
 
 [[package]]
+name = "engine"
+version = "0.0.1"
+dependencies = [
+ "migration",
+ "sea-orm",
+ "serde",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
 name = "event-listener"
 version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -917,6 +928,7 @@ dependencies = [
  "axum",
  "config",
  "crossterm",
+ "engine",
  "migration",
  "sea-orm",
  "serde",

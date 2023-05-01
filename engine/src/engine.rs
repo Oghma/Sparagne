@@ -6,11 +6,7 @@ use sea_orm::{
 };
 use std::collections::HashMap;
 
-use self::{cash_flows::CashFlow, errors::EngineError};
-
-pub mod cash_flows;
-mod entry;
-pub mod errors;
+use crate::{cash_flows, cash_flows::CashFlow, entry, errors::EngineError};
 
 /// Handle wallets and cash flow.
 #[derive(Debug)]
@@ -52,7 +48,7 @@ impl Engine {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<String, errors::EngineError> {
+    ) -> Result<String, EngineError> {
         match self.cash_flows.get_mut(flow_name) {
             Some(flow) => {
                 let entry = flow.add_entry(amount, category, note)?;
@@ -68,7 +64,7 @@ impl Engine {
         &mut self,
         flow_name: &String,
         entry_id: &String,
-    ) -> Result<(), errors::EngineError> {
+    ) -> Result<(), EngineError> {
         match self.cash_flows.get_mut(flow_name) {
             Some(flow) => {
                 flow.delete_entry(entry_id)?;
@@ -78,7 +74,7 @@ impl Engine {
                     .unwrap();
                 Ok(())
             }
-            None => Err(errors::EngineError::KeyNotFound(flow_name.clone())),
+            None => Err(EngineError::KeyNotFound(flow_name.clone())),
         }
     }
 
@@ -88,9 +84,9 @@ impl Engine {
         balance: f64,
         max_balance: Option<f64>,
         income_bounded: Option<bool>,
-    ) -> Result<(), errors::EngineError> {
+    ) -> Result<(), EngineError> {
         if self.cash_flows.contains_key(&name) {
-            return Err(errors::EngineError::ExistingKey(name));
+            return Err(EngineError::ExistingKey(name));
         }
         let flow = CashFlow::new(name.clone(), balance, max_balance, income_bounded);
         let flow_mdodel: cash_flows::ActiveModel = (&flow).into();
@@ -115,7 +111,7 @@ impl Engine {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<(), errors::EngineError> {
+    ) -> Result<(), EngineError> {
         match self.cash_flows.get_mut(flow_name) {
             Some(flow) => {
                 let entry = flow.update_entry(entry_id, amount, category, note)?;
@@ -123,15 +119,11 @@ impl Engine {
                 entry_model.update(&self.database).await.unwrap();
                 Ok(())
             }
-            None => Err(errors::EngineError::KeyNotFound(flow_name.clone())),
+            None => Err(EngineError::KeyNotFound(flow_name.clone())),
         }
     }
 
-    pub async fn delete_flow(
-        &mut self,
-        name: &String,
-        archive: bool,
-    ) -> Result<(), errors::EngineError> {
+    pub async fn delete_flow(&mut self, name: &String, archive: bool) -> Result<(), EngineError> {
         if let Some(flow) = self.cash_flows.get_mut(name) {
             if archive {
                 flow.archive();

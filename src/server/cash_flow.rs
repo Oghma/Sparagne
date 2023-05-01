@@ -2,8 +2,7 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
 
 use super::SharedState;
-
-use crate::engine::cash_flows::CashFlow;
+use engine::CashFlow;
 
 #[derive(Deserialize)]
 pub struct CreateCashFlow {
