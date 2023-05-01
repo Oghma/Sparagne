@@ -57,7 +57,6 @@ impl Engine {
             Some(flow) => {
                 let entry = flow.add_entry(amount, category, note)?;
                 let entry_insert: entry::ActiveModel = entry.into();
-                println!("{:?}", &entry_insert);
                 entry_insert.insert(&self.database).await.unwrap();
                 Ok(entry.id.clone())
             }
@@ -95,16 +94,7 @@ impl Engine {
         }
         let flow = CashFlow::new(name.clone(), balance, max_balance, income_bounded);
         let flow_mdodel: cash_flows::ActiveModel = (&flow).into();
-        println!("{:?}", &flow_mdodel);
         flow_mdodel.insert(&self.database).await.unwrap();
-
-        let cash_flows: Vec<cash_flows::Model> = cash_flows::Entity::find()
-            .all(&self.database)
-            .await
-            .unwrap();
-
-        println!("{:?}", cash_flows);
-
         self.cash_flows.insert(name, flow);
 
         Ok(())
