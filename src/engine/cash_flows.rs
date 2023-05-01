@@ -1,6 +1,7 @@
 //! The module contains the representation of a cash flow.
 //!
 use sea_orm::entity::{prelude::*, ActiveValue};
+use serde::Serialize;
 
 use super::entry::Entry;
 use super::errors::EngineError;
@@ -29,7 +30,7 @@ use super::errors::EngineError;
 ///
 /// With a income bounded cash flow, the constraint is $5 <= 10$ accepting an
 /// income of maximum 7.
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct CashFlow {
     pub name: String,
     pub balance: f64,
