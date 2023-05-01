@@ -1,7 +1,7 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
 
-use super::SharedState;
+use crate::server::SharedState;
 
 #[derive(Deserialize)]
 pub struct CreateEntry {

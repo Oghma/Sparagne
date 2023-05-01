@@ -925,14 +925,13 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 name = "hodlTracker"
 version = "0.1.0"
 dependencies = [
- "axum",
  "config",
  "crossterm",
  "engine",
- "migration",
  "sea-orm",
  "serde",
  "serde_derive",
+ "server",
  "thiserror",
  "tokio",
  "tui",
@@ -1971,6 +1970,16 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "server"
+version = "0.0.1"
+dependencies = [
+ "axum",
+ "engine",
+ "serde",
+ "tokio",
 ]
 
 [[package]]

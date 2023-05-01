@@ -4,19 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = [".", "engine", "migration"]
+members = [".", "engine", "migration", "server"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.6.11"
 config = "0.13.2"
 crossterm = "0.25.0"
 engine = { path = "engine" }
-migration = { path = "migration" }
 sea-orm = { version = "0.11.0", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 serde = "1.0.147"
 serde_derive = "1.0.147"
+server = { path = "server" }
 thiserror = "1.0.37"
 tokio = { version = "1.26.0", features = ["full"] }
 tui = "0.19.0"
