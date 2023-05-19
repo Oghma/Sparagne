@@ -10,5 +10,5 @@ path = "src/lib.rs"
 [dependencies]
 axum = "0.6.18"
 engine = { path = "../engine" }
-serde = "1.0.160"
-tokio = { version = "1.28.0", features = ["full"] }
+serde = "1.0.163"
+tokio = { version = "1.28.1", features = ["full"] }

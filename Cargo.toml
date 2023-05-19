@@ -11,8 +11,8 @@ members = [".", "engine", "migration", "server", "telegram_bot"]
 [dependencies]
 config = "0.13.3"
 engine = { path = "engine" }
-serde = "1.0.160"
-serde_derive = "1.0.160"
+serde = "1.0.163"
+serde_derive = "1.0.163"
 server = { path = "server" }
 telegram_bot = { path = "telegram_bot" }
-tokio = { version = "1.28.0", features = ["full"] }
+tokio = { version = "1.28.1", features = ["full"] }
