@@ -2,8 +2,7 @@
 //!
 //! The errors are:
 //!
-//! - [`MaxBalanceReached`] thrown when a [`CashFlow`] or [`Wallet`] has reached
-//!     max balance.
+//! - [`MaxBalanceReached`] thrown when a [`CashFlow`] has reached max balance.
 //! - [`KeyNotFound`] thrown when an item are not found.
 //!
 //!  [`MaxBalanceReached`]: EngineError::MaxBalanceReached
