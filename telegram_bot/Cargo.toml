@@ -1,0 +1,16 @@
+[package]
+name = "telegram_bot"
+version = "0.0.1"
+edition = "2021"
+
+[lib]
+name = "telegram_bot"
+path = "src/lib.rs"
+
+[dependencies]
+engine = { path = "../engine" }
+reqwest = { workspace = true, features = ["json"] }
+serde_json = { workspace = true }
+teloxide = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros"] }
+tracing = { workspace = true }

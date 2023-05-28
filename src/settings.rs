@@ -11,8 +11,15 @@ pub struct Sqlite {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct Telegram {
+    pub token: String,
+    pub server_url: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Settings {
     pub sqlite: Sqlite,
+    pub telegram: Option<Telegram>,
 }
 
 impl Settings {
