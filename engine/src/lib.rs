@@ -1,8 +1,8 @@
 pub use cash_flows::CashFlow;
-pub use engine::Engine;
 pub use errors::EngineError;
+pub use vault::Vault;
 
 mod cash_flows;
-mod engine;
 mod entry;
 mod errors;
+mod vault;

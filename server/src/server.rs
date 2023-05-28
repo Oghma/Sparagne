@@ -9,11 +9,11 @@ use tokio::sync::RwLock;
 
 use crate::cash_flow;
 use crate::entry;
-use engine::Engine;
+use engine::Vault;
 
-pub type SharedState = State<Arc<RwLock<Engine>>>;
+pub type SharedState = State<Arc<RwLock<Vault>>>;
 
-pub async fn run(engine: Engine) {
+pub async fn run(engine: Vault) {
     let state = Arc::new(RwLock::new(engine));
 
     let app = Router::new()

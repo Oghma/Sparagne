@@ -12,7 +12,7 @@ async fn main() {
 
     let settings = settings::Settings::new().unwrap();
 
-    let engine = engine::Engine::builder()
+    let engine = engine::Vault::builder()
         .database(&settings.sqlite.path)
         .build()
         .await;
