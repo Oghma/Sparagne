@@ -6,3 +6,5 @@ mod cash_flows;
 mod entry;
 mod error;
 mod vault;
+
+type ResultEngine<T> = Result<T, EngineError>;

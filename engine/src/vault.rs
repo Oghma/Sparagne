@@ -6,7 +6,7 @@ use sea_orm::{
 };
 use std::collections::HashMap;
 
-use crate::{cash_flows, cash_flows::CashFlow, entry, error::EngineError};
+use crate::{cash_flows, cash_flows::CashFlow, entry, error::EngineError, ResultEngine};
 
 /// Handle wallets and cash flow.
 #[derive(Debug)]
@@ -48,7 +48,7 @@ impl Vault {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<String, EngineError> {
+    ) -> ResultEngine<String> {
         match self.cash_flows.get_mut(flow_name) {
             Some(flow) => {
                 let entry = flow.add_entry(amount, category, note)?;
@@ -64,7 +64,7 @@ impl Vault {
         &mut self,
         flow_name: &String,
         entry_id: &String,
-    ) -> Result<(), EngineError> {
+    ) -> ResultEngine<()> {
         match self.cash_flows.get_mut(flow_name) {
             Some(flow) => {
                 flow.delete_entry(entry_id)?;
@@ -84,7 +84,7 @@ impl Vault {
         balance: f64,
         max_balance: Option<f64>,
         income_bounded: Option<bool>,
-    ) -> Result<(), EngineError> {
+    ) -> ResultEngine<()> {
         if self.cash_flows.contains_key(&name) {
             return Err(EngineError::ExistingKey(name));
         }
@@ -111,7 +111,7 @@ impl Vault {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<(), EngineError> {
+    ) -> ResultEngine<()> {
         match self.cash_flows.get_mut(flow_name) {
             Some(flow) => {
                 let entry = flow.update_entry(entry_id, amount, category, note)?;
@@ -123,7 +123,7 @@ impl Vault {
         }
     }
 
-    pub async fn delete_flow(&mut self, name: &String, archive: bool) -> Result<(), EngineError> {
+    pub async fn delete_flow(&mut self, name: &String, archive: bool) -> ResultEngine<()> {
         if let Some(flow) = self.cash_flows.get_mut(name) {
             if archive {
                 flow.archive();
