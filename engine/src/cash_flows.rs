@@ -4,7 +4,7 @@ use sea_orm::entity::{prelude::*, ActiveValue};
 use serde::Serialize;
 
 use super::entry::Entry;
-use super::errors::EngineError;
+use super::error::EngineError;
 
 /// A cash flow.
 ///

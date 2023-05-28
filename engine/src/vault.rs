@@ -6,7 +6,7 @@ use sea_orm::{
 };
 use std::collections::HashMap;
 
-use crate::{cash_flows, cash_flows::CashFlow, entry, errors::EngineError};
+use crate::{cash_flows, cash_flows::CashFlow, entry, error::EngineError};
 
 /// Handle wallets and cash flow.
 #[derive(Debug)]
