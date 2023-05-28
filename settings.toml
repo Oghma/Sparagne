@@ -1,3 +1,7 @@
 # Only sqlite3 is supported as database.
 [sqlite]
 path = "db/db.sqlite3"
+
+[telegram]
+token = ""
+server_url = ""
