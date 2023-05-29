@@ -31,7 +31,7 @@ impl Wallet {
         category: String,
         note: String,
     ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(balance, category, note, self.name.clone());
+        let entry = Entry::new(balance, category, note, None, Some(self.name.clone()));
         self.balance += entry.amount;
         self.entries.push(entry);
 

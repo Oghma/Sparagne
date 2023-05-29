@@ -12,18 +12,26 @@ pub struct Entry {
     pub amount: f64,
     pub category: String,
     pub note: String,
-    pub cash_flow: String,
+    pub cash_flow: Option<String>,
+    pub wallet: Option<String>,
 }
 
 /// Type used to represent an entry in cash flows and wallets.
 impl Entry {
-    pub fn new(amount: f64, category: String, note: String, cash_flow: String) -> Self {
+    pub fn new(
+        amount: f64,
+        category: String,
+        note: String,
+        cash_flow: Option<String>,
+        wallet: Option<String>,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             amount,
             category,
             note,
             cash_flow,
+            wallet,
         }
     }
 }
@@ -36,6 +44,7 @@ impl From<Model> for Entry {
             category: entry.category.unwrap(),
             note: entry.note.unwrap(),
             cash_flow: entry.cash_flow_id,
+            wallet: entry.wallet_id,
         }
     }
 }
@@ -49,7 +58,8 @@ pub struct Model {
     pub amount: f64,
     pub note: Option<String>,
     pub category: Option<String>,
-    pub cash_flow_id: String,
+    pub cash_flow_id: Option<String>,
+    pub wallet_id: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -62,11 +72,25 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     CashFlows,
+    #[sea_orm(
+        belongs_to = "super::wallets::Entity",
+        from = "Column::WalletId",
+        to = "super::wallets::Column::Name",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Wallets,
 }
 
 impl Related<super::cash_flows::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::CashFlows.def()
+    }
+}
+
+impl Related<super::wallets::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Wallets.def()
     }
 }
 
@@ -80,6 +104,7 @@ impl From<&Entry> for ActiveModel {
             note: ActiveValue::Set(Some(entry.note.clone())),
             category: ActiveValue::Set(Some(entry.category.clone())),
             cash_flow_id: ActiveValue::Set(entry.cash_flow.clone()),
+            wallet_id: ActiveValue::Set(entry.wallet.clone()),
         }
     }
 }

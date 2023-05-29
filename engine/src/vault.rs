@@ -28,8 +28,10 @@ impl Vault {
         }
 
         for entry in entries {
-            let flow: &mut CashFlow = cash_flow.get_mut(&entry.cash_flow_id).unwrap();
-            flow.entries.push(entry.into());
+            if let Some(id) = &entry.cash_flow_id {
+                let flow: &mut CashFlow = cash_flow.get_mut(id).unwrap();
+                flow.entries.push(entry.into());
+            }
         }
 
         Self {
