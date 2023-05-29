@@ -5,12 +5,14 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
 };
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use crate::{cash_flows, cash_flows::CashFlow, entry, error::EngineError, ResultEngine};
 
 /// Handle wallets and cash flow.
 #[derive(Debug)]
 pub struct Vault {
+    pub id: Uuid,
     cash_flows: HashMap<String, CashFlow>,
     database: DatabaseConnection,
 }
@@ -35,6 +37,7 @@ impl Vault {
         }
 
         Self {
+            id: Uuid::new_v4(),
             cash_flows: cash_flow,
             database,
         }
