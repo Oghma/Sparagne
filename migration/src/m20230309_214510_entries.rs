@@ -1,6 +1,7 @@
 use sea_orm_migration::prelude::*;
 
 use super::m20230309_180650_cash_flows::CashFlows;
+use super::m20230528_204409_wallets::Wallets;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -17,12 +18,19 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Entries::Amount).double().not_null())
                     .col(ColumnDef::new(Entries::Note).string())
                     .col(ColumnDef::new(Entries::Category).string())
-                    .col(ColumnDef::new(Entries::CashFlowId).string().not_null())
+                    .col(ColumnDef::new(Entries::CashFlowId).string())
+                    .col(ColumnDef::new(Entries::WalletId).string())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-entries-cashflow_id")
                             .from(Entries::Table, Entries::CashFlowId)
                             .to(CashFlows::Table, CashFlows::Name),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-entries-wallet_id")
+                            .from(Entries::Table, Entries::WalletId)
+                            .to(Wallets::Table, Wallets::Name),
                     )
                     .to_owned(),
             )
@@ -45,4 +53,5 @@ enum Entries {
     Note,
     Category,
     CashFlowId,
+    WalletId,
 }
