@@ -1,0 +1,167 @@
+//! The module contains `Wallet` struct and its implementation.
+
+use sea_orm::entity::prelude::*;
+
+use crate::{entry::Entry, EngineError, ResultEngine};
+
+/// A wallet.
+///
+/// A wallet is a representation of a real wallet, a bank account or anything
+/// else where money are kept. It is not a representation of a credit card.
+pub struct Wallet {
+    pub name: String,
+    pub balance: f64,
+    pub entries: Vec<Entry>,
+    pub archived: bool,
+}
+
+impl Wallet {
+    pub fn new(name: String, balance: f64) -> Self {
+        Self {
+            name,
+            balance,
+            entries: Vec::new(),
+            archived: false,
+        }
+    }
+
+    pub fn add_entry(
+        &mut self,
+        balance: f64,
+        category: String,
+        note: String,
+    ) -> ResultEngine<&Entry> {
+        let entry = Entry::new(balance, category, note, None, Some(self.name.clone()));
+        self.balance += entry.amount;
+        self.entries.push(entry);
+
+        Ok(&self.entries[self.entries.len() - 1])
+    }
+
+    pub fn archive(&mut self) {
+        self.archived = true;
+    }
+
+    pub fn delete_entry(&mut self, id: &str) -> ResultEngine<Entry> {
+        match self.entries.iter().position(|entry| entry.id == *id) {
+            Some(index) => {
+                let entry = self.entries.remove(index);
+                self.balance -= entry.amount;
+                Ok(entry)
+            }
+            None => Err(EngineError::KeyNotFound(id.to_string())),
+        }
+    }
+
+    pub fn update_entry(
+        &mut self,
+        id: &str,
+        amount: f64,
+        category: String,
+        note: String,
+    ) -> ResultEngine<&Entry> {
+        match self.entries.iter().position(|entry| entry.id == *id) {
+            Some(index) => {
+                let entry = &mut self.entries[index];
+                self.balance = self.balance - entry.amount + amount;
+
+                entry.amount = amount;
+                entry.category = category;
+                entry.note = note;
+
+                Ok(entry)
+            }
+            None => Err(EngineError::KeyNotFound(id.to_string())),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[sea_orm(table_name = "wallets")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub name: String,
+    #[sea_orm(column_type = "Double")]
+    pub balance: f64,
+    pub archived: bool,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(has_many = "super::entry::Entity")]
+    Entries,
+}
+
+impl Related<super::entry::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Entries.def()
+    }
+}
+
+impl ActiveModelBehavior for ActiveModel {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wallet() -> Wallet {
+        Wallet::new(String::from("Cash"), 0f64)
+    }
+
+    #[test]
+    fn add_entry() {
+        let mut wallet = wallet();
+        wallet
+            .add_entry(10.4, String::from("Income"), String::from("Hard work"))
+            .unwrap();
+        let entry = &wallet.entries[0];
+
+        assert_eq!(wallet.name, "Cash".to_string());
+        assert_eq!(wallet.balance, 10.4);
+        assert_eq!(entry.amount, 10.4);
+        assert_eq!(entry.category, "Income".to_string());
+        assert_eq!(entry.note, "Hard work".to_string());
+    }
+
+    #[test]
+    fn update_entry() {
+        let mut wallet = wallet();
+        wallet
+            .add_entry(10.4, String::from("Income"), String::from("Hard work"))
+            .unwrap();
+        let entry_id = wallet.entries[0].id.clone();
+
+        wallet
+            .update_entry(
+                &entry_id,
+                10f64,
+                String::from("Income"),
+                String::from("Monthly"),
+            )
+            .unwrap();
+        let entry = &wallet.entries[0];
+
+        assert_eq!(wallet.balance, 10f64);
+        assert_eq!(entry.amount, 10f64);
+        assert_eq!(entry.category, String::from("Income"));
+        assert_eq!(entry.note, String::from("Monthly"))
+    }
+
+    #[test]
+    #[should_panic(expected = "KeyNotFound(\"fail\")")]
+    fn fail_update_entry() {
+        let mut wallet = wallet();
+        wallet
+            .add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .unwrap();
+
+        wallet
+            .update_entry(
+                "fail",
+                20f64,
+                String::from("Income"),
+                String::from("Monthly"),
+            )
+            .unwrap();
+    }
+}

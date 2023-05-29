@@ -1,8 +1,11 @@
 pub use cash_flows::CashFlow;
-pub use engine::Engine;
-pub use errors::EngineError;
+pub use error::EngineError;
+pub use vault::Vault;
 
 mod cash_flows;
-mod engine;
 mod entry;
-mod errors;
+mod error;
+mod vault;
+mod wallets;
+
+type ResultEngine<T> = Result<T, EngineError>;

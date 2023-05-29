@@ -4,7 +4,8 @@ use sea_orm::entity::{prelude::*, ActiveValue};
 use serde::Serialize;
 
 use super::entry::Entry;
-use super::errors::EngineError;
+use super::error::EngineError;
+use super::ResultEngine;
 
 /// A cash flow.
 ///
@@ -67,8 +68,8 @@ impl CashFlow {
         balance: f64,
         category: String,
         note: String,
-    ) -> Result<&Entry, EngineError> {
-        let entry = Entry::new(balance, category, note, self.name.clone());
+    ) -> ResultEngine<&Entry> {
+        let entry = Entry::new(balance, category, note, Some(self.name.clone()), None);
         // If bounded, check constraints are respected
         if entry.amount > 0f64 {
             if let Some(bound) = self.max_balance {
@@ -93,7 +94,7 @@ impl CashFlow {
         self.archived = true;
     }
 
-    pub fn delete_entry(&mut self, id: &String) -> Result<Entry, EngineError> {
+    pub fn delete_entry(&mut self, id: &String) -> ResultEngine<Entry> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
@@ -115,7 +116,7 @@ impl CashFlow {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<&Entry, EngineError> {
+    ) -> ResultEngine<&Entry> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
                 let entry = &mut self.entries[index];

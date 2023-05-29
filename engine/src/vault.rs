@@ -1,4 +1,4 @@
-//! This module is the core of the application. The `Engine` struct handles cash
+//! The core of the project. `Vault` struct is a vault it handles cash flows,
 //! flows and wallets.
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{
@@ -6,16 +6,16 @@ use sea_orm::{
 };
 use std::collections::HashMap;
 
-use crate::{cash_flows, cash_flows::CashFlow, entry, errors::EngineError};
+use crate::{cash_flows, cash_flows::CashFlow, entry, error::EngineError, ResultEngine};
 
 /// Handle wallets and cash flow.
 #[derive(Debug)]
-pub struct Engine {
+pub struct Vault {
     cash_flows: HashMap<String, CashFlow>,
     database: DatabaseConnection,
 }
 
-impl Engine {
+impl Vault {
     pub async fn new(database: DatabaseConnection) -> Self {
         let mut cash_flow = HashMap::new();
 
@@ -28,8 +28,10 @@ impl Engine {
         }
 
         for entry in entries {
-            let flow: &mut CashFlow = cash_flow.get_mut(&entry.cash_flow_id).unwrap();
-            flow.entries.push(entry.into());
+            if let Some(id) = &entry.cash_flow_id {
+                let flow: &mut CashFlow = cash_flow.get_mut(id).unwrap();
+                flow.entries.push(entry.into());
+            }
         }
 
         Self {
@@ -38,8 +40,8 @@ impl Engine {
         }
     }
 
-    pub fn builder() -> EngineBuilder {
-        EngineBuilder::default()
+    pub fn builder() -> VaultBuilder {
+        VaultBuilder::default()
     }
 
     pub async fn add_flow_entry(
@@ -48,7 +50,7 @@ impl Engine {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<String, EngineError> {
+    ) -> ResultEngine<String> {
         match self.cash_flows.get_mut(flow_name) {
             Some(flow) => {
                 let entry = flow.add_entry(amount, category, note)?;
@@ -64,7 +66,7 @@ impl Engine {
         &mut self,
         flow_name: &String,
         entry_id: &String,
-    ) -> Result<(), EngineError> {
+    ) -> ResultEngine<()> {
         match self.cash_flows.get_mut(flow_name) {
             Some(flow) => {
                 flow.delete_entry(entry_id)?;
@@ -84,7 +86,7 @@ impl Engine {
         balance: f64,
         max_balance: Option<f64>,
         income_bounded: Option<bool>,
-    ) -> Result<(), EngineError> {
+    ) -> ResultEngine<()> {
         if self.cash_flows.contains_key(&name) {
             return Err(EngineError::ExistingKey(name));
         }
@@ -111,7 +113,7 @@ impl Engine {
         amount: f64,
         category: String,
         note: String,
-    ) -> Result<(), EngineError> {
+    ) -> ResultEngine<()> {
         match self.cash_flows.get_mut(flow_name) {
             Some(flow) => {
                 let entry = flow.update_entry(entry_id, amount, category, note)?;
@@ -123,7 +125,7 @@ impl Engine {
         }
     }
 
-    pub async fn delete_flow(&mut self, name: &String, archive: bool) -> Result<(), EngineError> {
+    pub async fn delete_flow(&mut self, name: &String, archive: bool) -> ResultEngine<()> {
         if let Some(flow) = self.cash_flows.get_mut(name) {
             if archive {
                 flow.archive();
@@ -148,29 +150,29 @@ impl Engine {
 }
 
 #[derive(Default)]
-pub struct EngineBuilder {
+pub struct VaultBuilder {
     url: String,
     database_initialize: bool,
 }
 
-impl EngineBuilder {
-    pub fn database(mut self, path: &str) -> EngineBuilder {
+impl VaultBuilder {
+    pub fn database(mut self, path: &str) -> VaultBuilder {
         self.url = format!("sqlite:{}", path);
         self
     }
 
-    pub fn memory(mut self) -> EngineBuilder {
+    pub fn memory(mut self) -> VaultBuilder {
         self.url = "sqlite::memory:".to_string();
         self.database_initialize = true;
         self
     }
 
-    pub fn database_initialize(mut self) -> EngineBuilder {
+    pub fn database_initialize(mut self) -> VaultBuilder {
         self.database_initialize = true;
         self
     }
 
-    pub async fn build(self) -> Engine {
+    pub async fn build(self) -> Vault {
         let database = Database::connect(self.url)
             .await
             .expect("Failed to create db");
@@ -179,7 +181,7 @@ impl EngineBuilder {
             Migrator::up(&database, None).await.unwrap();
         }
 
-        Engine::new(database).await
+        Vault::new(database).await
     }
 }
 
@@ -187,21 +189,21 @@ impl EngineBuilder {
 mod tests {
     use super::*;
 
-    async fn engine() -> (String, Engine) {
-        let mut engine = Engine::builder().memory().build().await;
-        engine
+    async fn vault() -> (String, Vault) {
+        let mut vault = Vault::builder().memory().build().await;
+        vault
             .new_flow(String::from("Cash"), 1f64, None, None)
             .await
             .unwrap();
 
-        (String::from("Cash"), engine)
+        (String::from("Cash"), vault)
     }
 
     #[tokio::test]
     async fn add_flow_entry() {
-        let (flow_name, mut engine) = engine().await;
+        let (flow_name, mut vault) = vault().await;
 
-        engine
+        vault
             .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
             .await
             .unwrap();
@@ -210,8 +212,8 @@ mod tests {
     #[tokio::test]
     #[should_panic(expected = "KeyNotFound(\"Foo\")")]
     async fn fail_flow_entry() {
-        let (_, mut engine) = engine().await;
-        engine
+        let (_, mut vault) = vault().await;
+        vault
             .add_flow_entry(
                 &String::from("Foo"),
                 1.2,
@@ -224,30 +226,30 @@ mod tests {
 
     #[tokio::test]
     async fn new_flows() {
-        let mut engine = Engine::builder().memory().build().await;
-        engine
+        let mut vault = Vault::builder().memory().build().await;
+        vault
             .new_flow(String::from("Cash"), 1f64, None, None)
             .await
             .unwrap();
 
-        engine
+        vault
             .new_flow(String::from("Cash1"), 1f64, Some(10f64), None)
             .await
             .unwrap();
 
-        engine
+        vault
             .new_flow(String::from("Cash2"), 1f64, Some(10f64), Some(true))
             .await
             .unwrap();
 
-        assert_eq!(engine.cash_flows.is_empty(), false);
+        assert_eq!(vault.cash_flows.is_empty(), false);
     }
 
     #[tokio::test]
     #[should_panic(expected = "ExistingKey(\"Cash\")")]
     async fn fail_add_same_flow() {
-        let (flow_name, mut engine) = engine().await;
-        engine
+        let (flow_name, mut vault) = vault().await;
+        vault
             .new_flow(flow_name, 1f64, Some(10f64), None)
             .await
             .unwrap();
@@ -255,14 +257,14 @@ mod tests {
 
     #[tokio::test]
     async fn delete_entry() {
-        let (flow_name, mut engine) = engine().await;
+        let (flow_name, mut vault) = vault().await;
 
-        let entry_id = engine
+        let entry_id = vault
             .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
             .await
             .unwrap();
 
-        engine
+        vault
             .delete_flow_entry(&flow_name, &entry_id)
             .await
             .unwrap();
@@ -270,14 +272,14 @@ mod tests {
 
     #[tokio::test]
     async fn update_entry() {
-        let (flow_name, mut engine) = engine().await;
+        let (flow_name, mut vault) = vault().await;
 
-        let entry_id = engine
+        let entry_id = vault
             .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
             .await
             .unwrap();
 
-        engine
+        vault
             .update_flow_entry(
                 &flow_name,
                 &entry_id,
@@ -291,8 +293,8 @@ mod tests {
 
     #[tokio::test]
     async fn delete_flow() {
-        let (flow_name, mut engine) = engine().await;
-        engine.delete_flow(&flow_name, false).await.unwrap();
-        assert_eq!(engine.cash_flows.is_empty(), true);
+        let (flow_name, mut vault) = vault().await;
+        vault.delete_flow(&flow_name, false).await.unwrap();
+        assert_eq!(vault.cash_flows.is_empty(), true);
     }
 }
