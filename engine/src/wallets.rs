@@ -1,5 +1,7 @@
 //! The module contains `Wallet` struct and its implementation.
 
+use sea_orm::entity::prelude::*;
+
 use crate::{entry::Entry, EngineError, ResultEngine};
 
 /// A wallet.
@@ -73,6 +75,30 @@ impl Wallet {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[sea_orm(table_name = "wallets")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub name: String,
+    #[sea_orm(column_type = "Double")]
+    pub balance: f64,
+    pub archived: bool,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(has_many = "super::entry::Entity")]
+    Entries,
+}
+
+impl Related<super::entry::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Entries.def()
+    }
+}
+
+impl ActiveModelBehavior for ActiveModel {}
 
 #[cfg(test)]
 mod tests {
