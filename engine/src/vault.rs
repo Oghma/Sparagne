@@ -1,5 +1,6 @@
-//! The core of the project. `Vault` struct is a vault it handles cash flows,
-//! flows and wallets.
+//! The `Vault` holds the user's wallets and cash flows. The user can have
+//! multiple vaults.
+
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
@@ -9,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{cash_flows, cash_flows::CashFlow, entry, error::EngineError, ResultEngine};
 
-/// Handle wallets and cash flow.
+/// Holds wallets and cash flows
 #[derive(Debug)]
 pub struct Vault {
     pub id: Uuid,
