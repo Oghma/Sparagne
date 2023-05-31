@@ -2,9 +2,7 @@
 //! multiple vaults.
 
 use migration::{Migrator, MigratorTrait};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
-};
+use sea_orm::{prelude::*, Database};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -188,6 +186,19 @@ impl VaultBuilder {
         Vault::new(database).await
     }
 }
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
+#[sea_orm(table_name = "vault")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: String,
+    pub name: Option<Uuid>,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}
 
 #[cfg(test)]
 mod tests {
