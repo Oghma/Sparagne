@@ -1,8 +1,7 @@
 //! The `Vault` holds the user's wallets and cash flows. The user can have
 //! multiple vaults.
 
-use migration::{Migrator, MigratorTrait};
-use sea_orm::{prelude::*, Database};
+use sea_orm::prelude::*;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -40,10 +39,6 @@ impl Vault {
             cash_flows: cash_flow,
             database,
         }
-    }
-
-    pub fn builder() -> VaultBuilder {
-        VaultBuilder::default()
     }
 
     pub async fn add_flow_entry(
@@ -148,42 +143,6 @@ impl Vault {
             return Ok(());
         }
         Err(EngineError::KeyNotFound(name.clone()))
-    }
-}
-
-#[derive(Default)]
-pub struct VaultBuilder {
-    url: String,
-    database_initialize: bool,
-}
-
-impl VaultBuilder {
-    pub fn database(mut self, path: &str) -> VaultBuilder {
-        self.url = format!("sqlite:{}", path);
-        self
-    }
-
-    pub fn memory(mut self) -> VaultBuilder {
-        self.url = "sqlite::memory:".to_string();
-        self.database_initialize = true;
-        self
-    }
-
-    pub fn database_initialize(mut self) -> VaultBuilder {
-        self.database_initialize = true;
-        self
-    }
-
-    pub async fn build(self) -> Vault {
-        let database = Database::connect(self.url)
-            .await
-            .expect("Failed to create db");
-
-        if self.database_initialize {
-            Migrator::up(&database, None).await.unwrap();
-        }
-
-        Vault::new(database).await
     }
 }
 
