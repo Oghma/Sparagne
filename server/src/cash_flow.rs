@@ -24,17 +24,12 @@ pub async fn cashflow_new(
     State(state): SharedState,
     Json(payload): Json<CreateCashFlow>,
 ) -> StatusCode {
-    if let Ok(()) = state
-        .write()
-        .await
-        .new_flow(
-            payload.name,
-            payload.balance,
-            payload.max_balance,
-            payload.income_bounded,
-        )
-        .await
-    {
+    if let Ok(_) = state.write().await.new_flow(
+        payload.name,
+        payload.balance,
+        payload.max_balance,
+        payload.income_bounded,
+    ) {
         return StatusCode::CREATED;
     }
     StatusCode::NOT_IMPLEMENTED
