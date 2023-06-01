@@ -22,7 +22,7 @@ async fn main() {
         tracing::info!("Found telegram settings...");
         telegram_bot::Bot::builder()
             .token(&telegram.token)
-            .server_url(&telegram.server_url)
+            .server(&telegram.server)
             .build()
             .run()
             .await;

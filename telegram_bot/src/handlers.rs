@@ -46,7 +46,7 @@ pub async fn handle_user_commands(
         } => {
             send_entry(
                 &cfg.client,
-                &cfg.server_url,
+                &cfg.server,
                 &flow_name,
                 amount,
                 &category,
@@ -63,7 +63,7 @@ pub async fn handle_user_commands(
         } => {
             send_entry(
                 &cfg.client,
-                &cfg.server_url,
+                &cfg.server,
                 &flow_name,
                 -amount,
                 &category,

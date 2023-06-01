@@ -5,4 +5,4 @@ path = "db/db.sqlite3"
 # Uncomment to start the telegram bot
 # [telegram]
 # token = ""
-# server_url = ""
+# server = ""
