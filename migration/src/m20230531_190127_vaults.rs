@@ -9,10 +9,10 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Vault::Table)
+                    .table(Vaults::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(Vault::Id).uuid().not_null().primary_key())
-                    .col(ColumnDef::new(Vault::Name).string())
+                    .col(ColumnDef::new(Vaults::Id).uuid().not_null().primary_key())
+                    .col(ColumnDef::new(Vaults::Name).string())
                     .to_owned(),
             )
             .await
@@ -21,14 +21,14 @@ impl MigrationTrait for Migration {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         // Replace the sample below with your own migration scripts
         manager
-            .drop_table(Table::drop().table(Vault::Table).to_owned())
+            .drop_table(Table::drop().table(Vaults::Table).to_owned())
             .await
     }
 }
 
 /// Learn more at https://docs.rs/sea-query#iden
 #[derive(Iden)]
-enum Vault {
+pub enum Vaults {
     Table,
     Id,
     Name,
