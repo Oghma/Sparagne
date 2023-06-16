@@ -2369,6 +2369,7 @@ dependencies = [
  "engine",
  "serde",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

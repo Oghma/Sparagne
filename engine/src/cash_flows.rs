@@ -174,17 +174,32 @@ pub struct Model {
     #[sea_orm(column_type = "Double", nullable)]
     pub income_balance: Option<f64>,
     pub archived: bool,
+    pub vault_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::entry::Entity")]
     Entries,
+    #[sea_orm(
+        belongs_to = "super::vault::Entity",
+        from = "Column::VaultId",
+        to = "super::vault::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Vaults,
 }
 
 impl Related<super::entry::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Entries.def()
+    }
+}
+
+impl Related<super::vault::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Vaults.def()
     }
 }
 
@@ -198,6 +213,7 @@ impl From<&CashFlow> for ActiveModel {
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
             archived: ActiveValue::Set(flow.archived),
+            vault_id: ActiveValue::NotSet,
         }
     }
 }
@@ -210,6 +226,7 @@ impl From<&mut CashFlow> for ActiveModel {
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
             archived: ActiveValue::Set(flow.archived),
+            vault_id: ActiveValue::NotSet,
         }
     }
 }
