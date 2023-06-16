@@ -11,19 +11,16 @@ use crate::{cash_flows, cash_flows::CashFlow, entry, error::EngineError, ResultE
 #[derive(Debug)]
 pub struct Vault {
     pub id: Uuid,
-    cash_flow: HashMap<String, CashFlow>,
+    pub name: String,
+    pub cash_flow: HashMap<String, CashFlow>,
 }
 
 impl Vault {
-    pub fn new(flows: Vec<CashFlow>) -> Self {
-        let cash_flow = flows
-            .into_iter()
-            .map(|entry| (entry.name.clone(), entry))
-            .collect::<HashMap<_, _>>();
-
+    pub fn new(name: String) -> Self {
         Self {
             id: Uuid::new_v4(),
-            cash_flow,
+            name,
+            cash_flow: HashMap::new(),
         }
     }
 
@@ -124,8 +121,8 @@ impl Vault {
 #[sea_orm(table_name = "vaults")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: String,
-    pub name: Option<Uuid>,
+    pub id: Uuid,
+    pub name: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -147,7 +144,10 @@ mod tests {
     use super::*;
 
     fn vault() -> (String, Vault) {
-        let vault = Vault::new(vec![CashFlow::new(String::from("Cash"), 1f64, None, None)]);
+        let mut vault = Vault::new(String::from("Main"));
+        vault
+            .new_flow(String::from("Cash"), 1f64, None, None)
+            .unwrap();
         (String::from("Cash"), vault)
     }
 
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn new_flows() {
-        let mut vault = Vault::new(vec![]);
+        let mut vault = Vault::new(String::from("Main"));
 
         vault
             .new_flow(String::from("Cash"), 1f64, None, None)
