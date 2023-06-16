@@ -31,7 +31,7 @@ impl Wallet {
         category: String,
         note: String,
     ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(balance, category, note, None, Some(self.name.clone()));
+        let entry = Entry::new(balance, category, note);
         self.balance += entry.amount;
         self.entries.push(entry);
 
@@ -42,7 +42,7 @@ impl Wallet {
         self.archived = true;
     }
 
-    pub fn delete_entry(&mut self, id: &str) -> ResultEngine<Entry> {
+    pub fn delete_entry(&mut self, id: &Uuid) -> ResultEngine<Entry> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
@@ -55,7 +55,7 @@ impl Wallet {
 
     pub fn update_entry(
         &mut self,
-        id: &str,
+        id: &Uuid,
         amount: f64,
         category: String,
         note: String,
@@ -102,6 +102,8 @@ impl ActiveModelBehavior for ActiveModel {}
 
 #[cfg(test)]
 mod tests {
+    use uuid::uuid;
+
     use super::*;
 
     fn wallet() -> Wallet {
@@ -148,7 +150,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "KeyNotFound(\"fail\")")]
+    #[should_panic(expected = "KeyNotFound(\"6a8416ed-b8e6-4732-a591-bf55da9687e7\")")]
     fn fail_update_entry() {
         let mut wallet = wallet();
         wallet
@@ -157,7 +159,7 @@ mod tests {
 
         wallet
             .update_entry(
-                "fail",
+                &uuid!("6a8416ed-b8e6-4732-a591-bf55da9687e7"),
                 20f64,
                 String::from("Income"),
                 String::from("Monthly"),

@@ -33,7 +33,7 @@ impl Vault {
         amount: f64,
         category: String,
         note: String,
-    ) -> ResultEngine<(String, entry::ActiveModel)> {
+    ) -> ResultEngine<(Uuid, entry::ActiveModel)> {
         match self.cash_flow.get_mut(flow_name) {
             Some(flow) => {
                 let entry = flow.add_entry(amount, category, note)?;
@@ -46,7 +46,7 @@ impl Vault {
         }
     }
 
-    pub fn delete_flow_entry(&mut self, flow_name: &String, entry_id: &String) -> ResultEngine<()> {
+    pub fn delete_flow_entry(&mut self, flow_name: &String, entry_id: &Uuid) -> ResultEngine<()> {
         match self.cash_flow.get_mut(flow_name) {
             Some(flow) => {
                 flow.delete_entry(entry_id)?;
@@ -84,7 +84,7 @@ impl Vault {
     pub fn update_flow_entry(
         &mut self,
         flow_name: &String,
-        entry_id: &String,
+        entry_id: &Uuid,
         amount: f64,
         category: String,
         note: String,

@@ -1,5 +1,6 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
+use uuid::Uuid;
 
 use super::server::SharedState;
 use engine::CashFlow;
@@ -10,6 +11,7 @@ pub struct CreateCashFlow {
     balance: f64,
     max_balance: Option<f64>,
     income_bounded: Option<bool>,
+    vault_id: Uuid,
 }
 
 pub async fn cashflow_names(State(state): SharedState) -> Json<Vec<CashFlow>> {
@@ -29,6 +31,7 @@ pub async fn cashflow_new(
         payload.balance,
         payload.max_balance,
         payload.income_bounded,
+        payload.vault_id,
     ) {
         return StatusCode::CREATED;
     }

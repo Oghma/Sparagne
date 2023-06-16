@@ -69,7 +69,7 @@ impl CashFlow {
         category: String,
         note: String,
     ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(balance, category, note, Some(self.name.clone()), None);
+        let entry = Entry::new(balance, category, note);
         // If bounded, check constraints are respected
         if entry.amount > 0f64 {
             if let Some(bound) = self.max_balance {
@@ -94,7 +94,7 @@ impl CashFlow {
         self.archived = true;
     }
 
-    pub fn delete_entry(&mut self, id: &String) -> ResultEngine<Entry> {
+    pub fn delete_entry(&mut self, id: &Uuid) -> ResultEngine<Entry> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
@@ -112,7 +112,7 @@ impl CashFlow {
 
     pub fn update_entry(
         &mut self,
-        id: &String,
+        id: &Uuid,
         amount: f64,
         category: String,
         note: String,
