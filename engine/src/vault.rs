@@ -1,7 +1,7 @@
 //! The `Vault` holds the user's wallets and cash flows. The user can have
 //! multiple vaults.
 
-use sea_orm::prelude::*;
+use sea_orm::{prelude::*, ActiveValue};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -138,6 +138,15 @@ impl Related<super::cash_flows::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl From<&Vault> for ActiveModel {
+    fn from(value: &Vault) -> Self {
+        Self {
+            id: sea_orm::ActiveValue::Set(value.id),
+            name: ActiveValue::Set(value.name.clone()),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
