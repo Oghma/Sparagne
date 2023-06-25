@@ -22,6 +22,11 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// Return a builder for `Engine`. Help to build the struct.
+    pub fn builder() -> EngineBuilder {
+        EngineBuilder::default()
+    }
+
     ///Add a new income or an expense
     async fn add_entry(
         &mut self,
@@ -164,5 +169,93 @@ impl Engine {
             }
             None => Err(EngineError::KeyNotFound(vault_id.to_string())),
         }
+    }
+}
+
+/// The builder for `Engine`
+#[derive(Default)]
+pub struct EngineBuilder {
+    sqlite_path: String,
+    initialize: bool,
+}
+
+impl EngineBuilder {
+    /// Specifies a path to SQLite3 database
+    ///
+    /// NOTE: Only SQLite is supported
+    pub fn sqlite(mut self, path: &str) -> EngineBuilder {
+        self.sqlite_path = format!("sqlite:{}", path);
+        self
+    }
+
+    /// Specifies to create an in-memory database
+    pub fn memory(mut self) -> EngineBuilder {
+        self.sqlite_path = String::from("sqlite::memory:");
+        self
+    }
+
+    /// Specifies to initialize the database creating the schema
+    ///
+    /// By default, is `false`
+    pub fn initialize(mut self) -> EngineBuilder {
+        self.initialize = true;
+        self
+    }
+
+    /// Construct `Engine`
+    pub async fn build(self) -> Engine {
+        let mut vaults = HashMap::new();
+        let database = Database::connect(self.sqlite_path)
+            .await
+            .expect("Failed to connect to the database");
+
+        if self.initialize {
+            Migrator::up(&database, None).await.unwrap();
+        }
+
+        let vaults_flows: Vec<(vault::Model, Vec<cash_flows::Model>)> = vault::Entity::find()
+            .find_with_related(cash_flows::Entity)
+            .all(&database)
+            .await
+            .unwrap();
+
+        for vault_entry in vaults_flows {
+            let mut flows = HashMap::new();
+
+            for flow_entry in vault_entry.1 {
+                // Fetch cash flow entries
+                let entries: Vec<entry::Entry> = flow_entry
+                    .find_related(entry::Entity)
+                    .all(&database)
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .map(|value| entry::Entry::from(value))
+                    .collect();
+
+                flows.insert(
+                    flow_entry.name.clone(),
+                    CashFlow {
+                        name: flow_entry.name,
+                        balance: flow_entry.balance,
+                        max_balance: flow_entry.max_balance,
+                        income_balance: flow_entry.income_balance,
+                        entries,
+                        archived: flow_entry.archived,
+                    },
+                );
+            }
+
+            vaults.insert(
+                vault_entry.0.id,
+                Vault {
+                    id: vault_entry.0.id,
+                    name: vault_entry.0.name,
+                    cash_flow: flows,
+                },
+            );
+        }
+
+        Engine { vaults, database }
     }
 }
