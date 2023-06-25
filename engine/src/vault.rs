@@ -59,15 +59,16 @@ impl Vault {
         balance: f64,
         max_balance: Option<f64>,
         income_bounded: Option<bool>,
-    ) -> ResultEngine<cash_flows::ActiveModel> {
+    ) -> ResultEngine<(String, cash_flows::ActiveModel)> {
         if self.cash_flow.contains_key(&name) {
             return Err(EngineError::ExistingKey(name));
         }
         let flow = CashFlow::new(name.clone(), balance, max_balance, income_bounded);
+        let flow_id = flow.name.clone();
         let flow_mdodel: cash_flows::ActiveModel = (&flow).into();
         self.cash_flow.insert(name, flow);
 
-        Ok(flow_mdodel)
+        Ok((flow_id, flow_mdodel))
     }
 
     pub fn iter_flow(&self) -> impl Iterator<Item = (&String, &CashFlow)> {

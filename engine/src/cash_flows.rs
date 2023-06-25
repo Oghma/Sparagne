@@ -149,19 +149,6 @@ impl CashFlow {
     }
 }
 
-impl From<Model> for CashFlow {
-    fn from(cash_flow: Model) -> Self {
-        Self {
-            name: cash_flow.name,
-            balance: cash_flow.balance,
-            max_balance: cash_flow.max_balance,
-            income_balance: cash_flow.income_balance,
-            entries: Vec::new(),
-            archived: cash_flow.archived,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "cash_flows")]
 pub struct Model {
