@@ -8,6 +8,7 @@ use crate::{entry::Entry, EngineError, ResultEngine};
 ///
 /// A wallet is a representation of a real wallet, a bank account or anything
 /// else where money are kept. It is not a representation of a credit card.
+#[derive(Debug)]
 pub struct Wallet {
     pub name: String,
     pub balance: f64,
@@ -84,17 +85,32 @@ pub struct Model {
     #[sea_orm(column_type = "Double")]
     pub balance: f64,
     pub archived: bool,
+    pub vault_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::entry::Entity")]
     Entries,
+    #[sea_orm(
+        belongs_to = "super::vault::Entity",
+        from = "Column::VaultId",
+        to = "super::vault::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Vaults,
 }
 
 impl Related<super::entry::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Entries.def()
+    }
+}
+
+impl Related<super::vault::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Vaults.def()
     }
 }
 
