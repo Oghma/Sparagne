@@ -5,7 +5,9 @@ use sea_orm::{prelude::*, ActiveValue};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::{cash_flows, cash_flows::CashFlow, entry, error::EngineError, ResultEngine};
+use crate::{
+    cash_flows, cash_flows::CashFlow, entry, error::EngineError, wallets::Wallet, ResultEngine,
+};
 
 /// Holds wallets and cash flows
 #[derive(Debug)]
@@ -13,6 +15,7 @@ pub struct Vault {
     pub id: Uuid,
     pub name: String,
     pub cash_flow: HashMap<String, CashFlow>,
+    pub wallet: HashMap<Uuid, Wallet>,
 }
 
 impl Vault {
@@ -21,6 +24,7 @@ impl Vault {
             id: Uuid::new_v4(),
             name,
             cash_flow: HashMap::new(),
+            wallet: HashMap::new(),
         }
     }
 

@@ -252,6 +252,7 @@ impl EngineBuilder {
                     id: vault_entry.0.id,
                     name: vault_entry.0.name,
                     cash_flow: flows,
+                    wallet: HashMap::new(),
                 },
             );
         }
