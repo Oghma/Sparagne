@@ -54,6 +54,12 @@ impl Wallet {
         }
     }
 
+    /// Insert an existing `Entry` into the wallet.
+    pub fn insert_entry(&mut self, entry: &Entry) {
+        self.balance += entry.amount;
+        self.entries.push(entry.clone());
+    }
+
     pub fn update_entry(
         &mut self,
         id: &Uuid,
