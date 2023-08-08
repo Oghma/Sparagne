@@ -34,18 +34,26 @@ impl Engine {
         category: &str,
         note: &str,
         vault_id: &Uuid,
-        flow_id: &String,
+        flow_id: Option<&str>,
+        wallet_id: Option<&Uuid>,
     ) -> ResultEngine<Uuid> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
-                let (entry_id, mut entry_model) = vault.add_flow_entry(
+                let (entry_id, mut entry_model) = vault.add_entry(
+                    wallet_id,
                     flow_id,
                     balance,
                     category.to_string(),
                     note.to_string(),
                 )?;
 
-                entry_model.cash_flow_id = ActiveValue::Set(Some(flow_id.clone()));
+                if let Some(fid) = flow_id {
+                    entry_model.cash_flow_id = ActiveValue::Set(Some(fid.to_string()));
+                }
+                if let Some(wid) = wallet_id {
+                    entry_model.wallet_id = ActiveValue::Set(Some(wid.to_string()));
+                }
+
                 entry_model.save(&self.database).await.unwrap();
                 Ok(entry_id)
             }

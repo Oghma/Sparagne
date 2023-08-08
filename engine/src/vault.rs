@@ -28,23 +28,51 @@ impl Vault {
         }
     }
 
-    pub fn add_flow_entry(
+    /// Add an income or expense entry
+    pub fn add_entry(
         &mut self,
-        flow_name: &String,
+        wallet_id: Option<&Uuid>,
+        flow_id: Option<&str>,
         amount: f64,
         category: String,
         note: String,
     ) -> ResultEngine<(Uuid, entry::ActiveModel)> {
-        match self.cash_flow.get_mut(flow_name) {
-            Some(flow) => {
-                let entry = flow.add_entry(amount, category, note)?;
-                let entry_id = entry.id.clone();
-                let entry: entry::ActiveModel = entry.into();
+        let entry;
 
-                Ok((entry_id, entry))
+        match (wallet_id, flow_id) {
+            (Some(wid), Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                entry = flow.add_entry(amount, category, note)?;
+
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                wallet.insert_entry(entry);
             }
-            None => Err(EngineError::KeyNotFound(flow_name.clone())),
+            (Some(wid), None) => {
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                entry = wallet.add_entry(amount, category, note)?;
+            }
+            (None, Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                entry = flow.add_entry(amount, category, note)?;
+            }
+            (None, None) => {
+                return Err(EngineError::KeyNotFound(
+                    "Missing wallet and cash flow ids".to_string(),
+                ));
+            }
         }
+
+        let entry_id = entry.id.clone();
+        let entry: entry::ActiveModel = entry.into();
+        Ok((entry_id, entry))
     }
 
     pub fn delete_flow_entry(&mut self, flow_name: &String, entry_id: &Uuid) -> ResultEngine<()> {
@@ -166,10 +194,16 @@ mod tests {
     }
 
     #[test]
-    fn add_flow_entry() {
+    fn add_entry() {
         let (flow_name, mut vault) = vault();
         vault
-            .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
+            .add_entry(
+                None,
+                Some(&flow_name),
+                1.2,
+                String::from("Income"),
+                String::from(""),
+            )
             .unwrap();
     }
 
@@ -178,8 +212,9 @@ mod tests {
     fn fail_flow_entry() {
         let (_, mut vault) = vault();
         vault
-            .add_flow_entry(
-                &String::from("Foo"),
+            .add_entry(
+                None,
+                Some("Foo"),
                 1.2,
                 String::from("Income"),
                 String::from(""),
@@ -218,7 +253,13 @@ mod tests {
         let (flow_name, mut vault) = vault();
 
         let (entry_id, _) = vault
-            .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
+            .add_entry(
+                None,
+                Some(&flow_name),
+                1.2,
+                String::from("Income"),
+                String::from(""),
+            )
             .unwrap();
 
         vault.delete_flow_entry(&flow_name, &entry_id).unwrap();
@@ -229,7 +270,13 @@ mod tests {
         let (flow_name, mut vault) = vault();
 
         let (entry_id, _) = vault
-            .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
+            .add_entry(
+                None,
+                Some(&flow_name),
+                1.2,
+                String::from("Income"),
+                String::from(""),
+            )
             .unwrap();
 
         vault
