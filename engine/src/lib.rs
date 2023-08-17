@@ -156,7 +156,8 @@ impl Engine {
     async fn update_entry(
         &mut self,
         vault_id: &Uuid,
-        flow_id: &String,
+        flow_id: Option<&str>,
+        wallet_id: Option<&Uuid>,
         entry_id: &Uuid,
         amount: f64,
         category: &str,
@@ -164,14 +165,21 @@ impl Engine {
     ) -> ResultEngine<()> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
-                let mut entry_model = vault.update_flow_entry(
+                let mut entry_model = vault.update_entry(
+                    wallet_id,
                     flow_id,
                     entry_id,
                     amount,
                     category.to_string(),
                     note.to_string(),
                 )?;
-                entry_model.cash_flow_id = ActiveValue::Set(Some(flow_id.clone()));
+
+                if let Some(fid) = flow_id {
+                    entry_model.cash_flow_id = ActiveValue::Set(Some(fid.to_string()));
+                }
+                if let Some(wid) = wallet_id {
+                    entry_model.wallet_id = ActiveValue::Set(Some(wid.to_string()));
+                }
                 entry_model.save(&self.database).await.unwrap();
 
                 Ok(())

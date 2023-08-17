@@ -143,23 +143,50 @@ impl Vault {
         self.cash_flow.iter()
     }
 
-    pub fn update_flow_entry(
+    pub fn update_entry(
         &mut self,
-        flow_name: &String,
+        wallet_id: Option<&Uuid>,
+        flow_id: Option<&str>,
         entry_id: &Uuid,
         amount: f64,
         category: String,
         note: String,
     ) -> ResultEngine<entry::ActiveModel> {
-        match self.cash_flow.get_mut(flow_name) {
-            Some(flow) => {
-                let entry = flow.update_entry(entry_id, amount, category, note)?;
-                let entry: entry::ActiveModel = entry.into();
+        let entry;
 
-                Ok(entry)
+        match (wallet_id, flow_id) {
+            (Some(wid), Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                entry = flow.update_entry(entry_id, amount, category.clone(), note.clone())?;
+
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                wallet.update_entry(entry_id, amount, category, note)?;
             }
-            None => Err(EngineError::KeyNotFound(flow_name.clone())),
+            (Some(wid), None) => {
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                entry = wallet.update_entry(entry_id, amount, category, note)?;
+            }
+            (None, Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                entry = flow.update_entry(entry_id, amount, category, note)?;
+            }
+            (None, None) => {
+                return Err(EngineError::KeyNotFound(
+                    "Missing wallet and cash flow ids".to_string(),
+                ));
+            }
         }
+
+        let entry: entry::ActiveModel = entry.into();
+        Ok(entry)
     }
 
     pub fn delete_flow(
@@ -314,8 +341,9 @@ mod tests {
             .unwrap();
 
         vault
-            .update_flow_entry(
-                &flow_name,
+            .update_entry(
+                None,
+                Some(&flow_name),
                 &entry_id,
                 -5f64,
                 String::from("Home"),
