@@ -89,12 +89,13 @@ impl Engine {
     async fn delete_entry(
         &mut self,
         vault_id: &Uuid,
-        flow_id: &String,
+        flow_id: Option<&str>,
+        wallet_id: Option<&Uuid>,
         entry_id: &Uuid,
     ) -> ResultEngine<()> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
-                vault.delete_flow_entry(flow_id, entry_id)?;
+                vault.delete_entry(wallet_id, flow_id, entry_id)?;
                 entry::Entity::delete_by_id(entry_id.clone())
                     .exec(&self.database)
                     .await

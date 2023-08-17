@@ -75,14 +75,46 @@ impl Vault {
         Ok((entry_id, entry))
     }
 
-    pub fn delete_flow_entry(&mut self, flow_name: &String, entry_id: &Uuid) -> ResultEngine<()> {
-        match self.cash_flow.get_mut(flow_name) {
-            Some(flow) => {
+    pub fn delete_entry(
+        &mut self,
+        wallet_id: Option<&Uuid>,
+        flow_id: Option<&str>,
+        entry_id: &Uuid,
+    ) -> ResultEngine<()> {
+        match (wallet_id, flow_id) {
+            (Some(wid), Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
                 flow.delete_entry(entry_id)?;
-                Ok(())
+
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                wallet.delete_entry(entry_id)?;
             }
-            None => Err(EngineError::KeyNotFound(flow_name.clone())),
-        }
+            (Some(wid), None) => {
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                wallet.delete_entry(entry_id)?;
+            }
+
+            (None, Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                flow.delete_entry(entry_id)?;
+            }
+
+            (None, None) => {
+                return Err(EngineError::KeyNotFound(
+                    "Missing wallet and cash flow ids".to_string(),
+                ))
+            }
+        };
+
+        Ok(())
     }
 
     pub fn new_flow(
@@ -262,7 +294,9 @@ mod tests {
             )
             .unwrap();
 
-        vault.delete_flow_entry(&flow_name, &entry_id).unwrap();
+        vault
+            .delete_entry(None, Some(&flow_name), &entry_id)
+            .unwrap();
     }
 
     #[test]
