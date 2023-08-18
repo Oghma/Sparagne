@@ -28,7 +28,7 @@ impl Engine {
     }
 
     ///Add a new income or an expense
-    async fn add_entry(
+    pub async fn add_entry(
         &mut self,
         balance: f64,
         category: &str,
@@ -62,7 +62,7 @@ impl Engine {
     }
 
     /// Delete a cash flow contained by a vault.
-    async fn delete_cash_flow(
+    pub async fn delete_cash_flow(
         &mut self,
         vault_id: &Uuid,
         name: &str,
@@ -86,7 +86,7 @@ impl Engine {
     }
 
     /// Delete an income or an expense.
-    async fn delete_entry(
+    pub async fn delete_entry(
         &mut self,
         vault_id: &Uuid,
         flow_id: Option<&str>,
@@ -109,7 +109,7 @@ impl Engine {
 
     /// Delete or archive a vault
     /// TODO: Add `archive`
-    async fn delete_vault(&mut self, vault_id: &Uuid) -> ResultEngine<()> {
+    pub async fn delete_vault(&mut self, vault_id: &Uuid) -> ResultEngine<()> {
         match self.vaults.remove(vault_id) {
             Some(vault) => {
                 let vault_model: vault::ActiveModel = (&vault).into();
@@ -121,7 +121,7 @@ impl Engine {
     }
 
     /// Add a new vault
-    async fn new_vault(&mut self, name: &str) -> ResultEngine<Uuid> {
+    pub async fn new_vault(&mut self, name: &str) -> ResultEngine<Uuid> {
         let new_vault = Vault::new(name.to_string());
         let new_vault_id = new_vault.id.clone();
         let vault_entry: vault::ActiveModel = (&new_vault).into();
@@ -132,7 +132,7 @@ impl Engine {
     }
 
     /// Add a new cash flow inside a vault.
-    async fn new_cash_flow(
+    pub async fn new_cash_flow(
         &mut self,
         vault_id: &Uuid,
         name: &str,
@@ -153,7 +153,7 @@ impl Engine {
     }
 
     /// Update an income or an expense
-    async fn update_entry(
+    pub async fn update_entry(
         &mut self,
         vault_id: &Uuid,
         flow_id: Option<&str>,
