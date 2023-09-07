@@ -1,21 +1,28 @@
 use axum::{
     extract::State,
-    headers::Header,
+    headers::{authorization::Basic, Authorization, Header},
+    http::{Request, StatusCode},
+    middleware::{self, Next},
+    response::Response,
     routing::{get, post},
-    Router,
+    Extension, Router, TypedHeader,
 };
+use sea_orm::{ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter};
 
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 
-use crate::cash_flow;
-use crate::entry;
+use crate::{cash_flow, entry, user};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
     axum::http::HeaderName::from_static("telegram-user-id");
 
-pub type SharedState = State<Arc<RwLock<Engine>>>;
+#[derive(Clone)]
+pub struct ServerState {
+    pub engine: Arc<RwLock<Engine>>,
+    pub db: DatabaseConnection,
+}
 
 /// `TypedHeader` for custom telegram header
 #[derive(Debug)]
@@ -48,8 +55,57 @@ impl Header for TelegramHeader {
     }
 }
 
-pub async fn run(engine: Engine) {
-    let state = Arc::new(RwLock::new(engine));
+async fn auth<B>(
+    auth_header: TypedHeader<Authorization<Basic>>,
+    telegram_header: Option<TypedHeader<TelegramHeader>>,
+    State(state): State<ServerState>,
+    mut request: Request<B>,
+    next: Next<B>,
+) -> Result<Response, StatusCode> {
+    if auth_header.username().is_empty() || auth_header.password().is_empty() {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let user: Option<user::Model> = user::Entity::find()
+        .filter(user::Column::User.contains(auth_header.username()))
+        .filter(user::Column::Password.contains(auth_header.password()))
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let mut user = if let Some(user) = user {
+        user
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    if let Some(header) = telegram_header {
+        let header = header.0;
+        let user_entry = user::Entity::find()
+            .filter(user::Column::TelegramId.eq(header.0))
+            .one(&state.db)
+            .await
+            .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+        user = if let Some(user) = user_entry {
+            user
+        } else {
+            return Err(StatusCode::UNAUTHORIZED);
+        };
+    }
+
+    request.extensions_mut().insert(user);
+    Ok(next.run(request).await)
+}
+
+pub async fn run(engine: Engine, sqlite_path: &str) {
+    let db = Database::connect(format!("sqlite:{}", sqlite_path))
+        .await
+        .expect("Failed to connect to the databse");
+    let state = ServerState {
+        engine: Arc::new(RwLock::new(engine)),
+        db,
+    };
 
     let app = Router::new()
         .route("/allCashFlows", get(cash_flow::cashflow_names))
