@@ -13,7 +13,7 @@ pub struct Sqlite {
 #[derive(Debug, Deserialize)]
 pub struct Telegram {
     pub token: String,
-    pub server_url: String,
+    pub server: String,
 }
 
 #[derive(Debug, Deserialize)]

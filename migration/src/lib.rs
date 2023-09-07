@@ -3,6 +3,8 @@ pub use sea_orm_migration::prelude::*;
 mod m20230309_180650_cash_flows;
 mod m20230309_214510_entries;
 mod m20230528_204409_wallets;
+mod m20230531_190127_vaults;
+mod m20230828_064600_users;
 
 pub struct Migrator;
 
@@ -13,6 +15,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20230309_180650_cash_flows::Migration),
             Box::new(m20230309_214510_entries::Migration),
             Box::new(m20230528_204409_wallets::Migration),
+            Box::new(m20230531_190127_vaults::Migration),
+            Box::new(m20230828_064600_users::Migration),
         ]
     }
 }

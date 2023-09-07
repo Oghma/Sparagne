@@ -69,7 +69,7 @@ impl CashFlow {
         category: String,
         note: String,
     ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(balance, category, note, Some(self.name.clone()), None);
+        let entry = Entry::new(balance, category, note);
         // If bounded, check constraints are respected
         if entry.amount > 0f64 {
             if let Some(bound) = self.max_balance {
@@ -94,7 +94,7 @@ impl CashFlow {
         self.archived = true;
     }
 
-    pub fn delete_entry(&mut self, id: &String) -> ResultEngine<Entry> {
+    pub fn delete_entry(&mut self, id: &Uuid) -> ResultEngine<Entry> {
         match self.entries.iter().position(|entry| entry.id == *id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
@@ -112,7 +112,7 @@ impl CashFlow {
 
     pub fn update_entry(
         &mut self,
-        id: &String,
+        id: &Uuid,
         amount: f64,
         category: String,
         note: String,
@@ -149,19 +149,6 @@ impl CashFlow {
     }
 }
 
-impl From<Model> for CashFlow {
-    fn from(cash_flow: Model) -> Self {
-        Self {
-            name: cash_flow.name,
-            balance: cash_flow.balance,
-            max_balance: cash_flow.max_balance,
-            income_balance: cash_flow.income_balance,
-            entries: Vec::new(),
-            archived: cash_flow.archived,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "cash_flows")]
 pub struct Model {
@@ -174,17 +161,32 @@ pub struct Model {
     #[sea_orm(column_type = "Double", nullable)]
     pub income_balance: Option<f64>,
     pub archived: bool,
+    pub vault_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::entry::Entity")]
     Entries,
+    #[sea_orm(
+        belongs_to = "super::vault::Entity",
+        from = "Column::VaultId",
+        to = "super::vault::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Vaults,
 }
 
 impl Related<super::entry::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Entries.def()
+    }
+}
+
+impl Related<super::vault::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Vaults.def()
     }
 }
 
@@ -198,6 +200,7 @@ impl From<&CashFlow> for ActiveModel {
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
             archived: ActiveValue::Set(flow.archived),
+            vault_id: ActiveValue::NotSet,
         }
     }
 }
@@ -210,6 +213,7 @@ impl From<&mut CashFlow> for ActiveModel {
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
             archived: ActiveValue::Set(flow.archived),
+            vault_id: ActiveValue::NotSet,
         }
     }
 }

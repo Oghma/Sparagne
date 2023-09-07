@@ -12,17 +12,11 @@ async fn main() {
 
     let settings = settings::Settings::new().unwrap();
 
-    let engine = engine::Vault::builder()
-        .database(&settings.sqlite.path)
-        .build()
-        .await;
-    tokio::spawn(async move { server::run(engine).await });
-
     if let Some(telegram) = settings.telegram {
         tracing::info!("Found telegram settings...");
         telegram_bot::Bot::builder()
             .token(&telegram.token)
-            .server_url(&telegram.server_url)
+            .server(&telegram.server)
             .build()
             .run()
             .await;

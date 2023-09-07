@@ -10,21 +10,21 @@ mod handlers;
 pub struct ConfigParameters {
     allowed_users: Option<Vec<UserId>>,
     client: Client,
-    server_url: String,
+    server: String,
 }
 
 pub struct Bot {
     token: String,
     allowed_users: Option<Vec<UserId>>,
-    server_url: String,
+    server: String,
 }
 
 impl Bot {
-    pub fn new(token: &str, allowed_users: Option<Vec<UserId>>, server_url: &str) -> Self {
+    pub fn new(token: &str, allowed_users: Option<Vec<UserId>>, server: &str) -> Self {
         Self {
             token: token.to_string(),
             allowed_users,
-            server_url: server_url.to_string(),
+            server: server.to_string(),
         }
     }
 
@@ -39,7 +39,7 @@ impl Bot {
         let parameters = ConfigParameters {
             allowed_users: self.allowed_users.clone(),
             client: Client::new(),
-            server_url: self.server_url.clone(),
+            server: self.server.clone(),
         };
 
         let handler = Update::filter_message().branch(
@@ -74,7 +74,7 @@ impl Bot {
 pub struct BotBuilder {
     token: String,
     allowed_users: Option<Vec<UserId>>,
-    server_url: String,
+    server: String,
 }
 
 impl BotBuilder {
@@ -90,8 +90,8 @@ impl BotBuilder {
         self
     }
 
-    pub fn server_url(mut self, server_url: &str) -> BotBuilder {
-        self.server_url = server_url.to_string();
+    pub fn server(mut self, server: &str) -> BotBuilder {
+        self.server = server.to_string();
         self
     }
 
@@ -100,7 +100,7 @@ impl BotBuilder {
         Bot {
             token: self.token,
             allowed_users: self.allowed_users,
-            server_url: self.server_url,
+            server: self.server,
         }
     }
 }

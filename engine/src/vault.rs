@@ -1,187 +1,242 @@
-//! The core of the project. `Vault` struct is a vault it handles cash flows,
-//! flows and wallets.
-use migration::{Migrator, MigratorTrait};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
-};
+//! The `Vault` holds the user's wallets and cash flows. The user can have
+//! multiple vaults.
+
+use sea_orm::{prelude::*, ActiveValue};
 use std::collections::HashMap;
+use uuid::Uuid;
 
-use crate::{cash_flows, cash_flows::CashFlow, entry, error::EngineError, ResultEngine};
+use crate::{
+    cash_flows, cash_flows::CashFlow, entry, error::EngineError, wallets::Wallet, ResultEngine,
+};
 
-/// Handle wallets and cash flow.
+/// Holds wallets and cash flows
 #[derive(Debug)]
 pub struct Vault {
-    cash_flows: HashMap<String, CashFlow>,
-    database: DatabaseConnection,
+    pub id: Uuid,
+    pub name: String,
+    pub cash_flow: HashMap<String, CashFlow>,
+    pub wallet: HashMap<Uuid, Wallet>,
 }
 
 impl Vault {
-    pub async fn new(database: DatabaseConnection) -> Self {
-        let mut cash_flow = HashMap::new();
-
-        let cash_flows: Vec<cash_flows::Model> =
-            cash_flows::Entity::find().all(&database).await.unwrap();
-        let entries: Vec<entry::Model> = entry::Entity::find().all(&database).await.unwrap();
-
-        for flow in cash_flows {
-            cash_flow.insert(flow.name.clone(), flow.into());
-        }
-
-        for entry in entries {
-            if let Some(id) = &entry.cash_flow_id {
-                let flow: &mut CashFlow = cash_flow.get_mut(id).unwrap();
-                flow.entries.push(entry.into());
-            }
-        }
-
+    pub fn new(name: String) -> Self {
         Self {
-            cash_flows: cash_flow,
-            database,
+            id: Uuid::new_v4(),
+            name,
+            cash_flow: HashMap::new(),
+            wallet: HashMap::new(),
         }
     }
 
-    pub fn builder() -> VaultBuilder {
-        VaultBuilder::default()
-    }
-
-    pub async fn add_flow_entry(
+    /// Add an income or expense entry
+    pub fn add_entry(
         &mut self,
-        flow_name: &String,
+        wallet_id: Option<&Uuid>,
+        flow_id: Option<&str>,
         amount: f64,
         category: String,
         note: String,
-    ) -> ResultEngine<String> {
-        match self.cash_flows.get_mut(flow_name) {
-            Some(flow) => {
-                let entry = flow.add_entry(amount, category, note)?;
-                let entry_insert: entry::ActiveModel = entry.into();
-                entry_insert.insert(&self.database).await.unwrap();
-                Ok(entry.id.clone())
+    ) -> ResultEngine<(Uuid, entry::ActiveModel)> {
+        let entry;
+
+        match (wallet_id, flow_id) {
+            (Some(wid), Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                entry = flow.add_entry(amount, category, note)?;
+
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                wallet.insert_entry(entry);
             }
-            None => Err(EngineError::KeyNotFound(flow_name.clone())),
+            (Some(wid), None) => {
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                entry = wallet.add_entry(amount, category, note)?;
+            }
+            (None, Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                entry = flow.add_entry(amount, category, note)?;
+            }
+            (None, None) => {
+                return Err(EngineError::KeyNotFound(
+                    "Missing wallet and cash flow ids".to_string(),
+                ));
+            }
         }
+
+        let entry_id = entry.id.clone();
+        let entry: entry::ActiveModel = entry.into();
+        Ok((entry_id, entry))
     }
 
-    pub async fn delete_flow_entry(
+    pub fn delete_entry(
         &mut self,
-        flow_name: &String,
-        entry_id: &String,
+        wallet_id: Option<&Uuid>,
+        flow_id: Option<&str>,
+        entry_id: &Uuid,
     ) -> ResultEngine<()> {
-        match self.cash_flows.get_mut(flow_name) {
-            Some(flow) => {
+        match (wallet_id, flow_id) {
+            (Some(wid), Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
                 flow.delete_entry(entry_id)?;
-                entry::Entity::delete_by_id(entry_id)
-                    .exec(&self.database)
-                    .await
-                    .unwrap();
-                Ok(())
+
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                wallet.delete_entry(entry_id)?;
             }
-            None => Err(EngineError::KeyNotFound(flow_name.clone())),
-        }
+            (Some(wid), None) => {
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                wallet.delete_entry(entry_id)?;
+            }
+
+            (None, Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                flow.delete_entry(entry_id)?;
+            }
+
+            (None, None) => {
+                return Err(EngineError::KeyNotFound(
+                    "Missing wallet and cash flow ids".to_string(),
+                ))
+            }
+        };
+
+        Ok(())
     }
 
-    pub async fn new_flow(
+    pub fn new_flow(
         &mut self,
         name: String,
         balance: f64,
         max_balance: Option<f64>,
         income_bounded: Option<bool>,
-    ) -> ResultEngine<()> {
-        if self.cash_flows.contains_key(&name) {
+    ) -> ResultEngine<(String, cash_flows::ActiveModel)> {
+        if self.cash_flow.contains_key(&name) {
             return Err(EngineError::ExistingKey(name));
         }
         let flow = CashFlow::new(name.clone(), balance, max_balance, income_bounded);
+        let flow_id = flow.name.clone();
         let flow_mdodel: cash_flows::ActiveModel = (&flow).into();
-        flow_mdodel.insert(&self.database).await.unwrap();
-        self.cash_flows.insert(name, flow);
+        self.cash_flow.insert(name, flow);
 
-        Ok(())
+        Ok((flow_id, flow_mdodel))
     }
 
     pub fn iter_flow(&self) -> impl Iterator<Item = (&String, &CashFlow)> {
-        self.cash_flows.iter().filter(|flow| !flow.1.archived)
+        self.cash_flow.iter().filter(|flow| !flow.1.archived)
     }
 
     pub fn iter_all_flow(&self) -> impl Iterator<Item = (&String, &CashFlow)> {
-        self.cash_flows.iter()
+        self.cash_flow.iter()
     }
 
-    pub async fn update_flow_entry(
+    pub fn update_entry(
         &mut self,
-        flow_name: &String,
-        entry_id: &String,
+        wallet_id: Option<&Uuid>,
+        flow_id: Option<&str>,
+        entry_id: &Uuid,
         amount: f64,
         category: String,
         note: String,
-    ) -> ResultEngine<()> {
-        match self.cash_flows.get_mut(flow_name) {
-            Some(flow) => {
-                let entry = flow.update_entry(entry_id, amount, category, note)?;
-                let entry_model: entry::ActiveModel = entry.into();
-                entry_model.update(&self.database).await.unwrap();
-                Ok(())
+    ) -> ResultEngine<entry::ActiveModel> {
+        let entry;
+
+        match (wallet_id, flow_id) {
+            (Some(wid), Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                entry = flow.update_entry(entry_id, amount, category.clone(), note.clone())?;
+
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                wallet.update_entry(entry_id, amount, category, note)?;
             }
-            None => Err(EngineError::KeyNotFound(flow_name.clone())),
+            (Some(wid), None) => {
+                let Some(wallet) = self.wallet.get_mut(wid) else {
+                    return Err(EngineError::KeyNotFound(wid.to_string()));
+                };
+                entry = wallet.update_entry(entry_id, amount, category, note)?;
+            }
+            (None, Some(fid)) => {
+                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                    return Err(EngineError::KeyNotFound(fid.to_string()));
+                };
+                entry = flow.update_entry(entry_id, amount, category, note)?;
+            }
+            (None, None) => {
+                return Err(EngineError::KeyNotFound(
+                    "Missing wallet and cash flow ids".to_string(),
+                ));
+            }
         }
+
+        let entry: entry::ActiveModel = entry.into();
+        Ok(entry)
     }
 
-    pub async fn delete_flow(&mut self, name: &String, archive: bool) -> ResultEngine<()> {
-        if let Some(flow) = self.cash_flows.get_mut(name) {
-            if archive {
+    pub fn delete_flow(
+        &mut self,
+        name: &String,
+        archive: bool,
+    ) -> ResultEngine<cash_flows::ActiveModel> {
+        match (self.cash_flow.get_mut(name), archive) {
+            (Some(flow), true) => {
                 flow.archive();
-                let flow_model: cash_flows::ActiveModel = flow.into();
-                flow_model.update(&self.database).await.unwrap();
-            } else {
-                // TODO: Handle better when wallets are implemented
-                entry::Entity::delete_many()
-                    .filter(entry::Column::CashFlowId.eq(name))
-                    .exec(&self.database)
-                    .await
-                    .unwrap();
-
-                let flow_mdodel: cash_flows::ActiveModel = flow.into();
-                flow_mdodel.delete(&self.database).await.unwrap();
-                self.cash_flows.remove(name);
+                Ok(flow.into())
             }
-            return Ok(());
+            (Some(flow), false) => {
+                let flow: cash_flows::ActiveModel = flow.into();
+                self.cash_flow.remove(name);
+                Ok(flow)
+            }
+            (None, _) => Err(EngineError::KeyNotFound(name.clone())),
         }
-        Err(EngineError::KeyNotFound(name.clone()))
     }
 }
 
-#[derive(Default)]
-pub struct VaultBuilder {
-    url: String,
-    database_initialize: bool,
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
+#[sea_orm(table_name = "vaults")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
+    pub name: String,
 }
 
-impl VaultBuilder {
-    pub fn database(mut self, path: &str) -> VaultBuilder {
-        self.url = format!("sqlite:{}", path);
-        self
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(has_many = "super::cash_flows::Entity")]
+    CashFlows,
+}
+
+impl Related<super::cash_flows::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::CashFlows.def()
     }
+}
 
-    pub fn memory(mut self) -> VaultBuilder {
-        self.url = "sqlite::memory:".to_string();
-        self.database_initialize = true;
-        self
-    }
+impl ActiveModelBehavior for ActiveModel {}
 
-    pub fn database_initialize(mut self) -> VaultBuilder {
-        self.database_initialize = true;
-        self
-    }
-
-    pub async fn build(self) -> Vault {
-        let database = Database::connect(self.url)
-            .await
-            .expect("Failed to create db");
-
-        if self.database_initialize {
-            Migrator::up(&database, None).await.unwrap();
+impl From<&Vault> for ActiveModel {
+    fn from(value: &Vault) -> Self {
+        Self {
+            id: sea_orm::ActiveValue::Set(value.id),
+            name: ActiveValue::Set(value.name.clone()),
         }
-
-        Vault::new(database).await
     }
 }
 
@@ -189,112 +244,118 @@ impl VaultBuilder {
 mod tests {
     use super::*;
 
-    async fn vault() -> (String, Vault) {
-        let mut vault = Vault::builder().memory().build().await;
+    fn vault() -> (String, Vault) {
+        let mut vault = Vault::new(String::from("Main"));
         vault
             .new_flow(String::from("Cash"), 1f64, None, None)
-            .await
             .unwrap();
-
         (String::from("Cash"), vault)
     }
 
-    #[tokio::test]
-    async fn add_flow_entry() {
-        let (flow_name, mut vault) = vault().await;
-
+    #[test]
+    fn add_entry() {
+        let (flow_name, mut vault) = vault();
         vault
-            .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    #[should_panic(expected = "KeyNotFound(\"Foo\")")]
-    async fn fail_flow_entry() {
-        let (_, mut vault) = vault().await;
-        vault
-            .add_flow_entry(
-                &String::from("Foo"),
+            .add_entry(
+                None,
+                Some(&flow_name),
                 1.2,
                 String::from("Income"),
                 String::from(""),
             )
-            .await
             .unwrap();
     }
 
-    #[tokio::test]
-    async fn new_flows() {
-        let mut vault = Vault::builder().memory().build().await;
+    #[test]
+    #[should_panic(expected = "KeyNotFound(\"Foo\")")]
+    fn fail_flow_entry() {
+        let (_, mut vault) = vault();
+        vault
+            .add_entry(
+                None,
+                Some("Foo"),
+                1.2,
+                String::from("Income"),
+                String::from(""),
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn new_flows() {
+        let mut vault = Vault::new(String::from("Main"));
+
         vault
             .new_flow(String::from("Cash"), 1f64, None, None)
-            .await
             .unwrap();
 
         vault
             .new_flow(String::from("Cash1"), 1f64, Some(10f64), None)
-            .await
             .unwrap();
 
         vault
             .new_flow(String::from("Cash2"), 1f64, Some(10f64), Some(true))
-            .await
             .unwrap();
 
-        assert_eq!(vault.cash_flows.is_empty(), false);
+        assert_eq!(vault.cash_flow.is_empty(), false);
     }
 
-    #[tokio::test]
+    #[test]
     #[should_panic(expected = "ExistingKey(\"Cash\")")]
-    async fn fail_add_same_flow() {
-        let (flow_name, mut vault) = vault().await;
+    fn fail_add_same_flow() {
+        let (flow_name, mut vault) = vault();
+        vault.new_flow(flow_name, 1f64, Some(10f64), None).unwrap();
+    }
+
+    #[test]
+    fn delete_entry() {
+        let (flow_name, mut vault) = vault();
+
+        let (entry_id, _) = vault
+            .add_entry(
+                None,
+                Some(&flow_name),
+                1.2,
+                String::from("Income"),
+                String::from(""),
+            )
+            .unwrap();
+
         vault
-            .new_flow(flow_name, 1f64, Some(10f64), None)
-            .await
+            .delete_entry(None, Some(&flow_name), &entry_id)
             .unwrap();
     }
 
-    #[tokio::test]
-    async fn delete_entry() {
-        let (flow_name, mut vault) = vault().await;
+    #[test]
+    fn update_entry() {
+        let (flow_name, mut vault) = vault();
 
-        let entry_id = vault
-            .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
-            .await
+        let (entry_id, _) = vault
+            .add_entry(
+                None,
+                Some(&flow_name),
+                1.2,
+                String::from("Income"),
+                String::from(""),
+            )
             .unwrap();
 
         vault
-            .delete_flow_entry(&flow_name, &entry_id)
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn update_entry() {
-        let (flow_name, mut vault) = vault().await;
-
-        let entry_id = vault
-            .add_flow_entry(&flow_name, 1.2, String::from("Income"), String::from(""))
-            .await
-            .unwrap();
-
-        vault
-            .update_flow_entry(
-                &flow_name,
+            .update_entry(
+                None,
+                Some(&flow_name),
                 &entry_id,
                 -5f64,
                 String::from("Home"),
                 String::from(""),
             )
-            .await
             .unwrap();
     }
 
-    #[tokio::test]
-    async fn delete_flow() {
-        let (flow_name, mut vault) = vault().await;
-        vault.delete_flow(&flow_name, false).await.unwrap();
-        assert_eq!(vault.cash_flows.is_empty(), true);
+    #[test]
+    fn delete_flow() {
+        let (flow_name, mut vault) = vault();
+        vault.delete_flow(&flow_name, false).unwrap();
+        assert_eq!(vault.cash_flow.is_empty(), true);
     }
 }

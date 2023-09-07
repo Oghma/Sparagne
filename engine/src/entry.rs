@@ -8,30 +8,20 @@ use uuid::Uuid;
 /// Represent a movement, an entry in cash flows or wallets.
 #[derive(Clone, Debug, Serialize)]
 pub struct Entry {
-    pub id: String,
+    pub id: Uuid,
     pub amount: f64,
     pub category: String,
     pub note: String,
-    pub cash_flow: Option<String>,
-    pub wallet: Option<String>,
 }
 
 /// Type used to represent an entry in cash flows and wallets.
 impl Entry {
-    pub fn new(
-        amount: f64,
-        category: String,
-        note: String,
-        cash_flow: Option<String>,
-        wallet: Option<String>,
-    ) -> Self {
+    pub fn new(amount: f64, category: String, note: String) -> Self {
         Self {
-            id: Uuid::new_v4().to_string(),
+            id: Uuid::new_v4(),
             amount,
             category,
             note,
-            cash_flow,
-            wallet,
         }
     }
 }
@@ -43,8 +33,6 @@ impl From<Model> for Entry {
             amount: entry.amount,
             category: entry.category.unwrap(),
             note: entry.note.unwrap(),
-            cash_flow: entry.cash_flow_id,
-            wallet: entry.wallet_id,
         }
     }
 }
@@ -53,7 +41,7 @@ impl From<Model> for Entry {
 #[sea_orm(table_name = "entries")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: String,
+    pub id: Uuid,
     #[sea_orm(column_type = "Double")]
     pub amount: f64,
     pub note: Option<String>,
@@ -103,8 +91,8 @@ impl From<&Entry> for ActiveModel {
             amount: ActiveValue::Set(entry.amount),
             note: ActiveValue::Set(Some(entry.note.clone())),
             category: ActiveValue::Set(Some(entry.category.clone())),
-            cash_flow_id: ActiveValue::Set(entry.cash_flow.clone()),
-            wallet_id: ActiveValue::Set(entry.wallet.clone()),
+            cash_flow_id: ActiveValue::NotSet,
+            wallet_id: ActiveValue::NotSet,
         }
     }
 }

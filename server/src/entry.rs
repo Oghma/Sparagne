@@ -12,17 +12,12 @@ pub struct CreateEntry {
 }
 
 pub async fn entry_new(State(state): SharedState, Json(payload): Json<CreateEntry>) -> StatusCode {
-    if let Ok(_) = state
-        .write()
-        .await
-        .add_flow_entry(
-            &payload.flow_name,
-            payload.amount,
-            payload.category,
-            payload.note,
-        )
-        .await
-    {
+    if let Ok(_) = state.write().await.add_flow_entry(
+        &payload.flow_name,
+        payload.amount,
+        payload.category,
+        payload.note,
+    ) {
         StatusCode::ACCEPTED
     } else {
         StatusCode::NOT_IMPLEMENTED
