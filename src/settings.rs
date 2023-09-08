@@ -10,9 +10,16 @@ pub struct App {
     pub level: String,
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
+pub enum Database {
+    Memory,
+    Sqlite(String),
+}
+
 #[derive(Debug, Deserialize)]
-pub struct Sqlite {
-    pub path: String,
+pub struct Server {
+    pub database: Database,
+    pub port: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,7 +31,7 @@ pub struct Telegram {
 #[derive(Debug, Deserialize)]
 pub struct Settings {
     pub app: App,
-    pub sqlite: Sqlite,
+    pub server: Option<Server>,
     pub telegram: Option<Telegram>,
 }
 

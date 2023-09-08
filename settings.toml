@@ -3,9 +3,12 @@
 # Debug level
 level = "info"
 
+[server]
+port = 8844
+
+[server.database]
 # Only sqlite3 is supported as database.
-[sqlite]
-path = "db/db.sqlite3"
+Sqlite = "db/db.sqlite3"
 
 # Uncomment to start the telegram bot
 # [telegram]
