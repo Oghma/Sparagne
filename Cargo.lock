@@ -1140,6 +1140,7 @@ version = "0.1.0"
 dependencies = [
  "config",
  "engine",
+ "sea-orm",
  "serde",
  "serde_derive",
  "server",
