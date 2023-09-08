@@ -192,22 +192,14 @@ impl Engine {
 /// The builder for `Engine`
 #[derive(Default)]
 pub struct EngineBuilder {
-    sqlite_path: String,
+    database: DatabaseConnection,
     initialize: bool,
 }
 
 impl EngineBuilder {
-    /// Specifies a path to SQLite3 database
-    ///
-    /// NOTE: Only SQLite is supported
-    pub fn sqlite(mut self, path: &str) -> EngineBuilder {
-        self.sqlite_path = format!("sqlite:{}", path);
-        self
-    }
-
-    /// Specifies to create an in-memory database
-    pub fn memory(mut self) -> EngineBuilder {
-        self.sqlite_path = String::from("sqlite::memory:");
+    /// Pass the required database
+    pub fn database(mut self, db: DatabaseConnection) -> EngineBuilder {
+        self.database = db;
         self
     }
 
@@ -222,17 +214,14 @@ impl EngineBuilder {
     /// Construct `Engine`
     pub async fn build(self) -> Engine {
         let mut vaults = HashMap::new();
-        let database = Database::connect(self.sqlite_path)
-            .await
-            .expect("Failed to connect to the database");
 
         if self.initialize {
-            Migrator::up(&database, None).await.unwrap();
+            Migrator::up(&self.database, None).await.unwrap();
         }
 
         let vaults_flows: Vec<(vault::Model, Vec<cash_flows::Model>)> = vault::Entity::find()
             .find_with_related(cash_flows::Entity)
-            .all(&database)
+            .all(&self.database)
             .await
             .unwrap();
 
@@ -243,7 +232,7 @@ impl EngineBuilder {
                 // Fetch cash flow entries
                 let entries: Vec<entry::Entry> = flow_entry
                     .find_related(entry::Entity)
-                    .all(&database)
+                    .all(&self.database)
                     .await
                     .unwrap()
                     .into_iter()
@@ -274,6 +263,9 @@ impl EngineBuilder {
             );
         }
 
-        Engine { vaults, database }
+        Engine {
+            vaults,
+            database: self.database,
+        }
     }
 }

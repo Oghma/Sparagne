@@ -98,10 +98,7 @@ async fn auth<B>(
     Ok(next.run(request).await)
 }
 
-pub async fn run(engine: Engine, sqlite_path: &str) {
-    let db = Database::connect(format!("sqlite:{}", sqlite_path))
-        .await
-        .expect("Failed to connect to the databse");
+pub async fn run(engine: Engine, db: DatabaseConnection) {
     let state = ServerState {
         engine: Arc::new(RwLock::new(engine)),
         db,
