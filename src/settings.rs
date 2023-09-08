@@ -6,6 +6,11 @@ use config::{Config, ConfigError, File};
 use serde_derive::Deserialize;
 
 #[derive(Debug, Deserialize)]
+pub struct App {
+    pub level: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Sqlite {
     pub path: String,
 }
@@ -18,6 +23,7 @@ pub struct Telegram {
 
 #[derive(Debug, Deserialize)]
 pub struct Settings {
+    pub app: App,
     pub sqlite: Sqlite,
     pub telegram: Option<Telegram>,
 }
