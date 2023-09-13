@@ -215,6 +215,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub name: String,
+    pub user_id: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -236,6 +237,7 @@ impl From<&Vault> for ActiveModel {
         Self {
             id: sea_orm::ActiveValue::Set(value.id),
             name: ActiveValue::Set(value.name.clone()),
+            user_id: ActiveValue::NotSet,
         }
     }
 }
