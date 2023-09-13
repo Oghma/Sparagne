@@ -67,7 +67,7 @@ async fn auth<B>(
     }
 
     let user: Option<user::Model> = user::Entity::find()
-        .filter(user::Column::User.contains(auth_header.username()))
+        .filter(user::Column::Username.contains(auth_header.username()))
         .filter(user::Column::Password.contains(auth_header.password()))
         .one(&state.db)
         .await
