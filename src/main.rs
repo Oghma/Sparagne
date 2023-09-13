@@ -43,7 +43,9 @@ async fn main() {
         });
     }
 
-    while let Some(_) = tasks.join_next().await {}
+    while let Some(_) = tasks.join_next().await {
+        tasks.shutdown().await;
+    }
 }
 
 async fn parse_database(config: &settings::Database) -> sea_orm::DatabaseConnection {
