@@ -8,7 +8,6 @@ name = "engine"
 path = "src/lib.rs"
 
 [dependencies]
-migration = { path = "../migration" }
 serde = { workspace = true }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 thiserror = { workspace = true }

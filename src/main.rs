@@ -1,4 +1,5 @@
 use engine;
+use migration::{Migrator, MigratorTrait};
 use server;
 use settings::Database;
 use telegram_bot;
@@ -24,7 +25,6 @@ async fn main() {
 
             let engine = engine::Engine::builder()
                 .database(db.clone())
-                .initialize()
                 .build()
                 .await;
             server::run(engine, db).await;
@@ -51,10 +51,14 @@ async fn main() {
 async fn parse_database(config: &settings::Database) -> sea_orm::DatabaseConnection {
     let url = match config {
         Database::Memory => String::from("sqlite::memory"),
-        Database::Sqlite(path) => format!("sqlite:{}", path),
+        Database::Sqlite(path) => format!("sqlite:{}?mode=rwc", path),
     };
 
-    sea_orm::Database::connect(url)
+    let database = sea_orm::Database::connect(url)
         .await
-        .expect("Failed to connect to the database")
+        .expect("Failed to connect to the database");
+
+    Migrator::up(&database, None).await.unwrap();
+
+    database
 }
