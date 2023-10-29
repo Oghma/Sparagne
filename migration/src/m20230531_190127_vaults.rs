@@ -19,7 +19,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-vaults-users_id")
-                            .from(Vaults::Table, Vaults::Id)
+                            .from(Vaults::Table, Vaults::UserId)
                             .to(Users::Table, Users::Username),
                     )
                     .to_owned(),
