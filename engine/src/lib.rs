@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 pub use cash_flows::CashFlow;
 pub use error::EngineError;
-use migration::{Migrator, MigratorTrait};
-use sea_orm::{prelude::*, ActiveValue, Database};
+use sea_orm::{prelude::*, ActiveValue};
 use uuid::Uuid;
 pub use vault::Vault;
 
@@ -121,12 +120,13 @@ impl Engine {
     }
 
     /// Add a new vault
-    pub async fn new_vault(&mut self, name: &str) -> ResultEngine<Uuid> {
+    pub async fn new_vault(&mut self, name: &str, user_id: &str) -> ResultEngine<Uuid> {
         let new_vault = Vault::new(name.to_string());
         let new_vault_id = new_vault.id.clone();
-        let vault_entry: vault::ActiveModel = (&new_vault).into();
+        let mut vault_entry: vault::ActiveModel = (&new_vault).into();
+        vault_entry.user_id = ActiveValue::Set(user_id.to_string());
 
-        vault_entry.save(&self.database).await.unwrap();
+        vault_entry.insert(&self.database).await.unwrap();
         self.vaults.insert(new_vault.id, new_vault);
         Ok(new_vault_id)
     }
@@ -193,7 +193,6 @@ impl Engine {
 #[derive(Default)]
 pub struct EngineBuilder {
     database: DatabaseConnection,
-    initialize: bool,
 }
 
 impl EngineBuilder {
@@ -203,21 +202,9 @@ impl EngineBuilder {
         self
     }
 
-    /// Specifies to initialize the database creating the schema
-    ///
-    /// By default, is `false`
-    pub fn initialize(mut self) -> EngineBuilder {
-        self.initialize = true;
-        self
-    }
-
     /// Construct `Engine`
     pub async fn build(self) -> Engine {
         let mut vaults = HashMap::new();
-
-        if self.initialize {
-            Migrator::up(&self.database, None).await.unwrap();
-        }
 
         let vaults_flows: Vec<(vault::Model, Vec<cash_flows::Model>)> = vault::Entity::find()
             .find_with_related(cash_flows::Entity)

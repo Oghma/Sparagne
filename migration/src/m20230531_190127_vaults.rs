@@ -1,5 +1,7 @@
 use sea_orm_migration::prelude::*;
 
+use super::m20230828_064600_users::Users;
+
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
@@ -12,7 +14,14 @@ impl MigrationTrait for Migration {
                     .table(Vaults::Table)
                     .if_not_exists()
                     .col(ColumnDef::new(Vaults::Id).uuid().not_null().primary_key())
-                    .col(ColumnDef::new(Vaults::Name).string())
+                    .col(ColumnDef::new(Vaults::Name).string().not_null())
+                    .col(ColumnDef::new(Vaults::UserId).string().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-vaults-users_id")
+                            .from(Vaults::Table, Vaults::UserId)
+                            .to(Users::Table, Users::Username),
+                    )
                     .to_owned(),
             )
             .await
@@ -32,4 +41,5 @@ pub enum Vaults {
     Table,
     Id,
     Name,
+    UserId,
 }

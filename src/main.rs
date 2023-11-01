@@ -1,4 +1,5 @@
 use engine;
+use migration::{Migrator, MigratorTrait};
 use server;
 use settings::Database;
 use telegram_bot;
@@ -12,7 +13,7 @@ async fn main() {
 
     tracing_subscriber::fmt()
         .with_env_filter(format!(
-            "hodlTracker={level},telegram_bot={level},server={level}",
+            "hodlTracker={level},telegram_bot={level},server={level},engine={level}",
             level = settings.app.level
         ))
         .init();
@@ -22,11 +23,7 @@ async fn main() {
             tracing::info!("Found server settings...");
             let db = parse_database(&server.database).await;
 
-            let engine = engine::Engine::builder()
-                .database(db.clone())
-                .initialize()
-                .build()
-                .await;
+            let engine = engine::Engine::builder().database(db.clone()).build().await;
             server::run(engine, db).await;
         });
     }
@@ -43,16 +40,22 @@ async fn main() {
         });
     }
 
-    while let Some(_) = tasks.join_next().await {}
+    while let Some(_) = tasks.join_next().await {
+        tasks.shutdown().await;
+    }
 }
 
 async fn parse_database(config: &settings::Database) -> sea_orm::DatabaseConnection {
     let url = match config {
         Database::Memory => String::from("sqlite::memory"),
-        Database::Sqlite(path) => format!("sqlite:{}", path),
+        Database::Sqlite(path) => format!("sqlite:{}?mode=rwc", path),
     };
 
-    sea_orm::Database::connect(url)
+    let database = sea_orm::Database::connect(url)
         .await
-        .expect("Failed to connect to the database")
+        .expect("Failed to connect to the database");
+
+    Migrator::up(&database, None).await.unwrap();
+
+    database
 }

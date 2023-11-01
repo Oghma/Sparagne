@@ -760,7 +760,6 @@ dependencies = [
 name = "engine"
 version = "0.0.1"
 dependencies = [
- "migration",
  "sea-orm",
  "serde",
  "thiserror",
@@ -1140,6 +1139,7 @@ version = "0.1.0"
 dependencies = [
  "config",
  "engine",
+ "migration",
  "sea-orm",
  "serde",
  "serde_derive",
