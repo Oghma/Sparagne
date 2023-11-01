@@ -8,6 +8,11 @@ mod cash_flow;
 mod entry;
 mod server;
 mod user;
+mod vault;
+
+pub mod types {
+    pub use crate::vault::VaultNew;
+}
 
 pub struct ServerError(EngineError);
 

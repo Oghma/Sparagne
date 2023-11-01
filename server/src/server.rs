@@ -12,7 +12,7 @@ use sea_orm::{ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilte
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 
-use crate::{cash_flow, entry, user};
+use crate::{cash_flow, entry, user, vault};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
@@ -108,6 +108,8 @@ pub async fn run(engine: Engine, db: DatabaseConnection) {
         .route("/allCashFlows", get(cash_flow::cashflow_names))
         .route("/cashFlow", post(cash_flow::cashflow_new))
         .route("/entry", post(entry::entry_new))
+        .route("/vault", post(vault::vault_new))
+        .route_layer(middleware::from_fn_with_state(state.clone(), auth))
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
