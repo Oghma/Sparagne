@@ -5,9 +5,9 @@ use axum::{
     middleware::{self, Next},
     response::Response,
     routing::{get, post},
-    Extension, Router, TypedHeader,
+    Router, TypedHeader,
 };
-use sea_orm::{ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
