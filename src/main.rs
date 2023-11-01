@@ -13,7 +13,7 @@ async fn main() {
 
     tracing_subscriber::fmt()
         .with_env_filter(format!(
-            "hodlTracker={level},telegram_bot={level},server={level}",
+            "hodlTracker={level},telegram_bot={level},server={level},engine={level}",
             level = settings.app.level
         ))
         .init();
@@ -23,10 +23,7 @@ async fn main() {
             tracing::info!("Found server settings...");
             let db = parse_database(&server.database).await;
 
-            let engine = engine::Engine::builder()
-                .database(db.clone())
-                .build()
-                .await;
+            let engine = engine::Engine::builder().database(db.clone()).build().await;
             server::run(engine, db).await;
         });
     }
