@@ -14,7 +14,10 @@ pub mod types {
     pub use crate::vault::VaultNew;
 }
 
-pub struct ServerError(EngineError);
+pub enum ServerError {
+    Engine(EngineError),
+    Generic(String),
+}
 
 //TODO: Find a better solution
 #[derive(Serialize)]
@@ -24,12 +27,11 @@ struct Error {
 
 impl IntoResponse for ServerError {
     fn into_response(self) -> axum::response::Response {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(Error {
-                error: format!("{}", self.0),
-            }),
-        )
-            .into_response()
+        let error = match self {
+            ServerError::Engine(err) => err.to_string(),
+            ServerError::Generic(err) => err,
+        };
+
+        (StatusCode::BAD_REQUEST, Json(Error { error })).into_response()
     }
 }

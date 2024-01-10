@@ -29,7 +29,7 @@ pub async fn vault_new(
             id: uuid.to_string(),
             name: payload.name,
         })),
-        Err(err) => Err(ServerError(err)),
+        Err(err) => Err(ServerError::Engine(err)),
     }
 }
 
