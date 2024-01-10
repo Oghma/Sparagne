@@ -2,7 +2,10 @@
 use reqwest::Client;
 use teloxide::{prelude::*, Bot as TBot};
 
-use crate::handlers::{handle_user_commands, UserCommands};
+use crate::{
+    commands::HandleUserAccount,
+    handlers::{handle_pair_user, handle_user_commands, UserCommands},
+};
 
 mod commands;
 mod handlers;
@@ -33,6 +36,7 @@ impl Bot {
         BotBuilder::default()
     }
 
+    /// Run the telegram bot.
     pub async fn run(&self) {
         tracing::info!("Starting telegram bot...");
 
@@ -43,18 +47,24 @@ impl Bot {
             server: self.server.clone(),
         };
 
-        let handler = Update::filter_message().branch(
-            dptree::filter(|cfg: ConfigParameters, msg: Message| {
-                msg.from()
-                    .map(|user| match cfg.allowed_users {
-                        None => true,
-                        Some(ids) => ids.contains(&user.id),
-                    })
-                    .unwrap_or_default()
-            })
-            .filter_command::<UserCommands>()
-            .endpoint(handle_user_commands),
-        );
+        let handler = Update::filter_message()
+            .branch(
+                dptree::filter(|cfg: ConfigParameters, msg: Message| {
+                    msg.from()
+                        .map(|user| match cfg.allowed_users {
+                            None => true,
+                            Some(ids) => ids.contains(&user.id),
+                        })
+                        .unwrap_or_default()
+                })
+                .filter_command::<UserCommands>()
+                .endpoint(handle_user_commands),
+            )
+            .branch(
+                dptree::entry()
+                    .filter_command::<HandleUserAccount>()
+                    .endpoint(handle_pair_user),
+            );
 
         Dispatcher::builder(bot, handler)
             .dependencies(dptree::deps![parameters])

@@ -3,6 +3,8 @@ use reqwest::Client;
 use serde_json::json;
 use teloxide::{prelude::*, utils::command::BotCommands, Bot};
 
+use crate::commands::HandleUserAccount;
+
 // TODO: Avoid to hardcode italian strings and commands. Generalize
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase", description = "Commandi supportati:")]
@@ -74,6 +76,34 @@ pub async fn handle_user_commands(
         }
         UserCommands::Sommario => bot.send_message(msg.chat.id, "TODO".to_string()).await?,
     };
+
+    Ok(())
+}
+
+pub async fn handle_pair_user(
+    bot: Bot,
+    cfg: super::ConfigParameters,
+    msg: Message,
+    cmd: HandleUserAccount,
+) -> ResponseResult<()> {
+    match cmd {
+        HandleUserAccount::Pair { code } => {
+            cfg.client
+                .post(cfg.server + "/pairUser")
+                .json(&server::types::user::PairUser {
+                    code,
+                    telegram_id: msg.from().map(|user| user.id.to_string()).unwrap(),
+                })
+                .send()
+                .await?;
+
+            bot.send_message(msg.chat.id, "Account paired").await?;
+        }
+        HandleUserAccount::UnPair => {
+            cfg.client.delete(cfg.server + "/pairUser").send().await?;
+            bot.send_message(msg.chat.id, "Account unpaired").await?;
+        }
+    }
 
     Ok(())
 }
