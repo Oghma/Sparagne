@@ -1,7 +1,10 @@
 //! The module contains the definition of a user and its
 
+use axum::{extract::State, http::StatusCode, Extension, Json};
 use sea_orm::{entity::prelude::*, ActiveValue};
 use serde::{Deserialize, Serialize};
+
+use crate::{server::ServerState, ServerError};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "users")]
@@ -23,4 +26,47 @@ impl ActiveModelBehavior for ActiveModel {}
 pub struct PairUser {
     pub code: String,
     pub telegram_id: String,
+}
+
+/// Function to pair a user with its telegram id
+pub async fn pair(
+    _: Extension<Model>,
+    State(state): State<ServerState>,
+    Json(payload): Json<PairUser>,
+) -> Result<StatusCode, ServerError> {
+    if let Some(user) = Entity::find()
+        .filter(Column::PairCode.eq(payload.code))
+        .one(&state.db)
+        .await
+        .map_err(|err| ServerError::Generic(err.to_string()))?
+    {
+        let mut user: ActiveModel = user.into();
+        user.telegram_id = ActiveValue::Set(Some(payload.telegram_id));
+        user.update(&state.db)
+            .await
+            .map_err(|err| ServerError::Generic(err.to_string()))?;
+    }
+
+    Ok(StatusCode::ACCEPTED)
+}
+
+/// Function to unpair the user with its teleram id
+pub async fn unpair(
+    Extension(user): Extension<Model>,
+    State(state): State<ServerState>,
+) -> Result<StatusCode, ServerError> {
+    if let Some(user) = Entity::find()
+        .filter(Column::TelegramId.eq(user.telegram_id))
+        .one(&state.db)
+        .await
+        .map_err(|err| ServerError::Generic(err.to_string()))?
+    {
+        let mut user: ActiveModel = user.into();
+        user.telegram_id = ActiveValue::NotSet;
+        user.update(&state.db)
+            .await
+            .map_err(|err| ServerError::Generic(err.to_string()))?;
+    }
+
+    Ok(StatusCode::ACCEPTED)
 }
