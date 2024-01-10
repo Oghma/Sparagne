@@ -2795,6 +2795,7 @@ dependencies = [
  "engine",
  "reqwest",
  "serde_json",
+ "server",
  "teloxide",
  "tokio",
  "tracing",

@@ -11,6 +11,7 @@ path = "src/lib.rs"
 engine = { path = "../engine" }
 reqwest = { workspace = true, features = ["json"] }
 serde_json = { workspace = true }
+server = { path = "../server" }
 teloxide = { workspace = true, features = ["macros"] }
 tokio = { workspace = true, features = ["macros"] }
 tracing = { workspace = true }
