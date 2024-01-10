@@ -4,6 +4,7 @@ use teloxide::{prelude::*, Bot as TBot};
 
 use crate::handlers::{handle_user_commands, UserCommands};
 
+mod commands;
 mod handlers;
 
 #[derive(Clone)]
