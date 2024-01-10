@@ -1,6 +1,7 @@
 //! The module contains the definition of a user and its
 
 use sea_orm::{entity::prelude::*, ActiveValue};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "users")]
@@ -16,3 +17,10 @@ pub struct Model {
 pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
+
+/// Struct for pairing user
+#[derive(Deserialize, Serialize)]
+pub struct PairUser {
+    pub code: String,
+    pub telegram_id: String,
+}

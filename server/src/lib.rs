@@ -11,7 +11,13 @@ mod user;
 mod vault;
 
 pub mod types {
-    pub use crate::vault::VaultNew;
+    pub mod vault {
+        pub use crate::vault::VaultNew;
+    }
+
+    pub mod user {
+        pub use crate::user::PairUser;
+    }
 }
 
 pub enum ServerError {
