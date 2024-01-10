@@ -1,5 +1,6 @@
-///! This module contains the representation of a User
-use sea_orm::entity::prelude::*;
+//! The module contains the definition of a user and its
+
+use sea_orm::{entity::prelude::*, ActiveValue};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "users")]
@@ -8,6 +9,7 @@ pub struct Model {
     pub username: String,
     pub password: String,
     pub telegram_id: Option<String>,
+    pub pair_code: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
