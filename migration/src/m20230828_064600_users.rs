@@ -19,6 +19,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Users::Password).not_null().string())
                     .col(ColumnDef::new(Users::TelegramId).string())
+                    .col(ColumnDef::new(Users::PairCode).string())
                     .to_owned(),
             )
             .await
@@ -39,4 +40,5 @@ pub enum Users {
     Username,
     Password,
     TelegramId,
+    PairCode,
 }

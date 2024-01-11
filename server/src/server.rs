@@ -4,7 +4,7 @@ use axum::{
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::Response,
-    routing::{get, post},
+    routing::post,
     Router, TypedHeader,
 };
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
@@ -12,7 +12,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 
-use crate::{cash_flow, entry, user, vault};
+use crate::{user, vault};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
@@ -25,6 +25,8 @@ pub struct ServerState {
 }
 
 /// `TypedHeader` for custom telegram header
+///
+/// Telegram requests must contain "telegram-user-id" entry in the header.
 #[derive(Debug)]
 struct TelegramHeader(u64);
 
@@ -105,10 +107,11 @@ pub async fn run(engine: Engine, db: DatabaseConnection) {
     };
 
     let app = Router::new()
-        .route("/allCashFlows", get(cash_flow::cashflow_names))
-        .route("/cashFlow", post(cash_flow::cashflow_new))
-        .route("/entry", post(entry::entry_new))
+        // .route("/allCashFlows", get(cash_flow::cashflow_names))
+        // .route("/cashFlow", post(cash_flow::cashflow_new))
+        // .route("/entry", post(entry::entry_new))
         .route("/vault", post(vault::vault_new))
+        .route("/user/pair", post(user::pair).delete(user::unpair))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth))
         .with_state(state);
 

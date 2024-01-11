@@ -1,7 +1,9 @@
 //! Commands and command handler functions.
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::json;
 use teloxide::{prelude::*, utils::command::BotCommands, Bot};
+
+use crate::commands::HandleUserAccount;
 
 // TODO: Avoid to hardcode italian strings and commands. Generalize
 #[derive(BotCommands, Clone)]
@@ -74,6 +76,61 @@ pub async fn handle_user_commands(
         }
         UserCommands::Sommario => bot.send_message(msg.chat.id, "TODO".to_string()).await?,
     };
+
+    Ok(())
+}
+
+pub async fn handle_pair_user(
+    bot: Bot,
+    cfg: super::ConfigParameters,
+    msg: Message,
+    cmd: HandleUserAccount,
+) -> ResponseResult<()> {
+    let telegram_id = msg.from().map(|user| user.id.to_string()).unwrap();
+
+    match cmd {
+        HandleUserAccount::Pair { code } => {
+            let response = cfg
+                .client
+                .post(cfg.server.to_string() + "/user/pair")
+                .json(&server::types::user::PairUser { code, telegram_id })
+                .send()
+                .await
+                .unwrap();
+
+            let user_response = match response.status() {
+                StatusCode::CREATED => "Account paired",
+                _ => {
+                    tracing::debug!("{:?}", response);
+                    tracing::debug!("body: {}", response.text().await.unwrap());
+
+                    "Connection problems with the server. Retry later!"
+                }
+            };
+
+            bot.send_message(msg.chat.id, user_response).await?;
+        }
+        HandleUserAccount::UnPair => {
+            let response = cfg
+                .client
+                .delete(cfg.server + "/user/pair")
+                .header("telegram-user-id", telegram_id)
+                .send()
+                .await
+                .unwrap();
+
+            let user_response = match response.status() {
+                StatusCode::ACCEPTED => "Account unpaired",
+                _ => {
+                    tracing::debug!("{:?}", response);
+                    tracing::debug!("body: {}", response.text().await.unwrap());
+
+                    "Connection problems with the server. Retry later!"
+                }
+            };
+            bot.send_message(msg.chat.id, user_response).await?;
+        }
+    }
 
     Ok(())
 }

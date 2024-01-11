@@ -4,17 +4,26 @@ use engine::EngineError;
 use serde::Serialize;
 pub use server::run;
 
-mod cash_flow;
-mod entry;
+//mod cash_flow;
+//mod entry;
 mod server;
 mod user;
 mod vault;
 
 pub mod types {
-    pub use crate::vault::VaultNew;
+    pub mod vault {
+        pub use crate::vault::VaultNew;
+    }
+
+    pub mod user {
+        pub use crate::user::PairUser;
+    }
 }
 
-pub struct ServerError(EngineError);
+pub enum ServerError {
+    Engine(EngineError),
+    Generic(String),
+}
 
 //TODO: Find a better solution
 #[derive(Serialize)]
@@ -24,12 +33,11 @@ struct Error {
 
 impl IntoResponse for ServerError {
     fn into_response(self) -> axum::response::Response {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(Error {
-                error: format!("{}", self.0),
-            }),
-        )
-            .into_response()
+        let error = match self {
+            ServerError::Engine(err) => err.to_string(),
+            ServerError::Generic(err) => err,
+        };
+
+        (StatusCode::BAD_REQUEST, Json(Error { error })).into_response()
     }
 }
