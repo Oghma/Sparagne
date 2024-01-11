@@ -15,3 +15,5 @@ Sqlite = "db/db.sqlite3"
 # token = ""
 # server = ""
 
+username = ""
+password = ""

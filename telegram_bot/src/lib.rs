@@ -1,5 +1,6 @@
 //! Library for the telegram bot
-use reqwest::Client;
+use base64::Engine;
+use reqwest::{header, Client};
 use teloxide::{prelude::*, Bot as TBot};
 
 use crate::{
@@ -21,14 +22,35 @@ pub struct Bot {
     token: String,
     allowed_users: Option<Vec<UserId>>,
     server: String,
+    client: Client,
 }
 
 impl Bot {
-    pub fn new(token: &str, allowed_users: Option<Vec<UserId>>, server: &str) -> Self {
+    pub fn new(
+        token: &str,
+        allowed_users: Option<Vec<UserId>>,
+        server: &str,
+        username: &str,
+        password: &str,
+    ) -> Self {
+        // Basic authorization is in the form "Basic `secret`" where `secret` is
+        // the base64 of the string "username:password"
+        let secret = format!("{}:{}", username, password);
+        let secret = format!("Basic {}", base64::prelude::BASE64_STANDARD.encode(secret));
+
+        let mut auth = header::HeaderValue::try_from(secret).unwrap();
+        auth.set_sensitive(true);
+
+        let mut headers = header::HeaderMap::new();
+        headers.insert(header::AUTHORIZATION, auth);
+
+        let client = Client::builder().default_headers(headers).build().unwrap();
+
         Self {
             token: token.to_string(),
             allowed_users,
             server: server.to_string(),
+            client,
         }
     }
 
@@ -43,7 +65,7 @@ impl Bot {
         let bot = TBot::new(&self.token);
         let parameters = ConfigParameters {
             allowed_users: self.allowed_users.clone(),
-            client: Client::new(),
+            client: self.client.clone(),
             server: self.server.clone(),
         };
 
@@ -86,6 +108,8 @@ pub struct BotBuilder {
     token: String,
     allowed_users: Option<Vec<UserId>>,
     server: String,
+    username: String,
+    password: String,
 }
 
 impl BotBuilder {
@@ -101,17 +125,21 @@ impl BotBuilder {
         self
     }
 
-    pub fn server(mut self, server: &str) -> BotBuilder {
+    pub fn server(mut self, server: &str, username: &str, password: &str) -> BotBuilder {
         self.server = server.to_string();
+        self.username = username.to_string();
+        self.password = password.to_string();
         self
     }
 
     pub fn build(self) -> Bot {
         tracing::info!("Initializing...");
-        Bot {
-            token: self.token,
-            allowed_users: self.allowed_users,
-            server: self.server,
-        }
+        Bot::new(
+            &self.token,
+            self.allowed_users,
+            &self.server,
+            &self.username,
+            &self.password,
+        )
     }
 }

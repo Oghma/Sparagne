@@ -26,6 +26,8 @@ pub struct Server {
 pub struct Telegram {
     pub token: String,
     pub server: String,
+    pub username: String,
+    pub password: String,
 }
 
 #[derive(Debug, Deserialize)]
