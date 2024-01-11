@@ -2,6 +2,7 @@
 
 use axum::{extract::State, Extension, Json};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{server::ServerState, user, ServerError};
 
@@ -12,8 +13,8 @@ pub struct VaultNew {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Vault {
-    id: String,
-    name: String,
+    id: Option<Uuid>,
+    name: Option<String>,
 }
 
 /// Handle requests for creating new `Vault`
