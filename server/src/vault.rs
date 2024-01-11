@@ -23,15 +23,13 @@ pub async fn vault_new(
     State(state): State<ServerState>,
     Json(payload): Json<VaultNew>,
 ) -> Result<Json<Vault>, ServerError> {
-    //(StatusCode, Json<Vault>) {
     let mut engine = state.engine.write().await;
-    match engine.new_vault(&payload.name, &user.username).await {
-        Ok(uuid) => Ok(Json(Vault {
-            id: uuid.to_string(),
-            name: payload.name,
-        })),
-        Err(err) => Err(ServerError::Engine(err)),
-    }
+    let vault_id = engine.new_vault(&payload.name, &user.username).await?;
+
+    Ok(Json(Vault {
+        id: Some(vault_id),
+        name: Some(payload.name),
+    }))
 }
 
 /// Handle requests for listing users Vaults
