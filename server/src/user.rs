@@ -42,12 +42,16 @@ pub async fn pair(
     {
         let mut user: ActiveModel = user.into();
         user.telegram_id = ActiveValue::Set(Some(payload.telegram_id));
+        user.pair_code = ActiveValue::Set(None);
+
         user.update(&state.db)
             .await
             .map_err(|err| ServerError::Generic(err.to_string()))?;
+    } else {
+        return Err(ServerError::Generic("user not found".to_string()));
     }
 
-    Ok(StatusCode::ACCEPTED)
+    Ok(StatusCode::CREATED)
 }
 
 /// Function to unpair the user with its teleram id
@@ -62,10 +66,12 @@ pub async fn unpair(
         .map_err(|err| ServerError::Generic(err.to_string()))?
     {
         let mut user: ActiveModel = user.into();
-        user.telegram_id = ActiveValue::NotSet;
+        user.telegram_id = ActiveValue::Set(None);
         user.update(&state.db)
             .await
             .map_err(|err| ServerError::Generic(err.to_string()))?;
+    } else {
+        return Err(ServerError::Generic("user not found".to_string()));
     }
 
     Ok(StatusCode::ACCEPTED)
