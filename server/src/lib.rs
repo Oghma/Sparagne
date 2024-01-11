@@ -41,3 +41,9 @@ impl IntoResponse for ServerError {
         (StatusCode::BAD_REQUEST, Json(Error { error })).into_response()
     }
 }
+
+impl From<EngineError> for ServerError {
+    fn from(value: EngineError) -> Self {
+        Self::Engine(value)
+    }
+}
