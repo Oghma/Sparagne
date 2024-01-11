@@ -32,7 +32,21 @@ pub async fn vault_new(
     }))
 }
 
-/// Handle requests for listing users Vaults
-pub async fn vault_get(Extension(user): Extension<user::Model>, State(state): State<ServerState>) {
+/// Handle requests for listing user Vault
+pub async fn get(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Json(payload): Json<Vault>,
+) -> Result<Json<Vault>, ServerError> {
+    if payload.id.is_none() && payload.name.is_none() {
+        return Err(ServerError::Generic("id or name required".to_string()));
+    }
+
     let engine = state.engine.read().await;
+    let vault = engine.vault(payload.id, payload.name, &user.username)?;
+
+    Ok(Json(Vault {
+        id: Some(vault.id),
+        name: Some(vault.name.clone()),
+    }))
 }
