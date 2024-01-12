@@ -12,14 +12,12 @@ pub enum UserCommands {
     Help,
     #[command(description = "Inserisce una nuova entrata.", parse_with = "split")]
     Entrata {
-        flow_name: String,
         amount: f64,
         category: String,
         note: String,
     },
     #[command(description = "Inserisce una nuova entrata.", parse_with = "split")]
     Uscita {
-        flow_name: String,
         amount: f64,
         category: String,
         note: String,
@@ -40,7 +38,6 @@ pub async fn handle_user_commands(
                 .await?;
         }
         UserCommands::Entrata {
-            flow_name,
             amount,
             category,
             note,
@@ -57,7 +54,6 @@ pub async fn handle_user_commands(
             .await?;
         }
         UserCommands::Uscita {
-            flow_name,
             amount,
             category,
             note,
