@@ -10,6 +10,7 @@ use crate::{
 
 mod commands;
 mod handlers;
+mod macros;
 
 #[derive(Clone)]
 pub struct ConfigParameters {
