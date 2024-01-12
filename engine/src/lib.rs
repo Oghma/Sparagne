@@ -26,7 +26,7 @@ impl Engine {
         EngineBuilder::default()
     }
 
-    ///Add a new income or an expense
+    /// Add a new income or an expense
     pub async fn add_entry(
         &mut self,
         balance: f64,
@@ -95,7 +95,7 @@ impl Engine {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
                 vault.delete_entry(wallet_id, flow_id, entry_id)?;
-                entry::Entity::delete_by_id(entry_id.clone())
+                entry::Entity::delete_by_id(*entry_id)
                     .exec(&self.database)
                     .await
                     .unwrap();
@@ -122,7 +122,7 @@ impl Engine {
     /// Add a new vault
     pub async fn new_vault(&mut self, name: &str, user_id: &str) -> ResultEngine<Uuid> {
         let new_vault = Vault::new(name.to_string());
-        let new_vault_id = new_vault.id.clone();
+        let new_vault_id = new_vault.id;
         let mut vault_entry: vault::ActiveModel = (&new_vault).into();
         vault_entry.user_id = ActiveValue::Set(user_id.to_string());
 
@@ -223,7 +223,7 @@ impl EngineBuilder {
                     .await
                     .unwrap()
                     .into_iter()
-                    .map(|value| entry::Entry::from(value))
+                    .map(entry::Entry::from)
                     .collect();
 
                 flows.insert(

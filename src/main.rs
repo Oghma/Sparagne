@@ -1,8 +1,5 @@
-use engine;
 use migration::{Migrator, MigratorTrait};
-use server;
 use settings::Database;
-use telegram_bot;
 
 mod settings;
 
@@ -13,7 +10,7 @@ async fn main() {
 
     tracing_subscriber::fmt()
         .with_env_filter(format!(
-            "hodlTracker={level},telegram_bot={level},server={level},engine={level}",
+            "hodl_tracker={level},telegram_bot={level},server={level},engine={level}",
             level = settings.app.level
         ))
         .init();
@@ -40,7 +37,7 @@ async fn main() {
         });
     }
 
-    while let Some(_) = tasks.join_next().await {
+    while tasks.join_next().await.is_some() {
         tasks.shutdown().await;
     }
 }

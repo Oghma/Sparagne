@@ -70,7 +70,7 @@ impl Vault {
             }
         }
 
-        let entry_id = entry.id.clone();
+        let entry_id = entry.id;
         let entry: entry::ActiveModel = entry.into();
         Ok((entry_id, entry))
     }
@@ -299,7 +299,7 @@ mod tests {
             .new_flow(String::from("Cash2"), 1f64, Some(10f64), Some(true))
             .unwrap();
 
-        assert_eq!(vault.cash_flow.is_empty(), false);
+        assert!(!vault.cash_flow.is_empty());
     }
 
     #[test]
@@ -358,6 +358,6 @@ mod tests {
     fn delete_flow() {
         let (flow_name, mut vault) = vault();
         vault.delete_flow(&flow_name, false).unwrap();
-        assert_eq!(vault.cash_flow.is_empty(), true);
+        assert!(vault.cash_flow.is_empty());
     }
 }

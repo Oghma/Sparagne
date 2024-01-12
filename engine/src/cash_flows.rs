@@ -126,10 +126,8 @@ impl CashFlow {
                     if let Some(income_balance) = self.income_balance {
                         // Check if the entry or the update is an income and if
                         // the updates does not exceed `max_balance`
-                        if entry.amount > 0f64 || amount > 0f64 {
-                            if income_balance - entry.amount + amount > bound {
-                                return Err(EngineError::MaxBalanceReached(self.name.clone()));
-                            }
+                        if (entry.amount > 0f64 || amount > 0f64) && income_balance - entry.amount + amount > bound {
+                            return Err(EngineError::MaxBalanceReached(self.name.clone()));
                         }
                     } else if new_balance > bound {
                         return Err(EngineError::MaxBalanceReached(self.name.clone()));
@@ -248,11 +246,11 @@ mod tests {
         let mut flow = unbounded();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id.clone();
+        let entry_id = flow.entries[0].id;
         flow.delete_entry(&entry_id).unwrap();
 
         assert_eq!(flow.balance, 0f64);
-        assert_eq!(flow.entries.is_empty(), true)
+        assert!(flow.entries.is_empty())
     }
 
     #[test]
@@ -260,7 +258,7 @@ mod tests {
         let mut flow = unbounded();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id.clone();
+        let entry_id = flow.entries[0].id;
 
         flow.update_entry(
             &entry_id,
@@ -291,7 +289,7 @@ mod tests {
         let mut flow = bounded();
         flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id.clone();
+        let entry_id = flow.entries[0].id;
 
         flow.update_entry(
             &entry_id,
@@ -308,7 +306,7 @@ mod tests {
         let mut flow = bounded();
         flow.add_entry(-1.23, "Income".to_string(), "Weekly".to_string())
             .unwrap();
-        let entry_id = flow.entries[0].id.clone();
+        let entry_id = flow.entries[0].id;
 
         flow.update_entry(
             &entry_id,

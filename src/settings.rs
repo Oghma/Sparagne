@@ -1,7 +1,7 @@
-///! Handles settings for the application. Configuration is written in
-///! `settings.toml`.
-///!
-///! See `settings.toml` for the configuration.
+//! Handles settings for the application. Configuration is written in
+//! `settings.toml`.
+//!
+//! See `settings.toml` for the configuration.
 use config::{Config, ConfigError, File};
 use serde_derive::Deserialize;
 
