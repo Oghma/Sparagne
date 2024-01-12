@@ -1,25 +1,35 @@
-use axum::{extract::State, http::StatusCode, Json};
-use serde::Deserialize;
+//! Entries API endpoints
+use axum::{extract::State, http::StatusCode, Extension, Json};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use crate::server::SharedState;
+use crate::{server::ServerState, user, ServerError};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct CreateEntry {
-    flow_name: String,
+    vault_id: Uuid,
     amount: f64,
     category: String,
     note: String,
 }
 
-pub async fn entry_new(State(state): SharedState, Json(payload): Json<CreateEntry>) -> StatusCode {
-    if let Ok(_) = state.write().await.add_flow_entry(
-        &payload.flow_name,
-        payload.amount,
-        payload.category,
-        payload.note,
-    ) {
-        StatusCode::ACCEPTED
-    } else {
-        StatusCode::NOT_IMPLEMENTED
-    }
+pub async fn entry_new(
+    _: Extension<user::Model>,
+    State(state): State<ServerState>,
+    Json(payload): Json<CreateEntry>,
+) -> Result<StatusCode, ServerError> {
+    let mut engine = state.engine.write().await;
+
+    engine
+        .add_entry(
+            payload.amount,
+            &payload.category,
+            &payload.note,
+            &payload.vault_id,
+            None,
+            None,
+        )
+        .await?;
+
+    Ok(StatusCode::CREATED)
 }
