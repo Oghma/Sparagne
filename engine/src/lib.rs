@@ -186,6 +186,40 @@ impl Engine {
             None => Err(EngineError::KeyNotFound(vault_id.to_string())),
         }
     }
+
+    /// Return a user `Vault`.
+    pub fn vault(
+        &self,
+        vault_id: Option<Uuid>,
+        vault_name: Option<String>,
+        user_id: &str,
+    ) -> ResultEngine<&Vault> {
+        if vault_id.is_none() && vault_name.is_none() {
+            return Err(EngineError::KeyNotFound(
+                "missing vault id or name".to_string(),
+            ));
+        }
+
+        let vault = if let Some(id) = vault_id {
+            match self.vaults.get(&id) {
+                None => return Err(EngineError::KeyNotFound("vault not exists".to_string())),
+                Some(vault) => vault,
+            }
+        } else {
+            let name = vault_name.unwrap();
+
+            match self
+                .vaults
+                .iter()
+                .find(|(_, vault)| vault.name == name && vault.user_id == user_id)
+            {
+                Some((_, vault)) => vault,
+                None => return Err(EngineError::KeyNotFound("vault not exists".to_string())),
+            }
+        };
+
+        Ok(vault)
+    }
 }
 
 /// The builder for `Engine`
