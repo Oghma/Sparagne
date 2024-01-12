@@ -13,8 +13,8 @@ pub struct VaultNew {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Vault {
-    id: Option<Uuid>,
-    name: Option<String>,
+    pub id: Option<Uuid>,
+    pub name: Option<String>,
 }
 
 /// Handle requests for creating new `Vault`
