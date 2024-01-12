@@ -6,17 +6,18 @@ use uuid::Uuid;
 use crate::{server::ServerState, user, ServerError};
 
 #[derive(Deserialize, Serialize)]
-pub struct CreateEntry {
-    vault_id: Uuid,
-    amount: f64,
-    category: String,
-    note: String,
+pub struct EntryNew {
+    pub vault_id: Uuid,
+    pub amount: f64,
+    pub category: String,
+    pub note: String,
+    pub cash_flow: String,
 }
 
 pub async fn entry_new(
     _: Extension<user::Model>,
     State(state): State<ServerState>,
-    Json(payload): Json<CreateEntry>,
+    Json(payload): Json<EntryNew>,
 ) -> Result<StatusCode, ServerError> {
     let mut engine = state.engine.write().await;
 
@@ -26,7 +27,7 @@ pub async fn entry_new(
             &payload.category,
             &payload.note,
             &payload.vault_id,
-            None,
+            Some(&payload.cash_flow),
             None,
         )
         .await?;

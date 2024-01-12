@@ -19,6 +19,10 @@ pub mod types {
     pub mod user {
         pub use crate::user::PairUser;
     }
+
+    pub mod entry {
+        pub use crate::entry::EntryNew;
+    }
 }
 
 pub enum ServerError {
