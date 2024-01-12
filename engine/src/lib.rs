@@ -121,10 +121,9 @@ impl Engine {
 
     /// Add a new vault
     pub async fn new_vault(&mut self, name: &str, user_id: &str) -> ResultEngine<Uuid> {
-        let new_vault = Vault::new(name.to_string());
+        let new_vault = Vault::new(name.to_string(), user_id);
         let new_vault_id = new_vault.id;
-        let mut vault_entry: vault::ActiveModel = (&new_vault).into();
-        vault_entry.user_id = ActiveValue::Set(user_id.to_string());
+        let vault_entry: vault::ActiveModel = (&new_vault).into();
 
         vault_entry.insert(&self.database).await.unwrap();
         self.vaults.insert(new_vault.id, new_vault);
@@ -246,6 +245,7 @@ impl EngineBuilder {
                     name: vault_entry.0.name,
                     cash_flow: flows,
                     wallet: HashMap::new(),
+                    user_id: vault_entry.0.user_id,
                 },
             );
         }

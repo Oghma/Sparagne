@@ -16,15 +16,17 @@ pub struct Vault {
     pub name: String,
     pub cash_flow: HashMap<String, CashFlow>,
     pub wallet: HashMap<Uuid, Wallet>,
+    pub user_id: String,
 }
 
 impl Vault {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, user_id: &str) -> Self {
         Self {
             id: Uuid::new_v4(),
             name,
             cash_flow: HashMap::new(),
             wallet: HashMap::new(),
+            user_id: user_id.to_string(),
         }
     }
 
@@ -237,7 +239,7 @@ impl From<&Vault> for ActiveModel {
         Self {
             id: sea_orm::ActiveValue::Set(value.id),
             name: ActiveValue::Set(value.name.clone()),
-            user_id: ActiveValue::NotSet,
+            user_id: ActiveValue::Set(value.user_id.clone()),
         }
     }
 }
@@ -247,7 +249,7 @@ mod tests {
     use super::*;
 
     fn vault() -> (String, Vault) {
-        let mut vault = Vault::new(String::from("Main"));
+        let mut vault = Vault::new(String::from("Main"), "foo");
         vault
             .new_flow(String::from("Cash"), 1f64, None, None)
             .unwrap();
@@ -285,7 +287,7 @@ mod tests {
 
     #[test]
     fn new_flows() {
-        let mut vault = Vault::new(String::from("Main"));
+        let mut vault = Vault::new(String::from("Main"), "foo");
 
         vault
             .new_flow(String::from("Cash"), 1f64, None, None)
