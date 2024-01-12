@@ -12,6 +12,7 @@ mod vault;
 
 pub mod types {
     pub mod vault {
+        pub use crate::vault::Vault;
         pub use crate::vault::VaultNew;
     }
 
