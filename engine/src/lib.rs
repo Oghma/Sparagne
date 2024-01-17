@@ -53,7 +53,7 @@ impl Engine {
                     entry_model.wallet_id = ActiveValue::Set(Some(wid.to_string()));
                 }
 
-                entry_model.save(&self.database).await.unwrap();
+                entry_model.insert(&self.database).await.unwrap();
                 Ok(entry_id)
             }
             None => Err(EngineError::KeyNotFound(vault_id.to_string())),
@@ -144,7 +144,7 @@ impl Engine {
                 let (id, mut flow) =
                     vault.new_flow(name.to_string(), balance, max_balance, income_bounded)?;
                 flow.vault_id = ActiveValue::Set(vault.id);
-                flow.save(&self.database).await.unwrap();
+                flow.insert(&self.database).await.unwrap();
                 Ok(id)
             }
             None => Err(EngineError::KeyNotFound(vault_id.to_string())),
