@@ -59,6 +59,21 @@ impl Engine {
         }
     }
 
+    /// Return a [`CashFlow`]
+    pub fn cash_flow(
+        &self,
+        cash_flow_id: &str,
+        vault_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<&CashFlow> {
+        let vault = self.vault(Some(vault_id), None, user_id)?;
+
+        vault
+            .cash_flow
+            .get(cash_flow_id)
+            .ok_or(EngineError::KeyNotFound("cash_flow not exists".to_string()))
+    }
+
     /// Delete a cash flow contained by a vault.
     pub async fn delete_cash_flow(
         &mut self,
@@ -202,7 +217,13 @@ impl Engine {
         let vault = if let Some(id) = vault_id {
             match self.vaults.get(id) {
                 None => return Err(EngineError::KeyNotFound("vault not exists".to_string())),
-                Some(vault) => vault,
+                Some(vault) => {
+                    if vault.user_id == user_id {
+                        vault
+                    } else {
+                        return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+                    }
+                }
             }
         } else {
             let name = vault_name.unwrap();

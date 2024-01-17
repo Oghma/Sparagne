@@ -126,7 +126,9 @@ impl CashFlow {
                     if let Some(income_balance) = self.income_balance {
                         // Check if the entry or the update is an income and if
                         // the updates does not exceed `max_balance`
-                        if (entry.amount > 0f64 || amount > 0f64) && income_balance - entry.amount + amount > bound {
+                        if (entry.amount > 0f64 || amount > 0f64)
+                            && income_balance - entry.amount + amount > bound
+                        {
                             return Err(EngineError::MaxBalanceReached(self.name.clone()));
                         }
                     } else if new_balance > bound {
