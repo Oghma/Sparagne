@@ -5,18 +5,23 @@ use serde::Serialize;
 pub use server::run;
 
 //mod cash_flow;
-//mod entry;
+mod entry;
 mod server;
 mod user;
 mod vault;
 
 pub mod types {
     pub mod vault {
+        pub use crate::vault::Vault;
         pub use crate::vault::VaultNew;
     }
 
     pub mod user {
         pub use crate::user::PairUser;
+    }
+
+    pub mod entry {
+        pub use crate::entry::EntryNew;
     }
 }
 
@@ -39,5 +44,11 @@ impl IntoResponse for ServerError {
         };
 
         (StatusCode::BAD_REQUEST, Json(Error { error })).into_response()
+    }
+}
+
+impl From<EngineError> for ServerError {
+    fn from(value: EngineError) -> Self {
+        Self::Engine(value)
     }
 }

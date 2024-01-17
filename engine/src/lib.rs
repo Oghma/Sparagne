@@ -26,7 +26,7 @@ impl Engine {
         EngineBuilder::default()
     }
 
-    ///Add a new income or an expense
+    /// Add a new income or an expense
     pub async fn add_entry(
         &mut self,
         balance: f64,
@@ -53,7 +53,7 @@ impl Engine {
                     entry_model.wallet_id = ActiveValue::Set(Some(wid.to_string()));
                 }
 
-                entry_model.save(&self.database).await.unwrap();
+                entry_model.insert(&self.database).await.unwrap();
                 Ok(entry_id)
             }
             None => Err(EngineError::KeyNotFound(vault_id.to_string())),
@@ -95,7 +95,7 @@ impl Engine {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
                 vault.delete_entry(wallet_id, flow_id, entry_id)?;
-                entry::Entity::delete_by_id(entry_id.clone())
+                entry::Entity::delete_by_id(*entry_id)
                     .exec(&self.database)
                     .await
                     .unwrap();
@@ -121,10 +121,9 @@ impl Engine {
 
     /// Add a new vault
     pub async fn new_vault(&mut self, name: &str, user_id: &str) -> ResultEngine<Uuid> {
-        let new_vault = Vault::new(name.to_string());
-        let new_vault_id = new_vault.id.clone();
-        let mut vault_entry: vault::ActiveModel = (&new_vault).into();
-        vault_entry.user_id = ActiveValue::Set(user_id.to_string());
+        let new_vault = Vault::new(name.to_string(), user_id);
+        let new_vault_id = new_vault.id;
+        let vault_entry: vault::ActiveModel = (&new_vault).into();
 
         vault_entry.insert(&self.database).await.unwrap();
         self.vaults.insert(new_vault.id, new_vault);
@@ -145,7 +144,7 @@ impl Engine {
                 let (id, mut flow) =
                     vault.new_flow(name.to_string(), balance, max_balance, income_bounded)?;
                 flow.vault_id = ActiveValue::Set(vault.id);
-                flow.save(&self.database).await.unwrap();
+                flow.insert(&self.database).await.unwrap();
                 Ok(id)
             }
             None => Err(EngineError::KeyNotFound(vault_id.to_string())),
@@ -187,6 +186,40 @@ impl Engine {
             None => Err(EngineError::KeyNotFound(vault_id.to_string())),
         }
     }
+
+    /// Return a user `Vault`.
+    pub fn vault(
+        &self,
+        vault_id: Option<Uuid>,
+        vault_name: Option<String>,
+        user_id: &str,
+    ) -> ResultEngine<&Vault> {
+        if vault_id.is_none() && vault_name.is_none() {
+            return Err(EngineError::KeyNotFound(
+                "missing vault id or name".to_string(),
+            ));
+        }
+
+        let vault = if let Some(id) = vault_id {
+            match self.vaults.get(&id) {
+                None => return Err(EngineError::KeyNotFound("vault not exists".to_string())),
+                Some(vault) => vault,
+            }
+        } else {
+            let name = vault_name.unwrap();
+
+            match self
+                .vaults
+                .iter()
+                .find(|(_, vault)| vault.name == name && vault.user_id == user_id)
+            {
+                Some((_, vault)) => vault,
+                None => return Err(EngineError::KeyNotFound("vault not exists".to_string())),
+            }
+        };
+
+        Ok(vault)
+    }
 }
 
 /// The builder for `Engine`
@@ -223,7 +256,7 @@ impl EngineBuilder {
                     .await
                     .unwrap()
                     .into_iter()
-                    .map(|value| entry::Entry::from(value))
+                    .map(entry::Entry::from)
                     .collect();
 
                 flows.insert(
@@ -246,6 +279,7 @@ impl EngineBuilder {
                     name: vault_entry.0.name,
                     cash_flow: flows,
                     wallet: HashMap::new(),
+                    user_id: vault_entry.0.user_id,
                 },
             );
         }

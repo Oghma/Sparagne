@@ -153,7 +153,7 @@ mod tests {
         wallet
             .add_entry(10.4, String::from("Income"), String::from("Hard work"))
             .unwrap();
-        let entry_id = wallet.entries[0].id.clone();
+        let entry_id = wallet.entries[0].id;
 
         wallet
             .update_entry(

@@ -2,6 +2,7 @@
 
 use axum::{extract::State, Extension, Json};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{server::ServerState, user, ServerError};
 
@@ -12,8 +13,8 @@ pub struct VaultNew {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Vault {
-    id: String,
-    name: String,
+    pub id: Option<Uuid>,
+    pub name: Option<String>,
 }
 
 /// Handle requests for creating new `Vault`
@@ -22,18 +23,30 @@ pub async fn vault_new(
     State(state): State<ServerState>,
     Json(payload): Json<VaultNew>,
 ) -> Result<Json<Vault>, ServerError> {
-    //(StatusCode, Json<Vault>) {
     let mut engine = state.engine.write().await;
-    match engine.new_vault(&payload.name, &user.username).await {
-        Ok(uuid) => Ok(Json(Vault {
-            id: uuid.to_string(),
-            name: payload.name,
-        })),
-        Err(err) => Err(ServerError::Engine(err)),
-    }
+    let vault_id = engine.new_vault(&payload.name, &user.username).await?;
+
+    Ok(Json(Vault {
+        id: Some(vault_id),
+        name: Some(payload.name),
+    }))
 }
 
-/// Handle requests for listing users Vaults
-pub async fn vault_get(Extension(user): Extension<user::Model>, State(state): State<ServerState>) {
+/// Handle requests for listing user Vault
+pub async fn get(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Json(payload): Json<Vault>,
+) -> Result<Json<Vault>, ServerError> {
+    if payload.id.is_none() && payload.name.is_none() {
+        return Err(ServerError::Generic("id or name required".to_string()));
+    }
+
     let engine = state.engine.read().await;
+    let vault = engine.vault(payload.id, payload.name, &user.username)?;
+
+    Ok(Json(Vault {
+        id: Some(vault.id),
+        name: Some(vault.name.clone()),
+    }))
 }
