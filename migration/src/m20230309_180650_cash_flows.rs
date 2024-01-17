@@ -23,7 +23,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(CashFlows::MaxBalance).double())
                     .col(ColumnDef::new(CashFlows::IncomeBalance).double())
                     .col(ColumnDef::new(CashFlows::Archived).boolean().not_null())
-                    .col(ColumnDef::new(CashFlows::VaultId).uuid())
+                    .col(ColumnDef::new(CashFlows::VaultId).string())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-cashflows-vault_id")

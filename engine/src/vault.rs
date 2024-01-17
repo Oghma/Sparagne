@@ -3,7 +3,6 @@
 
 use sea_orm::{prelude::*, ActiveValue};
 use std::collections::HashMap;
-use uuid::Uuid;
 
 use crate::{
     cash_flows, cash_flows::CashFlow, entry, error::EngineError, wallets::Wallet, ResultEngine,
@@ -12,17 +11,17 @@ use crate::{
 /// Holds wallets and cash flows
 #[derive(Debug)]
 pub struct Vault {
-    pub id: Uuid,
+    pub id: String,
     pub name: String,
     pub cash_flow: HashMap<String, CashFlow>,
-    pub wallet: HashMap<Uuid, Wallet>,
+    pub wallet: HashMap<String, Wallet>,
     pub user_id: String,
 }
 
 impl Vault {
     pub fn new(name: String, user_id: &str) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().to_string(),
             name,
             cash_flow: HashMap::new(),
             wallet: HashMap::new(),
@@ -33,12 +32,12 @@ impl Vault {
     /// Add an income or expense entry
     pub fn add_entry(
         &mut self,
-        wallet_id: Option<&Uuid>,
+        wallet_id: Option<&str>,
         flow_id: Option<&str>,
         amount: f64,
         category: String,
         note: String,
-    ) -> ResultEngine<(Uuid, entry::ActiveModel)> {
+    ) -> ResultEngine<(String, entry::ActiveModel)> {
         let entry;
 
         match (wallet_id, flow_id) {
@@ -72,16 +71,16 @@ impl Vault {
             }
         }
 
-        let entry_id = entry.id;
+        let entry_id = entry.id.clone();
         let entry: entry::ActiveModel = entry.into();
         Ok((entry_id, entry))
     }
 
     pub fn delete_entry(
         &mut self,
-        wallet_id: Option<&Uuid>,
+        wallet_id: Option<&str>,
         flow_id: Option<&str>,
-        entry_id: &Uuid,
+        entry_id: &str,
     ) -> ResultEngine<()> {
         match (wallet_id, flow_id) {
             (Some(wid), Some(fid)) => {
@@ -147,9 +146,9 @@ impl Vault {
 
     pub fn update_entry(
         &mut self,
-        wallet_id: Option<&Uuid>,
+        wallet_id: Option<&str>,
         flow_id: Option<&str>,
-        entry_id: &Uuid,
+        entry_id: &str,
         amount: f64,
         category: String,
         note: String,
@@ -215,7 +214,7 @@ impl Vault {
 #[sea_orm(table_name = "vaults")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: Uuid,
+    pub id: String,
     pub name: String,
     pub user_id: String,
 }
@@ -237,7 +236,7 @@ impl ActiveModelBehavior for ActiveModel {}
 impl From<&Vault> for ActiveModel {
     fn from(value: &Vault) -> Self {
         Self {
-            id: sea_orm::ActiveValue::Set(value.id),
+            id: sea_orm::ActiveValue::Set(value.id.clone()),
             name: ActiveValue::Set(value.name.clone()),
             user_id: ActiveValue::Set(value.user_id.clone()),
         }

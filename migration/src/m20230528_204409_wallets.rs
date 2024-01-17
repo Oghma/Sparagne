@@ -21,7 +21,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Wallets::Balance).double().not_null())
                     .col(ColumnDef::new(Wallets::Archived).boolean().not_null())
-                    .col(ColumnDef::new(Wallets::VaultId).uuid())
+                    .col(ColumnDef::new(Wallets::VaultId).string())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-wallets-vault_id")

@@ -2,7 +2,6 @@
 
 use axum::{extract::State, Extension, Json};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{server::ServerState, user, ServerError};
 
@@ -13,7 +12,7 @@ pub struct VaultNew {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Vault {
-    pub id: Option<Uuid>,
+    pub id: Option<String>,
     pub name: Option<String>,
 }
 
@@ -43,10 +42,10 @@ pub async fn get(
     }
 
     let engine = state.engine.read().await;
-    let vault = engine.vault(payload.id, payload.name, &user.username)?;
+    let vault = engine.vault(payload.id.as_deref(), payload.name, &user.username)?;
 
     Ok(Json(Vault {
-        id: Some(vault.id),
+        id: Some(vault.id.clone()),
         name: Some(vault.name.clone()),
     }))
 }

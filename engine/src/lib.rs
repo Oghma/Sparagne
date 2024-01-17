@@ -3,7 +3,6 @@ use std::collections::HashMap;
 pub use cash_flows::CashFlow;
 pub use error::EngineError;
 use sea_orm::{prelude::*, ActiveValue};
-use uuid::Uuid;
 pub use vault::Vault;
 
 mod cash_flows;
@@ -16,7 +15,7 @@ type ResultEngine<T> = Result<T, EngineError>;
 
 #[derive(Debug)]
 pub struct Engine {
-    vaults: HashMap<Uuid, Vault>,
+    vaults: HashMap<String, Vault>,
     database: DatabaseConnection,
 }
 
@@ -32,10 +31,10 @@ impl Engine {
         balance: f64,
         category: &str,
         note: &str,
-        vault_id: &Uuid,
+        vault_id: &str,
         flow_id: Option<&str>,
-        wallet_id: Option<&Uuid>,
-    ) -> ResultEngine<Uuid> {
+        wallet_id: Option<&str>,
+    ) -> ResultEngine<String> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
                 let (entry_id, mut entry_model) = vault.add_entry(
@@ -63,14 +62,14 @@ impl Engine {
     /// Delete a cash flow contained by a vault.
     pub async fn delete_cash_flow(
         &mut self,
-        vault_id: &Uuid,
+        vault_id: &str,
         name: &str,
         archive: bool,
     ) -> ResultEngine<()> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
                 let mut flow_model = vault.delete_flow(&name.to_string(), archive)?;
-                flow_model.vault_id = ActiveValue::Set(vault.id);
+                flow_model.vault_id = ActiveValue::Set(vault.id.clone());
 
                 if archive {
                     flow_model.archived = ActiveValue::Set(true);
@@ -87,15 +86,15 @@ impl Engine {
     /// Delete an income or an expense.
     pub async fn delete_entry(
         &mut self,
-        vault_id: &Uuid,
+        vault_id: &str,
         flow_id: Option<&str>,
-        wallet_id: Option<&Uuid>,
-        entry_id: &Uuid,
+        wallet_id: Option<&str>,
+        entry_id: &str,
     ) -> ResultEngine<()> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
                 vault.delete_entry(wallet_id, flow_id, entry_id)?;
-                entry::Entity::delete_by_id(*entry_id)
+                entry::Entity::delete_by_id(entry_id)
                     .exec(&self.database)
                     .await
                     .unwrap();
@@ -108,7 +107,7 @@ impl Engine {
 
     /// Delete or archive a vault
     /// TODO: Add `archive`
-    pub async fn delete_vault(&mut self, vault_id: &Uuid) -> ResultEngine<()> {
+    pub async fn delete_vault(&mut self, vault_id: &str) -> ResultEngine<()> {
         match self.vaults.remove(vault_id) {
             Some(vault) => {
                 let vault_model: vault::ActiveModel = (&vault).into();
@@ -120,20 +119,20 @@ impl Engine {
     }
 
     /// Add a new vault
-    pub async fn new_vault(&mut self, name: &str, user_id: &str) -> ResultEngine<Uuid> {
+    pub async fn new_vault(&mut self, name: &str, user_id: &str) -> ResultEngine<String> {
         let new_vault = Vault::new(name.to_string(), user_id);
-        let new_vault_id = new_vault.id;
+        let new_vault_id = new_vault.id.clone();
         let vault_entry: vault::ActiveModel = (&new_vault).into();
 
         vault_entry.insert(&self.database).await.unwrap();
-        self.vaults.insert(new_vault.id, new_vault);
+        self.vaults.insert(new_vault_id.clone(), new_vault);
         Ok(new_vault_id)
     }
 
     /// Add a new cash flow inside a vault.
     pub async fn new_cash_flow(
         &mut self,
-        vault_id: &Uuid,
+        vault_id: &str,
         name: &str,
         balance: f64,
         max_balance: Option<f64>,
@@ -143,7 +142,7 @@ impl Engine {
             Some(vault) => {
                 let (id, mut flow) =
                     vault.new_flow(name.to_string(), balance, max_balance, income_bounded)?;
-                flow.vault_id = ActiveValue::Set(vault.id);
+                flow.vault_id = ActiveValue::Set(vault.id.clone());
                 flow.insert(&self.database).await.unwrap();
                 Ok(id)
             }
@@ -154,10 +153,10 @@ impl Engine {
     /// Update an income or an expense
     pub async fn update_entry(
         &mut self,
-        vault_id: &Uuid,
+        vault_id: &str,
         flow_id: Option<&str>,
-        wallet_id: Option<&Uuid>,
-        entry_id: &Uuid,
+        wallet_id: Option<&str>,
+        entry_id: &str,
         amount: f64,
         category: &str,
         note: &str,
@@ -190,7 +189,7 @@ impl Engine {
     /// Return a user `Vault`.
     pub fn vault(
         &self,
-        vault_id: Option<Uuid>,
+        vault_id: Option<&str>,
         vault_name: Option<String>,
         user_id: &str,
     ) -> ResultEngine<&Vault> {
@@ -201,7 +200,7 @@ impl Engine {
         }
 
         let vault = if let Some(id) = vault_id {
-            match self.vaults.get(&id) {
+            match self.vaults.get(id) {
                 None => return Err(EngineError::KeyNotFound("vault not exists".to_string())),
                 Some(vault) => vault,
             }
@@ -273,7 +272,7 @@ impl EngineBuilder {
             }
 
             vaults.insert(
-                vault_entry.0.id,
+                vault_entry.0.id.clone(),
                 Vault {
                     id: vault_entry.0.id,
                     name: vault_entry.0.name,

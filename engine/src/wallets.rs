@@ -43,8 +43,8 @@ impl Wallet {
         self.archived = true;
     }
 
-    pub fn delete_entry(&mut self, id: &Uuid) -> ResultEngine<Entry> {
-        match self.entries.iter().position(|entry| entry.id == *id) {
+    pub fn delete_entry(&mut self, id: &str) -> ResultEngine<Entry> {
+        match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
                 self.balance -= entry.amount;
@@ -62,12 +62,12 @@ impl Wallet {
 
     pub fn update_entry(
         &mut self,
-        id: &Uuid,
+        id: &str,
         amount: f64,
         category: String,
         note: String,
     ) -> ResultEngine<&Entry> {
-        match self.entries.iter().position(|entry| entry.id == *id) {
+        match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
                 let entry = &mut self.entries[index];
                 self.balance = self.balance - entry.amount + amount;
@@ -91,7 +91,7 @@ pub struct Model {
     #[sea_orm(column_type = "Double")]
     pub balance: f64,
     pub archived: bool,
-    pub vault_id: Uuid,
+    pub vault_id: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -124,8 +124,6 @@ impl ActiveModelBehavior for ActiveModel {}
 
 #[cfg(test)]
 mod tests {
-    use uuid::uuid;
-
     use super::*;
 
     fn wallet() -> Wallet {
@@ -153,7 +151,7 @@ mod tests {
         wallet
             .add_entry(10.4, String::from("Income"), String::from("Hard work"))
             .unwrap();
-        let entry_id = wallet.entries[0].id;
+        let entry_id = wallet.entries[0].id.clone();
 
         wallet
             .update_entry(
@@ -181,7 +179,7 @@ mod tests {
 
         wallet
             .update_entry(
-                &uuid!("6a8416ed-b8e6-4732-a591-bf55da9687e7"),
+                "6a8416ed-b8e6-4732-a591-bf55da9687e7",
                 20f64,
                 String::from("Income"),
                 String::from("Monthly"),

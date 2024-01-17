@@ -14,7 +14,12 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Entries::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(Entries::Id).uuid().not_null().primary_key())
+                    .col(
+                        ColumnDef::new(Entries::Id)
+                            .string()
+                            .not_null()
+                            .primary_key(),
+                    )
                     .col(ColumnDef::new(Entries::Amount).double().not_null())
                     .col(ColumnDef::new(Entries::Note).string())
                     .col(ColumnDef::new(Entries::Category).string())

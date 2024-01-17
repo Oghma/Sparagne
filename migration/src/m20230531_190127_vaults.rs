@@ -13,7 +13,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Vaults::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(Vaults::Id).uuid().not_null().primary_key())
+                    .col(ColumnDef::new(Vaults::Id).string().not_null().primary_key())
                     .col(ColumnDef::new(Vaults::Name).string().not_null())
                     .col(ColumnDef::new(Vaults::UserId).string().not_null())
                     .foreign_key(

@@ -8,7 +8,7 @@ use uuid::Uuid;
 /// Represent a movement, an entry in cash flows or wallets.
 #[derive(Clone, Debug, Serialize)]
 pub struct Entry {
-    pub id: Uuid,
+    pub id: String,
     pub amount: f64,
     pub category: String,
     pub note: String,
@@ -18,7 +18,7 @@ pub struct Entry {
 impl Entry {
     pub fn new(amount: f64, category: String, note: String) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().to_string(),
             amount,
             category,
             note,
@@ -41,7 +41,7 @@ impl From<Model> for Entry {
 #[sea_orm(table_name = "entries")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: Uuid,
+    pub id: String,
     #[sea_orm(column_type = "Double")]
     pub amount: f64,
     pub note: Option<String>,
@@ -87,7 +87,7 @@ impl ActiveModelBehavior for ActiveModel {}
 impl From<&Entry> for ActiveModel {
     fn from(entry: &Entry) -> Self {
         Self {
-            id: ActiveValue::Set(entry.id),
+            id: ActiveValue::Set(entry.id.clone()),
             amount: ActiveValue::Set(entry.amount),
             note: ActiveValue::Set(Some(entry.note.clone())),
             category: ActiveValue::Set(Some(entry.category.clone())),

@@ -1,13 +1,12 @@
 //! Entries API endpoints
 use axum::{extract::State, http::StatusCode, Extension, Json};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{server::ServerState, user, ServerError};
 
 #[derive(Deserialize, Serialize)]
 pub struct EntryNew {
-    pub vault_id: Uuid,
+    pub vault_id: String,
     pub amount: f64,
     pub category: String,
     pub note: String,
