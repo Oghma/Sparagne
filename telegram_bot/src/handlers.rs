@@ -163,6 +163,11 @@ async fn send_entry(
         Some(response) => response.json::<server::types::vault::Vault>().await?,
     };
 
+    let success_str = if amount >= 0f64 {
+        "Entrata inserita"
+    } else {
+        "Uscita inserita"
+    };
     let (user_response, _) = post_check!(
         client,
         format!("{}/entry", url),
@@ -175,7 +180,7 @@ async fn send_entry(
             cash_flow: "Main".to_string()
         },
         StatusCode::CREATED,
-        "Uscita inserita",
+        success_str,
         "Problemi di connessione con il server. Riprova più tardi!"
     );
 
