@@ -62,7 +62,7 @@ pub async fn handle_user_commands(
             send_entry(
                 &cfg.client,
                 &cfg.server,
-                amount,
+                -amount,
                 &category,
                 &note,
                 &msg,
