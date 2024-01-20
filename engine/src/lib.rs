@@ -48,9 +48,17 @@ impl Engine {
                     category.to_string(),
                     note.to_string(),
                 )?;
-
                 if let Some(fid) = flow_id {
-                    entry_model.cash_flow_id = ActiveValue::Set(Some(fid.to_string()));
+                    let flow_id = fid.to_string();
+                    entry_model.cash_flow_id = ActiveValue::Set(Some(flow_id.clone()));
+
+                    // Update cashflow balance
+                    let flow = self.cash_flow(&flow_id, vault_id, user_id)?;
+                    let mut flow_entry = cash_flows::ActiveModel::new();
+                    flow_entry.name = ActiveValue::Set(flow.name.clone());
+                    flow_entry.balance = ActiveValue::Set(flow.balance);
+
+                    flow_entry.update(&self.database).await.unwrap();
                 }
                 if let Some(wid) = wallet_id {
                     entry_model.wallet_id = ActiveValue::Set(Some(wid.to_string()));
