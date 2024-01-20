@@ -1,4 +1,5 @@
 //! Commands and command handler functions.
+use engine::CashFlow;
 use reqwest::{Client, StatusCode};
 use teloxide::{prelude::*, utils::command::BotCommands, Bot};
 
@@ -70,7 +71,65 @@ pub async fn handle_user_commands(
             .await?;
         }
         UserCommands::Sommario => {
-            bot.send_message(msg.chat.id, "TODO".to_string()).await?;
+            let user_id = &msg.from().map(|user| user.id.to_string()).unwrap();
+
+            let (user_response, response) = get_check!(
+                cfg.client,
+                format!("{}/vault", cfg.server),
+                user_id,
+                &server::types::vault::Vault {
+                    id: None,
+                    name: Some("Main".to_string()),
+                },
+                "",
+                "Problemi di connessione con il server. Riprova più tardi!"
+            );
+
+            let vault = match response {
+                None => {
+                    bot.send_message(msg.chat.id, user_response).await?;
+                    return Ok(());
+                }
+                Some(response) => response.json::<server::types::vault::Vault>().await?,
+            };
+
+            let (user_response, response) = get_check!(
+                cfg.client,
+                format!("{}/cashFlow", cfg.server),
+                user_id,
+                &server::types::cash_flow::CashFlowGet {
+                    name: "Main".to_string(),
+                    vault_id: vault.id.unwrap()
+                },
+                "",
+                "Problemi di connessione con il server. Riprova più tardi!"
+            );
+
+            let flow = match response {
+                None => {
+                    bot.send_message(msg.chat.id, user_response).await?;
+                    return Ok(());
+                }
+                Some(response) => response.json::<CashFlow>().await?,
+            };
+
+            let mut user_response = String::from("Ultime 10 voci:\n\n");
+            flow.entries
+                .iter()
+                .take(10)
+                .enumerate()
+                .for_each(|(index, entry)| {
+                    let index = (index + 1).to_string();
+                    let row = if entry.amount >= 0.0 {
+                        format!("{index}. 🟢 {}\n", entry)
+                    } else {
+                        format!("{index}. 🔴 {}\n", entry)
+                    };
+
+                    user_response.push_str(&row);
+                });
+
+            bot.send_message(msg.chat.id, user_response).await?;
         }
     };
 
