@@ -2,11 +2,11 @@
 //!
 //! Both expenses and income are represented by `Entry` type.
 use sea_orm::{entity::prelude::*, ActiveValue};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Represent a movement, an entry in cash flows or wallets.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Entry {
     pub id: String,
     pub amount: f64,
