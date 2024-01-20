@@ -14,7 +14,7 @@ pub struct EntryNew {
 }
 
 pub async fn entry_new(
-    _: Extension<user::Model>,
+    Extension(user): Extension<user::Model>,
     State(state): State<ServerState>,
     Json(payload): Json<EntryNew>,
 ) -> Result<StatusCode, ServerError> {
@@ -28,6 +28,7 @@ pub async fn entry_new(
             &payload.vault_id,
             Some(&payload.cash_flow),
             None,
+            &user.username,
         )
         .await?;
 
