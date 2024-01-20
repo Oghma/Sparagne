@@ -1,6 +1,8 @@
 //! The module contains the `Entry` type representing an entry in cash flows and wallets.
 //!
 //! Both expenses and income are represented by `Entry` type.
+use core::fmt;
+
 use sea_orm::{entity::prelude::*, ActiveValue};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -23,6 +25,12 @@ impl Entry {
             category,
             note,
         }
+    }
+}
+
+impl fmt::Display for Entry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}€ {} {}", self.amount, self.category, self.note)
     }
 }
 
