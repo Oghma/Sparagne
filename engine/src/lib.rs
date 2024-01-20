@@ -34,9 +34,13 @@ impl Engine {
         vault_id: &str,
         flow_id: Option<&str>,
         wallet_id: Option<&str>,
+        user_id: &str,
     ) -> ResultEngine<String> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
+                if vault.user_id != user_id {
+                    return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+                }
                 let (entry_id, mut entry_model) = vault.add_entry(
                     wallet_id,
                     flow_id,
