@@ -4,7 +4,7 @@ use axum::{
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::Response,
-    routing::post,
+    routing::{get, post},
     Router, TypedHeader,
 };
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
@@ -12,7 +12,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 
-use crate::{entry, user, vault};
+use crate::{cash_flow, entry, user, vault};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
@@ -107,8 +107,7 @@ pub async fn run(engine: Engine, db: DatabaseConnection) {
     };
 
     let app = Router::new()
-        // .route("/allCashFlows", get(cash_flow::cashflow_names))
-        // .route("/cashFlow", post(cash_flow::cashflow_new))
+        .route("/cashFlow", get(cash_flow::get))
         .route("/entry", post(entry::entry_new))
         .route("/vault", post(vault::vault_new).get(vault::get))
         .route("/user/pair", post(user::pair).delete(user::unpair))

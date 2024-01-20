@@ -1,39 +1,24 @@
-use axum::{extract::State, http::StatusCode, Json};
-use serde::Deserialize;
-use uuid::Uuid;
+//! CashFlow API endpoints
 
-use super::server::SharedState;
+use axum::{extract::State, Extension, Json};
 use engine::CashFlow;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
-pub struct CreateCashFlow {
-    name: String,
-    balance: f64,
-    max_balance: Option<f64>,
-    income_bounded: Option<bool>,
-    vault_id: Uuid,
+use crate::{server::ServerState, user, ServerError};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CashFlowGet {
+    pub name: String,
+    pub vault_id: String,
 }
 
-pub async fn cashflow_names(State(state): SharedState) -> Json<Vec<CashFlow>> {
-    let mut flows = Vec::new();
-    for (_, flow) in state.read().await.iter_flow() {
-        flows.push(flow.clone());
-    }
-    Json(flows)
-}
+pub async fn get(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Json(payload): Json<CashFlowGet>,
+) -> Result<Json<CashFlow>, ServerError> {
+    let engine = state.engine.read().await;
+    let flow = engine.cash_flow(&payload.name, &payload.vault_id, &user.username)?;
 
-pub async fn cashflow_new(
-    State(state): SharedState,
-    Json(payload): Json<CreateCashFlow>,
-) -> StatusCode {
-    if let Ok(_) = state.write().await.new_flow(
-        payload.name,
-        payload.balance,
-        payload.max_balance,
-        payload.income_bounded,
-        payload.vault_id,
-    ) {
-        return StatusCode::CREATED;
-    }
-    StatusCode::NOT_IMPLEMENTED
+    Ok(Json(flow.clone()))
 }

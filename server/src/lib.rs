@@ -4,13 +4,18 @@ use engine::EngineError;
 use serde::Serialize;
 pub use server::run;
 
-//mod cash_flow;
+mod cash_flow;
 mod entry;
 mod server;
 mod user;
 mod vault;
 
 pub mod types {
+    pub mod cash_flow {
+        pub use crate::cash_flow::CashFlowGet;
+        pub use engine::CashFlow;
+    }
+
     pub mod vault {
         pub use crate::vault::Vault;
         pub use crate::vault::VaultNew;
