@@ -1,15 +1,18 @@
 use axum::{
-    extract::State,
-    headers::{authorization::Basic, Authorization, Header},
-    http::{Request, StatusCode},
+    extract::{Request, State},
+    http::StatusCode,
     middleware::{self, Next},
     response::Response,
     routing::{get, post},
-    Router, TypedHeader,
+    Router,
+};
+use axum_extra::{
+    headers::{authorization::Basic, Authorization, Error as AxumError, Header},
+    TypedHeader,
 };
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::{cash_flow, entry, user, vault};
@@ -35,17 +38,17 @@ impl Header for TelegramHeader {
         &TELEGRAM_HEADER
     }
 
-    fn decode<'i, I>(values: &mut I) -> Result<Self, axum::headers::Error>
+    fn decode<'i, I>(values: &mut I) -> Result<Self, AxumError>
     where
         Self: Sized,
         I: Iterator<Item = &'i axum::http::HeaderValue>,
     {
-        let value = values.next().ok_or_else(axum::headers::Error::invalid)?;
+        let value = values.next().ok_or_else(AxumError::invalid)?;
         let Ok(value) = value.to_str() else {
-            return Err(axum::headers::Error::invalid());
+            return Err(AxumError::invalid());
         };
         let Ok(value) = value.parse() else {
-            return Err(axum::headers::Error::invalid());
+            return Err(AxumError::invalid());
         };
 
         Ok(TelegramHeader(value))
@@ -57,12 +60,12 @@ impl Header for TelegramHeader {
     }
 }
 
-async fn auth<B>(
+async fn auth(
     auth_header: TypedHeader<Authorization<Basic>>,
     telegram_header: Option<TypedHeader<TelegramHeader>>,
     State(state): State<ServerState>,
-    mut request: Request<B>,
-    next: Next<B>,
+    mut request: Request,
+    next: Next,
 ) -> Result<Response, StatusCode> {
     if auth_header.username().is_empty() || auth_header.password().is_empty() {
         return Err(StatusCode::UNAUTHORIZED);
@@ -114,9 +117,9 @@ pub async fn run(engine: Engine, db: DatabaseConnection) {
         .route_layer(middleware::from_fn_with_state(state.clone(), auth))
         .with_state(state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    // TODO: Avoid to hardcode ip
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
