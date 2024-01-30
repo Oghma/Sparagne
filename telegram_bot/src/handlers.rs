@@ -3,29 +3,10 @@ use engine::CashFlow;
 use reqwest::{Client, StatusCode};
 use teloxide::{prelude::*, utils::command::BotCommands, Bot};
 
-use crate::{commands::HandleUserAccount, get_check, post_check};
-
-// TODO: Avoid to hardcode italian strings and commands. Generalize
-#[derive(BotCommands, Clone)]
-#[command(rename_rule = "lowercase", description = "Commandi supportati:")]
-pub enum UserCommands {
-    #[command(description = "Mostra questo messaggio.")]
-    Help,
-    #[command(description = "Inserisce una nuova entrata.", parse_with = "split")]
-    Entrata {
-        amount: f64,
-        category: String,
-        note: String,
-    },
-    #[command(description = "Inserisce una nuova entrata.", parse_with = "split")]
-    Uscita {
-        amount: f64,
-        category: String,
-        note: String,
-    },
-    #[command(description = "Lista di tutte le entrate e uscite")]
-    Sommario,
-}
+use crate::{
+    commands::{HandleUserAccount, UserCommands},
+    get_check, post_check,
+};
 
 pub async fn handle_user_commands(
     bot: Bot,

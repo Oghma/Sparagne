@@ -4,8 +4,8 @@ use reqwest::{header, Client};
 use teloxide::{prelude::*, Bot as TBot};
 
 use crate::{
-    commands::HandleUserAccount,
-    handlers::{handle_pair_user, handle_user_commands, UserCommands},
+    commands::{HandleUserAccount, UserCommands},
+    handlers::{handle_pair_user, handle_user_commands},
 };
 
 mod commands;
