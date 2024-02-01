@@ -4,8 +4,8 @@ use reqwest::{header, Client};
 use teloxide::{prelude::*, Bot as TBot};
 
 use crate::{
-    commands::HandleUserAccount,
-    handlers::{handle_pair_user, handle_user_commands, UserCommands},
+    commands::{split_entry, HandleUserAccount, UserCommands},
+    handlers::{handle_pair_user, handle_user_commands},
 };
 
 mod commands;
@@ -80,8 +80,27 @@ impl Bot {
                         })
                         .unwrap_or_default()
                 })
-                .filter_command::<UserCommands>()
-                .endpoint(handle_user_commands),
+                .branch(
+                    dptree::entry()
+                        .filter_command::<UserCommands>()
+                        .endpoint(handle_user_commands),
+                )
+                .branch(
+                    dptree::filter_map(|msg: Message| {
+                        msg.text().and_then(|text| {
+                            let tmp = split_entry(text.to_string());
+                            tmp.and_then(|expense| {
+                                Ok(UserCommands::Uscita {
+                                    amount: expense.0,
+                                    category: expense.1,
+                                    note: expense.2,
+                                })
+                            })
+                            .ok()
+                        })
+                    })
+                    .endpoint(handle_user_commands),
+                ),
             )
             .branch(
                 dptree::entry()
