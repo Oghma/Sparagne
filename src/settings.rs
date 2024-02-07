@@ -40,7 +40,7 @@ pub struct Settings {
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
         let settings = Config::builder()
-            .add_source(File::with_name("settings"))
+            .add_source(File::with_name("config/config"))
             .build()?;
 
         settings.try_deserialize()
