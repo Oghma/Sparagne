@@ -8,7 +8,7 @@ port = 8844
 
 [server.database]
 # Only sqlite3 is supported as database.
-Sqlite = "db/db.sqlite3"
+Sqlite = "config/db.sqlite3"
 
 # Uncomment to start the telegram bot
 # [telegram]
