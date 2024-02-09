@@ -20,7 +20,7 @@ pub fn split_entry(input: String) -> Result<(f64, String, String), ParseError> {
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase", description = "Commandi supportati:")]
 pub enum UserCommands {
-    #[command(description = "Mostra questo messaggio.")]
+    #[command(description = "Mostra il seguente messaggio.")]
     Help,
     #[command(
         description = "Inserisce una nuova entrata.",
@@ -32,7 +32,7 @@ pub enum UserCommands {
         note: String,
     },
     #[command(
-        description = "Inserisce una nuova entrata.",
+        description = "Inserisce una nuova uscita.",
         parse_with = split_entry
     )]
     Uscita {
@@ -40,7 +40,7 @@ pub enum UserCommands {
         category: String,
         note: String,
     },
-    #[command(description = "Lista di tutte le entrate e uscite")]
+    #[command(description = "Una lista delle ultime entrate ed uscite")]
     Sommario,
 }
 

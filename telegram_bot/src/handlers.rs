@@ -16,8 +16,17 @@ pub async fn handle_user_commands(
 ) -> ResponseResult<()> {
     match cmd {
         UserCommands::Help => {
+            let income_info = "– Per registrare una nuova entrata utilizza il comando \\entrata.";
+            let expense_info = "– Per registrare una nuova uscita è possibile utilizzare il comando \\uscita o inserirla direttamente";
+            let example = "Ad esempio:\n1.1 Bar Caffè al bar";
+
             bot.send_message(msg.chat.id, UserCommands::descriptions().to_string())
                 .await?;
+            bot.send_message(
+                msg.chat.id,
+                format!("{income_info}\n{expense_info}\n\n{example}"),
+            )
+            .await?;
         }
         UserCommands::Entrata {
             amount,
