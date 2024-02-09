@@ -25,7 +25,7 @@ tracing-subscriber = "0.3.18"
 uuid = "1.7.0"
 
 [dependencies]
-config = "0.13.4"
+config = "0.14.0"
 engine = { path = "engine" }
 migration = { path = "migration" }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
