@@ -25,14 +25,11 @@ pub fn schema() -> UpdateHandler<RequestError> {
         .branch(
             dptree::filter_map(|msg: Message| {
                 msg.text().and_then(|text| {
-                    split_entry(text.to_string())
-                        .and_then(|expense| {
-                            Ok(UserCommands::Uscita {
+                    split_entry(text.to_string()).map(|expense| UserCommands::Uscita {
                                 amount: expense.0,
                                 category: expense.1,
                                 note: expense.2,
                             })
-                        })
                         .ok()
                 })
             })
