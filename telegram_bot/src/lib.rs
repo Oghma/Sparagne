@@ -3,8 +3,6 @@ use base64::Engine;
 use reqwest::{header, Client};
 use teloxide::{prelude::*, Bot as TBot};
 
-use crate::{commands::HandleUserAccount, handlers::handle_pair_user};
-
 mod commands;
 mod handlers;
 mod macros;
@@ -82,11 +80,7 @@ impl Bot {
                 )
                 .branch(handlers::entry::schema()),
             )
-            .branch(
-                dptree::entry()
-                    .filter_command::<HandleUserAccount>()
-                    .endpoint(handle_pair_user),
-            );
+            .branch(handlers::user::schema());
 
         Dispatcher::builder(bot, handler)
             .dependencies(dptree::deps![parameters])
