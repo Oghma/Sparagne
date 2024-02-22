@@ -2,7 +2,7 @@
 use engine::CashFlow;
 use reqwest::{Client, StatusCode};
 use teloxide::{
-    dispatching::{UpdateFilterExt, UpdateHandler},
+    dispatching::{dialogue::InMemStorage, UpdateFilterExt, UpdateHandler},
     prelude::*,
     utils::command::BotCommands,
     RequestError,
@@ -10,26 +10,36 @@ use teloxide::{
 
 use crate::{
     commands::{split_entry, UserCommands},
-    post_check,
+    delete_check, post_check,
 };
 use crate::{get_check, ConfigParameters};
+
+use super::{GlobalDialogue, GlobalState};
 
 /// Build the schema for UserCommands commands
 pub fn schema() -> UpdateHandler<RequestError> {
     Update::filter_message()
+        .enter_dialogue::<Update, InMemStorage<GlobalState>, GlobalState>()
         .branch(
             dptree::entry()
                 .filter_command::<UserCommands>()
-                .endpoint(handle_user_commands),
+                .branch(
+                    dptree::case![UserCommands::Elimina]
+                        .branch(dptree::case![GlobalState::Idle].endpoint(handle_delete_list)),
+                )
+                .branch(dptree::entry().endpoint(handle_user_commands)),
         )
+        .branch(dptree::case![GlobalState::InDelete(entries)].endpoint(handle_delete_entry))
         .branch(
+            // Handle expenses inserted without /expense command
             dptree::filter_map(|msg: Message| {
                 msg.text().and_then(|text| {
-                    split_entry(text.to_string()).map(|expense| UserCommands::Uscita {
-                                amount: expense.0,
-                                category: expense.1,
-                                note: expense.2,
-                            })
+                    split_entry(text.to_string())
+                        .map(|expense| UserCommands::Uscita {
+                            amount: expense.0,
+                            category: expense.1,
+                            note: expense.2,
+                        })
                         .ok()
                 })
             })
@@ -94,7 +104,95 @@ async fn handle_user_commands(
                 let user_response = format!("Ultime 10 voci:\n\n{}", format_entries(&flow, 10));
                 bot.send_message(msg.chat.id, user_response).await?;
             };
+        }
+        UserCommands::Elimina => {
+            tracing::info!("error in receiving delete command");
+        }
+    };
 
+    Ok(())
+}
+
+/// Show a list of entries of possible entries can be deleted.
+///
+/// NOTE: This is the first step of the deletion command
+async fn handle_delete_list(
+    bot: Bot,
+    cfg: ConfigParameters,
+    msg: Message,
+    dialogue: GlobalDialogue,
+) -> ResponseResult<()> {
+    if let Some(flow) = get_main_cash_flow(&bot, &msg, &cfg).await? {
+        let entries_id = flow
+            .entries
+            .iter()
+            .take(10)
+            .map(|entry| (entry.id.clone(), flow.name.clone()))
+            .collect();
+
+        let user_response = format!(
+            "Quale voce vuoi eliminare?:\n\n{}",
+            format_entries(&flow, 10)
+        );
+        bot.send_message(msg.chat.id, user_response).await?;
+        dialogue
+            .update(GlobalState::InDelete(entries_id))
+            .await
+            .unwrap();
+    };
+
+    Ok(())
+}
+
+/// Delete the entry selected by the user.
+///
+/// NOTE: This is the second step of the deletion command
+async fn handle_delete_entry(
+    bot: Bot,
+    cfg: ConfigParameters,
+    msg: Message,
+    dialogue: GlobalDialogue,
+    entries: Vec<(String, String)>,
+) -> ResponseResult<()> {
+    let user_id = msg.from().map(|user| user.id.to_string()).unwrap();
+    let entry = &entries[msg.text().unwrap().parse::<usize>().unwrap() - 1];
+
+    let (user_response, response) = get_check!(
+        cfg.client,
+        format!("{}/vault", cfg.server),
+        user_id.clone(),
+        &server::types::vault::Vault {
+            id: None,
+            name: Some("Main".to_string()),
+        },
+        "",
+        "Problemi di connessione con il server. Riprova più tardi!"
+    );
+
+    let vault = match response {
+        None => {
+            bot.send_message(msg.chat.id, user_response).await?;
+            return Ok(());
+        }
+        Some(response) => response.json::<server::types::vault::Vault>().await?,
+    };
+
+    let (user_response, _) = delete_check!(
+        cfg.client,
+        format!("{}/entry", cfg.server),
+        user_id,
+        &server::types::entry::EntryDelete {
+            vault_id: vault.id.unwrap(),
+            entry_id: entry.0.clone(),
+            cash_flow: Some(entry.1.clone()),
+            wallet: None
+        },
+        "Voce eliminata",
+        "Problemi di connessione con il server. Riprova più tardi!"
+    );
+
+    bot.send_message(msg.chat.id, user_response).await?;
+    dialogue.exit().await.unwrap();
     Ok(())
 }
 

@@ -1,7 +1,9 @@
 //! Library for the telegram bot
 use base64::Engine;
 use reqwest::{header, Client};
-use teloxide::{prelude::*, Bot as TBot};
+use teloxide::{dispatching::dialogue::InMemStorage, prelude::*, Bot as TBot};
+
+use crate::handlers::GlobalState;
 
 mod commands;
 mod handlers;
@@ -83,7 +85,10 @@ impl Bot {
             .branch(handlers::user::schema());
 
         Dispatcher::builder(bot, handler)
-            .dependencies(dptree::deps![parameters])
+            .dependencies(dptree::deps![
+                InMemStorage::<GlobalState>::new(),
+                parameters
+            ])
             .default_handler(|upd| async move {
                 tracing::warn!("Unhandled update {:?}", upd);
             })
