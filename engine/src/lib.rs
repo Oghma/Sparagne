@@ -4,6 +4,7 @@ pub use cash_flows::CashFlow;
 pub use error::EngineError;
 use sea_orm::{prelude::*, ActiveValue};
 pub use vault::Vault;
+use wallets::Wallet;
 
 mod cash_flows;
 mod entry;
@@ -58,6 +59,7 @@ impl Engine {
                     let mut flow_entry = cash_flows::ActiveModel::new();
                     flow_entry.name = ActiveValue::Set(flow.name.clone());
                     flow_entry.balance = ActiveValue::Set(flow.balance);
+                    flow_entry.income_balance = ActiveValue::Set(flow.income_balance);
 
                     flow_entry.update(&self.database).await.unwrap();
                 }
@@ -131,6 +133,18 @@ impl Engine {
                     .exec(&self.database)
                     .await
                     .unwrap();
+
+                if let Some(id) = flow_id {
+                    let flow = self.cash_flow(id, vault_id, user_id)?;
+                    let flow: cash_flows::ActiveModel = flow.into();
+                    flow.save(&self.database).await.unwrap();
+                }
+
+                if let Some(id) = wallet_id {
+                    let wallet = self.wallet(id, vault_id, user_id)?;
+                    let wallet: wallets::ActiveModel = wallet.into();
+                    wallet.save(&self.database).await.unwrap();
+                }
 
                 Ok(())
             }
