@@ -76,44 +76,32 @@ impl Vault {
         Ok((entry_id, entry))
     }
 
+    /// Delete an income or expense
     pub fn delete_entry(
         &mut self,
         wallet_id: Option<&str>,
         flow_id: Option<&str>,
         entry_id: &str,
     ) -> ResultEngine<()> {
-        match (wallet_id, flow_id) {
-            (Some(wid), Some(fid)) => {
-                let Some(flow) = self.cash_flow.get_mut(fid) else {
-                    return Err(EngineError::KeyNotFound(fid.to_string()));
-                };
-                flow.delete_entry(entry_id)?;
+        if wallet_id.is_none() && flow_id.is_none() {
+            return Err(EngineError::KeyNotFound(
+                "Missing wallet and cash flow ids".to_string(),
+            ));
+        }
 
-                let Some(wallet) = self.wallet.get_mut(wid) else {
-                    return Err(EngineError::KeyNotFound(wid.to_string()));
-                };
-                wallet.delete_entry(entry_id)?;
-            }
-            (Some(wid), None) => {
-                let Some(wallet) = self.wallet.get_mut(wid) else {
-                    return Err(EngineError::KeyNotFound(wid.to_string()));
-                };
-                wallet.delete_entry(entry_id)?;
-            }
+        if let Some(fid) = flow_id {
+            let Some(flow) = self.cash_flow.get_mut(fid) else {
+                return Err(EngineError::KeyNotFound(fid.to_string()));
+            };
+            flow.delete_entry(entry_id)?;
+        }
 
-            (None, Some(fid)) => {
-                let Some(flow) = self.cash_flow.get_mut(fid) else {
-                    return Err(EngineError::KeyNotFound(fid.to_string()));
-                };
-                flow.delete_entry(entry_id)?;
-            }
-
-            (None, None) => {
-                return Err(EngineError::KeyNotFound(
-                    "Missing wallet and cash flow ids".to_string(),
-                ))
-            }
-        };
+        if let Some(wid) = wallet_id {
+            let Some(wallet) = self.wallet.get_mut(wid) else {
+                return Err(EngineError::KeyNotFound(wid.to_string()));
+            };
+            wallet.delete_entry(entry_id)?;
+        }
 
         Ok(())
     }
