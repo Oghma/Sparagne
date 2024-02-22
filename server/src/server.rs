@@ -111,7 +111,7 @@ pub async fn run(engine: Engine, db: DatabaseConnection) {
 
     let app = Router::new()
         .route("/cashFlow", get(cash_flow::get))
-        .route("/entry", post(entry::entry_new))
+        .route("/entry", post(entry::entry_new).delete(entry::entry_delete))
         .route("/vault", post(vault::vault_new).get(vault::get))
         .route("/user/pair", post(user::pair).delete(user::unpair))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth))

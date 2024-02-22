@@ -1,12 +1,9 @@
 //! Library for the telegram bot
 use base64::Engine;
 use reqwest::{header, Client};
-use teloxide::{prelude::*, Bot as TBot};
+use teloxide::{dispatching::dialogue::InMemStorage, prelude::*, Bot as TBot};
 
-use crate::{
-    commands::{split_entry, HandleUserAccount, UserCommands},
-    handlers::{handle_pair_user, handle_user_commands},
-};
+use crate::handlers::GlobalState;
 
 mod commands;
 mod handlers;
@@ -72,44 +69,26 @@ impl Bot {
 
         let handler = Update::filter_message()
             .branch(
-                dptree::filter(|cfg: ConfigParameters, msg: Message| {
-                    msg.from()
-                        .map(|user| match cfg.allowed_users {
-                            None => true,
-                            Some(ids) => ids.contains(&user.id),
-                        })
-                        .unwrap_or_default()
-                })
-                .branch(
-                    dptree::entry()
-                        .filter_command::<UserCommands>()
-                        .endpoint(handle_user_commands),
-                )
-                .branch(
-                    dptree::filter_map(|msg: Message| {
-                        msg.text().and_then(|text| {
-                            let tmp = split_entry(text.to_string());
-                            tmp.and_then(|expense| {
-                                Ok(UserCommands::Uscita {
-                                    amount: expense.0,
-                                    category: expense.1,
-                                    note: expense.2,
-                                })
+                dptree::filter(
+                    // Only allowed users can use the bot
+                    |cfg: ConfigParameters, msg: Message| {
+                        msg.from()
+                            .map(|user| match cfg.allowed_users {
+                                None => true,
+                                Some(ids) => ids.contains(&user.id),
                             })
-                            .ok()
-                        })
-                    })
-                    .endpoint(handle_user_commands),
-                ),
+                            .unwrap_or_default()
+                    },
+                )
+                .branch(handlers::entry::schema()),
             )
-            .branch(
-                dptree::entry()
-                    .filter_command::<HandleUserAccount>()
-                    .endpoint(handle_pair_user),
-            );
+            .branch(handlers::user::schema());
 
         Dispatcher::builder(bot, handler)
-            .dependencies(dptree::deps![parameters])
+            .dependencies(dptree::deps![
+                InMemStorage::<GlobalState>::new(),
+                parameters
+            ])
             .default_handler(|upd| async move {
                 tracing::warn!("Unhandled update {:?}", upd);
             })

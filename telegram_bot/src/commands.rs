@@ -42,6 +42,8 @@ pub enum UserCommands {
     },
     #[command(description = "Una lista delle ultime entrate ed uscite")]
     Sommario,
+    #[command(description = "Elimina una delle entrate.")]
+    Elimina,
 }
 
 /// Commands to manage user accounts
