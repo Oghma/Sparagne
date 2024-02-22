@@ -26,6 +26,7 @@ impl Engine {
     }
 
     /// Add a new income or an expense
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_entry(
         &mut self,
         balance: f64,
@@ -178,6 +179,7 @@ impl Engine {
     }
 
     /// Update an income or an expense
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_entry(
         &mut self,
         vault_id: &str,
