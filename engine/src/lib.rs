@@ -118,9 +118,14 @@ impl Engine {
         flow_id: Option<&str>,
         wallet_id: Option<&str>,
         entry_id: &str,
+        user_id: &str,
     ) -> ResultEngine<()> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
+                if vault.user_id != user_id {
+                    return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+                }
+
                 vault.delete_entry(wallet_id, flow_id, entry_id)?;
                 entry::Entity::delete_by_id(entry_id)
                     .exec(&self.database)
