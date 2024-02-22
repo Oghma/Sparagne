@@ -13,6 +13,14 @@ pub struct EntryNew {
     pub cash_flow: String,
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct EntryDelete {
+    pub vault_id: String,
+    pub entry_id: String,
+    pub cash_flow: Option<String>,
+    pub wallet: Option<String>,
+}
+
 pub async fn entry_new(
     Extension(user): Extension<user::Model>,
     State(state): State<ServerState>,
@@ -33,4 +41,23 @@ pub async fn entry_new(
         .await?;
 
     Ok(StatusCode::CREATED)
+}
+
+pub async fn entry_delete(
+    _: Extension<user::Model>,
+    State(state): State<ServerState>,
+    Json(payload): Json<EntryDelete>,
+) -> Result<StatusCode, ServerError> {
+    let mut engine = state.engine.write().await;
+
+    engine
+        .delete_entry(
+            &payload.vault_id,
+            payload.cash_flow.as_deref(),
+            payload.wallet.as_deref(),
+            &payload.entry_id,
+        )
+        .await?;
+
+    Ok(StatusCode::OK)
 }

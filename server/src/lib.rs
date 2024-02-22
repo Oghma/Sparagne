@@ -26,6 +26,7 @@ pub mod types {
     }
 
     pub mod entry {
+        pub use crate::entry::EntryDelete;
         pub use crate::entry::EntryNew;
     }
 }
