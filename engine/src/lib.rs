@@ -259,6 +259,16 @@ impl Engine {
 
         Ok(vault)
     }
+
+    /// Return a [`Wallet`]
+    pub fn wallet(&self, wallet_id: &str, vault_id: &str, user_id: &str) -> ResultEngine<&Wallet> {
+        let vault = self.vault(Some(vault_id), None, user_id)?;
+
+        vault
+            .wallet
+            .get(wallet_id)
+            .ok_or(EngineError::KeyNotFound("wallet not exists".to_string()))
+    }
 }
 
 /// The builder for `Engine`
