@@ -9,22 +9,22 @@ use teloxide::{
 };
 
 use crate::{
-    commands::{split_entry, UserCommands},
+    commands::{split_entry, EntryCommands},
     delete_check, post_check,
 };
 use crate::{get_check, ConfigParameters};
 
 use super::{GlobalDialogue, GlobalState};
 
-/// Build the schema for UserCommands commands
+/// Build the schema for EntryCommands commands
 pub fn schema() -> UpdateHandler<RequestError> {
     Update::filter_message()
         .enter_dialogue::<Update, InMemStorage<GlobalState>, GlobalState>()
         .branch(
             dptree::entry()
-                .filter_command::<UserCommands>()
+                .filter_command::<EntryCommands>()
                 .branch(
-                    dptree::case![UserCommands::Elimina]
+                    dptree::case![EntryCommands::Elimina]
                         .branch(dptree::case![GlobalState::Idle].endpoint(handle_delete_list)),
                 )
                 .branch(dptree::entry().endpoint(handle_user_commands)),
@@ -35,7 +35,7 @@ pub fn schema() -> UpdateHandler<RequestError> {
             dptree::filter_map(|msg: Message| {
                 msg.text().and_then(|text| {
                     split_entry(text.to_string())
-                        .map(|expense| UserCommands::Uscita {
+                        .map(|expense| EntryCommands::Uscita {
                             amount: expense.0,
                             category: expense.1,
                             note: expense.2,
@@ -51,15 +51,15 @@ async fn handle_user_commands(
     bot: Bot,
     cfg: ConfigParameters,
     msg: Message,
-    cmd: UserCommands,
+    cmd: EntryCommands,
 ) -> ResponseResult<()> {
     match cmd {
-        UserCommands::Help => {
+        EntryCommands::Help => {
             let income_info = "– Per registrare una nuova entrata utilizza il comando \\entrata.";
             let expense_info = "– Per registrare una nuova uscita è possibile utilizzare il comando \\uscita o inserirla direttamente";
             let example = "Per esempio\n1.1 Bar Caffè al bar";
 
-            bot.send_message(msg.chat.id, UserCommands::descriptions().to_string())
+            bot.send_message(msg.chat.id, EntryCommands::descriptions().to_string())
                 .await?;
             bot.send_message(
                 msg.chat.id,
@@ -67,7 +67,7 @@ async fn handle_user_commands(
             )
             .await?;
         }
-        UserCommands::Entrata {
+        EntryCommands::Entrata {
             amount,
             category,
             note,
@@ -83,7 +83,7 @@ async fn handle_user_commands(
             )
             .await?;
         }
-        UserCommands::Uscita {
+        EntryCommands::Uscita {
             amount,
             category,
             note,
@@ -99,13 +99,13 @@ async fn handle_user_commands(
             )
             .await?;
         }
-        UserCommands::Sommario => {
+        EntryCommands::Sommario => {
             if let Some(flow) = get_main_cash_flow(&bot, &msg, &cfg).await? {
                 let user_response = format!("Ultime 10 voci:\n\n{}", format_entries(&flow, 10));
                 bot.send_message(msg.chat.id, user_response).await?;
             };
         }
-        UserCommands::Elimina => {
+        EntryCommands::Elimina => {
             tracing::info!("error in receiving delete command");
         }
     };

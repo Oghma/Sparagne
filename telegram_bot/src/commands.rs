@@ -19,7 +19,7 @@ pub fn split_entry(input: String) -> Result<(f64, String, String), ParseError> {
 // TODO: Avoid to hardcode italian strings and commands. Generalize
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase", description = "Commandi supportati:")]
-pub enum UserCommands {
+pub enum EntryCommands {
     #[command(description = "Mostra il seguente messaggio.")]
     Help,
     #[command(
