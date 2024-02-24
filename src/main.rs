@@ -10,7 +10,7 @@ async fn main() {
 
     tracing_subscriber::fmt()
         .with_env_filter(format!(
-            "hodl_tracker={level},telegram_bot={level},server={level},engine={level}",
+            "sparagne={level},telegram_bot={level},server={level},engine={level}",
             level = settings.app.level
         ))
         .init();

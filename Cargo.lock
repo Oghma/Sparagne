@@ -1402,22 +1402,6 @@ dependencies = [
  "digest",
 ]
 
-[[package]]
-name = "hodl_tracker"
-version = "0.1.0"
-dependencies = [
- "config",
- "engine",
- "migration",
- "sea-orm",
- "serde",
- "serde_derive",
- "server",
- "telegram_bot",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
 
 [[package]]
 name = "home"
@@ -3125,6 +3109,22 @@ checksum = "7b5fac59a5cb5dd637972e5fca70daf0523c9067fcdc4842f053dae04a18f8e9"
 dependencies = [
  "libc",
  "windows-sys 0.48.0",
+
+[[package]]
+name = "sparagne"
+version = "0.1.0"
+dependencies = [
+ "config",
+ "engine",
+ "migration",
+ "sea-orm",
+ "serde",
+ "serde_derive",
+ "server",
+ "telegram_bot",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

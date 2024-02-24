@@ -2,7 +2,7 @@
 FROM rust AS builder
 RUN update-ca-certificates
 
-WORKDIR /hodlTracker
+WORKDIR /sparagne
 COPY ./ .
 
 RUN cargo build --release
@@ -11,11 +11,11 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y openssl ca-certificates  && apt clean && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /hodlTracker
+WORKDIR /sparagne
 
 # Copy our build
-COPY --from=builder /hodlTracker/target/release/hodl_tracker ./
+COPY --from=builder /sparagne/target/release/sparagne ./
 
-CMD [ "/hodlTracker/hodl_tracker" ]
+CMD [ "/sparagne/sparagne" ]
 
 VOLUME /hodlTracker/config
