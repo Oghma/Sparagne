@@ -44,7 +44,7 @@ pub async fn entry_new(
 }
 
 pub async fn entry_delete(
-    _: Extension<user::Model>,
+    Extension(user): Extension<user::Model>,
     State(state): State<ServerState>,
     Json(payload): Json<EntryDelete>,
 ) -> Result<StatusCode, ServerError> {
@@ -56,6 +56,7 @@ pub async fn entry_delete(
             payload.cash_flow.as_deref(),
             payload.wallet.as_deref(),
             &payload.entry_id,
+            &user.username,
         )
         .await?;
 

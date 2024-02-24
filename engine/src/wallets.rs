@@ -1,6 +1,6 @@
 //! The module contains `Wallet` struct and its implementation.
 
-use sea_orm::entity::prelude::*;
+use sea_orm::entity::{prelude::*, ActiveValue};
 
 use crate::{entry::Entry, EngineError, ResultEngine};
 
@@ -121,6 +121,17 @@ impl Related<super::vault::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl From<&Wallet> for ActiveModel {
+    fn from(value: &Wallet) -> Self {
+        Self {
+            name: ActiveValue::Set(value.name.clone()),
+            balance: ActiveValue::Set(value.balance),
+            archived: ActiveValue::Set(value.archived),
+            vault_id: ActiveValue::NotSet,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

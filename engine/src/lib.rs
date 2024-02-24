@@ -4,6 +4,7 @@ pub use cash_flows::CashFlow;
 pub use error::EngineError;
 use sea_orm::{prelude::*, ActiveValue};
 pub use vault::Vault;
+use wallets::Wallet;
 
 mod cash_flows;
 mod entry;
@@ -26,6 +27,7 @@ impl Engine {
     }
 
     /// Add a new income or an expense
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_entry(
         &mut self,
         balance: f64,
@@ -57,6 +59,7 @@ impl Engine {
                     let mut flow_entry = cash_flows::ActiveModel::new();
                     flow_entry.name = ActiveValue::Set(flow.name.clone());
                     flow_entry.balance = ActiveValue::Set(flow.balance);
+                    flow_entry.income_balance = ActiveValue::Set(flow.income_balance);
 
                     flow_entry.update(&self.database).await.unwrap();
                 }
@@ -117,14 +120,31 @@ impl Engine {
         flow_id: Option<&str>,
         wallet_id: Option<&str>,
         entry_id: &str,
+        user_id: &str,
     ) -> ResultEngine<()> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
+                if vault.user_id != user_id {
+                    return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+                }
+
                 vault.delete_entry(wallet_id, flow_id, entry_id)?;
                 entry::Entity::delete_by_id(entry_id)
                     .exec(&self.database)
                     .await
                     .unwrap();
+
+                if let Some(id) = flow_id {
+                    let flow = self.cash_flow(id, vault_id, user_id)?;
+                    let flow: cash_flows::ActiveModel = flow.into();
+                    flow.save(&self.database).await.unwrap();
+                }
+
+                if let Some(id) = wallet_id {
+                    let wallet = self.wallet(id, vault_id, user_id)?;
+                    let wallet: wallets::ActiveModel = wallet.into();
+                    wallet.save(&self.database).await.unwrap();
+                }
 
                 Ok(())
             }
@@ -178,6 +198,7 @@ impl Engine {
     }
 
     /// Update an income or an expense
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_entry(
         &mut self,
         vault_id: &str,
@@ -251,6 +272,16 @@ impl Engine {
         };
 
         Ok(vault)
+    }
+
+    /// Return a [`Wallet`]
+    pub fn wallet(&self, wallet_id: &str, vault_id: &str, user_id: &str) -> ResultEngine<&Wallet> {
+        let vault = self.vault(Some(vault_id), None, user_id)?;
+
+        vault
+            .wallet
+            .get(wallet_id)
+            .ok_or(EngineError::KeyNotFound("wallet not exists".to_string()))
     }
 }
 
