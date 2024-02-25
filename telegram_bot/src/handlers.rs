@@ -3,6 +3,7 @@
 use teloxide::{dispatching::dialogue::InMemStorage, prelude::Dialogue};
 
 pub mod entry;
+pub mod statistics;
 pub mod user;
 
 #[derive(Debug, Default, Clone)]

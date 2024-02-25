@@ -80,7 +80,8 @@ impl Bot {
                             .unwrap_or_default()
                     },
                 )
-                .branch(handlers::entry::schema()),
+                .branch(handlers::entry::schema())
+                .branch(handlers::statistics::schema()),
             )
             .branch(handlers::user::schema());
 

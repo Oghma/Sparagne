@@ -56,3 +56,11 @@ pub enum HandleUserAccount {
     },
     UnPair,
 }
+
+/// Commands for user statistics
+#[derive(BotCommands, Clone)]
+#[command(rename_rule = "lowercase", description = "Statistiche")]
+pub enum UserStatisticsCommands {
+    #[command(description = "Mostra le statistiche del vault")]
+    Stats,
+}
