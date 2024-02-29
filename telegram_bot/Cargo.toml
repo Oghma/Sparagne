@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 base64 = "0.21.7"
+csv = { workspace = true }
 engine = { path = "../engine" }
 reqwest = { workspace = true, features = ["json"] }
 serde_json = { workspace = true }
