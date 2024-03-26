@@ -19,7 +19,7 @@ pub fn split_entry(input: String) -> Result<(f64, String, String), ParseError> {
 // TODO: Avoid to hardcode italian strings and commands. Generalize
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase", description = "Commandi supportati:")]
-pub enum UserCommands {
+pub enum EntryCommands {
     #[command(description = "Mostra il seguente messaggio.")]
     Help,
     #[command(
@@ -55,4 +55,19 @@ pub enum HandleUserAccount {
         code: String,
     },
     UnPair,
+}
+
+/// Commands for user statistics
+#[derive(BotCommands, Clone)]
+#[command(rename_rule = "lowercase", description = "Statistiche")]
+pub enum UserStatisticsCommands {
+    #[command(description = "Mostra le statistiche del vault")]
+    Stats,
+}
+
+/// Commands for exporting user data
+#[derive(BotCommands, Clone)]
+#[command(rename_rule = "lowercase", description = "Esportare i propri dati")]
+pub enum UserExportCommands {
+    Export,
 }

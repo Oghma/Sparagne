@@ -15,7 +15,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::{cash_flow, entry, user, vault};
+use crate::{cash_flow, entry, statistics, user, vault};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
@@ -114,6 +114,7 @@ pub async fn run(engine: Engine, db: DatabaseConnection) {
         .route("/entry", post(entry::entry_new).delete(entry::entry_delete))
         .route("/vault", post(vault::vault_new).get(vault::get))
         .route("/user/pair", post(user::pair).delete(user::unpair))
+        .route("/stats", get(statistics::get_stats))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth))
         .with_state(state);
 

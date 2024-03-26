@@ -7,6 +7,7 @@ pub use server::run;
 mod cash_flow;
 mod entry;
 mod server;
+mod statistics;
 mod user;
 mod vault;
 
@@ -28,6 +29,10 @@ pub mod types {
     pub mod entry {
         pub use crate::entry::EntryDelete;
         pub use crate::entry::EntryNew;
+    }
+
+    pub mod stats {
+        pub use crate::statistics::Statistic;
     }
 }
 
