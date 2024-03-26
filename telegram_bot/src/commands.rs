@@ -64,3 +64,10 @@ pub enum UserStatisticsCommands {
     #[command(description = "Mostra le statistiche del vault")]
     Stats,
 }
+
+/// Commands for exporting user data
+#[derive(BotCommands, Clone)]
+#[command(rename_rule = "lowercase", description = "Esportare i propri dati")]
+pub enum UserExportCommands {
+    Export,
+}

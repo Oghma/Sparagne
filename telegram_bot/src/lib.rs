@@ -81,7 +81,8 @@ impl Bot {
                     },
                 )
                 .branch(handlers::entry::schema())
-                .branch(handlers::statistics::schema()),
+                .branch(handlers::statistics::schema())
+                .branch(handlers::exports::schema()),
             )
             .branch(handlers::user::schema());
 
