@@ -9,7 +9,7 @@ use teloxide::{
 };
 
 use crate::{
-    commands::{split_entry, EntryCommands},
+    commands::{split_entry, EntryCommands, UserStatisticsCommands},
     delete_check, post_check,
 };
 use crate::{get_check, ConfigParameters};
@@ -55,17 +55,24 @@ async fn handle_user_commands(
 ) -> ResponseResult<()> {
     match cmd {
         EntryCommands::Help => {
-            let income_info = "– Per registrare una nuova entrata utilizza il comando \\entrata.";
-            let expense_info = "– Per registrare una nuova uscita è possibile utilizzare il comando \\uscita o inserirla direttamente";
-            let example = "Per esempio\n1.1 Bar Caffè al bar";
+            let help_message = format!(
+                "Sparagne! Per monitorare il tuo budget!\n{}\n{}",
+                EntryCommands::descriptions(),
+                UserStatisticsCommands::descriptions(),
+            );
 
-            bot.send_message(msg.chat.id, EntryCommands::descriptions().to_string())
+            let income_info = "– Per registrare una nuova entrata utilizza il comando \\entrata importo nome categoria note";
+            let income_example = "Per esempio\n\\entrata 1000 stipendio Stipendio di gennaio";
+
+            let expense_info = "– Per registrare una nuova uscita è possibile utilizzare il comando \\uscita o inserirla direttamente";
+            let expense_example =
+                "Per esempio\n1.1 Bar Caffè al bar o \\uscita 1.1 Bar Caffè al bar";
+
+            bot.send_message(msg.chat.id, help_message).await?;
+            bot.send_message(msg.chat.id, format!("{income_info}\n{income_example}"))
                 .await?;
-            bot.send_message(
-                msg.chat.id,
-                format!("{income_info}\n{expense_info}\n\n{example}"),
-            )
-            .await?;
+            bot.send_message(msg.chat.id, format!("{expense_info}\n{expense_example}"))
+                .await?;
         }
         EntryCommands::Entrata {
             amount,

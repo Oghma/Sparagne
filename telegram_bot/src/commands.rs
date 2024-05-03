@@ -18,7 +18,10 @@ pub fn split_entry(input: String) -> Result<(f64, String, String), ParseError> {
 
 // TODO: Avoid to hardcode italian strings and commands. Generalize
 #[derive(BotCommands, Clone)]
-#[command(rename_rule = "lowercase", description = "Commandi supportati:")]
+#[command(
+    rename_rule = "lowercase",
+    description = "Comandi per gestire le finanze:"
+)]
 pub enum EntryCommands {
     #[command(description = "Mostra il seguente messaggio.")]
     Help,
@@ -48,18 +51,20 @@ pub enum EntryCommands {
 
 /// Commands to manage user accounts
 #[derive(BotCommands, Clone)]
-#[command(rename_rule = "lowercase", description = "Gestione degli utenti")]
+#[command(
+    rename_rule = "lowercase",
+    description = "Comandi per gestire l'account"
+)]
 pub enum HandleUserAccount {
-    #[command(description = "Pair with an account.")]
-    Pair {
-        code: String,
-    },
+    #[command(description = "Collega il tuo account telegram.")]
+    Pair { code: String },
+    #[command(description = "Scollega il tuo account telegram.")]
     UnPair,
 }
 
 /// Commands for user statistics
 #[derive(BotCommands, Clone)]
-#[command(rename_rule = "lowercase", description = "Statistiche")]
+#[command(rename_rule = "lowercase", description = "Comandi per le statistiche")]
 pub enum UserStatisticsCommands {
     #[command(description = "Mostra le statistiche del vault")]
     Stats,
@@ -67,7 +72,11 @@ pub enum UserStatisticsCommands {
 
 /// Commands for exporting user data
 #[derive(BotCommands, Clone)]
-#[command(rename_rule = "lowercase", description = "Esportare i propri dati")]
+#[command(
+    rename_rule = "lowercase",
+    description = "Comandi per esportare i dati"
+)]
 pub enum UserExportCommands {
+    #[command(description = "Esporta in un file csv le tue voci")]
     Export,
 }
