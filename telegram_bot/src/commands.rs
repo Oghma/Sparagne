@@ -80,3 +80,10 @@ pub enum UserExportCommands {
     #[command(description = "Esporta in un file csv le tue voci")]
     Export,
 }
+
+/// Start command. Needed when user send /start
+#[derive(BotCommands, Clone)]
+#[command(rename_rule = "lowercase")]
+pub enum UserStartCommands {
+    Start,
+}
