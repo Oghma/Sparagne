@@ -55,24 +55,7 @@ async fn handle_user_commands(
 ) -> ResponseResult<()> {
     match cmd {
         EntryCommands::Help => {
-            let help_message = format!(
-                "Sparagne! Per monitorare il tuo budget!\n{}\n{}",
-                EntryCommands::descriptions(),
-                UserStatisticsCommands::descriptions(),
-            );
-
-            let income_info = "– Per registrare una nuova entrata utilizza il comando \\entrata importo nome categoria note";
-            let income_example = "Per esempio\n\\entrata 1000 stipendio Stipendio di gennaio";
-
-            let expense_info = "– Per registrare una nuova uscita è possibile utilizzare il comando \\uscita o inserirla direttamente";
-            let expense_example =
-                "Per esempio\n1.1 Bar Caffè al bar o \\uscita 1.1 Bar Caffè al bar";
-
-            bot.send_message(msg.chat.id, help_message).await?;
-            bot.send_message(msg.chat.id, format!("{income_info}\n{income_example}"))
-                .await?;
-            bot.send_message(msg.chat.id, format!("{expense_info}\n{expense_example}"))
-                .await?;
+            send_help_message(bot, msg).await?;
         }
         EntryCommands::Entrata {
             amount,
@@ -327,6 +310,28 @@ async fn send_entry(
     );
 
     bot.send_message(msg.chat.id, user_response).await?;
+
+    Ok(())
+}
+
+async fn send_help_message(bot: Bot, msg: Message) -> ResponseResult<()> {
+    let help_message = format!(
+        "Sparagne! Per monitorare il tuo budget!\n{}\n{}",
+        EntryCommands::descriptions(),
+        UserStatisticsCommands::descriptions(),
+    );
+
+    let income_info = "– Per registrare una nuova entrata utilizza il comando \\entrata importo nome categoria note";
+    let income_example = "Per esempio\n\\entrata 1000 stipendio Stipendio di gennaio";
+
+    let expense_info = "– Per registrare una nuova uscita è possibile utilizzare il comando \\uscita o inserirla direttamente";
+    let expense_example = "Per esempio\n1.1 Bar Caffè al bar o \\uscita 1.1 Bar Caffè al bar";
+
+    bot.send_message(msg.chat.id, help_message).await?;
+    bot.send_message(msg.chat.id, format!("{income_info}\n{income_example}"))
+        .await?;
+    bot.send_message(msg.chat.id, format!("{expense_info}\n{expense_example}"))
+        .await?;
 
     Ok(())
 }
