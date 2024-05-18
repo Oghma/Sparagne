@@ -9,7 +9,7 @@ use teloxide::{
 };
 
 use crate::{
-    commands::{split_entry, EntryCommands, UserStartCommands, UserStatisticsCommands},
+    commands::{split_entry, EntryCommands, UserStatisticsCommands},
     delete_check, post_check,
 };
 use crate::{get_check, ConfigParameters};
@@ -44,11 +44,6 @@ pub fn schema() -> UpdateHandler<RequestError> {
                 })
             })
             .endpoint(handle_user_commands),
-        )
-        .branch(
-            dptree::entry()
-                .filter_command::<UserStartCommands>()
-                .endpoint(send_help_message),
         )
 }
 

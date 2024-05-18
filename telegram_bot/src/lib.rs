@@ -84,7 +84,8 @@ impl Bot {
                 .branch(handlers::statistics::schema())
                 .branch(handlers::exports::schema()),
             )
-            .branch(handlers::user::schema());
+            .branch(handlers::user::schema())
+            .branch(handlers::start::schema());
 
         Dispatcher::builder(bot, handler)
             .dependencies(dptree::deps![
