@@ -314,7 +314,7 @@ async fn send_entry(
     Ok(())
 }
 
-async fn send_help_message(bot: Bot, msg: Message) -> ResponseResult<()> {
+pub async fn send_help_message(bot: Bot, msg: Message) -> ResponseResult<()> {
     let help_message = format!(
         "Sparagne! Per monitorare il tuo budget!\n{}\n{}",
         EntryCommands::descriptions(),

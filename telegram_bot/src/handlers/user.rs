@@ -5,6 +5,8 @@ use teloxide::{dispatching::UpdateHandler, prelude::*, RequestError};
 
 use crate::{commands::HandleUserAccount, ConfigParameters};
 
+use super::entry::send_help_message;
+
 /// Build the schema for `HandleUserAccount` commands
 pub fn schema() -> UpdateHandler<RequestError> {
     Update::filter_message()
@@ -30,17 +32,21 @@ async fn handle_pair_user(
                 .await
                 .unwrap();
 
-            let user_response = match response.status() {
-                StatusCode::CREATED => "Account paired",
+            match response.status() {
+                StatusCode::CREATED => {
+                    bot.send_message(msg.chat.id, "Account paired").await?;
+                    send_help_message(bot, msg).await?;
+                }
                 _ => {
                     tracing::debug!("{:?}", response);
                     tracing::debug!("body: {}", response.text().await.unwrap());
-
-                    "Connection problems with the server. Retry later!"
+                    bot.send_message(
+                        msg.chat.id,
+                        "Connection problems with the server. Retry later!",
+                    )
+                    .await?;
                 }
             };
-
-            bot.send_message(msg.chat.id, user_response).await?;
         }
         HandleUserAccount::UnPair => {
             let response = cfg
