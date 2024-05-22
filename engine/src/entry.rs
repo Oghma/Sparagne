@@ -2,6 +2,7 @@
 //!
 //! Both expenses and income are represented by `Entry` type.
 use core::fmt;
+use std::time::Duration;
 
 use sea_orm::{entity::prelude::*, ActiveValue};
 use serde::{Deserialize, Serialize};
@@ -14,16 +15,18 @@ pub struct Entry {
     pub amount: f64,
     pub category: String,
     pub note: String,
+    pub date: Duration,
 }
 
 /// Type used to represent an entry in cash flows and wallets.
 impl Entry {
-    pub fn new(amount: f64, category: String, note: String) -> Self {
+    pub fn new(amount: f64, category: String, note: String, date: Duration) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             amount,
             category,
             note,
+            date,
         }
     }
 }
@@ -41,6 +44,7 @@ impl From<Model> for Entry {
             amount: entry.amount,
             category: entry.category.unwrap(),
             note: entry.note.unwrap(),
+            date: Duration::from_secs(entry.date.parse().unwrap()),
         }
     }
 }
@@ -54,6 +58,7 @@ pub struct Model {
     pub amount: f64,
     pub note: Option<String>,
     pub category: Option<String>,
+    pub date: String,
     pub cash_flow_id: Option<String>,
     pub wallet_id: Option<String>,
 }
@@ -99,6 +104,7 @@ impl From<&Entry> for ActiveModel {
             amount: ActiveValue::Set(entry.amount),
             note: ActiveValue::Set(Some(entry.note.clone())),
             category: ActiveValue::Set(Some(entry.category.clone())),
+            date: ActiveValue::Set(entry.date.as_secs().to_string()),
             cash_flow_id: ActiveValue::NotSet,
             wallet_id: ActiveValue::NotSet,
         }

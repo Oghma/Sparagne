@@ -1,4 +1,6 @@
 //! Handler for managing user entries
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use engine::CashFlow;
 use reqwest::{Client, StatusCode};
 use teloxide::{
@@ -302,7 +304,8 @@ async fn send_entry(
             amount,
             category: category.to_string(),
             note: note.to_string(),
-            cash_flow: "Main".to_string()
+            cash_flow: "Main".to_string(),
+            date: SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
         },
         StatusCode::CREATED,
         success_str,

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 pub use cash_flows::CashFlow;
 pub use error::EngineError;
@@ -37,6 +37,7 @@ impl Engine {
         flow_id: Option<&str>,
         wallet_id: Option<&str>,
         user_id: &str,
+        date: Duration,
     ) -> ResultEngine<String> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
@@ -49,6 +50,7 @@ impl Engine {
                     balance,
                     category.to_string(),
                     note.to_string(),
+                    date,
                 )?;
                 if let Some(fid) = flow_id {
                     let flow_id = fid.to_string();

@@ -1,5 +1,7 @@
 //! The module contains the representation of a cash flow.
 //!
+use std::time::Duration;
+
 use sea_orm::entity::{prelude::*, ActiveValue};
 use serde::{Deserialize, Serialize};
 
@@ -68,8 +70,9 @@ impl CashFlow {
         balance: f64,
         category: String,
         note: String,
+        date: Duration,
     ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(balance, category, note);
+        let entry = Entry::new(balance, category, note, date);
         // If bounded, check constraints are respected
         if entry.amount > 0f64 {
             if let Some(bound) = self.max_balance {
@@ -220,6 +223,8 @@ impl From<&mut CashFlow> for ActiveModel {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use super::*;
 
     fn bounded() -> CashFlow {
@@ -233,8 +238,13 @@ mod tests {
     #[test]
     fn add_entry() {
         let mut flow = unbounded();
-        flow.add_entry(1.23, String::from("Income"), String::from("First"))
-            .unwrap();
+        flow.add_entry(
+            1.23,
+            String::from("Income"),
+            String::from("First"),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+        )
+        .unwrap();
         let entry = &flow.entries[0];
 
         assert_eq!(flow.name, "Cash".to_string());
@@ -246,8 +256,13 @@ mod tests {
     #[test]
     fn delete_entry() {
         let mut flow = unbounded();
-        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
-            .unwrap();
+        flow.add_entry(
+            1.23,
+            "Income".to_string(),
+            "Weekly".to_string(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+        )
+        .unwrap();
         let entry_id = flow.entries[0].id.clone();
         flow.delete_entry(&entry_id).unwrap();
 
@@ -258,8 +273,13 @@ mod tests {
     #[test]
     fn update_entry() {
         let mut flow = unbounded();
-        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
-            .unwrap();
+        flow.add_entry(
+            1.23,
+            "Income".to_string(),
+            "Weekly".to_string(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+        )
+        .unwrap();
         let entry_id = flow.entries[0].id.clone();
 
         flow.update_entry(
@@ -281,16 +301,26 @@ mod tests {
     #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
     fn fail_add_entry() {
         let mut flow = bounded();
-        flow.add_entry(20.44, "Income".to_string(), "Weekly".to_string())
-            .unwrap();
+        flow.add_entry(
+            20.44,
+            "Income".to_string(),
+            "Weekly".to_string(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+        )
+        .unwrap();
     }
 
     #[test]
     #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
     fn fail_update_entry() {
         let mut flow = bounded();
-        flow.add_entry(1.23, "Income".to_string(), "Weekly".to_string())
-            .unwrap();
+        flow.add_entry(
+            1.23,
+            "Income".to_string(),
+            "Weekly".to_string(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+        )
+        .unwrap();
         let entry_id = flow.entries[0].id.clone();
 
         flow.update_entry(
@@ -306,8 +336,13 @@ mod tests {
     #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
     fn fail_update_income_expense_switch() {
         let mut flow = bounded();
-        flow.add_entry(-1.23, "Income".to_string(), "Weekly".to_string())
-            .unwrap();
+        flow.add_entry(
+            -1.23,
+            "Income".to_string(),
+            "Weekly".to_string(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+        )
+        .unwrap();
         let entry_id = flow.entries[0].id.clone();
 
         flow.update_entry(

@@ -23,6 +23,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Entries::Amount).double().not_null())
                     .col(ColumnDef::new(Entries::Note).string())
                     .col(ColumnDef::new(Entries::Category).string())
+                    .col(ColumnDef::new(Entries::Date).timestamp().not_null())
                     .col(ColumnDef::new(Entries::CashFlowId).string())
                     .col(ColumnDef::new(Entries::WalletId).string())
                     .foreign_key(
@@ -57,6 +58,7 @@ enum Entries {
     Amount,
     Note,
     Category,
+    Date,
     CashFlowId,
     WalletId,
 }

@@ -1,5 +1,7 @@
 //! The module contains `Wallet` struct and its implementation.
 
+use std::time::Duration;
+
 use sea_orm::entity::{prelude::*, ActiveValue};
 
 use crate::{entry::Entry, EngineError, ResultEngine};
@@ -31,8 +33,9 @@ impl Wallet {
         balance: f64,
         category: String,
         note: String,
+        date: Duration,
     ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(balance, category, note);
+        let entry = Entry::new(balance, category, note, date);
         self.balance += entry.amount;
         self.entries.push(entry);
 
@@ -135,6 +138,8 @@ impl From<&Wallet> for ActiveModel {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use super::*;
 
     fn wallet() -> Wallet {
@@ -145,7 +150,12 @@ mod tests {
     fn add_entry() {
         let mut wallet = wallet();
         wallet
-            .add_entry(10.4, String::from("Income"), String::from("Hard work"))
+            .add_entry(
+                10.4,
+                String::from("Income"),
+                String::from("Hard work"),
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+            )
             .unwrap();
         let entry = &wallet.entries[0];
 
@@ -160,7 +170,12 @@ mod tests {
     fn update_entry() {
         let mut wallet = wallet();
         wallet
-            .add_entry(10.4, String::from("Income"), String::from("Hard work"))
+            .add_entry(
+                10.4,
+                String::from("Income"),
+                String::from("Hard work"),
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+            )
             .unwrap();
         let entry_id = wallet.entries[0].id.clone();
 
@@ -185,7 +200,12 @@ mod tests {
     fn fail_update_entry() {
         let mut wallet = wallet();
         wallet
-            .add_entry(1.23, "Income".to_string(), "Weekly".to_string())
+            .add_entry(
+                1.23,
+                "Income".to_string(),
+                "Weekly".to_string(),
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+            )
             .unwrap();
 
         wallet

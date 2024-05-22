@@ -1,4 +1,6 @@
 //! Entries API endpoints
+use std::time::Duration;
+
 use axum::{extract::State, http::StatusCode, Extension, Json};
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +13,7 @@ pub struct EntryNew {
     pub category: String,
     pub note: String,
     pub cash_flow: String,
+    pub date: Duration,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -37,6 +40,7 @@ pub async fn entry_new(
             Some(&payload.cash_flow),
             None,
             &user.username,
+            payload.date,
         )
         .await?;
 

@@ -2,7 +2,7 @@
 //! multiple vaults.
 
 use sea_orm::{prelude::*, ActiveValue};
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use crate::{
     cash_flows, cash_flows::CashFlow, entry, error::EngineError, wallets::Wallet, ResultEngine,
@@ -37,6 +37,7 @@ impl Vault {
         amount: f64,
         category: String,
         note: String,
+        date: Duration,
     ) -> ResultEngine<(String, entry::ActiveModel)> {
         let entry;
 
@@ -45,7 +46,7 @@ impl Vault {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
-                entry = flow.add_entry(amount, category, note)?;
+                entry = flow.add_entry(amount, category, note, date)?;
 
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
@@ -56,13 +57,13 @@ impl Vault {
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
-                entry = wallet.add_entry(amount, category, note)?;
+                entry = wallet.add_entry(amount, category, note, date)?;
             }
             (None, Some(fid)) => {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
-                entry = flow.add_entry(amount, category, note)?;
+                entry = flow.add_entry(amount, category, note, date)?;
             }
             (None, None) => {
                 return Err(EngineError::KeyNotFound(
@@ -233,6 +234,8 @@ impl From<&Vault> for ActiveModel {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use super::*;
 
     fn vault() -> (String, Vault) {
@@ -253,6 +256,7 @@ mod tests {
                 1.2,
                 String::from("Income"),
                 String::from(""),
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
             )
             .unwrap();
     }
@@ -268,6 +272,7 @@ mod tests {
                 1.2,
                 String::from("Income"),
                 String::from(""),
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
             )
             .unwrap();
     }
@@ -309,6 +314,7 @@ mod tests {
                 1.2,
                 String::from("Income"),
                 String::from(""),
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
             )
             .unwrap();
 
@@ -328,6 +334,7 @@ mod tests {
                 1.2,
                 String::from("Income"),
                 String::from(""),
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
             )
             .unwrap();
 
