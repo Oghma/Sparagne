@@ -18,4 +18,4 @@ COPY --from=builder /sparagne/target/release/sparagne ./
 
 CMD [ "/sparagne/sparagne" ]
 
-VOLUME /hodlTracker/config
+VOLUME /sparagne/config
