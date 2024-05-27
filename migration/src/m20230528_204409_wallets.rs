@@ -13,15 +13,11 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Wallets::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Wallets::Name)
-                            .string()
-                            .not_null()
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Wallets::Name).string().not_null())
                     .col(ColumnDef::new(Wallets::Balance).double().not_null())
                     .col(ColumnDef::new(Wallets::Archived).boolean().not_null())
-                    .col(ColumnDef::new(Wallets::VaultId).string())
+                    .col(ColumnDef::new(Wallets::VaultId).string().not_null())
+                    .primary_key(Index::create().col(Wallets::VaultId).col(Wallets::Name))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-wallets-vault_id")

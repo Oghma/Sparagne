@@ -13,17 +13,13 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(CashFlows::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(CashFlows::Name)
-                            .string()
-                            .not_null()
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(CashFlows::Name).string().not_null())
                     .col(ColumnDef::new(CashFlows::Balance).double().not_null())
                     .col(ColumnDef::new(CashFlows::MaxBalance).double())
                     .col(ColumnDef::new(CashFlows::IncomeBalance).double())
                     .col(ColumnDef::new(CashFlows::Archived).boolean().not_null())
-                    .col(ColumnDef::new(CashFlows::VaultId).string())
+                    .col(ColumnDef::new(CashFlows::VaultId).string().not_null())
+                    .primary_key(Index::create().col(CashFlows::VaultId).col(CashFlows::Name))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-cashflows-vault_id")

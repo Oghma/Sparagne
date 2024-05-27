@@ -164,6 +164,7 @@ pub struct Model {
     #[sea_orm(column_type = "Double", nullable)]
     pub income_balance: Option<f64>,
     pub archived: bool,
+    #[sea_orm(primary_key, auto_increment = false)]
     pub vault_id: String,
 }
 
