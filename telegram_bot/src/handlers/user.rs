@@ -27,7 +27,7 @@ async fn handle_pair_user(
             let response = cfg
                 .client
                 .post(cfg.server.to_string() + "/user/pair")
-                .json(&server::types::user::PairUser { code, telegram_id })
+                .json(&api_types::user::PairUser { code, telegram_id })
                 .send()
                 .await
                 .unwrap();

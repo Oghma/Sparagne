@@ -126,6 +126,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "api_types"
+version = "0.0.1"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "aquamarine"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,20 +1,9 @@
 //! Vault API endpoints
 
+use api_types::vault::{Vault, VaultNew};
 use axum::{extract::State, Extension, Json};
-use serde::{Deserialize, Serialize};
 
 use crate::{server::ServerState, user, ServerError};
-
-#[derive(Deserialize, Debug)]
-pub struct VaultNew {
-    name: String,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct Vault {
-    pub id: Option<String>,
-    pub name: Option<String>,
-}
 
 /// Handle requests for creating new `Vault`
 pub async fn vault_new(

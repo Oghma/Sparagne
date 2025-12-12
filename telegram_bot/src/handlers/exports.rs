@@ -21,7 +21,7 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
         cfg.client,
         format!("{}/vault", cfg.server),
         user_id,
-        &server::types::vault::Vault {
+        &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),
         },
@@ -34,14 +34,14 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
             bot.send_message(msg.chat.id, user_response).await?;
             return Ok(());
         }
-        Some(response) => response.json::<server::types::vault::Vault>().await?,
+        Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
     let (user_response, response) = get_check!(
         cfg.client,
         format!("{}/cashFlow", cfg.server),
         user_id,
-        &server::types::cash_flow::CashFlowGet {
+        &api_types::cash_flow::CashFlowGet {
             name: "Main".to_string(),
             vault_id: vault.id.unwrap()
         },

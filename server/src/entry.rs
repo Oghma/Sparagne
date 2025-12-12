@@ -1,28 +1,8 @@
 //! Entries API endpoints
-use std::time::Duration;
-
+use api_types::entry::{EntryDelete, EntryNew};
 use axum::{extract::State, http::StatusCode, Extension, Json};
-use serde::{Deserialize, Serialize};
 
 use crate::{server::ServerState, user, ServerError};
-
-#[derive(Deserialize, Serialize)]
-pub struct EntryNew {
-    pub vault_id: String,
-    pub amount: f64,
-    pub category: String,
-    pub note: String,
-    pub cash_flow: String,
-    pub date: Duration,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct EntryDelete {
-    pub vault_id: String,
-    pub entry_id: String,
-    pub cash_flow: Option<String>,
-    pub wallet: Option<String>,
-}
 
 pub async fn entry_new(
     Extension(user): Extension<user::Model>,

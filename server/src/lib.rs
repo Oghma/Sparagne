@@ -13,26 +13,24 @@ mod vault;
 
 pub mod types {
     pub mod cash_flow {
-        pub use crate::cash_flow::CashFlowGet;
+        pub use api_types::cash_flow::CashFlowGet;
         pub use engine::CashFlow;
     }
 
     pub mod vault {
-        pub use crate::vault::Vault;
-        pub use crate::vault::VaultNew;
+        pub use api_types::vault::{Vault, VaultNew};
     }
 
     pub mod user {
-        pub use crate::user::PairUser;
+        pub use api_types::user::PairUser;
     }
 
     pub mod entry {
-        pub use crate::entry::EntryDelete;
-        pub use crate::entry::EntryNew;
+        pub use api_types::entry::{EntryDelete, EntryNew};
     }
 
     pub mod stats {
-        pub use crate::statistics::Statistic;
+        pub use api_types::stats::Statistic;
     }
 }
 

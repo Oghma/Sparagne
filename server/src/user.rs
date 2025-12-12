@@ -1,8 +1,8 @@
 //! The module contains the definition of a user and its
 
+use api_types::user::PairUser;
 use axum::{extract::State, http::StatusCode, Extension, Json};
 use sea_orm::{entity::prelude::*, ActiveValue};
-use serde::{Deserialize, Serialize};
 
 use crate::{server::ServerState, ServerError};
 
@@ -20,13 +20,6 @@ pub struct Model {
 pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
-
-/// Struct for pairing user
-#[derive(Deserialize, Serialize)]
-pub struct PairUser {
-    pub code: String,
-    pub telegram_id: String,
-}
 
 /// Function to pair a user with its telegram id
 pub async fn pair(

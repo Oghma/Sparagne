@@ -3,7 +3,7 @@
 //!
 //! See `settings.toml` for the configuration.
 use config::{Config, ConfigError, File};
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct App {

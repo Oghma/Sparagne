@@ -11,9 +11,9 @@ path = "src/lib.rs"
 base64 = { workspace = true }
 csv = { workspace = true }
 engine = { path = "../engine" }
+api_types = { path = "../api_types" }
 reqwest = { workspace = true, features = ["json"] }
 serde_json = { workspace = true }
-server = { path = "../server" }
 teloxide = { workspace = true, features = ["macros", "rustls"] }
 tokio = { workspace = true, features = ["macros"] }
 tracing = { workspace = true }

@@ -1,16 +1,9 @@
 //! Statistics API edpoints
 
+use api_types::{stats::Statistic, vault::Vault};
 use axum::{extract::State, Extension, Json};
-use serde::{Deserialize, Serialize};
 
-use crate::{server::ServerState, user, vault::Vault, ServerError};
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Statistic {
-    pub balance: f64,
-    pub total_income: f64,
-    pub total_expenses: f64,
-}
+use crate::{server::ServerState, user, ServerError};
 
 /// Handle requests for user statistics
 pub async fn get_stats(

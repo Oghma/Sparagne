@@ -26,7 +26,7 @@ async fn handle_statistics(
                 cfg.client,
                 format!("{}/stats", cfg.server),
                 user_id,
-                &server::types::vault::Vault {
+                &api_types::vault::Vault {
                     id: None,
                     name: Some("Main".to_string())
                 },
@@ -39,7 +39,7 @@ async fn handle_statistics(
                     bot.send_message(msg.chat.id, user_response).await?;
                     return Ok(());
                 }
-                Some(response) => response.json::<server::types::stats::Statistic>().await?,
+                Some(response) => response.json::<api_types::stats::Statistic>().await?,
             };
 
             let response = format!(

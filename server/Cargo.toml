@@ -11,6 +11,7 @@ path = "src/lib.rs"
 axum = { workspace = true }
 axum-extra = { workspace = true, features = ["typed-header"] }
 engine = { path = "../engine" }
+api_types = { path = "../api_types" }
 serde = { workspace = true }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 tokio = { workspace = true, features = ["full"] }

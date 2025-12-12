@@ -1,16 +1,10 @@
 //! CashFlow API endpoints
 
 use axum::{extract::State, Extension, Json};
+use api_types::cash_flow::CashFlowGet;
 use engine::CashFlow;
-use serde::{Deserialize, Serialize};
 
 use crate::{server::ServerState, user, ServerError};
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CashFlowGet {
-    pub name: String,
-    pub vault_id: String,
-}
 
 pub async fn get(
     Extension(user): Extension<user::Model>,

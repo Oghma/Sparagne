@@ -153,7 +153,7 @@ async fn handle_delete_entry(
         cfg.client,
         format!("{}/vault", cfg.server),
         user_id.clone(),
-        &server::types::vault::Vault {
+        &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),
         },
@@ -166,14 +166,14 @@ async fn handle_delete_entry(
             bot.send_message(msg.chat.id, user_response).await?;
             return Ok(());
         }
-        Some(response) => response.json::<server::types::vault::Vault>().await?,
+        Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
     let (user_response, _) = delete_check!(
         cfg.client,
         format!("{}/entry", cfg.server),
         user_id,
-        &server::types::entry::EntryDelete {
+        &api_types::entry::EntryDelete {
             vault_id: vault.id.unwrap(),
             entry_id: entry.0.clone(),
             cash_flow: Some(entry.1.clone()),
@@ -200,7 +200,7 @@ async fn get_main_cash_flow(
         cfg.client,
         format!("{}/vault", cfg.server),
         user_id,
-        &server::types::vault::Vault {
+        &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),
         },
@@ -213,14 +213,14 @@ async fn get_main_cash_flow(
             bot.send_message(msg.chat.id, user_response).await?;
             return Ok(None);
         }
-        Some(response) => response.json::<server::types::vault::Vault>().await?,
+        Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
     let (user_response, response) = get_check!(
         cfg.client,
         format!("{}/cashFlow", cfg.server),
         user_id,
-        &server::types::cash_flow::CashFlowGet {
+        &api_types::cash_flow::CashFlowGet {
             name: "Main".to_string(),
             vault_id: vault.id.unwrap()
         },
@@ -274,7 +274,7 @@ async fn send_entry(
         client,
         format!("{}/vault", url),
         user_id,
-        &server::types::vault::Vault {
+        &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),
         },
@@ -287,7 +287,7 @@ async fn send_entry(
             bot.send_message(msg.chat.id, user_response).await?;
             return Ok(());
         }
-        Some(response) => response.json::<server::types::vault::Vault>().await?,
+        Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
     let success_str = if amount >= 0f64 {
@@ -299,7 +299,7 @@ async fn send_entry(
         client,
         format!("{}/entry", url),
         user_id,
-        &server::types::entry::EntryNew {
+        &api_types::entry::EntryNew {
             vault_id: vault.id.unwrap(),
             amount,
             category: category.to_string(),
