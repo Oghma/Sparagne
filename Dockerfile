@@ -5,7 +5,7 @@ RUN update-ca-certificates
 WORKDIR /sparagne
 COPY ./ .
 
-RUN cargo build --release
+RUN cargo build -p sparagne --release
 
 # Final image
 FROM debian:bookworm-slim

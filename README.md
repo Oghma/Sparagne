@@ -42,7 +42,7 @@ Open `config/config.toml` and change the settings. See [Settings](#Settings).
 Save the settings and run `Sparagne`
 
 ``` sh
-cargo run --release
+cargo run -p sparagne --release
 ```
 
 ### Database
@@ -62,5 +62,4 @@ To use the telegram bot `[telegram]` settings need to have enabled
 - `server`: ip address of the sparagne server. For now is hardcoded to `"http://127.0.0.1:3000"`
 - `username`: username of the telegram database account. See [Database](#Database)
 - `password`: password of the telegram database account
-
 

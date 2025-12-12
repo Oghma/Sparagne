@@ -1,11 +1,6 @@
-[package]
-name = "sparagne"
-version = "0.1.0"
-edition = "2021"
-
 [workspace]
 members = [
-    ".",
+    "crates/app",
     "crates/engine",
     "crates/migration",
     "crates/server",
@@ -46,15 +41,8 @@ tokio = "1.36.0"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 uuid = "1.8.0"
-
-[dependencies]
-config = "0.14.0"
 engine = { path = "crates/engine" }
 migration = { path = "crates/migration" }
-sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
-serde = { workspace = true }
 server = { path = "crates/server" }
 telegram_bot = { path = "crates/telegram_bot" }
-tokio = { workspace = true, features = ["full"] }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+api_types = { path = "crates/api_types" }
