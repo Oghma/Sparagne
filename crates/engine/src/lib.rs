@@ -41,6 +41,11 @@ impl Engine {
         user_id: &str,
         date: Duration,
     ) -> ResultEngine<String> {
+        if amount_cents == 0 {
+            return Err(EngineError::InvalidAmount(
+                "amount_cents must be != 0".to_string(),
+            ));
+        }
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
                 if vault.user_id != user_id {
