@@ -1,7 +1,7 @@
 //! Handler for managing user entries
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use engine::CashFlow;
+use engine::{CashFlow, MoneyCents};
 use reqwest::{Client, StatusCode};
 use teloxide::{
     RequestError,
@@ -10,10 +10,10 @@ use teloxide::{
     utils::command::BotCommands,
 };
 
-use crate::{ConfigParameters, get_check};
 use crate::{
+    ConfigParameters,
     commands::{EntryCommands, UserStatisticsCommands, split_entry},
-    delete_check, post_check,
+    delete_check, get_check, post_check,
 };
 
 use super::{GlobalDialogue, GlobalState};
@@ -146,11 +146,7 @@ async fn handle_delete_entry(
     dialogue: GlobalDialogue,
     entries: Vec<(String, String)>,
 ) -> ResponseResult<()> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|user| user.id.to_string())
-        .unwrap();
+    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
     let entry = &entries[msg.text().unwrap().parse::<usize>().unwrap() - 1];
 
     let (user_response, response) = get_check!(
@@ -198,11 +194,7 @@ async fn get_main_cash_flow(
     msg: &Message,
     cfg: &ConfigParameters,
 ) -> ResponseResult<Option<CashFlow>> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|user| user.id.to_string())
-        .unwrap();
+    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
 
     let (user_response, response) = get_check!(
         cfg.client,
@@ -256,7 +248,7 @@ fn format_entries(flow: &CashFlow, num_entries: usize) -> String {
         .enumerate()
         .for_each(|(index, entry)| {
             let index = (index + 1).to_string();
-            let row = if entry.amount >= 0.0 {
+            let row = if entry.amount_cents >= 0 {
                 format!("{index}. 🟢 {}\n", entry)
             } else {
                 format!("{index}. 🔴 {}\n", entry)
@@ -270,17 +262,13 @@ fn format_entries(flow: &CashFlow, num_entries: usize) -> String {
 async fn send_entry(
     client: &Client,
     url: &str,
-    amount: f64,
+    amount: MoneyCents,
     category: &str,
     note: &str,
     msg: &Message,
     bot: &Bot,
 ) -> ResponseResult<()> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|user| user.id.to_string())
-        .unwrap();
+    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
 
     let (user_response, response) = get_check!(
         client,
@@ -302,7 +290,7 @@ async fn send_entry(
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
-    let success_str = if amount >= 0f64 {
+    let success_str = if amount.cents() >= 0 {
         "Entrata inserita"
     } else {
         "Uscita inserita"
@@ -313,7 +301,7 @@ async fn send_entry(
         user_id,
         &api_types::entry::EntryNew {
             vault_id: vault.id.unwrap(),
-            amount,
+            amount_cents: amount.cents(),
             category: category.to_string(),
             note: note.to_string(),
             cash_flow: "Main".to_string(),

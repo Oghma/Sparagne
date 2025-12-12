@@ -2,6 +2,7 @@ use std::{collections::HashMap, time::Duration};
 
 pub use cash_flows::CashFlow;
 pub use error::EngineError;
+pub use money::MoneyCents;
 use sea_orm::{ActiveValue, prelude::*};
 pub use vault::Vault;
 use wallets::Wallet;
@@ -9,6 +10,7 @@ use wallets::Wallet;
 mod cash_flows;
 mod entry;
 mod error;
+mod money;
 mod vault;
 mod wallets;
 
@@ -30,7 +32,7 @@ impl Engine {
     #[allow(clippy::too_many_arguments)]
     pub async fn add_entry(
         &mut self,
-        balance: f64,
+        amount_cents: i64,
         category: &str,
         note: &str,
         vault_id: &str,
@@ -39,6 +41,11 @@ impl Engine {
         user_id: &str,
         date: Duration,
     ) -> ResultEngine<String> {
+        if amount_cents == 0 {
+            return Err(EngineError::InvalidAmount(
+                "amount_cents must be != 0".to_string(),
+            ));
+        }
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
                 if vault.user_id != user_id {
@@ -47,7 +54,7 @@ impl Engine {
                 let (entry_id, mut entry_model) = vault.add_entry(
                     wallet_id,
                     flow_id,
-                    balance,
+                    amount_cents,
                     category.to_string(),
                     note.to_string(),
                     date,
@@ -183,8 +190,8 @@ impl Engine {
         &mut self,
         vault_id: &str,
         name: &str,
-        balance: f64,
-        max_balance: Option<f64>,
+        balance: i64,
+        max_balance: Option<i64>,
         income_bounded: Option<bool>,
     ) -> ResultEngine<String> {
         match self.vaults.get_mut(vault_id) {
@@ -207,7 +214,7 @@ impl Engine {
         flow_id: Option<&str>,
         wallet_id: Option<&str>,
         entry_id: &str,
-        amount: f64,
+        amount_cents: i64,
         category: &str,
         note: &str,
     ) -> ResultEngine<()> {
@@ -217,7 +224,7 @@ impl Engine {
                     wallet_id,
                     flow_id,
                     entry_id,
-                    amount,
+                    amount_cents,
                     category.to_string(),
                     note.to_string(),
                 )?;
@@ -276,7 +283,7 @@ impl Engine {
         Ok(vault)
     }
 
-    /// Return a [`Wallet`]
+    /// Return a wallet.
     pub fn wallet(&self, wallet_id: &str, vault_id: &str, user_id: &str) -> ResultEngine<&Wallet> {
         let vault = self.vault(Some(vault_id), None, user_id)?;
 

@@ -42,7 +42,7 @@ pub mod entry {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct EntryNew {
         pub vault_id: String,
-        pub amount: f64,
+        pub amount_cents: i64,
         pub category: String,
         pub note: String,
         pub cash_flow: String,
@@ -63,8 +63,8 @@ pub mod stats {
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Statistic {
-        pub balance: f64,
-        pub total_income: f64,
-        pub total_expenses: f64,
+        pub balance_cents: i64,
+        pub total_income_cents: i64,
+        pub total_expenses_cents: i64,
     }
 }

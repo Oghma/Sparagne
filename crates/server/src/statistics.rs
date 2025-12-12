@@ -21,20 +21,20 @@ pub async fn get_stats(
     let result = vault
         .cash_flow
         .iter()
-        .fold((0.0, 0.0, 0.0), |acc, (_, flow)| {
+        .fold((0i64, 0i64, 0i64), |acc, (_, flow)| {
             let (income, expenses) = flow.entries.iter().fold((acc.0, acc.1), |acc, entry| {
-                if entry.amount >= 0.0 {
-                    (acc.0 + entry.amount, acc.1)
+                if entry.amount_cents >= 0 {
+                    (acc.0 + entry.amount_cents, acc.1)
                 } else {
-                    (acc.0, acc.1 + entry.amount.abs())
+                    (acc.0, acc.1 + entry.amount_cents.abs())
                 }
             });
             (income, expenses, acc.2 + flow.balance)
         });
 
     Ok(Json(Statistic {
-        balance: result.2,
-        total_income: result.0,
-        total_expenses: result.1,
+        balance_cents: result.2,
+        total_income_cents: result.0,
+        total_expenses_cents: result.1,
     }))
 }

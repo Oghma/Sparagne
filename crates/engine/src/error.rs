@@ -19,4 +19,6 @@ pub enum EngineError {
     KeyNotFound(String),
     #[error("\"{0}\" already present!")]
     ExistingKey(String),
+    #[error("Invalid amount: {0}")]
+    InvalidAmount(String),
 }
