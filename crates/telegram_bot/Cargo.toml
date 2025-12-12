@@ -10,8 +10,8 @@ path = "src/lib.rs"
 [dependencies]
 base64 = { workspace = true }
 csv = { workspace = true }
-engine = { path = "../engine" }
-api_types = { path = "../api_types" }
+engine = { workspace = true }
+api_types = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde_json = { workspace = true }
 teloxide = { workspace = true, features = ["macros", "rustls"] }
