@@ -21,4 +21,6 @@ pub enum EngineError {
     ExistingKey(String),
     #[error("Invalid amount: {0}")]
     InvalidAmount(String),
+    #[error("Currency mismatch: {0}")]
+    CurrencyMismatch(String),
 }
