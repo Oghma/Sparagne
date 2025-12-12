@@ -1,7 +1,7 @@
 //! Library for the telegram bot
 use base64::Engine;
-use reqwest::{header, Client};
-use teloxide::{dispatching::dialogue::InMemStorage, prelude::*, Bot as TBot};
+use reqwest::{Client, header};
+use teloxide::{Bot as TBot, dispatching::dialogue::InMemStorage, prelude::*};
 
 use crate::handlers::GlobalState;
 
@@ -72,7 +72,8 @@ impl Bot {
                 dptree::filter(
                     // Only allowed users can use the bot
                     |cfg: ConfigParameters, msg: Message| {
-                        msg.from()
+                        msg.from
+                            .as_ref()
                             .map(|user| match cfg.allowed_users {
                                 None => true,
                                 Some(ids) => ids.contains(&user.id),

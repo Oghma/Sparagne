@@ -3,9 +3,9 @@
 use csv::Writer;
 use engine::CashFlow;
 use reqwest::StatusCode;
-use teloxide::{dispatching::UpdateHandler, prelude::*, types::InputFile, RequestError};
+use teloxide::{RequestError, dispatching::UpdateHandler, prelude::*, types::InputFile};
 
-use crate::{commands::UserExportCommands, get_check, ConfigParameters};
+use crate::{ConfigParameters, commands::UserExportCommands, get_check};
 
 /// Build the schema for Export commands
 pub fn schema() -> UpdateHandler<RequestError> {
@@ -15,12 +15,16 @@ pub fn schema() -> UpdateHandler<RequestError> {
 }
 
 async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> ResponseResult<()> {
-    let user_id = &msg.from().map(|user| user.id.to_string()).unwrap();
+    let user_id = msg
+        .from
+        .as_ref()
+        .map(|user| user.id.to_string())
+        .unwrap();
 
     let (user_response, response) = get_check!(
         cfg.client,
         format!("{}/vault", cfg.server),
-        user_id,
+        user_id.clone(),
         &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),

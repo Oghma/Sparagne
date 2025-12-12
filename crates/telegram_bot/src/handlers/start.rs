@@ -1,9 +1,9 @@
 //! Handler for the /start command
 
 use teloxide::{
+    RequestError,
     dispatching::{HandlerExt, UpdateHandler},
     prelude::*,
-    RequestError,
 };
 
 use crate::commands::UserStartCommands;

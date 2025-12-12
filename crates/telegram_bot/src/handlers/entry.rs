@@ -4,17 +4,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use engine::CashFlow;
 use reqwest::{Client, StatusCode};
 use teloxide::{
-    dispatching::{dialogue::InMemStorage, UpdateFilterExt, UpdateHandler},
+    RequestError,
+    dispatching::{UpdateFilterExt, UpdateHandler, dialogue::InMemStorage},
     prelude::*,
     utils::command::BotCommands,
-    RequestError,
 };
 
+use crate::{ConfigParameters, get_check};
 use crate::{
-    commands::{split_entry, EntryCommands, UserStatisticsCommands},
+    commands::{EntryCommands, UserStatisticsCommands, split_entry},
     delete_check, post_check,
 };
-use crate::{get_check, ConfigParameters};
 
 use super::{GlobalDialogue, GlobalState};
 
@@ -146,7 +146,11 @@ async fn handle_delete_entry(
     dialogue: GlobalDialogue,
     entries: Vec<(String, String)>,
 ) -> ResponseResult<()> {
-    let user_id = msg.from().map(|user| user.id.to_string()).unwrap();
+    let user_id = msg
+        .from
+        .as_ref()
+        .map(|user| user.id.to_string())
+        .unwrap();
     let entry = &entries[msg.text().unwrap().parse::<usize>().unwrap() - 1];
 
     let (user_response, response) = get_check!(
@@ -194,12 +198,16 @@ async fn get_main_cash_flow(
     msg: &Message,
     cfg: &ConfigParameters,
 ) -> ResponseResult<Option<CashFlow>> {
-    let user_id = &msg.from().map(|user| user.id.to_string()).unwrap();
+    let user_id = msg
+        .from
+        .as_ref()
+        .map(|user| user.id.to_string())
+        .unwrap();
 
     let (user_response, response) = get_check!(
         cfg.client,
         format!("{}/vault", cfg.server),
-        user_id,
+        user_id.clone(),
         &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),
@@ -268,12 +276,16 @@ async fn send_entry(
     msg: &Message,
     bot: &Bot,
 ) -> ResponseResult<()> {
-    let user_id = &msg.from().map(|user| user.id.to_string()).unwrap();
+    let user_id = msg
+        .from
+        .as_ref()
+        .map(|user| user.id.to_string())
+        .unwrap();
 
     let (user_response, response) = get_check!(
         client,
         format!("{}/vault", url),
-        user_id,
+        user_id.clone(),
         &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),

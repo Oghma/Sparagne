@@ -1,10 +1,10 @@
 //! CashFlow API endpoints
 
-use axum::{extract::State, Extension, Json};
 use api_types::cash_flow::CashFlowGet;
+use axum::{Extension, Json, extract::State};
 use engine::CashFlow;
 
-use crate::{server::ServerState, user, ServerError};
+use crate::{ServerError, server::ServerState, user};
 
 pub async fn get(
     Extension(user): Extension<user::Model>,

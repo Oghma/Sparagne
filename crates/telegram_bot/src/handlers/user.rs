@@ -1,9 +1,9 @@
 //! Handler for managing user settings
 
 use reqwest::StatusCode;
-use teloxide::{dispatching::UpdateHandler, prelude::*, RequestError};
+use teloxide::{RequestError, dispatching::UpdateHandler, prelude::*};
 
-use crate::{commands::HandleUserAccount, ConfigParameters};
+use crate::{ConfigParameters, commands::HandleUserAccount};
 
 use super::entry::send_help_message;
 
@@ -20,7 +20,11 @@ async fn handle_pair_user(
     msg: Message,
     cmd: HandleUserAccount,
 ) -> ResponseResult<()> {
-    let telegram_id = msg.from().map(|user| user.id.to_string()).unwrap();
+    let telegram_id = msg
+        .from
+        .as_ref()
+        .map(|user| user.id.to_string())
+        .unwrap();
 
     match cmd {
         HandleUserAccount::Pair { code } => {

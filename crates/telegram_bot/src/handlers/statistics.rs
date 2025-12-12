@@ -1,9 +1,9 @@
 //! Handler for user statistcs commands
 
 use reqwest::StatusCode;
-use teloxide::{dispatching::UpdateHandler, prelude::*, RequestError};
+use teloxide::{RequestError, dispatching::UpdateHandler, prelude::*};
 
-use crate::{commands::UserStatisticsCommands, get_check, ConfigParameters};
+use crate::{ConfigParameters, commands::UserStatisticsCommands, get_check};
 
 /// Build the schema for Statistics commands
 pub fn schema() -> UpdateHandler<RequestError> {
@@ -18,7 +18,11 @@ async fn handle_statistics(
     msg: Message,
     cmd: UserStatisticsCommands,
 ) -> ResponseResult<()> {
-    let user_id = &msg.from().map(|user| user.id.to_string()).unwrap();
+    let user_id = msg
+        .from
+        .as_ref()
+        .map(|user| user.id.to_string())
+        .unwrap();
 
     match cmd {
         UserStatisticsCommands::Stats => {

@@ -68,4 +68,3 @@ pub mod stats {
         pub total_expenses: f64,
     }
 }
-

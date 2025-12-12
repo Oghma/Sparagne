@@ -1,10 +1,10 @@
 //! The module contains the definition of a user and its
 
 use api_types::user::PairUser;
-use axum::{extract::State, http::StatusCode, Extension, Json};
-use sea_orm::{entity::prelude::*, ActiveValue};
+use axum::{Extension, Json, extract::State, http::StatusCode};
+use sea_orm::{ActiveValue, entity::prelude::*};
 
-use crate::{server::ServerState, ServerError};
+use crate::{ServerError, server::ServerState};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "users")]

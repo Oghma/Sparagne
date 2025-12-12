@@ -1,9 +1,9 @@
 //! Statistics API edpoints
 
 use api_types::{stats::Statistic, vault::Vault};
-use axum::{extract::State, Extension, Json};
+use axum::{Extension, Json, extract::State};
 
-use crate::{server::ServerState, user, ServerError};
+use crate::{ServerError, server::ServerState, user};
 
 /// Handle requests for user statistics
 pub async fn get_stats(

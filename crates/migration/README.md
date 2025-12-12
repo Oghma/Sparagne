@@ -1,41 +1,35 @@
 # Running Migrator CLI
 
-- Generate a new migration file
-    ```sh
-    cargo run -- migrate generate MIGRATION_NAME
-    ```
-- Apply all pending migrations
-    ```sh
-    cargo run
-    ```
-    ```sh
-    cargo run -- up
-    ```
-- Apply first 10 pending migrations
-    ```sh
-    cargo run -- up -n 10
-    ```
-- Rollback last applied migrations
-    ```sh
-    cargo run -- down
-    ```
-- Rollback last 10 applied migrations
-    ```sh
-    cargo run -- down -n 10
-    ```
-- Drop all tables from the database, then reapply all migrations
-    ```sh
-    cargo run -- fresh
-    ```
-- Rollback all applied migrations, then reapply all migrations
-    ```sh
-    cargo run -- refresh
-    ```
-- Rollback all applied migrations
-    ```sh
-    cargo run -- reset
-    ```
-- Check the status of all migrations
-    ```sh
-    cargo run -- status
-    ```
+This crate currently exposes a small custom migrator CLI (not the upstream `sea-orm-migration` CLI).
+We introduced it to keep migrations stable under Rust 1.92 and avoid pulling the `sea-orm-cli`
+dependency during the pre‑refactor phase. During the engine refactor we will re‑evaluate whether to
+keep this mini‑CLI or switch back to the official one.
+
+## Usage
+
+The CLI reads `DATABASE_URL`. If unset, it defaults to a local SQLite DB:
+
+```sh
+export DATABASE_URL="sqlite:./sparagne.db?mode=rwc"
+```
+
+Commands:
+
+- Apply all pending migrations (default)
+  ```sh
+  cargo run -p migration
+  # or
+  cargo run -p migration -- up
+  ```
+- Rollback last applied migration batch
+  ```sh
+  cargo run -p migration -- down
+  ```
+- Drop all tables, then reapply all migrations
+  ```sh
+  cargo run -p migration -- fresh
+  ```
+- Print migration status
+  ```sh
+  cargo run -p migration -- status
+  ```

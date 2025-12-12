@@ -2,9 +2,9 @@
 
 use std::time::Duration;
 
-use sea_orm::entity::{prelude::*, ActiveValue};
+use sea_orm::entity::{ActiveValue, prelude::*};
 
-use crate::{entry::Entry, EngineError, ResultEngine};
+use crate::{EngineError, ResultEngine, entry::Entry};
 
 /// A wallet.
 ///

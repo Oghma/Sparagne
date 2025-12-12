@@ -2,7 +2,7 @@ use std::{collections::HashMap, time::Duration};
 
 pub use cash_flows::CashFlow;
 pub use error::EngineError;
-use sea_orm::{prelude::*, ActiveValue};
+use sea_orm::{ActiveValue, prelude::*};
 pub use vault::Vault;
 use wallets::Wallet;
 

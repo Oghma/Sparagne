@@ -1,11 +1,11 @@
 //! The `Vault` holds the user's wallets and cash flows. The user can have
 //! multiple vaults.
 
-use sea_orm::{prelude::*, ActiveValue};
+use sea_orm::{ActiveValue, prelude::*};
 use std::{collections::HashMap, time::Duration};
 
 use crate::{
-    cash_flows, cash_flows::CashFlow, entry, error::EngineError, wallets::Wallet, ResultEngine,
+    ResultEngine, cash_flows, cash_flows::CashFlow, entry, error::EngineError, wallets::Wallet,
 };
 
 /// Holds wallets and cash flows

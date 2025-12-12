@@ -1,9 +1,9 @@
 //! Vault API endpoints
 
 use api_types::vault::{Vault, VaultNew};
-use axum::{extract::State, Extension, Json};
+use axum::{Extension, Json, extract::State};
 
-use crate::{server::ServerState, user, ServerError};
+use crate::{ServerError, server::ServerState, user};
 
 /// Handle requests for creating new `Vault`
 pub async fn vault_new(

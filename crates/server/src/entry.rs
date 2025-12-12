@@ -1,8 +1,8 @@
 //! Entries API endpoints
 use api_types::entry::{EntryDelete, EntryNew};
-use axum::{extract::State, http::StatusCode, Extension, Json};
+use axum::{Extension, Json, extract::State, http::StatusCode};
 
-use crate::{server::ServerState, user, ServerError};
+use crate::{ServerError, server::ServerState, user};
 
 pub async fn entry_new(
     Extension(user): Extension<user::Model>,

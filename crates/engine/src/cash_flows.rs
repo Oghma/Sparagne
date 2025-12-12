@@ -2,12 +2,12 @@
 //!
 use std::time::Duration;
 
-use sea_orm::entity::{prelude::*, ActiveValue};
+use sea_orm::entity::{ActiveValue, prelude::*};
 use serde::{Deserialize, Serialize};
 
+use super::ResultEngine;
 use super::entry::Entry;
 use super::error::EngineError;
-use super::ResultEngine;
 
 /// A cash flow.
 ///

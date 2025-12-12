@@ -4,7 +4,7 @@
 use core::fmt;
 use std::time::Duration;
 
-use sea_orm::{entity::prelude::*, ActiveValue};
+use sea_orm::{ActiveValue, entity::prelude::*};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
