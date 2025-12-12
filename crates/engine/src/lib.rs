@@ -2,6 +2,7 @@ use std::{collections::HashMap, time::Duration};
 
 pub use cash_flows::CashFlow;
 pub use error::EngineError;
+pub use money::MoneyCents;
 use sea_orm::{ActiveValue, prelude::*};
 pub use vault::Vault;
 use wallets::Wallet;
@@ -9,6 +10,7 @@ use wallets::Wallet;
 mod cash_flows;
 mod entry;
 mod error;
+mod money;
 mod vault;
 mod wallets;
 
