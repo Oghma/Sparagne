@@ -1,6 +1,6 @@
 //! Handler for user statistcs commands
 
-use engine::MoneyCents;
+use engine::{Currency, Money};
 use reqwest::StatusCode;
 use teloxide::{RequestError, dispatching::UpdateHandler, prelude::*};
 
@@ -29,7 +29,8 @@ async fn handle_statistics(
                 user_id,
                 &api_types::vault::Vault {
                     id: None,
-                    name: Some("Main".to_string())
+                    name: Some("Main".to_string()),
+                    currency: None,
                 },
                 "",
                 "Problemi di connessione con il server. Riprova più tardi!"
@@ -43,11 +44,15 @@ async fn handle_statistics(
                 Some(response) => response.json::<api_types::stats::Statistic>().await?,
             };
 
+            let currency = match stats.currency {
+                api_types::Currency::Eur => Currency::Eur,
+            };
+
             let response = format!(
                 "Bilancio: {}\nTotale entrate: {}\nTotale uscite: {}",
-                MoneyCents::new(stats.balance_cents),
-                MoneyCents::new(stats.total_income_cents),
-                MoneyCents::new(stats.total_expenses_cents),
+                Money::new(stats.balance_minor).format(currency),
+                Money::new(stats.total_income_minor).format(currency),
+                Money::new(stats.total_expenses_minor).format(currency),
             );
 
             bot.send_message(msg.chat.id, response).await?;

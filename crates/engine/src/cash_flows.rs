@@ -5,6 +5,7 @@ use sea_orm::entity::{ActiveValue, prelude::*};
 use serde::{Deserialize, Serialize};
 
 use super::{ResultEngine, entry::Entry, error::EngineError};
+use crate::Currency;
 
 /// A cash flow.
 ///
@@ -22,11 +23,11 @@ use super::{ResultEngine, entry::Entry, error::EngineError};
 ///
 /// ** Examples
 ///
-/// Amounts are stored as integer cents (`i64`).
+/// Amounts are stored as integer minor units (`i64`), and formatted using the vault currency.
 ///
-/// Suppose a cash flow with a max balance of 10€ (1000 cents) and a balance of
-/// 5€ (500 cents). A new expense with value 2€ (200 cents) is inserted bringing
-/// the balance to 3€ (300 cents).
+/// Example with `EUR` (2 minor units):
+/// max balance = 10.00 EUR (1000), current balance = 5.00 EUR (500).
+/// A new expense of 2.00 EUR (200) brings the balance to 3.00 EUR (300).
 ///
 /// With a bounded cash flow the constraint is $5 + -3 <= 10$ accepting an
 /// income of maximum 7.
@@ -39,6 +40,7 @@ pub struct CashFlow {
     pub balance: i64,
     pub max_balance: Option<i64>,
     pub income_balance: Option<i64>,
+    pub currency: Currency,
     pub entries: Vec<Entry>,
     pub archived: bool,
 }
@@ -49,6 +51,7 @@ impl CashFlow {
         balance: i64,
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
+        currency: Currency,
     ) -> Self {
         let income_balance = match income_bounded {
             Some(true) => Some(max_balance.unwrap()),
@@ -60,6 +63,7 @@ impl CashFlow {
             balance,
             max_balance,
             income_balance,
+            currency,
             entries: Vec::new(),
             archived: false,
         }
@@ -67,27 +71,27 @@ impl CashFlow {
 
     pub fn add_entry(
         &mut self,
-        amount_cents: i64,
+        amount_minor: i64,
         category: String,
         note: String,
         date: Duration,
     ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(amount_cents, category, note, date);
+        let entry = Entry::new(amount_minor, self.currency, category, note, date);
         // If bounded, check constraints are respected
-        if entry.amount_cents > 0
+        if entry.amount_minor > 0
             && let Some(bound) = self.max_balance
         {
             if let Some(income_balance) = self.income_balance {
-                if income_balance + entry.amount_cents > bound {
+                if income_balance + entry.amount_minor > bound {
                     return Err(EngineError::MaxBalanceReached(self.name.clone()));
                 }
-                self.income_balance = Some(income_balance + entry.amount_cents);
-            } else if self.balance + entry.amount_cents > bound {
+                self.income_balance = Some(income_balance + entry.amount_minor);
+            } else if self.balance + entry.amount_minor > bound {
                 return Err(EngineError::MaxBalanceReached(self.name.clone()));
             }
         }
 
-        self.balance += entry.amount_cents;
+        self.balance += entry.amount_minor;
         self.entries.push(entry);
 
         Ok(&self.entries[self.entries.len() - 1])
@@ -101,12 +105,12 @@ impl CashFlow {
         match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
-                self.balance -= entry.amount_cents;
+                self.balance -= entry.amount_minor;
 
-                if entry.amount_cents > 0 {
+                if entry.amount_minor > 0 {
                     self.income_balance = self
                         .income_balance
-                        .map(|balance| balance - entry.amount_cents);
+                        .map(|balance| balance - entry.amount_minor);
                 }
 
                 Ok(entry)
@@ -118,21 +122,21 @@ impl CashFlow {
     pub fn update_entry(
         &mut self,
         id: &str,
-        amount_cents: i64,
+        amount_minor: i64,
         category: String,
         note: String,
     ) -> ResultEngine<&Entry> {
         match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
                 let entry = &mut self.entries[index];
-                let new_balance = self.balance - entry.amount_cents + amount_cents;
+                let new_balance = self.balance - entry.amount_minor + amount_minor;
 
                 if let Some(bound) = self.max_balance {
                     if let Some(income_balance) = self.income_balance {
                         // Check if the entry or the update is an income and if
                         // the updates does not exceed `max_balance`
-                        if (entry.amount_cents > 0 || amount_cents > 0)
-                            && income_balance - entry.amount_cents + amount_cents > bound
+                        if (entry.amount_minor > 0 || amount_minor > 0)
+                            && income_balance - entry.amount_minor + amount_minor > bound
                         {
                             return Err(EngineError::MaxBalanceReached(self.name.clone()));
                         }
@@ -143,7 +147,7 @@ impl CashFlow {
 
                 self.balance = new_balance;
 
-                entry.amount_cents = amount_cents;
+                entry.amount_minor = amount_minor;
                 entry.category = category;
                 entry.note = note;
 
@@ -162,6 +166,7 @@ pub struct Model {
     pub balance: i64,
     pub max_balance: Option<i64>,
     pub income_balance: Option<i64>,
+    pub currency: String,
     pub archived: bool,
     #[sea_orm(primary_key, auto_increment = false)]
     pub vault_id: String,
@@ -202,6 +207,7 @@ impl From<&CashFlow> for ActiveModel {
             balance: ActiveValue::Set(flow.balance),
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
+            currency: ActiveValue::Set(flow.currency.code().to_string()),
             archived: ActiveValue::Set(flow.archived),
             vault_id: ActiveValue::NotSet,
         }
@@ -215,6 +221,7 @@ impl From<&mut CashFlow> for ActiveModel {
             balance: ActiveValue::Set(flow.balance),
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
+            currency: ActiveValue::Set(flow.currency.code().to_string()),
             archived: ActiveValue::Set(flow.archived),
             vault_id: ActiveValue::NotSet,
         }
@@ -228,11 +235,17 @@ mod tests {
     use super::*;
 
     fn bounded() -> CashFlow {
-        CashFlow::new(String::from("Cash"), 0, Some(1000), Some(true))
+        CashFlow::new(
+            String::from("Cash"),
+            0,
+            Some(1000),
+            Some(true),
+            Currency::Eur,
+        )
     }
 
     fn unbounded() -> CashFlow {
-        CashFlow::new(String::from("Cash"), 0, None, None)
+        CashFlow::new(String::from("Cash"), 0, None, None, Currency::Eur)
     }
 
     #[test]
@@ -249,7 +262,8 @@ mod tests {
 
         assert_eq!(flow.name, "Cash".to_string());
         assert_eq!(flow.balance, 123);
-        assert_eq!(entry.amount_cents, 123);
+        assert_eq!(entry.amount_minor, 123);
+        assert_eq!(entry.currency, Currency::Eur);
         assert_eq!(entry.category, "Income".to_string());
     }
 
@@ -292,7 +306,7 @@ mod tests {
         let entry = &flow.entries[0];
 
         assert_eq!(flow.balance, 1000);
-        assert_eq!(entry.amount_cents, 1000);
+        assert_eq!(entry.amount_minor, 1000);
         assert_eq!(entry.category, String::from("Income"));
         assert_eq!(entry.note, String::from("Monthly"))
     }

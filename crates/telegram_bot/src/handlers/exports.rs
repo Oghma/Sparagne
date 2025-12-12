@@ -24,6 +24,7 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
         &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),
+            currency: None,
         },
         "",
         "Problemi di connessione con il server. Riprova più tardi!"

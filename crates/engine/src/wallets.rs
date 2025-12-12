@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use sea_orm::entity::{ActiveValue, prelude::*};
 
-use crate::{EngineError, ResultEngine, entry::Entry};
+use crate::{Currency, EngineError, ResultEngine, entry::Entry};
 
 /// A wallet.
 ///
@@ -14,15 +14,17 @@ use crate::{EngineError, ResultEngine, entry::Entry};
 pub struct Wallet {
     pub name: String,
     pub balance: i64,
+    pub currency: Currency,
     pub entries: Vec<Entry>,
     pub archived: bool,
 }
 
 impl Wallet {
-    pub fn new(name: String, balance: i64) -> Self {
+    pub fn new(name: String, balance: i64, currency: Currency) -> Self {
         Self {
             name,
             balance,
+            currency,
             entries: Vec::new(),
             archived: false,
         }
@@ -30,13 +32,13 @@ impl Wallet {
 
     pub fn add_entry(
         &mut self,
-        amount_cents: i64,
+        amount_minor: i64,
         category: String,
         note: String,
         date: Duration,
     ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(amount_cents, category, note, date);
-        self.balance += entry.amount_cents;
+        let entry = Entry::new(amount_minor, self.currency, category, note, date);
+        self.balance += entry.amount_minor;
         self.entries.push(entry);
 
         Ok(&self.entries[self.entries.len() - 1])
@@ -50,7 +52,7 @@ impl Wallet {
         match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
-                self.balance -= entry.amount_cents;
+                self.balance -= entry.amount_minor;
                 Ok(entry)
             }
             None => Err(EngineError::KeyNotFound(id.to_string())),
@@ -59,23 +61,23 @@ impl Wallet {
 
     /// Insert an existing `Entry` into the wallet.
     pub fn insert_entry(&mut self, entry: &Entry) {
-        self.balance += entry.amount_cents;
+        self.balance += entry.amount_minor;
         self.entries.push(entry.clone());
     }
 
     pub fn update_entry(
         &mut self,
         id: &str,
-        amount_cents: i64,
+        amount_minor: i64,
         category: String,
         note: String,
     ) -> ResultEngine<&Entry> {
         match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
                 let entry = &mut self.entries[index];
-                self.balance = self.balance - entry.amount_cents + amount_cents;
+                self.balance = self.balance - entry.amount_minor + amount_minor;
 
-                entry.amount_cents = amount_cents;
+                entry.amount_minor = amount_minor;
                 entry.category = category;
                 entry.note = note;
 
@@ -92,6 +94,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub name: String,
     pub balance: i64,
+    pub currency: String,
     pub archived: bool,
     #[sea_orm(primary_key, auto_increment = false)]
     pub vault_id: String,
@@ -130,6 +133,7 @@ impl From<&Wallet> for ActiveModel {
         Self {
             name: ActiveValue::Set(value.name.clone()),
             balance: ActiveValue::Set(value.balance),
+            currency: ActiveValue::Set(value.currency.code().to_string()),
             archived: ActiveValue::Set(value.archived),
             vault_id: ActiveValue::NotSet,
         }
@@ -143,7 +147,7 @@ mod tests {
     use super::*;
 
     fn wallet() -> Wallet {
-        Wallet::new(String::from("Cash"), 0)
+        Wallet::new(String::from("Cash"), 0, Currency::Eur)
     }
 
     #[test]
@@ -161,7 +165,8 @@ mod tests {
 
         assert_eq!(wallet.name, "Cash".to_string());
         assert_eq!(wallet.balance, 1040);
-        assert_eq!(entry.amount_cents, 1040);
+        assert_eq!(entry.amount_minor, 1040);
+        assert_eq!(entry.currency, Currency::Eur);
         assert_eq!(entry.category, "Income".to_string());
         assert_eq!(entry.note, "Hard work".to_string());
     }
@@ -190,7 +195,7 @@ mod tests {
         let entry = &wallet.entries[0];
 
         assert_eq!(wallet.balance, 1000);
-        assert_eq!(entry.amount_cents, 1000);
+        assert_eq!(entry.amount_minor, 1000);
         assert_eq!(entry.category, String::from("Income"));
         assert_eq!(entry.note, String::from("Monthly"))
     }

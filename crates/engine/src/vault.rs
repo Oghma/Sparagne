@@ -5,7 +5,8 @@ use sea_orm::{ActiveValue, prelude::*};
 use std::{collections::HashMap, time::Duration};
 
 use crate::{
-    ResultEngine, cash_flows, cash_flows::CashFlow, entry, error::EngineError, wallets::Wallet,
+    Currency, ResultEngine, cash_flows, cash_flows::CashFlow, entry, error::EngineError,
+    wallets::Wallet,
 };
 
 /// Holds wallets and cash flows
@@ -16,6 +17,7 @@ pub struct Vault {
     pub cash_flow: HashMap<String, CashFlow>,
     pub wallet: HashMap<String, Wallet>,
     pub user_id: String,
+    pub currency: Currency,
 }
 
 impl Vault {
@@ -26,6 +28,7 @@ impl Vault {
             cash_flow: HashMap::new(),
             wallet: HashMap::new(),
             user_id: user_id.to_string(),
+            currency: Currency::Eur,
         }
     }
 
@@ -46,23 +49,43 @@ impl Vault {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
+                if flow.currency != self.currency {
+                    return Err(EngineError::CurrencyMismatch(
+                        "flow currency mismatch".to_string(),
+                    ));
+                }
                 entry = flow.add_entry(amount_cents, category, note, date)?;
 
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
+                if wallet.currency != self.currency {
+                    return Err(EngineError::CurrencyMismatch(
+                        "wallet currency mismatch".to_string(),
+                    ));
+                }
                 wallet.insert_entry(entry);
             }
             (Some(wid), None) => {
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
+                if wallet.currency != self.currency {
+                    return Err(EngineError::CurrencyMismatch(
+                        "wallet currency mismatch".to_string(),
+                    ));
+                }
                 entry = wallet.add_entry(amount_cents, category, note, date)?;
             }
             (None, Some(fid)) => {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
+                if flow.currency != self.currency {
+                    return Err(EngineError::CurrencyMismatch(
+                        "flow currency mismatch".to_string(),
+                    ));
+                }
                 entry = flow.add_entry(amount_cents, category, note, date)?;
             }
             (None, None) => {
@@ -117,7 +140,13 @@ impl Vault {
         if self.cash_flow.contains_key(&name) {
             return Err(EngineError::ExistingKey(name));
         }
-        let flow = CashFlow::new(name.clone(), balance, max_balance, income_bounded);
+        let flow = CashFlow::new(
+            name.clone(),
+            balance,
+            max_balance,
+            income_bounded,
+            self.currency,
+        );
         let flow_id = flow.name.clone();
         let flow_mdodel: cash_flows::ActiveModel = (&flow).into();
         self.cash_flow.insert(name, flow);
@@ -149,24 +178,44 @@ impl Vault {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
+                if flow.currency != self.currency {
+                    return Err(EngineError::CurrencyMismatch(
+                        "flow currency mismatch".to_string(),
+                    ));
+                }
                 entry =
                     flow.update_entry(entry_id, amount_cents, category.clone(), note.clone())?;
 
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
+                if wallet.currency != self.currency {
+                    return Err(EngineError::CurrencyMismatch(
+                        "wallet currency mismatch".to_string(),
+                    ));
+                }
                 wallet.update_entry(entry_id, amount_cents, category, note)?;
             }
             (Some(wid), None) => {
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
+                if wallet.currency != self.currency {
+                    return Err(EngineError::CurrencyMismatch(
+                        "wallet currency mismatch".to_string(),
+                    ));
+                }
                 entry = wallet.update_entry(entry_id, amount_cents, category, note)?;
             }
             (None, Some(fid)) => {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
+                if flow.currency != self.currency {
+                    return Err(EngineError::CurrencyMismatch(
+                        "flow currency mismatch".to_string(),
+                    ));
+                }
                 entry = flow.update_entry(entry_id, amount_cents, category, note)?;
             }
             (None, None) => {
@@ -207,6 +256,7 @@ pub struct Model {
     pub id: String,
     pub name: String,
     pub user_id: String,
+    pub currency: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -229,6 +279,7 @@ impl From<&Vault> for ActiveModel {
             id: sea_orm::ActiveValue::Set(value.id.clone()),
             name: ActiveValue::Set(value.name.clone()),
             user_id: ActiveValue::Set(value.user_id.clone()),
+            currency: ActiveValue::Set(value.currency.code().to_string()),
         }
     }
 }

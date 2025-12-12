@@ -1,13 +1,16 @@
 use std::{collections::HashMap, time::Duration};
 
 pub use cash_flows::CashFlow;
+pub use currency::Currency;
 pub use error::EngineError;
-pub use money::MoneyCents;
+pub use money::Money;
 use sea_orm::{ActiveValue, prelude::*};
 pub use vault::Vault;
 use wallets::Wallet;
 
 mod cash_flows;
+mod currency;
+mod docs;
 mod entry;
 mod error;
 mod money;
@@ -32,7 +35,7 @@ impl Engine {
     #[allow(clippy::too_many_arguments)]
     pub async fn add_entry(
         &mut self,
-        amount_cents: i64,
+        amount_minor: i64,
         category: &str,
         note: &str,
         vault_id: &str,
@@ -41,9 +44,9 @@ impl Engine {
         user_id: &str,
         date: Duration,
     ) -> ResultEngine<String> {
-        if amount_cents == 0 {
+        if amount_minor == 0 {
             return Err(EngineError::InvalidAmount(
-                "amount_cents must be != 0".to_string(),
+                "amount must be != 0".to_string(),
             ));
         }
         match self.vaults.get_mut(vault_id) {
@@ -54,7 +57,7 @@ impl Engine {
                 let (entry_id, mut entry_model) = vault.add_entry(
                     wallet_id,
                     flow_id,
-                    amount_cents,
+                    amount_minor,
                     category.to_string(),
                     note.to_string(),
                     date,
@@ -175,8 +178,14 @@ impl Engine {
     }
 
     /// Add a new vault
-    pub async fn new_vault(&mut self, name: &str, user_id: &str) -> ResultEngine<String> {
-        let new_vault = Vault::new(name.to_string(), user_id);
+    pub async fn new_vault(
+        &mut self,
+        name: &str,
+        user_id: &str,
+        currency: Option<Currency>,
+    ) -> ResultEngine<String> {
+        let mut new_vault = Vault::new(name.to_string(), user_id);
+        new_vault.currency = currency.unwrap_or_default();
         let new_vault_id = new_vault.id.clone();
         let vault_entry: vault::ActiveModel = (&new_vault).into();
 
@@ -318,6 +327,8 @@ impl EngineBuilder {
             .unwrap();
 
         for vault_entry in vaults_flows {
+            let vault_currency =
+                Currency::try_from(vault_entry.0.currency.as_str()).unwrap_or_default();
             let mut flows = HashMap::new();
 
             for flow_entry in vault_entry.1 {
@@ -338,6 +349,8 @@ impl EngineBuilder {
                         balance: flow_entry.balance,
                         max_balance: flow_entry.max_balance,
                         income_balance: flow_entry.income_balance,
+                        currency: Currency::try_from(flow_entry.currency.as_str())
+                            .unwrap_or(vault_currency),
                         entries,
                         archived: flow_entry.archived,
                     },
@@ -352,6 +365,7 @@ impl EngineBuilder {
                     cash_flow: flows,
                     wallet: HashMap::new(),
                     user_id: vault_entry.0.user_id,
+                    currency: vault_currency,
                 },
             );
         }

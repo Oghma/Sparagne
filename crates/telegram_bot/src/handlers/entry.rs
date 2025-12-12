@@ -1,7 +1,7 @@
 //! Handler for managing user entries
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use engine::{CashFlow, MoneyCents};
+use engine::{CashFlow, Currency, Money};
 use reqwest::{Client, StatusCode};
 use teloxide::{
     RequestError,
@@ -67,7 +67,8 @@ async fn handle_user_commands(
             send_entry(
                 &cfg.client,
                 &cfg.server,
-                amount,
+                &amount,
+                false,
                 &category,
                 &note,
                 &msg,
@@ -83,7 +84,8 @@ async fn handle_user_commands(
             send_entry(
                 &cfg.client,
                 &cfg.server,
-                -amount,
+                &amount,
+                true,
                 &category,
                 &note,
                 &msg,
@@ -156,6 +158,7 @@ async fn handle_delete_entry(
         &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),
+            currency: None,
         },
         "",
         "Problemi di connessione con il server. Riprova più tardi!"
@@ -203,6 +206,7 @@ async fn get_main_cash_flow(
         &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),
+            currency: None,
         },
         "",
         "Problemi di connessione con il server. Riprova più tardi!"
@@ -248,7 +252,7 @@ fn format_entries(flow: &CashFlow, num_entries: usize) -> String {
         .enumerate()
         .for_each(|(index, entry)| {
             let index = (index + 1).to_string();
-            let row = if entry.amount_cents >= 0 {
+            let row = if entry.amount_minor >= 0 {
                 format!("{index}. 🟢 {}\n", entry)
             } else {
                 format!("{index}. 🔴 {}\n", entry)
@@ -262,7 +266,8 @@ fn format_entries(flow: &CashFlow, num_entries: usize) -> String {
 async fn send_entry(
     client: &Client,
     url: &str,
-    amount: MoneyCents,
+    amount_str: &str,
+    is_expense: bool,
     category: &str,
     note: &str,
     msg: &Message,
@@ -277,6 +282,7 @@ async fn send_entry(
         &api_types::vault::Vault {
             id: None,
             name: Some("Main".to_string()),
+            currency: None,
         },
         "",
         "Problemi di connessione con il server. Riprova più tardi!"
@@ -290,10 +296,27 @@ async fn send_entry(
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
-    let success_str = if amount.cents() >= 0 {
-        "Entrata inserita"
-    } else {
+    let currency = match vault.currency.unwrap_or(api_types::Currency::Eur) {
+        api_types::Currency::Eur => Currency::Eur,
+    };
+
+    let mut amount = match Money::parse_major(amount_str, currency) {
+        Ok(v) => v,
+        Err(_) => {
+            bot.send_message(msg.chat.id, "Importo non valido (es: 10 o 10.50)")
+                .await?;
+            return Ok(());
+        }
+    };
+
+    if is_expense && amount.is_positive() {
+        amount = -amount;
+    }
+
+    let success_str = if amount.is_negative() {
         "Uscita inserita"
+    } else {
+        "Entrata inserita"
     };
     let (user_response, _) = post_check!(
         client,
@@ -301,7 +324,7 @@ async fn send_entry(
         user_id,
         &api_types::entry::EntryNew {
             vault_id: vault.id.unwrap(),
-            amount_cents: amount.cents(),
+            amount_minor: amount.minor(),
             category: category.to_string(),
             note: note.to_string(),
             cash_flow: "Main".to_string(),

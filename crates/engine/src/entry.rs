@@ -9,13 +9,14 @@ use sea_orm::{ActiveValue, entity::prelude::*};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::MoneyCents;
+use crate::{Currency, Money};
 
 /// Represent a movement, an entry in cash flows or wallets.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Entry {
     pub id: String,
-    pub amount_cents: i64,
+    pub amount_minor: i64,
+    pub currency: Currency,
     pub category: String,
     pub note: String,
     pub date: Duration,
@@ -23,10 +24,17 @@ pub struct Entry {
 
 /// Type used to represent an entry in cash flows and wallets.
 impl Entry {
-    pub fn new(amount_cents: i64, category: String, note: String, date: Duration) -> Self {
+    pub fn new(
+        amount_minor: i64,
+        currency: Currency,
+        category: String,
+        note: String,
+        date: Duration,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
-            amount_cents,
+            amount_minor,
+            currency,
             category,
             note,
             date,
@@ -39,7 +47,7 @@ impl fmt::Display for Entry {
         write!(
             f,
             "{} {} {}",
-            MoneyCents::new(self.amount_cents),
+            Money::new(self.amount_minor).format(self.currency),
             self.category,
             self.note
         )
@@ -50,7 +58,8 @@ impl From<Model> for Entry {
     fn from(entry: Model) -> Self {
         Self {
             id: entry.id,
-            amount_cents: entry.amount,
+            amount_minor: entry.amount,
+            currency: Currency::try_from(entry.currency.as_str()).unwrap_or_default(),
             category: entry.category.unwrap(),
             note: entry.note.unwrap(),
             date: Duration::from_secs(entry.date.parse().unwrap()),
@@ -64,6 +73,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
     pub amount: i64,
+    pub currency: String,
     pub note: Option<String>,
     pub category: Option<String>,
     pub date: String,
@@ -109,7 +119,8 @@ impl From<&Entry> for ActiveModel {
     fn from(entry: &Entry) -> Self {
         Self {
             id: ActiveValue::Set(entry.id.clone()),
-            amount: ActiveValue::Set(entry.amount_cents),
+            amount: ActiveValue::Set(entry.amount_minor),
+            currency: ActiveValue::Set(entry.currency.code().to_string()),
             note: ActiveValue::Set(Some(entry.note.clone())),
             category: ActiveValue::Set(Some(entry.category.clone())),
             date: ActiveValue::Set(entry.date.as_secs().to_string()),

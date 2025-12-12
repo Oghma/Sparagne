@@ -1,12 +1,9 @@
-use std::{
-    fmt,
-    ops::{Add, AddAssign, Neg, Sub, SubAssign},
-    str::FromStr,
-};
+use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
+use crate::Currency;
 use crate::EngineError;
 
-/// Signed money amount represented as **integer cents**.
+/// Signed money amount represented as **integer minor units** (currency-dependent).
 ///
 /// Use this type for **all** monetary values in the engine (balances, caps,
 /// entry amounts) to avoid floating-point drift.
@@ -18,39 +15,39 @@ use crate::EngineError;
 /// # Examples
 ///
 /// ```rust
-/// use engine::MoneyCents;
+/// use engine::{Currency, Money};
 ///
-/// let amount = MoneyCents::new(12_34);
-/// assert_eq!(amount.cents(), 1234);
-/// assert_eq!(amount.to_string(), "12.34€");
+/// let amount = Money::new(12_34);
+/// assert_eq!(amount.minor(), 1234);
+/// assert_eq!(amount.format(Currency::Eur), "12.34 EUR");
 /// ```
 ///
 /// Parsing from user input (accepts `.` or `,` as decimal separator; rejects >
 /// 2 decimals):
 ///
 /// ```rust
-/// use engine::MoneyCents;
+/// use engine::{Currency, Money};
 ///
-/// assert_eq!("10".parse::<MoneyCents>().unwrap().cents(), 1000);
-/// assert_eq!("10,5".parse::<MoneyCents>().unwrap().cents(), 1050);
-/// assert!("12.345".parse::<MoneyCents>().is_err());
+/// assert_eq!(Money::parse_major("10", Currency::Eur).unwrap().minor(), 1000);
+/// assert_eq!(Money::parse_major("10,5", Currency::Eur).unwrap().minor(), 1050);
+/// assert!(Money::parse_major("12.345", Currency::Eur).is_err());
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-pub struct MoneyCents(i64);
+pub struct Money(i64);
 
-impl MoneyCents {
-    pub const ZERO: MoneyCents = MoneyCents(0);
+impl Money {
+    pub const ZERO: Money = Money(0);
 
-    /// Creates a new amount from integer cents.
+    /// Creates a new amount from integer minor units.
     #[must_use]
     pub const fn new(cents: i64) -> Self {
         Self(cents)
     }
 
-    /// Returns the raw value in cents.
+    /// Returns the raw value in minor units.
     #[must_use]
-    pub const fn cents(self) -> i64 {
+    pub const fn minor(self) -> i64 {
         self.0
     }
 
@@ -74,101 +71,58 @@ impl MoneyCents {
 
     /// Checked addition (returns `None` on overflow).
     #[must_use]
-    pub fn checked_add(self, rhs: MoneyCents) -> Option<MoneyCents> {
-        self.0.checked_add(rhs.0).map(MoneyCents)
+    pub fn checked_add(self, rhs: Money) -> Option<Money> {
+        self.0.checked_add(rhs.0).map(Money)
     }
 
     /// Checked subtraction (returns `None` on overflow).
     #[must_use]
-    pub fn checked_sub(self, rhs: MoneyCents) -> Option<MoneyCents> {
-        self.0.checked_sub(rhs.0).map(MoneyCents)
+    pub fn checked_sub(self, rhs: Money) -> Option<Money> {
+        self.0.checked_sub(rhs.0).map(Money)
     }
-}
 
-impl fmt::Display for MoneyCents {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    /// Formats the amount according to `currency.minor_units()`.
+    ///
+    /// Output format: `<sign><major>.<minor> <CODE>`, e.g. `-12.34 EUR`.
+    #[must_use]
+    pub fn format(self, currency: Currency) -> String {
         let sign = if self.0 < 0 { "-" } else { "" };
         let abs = self.0.unsigned_abs();
-        let euros = abs / 100;
-        let cents = abs % 100;
-        write!(f, "{sign}{euros}.{cents:02}€")
+
+        let scale = 10u64.pow(currency.minor_units() as u32);
+        if scale == 1 {
+            return format!("{sign}{abs} {}", currency.code());
+        }
+
+        let major = abs / scale;
+        let minor = abs % scale;
+        format!(
+            "{sign}{major}.{minor:0width$} {}",
+            currency.code(),
+            width = currency.minor_units() as usize
+        )
     }
-}
 
-impl From<i64> for MoneyCents {
-    fn from(value: i64) -> Self {
-        Self(value)
-    }
-}
-
-impl From<MoneyCents> for i64 {
-    fn from(value: MoneyCents) -> Self {
-        value.0
-    }
-}
-
-impl Add for MoneyCents {
-    type Output = MoneyCents;
-
-    fn add(self, rhs: MoneyCents) -> Self::Output {
-        MoneyCents(self.0 + rhs.0)
-    }
-}
-
-impl AddAssign for MoneyCents {
-    fn add_assign(&mut self, rhs: MoneyCents) {
-        self.0 += rhs.0;
-    }
-}
-
-impl Sub for MoneyCents {
-    type Output = MoneyCents;
-
-    fn sub(self, rhs: MoneyCents) -> Self::Output {
-        MoneyCents(self.0 - rhs.0)
-    }
-}
-
-impl SubAssign for MoneyCents {
-    fn sub_assign(&mut self, rhs: MoneyCents) {
-        self.0 -= rhs.0;
-    }
-}
-
-impl Neg for MoneyCents {
-    type Output = MoneyCents;
-
-    fn neg(self) -> Self::Output {
-        MoneyCents(-self.0)
-    }
-}
-
-impl FromStr for MoneyCents {
-    type Err = EngineError;
-
-    /// Parses a decimal string into cents.
+    /// Parses a major-unit decimal string into minor units according to `currency.minor_units()`.
     ///
     /// Accepts `.` or `,` as decimal separator and an optional leading `+`/`-`.
-    ///
-    /// Validation rules:
-    /// - max 2 fractional digits (rejects `12.345`)
-    /// - rejects empty/invalid strings
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    /// Rejects more fractional digits than allowed by the currency.
+    pub fn parse_major(input: &str, currency: Currency) -> Result<Money, EngineError> {
         let empty = || EngineError::InvalidAmount("empty amount".to_string());
         let invalid = || EngineError::InvalidAmount("invalid amount".to_string());
         let overflow = || EngineError::InvalidAmount("amount too large".to_string());
 
-        let trimmed = s.trim();
+        let trimmed = input.trim();
         if trimmed.is_empty() {
             return Err(empty());
         }
 
-        let (sign, rest) = if let Some(stripped) = trimmed.strip_prefix('-') {
-            (-1i64, stripped)
+        let (is_negative, rest) = if let Some(stripped) = trimmed.strip_prefix('-') {
+            (true, stripped)
         } else if let Some(stripped) = trimmed.strip_prefix('+') {
-            (1i64, stripped)
+            (false, stripped)
         } else {
-            (1i64, trimmed)
+            (false, trimmed)
         };
 
         let rest = rest.trim();
@@ -178,57 +132,102 @@ impl FromStr for MoneyCents {
 
         let rest = rest.replace(',', ".");
         let mut parts = rest.split('.');
-        let euros_str = parts
-            .next()
-            .ok_or_else(invalid)?;
-        let cents_str = parts.next();
-
+        let major_str = parts.next().ok_or_else(invalid)?;
+        let frac_str = parts.next();
         if parts.next().is_some() {
             return Err(invalid());
         }
-
-        if euros_str.is_empty() || !euros_str.chars().all(|c| c.is_ascii_digit()) {
+        if major_str.is_empty() || !major_str.chars().all(|c| c.is_ascii_digit()) {
             return Err(invalid());
         }
 
-        let euros: i64 = euros_str
-            .parse()
-            .map_err(|_| invalid())?;
+        let major: i64 = major_str.parse().map_err(|_| invalid())?;
 
-        let cents: i64 = match cents_str {
-            None => 0,
-            Some("") => 0,
-            Some(frac) => {
-                if !frac.chars().all(|c| c.is_ascii_digit()) {
-                    return Err(invalid());
-                }
-                match frac.len() {
-                    0 => 0,
-                    1 => {
-                        frac.parse::<i64>()
-                            .map_err(|_| invalid())?
-                            * 10
-                    }
-                    2 => frac
-                        .parse::<i64>()
-                        .map_err(|_| invalid())?,
-                    _ => return Err(EngineError::InvalidAmount("too many decimals".to_string())),
-                }
-            }
+        let allowed = currency.minor_units() as usize;
+        let frac_raw = match frac_str {
+            None | Some("") => "",
+            Some(frac) => frac,
         };
 
-        let total = euros
-            .checked_mul(100)
-            .and_then(|v| v.checked_add(cents))
+        if !frac_raw.chars().all(|c| c.is_ascii_digit()) {
+            return Err(invalid());
+        }
+        if frac_raw.len() > allowed {
+            return Err(EngineError::InvalidAmount("too many decimals".to_string()));
+        }
+
+        let mut frac = frac_raw.to_string();
+        while frac.len() < allowed {
+            frac.push('0');
+        }
+
+        let scale: i64 = 10i64.pow(currency.minor_units() as u32);
+        let frac_val: i64 = if frac.is_empty() {
+            0
+        } else {
+            frac.parse().map_err(|_| invalid())?
+        };
+
+        let total = major
+            .checked_mul(scale)
+            .and_then(|v| v.checked_add(frac_val))
             .ok_or_else(overflow)?;
 
-        let signed = if sign < 0 {
+        let signed = if is_negative {
             total.checked_neg().ok_or_else(overflow)?
         } else {
             total
         };
 
-        Ok(MoneyCents(signed))
+        Ok(Money(signed))
+    }
+}
+
+impl From<i64> for Money {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl From<Money> for i64 {
+    fn from(value: Money) -> Self {
+        value.0
+    }
+}
+
+impl Add for Money {
+    type Output = Money;
+
+    fn add(self, rhs: Money) -> Self::Output {
+        Money(self.0 + rhs.0)
+    }
+}
+
+impl AddAssign for Money {
+    fn add_assign(&mut self, rhs: Money) {
+        self.0 += rhs.0;
+    }
+}
+
+impl Sub for Money {
+    type Output = Money;
+
+    fn sub(self, rhs: Money) -> Self::Output {
+        Money(self.0 - rhs.0)
+    }
+}
+
+impl SubAssign for Money {
+    fn sub_assign(&mut self, rhs: Money) {
+        self.0 -= rhs.0;
+    }
+}
+
+impl Neg for Money {
+    type Output = Money;
+
+    fn neg(self) -> Self::Output {
+        Money(-self.0)
     }
 }
 
@@ -237,27 +236,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn display_formats_eur() {
-        assert_eq!(MoneyCents::new(0).to_string(), "0.00€");
-        assert_eq!(MoneyCents::new(1).to_string(), "0.01€");
-        assert_eq!(MoneyCents::new(10).to_string(), "0.10€");
-        assert_eq!(MoneyCents::new(1050).to_string(), "10.50€");
-        assert_eq!(MoneyCents::new(-1050).to_string(), "-10.50€");
+    fn format_uses_currency_minor_units() {
+        assert_eq!(Money::new(0).format(Currency::Eur), "0.00 EUR");
+        assert_eq!(Money::new(1).format(Currency::Eur), "0.01 EUR");
+        assert_eq!(Money::new(10).format(Currency::Eur), "0.10 EUR");
+        assert_eq!(Money::new(1050).format(Currency::Eur), "10.50 EUR");
+        assert_eq!(Money::new(-1050).format(Currency::Eur), "-10.50 EUR");
     }
 
     #[test]
     fn parse_accepts_dot_or_comma() {
-        assert_eq!("10".parse::<MoneyCents>().unwrap().cents(), 1000);
-        assert_eq!("10.5".parse::<MoneyCents>().unwrap().cents(), 1050);
-        assert_eq!("10,50".parse::<MoneyCents>().unwrap().cents(), 1050);
-        assert_eq!("-0.01".parse::<MoneyCents>().unwrap().cents(), -1);
-        assert_eq!("+1.00".parse::<MoneyCents>().unwrap().cents(), 100);
-        assert_eq!("  2.30 ".parse::<MoneyCents>().unwrap().cents(), 230);
+        assert_eq!(
+            Money::parse_major("10", Currency::Eur).unwrap().minor(),
+            1000
+        );
+        assert_eq!(
+            Money::parse_major("10.5", Currency::Eur).unwrap().minor(),
+            1050
+        );
+        assert_eq!(
+            Money::parse_major("10,50", Currency::Eur).unwrap().minor(),
+            1050
+        );
+        assert_eq!(
+            Money::parse_major("-0.01", Currency::Eur).unwrap().minor(),
+            -1
+        );
+        assert_eq!(
+            Money::parse_major("+1.00", Currency::Eur).unwrap().minor(),
+            100
+        );
+        assert_eq!(
+            Money::parse_major("  2.30 ", Currency::Eur)
+                .unwrap()
+                .minor(),
+            230
+        );
     }
 
     #[test]
     fn parse_rejects_more_than_two_decimals() {
-        assert!("12.345".parse::<MoneyCents>().is_err());
-        assert!("0.001".parse::<MoneyCents>().is_err());
+        assert!(Money::parse_major("12.345", Currency::Eur).is_err());
+        assert!(Money::parse_major("0.001", Currency::Eur).is_err());
     }
 }

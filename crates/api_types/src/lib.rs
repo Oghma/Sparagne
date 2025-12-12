@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum Currency {
+    #[default]
+    Eur,
+}
+
 pub mod cash_flow {
     use super::*;
 
@@ -17,12 +24,14 @@ pub mod vault {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct VaultNew {
         pub name: String,
+        pub currency: Option<Currency>,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Vault {
         pub id: Option<String>,
         pub name: Option<String>,
+        pub currency: Option<Currency>,
     }
 }
 
@@ -42,7 +51,7 @@ pub mod entry {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct EntryNew {
         pub vault_id: String,
-        pub amount_cents: i64,
+        pub amount_minor: i64,
         pub category: String,
         pub note: String,
         pub cash_flow: String,
@@ -63,8 +72,9 @@ pub mod stats {
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Statistic {
-        pub balance_cents: i64,
-        pub total_income_cents: i64,
-        pub total_expenses_cents: i64,
+        pub currency: Currency,
+        pub balance_minor: i64,
+        pub total_income_minor: i64,
+        pub total_expenses_minor: i64,
     }
 }
