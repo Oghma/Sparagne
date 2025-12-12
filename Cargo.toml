@@ -4,9 +4,31 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = [".", "engine", "migration", "server", "telegram_bot", "api_types"]
+members = [
+    ".",
+    "crates/engine",
+    "crates/migration",
+    "crates/server",
+    "crates/telegram_bot",
+    "crates/api_types",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# Workspace lints (requires a recent Cargo; align with CI Issue 16).
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+# Keep Clippy baseline light for now; tighten during engine refactor.
+[workspace.lints.clippy]
+all = "allow"
+pedantic = "allow"
+nursery = "allow"
+# Future tightening candidates:
+# unwrap_used = "warn"
+# expect_used = "warn"
+# todo = "warn"
+# dbg_macro = "warn"
 
 [workspace.dependencies]
 axum = "0.7.4"
@@ -27,12 +49,12 @@ uuid = "1.8.0"
 
 [dependencies]
 config = "0.14.0"
-engine = { path = "engine" }
-migration = { path = "migration" }
+engine = { path = "crates/engine" }
+migration = { path = "crates/migration" }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 serde = { workspace = true }
-server = { path = "server" }
-telegram_bot = { path = "telegram_bot" }
+server = { path = "crates/server" }
+telegram_bot = { path = "crates/telegram_bot" }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
