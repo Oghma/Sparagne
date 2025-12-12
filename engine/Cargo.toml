@@ -11,6 +11,4 @@ path = "src/lib.rs"
 serde = { workspace = true }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
-tracing = { workspace = true }
 uuid = { workspace = true , features = ["v4", "macro-diagnostics"] }
