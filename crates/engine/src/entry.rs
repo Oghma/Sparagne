@@ -1,4 +1,5 @@
-//! The module contains the `Entry` type representing an entry in cash flows and wallets.
+//! The module contains the `Entry` type representing an entry in cash flows and
+//! wallets.
 //!
 //! Both expenses and income are represented by `Entry` type.
 use core::fmt;

@@ -15,11 +15,7 @@ pub fn schema() -> UpdateHandler<RequestError> {
 }
 
 async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> ResponseResult<()> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|user| user.id.to_string())
-        .unwrap();
+    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
 
     let (user_response, response) = get_check!(
         cfg.client,

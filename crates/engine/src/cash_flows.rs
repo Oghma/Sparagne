@@ -1,13 +1,10 @@
 //! The module contains the representation of a cash flow.
-//!
 use std::time::Duration;
 
 use sea_orm::entity::{ActiveValue, prelude::*};
 use serde::{Deserialize, Serialize};
 
-use super::ResultEngine;
-use super::entry::Entry;
-use super::error::EngineError;
+use super::{ResultEngine, entry::Entry, error::EngineError};
 
 /// A cash flow.
 ///

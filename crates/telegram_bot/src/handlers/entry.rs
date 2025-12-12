@@ -10,10 +10,10 @@ use teloxide::{
     utils::command::BotCommands,
 };
 
-use crate::{ConfigParameters, get_check};
 use crate::{
+    ConfigParameters,
     commands::{EntryCommands, UserStatisticsCommands, split_entry},
-    delete_check, post_check,
+    delete_check, get_check, post_check,
 };
 
 use super::{GlobalDialogue, GlobalState};
@@ -146,11 +146,7 @@ async fn handle_delete_entry(
     dialogue: GlobalDialogue,
     entries: Vec<(String, String)>,
 ) -> ResponseResult<()> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|user| user.id.to_string())
-        .unwrap();
+    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
     let entry = &entries[msg.text().unwrap().parse::<usize>().unwrap() - 1];
 
     let (user_response, response) = get_check!(
@@ -198,11 +194,7 @@ async fn get_main_cash_flow(
     msg: &Message,
     cfg: &ConfigParameters,
 ) -> ResponseResult<Option<CashFlow>> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|user| user.id.to_string())
-        .unwrap();
+    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
 
     let (user_response, response) = get_check!(
         cfg.client,

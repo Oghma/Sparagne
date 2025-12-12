@@ -20,11 +20,7 @@ async fn handle_pair_user(
     msg: Message,
     cmd: HandleUserAccount,
 ) -> ResponseResult<()> {
-    let telegram_id = msg
-        .from
-        .as_ref()
-        .map(|user| user.id.to_string())
-        .unwrap();
+    let telegram_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
 
     match cmd {
         HandleUserAccount::Pair { code } => {

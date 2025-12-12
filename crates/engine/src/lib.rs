@@ -278,7 +278,7 @@ impl Engine {
         Ok(vault)
     }
 
-    /// Return a [`Wallet`]
+    /// Return a wallet.
     pub fn wallet(&self, wallet_id: &str, vault_id: &str, user_id: &str) -> ResultEngine<&Wallet> {
         let vault = self.vault(Some(vault_id), None, user_id)?;
 
