@@ -32,7 +32,7 @@ impl Engine {
     #[allow(clippy::too_many_arguments)]
     pub async fn add_entry(
         &mut self,
-        balance: f64,
+        amount_cents: i64,
         category: &str,
         note: &str,
         vault_id: &str,
@@ -49,7 +49,7 @@ impl Engine {
                 let (entry_id, mut entry_model) = vault.add_entry(
                     wallet_id,
                     flow_id,
-                    balance,
+                    amount_cents,
                     category.to_string(),
                     note.to_string(),
                     date,
@@ -185,8 +185,8 @@ impl Engine {
         &mut self,
         vault_id: &str,
         name: &str,
-        balance: f64,
-        max_balance: Option<f64>,
+        balance: i64,
+        max_balance: Option<i64>,
         income_bounded: Option<bool>,
     ) -> ResultEngine<String> {
         match self.vaults.get_mut(vault_id) {
@@ -209,7 +209,7 @@ impl Engine {
         flow_id: Option<&str>,
         wallet_id: Option<&str>,
         entry_id: &str,
-        amount: f64,
+        amount_cents: i64,
         category: &str,
         note: &str,
     ) -> ResultEngine<()> {
@@ -219,7 +219,7 @@ impl Engine {
                     wallet_id,
                     flow_id,
                     entry_id,
-                    amount,
+                    amount_cents,
                     category.to_string(),
                     note.to_string(),
                 )?;

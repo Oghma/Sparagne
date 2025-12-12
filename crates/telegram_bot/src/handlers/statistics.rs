@@ -47,8 +47,10 @@ async fn handle_statistics(
             };
 
             let response = format!(
-                "Bilancio: {}€\nTotale entrate: {}€\nTotale uscite: {}€",
-                stats.balance, stats.total_income, stats.total_expenses
+                "Bilancio: {}\nTotale entrate: {}\nTotale uscite: {}",
+                MoneyCents::new(stats.balance_cents),
+                MoneyCents::new(stats.total_income_cents),
+                MoneyCents::new(stats.total_expenses_cents),
             );
 
             bot.send_message(msg.chat.id, response).await?;

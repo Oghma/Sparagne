@@ -1,7 +1,7 @@
 //! Handler for managing user entries
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use engine::CashFlow;
+use engine::{CashFlow, MoneyCents};
 use reqwest::{Client, StatusCode};
 use teloxide::{
     RequestError,
@@ -256,7 +256,7 @@ fn format_entries(flow: &CashFlow, num_entries: usize) -> String {
         .enumerate()
         .for_each(|(index, entry)| {
             let index = (index + 1).to_string();
-            let row = if entry.amount >= 0.0 {
+            let row = if entry.amount_cents >= 0 {
                 format!("{index}. 🟢 {}\n", entry)
             } else {
                 format!("{index}. 🔴 {}\n", entry)
@@ -270,17 +270,13 @@ fn format_entries(flow: &CashFlow, num_entries: usize) -> String {
 async fn send_entry(
     client: &Client,
     url: &str,
-    amount: f64,
+    amount: MoneyCents,
     category: &str,
     note: &str,
     msg: &Message,
     bot: &Bot,
 ) -> ResponseResult<()> {
-    let user_id = msg
-        .from
-        .as_ref()
-        .map(|user| user.id.to_string())
-        .unwrap();
+    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
 
     let (user_response, response) = get_check!(
         client,
@@ -302,7 +298,7 @@ async fn send_entry(
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
-    let success_str = if amount >= 0f64 {
+    let success_str = if amount.cents() >= 0 {
         "Entrata inserita"
     } else {
         "Uscita inserita"
@@ -313,7 +309,7 @@ async fn send_entry(
         user_id,
         &api_types::entry::EntryNew {
             vault_id: vault.id.unwrap(),
-            amount,
+            amount_cents: amount.cents(),
             category: category.to_string(),
             note: note.to_string(),
             cash_flow: "Main".to_string(),

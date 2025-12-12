@@ -1,7 +1,6 @@
 use sea_orm_migration::prelude::*;
 
-use super::m20230309_180650_cash_flows::CashFlows;
-use super::m20230528_204409_wallets::Wallets;
+use super::{m20230309_180650_cash_flows::CashFlows, m20230528_204409_wallets::Wallets};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -20,7 +19,7 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(Entries::Amount).double().not_null())
+                    .col(ColumnDef::new(Entries::Amount).big_integer().not_null())
                     .col(ColumnDef::new(Entries::Note).string())
                     .col(ColumnDef::new(Entries::Category).string())
                     .col(ColumnDef::new(Entries::Date).timestamp().not_null())

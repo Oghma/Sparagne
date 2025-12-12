@@ -13,13 +13,13 @@ use crate::{EngineError, ResultEngine, entry::Entry};
 #[derive(Debug)]
 pub struct Wallet {
     pub name: String,
-    pub balance: f64,
+    pub balance: i64,
     pub entries: Vec<Entry>,
     pub archived: bool,
 }
 
 impl Wallet {
-    pub fn new(name: String, balance: f64) -> Self {
+    pub fn new(name: String, balance: i64) -> Self {
         Self {
             name,
             balance,
@@ -30,13 +30,13 @@ impl Wallet {
 
     pub fn add_entry(
         &mut self,
-        balance: f64,
+        amount_cents: i64,
         category: String,
         note: String,
         date: Duration,
     ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(balance, category, note, date);
-        self.balance += entry.amount;
+        let entry = Entry::new(amount_cents, category, note, date);
+        self.balance += entry.amount_cents;
         self.entries.push(entry);
 
         Ok(&self.entries[self.entries.len() - 1])
@@ -50,7 +50,7 @@ impl Wallet {
         match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
-                self.balance -= entry.amount;
+                self.balance -= entry.amount_cents;
                 Ok(entry)
             }
             None => Err(EngineError::KeyNotFound(id.to_string())),
@@ -59,23 +59,23 @@ impl Wallet {
 
     /// Insert an existing `Entry` into the wallet.
     pub fn insert_entry(&mut self, entry: &Entry) {
-        self.balance += entry.amount;
+        self.balance += entry.amount_cents;
         self.entries.push(entry.clone());
     }
 
     pub fn update_entry(
         &mut self,
         id: &str,
-        amount: f64,
+        amount_cents: i64,
         category: String,
         note: String,
     ) -> ResultEngine<&Entry> {
         match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
                 let entry = &mut self.entries[index];
-                self.balance = self.balance - entry.amount + amount;
+                self.balance = self.balance - entry.amount_cents + amount_cents;
 
-                entry.amount = amount;
+                entry.amount_cents = amount_cents;
                 entry.category = category;
                 entry.note = note;
 
@@ -91,8 +91,7 @@ impl Wallet {
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub name: String,
-    #[sea_orm(column_type = "Double")]
-    pub balance: f64,
+    pub balance: i64,
     pub archived: bool,
     #[sea_orm(primary_key, auto_increment = false)]
     pub vault_id: String,
@@ -144,7 +143,7 @@ mod tests {
     use super::*;
 
     fn wallet() -> Wallet {
-        Wallet::new(String::from("Cash"), 0f64)
+        Wallet::new(String::from("Cash"), 0)
     }
 
     #[test]
@@ -152,7 +151,7 @@ mod tests {
         let mut wallet = wallet();
         wallet
             .add_entry(
-                10.4,
+                1040,
                 String::from("Income"),
                 String::from("Hard work"),
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
@@ -161,8 +160,8 @@ mod tests {
         let entry = &wallet.entries[0];
 
         assert_eq!(wallet.name, "Cash".to_string());
-        assert_eq!(wallet.balance, 10.4);
-        assert_eq!(entry.amount, 10.4);
+        assert_eq!(wallet.balance, 1040);
+        assert_eq!(entry.amount_cents, 1040);
         assert_eq!(entry.category, "Income".to_string());
         assert_eq!(entry.note, "Hard work".to_string());
     }
@@ -172,7 +171,7 @@ mod tests {
         let mut wallet = wallet();
         wallet
             .add_entry(
-                10.4,
+                1040,
                 String::from("Income"),
                 String::from("Hard work"),
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
@@ -183,15 +182,15 @@ mod tests {
         wallet
             .update_entry(
                 &entry_id,
-                10f64,
+                1000,
                 String::from("Income"),
                 String::from("Monthly"),
             )
             .unwrap();
         let entry = &wallet.entries[0];
 
-        assert_eq!(wallet.balance, 10f64);
-        assert_eq!(entry.amount, 10f64);
+        assert_eq!(wallet.balance, 1000);
+        assert_eq!(entry.amount_cents, 1000);
         assert_eq!(entry.category, String::from("Income"));
         assert_eq!(entry.note, String::from("Monthly"))
     }
@@ -202,7 +201,7 @@ mod tests {
         let mut wallet = wallet();
         wallet
             .add_entry(
-                1.23,
+                123,
                 "Income".to_string(),
                 "Weekly".to_string(),
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
@@ -212,7 +211,7 @@ mod tests {
         wallet
             .update_entry(
                 "6a8416ed-b8e6-4732-a591-bf55da9687e7",
-                20f64,
+                2000,
                 String::from("Income"),
                 String::from("Monthly"),
             )

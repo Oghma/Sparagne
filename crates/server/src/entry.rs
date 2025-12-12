@@ -13,7 +13,7 @@ pub async fn entry_new(
 
     engine
         .add_entry(
-            payload.amount,
+            payload.amount_cents,
             &payload.category,
             &payload.note,
             &payload.vault_id,

@@ -34,7 +34,7 @@ impl Vault {
         &mut self,
         wallet_id: Option<&str>,
         flow_id: Option<&str>,
-        amount: f64,
+        amount_cents: i64,
         category: String,
         note: String,
         date: Duration,
@@ -46,7 +46,7 @@ impl Vault {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
-                entry = flow.add_entry(amount, category, note, date)?;
+                entry = flow.add_entry(amount_cents, category, note, date)?;
 
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
@@ -57,13 +57,13 @@ impl Vault {
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
-                entry = wallet.add_entry(amount, category, note, date)?;
+                entry = wallet.add_entry(amount_cents, category, note, date)?;
             }
             (None, Some(fid)) => {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
-                entry = flow.add_entry(amount, category, note, date)?;
+                entry = flow.add_entry(amount_cents, category, note, date)?;
             }
             (None, None) => {
                 return Err(EngineError::KeyNotFound(
@@ -110,8 +110,8 @@ impl Vault {
     pub fn new_flow(
         &mut self,
         name: String,
-        balance: f64,
-        max_balance: Option<f64>,
+        balance: i64,
+        max_balance: Option<i64>,
         income_bounded: Option<bool>,
     ) -> ResultEngine<(String, cash_flows::ActiveModel)> {
         if self.cash_flow.contains_key(&name) {
@@ -138,7 +138,7 @@ impl Vault {
         wallet_id: Option<&str>,
         flow_id: Option<&str>,
         entry_id: &str,
-        amount: f64,
+        amount_cents: i64,
         category: String,
         note: String,
     ) -> ResultEngine<entry::ActiveModel> {
@@ -149,24 +149,25 @@ impl Vault {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
-                entry = flow.update_entry(entry_id, amount, category.clone(), note.clone())?;
+                entry =
+                    flow.update_entry(entry_id, amount_cents, category.clone(), note.clone())?;
 
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
-                wallet.update_entry(entry_id, amount, category, note)?;
+                wallet.update_entry(entry_id, amount_cents, category, note)?;
             }
             (Some(wid), None) => {
                 let Some(wallet) = self.wallet.get_mut(wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
-                entry = wallet.update_entry(entry_id, amount, category, note)?;
+                entry = wallet.update_entry(entry_id, amount_cents, category, note)?;
             }
             (None, Some(fid)) => {
                 let Some(flow) = self.cash_flow.get_mut(fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
-                entry = flow.update_entry(entry_id, amount, category, note)?;
+                entry = flow.update_entry(entry_id, amount_cents, category, note)?;
             }
             (None, None) => {
                 return Err(EngineError::KeyNotFound(
@@ -241,7 +242,7 @@ mod tests {
     fn vault() -> (String, Vault) {
         let mut vault = Vault::new(String::from("Main"), "foo");
         vault
-            .new_flow(String::from("Cash"), 1f64, None, None)
+            .new_flow(String::from("Cash"), 100, None, None)
             .unwrap();
         (String::from("Cash"), vault)
     }
@@ -253,7 +254,7 @@ mod tests {
             .add_entry(
                 None,
                 Some(&flow_name),
-                1.2,
+                120,
                 String::from("Income"),
                 String::from(""),
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
@@ -269,7 +270,7 @@ mod tests {
             .add_entry(
                 None,
                 Some("Foo"),
-                1.2,
+                120,
                 String::from("Income"),
                 String::from(""),
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
@@ -282,15 +283,15 @@ mod tests {
         let mut vault = Vault::new(String::from("Main"), "foo");
 
         vault
-            .new_flow(String::from("Cash"), 1f64, None, None)
+            .new_flow(String::from("Cash"), 100, None, None)
             .unwrap();
 
         vault
-            .new_flow(String::from("Cash1"), 1f64, Some(10f64), None)
+            .new_flow(String::from("Cash1"), 100, Some(1000), None)
             .unwrap();
 
         vault
-            .new_flow(String::from("Cash2"), 1f64, Some(10f64), Some(true))
+            .new_flow(String::from("Cash2"), 100, Some(1000), Some(true))
             .unwrap();
 
         assert!(!vault.cash_flow.is_empty());
@@ -300,7 +301,7 @@ mod tests {
     #[should_panic(expected = "ExistingKey(\"Cash\")")]
     fn fail_add_same_flow() {
         let (flow_name, mut vault) = vault();
-        vault.new_flow(flow_name, 1f64, Some(10f64), None).unwrap();
+        vault.new_flow(flow_name, 100, Some(1000), None).unwrap();
     }
 
     #[test]
@@ -311,7 +312,7 @@ mod tests {
             .add_entry(
                 None,
                 Some(&flow_name),
-                1.2,
+                120,
                 String::from("Income"),
                 String::from(""),
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
@@ -331,7 +332,7 @@ mod tests {
             .add_entry(
                 None,
                 Some(&flow_name),
-                1.2,
+                120,
                 String::from("Income"),
                 String::from(""),
                 SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
@@ -343,7 +344,7 @@ mod tests {
                 None,
                 Some(&flow_name),
                 &entry_id,
-                -5f64,
+                -500,
                 String::from("Home"),
                 String::from(""),
             )

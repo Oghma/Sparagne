@@ -8,11 +8,13 @@ use sea_orm::{ActiveValue, entity::prelude::*};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::MoneyCents;
+
 /// Represent a movement, an entry in cash flows or wallets.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Entry {
     pub id: String,
-    pub amount: f64,
+    pub amount_cents: i64,
     pub category: String,
     pub note: String,
     pub date: Duration,
@@ -20,10 +22,10 @@ pub struct Entry {
 
 /// Type used to represent an entry in cash flows and wallets.
 impl Entry {
-    pub fn new(amount: f64, category: String, note: String, date: Duration) -> Self {
+    pub fn new(amount_cents: i64, category: String, note: String, date: Duration) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
-            amount,
+            amount_cents,
             category,
             note,
             date,
@@ -33,7 +35,13 @@ impl Entry {
 
 impl fmt::Display for Entry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}€ {} {}", self.amount, self.category, self.note)
+        write!(
+            f,
+            "{} {} {}",
+            MoneyCents::new(self.amount_cents),
+            self.category,
+            self.note
+        )
     }
 }
 
@@ -41,7 +49,7 @@ impl From<Model> for Entry {
     fn from(entry: Model) -> Self {
         Self {
             id: entry.id,
-            amount: entry.amount,
+            amount_cents: entry.amount,
             category: entry.category.unwrap(),
             note: entry.note.unwrap(),
             date: Duration::from_secs(entry.date.parse().unwrap()),
@@ -54,8 +62,7 @@ impl From<Model> for Entry {
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
-    #[sea_orm(column_type = "Double")]
-    pub amount: f64,
+    pub amount: i64,
     pub note: Option<String>,
     pub category: Option<String>,
     pub date: String,
@@ -101,7 +108,7 @@ impl From<&Entry> for ActiveModel {
     fn from(entry: &Entry) -> Self {
         Self {
             id: ActiveValue::Set(entry.id.clone()),
-            amount: ActiveValue::Set(entry.amount),
+            amount: ActiveValue::Set(entry.amount_cents),
             note: ActiveValue::Set(Some(entry.note.clone())),
             category: ActiveValue::Set(Some(entry.category.clone())),
             date: ActiveValue::Set(entry.date.as_secs().to_string()),

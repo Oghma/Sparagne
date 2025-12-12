@@ -1,14 +1,15 @@
 //! Command structs
 
+use engine::MoneyCents;
 use teloxide::utils::command::{BotCommands, ParseError};
 
-pub fn split_entry(input: String) -> Result<(f64, String, String), ParseError> {
+pub fn split_entry(input: String) -> Result<(MoneyCents, String, String), ParseError> {
     let args: Vec<&str> = input.split(' ').collect();
 
     if args.len() < 3 {
         Err(ParseError::Custom("Failed to parse the entry".into()))
     } else {
-        let Ok(amount) = args[0].parse() else {
+        let Ok(amount) = args[0].parse::<MoneyCents>() else {
             return Err(ParseError::Custom("Failed to parse the entry".into()));
         };
 
@@ -30,7 +31,7 @@ pub enum EntryCommands {
         parse_with = split_entry
     )]
     Entrata {
-        amount: f64,
+        amount: MoneyCents,
         category: String,
         note: String,
     },
@@ -39,7 +40,7 @@ pub enum EntryCommands {
         parse_with = split_entry
     )]
     Uscita {
-        amount: f64,
+        amount: MoneyCents,
         category: String,
         note: String,
     },
