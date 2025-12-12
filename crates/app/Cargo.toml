@@ -1,11 +1,13 @@
 [package]
 name = "sparagne"
-version = "0.1.0"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-config = "0.14.0"
+config = { workspace = true }
 engine = { workspace = true }
 migration = { workspace = true }
 server = { workspace = true }
@@ -13,6 +15,6 @@ telegram_bot = { workspace = true }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-
