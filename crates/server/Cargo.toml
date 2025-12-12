@@ -1,7 +1,8 @@
 [package]
 name = "server"
 version = "0.0.1"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 name = "server"
