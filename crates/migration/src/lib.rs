@@ -6,6 +6,7 @@ mod m20230528_204409_wallets;
 mod m20230531_190127_vaults;
 mod m20230828_064600_users;
 mod m20251212_120000_currency;
+mod m20251214_090000_stable_ids;
 
 pub struct Migrator;
 
@@ -19,6 +20,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20230309_180650_cash_flows::Migration),
             Box::new(m20230309_214510_entries::Migration),
             Box::new(m20251212_120000_currency::Migration),
+            Box::new(m20251214_090000_stable_ids::Migration),
         ]
     }
 }

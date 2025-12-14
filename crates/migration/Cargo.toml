@@ -15,3 +15,4 @@ path = "src/lib.rs"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 sea-orm-migration = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+uuid = { workspace = true, features = ["v4"] }
