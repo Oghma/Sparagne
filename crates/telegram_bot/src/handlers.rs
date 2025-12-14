@@ -1,6 +1,7 @@
 //! Handlers for managing commands
 
 use teloxide::{dispatching::dialogue::InMemStorage, prelude::Dialogue};
+use uuid::Uuid;
 
 pub mod entry;
 pub mod exports;
@@ -12,7 +13,7 @@ pub mod user;
 pub enum GlobalState {
     #[default]
     Idle,
-    InDelete(Vec<(String, String)>),
+    InDelete(Vec<(String, Uuid)>),
 }
 
 type GlobalDialogue = Dialogue<GlobalState, InMemStorage<GlobalState>>;

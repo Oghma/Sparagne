@@ -121,7 +121,7 @@ async fn handle_delete_list(
             .entries
             .iter()
             .take(10)
-            .map(|entry| (entry.id.clone(), flow.name.clone()))
+            .map(|entry| (entry.id.clone(), flow.id))
             .collect();
 
         let user_response = format!(
@@ -146,7 +146,7 @@ async fn handle_delete_entry(
     cfg: ConfigParameters,
     msg: Message,
     dialogue: GlobalDialogue,
-    entries: Vec<(String, String)>,
+    entries: Vec<(String, uuid::Uuid)>,
 ) -> ResponseResult<()> {
     let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
     let entry = &entries[msg.text().unwrap().parse::<usize>().unwrap() - 1];
@@ -179,8 +179,8 @@ async fn handle_delete_entry(
         &api_types::entry::EntryDelete {
             vault_id: vault.id.unwrap(),
             entry_id: entry.0.clone(),
-            cash_flow: Some(entry.1.clone()),
-            wallet: None
+            cash_flow_id: Some(entry.1),
+            wallet_id: None
         },
         "Voce eliminata",
         "Problemi di connessione con il server. Riprova più tardi!"
@@ -225,8 +225,9 @@ async fn get_main_cash_flow(
         format!("{}/cashFlow", cfg.server),
         user_id,
         &api_types::cash_flow::CashFlowGet {
-            name: "Main".to_string(),
-            vault_id: vault.id.unwrap()
+            vault_id: vault.id.unwrap(),
+            id: None,
+            name: Some("Main".to_string()),
         },
         "",
         "Problemi di connessione con il server. Riprova più tardi!"
@@ -296,6 +297,27 @@ async fn send_entry(
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
+    let (user_response, response) = get_check!(
+        client,
+        format!("{}/cashFlow", url),
+        user_id.clone(),
+        &api_types::cash_flow::CashFlowGet {
+            vault_id: vault.id.clone().unwrap(),
+            id: None,
+            name: Some("Main".to_string()),
+        },
+        "",
+        "Problemi di connessione con il server. Riprova più tardi!"
+    );
+
+    let flow = match response {
+        None => {
+            bot.send_message(msg.chat.id, user_response).await?;
+            return Ok(());
+        }
+        Some(response) => response.json::<CashFlow>().await?,
+    };
+
     let currency = match vault.currency.unwrap_or(api_types::Currency::Eur) {
         api_types::Currency::Eur => Currency::Eur,
     };
@@ -327,7 +349,8 @@ async fn send_entry(
             amount_minor: amount.minor(),
             category: category.to_string(),
             note: note.to_string(),
-            cash_flow: "Main".to_string(),
+            cash_flow_id: Some(flow.id),
+            wallet_id: None,
             date: Utc::now().into(),
         },
         StatusCode::CREATED,

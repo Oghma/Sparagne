@@ -13,3 +13,4 @@ path = "src/lib.rs"
 [dependencies]
 chrono = { workspace = true }
 serde = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }

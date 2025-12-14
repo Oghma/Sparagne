@@ -1,5 +1,6 @@
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -13,8 +14,13 @@ pub mod cash_flow {
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct CashFlowGet {
-        pub name: String,
         pub vault_id: String,
+        /// Cash flow id (UUID).
+        ///
+        /// This is serialized as a string in JSON.
+        pub id: Option<Uuid>,
+        /// Cash flow name (legacy convenience).
+        pub name: Option<String>,
     }
 }
 
@@ -54,7 +60,10 @@ pub mod entry {
         pub amount_minor: i64,
         pub category: String,
         pub note: String,
-        pub cash_flow: String,
+        /// Cash flow id (UUID). Optional for wallet-only entries.
+        pub cash_flow_id: Option<Uuid>,
+        /// Wallet id (UUID). Optional for flow-only entries.
+        pub wallet_id: Option<Uuid>,
         /// RFC3339 timestamp, including timezone offset (local user time).
         ///
         /// Examples:
@@ -67,8 +76,8 @@ pub mod entry {
     pub struct EntryDelete {
         pub vault_id: String,
         pub entry_id: String,
-        pub cash_flow: Option<String>,
-        pub wallet: Option<String>,
+        pub cash_flow_id: Option<Uuid>,
+        pub wallet_id: Option<Uuid>,
     }
 }
 

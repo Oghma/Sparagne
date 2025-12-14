@@ -43,8 +43,9 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
         format!("{}/cashFlow", cfg.server),
         user_id,
         &api_types::cash_flow::CashFlowGet {
-            name: "Main".to_string(),
-            vault_id: vault.id.unwrap()
+            vault_id: vault.id.unwrap(),
+            id: None,
+            name: Some("Main".to_string()),
         },
         "",
         "Problemi di connessione con il server. Riprova più tardi!"

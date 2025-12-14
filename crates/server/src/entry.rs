@@ -18,8 +18,8 @@ pub async fn entry_new(
             &payload.category,
             &payload.note,
             &payload.vault_id,
-            Some(&payload.cash_flow),
-            None,
+            payload.cash_flow_id,
+            payload.wallet_id,
             &user.username,
             payload.date.with_timezone(&Utc),
         )
@@ -38,8 +38,8 @@ pub async fn entry_delete(
     engine
         .delete_entry(
             &payload.vault_id,
-            payload.cash_flow.as_deref(),
-            payload.wallet.as_deref(),
+            payload.cash_flow_id,
+            payload.wallet_id,
             &payload.entry_id,
             &user.username,
         )

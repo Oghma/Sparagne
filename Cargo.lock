@@ -62,6 +62,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
+ "uuid",
 ]
 
 [[package]]
@@ -1635,6 +1636,7 @@ dependencies = [
  "sea-orm",
  "sea-orm-migration",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -3442,6 +3444,7 @@ dependencies = [
  "teloxide",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
