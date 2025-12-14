@@ -1,9 +1,9 @@
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
-use crate::Currency;
-use crate::EngineError;
+use crate::{Currency, EngineError};
 
-/// Signed money amount represented as **integer minor units** (currency-dependent).
+/// Signed money amount represented as **integer minor units**
+/// (currency-dependent).
 ///
 /// Use this type for **all** monetary values in the engine (balances, caps,
 /// entry amounts) to avoid floating-point drift.
@@ -28,8 +28,14 @@ use crate::EngineError;
 /// ```rust
 /// use engine::{Currency, Money};
 ///
-/// assert_eq!(Money::parse_major("10", Currency::Eur).unwrap().minor(), 1000);
-/// assert_eq!(Money::parse_major("10,5", Currency::Eur).unwrap().minor(), 1050);
+/// assert_eq!(
+///     Money::parse_major("10", Currency::Eur).unwrap().minor(),
+///     1000
+/// );
+/// assert_eq!(
+///     Money::parse_major("10,5", Currency::Eur).unwrap().minor(),
+///     1050
+/// );
 /// assert!(Money::parse_major("12.345", Currency::Eur).is_err());
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -103,7 +109,8 @@ impl Money {
         )
     }
 
-    /// Parses a major-unit decimal string into minor units according to `currency.minor_units()`.
+    /// Parses a major-unit decimal string into minor units according to
+    /// `currency.minor_units()`.
     ///
     /// Accepts `.` or `,` as decimal separator and an optional leading `+`/`-`.
     /// Rejects more fractional digits than allowed by the currency.

@@ -4,13 +4,14 @@ use crate::EngineError;
 
 /// ISO-like currency code used by a vault and its money values.
 ///
-/// Today Sparagne is effectively mono-currency (default `EUR`), but the engine models currency
-/// explicitly to keep the data model future-proof.
+/// Today Sparagne is effectively mono-currency (default `EUR`), but the engine
+/// models currency explicitly to keep the data model future-proof.
 ///
 /// ## Minor units
 ///
-/// The engine stores monetary values as an `i64` number of **minor units** (see `Money`).
-/// `minor_units()` returns how many decimal digits are used when converting between:
+/// The engine stores monetary values as an `i64` number of **minor units** (see
+/// `Money`). `minor_units()` returns how many decimal digits are used when
+/// converting between:
 /// - major units (human input/output, e.g. `10.50 EUR`)
 /// - minor units (stored integers, e.g. `1050`)
 ///
