@@ -3,8 +3,8 @@
 //!
 //! Both expenses and income are represented by `Entry` type.
 use core::fmt;
-use std::time::Duration;
 
+use chrono::{DateTime, Utc};
 use sea_orm::{ActiveValue, entity::prelude::*};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -19,7 +19,7 @@ pub struct Entry {
     pub currency: Currency,
     pub category: String,
     pub note: String,
-    pub date: Duration,
+    pub date: DateTime<Utc>,
 }
 
 /// Type used to represent an entry in cash flows and wallets.
@@ -29,7 +29,7 @@ impl Entry {
         currency: Currency,
         category: String,
         note: String,
-        date: Duration,
+        date: DateTime<Utc>,
     ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
@@ -62,7 +62,7 @@ impl From<Model> for Entry {
             currency: Currency::try_from(entry.currency.as_str()).unwrap_or_default(),
             category: entry.category.unwrap(),
             note: entry.note.unwrap(),
-            date: Duration::from_secs(entry.date.parse().unwrap()),
+            date: entry.date,
         }
     }
 }
@@ -76,7 +76,7 @@ pub struct Model {
     pub currency: String,
     pub note: Option<String>,
     pub category: Option<String>,
-    pub date: String,
+    pub date: DateTimeUtc,
     pub cash_flow_id: Option<String>,
     pub wallet_id: Option<String>,
 }
@@ -123,7 +123,7 @@ impl From<&Entry> for ActiveModel {
             currency: ActiveValue::Set(entry.currency.code().to_string()),
             note: ActiveValue::Set(Some(entry.note.clone())),
             category: ActiveValue::Set(Some(entry.category.clone())),
-            date: ActiveValue::Set(entry.date.as_secs().to_string()),
+            date: ActiveValue::Set(entry.date),
             cash_flow_id: ActiveValue::NotSet,
             wallet_id: ActiveValue::NotSet,
         }

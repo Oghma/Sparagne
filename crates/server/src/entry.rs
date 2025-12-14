@@ -1,6 +1,7 @@
 //! Entries API endpoints
 use api_types::entry::{EntryDelete, EntryNew};
 use axum::{Extension, Json, extract::State, http::StatusCode};
+use chrono::Utc;
 
 use crate::{ServerError, server::ServerState, user};
 
@@ -20,7 +21,7 @@ pub async fn entry_new(
             Some(&payload.cash_flow),
             None,
             &user.username,
-            payload.date,
+            payload.date.with_timezone(&Utc),
         )
         .await?;
 

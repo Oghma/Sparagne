@@ -1,8 +1,9 @@
 //! The `Vault` holds the user's wallets and cash flows. The user can have
 //! multiple vaults.
 
+use chrono::{DateTime, Utc};
 use sea_orm::{ActiveValue, prelude::*};
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use crate::{
     Currency, ResultEngine, cash_flows, cash_flows::CashFlow, entry, error::EngineError,
@@ -40,7 +41,7 @@ impl Vault {
         amount_cents: i64,
         category: String,
         note: String,
-        date: Duration,
+        date: DateTime<Utc>,
     ) -> ResultEngine<(String, entry::ActiveModel)> {
         let entry;
 
@@ -286,7 +287,7 @@ impl From<&Vault> for ActiveModel {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use chrono::{TimeZone, Utc};
 
     use super::*;
 
@@ -308,7 +309,7 @@ mod tests {
                 120,
                 String::from("Income"),
                 String::from(""),
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+                Utc.timestamp_opt(0, 0).unwrap(),
             )
             .unwrap();
     }
@@ -324,7 +325,7 @@ mod tests {
                 120,
                 String::from("Income"),
                 String::from(""),
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+                Utc.timestamp_opt(0, 0).unwrap(),
             )
             .unwrap();
     }
@@ -366,7 +367,7 @@ mod tests {
                 120,
                 String::from("Income"),
                 String::from(""),
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+                Utc.timestamp_opt(0, 0).unwrap(),
             )
             .unwrap();
 
@@ -386,7 +387,7 @@ mod tests {
                 120,
                 String::from("Income"),
                 String::from(""),
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+                Utc.timestamp_opt(0, 0).unwrap(),
             )
             .unwrap();
 

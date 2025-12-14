@@ -1,5 +1,5 @@
+use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -55,7 +55,12 @@ pub mod entry {
         pub category: String,
         pub note: String,
         pub cash_flow: String,
-        pub date: Duration,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        ///
+        /// Examples:
+        /// - `2025-12-14T12:34:56Z`
+        /// - `2025-12-14T13:34:56+01:00`
+        pub date: DateTime<FixedOffset>,
     }
 
     #[derive(Debug, Serialize, Deserialize)]

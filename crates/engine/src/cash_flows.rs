@@ -1,5 +1,5 @@
 //! The module contains the representation of a cash flow.
-use std::time::Duration;
+use chrono::{DateTime, Utc};
 
 use sea_orm::entity::{ActiveValue, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,7 @@ impl CashFlow {
         amount_minor: i64,
         category: String,
         note: String,
-        date: Duration,
+        date: DateTime<Utc>,
     ) -> ResultEngine<&Entry> {
         let entry = Entry::new(amount_minor, self.currency, category, note, date);
         // If bounded, check constraints are respected
@@ -230,7 +230,7 @@ impl From<&mut CashFlow> for ActiveModel {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use chrono::{TimeZone, Utc};
 
     use super::*;
 
@@ -255,7 +255,7 @@ mod tests {
             123,
             String::from("Income"),
             String::from("First"),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+            Utc.timestamp_opt(0, 0).unwrap(),
         )
         .unwrap();
         let entry = &flow.entries[0];
@@ -274,7 +274,7 @@ mod tests {
             123,
             "Income".to_string(),
             "Weekly".to_string(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+            Utc.timestamp_opt(0, 0).unwrap(),
         )
         .unwrap();
         let entry_id = flow.entries[0].id.clone();
@@ -291,7 +291,7 @@ mod tests {
             123,
             "Income".to_string(),
             "Weekly".to_string(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+            Utc.timestamp_opt(0, 0).unwrap(),
         )
         .unwrap();
         let entry_id = flow.entries[0].id.clone();
@@ -319,7 +319,7 @@ mod tests {
             2044,
             "Income".to_string(),
             "Weekly".to_string(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+            Utc.timestamp_opt(0, 0).unwrap(),
         )
         .unwrap();
     }
@@ -332,7 +332,7 @@ mod tests {
             123,
             "Income".to_string(),
             "Weekly".to_string(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+            Utc.timestamp_opt(0, 0).unwrap(),
         )
         .unwrap();
         let entry_id = flow.entries[0].id.clone();
@@ -354,7 +354,7 @@ mod tests {
             -123,
             "Income".to_string(),
             "Weekly".to_string(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+            Utc.timestamp_opt(0, 0).unwrap(),
         )
         .unwrap();
         let entry_id = flow.entries[0].id.clone();

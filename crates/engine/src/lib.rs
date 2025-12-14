@@ -1,4 +1,5 @@
-use std::{collections::HashMap, time::Duration};
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
 pub use cash_flows::CashFlow;
 pub use currency::Currency;
@@ -42,7 +43,7 @@ impl Engine {
         flow_id: Option<&str>,
         wallet_id: Option<&str>,
         user_id: &str,
-        date: Duration,
+        date: DateTime<Utc>,
     ) -> ResultEngine<String> {
         if amount_minor == 0 {
             return Err(EngineError::InvalidAmount(

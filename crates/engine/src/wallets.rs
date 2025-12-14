@@ -1,6 +1,6 @@
 //! The module contains `Wallet` struct and its implementation.
 
-use std::time::Duration;
+use chrono::{DateTime, Utc};
 
 use sea_orm::entity::{ActiveValue, prelude::*};
 
@@ -35,7 +35,7 @@ impl Wallet {
         amount_minor: i64,
         category: String,
         note: String,
-        date: Duration,
+        date: DateTime<Utc>,
     ) -> ResultEngine<&Entry> {
         let entry = Entry::new(amount_minor, self.currency, category, note, date);
         self.balance += entry.amount_minor;
@@ -142,7 +142,7 @@ impl From<&Wallet> for ActiveModel {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use chrono::{TimeZone, Utc};
 
     use super::*;
 
@@ -158,7 +158,7 @@ mod tests {
                 1040,
                 String::from("Income"),
                 String::from("Hard work"),
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+                Utc.timestamp_opt(0, 0).unwrap(),
             )
             .unwrap();
         let entry = &wallet.entries[0];
@@ -179,7 +179,7 @@ mod tests {
                 1040,
                 String::from("Income"),
                 String::from("Hard work"),
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+                Utc.timestamp_opt(0, 0).unwrap(),
             )
             .unwrap();
         let entry_id = wallet.entries[0].id.clone();
@@ -209,7 +209,7 @@ mod tests {
                 123,
                 "Income".to_string(),
                 "Weekly".to_string(),
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
+                Utc.timestamp_opt(0, 0).unwrap(),
             )
             .unwrap();
 
