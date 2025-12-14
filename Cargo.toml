@@ -37,6 +37,7 @@ nursery = "allow"
 axum = "0.8.7"
 axum-extra = "0.12.2"
 base64 = "0.22.1"
+chrono = { version = "0.4.42", features = ["serde", "clock"] }
 config = "0.15.19"
 csv = "1.4.0"
 reqwest = "0.12.25"

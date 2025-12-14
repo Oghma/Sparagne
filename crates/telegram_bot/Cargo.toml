@@ -12,6 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 base64 = { workspace = true }
+chrono = { workspace = true }
 csv = { workspace = true }
 engine = { workspace = true }
 api_types = { workspace = true }

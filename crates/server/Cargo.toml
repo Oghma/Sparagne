@@ -13,6 +13,7 @@ path = "src/lib.rs"
 [dependencies]
 axum = { workspace = true }
 axum-extra = { workspace = true, features = ["typed-header"] }
+chrono = { workspace = true }
 engine = { workspace = true }
 api_types = { workspace = true }
 serde = { workspace = true }

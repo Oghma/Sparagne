@@ -11,4 +11,5 @@ name = "api_types"
 path = "src/lib.rs"
 
 [dependencies]
+chrono = { workspace = true }
 serde = { workspace = true }

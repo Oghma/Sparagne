@@ -11,6 +11,7 @@ name = "engine"
 path = "src/lib.rs"
 
 [dependencies]
+chrono = { workspace = true }
 serde = { workspace = true }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 thiserror = { workspace = true }
