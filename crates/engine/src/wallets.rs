@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 
 use sea_orm::entity::{ActiveValue, prelude::*};
+use uuid::Uuid;
 
 use crate::{Currency, EngineError, ResultEngine, entry::Entry};
 
@@ -12,6 +13,11 @@ use crate::{Currency, EngineError, ResultEngine, entry::Entry};
 /// else where money are kept. It is not a representation of a credit card.
 #[derive(Debug)]
 pub struct Wallet {
+    /// Stable identifier for this wallet.
+    ///
+    /// This is a UUID generated once and persisted in the database, so the
+    /// wallet can be renamed without breaking references.
+    pub id: Uuid,
     pub name: String,
     pub balance: i64,
     pub currency: Currency,
@@ -22,6 +28,18 @@ pub struct Wallet {
 impl Wallet {
     pub fn new(name: String, balance: i64, currency: Currency) -> Self {
         Self {
+            id: Uuid::new_v4(),
+            name,
+            balance,
+            currency,
+            entries: Vec::new(),
+            archived: false,
+        }
+    }
+
+    pub fn with_id(id: Uuid, name: String, balance: i64, currency: Currency) -> Self {
+        Self {
+            id,
             name,
             balance,
             currency,
@@ -92,11 +110,11 @@ impl Wallet {
 #[sea_orm(table_name = "wallets")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
+    pub id: String,
     pub name: String,
     pub balance: i64,
     pub currency: String,
     pub archived: bool,
-    #[sea_orm(primary_key, auto_increment = false)]
     pub vault_id: String,
 }
 
@@ -131,6 +149,7 @@ impl ActiveModelBehavior for ActiveModel {}
 impl From<&Wallet> for ActiveModel {
     fn from(value: &Wallet) -> Self {
         Self {
+            id: ActiveValue::Set(value.id.to_string()),
             name: ActiveValue::Set(value.name.clone()),
             balance: ActiveValue::Set(value.balance),
             currency: ActiveValue::Set(value.currency.code().to_string()),

@@ -77,6 +77,7 @@ pub struct Model {
     pub note: Option<String>,
     pub category: Option<String>,
     pub date: DateTimeUtc,
+    pub vault_id: String,
     pub cash_flow_id: Option<String>,
     pub wallet_id: Option<String>,
 }
@@ -86,7 +87,7 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::cash_flows::Entity",
         from = "Column::CashFlowId",
-        to = "super::cash_flows::Column::Name",
+        to = "super::cash_flows::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
@@ -94,11 +95,19 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::wallets::Entity",
         from = "Column::WalletId",
-        to = "super::wallets::Column::Name",
+        to = "super::wallets::Column::Id",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]
     Wallets,
+    #[sea_orm(
+        belongs_to = "super::vault::Entity",
+        from = "Column::VaultId",
+        to = "super::vault::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Vaults,
 }
 
 impl Related<super::cash_flows::Entity> for Entity {
@@ -113,6 +122,12 @@ impl Related<super::wallets::Entity> for Entity {
     }
 }
 
+impl Related<super::vault::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Vaults.def()
+    }
+}
+
 impl ActiveModelBehavior for ActiveModel {}
 
 impl From<&Entry> for ActiveModel {
@@ -124,6 +139,7 @@ impl From<&Entry> for ActiveModel {
             note: ActiveValue::Set(Some(entry.note.clone())),
             category: ActiveValue::Set(Some(entry.category.clone())),
             date: ActiveValue::Set(entry.date),
+            vault_id: ActiveValue::NotSet,
             cash_flow_id: ActiveValue::NotSet,
             wallet_id: ActiveValue::NotSet,
         }

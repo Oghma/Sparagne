@@ -4,6 +4,7 @@
 use chrono::{DateTime, Utc};
 use sea_orm::{ActiveValue, prelude::*};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use crate::{
     Currency, ResultEngine, cash_flows, cash_flows::CashFlow, entry, error::EngineError,
@@ -15,8 +16,8 @@ use crate::{
 pub struct Vault {
     pub id: String,
     pub name: String,
-    pub cash_flow: HashMap<String, CashFlow>,
-    pub wallet: HashMap<String, Wallet>,
+    pub cash_flow: HashMap<Uuid, CashFlow>,
+    pub wallet: HashMap<Uuid, Wallet>,
     pub user_id: String,
     pub currency: Currency,
 }
@@ -36,8 +37,8 @@ impl Vault {
     /// Add an income or expense entry
     pub fn add_entry(
         &mut self,
-        wallet_id: Option<&str>,
-        flow_id: Option<&str>,
+        wallet_id: Option<Uuid>,
+        flow_id: Option<Uuid>,
         amount_cents: i64,
         category: String,
         note: String,
@@ -47,7 +48,7 @@ impl Vault {
 
         match (wallet_id, flow_id) {
             (Some(wid), Some(fid)) => {
-                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                let Some(flow) = self.cash_flow.get_mut(&fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
                 if flow.currency != self.currency {
@@ -57,7 +58,7 @@ impl Vault {
                 }
                 entry = flow.add_entry(amount_cents, category, note, date)?;
 
-                let Some(wallet) = self.wallet.get_mut(wid) else {
+                let Some(wallet) = self.wallet.get_mut(&wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
                 if wallet.currency != self.currency {
@@ -68,7 +69,7 @@ impl Vault {
                 wallet.insert_entry(entry);
             }
             (Some(wid), None) => {
-                let Some(wallet) = self.wallet.get_mut(wid) else {
+                let Some(wallet) = self.wallet.get_mut(&wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
                 if wallet.currency != self.currency {
@@ -79,7 +80,7 @@ impl Vault {
                 entry = wallet.add_entry(amount_cents, category, note, date)?;
             }
             (None, Some(fid)) => {
-                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                let Some(flow) = self.cash_flow.get_mut(&fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
                 if flow.currency != self.currency {
@@ -104,8 +105,8 @@ impl Vault {
     /// Delete an income or expense
     pub fn delete_entry(
         &mut self,
-        wallet_id: Option<&str>,
-        flow_id: Option<&str>,
+        wallet_id: Option<Uuid>,
+        flow_id: Option<Uuid>,
         entry_id: &str,
     ) -> ResultEngine<()> {
         if wallet_id.is_none() && flow_id.is_none() {
@@ -115,14 +116,14 @@ impl Vault {
         }
 
         if let Some(fid) = flow_id {
-            let Some(flow) = self.cash_flow.get_mut(fid) else {
+            let Some(flow) = self.cash_flow.get_mut(&fid) else {
                 return Err(EngineError::KeyNotFound(fid.to_string()));
             };
             flow.delete_entry(entry_id)?;
         }
 
         if let Some(wid) = wallet_id {
-            let Some(wallet) = self.wallet.get_mut(wid) else {
+            let Some(wallet) = self.wallet.get_mut(&wid) else {
                 return Err(EngineError::KeyNotFound(wid.to_string()));
             };
             wallet.delete_entry(entry_id)?;
@@ -137,8 +138,8 @@ impl Vault {
         balance: i64,
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
-    ) -> ResultEngine<(String, cash_flows::ActiveModel)> {
-        if self.cash_flow.contains_key(&name) {
+    ) -> ResultEngine<(Uuid, cash_flows::ActiveModel)> {
+        if self.cash_flow.values().any(|flow| flow.name == name) {
             return Err(EngineError::ExistingKey(name));
         }
         let flow = CashFlow::new(
@@ -148,25 +149,25 @@ impl Vault {
             income_bounded,
             self.currency,
         );
-        let flow_id = flow.name.clone();
+        let flow_id = flow.id;
         let flow_mdodel: cash_flows::ActiveModel = (&flow).into();
-        self.cash_flow.insert(name, flow);
+        self.cash_flow.insert(flow_id, flow);
 
         Ok((flow_id, flow_mdodel))
     }
 
-    pub fn iter_flow(&self) -> impl Iterator<Item = (&String, &CashFlow)> {
+    pub fn iter_flow(&self) -> impl Iterator<Item = (&Uuid, &CashFlow)> {
         self.cash_flow.iter().filter(|flow| !flow.1.archived)
     }
 
-    pub fn iter_all_flow(&self) -> impl Iterator<Item = (&String, &CashFlow)> {
+    pub fn iter_all_flow(&self) -> impl Iterator<Item = (&Uuid, &CashFlow)> {
         self.cash_flow.iter()
     }
 
     pub fn update_entry(
         &mut self,
-        wallet_id: Option<&str>,
-        flow_id: Option<&str>,
+        wallet_id: Option<Uuid>,
+        flow_id: Option<Uuid>,
         entry_id: &str,
         amount_cents: i64,
         category: String,
@@ -176,7 +177,7 @@ impl Vault {
 
         match (wallet_id, flow_id) {
             (Some(wid), Some(fid)) => {
-                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                let Some(flow) = self.cash_flow.get_mut(&fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
                 if flow.currency != self.currency {
@@ -187,7 +188,7 @@ impl Vault {
                 entry =
                     flow.update_entry(entry_id, amount_cents, category.clone(), note.clone())?;
 
-                let Some(wallet) = self.wallet.get_mut(wid) else {
+                let Some(wallet) = self.wallet.get_mut(&wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
                 if wallet.currency != self.currency {
@@ -198,7 +199,7 @@ impl Vault {
                 wallet.update_entry(entry_id, amount_cents, category, note)?;
             }
             (Some(wid), None) => {
-                let Some(wallet) = self.wallet.get_mut(wid) else {
+                let Some(wallet) = self.wallet.get_mut(&wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
                 };
                 if wallet.currency != self.currency {
@@ -209,7 +210,7 @@ impl Vault {
                 entry = wallet.update_entry(entry_id, amount_cents, category, note)?;
             }
             (None, Some(fid)) => {
-                let Some(flow) = self.cash_flow.get_mut(fid) else {
+                let Some(flow) = self.cash_flow.get_mut(&fid) else {
                     return Err(EngineError::KeyNotFound(fid.to_string()));
                 };
                 if flow.currency != self.currency {
@@ -232,20 +233,20 @@ impl Vault {
 
     pub fn delete_flow(
         &mut self,
-        name: &String,
+        flow_id: &Uuid,
         archive: bool,
     ) -> ResultEngine<cash_flows::ActiveModel> {
-        match (self.cash_flow.get_mut(name), archive) {
+        match (self.cash_flow.get_mut(flow_id), archive) {
             (Some(flow), true) => {
                 flow.archive();
                 Ok(flow.into())
             }
             (Some(flow), false) => {
                 let flow: cash_flows::ActiveModel = flow.into();
-                self.cash_flow.remove(name);
+                self.cash_flow.remove(flow_id);
                 Ok(flow)
             }
-            (None, _) => Err(EngineError::KeyNotFound(name.clone())),
+            (None, _) => Err(EngineError::KeyNotFound(flow_id.to_string())),
         }
     }
 }
@@ -264,11 +265,27 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::cash_flows::Entity")]
     CashFlows,
+    #[sea_orm(has_many = "super::wallets::Entity")]
+    Wallets,
+    #[sea_orm(has_many = "super::entry::Entity")]
+    Entries,
 }
 
 impl Related<super::cash_flows::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::CashFlows.def()
+    }
+}
+
+impl Related<super::wallets::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Wallets.def()
+    }
+}
+
+impl Related<super::entry::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Entries.def()
     }
 }
 
@@ -291,12 +308,12 @@ mod tests {
 
     use super::*;
 
-    fn vault() -> (String, Vault) {
+    fn vault() -> (Uuid, Vault) {
         let mut vault = Vault::new(String::from("Main"), "foo");
-        vault
+        let (flow_id, _) = vault
             .new_flow(String::from("Cash"), 100, None, None)
             .unwrap();
-        (String::from("Cash"), vault)
+        (flow_id, vault)
     }
 
     #[test]
@@ -305,7 +322,7 @@ mod tests {
         vault
             .add_entry(
                 None,
-                Some(&flow_name),
+                Some(flow_name),
                 120,
                 String::from("Income"),
                 String::from(""),
@@ -315,13 +332,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "KeyNotFound(\"Foo\")")]
+    #[should_panic(expected = "KeyNotFound")]
     fn fail_flow_entry() {
         let (_, mut vault) = vault();
         vault
             .add_entry(
                 None,
-                Some("Foo"),
+                Some(Uuid::new_v4()),
                 120,
                 String::from("Income"),
                 String::from(""),
@@ -352,8 +369,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "ExistingKey(\"Cash\")")]
     fn fail_add_same_flow() {
-        let (flow_name, mut vault) = vault();
-        vault.new_flow(flow_name, 100, Some(1000), None).unwrap();
+        let (_, mut vault) = vault();
+        vault.new_flow("Cash".to_string(), 100, Some(1000), None)
+            .unwrap();
     }
 
     #[test]
@@ -363,7 +381,7 @@ mod tests {
         let (entry_id, _) = vault
             .add_entry(
                 None,
-                Some(&flow_name),
+                Some(flow_name),
                 120,
                 String::from("Income"),
                 String::from(""),
@@ -372,7 +390,7 @@ mod tests {
             .unwrap();
 
         vault
-            .delete_entry(None, Some(&flow_name), &entry_id)
+            .delete_entry(None, Some(flow_name), &entry_id)
             .unwrap();
     }
 
@@ -383,7 +401,7 @@ mod tests {
         let (entry_id, _) = vault
             .add_entry(
                 None,
-                Some(&flow_name),
+                Some(flow_name),
                 120,
                 String::from("Income"),
                 String::from(""),
@@ -394,7 +412,7 @@ mod tests {
         vault
             .update_entry(
                 None,
-                Some(&flow_name),
+                Some(flow_name),
                 &entry_id,
                 -500,
                 String::from("Home"),

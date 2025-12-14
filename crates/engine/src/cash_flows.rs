@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 
 use sea_orm::entity::{ActiveValue, prelude::*};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::{ResultEngine, entry::Entry, error::EngineError};
 use crate::Currency;
@@ -23,7 +24,8 @@ use crate::Currency;
 ///
 /// ** Examples
 ///
-/// Amounts are stored as integer minor units (`i64`), and formatted using the vault currency.
+/// Amounts are stored as integer minor units (`i64`), and formatted using the
+/// vault currency.
 ///
 /// Example with `EUR` (2 minor units):
 /// max balance = 10.00 EUR (1000), current balance = 5.00 EUR (500).
@@ -36,6 +38,11 @@ use crate::Currency;
 /// income of maximum 7.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CashFlow {
+    /// Stable identifier for this cash flow.
+    ///
+    /// This is a UUID generated once and persisted in the database, so the cash
+    /// flow can be renamed without breaking references.
+    pub id: Uuid,
     pub name: String,
     pub balance: i64,
     pub max_balance: Option<i64>,
@@ -59,6 +66,32 @@ impl CashFlow {
         };
 
         Self {
+            id: Uuid::new_v4(),
+            name,
+            balance,
+            max_balance,
+            income_balance,
+            currency,
+            entries: Vec::new(),
+            archived: false,
+        }
+    }
+
+    pub fn with_id(
+        id: Uuid,
+        name: String,
+        balance: i64,
+        max_balance: Option<i64>,
+        income_bounded: Option<bool>,
+        currency: Currency,
+    ) -> Self {
+        let income_balance = match income_bounded {
+            Some(true) => Some(max_balance.unwrap()),
+            _ => None,
+        };
+
+        Self {
+            id,
             name,
             balance,
             max_balance,
@@ -162,13 +195,13 @@ impl CashFlow {
 #[sea_orm(table_name = "cash_flows")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
+    pub id: String,
     pub name: String,
     pub balance: i64,
     pub max_balance: Option<i64>,
     pub income_balance: Option<i64>,
     pub currency: String,
     pub archived: bool,
-    #[sea_orm(primary_key, auto_increment = false)]
     pub vault_id: String,
 }
 
@@ -203,6 +236,7 @@ impl ActiveModelBehavior for ActiveModel {}
 impl From<&CashFlow> for ActiveModel {
     fn from(flow: &CashFlow) -> Self {
         Self {
+            id: ActiveValue::Set(flow.id.to_string()),
             name: ActiveValue::Set(flow.name.clone()),
             balance: ActiveValue::Set(flow.balance),
             max_balance: ActiveValue::Set(flow.max_balance),
@@ -217,6 +251,7 @@ impl From<&CashFlow> for ActiveModel {
 impl From<&mut CashFlow> for ActiveModel {
     fn from(flow: &mut CashFlow) -> Self {
         Self {
+            id: ActiveValue::Set(flow.id.to_string()),
             name: ActiveValue::Set(flow.name.clone()),
             balance: ActiveValue::Set(flow.balance),
             max_balance: ActiveValue::Set(flow.max_balance),

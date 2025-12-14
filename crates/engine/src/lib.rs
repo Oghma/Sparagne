@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 pub use cash_flows::CashFlow;
 pub use currency::Currency;
@@ -7,11 +8,10 @@ pub use error::EngineError;
 pub use money::Money;
 use sea_orm::{ActiveValue, prelude::*};
 pub use vault::Vault;
-use wallets::Wallet;
+pub use wallets::Wallet;
 
 mod cash_flows;
 mod currency;
-mod docs;
 mod entry;
 mod error;
 mod money;
@@ -40,8 +40,8 @@ impl Engine {
         category: &str,
         note: &str,
         vault_id: &str,
-        flow_id: Option<&str>,
-        wallet_id: Option<&str>,
+        flow_id: Option<Uuid>,
+        wallet_id: Option<Uuid>,
         user_id: &str,
         date: DateTime<Utc>,
     ) -> ResultEngine<String> {
@@ -63,17 +63,15 @@ impl Engine {
                     note.to_string(),
                     date,
                 )?;
+                entry_model.vault_id = ActiveValue::Set(vault_id.to_string());
                 if let Some(fid) = flow_id {
                     let flow_id = fid.to_string();
                     entry_model.cash_flow_id = ActiveValue::Set(Some(flow_id.clone()));
 
                     // Update cashflow balance
-                    let flow = self.cash_flow(&flow_id, vault_id, user_id)?;
-                    let mut flow_entry = cash_flows::ActiveModel::new();
-                    flow_entry.name = ActiveValue::Set(flow.name.clone());
-                    flow_entry.balance = ActiveValue::Set(flow.balance);
-                    flow_entry.income_balance = ActiveValue::Set(flow.income_balance);
-
+                    let flow = self.cash_flow(fid, vault_id, user_id)?;
+                    let mut flow_entry: cash_flows::ActiveModel = flow.into();
+                    flow_entry.vault_id = ActiveValue::Set(vault_id.to_string());
                     flow_entry.update(&self.database).await.unwrap();
                 }
                 if let Some(wid) = wallet_id {
@@ -90,7 +88,7 @@ impl Engine {
     /// Return a [`CashFlow`]
     pub fn cash_flow(
         &self,
-        cash_flow_id: &str,
+        cash_flow_id: Uuid,
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<&CashFlow> {
@@ -98,7 +96,21 @@ impl Engine {
 
         vault
             .cash_flow
-            .get(cash_flow_id)
+            .get(&cash_flow_id)
+            .ok_or(EngineError::KeyNotFound("cash_flow not exists".to_string()))
+    }
+
+    pub fn cash_flow_by_name(
+        &self,
+        name: &str,
+        vault_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<&CashFlow> {
+        let vault = self.vault(Some(vault_id), None, user_id)?;
+        vault
+            .cash_flow
+            .values()
+            .find(|flow| flow.name == name)
             .ok_or(EngineError::KeyNotFound("cash_flow not exists".to_string()))
     }
 
@@ -106,12 +118,12 @@ impl Engine {
     pub async fn delete_cash_flow(
         &mut self,
         vault_id: &str,
-        name: &str,
+        cash_flow_id: Uuid,
         archive: bool,
     ) -> ResultEngine<()> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
-                let mut flow_model = vault.delete_flow(&name.to_string(), archive)?;
+                let mut flow_model = vault.delete_flow(&cash_flow_id, archive)?;
                 flow_model.vault_id = ActiveValue::Set(vault.id.clone());
 
                 if archive {
@@ -130,8 +142,8 @@ impl Engine {
     pub async fn delete_entry(
         &mut self,
         vault_id: &str,
-        flow_id: Option<&str>,
-        wallet_id: Option<&str>,
+        flow_id: Option<Uuid>,
+        wallet_id: Option<Uuid>,
         entry_id: &str,
         user_id: &str,
     ) -> ResultEngine<()> {
@@ -203,7 +215,7 @@ impl Engine {
         balance: i64,
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
-    ) -> ResultEngine<String> {
+    ) -> ResultEngine<Uuid> {
         match self.vaults.get_mut(vault_id) {
             Some(vault) => {
                 let (id, mut flow) =
@@ -221,8 +233,8 @@ impl Engine {
     pub async fn update_entry(
         &mut self,
         vault_id: &str,
-        flow_id: Option<&str>,
-        wallet_id: Option<&str>,
+        flow_id: Option<Uuid>,
+        wallet_id: Option<Uuid>,
         entry_id: &str,
         amount_cents: i64,
         category: &str,
@@ -245,6 +257,7 @@ impl Engine {
                 if let Some(wid) = wallet_id {
                     entry_model.wallet_id = ActiveValue::Set(Some(wid.to_string()));
                 }
+                entry_model.vault_id = ActiveValue::Set(vault_id.to_string());
                 entry_model.save(&self.database).await.unwrap();
 
                 Ok(())
@@ -294,12 +307,12 @@ impl Engine {
     }
 
     /// Return a wallet.
-    pub fn wallet(&self, wallet_id: &str, vault_id: &str, user_id: &str) -> ResultEngine<&Wallet> {
+    pub fn wallet(&self, wallet_id: Uuid, vault_id: &str, user_id: &str) -> ResultEngine<&Wallet> {
         let vault = self.vault(Some(vault_id), None, user_id)?;
 
         vault
             .wallet
-            .get(wallet_id)
+            .get(&wallet_id)
             .ok_or(EngineError::KeyNotFound("wallet not exists".to_string()))
     }
 }
@@ -321,20 +334,22 @@ impl EngineBuilder {
     pub async fn build(self) -> Engine {
         let mut vaults = HashMap::new();
 
-        let vaults_flows: Vec<(vault::Model, Vec<cash_flows::Model>)> = vault::Entity::find()
-            .find_with_related(cash_flows::Entity)
-            .all(&self.database)
-            .await
-            .unwrap();
+        let vault_models: Vec<vault::Model> =
+            vault::Entity::find().all(&self.database).await.unwrap();
 
-        for vault_entry in vaults_flows {
+        for vault_model in vault_models {
             let vault_currency =
-                Currency::try_from(vault_entry.0.currency.as_str()).unwrap_or_default();
-            let mut flows = HashMap::new();
+                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
-            for flow_entry in vault_entry.1 {
-                // Fetch cash flow entries
-                let entries: Vec<entry::Entry> = flow_entry
+            let mut flows = HashMap::new();
+            let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
+                .filter(cash_flows::Column::VaultId.eq(vault_model.id.clone()))
+                .all(&self.database)
+                .await
+                .unwrap();
+
+            for flow_model in flow_models {
+                let entries: Vec<entry::Entry> = flow_model
                     .find_related(entry::Entity)
                     .all(&self.database)
                     .await
@@ -343,29 +358,59 @@ impl EngineBuilder {
                     .map(entry::Entry::from)
                     .collect();
 
-                flows.insert(
-                    flow_entry.name.clone(),
-                    CashFlow {
-                        name: flow_entry.name,
-                        balance: flow_entry.balance,
-                        max_balance: flow_entry.max_balance,
-                        income_balance: flow_entry.income_balance,
-                        currency: Currency::try_from(flow_entry.currency.as_str())
-                            .unwrap_or(vault_currency),
-                        entries,
-                        archived: flow_entry.archived,
-                    },
-                );
+                let id = Uuid::parse_str(&flow_model.id).unwrap();
+                let flow = CashFlow {
+                    id,
+                    name: flow_model.name,
+                    balance: flow_model.balance,
+                    max_balance: flow_model.max_balance,
+                    income_balance: flow_model.income_balance,
+                    currency: Currency::try_from(flow_model.currency.as_str())
+                        .unwrap_or(vault_currency),
+                    entries,
+                    archived: flow_model.archived,
+                };
+                flows.insert(id, flow);
+            }
+
+            let mut wallets = HashMap::new();
+            let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
+                .filter(wallets::Column::VaultId.eq(vault_model.id.clone()))
+                .all(&self.database)
+                .await
+                .unwrap();
+
+            for wallet_model in wallet_models {
+                let entries: Vec<entry::Entry> = wallet_model
+                    .find_related(entry::Entity)
+                    .all(&self.database)
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .map(entry::Entry::from)
+                    .collect();
+
+                let id = Uuid::parse_str(&wallet_model.id).unwrap();
+                let wallet = Wallet {
+                    id,
+                    name: wallet_model.name,
+                    balance: wallet_model.balance,
+                    currency: Currency::try_from(wallet_model.currency.as_str())
+                        .unwrap_or(vault_currency),
+                    entries,
+                    archived: wallet_model.archived,
+                };
+                wallets.insert(id, wallet);
             }
 
             vaults.insert(
-                vault_entry.0.id.clone(),
+                vault_model.id.clone(),
                 Vault {
-                    id: vault_entry.0.id,
-                    name: vault_entry.0.name,
+                    id: vault_model.id,
+                    name: vault_model.name,
                     cash_flow: flows,
-                    wallet: HashMap::new(),
-                    user_id: vault_entry.0.user_id,
+                    wallet: wallets,
+                    user_id: vault_model.user_id,
                     currency: vault_currency,
                 },
             );
