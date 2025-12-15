@@ -359,12 +359,21 @@ impl EngineBuilder {
                     .collect();
 
                 let id = Uuid::parse_str(&flow_model.id).unwrap();
+                // Back-compat / robustness: if this is an income-capped flow (income_balance
+                // present), ensure `income_balance` tracks the cumulative
+                // income total, not an arbitrary value.
+                let income_balance =
+                    if flow_model.max_balance.is_some() && flow_model.income_balance.is_some() {
+                        Some(entries.iter().map(|e| e.amount_minor.max(0)).sum::<i64>())
+                    } else {
+                        flow_model.income_balance
+                    };
                 let flow = CashFlow {
                     id,
                     name: flow_model.name,
                     balance: flow_model.balance,
                     max_balance: flow_model.max_balance,
-                    income_balance: flow_model.income_balance,
+                    income_balance,
                     currency: Currency::try_from(flow_model.currency.as_str())
                         .unwrap_or(vault_currency),
                     entries,

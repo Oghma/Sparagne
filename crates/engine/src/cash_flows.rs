@@ -8,19 +8,48 @@ use uuid::Uuid;
 use super::{ResultEngine, entry::Entry, error::EngineError};
 use crate::Currency;
 
+/// How a cash flow enforces upper bounds.
+///
+/// Amounts are expressed in integer minor units (e.g. cents for EUR).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FlowMode {
+    /// No upper bound (but still enforces non-negativity, except for
+    /// Unallocated).
+    Unlimited,
+    /// The flow balance must not exceed `cap_minor`.
+    NetCapped { cap_minor: i64 },
+    /// The cumulative sum of all incomes must not exceed `cap_minor`.
+    ///
+    /// `income_total_minor` tracks the cumulative positive amounts and is
+    /// independent from expenses.
+    IncomeCapped {
+        cap_minor: i64,
+        income_total_minor: i64,
+    },
+}
+
+fn income_contribution_minor(amount_minor: i64) -> i64 {
+    amount_minor.max(0)
+}
+
 /// A cash flow.
 ///
-/// Based to the need, it is possibile to create an unlimited, bounded or income
-/// bounded cash flow. Unlimited or unbounded means cash flow without an upper
-/// bound.
+/// A cash flow is a “bucket” that tracks how much money is allocated to a goal
+/// (vacations, emergency fund, …).
 ///
-/// Bounded means the cash flow has an upper bound and that takes into account
-/// expenses **and** income. Let $max_balance$ the upper bound, the constraint
-/// is: $incomes + expenses <= max_balance$
+/// A cash flow can be:
+/// - `Unlimited`: no upper bound.
+/// - `NetCapped`: balance must not exceed `cap_minor`.
+/// - `IncomeCapped`: cumulative incomes must not exceed `cap_minor`.
 ///
-/// Income bounded means the cash flow has an upper bound that it ignores
-/// expenses. **Only** incomes are checked. Let $max_balance$ the upper bound,
-/// the constraint is $incomes <= max_balance$.
+/// **Non-negativity**
+/// For normal flows, `balance` must never go below 0. The only exception is the
+/// special “Unallocated” flow, identified by internal name `unallocated`, which
+/// is allowed to go negative.
+///
+/// If a non-Unallocated flow is already negative due to legacy data, the engine
+/// enters a recovery mode: only operations that increase the balance are
+/// allowed until it reaches `>= 0`.
 ///
 /// ** Examples
 ///
@@ -53,19 +82,52 @@ pub struct CashFlow {
 }
 
 impl CashFlow {
+    pub fn mode(&self) -> FlowMode {
+        match (self.max_balance, self.income_balance) {
+            (None, _) => FlowMode::Unlimited,
+            (Some(cap_minor), None) => FlowMode::NetCapped { cap_minor },
+            (Some(cap_minor), Some(income_total_minor)) => FlowMode::IncomeCapped {
+                cap_minor,
+                income_total_minor,
+            },
+        }
+    }
+
+    pub fn is_unallocated(&self) -> bool {
+        self.name.eq_ignore_ascii_case("unallocated")
+    }
+
     pub fn new(
         name: String,
         balance: i64,
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
         currency: Currency,
-    ) -> Self {
+    ) -> ResultEngine<Self> {
+        if balance < 0 && !name.eq_ignore_ascii_case("unallocated") {
+            return Err(EngineError::InvalidFlow(
+                "flow balance must be >= 0 (except Unallocated)".to_string(),
+            ));
+        }
+        if let Some(cap_minor) = max_balance
+            && cap_minor <= 0
+        {
+            return Err(EngineError::InvalidFlow("cap must be > 0".to_string()));
+        }
+
         let income_balance = match income_bounded {
-            Some(true) => Some(max_balance.unwrap()),
+            Some(true) => {
+                if max_balance.is_none() {
+                    return Err(EngineError::InvalidFlow(
+                        "income-capped flow requires a cap".to_string(),
+                    ));
+                }
+                Some(0)
+            }
             _ => None,
         };
 
-        Self {
+        Ok(Self {
             id: Uuid::new_v4(),
             name,
             balance,
@@ -74,7 +136,7 @@ impl CashFlow {
             currency,
             entries: Vec::new(),
             archived: false,
-        }
+        })
     }
 
     pub fn with_id(
@@ -84,13 +146,31 @@ impl CashFlow {
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
         currency: Currency,
-    ) -> Self {
+    ) -> ResultEngine<Self> {
+        if balance < 0 && !name.eq_ignore_ascii_case("unallocated") {
+            return Err(EngineError::InvalidFlow(
+                "flow balance must be >= 0 (except Unallocated)".to_string(),
+            ));
+        }
+        if let Some(cap_minor) = max_balance
+            && cap_minor <= 0
+        {
+            return Err(EngineError::InvalidFlow("cap must be > 0".to_string()));
+        }
+
         let income_balance = match income_bounded {
-            Some(true) => Some(max_balance.unwrap()),
+            Some(true) => {
+                if max_balance.is_none() {
+                    return Err(EngineError::InvalidFlow(
+                        "income-capped flow requires a cap".to_string(),
+                    ));
+                }
+                Some(0)
+            }
             _ => None,
         };
 
-        Self {
+        Ok(Self {
             id,
             name,
             balance,
@@ -99,7 +179,7 @@ impl CashFlow {
             currency,
             entries: Vec::new(),
             archived: false,
-        }
+        })
     }
 
     pub fn add_entry(
@@ -110,21 +190,41 @@ impl CashFlow {
         date: DateTime<Utc>,
     ) -> ResultEngine<&Entry> {
         let entry = Entry::new(amount_minor, self.currency, category, note, date);
-        // If bounded, check constraints are respected
-        if entry.amount_minor > 0
-            && let Some(bound) = self.max_balance
-        {
-            if let Some(income_balance) = self.income_balance {
-                if income_balance + entry.amount_minor > bound {
-                    return Err(EngineError::MaxBalanceReached(self.name.clone()));
+
+        let new_balance = self.balance + entry.amount_minor;
+        if !self.is_unallocated() {
+            if self.balance >= 0 {
+                if new_balance < 0 {
+                    return Err(EngineError::InsufficientFunds(self.name.clone()));
                 }
-                self.income_balance = Some(income_balance + entry.amount_minor);
-            } else if self.balance + entry.amount_minor > bound {
-                return Err(EngineError::MaxBalanceReached(self.name.clone()));
+            } else if new_balance < self.balance {
+                // Legacy recovery mode: allow only operations that move the balance towards >=
+                // 0.
+                return Err(EngineError::InsufficientFunds(self.name.clone()));
             }
         }
 
-        self.balance += entry.amount_minor;
+        match self.mode() {
+            FlowMode::Unlimited => {}
+            FlowMode::NetCapped { cap_minor } => {
+                if new_balance > cap_minor {
+                    return Err(EngineError::MaxBalanceReached(self.name.clone()));
+                }
+            }
+            FlowMode::IncomeCapped {
+                cap_minor,
+                income_total_minor,
+            } => {
+                let new_income_total =
+                    income_total_minor + income_contribution_minor(entry.amount_minor);
+                if new_income_total > cap_minor {
+                    return Err(EngineError::MaxBalanceReached(self.name.clone()));
+                }
+                self.income_balance = Some(new_income_total);
+            }
+        }
+
+        self.balance = new_balance;
         self.entries.push(entry);
 
         Ok(&self.entries[self.entries.len() - 1])
@@ -138,12 +238,24 @@ impl CashFlow {
         match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
                 let entry = self.entries.remove(index);
-                self.balance -= entry.amount_minor;
+                let new_balance = self.balance - entry.amount_minor;
+                if !self.is_unallocated() {
+                    if self.balance >= 0 {
+                        if new_balance < 0 {
+                            return Err(EngineError::InsufficientFunds(self.name.clone()));
+                        }
+                    } else if new_balance < self.balance {
+                        return Err(EngineError::InsufficientFunds(self.name.clone()));
+                    }
+                }
+                self.balance = new_balance;
 
-                if entry.amount_minor > 0 {
-                    self.income_balance = self
-                        .income_balance
-                        .map(|balance| balance - entry.amount_minor);
+                if let FlowMode::IncomeCapped { .. } = self.mode()
+                    && let Some(income_total_minor) = self.income_balance
+                {
+                    self.income_balance = Some(
+                        income_total_minor - income_contribution_minor(entry.amount_minor),
+                    );
                 }
 
                 Ok(entry)
@@ -161,25 +273,46 @@ impl CashFlow {
     ) -> ResultEngine<&Entry> {
         match self.entries.iter().position(|entry| entry.id == id) {
             Some(index) => {
-                let entry = &mut self.entries[index];
-                let new_balance = self.balance - entry.amount_minor + amount_minor;
+                let old_amount_minor = self.entries[index].amount_minor;
+                let mode = self.mode();
+                let is_unallocated = self.is_unallocated();
 
-                if let Some(bound) = self.max_balance {
-                    if let Some(income_balance) = self.income_balance {
-                        // Check if the entry or the update is an income and if
-                        // the updates does not exceed `max_balance`
-                        if (entry.amount_minor > 0 || amount_minor > 0)
-                            && income_balance - entry.amount_minor + amount_minor > bound
-                        {
+                let new_balance = self.balance - old_amount_minor + amount_minor;
+
+                if !is_unallocated {
+                    if self.balance >= 0 {
+                        if new_balance < 0 {
+                            return Err(EngineError::InsufficientFunds(self.name.clone()));
+                        }
+                    } else if new_balance < self.balance {
+                        return Err(EngineError::InsufficientFunds(self.name.clone()));
+                    }
+                }
+
+                match mode {
+                    FlowMode::Unlimited => {}
+                    FlowMode::NetCapped { cap_minor } => {
+                        if new_balance > cap_minor {
                             return Err(EngineError::MaxBalanceReached(self.name.clone()));
                         }
-                    } else if new_balance > bound {
-                        return Err(EngineError::MaxBalanceReached(self.name.clone()));
+                    }
+                    FlowMode::IncomeCapped {
+                        cap_minor,
+                        income_total_minor,
+                    } => {
+                        let new_income_total = income_total_minor
+                            - income_contribution_minor(old_amount_minor)
+                            + income_contribution_minor(amount_minor);
+                        if new_income_total > cap_minor {
+                            return Err(EngineError::MaxBalanceReached(self.name.clone()));
+                        }
+                        self.income_balance = Some(new_income_total);
                     }
                 }
 
                 self.balance = new_balance;
 
+                let entry = &mut self.entries[index];
                 entry.amount_minor = amount_minor;
                 entry.category = category;
                 entry.note = note;
@@ -269,7 +402,11 @@ mod tests {
 
     use super::*;
 
-    fn bounded() -> CashFlow {
+    fn net_capped() -> CashFlow {
+        CashFlow::new(String::from("Cash"), 0, Some(1000), None, Currency::Eur).unwrap()
+    }
+
+    fn income_capped() -> CashFlow {
         CashFlow::new(
             String::from("Cash"),
             0,
@@ -277,10 +414,28 @@ mod tests {
             Some(true),
             Currency::Eur,
         )
+        .unwrap()
     }
 
     fn unbounded() -> CashFlow {
-        CashFlow::new(String::from("Cash"), 0, None, None, Currency::Eur)
+        CashFlow::new(String::from("Cash"), 0, None, None, Currency::Eur).unwrap()
+    }
+
+    fn unallocated() -> CashFlow {
+        CashFlow::new("unallocated".to_string(), 0, None, None, Currency::Eur).unwrap()
+    }
+
+    fn legacy_negative_flow() -> CashFlow {
+        CashFlow {
+            id: Uuid::new_v4(),
+            name: "Cash".to_string(),
+            balance: -10,
+            max_balance: None,
+            income_balance: None,
+            currency: Currency::Eur,
+            entries: Vec::new(),
+            archived: false,
+        }
     }
 
     #[test]
@@ -348,8 +503,8 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
-    fn fail_add_entry() {
-        let mut flow = bounded();
+    fn fail_net_capped_add_income_over_cap() {
+        let mut flow = net_capped();
         flow.add_entry(
             2044,
             "Income".to_string(),
@@ -361,8 +516,8 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
-    fn fail_update_entry() {
-        let mut flow = bounded();
+    fn fail_net_capped_update_over_cap() {
+        let mut flow = net_capped();
         flow.add_entry(
             123,
             "Income".to_string(),
@@ -382,24 +537,77 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
-    fn fail_update_income_expense_switch() {
-        let mut flow = bounded();
+    #[should_panic(expected = "InsufficientFunds(\"Cash\")")]
+    fn fail_non_unallocated_negative_balance() {
+        let mut flow = unbounded();
         flow.add_entry(
-            -123,
-            "Income".to_string(),
-            "Weekly".to_string(),
+            -1,
+            "Expense".to_string(),
+            "Too much".to_string(),
             Utc.timestamp_opt(0, 0).unwrap(),
         )
         .unwrap();
-        let entry_id = flow.entries[0].id.clone();
+    }
 
-        flow.update_entry(
-            &entry_id,
-            2000,
-            String::from("Income"),
-            String::from("Monthly"),
+    #[test]
+    fn allow_unallocated_negative_balance() {
+        let mut flow = unallocated();
+        flow.add_entry(
+            -1,
+            "Expense".to_string(),
+            "Allowed".to_string(),
+            Utc.timestamp_opt(0, 0).unwrap(),
         )
         .unwrap();
+        assert_eq!(flow.balance, -1);
+    }
+
+    #[test]
+    fn legacy_negative_flow_allows_recovery_incomes_only() {
+        let mut flow = legacy_negative_flow();
+        flow.add_entry(
+            5,
+            "Income".to_string(),
+            "Recover".to_string(),
+            Utc.timestamp_opt(0, 0).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(flow.balance, -5);
+
+        flow.add_entry(
+            -1,
+            "Expense".to_string(),
+            "Should fail".to_string(),
+            Utc.timestamp_opt(0, 0).unwrap(),
+        )
+        .unwrap_err();
+    }
+
+    #[test]
+    fn income_capped_tracks_income_total_on_update_and_delete() {
+        let mut flow = income_capped();
+        flow.add_entry(
+            100,
+            "Income".to_string(),
+            "First".to_string(),
+            Utc.timestamp_opt(0, 0).unwrap(),
+        )
+        .unwrap();
+        flow.add_entry(
+            100,
+            "Income".to_string(),
+            "Second".to_string(),
+            Utc.timestamp_opt(0, 0).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(flow.income_balance, Some(200));
+
+        let entry_id = flow.entries[0].id.clone();
+        flow.update_entry(&entry_id, -50, "Expense".to_string(), "Switch".to_string())
+            .unwrap();
+        assert_eq!(flow.income_balance, Some(100));
+
+        flow.delete_entry(&entry_id).unwrap();
+        assert_eq!(flow.income_balance, Some(100));
     }
 }
