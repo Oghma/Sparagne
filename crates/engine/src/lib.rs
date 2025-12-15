@@ -203,6 +203,21 @@ impl Engine {
         let vault_entry: vault::ActiveModel = (&new_vault).into();
 
         vault_entry.insert(&self.database).await.unwrap();
+
+        // Create the system flow "Unallocated".
+        let mut unallocated = CashFlow::new(
+            cash_flows::UNALLOCATED_INTERNAL_NAME.to_string(),
+            0,
+            None,
+            None,
+            new_vault.currency,
+        )?;
+        unallocated.system_kind = Some(cash_flows::SystemFlowKind::Unallocated);
+        let mut unallocated_model: cash_flows::ActiveModel = (&unallocated).into();
+        unallocated_model.vault_id = ActiveValue::Set(new_vault_id.clone());
+        unallocated_model.insert(&self.database).await.unwrap();
+        new_vault.cash_flow.insert(unallocated.id, unallocated);
+
         self.vaults.insert(new_vault_id.clone(), new_vault);
         Ok(new_vault_id)
     }
@@ -368,9 +383,14 @@ impl EngineBuilder {
                     } else {
                         flow_model.income_balance
                     };
+                let system_kind = flow_model
+                    .system_kind
+                    .as_deref()
+                    .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
                 let flow = CashFlow {
                     id,
                     name: flow_model.name,
+                    system_kind,
                     balance: flow_model.balance,
                     max_balance: flow_model.max_balance,
                     income_balance,

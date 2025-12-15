@@ -8,6 +8,33 @@ use uuid::Uuid;
 use super::{ResultEngine, entry::Entry, error::EngineError};
 use crate::Currency;
 
+pub(crate) const UNALLOCATED_INTERNAL_NAME: &str = "unallocated";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SystemFlowKind {
+    Unallocated,
+}
+
+impl SystemFlowKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unallocated => UNALLOCATED_INTERNAL_NAME,
+        }
+    }
+}
+
+impl TryFrom<&str> for SystemFlowKind {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value == UNALLOCATED_INTERNAL_NAME {
+            Ok(Self::Unallocated)
+        } else {
+            Err(())
+        }
+    }
+}
+
 /// How a cash flow enforces upper bounds.
 ///
 /// Amounts are expressed in integer minor units (e.g. cents for EUR).
@@ -73,6 +100,8 @@ pub struct CashFlow {
     /// flow can be renamed without breaking references.
     pub id: Uuid,
     pub name: String,
+    #[serde(skip)]
+    pub system_kind: Option<SystemFlowKind>,
     pub balance: i64,
     pub max_balance: Option<i64>,
     pub income_balance: Option<i64>,
@@ -94,7 +123,8 @@ impl CashFlow {
     }
 
     pub fn is_unallocated(&self) -> bool {
-        self.name.eq_ignore_ascii_case("unallocated")
+        matches!(self.system_kind, Some(SystemFlowKind::Unallocated))
+            || self.name.eq_ignore_ascii_case(UNALLOCATED_INTERNAL_NAME)
     }
 
     pub fn new(
@@ -104,7 +134,7 @@ impl CashFlow {
         income_bounded: Option<bool>,
         currency: Currency,
     ) -> ResultEngine<Self> {
-        if balance < 0 && !name.eq_ignore_ascii_case("unallocated") {
+        if balance < 0 && !name.eq_ignore_ascii_case(UNALLOCATED_INTERNAL_NAME) {
             return Err(EngineError::InvalidFlow(
                 "flow balance must be >= 0 (except Unallocated)".to_string(),
             ));
@@ -130,6 +160,7 @@ impl CashFlow {
         Ok(Self {
             id: Uuid::new_v4(),
             name,
+            system_kind: None,
             balance,
             max_balance,
             income_balance,
@@ -147,7 +178,7 @@ impl CashFlow {
         income_bounded: Option<bool>,
         currency: Currency,
     ) -> ResultEngine<Self> {
-        if balance < 0 && !name.eq_ignore_ascii_case("unallocated") {
+        if balance < 0 && !name.eq_ignore_ascii_case(UNALLOCATED_INTERNAL_NAME) {
             return Err(EngineError::InvalidFlow(
                 "flow balance must be >= 0 (except Unallocated)".to_string(),
             ));
@@ -173,6 +204,7 @@ impl CashFlow {
         Ok(Self {
             id,
             name,
+            system_kind: None,
             balance,
             max_balance,
             income_balance,
@@ -253,9 +285,8 @@ impl CashFlow {
                 if let FlowMode::IncomeCapped { .. } = self.mode()
                     && let Some(income_total_minor) = self.income_balance
                 {
-                    self.income_balance = Some(
-                        income_total_minor - income_contribution_minor(entry.amount_minor),
-                    );
+                    self.income_balance =
+                        Some(income_total_minor - income_contribution_minor(entry.amount_minor));
                 }
 
                 Ok(entry)
@@ -330,6 +361,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
     pub name: String,
+    pub system_kind: Option<String>,
     pub balance: i64,
     pub max_balance: Option<i64>,
     pub income_balance: Option<i64>,
@@ -371,6 +403,7 @@ impl From<&CashFlow> for ActiveModel {
         Self {
             id: ActiveValue::Set(flow.id.to_string()),
             name: ActiveValue::Set(flow.name.clone()),
+            system_kind: ActiveValue::Set(flow.system_kind.map(|k| k.as_str().to_string())),
             balance: ActiveValue::Set(flow.balance),
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
@@ -386,6 +419,7 @@ impl From<&mut CashFlow> for ActiveModel {
         Self {
             id: ActiveValue::Set(flow.id.to_string()),
             name: ActiveValue::Set(flow.name.clone()),
+            system_kind: ActiveValue::Set(flow.system_kind.map(|k| k.as_str().to_string())),
             balance: ActiveValue::Set(flow.balance),
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
@@ -422,13 +456,21 @@ mod tests {
     }
 
     fn unallocated() -> CashFlow {
-        CashFlow::new("unallocated".to_string(), 0, None, None, Currency::Eur).unwrap()
+        CashFlow::new(
+            UNALLOCATED_INTERNAL_NAME.to_string(),
+            0,
+            None,
+            None,
+            Currency::Eur,
+        )
+        .unwrap()
     }
 
     fn legacy_negative_flow() -> CashFlow {
         CashFlow {
             id: Uuid::new_v4(),
             name: "Cash".to_string(),
+            system_kind: None,
             balance: -10,
             max_balance: None,
             income_balance: None,

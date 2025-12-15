@@ -139,6 +139,11 @@ impl Vault {
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
     ) -> ResultEngine<(Uuid, cash_flows::ActiveModel)> {
+        if name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
+            return Err(EngineError::InvalidFlow(
+                "flow name is reserved".to_string(),
+            ));
+        }
         if self.cash_flow.values().any(|flow| flow.name == name) {
             return Err(EngineError::ExistingKey(name));
         }
@@ -238,10 +243,20 @@ impl Vault {
     ) -> ResultEngine<cash_flows::ActiveModel> {
         match (self.cash_flow.get_mut(flow_id), archive) {
             (Some(flow), true) => {
+                if flow.is_unallocated() {
+                    return Err(EngineError::InvalidFlow(
+                        "cannot archive Unallocated".to_string(),
+                    ));
+                }
                 flow.archive();
                 Ok(flow.into())
             }
             (Some(flow), false) => {
+                if flow.is_unallocated() {
+                    return Err(EngineError::InvalidFlow(
+                        "cannot delete Unallocated".to_string(),
+                    ));
+                }
                 let flow: cash_flows::ActiveModel = flow.into();
                 self.cash_flow.remove(flow_id);
                 Ok(flow)
@@ -367,6 +382,28 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "InvalidFlow(\"flow name is reserved\")")]
+    fn fail_add_reserved_unallocated_name() {
+        let mut vault = Vault::new(String::from("Main"), "foo");
+        vault
+            .new_flow("unallocated".to_string(), 0, None, None)
+            .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "InvalidFlow(\"cannot delete Unallocated\")")]
+    fn fail_delete_unallocated() {
+        let mut vault = Vault::new(String::from("Main"), "foo");
+        let mut flow =
+            CashFlow::new("unallocated".to_string(), 0, None, None, vault.currency).unwrap();
+        flow.system_kind = Some(cash_flows::SystemFlowKind::Unallocated);
+        let id = flow.id;
+        vault.cash_flow.insert(id, flow);
+
+        vault.delete_flow(&id, false).unwrap();
+    }
+
+    #[test]
     #[should_panic(expected = "ExistingKey(\"Cash\")")]
     fn fail_add_same_flow() {
         let (_, mut vault) = vault();
@@ -415,7 +452,7 @@ mod tests {
                 None,
                 Some(flow_name),
                 &entry_id,
-                -500,
+                -100,
                 String::from("Home"),
                 String::from(""),
             )
