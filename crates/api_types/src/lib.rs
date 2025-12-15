@@ -92,3 +92,45 @@ pub mod stats {
         pub total_expenses_minor: i64,
     }
 }
+
+pub mod transaction {
+    use super::*;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum TransactionKind {
+        Income,
+        Expense,
+        TransferWallet,
+        TransferFlow,
+        Refund,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionList {
+        pub vault_id: String,
+        pub flow_id: Option<Uuid>,
+        pub wallet_id: Option<Uuid>,
+        pub limit: Option<u64>,
+        pub include_voided: Option<bool>,
+        pub include_transfers: Option<bool>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionView {
+        pub id: Uuid,
+        pub kind: TransactionKind,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+        /// Signed amount for the selected target (wallet/flow).
+        pub amount_minor: i64,
+        pub category: Option<String>,
+        pub note: Option<String>,
+        pub voided: bool,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionListResponse {
+        pub transactions: Vec<TransactionView>,
+    }
+}
