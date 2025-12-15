@@ -15,12 +15,16 @@ use thiserror::Error;
 pub enum EngineError {
     #[error("Max balance reached!")]
     MaxBalanceReached(String),
+    #[error("Insufficient funds: {0}")]
+    InsufficientFunds(String),
     #[error("\"{0}\" key not found!")]
     KeyNotFound(String),
     #[error("\"{0}\" already present!")]
     ExistingKey(String),
     #[error("Invalid amount: {0}")]
     InvalidAmount(String),
+    #[error("Invalid flow: {0}")]
+    InvalidFlow(String),
     #[error("Currency mismatch: {0}")]
     CurrencyMismatch(String),
 }
