@@ -39,7 +39,7 @@ impl Vault {
         &mut self,
         wallet_id: Option<Uuid>,
         flow_id: Option<Uuid>,
-        amount_cents: i64,
+        amount_minor: i64,
         category: String,
         note: String,
         date: DateTime<Utc>,
@@ -56,7 +56,7 @@ impl Vault {
                         "flow currency mismatch".to_string(),
                     ));
                 }
-                entry = flow.add_entry(amount_cents, category, note, date)?;
+                entry = flow.add_entry(amount_minor, category, note, date)?;
 
                 let Some(wallet) = self.wallet.get_mut(&wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
@@ -77,7 +77,7 @@ impl Vault {
                         "wallet currency mismatch".to_string(),
                     ));
                 }
-                entry = wallet.add_entry(amount_cents, category, note, date)?;
+                entry = wallet.add_entry(amount_minor, category, note, date)?;
             }
             (None, Some(fid)) => {
                 let Some(flow) = self.cash_flow.get_mut(&fid) else {
@@ -88,7 +88,7 @@ impl Vault {
                         "flow currency mismatch".to_string(),
                     ));
                 }
-                entry = flow.add_entry(amount_cents, category, note, date)?;
+                entry = flow.add_entry(amount_minor, category, note, date)?;
             }
             (None, None) => {
                 return Err(EngineError::KeyNotFound(
@@ -148,7 +148,7 @@ impl Vault {
             max_balance,
             income_bounded,
             self.currency,
-        );
+        )?;
         let flow_id = flow.id;
         let flow_mdodel: cash_flows::ActiveModel = (&flow).into();
         self.cash_flow.insert(flow_id, flow);
@@ -169,7 +169,7 @@ impl Vault {
         wallet_id: Option<Uuid>,
         flow_id: Option<Uuid>,
         entry_id: &str,
-        amount_cents: i64,
+        amount_minor: i64,
         category: String,
         note: String,
     ) -> ResultEngine<entry::ActiveModel> {
@@ -186,7 +186,7 @@ impl Vault {
                     ));
                 }
                 entry =
-                    flow.update_entry(entry_id, amount_cents, category.clone(), note.clone())?;
+                    flow.update_entry(entry_id, amount_minor, category.clone(), note.clone())?;
 
                 let Some(wallet) = self.wallet.get_mut(&wid) else {
                     return Err(EngineError::KeyNotFound(wid.to_string()));
@@ -196,7 +196,7 @@ impl Vault {
                         "wallet currency mismatch".to_string(),
                     ));
                 }
-                wallet.update_entry(entry_id, amount_cents, category, note)?;
+                wallet.update_entry(entry_id, amount_minor, category, note)?;
             }
             (Some(wid), None) => {
                 let Some(wallet) = self.wallet.get_mut(&wid) else {
@@ -207,7 +207,7 @@ impl Vault {
                         "wallet currency mismatch".to_string(),
                     ));
                 }
-                entry = wallet.update_entry(entry_id, amount_cents, category, note)?;
+                entry = wallet.update_entry(entry_id, amount_minor, category, note)?;
             }
             (None, Some(fid)) => {
                 let Some(flow) = self.cash_flow.get_mut(&fid) else {
@@ -218,7 +218,7 @@ impl Vault {
                         "flow currency mismatch".to_string(),
                     ));
                 }
-                entry = flow.update_entry(entry_id, amount_cents, category, note)?;
+                entry = flow.update_entry(entry_id, amount_minor, category, note)?;
             }
             (None, None) => {
                 return Err(EngineError::KeyNotFound(
@@ -370,7 +370,8 @@ mod tests {
     #[should_panic(expected = "ExistingKey(\"Cash\")")]
     fn fail_add_same_flow() {
         let (_, mut vault) = vault();
-        vault.new_flow("Cash".to_string(), 100, Some(1000), None)
+        vault
+            .new_flow("Cash".to_string(), 100, Some(1000), None)
             .unwrap();
     }
 
