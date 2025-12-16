@@ -1,10 +1,10 @@
 use chrono::Utc;
-use sea_orm::{ConnectionTrait, Database, Statement};
+use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Statement};
 
 use engine::{Currency, Engine, EngineError};
 use migration::MigratorTrait;
 
-async fn engine_with_db() -> Engine {
+async fn engine_with_db() -> (Engine, DatabaseConnection) {
     let db = Database::connect("sqlite::memory:").await.unwrap();
     migration::Migrator::up(&db, None).await.unwrap();
     let backend = db.get_database_backend();
@@ -15,7 +15,12 @@ async fn engine_with_db() -> Engine {
     ))
     .await
     .unwrap();
-    Engine::builder().database(db).build().await.unwrap()
+    let engine = Engine::builder()
+        .database(db.clone())
+        .build()
+        .await
+        .unwrap();
+    (engine, db)
 }
 
 fn default_wallet_id(vault: &engine::Vault) -> uuid::Uuid {
@@ -28,7 +33,7 @@ fn default_wallet_id(vault: &engine::Vault) -> uuid::Uuid {
 
 #[tokio::test]
 async fn new_vault_creates_unallocated_and_default_wallet() {
-    let mut engine = engine_with_db().await;
+    let (mut engine, _db) = engine_with_db().await;
 
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
@@ -42,14 +47,14 @@ async fn new_vault_creates_unallocated_and_default_wallet() {
 
 #[tokio::test]
 async fn income_expense_void_reverts_balances() {
-    let mut engine = engine_with_db().await;
+    let (mut engine, _db) = engine_with_db().await;
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
         .await
         .unwrap();
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "Vacanze", 0, None, None)
+        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, "alice")
         .await
         .unwrap();
 
@@ -109,7 +114,7 @@ async fn income_expense_void_reverts_balances() {
 
 #[tokio::test]
 async fn transfer_wallet_does_not_touch_flows() {
-    let mut engine = engine_with_db().await;
+    let (mut engine, _db) = engine_with_db().await;
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
         .await
@@ -170,7 +175,7 @@ async fn transfer_wallet_does_not_touch_flows() {
 
 #[tokio::test]
 async fn income_capped_counts_transfers_in() {
-    let mut engine = engine_with_db().await;
+    let (mut engine, _db) = engine_with_db().await;
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
         .await
@@ -187,7 +192,7 @@ async fn income_capped_counts_transfers_in() {
         .unallocated_flow_id()
         .unwrap();
     let capped_flow = engine
-        .new_cash_flow(&vault_id, "Capped", 0, Some(500), Some(true))
+        .new_cash_flow(&vault_id, "Capped", 0, Some(500), Some(true), "alice")
         .await
         .unwrap();
 
@@ -223,14 +228,14 @@ async fn income_capped_counts_transfers_in() {
 
 #[tokio::test]
 async fn update_transaction_updates_balances() {
-    let mut engine = engine_with_db().await;
+    let (mut engine, _db) = engine_with_db().await;
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
         .await
         .unwrap();
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "Vacanze", 0, None, None)
+        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, "alice")
         .await
         .unwrap();
     let wallet_id = {
@@ -283,4 +288,132 @@ async fn update_transaction_updates_balances() {
     assert_eq!(flow.balance, 850);
     let wallet = engine.wallet(wallet_id, &vault_id, "alice").unwrap();
     assert_eq!(wallet.balance, 850);
+}
+
+#[tokio::test]
+async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
+    let (mut engine, db) = engine_with_db().await;
+    let backend = db.get_database_backend();
+
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_cash = {
+        let vault = engine.vault(Some(&vault_id), None, "alice").unwrap();
+        default_wallet_id(vault)
+    };
+    let unallocated_flow = engine
+        .vault(Some(&vault_id), None, "alice")
+        .unwrap()
+        .unallocated_flow_id()
+        .unwrap();
+
+    // Flow allocation (no wallets involved).
+    let capped_flow = engine
+        .new_cash_flow(&vault_id, "Capped", 0, Some(1000), Some(true), "alice")
+        .await
+        .unwrap();
+    engine
+        .transfer_flow(
+            &vault_id,
+            300,
+            unallocated_flow,
+            capped_flow,
+            Some("allocate"),
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    // Normal spend+void path (should be ignored by recompute).
+    let vacanze_flow = engine
+        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, "alice")
+        .await
+        .unwrap();
+    engine
+        .income(
+            &vault_id,
+            1000,
+            Some(vacanze_flow),
+            Some(wallet_cash),
+            Some("salary"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    let expense_id = engine
+        .expense(
+            &vault_id,
+            200,
+            Some(vacanze_flow),
+            Some(wallet_cash),
+            Some("food"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    engine
+        .void_transaction(&vault_id, expense_id, "alice", Utc::now())
+        .await
+        .unwrap();
+
+    // Corrupt denormalized balances directly in DB.
+    db.execute(Statement::from_sql_and_values(
+        backend,
+        "UPDATE wallets SET balance = ? WHERE id = ?;",
+        vec![999i64.into(), wallet_cash.to_string().into()],
+    ))
+    .await
+    .unwrap();
+    for flow_id in [unallocated_flow, capped_flow, vacanze_flow] {
+        db.execute(Statement::from_sql_and_values(
+            backend,
+            "UPDATE cash_flows SET balance = ?, income_balance = ? WHERE id = ?;",
+            vec![999i64.into(), 0i64.into(), flow_id.to_string().into()],
+        ))
+        .await
+        .unwrap();
+    }
+
+    engine.recompute_balances(&vault_id, "alice").await.unwrap();
+
+    // Expected balances:
+    // - wallet_cash: +1000 (income), voided expense ignored
+    // - vacanze_flow: +1000 (income), voided expense ignored
+    // - capped_flow: +300 (transfer in)
+    // - unallocated: -300 (transfer out); untouched by wallet+vacanze income
+    let wallet = engine.wallet(wallet_cash, &vault_id, "alice").unwrap();
+    assert_eq!(wallet.balance, 1000);
+
+    let vacanze = engine.cash_flow(vacanze_flow, &vault_id, "alice").unwrap();
+    assert_eq!(vacanze.balance, 1000);
+
+    let capped = engine.cash_flow(capped_flow, &vault_id, "alice").unwrap();
+    assert_eq!(capped.balance, 300);
+    assert_eq!(capped.income_balance, Some(300));
+
+    let unallocated = engine
+        .cash_flow(unallocated_flow, &vault_id, "alice")
+        .unwrap();
+    assert_eq!(unallocated.balance, -300);
+
+    // Verify DB matches recompute results too.
+    let row = db
+        .query_one(Statement::from_sql_and_values(
+            backend,
+            "SELECT balance FROM wallets WHERE id = ?;",
+            vec![wallet_cash.to_string().into()],
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    let db_balance: i64 = row.try_get("", "balance").unwrap();
+    assert_eq!(db_balance, 1000);
 }
