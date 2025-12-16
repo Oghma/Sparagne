@@ -5,6 +5,7 @@ level = "info"
 
 [server]
 port = 8844
+# bind = "127.0.0.1"
 
 [server.database]
 # Only sqlite3 is supported as database.

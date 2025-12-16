@@ -8,6 +8,7 @@
 //!  [`MaxBalanceReached`]: EngineError::MaxBalanceReached
 //!  [`KeyNotFound`]: EngineError::KeyNotFound
 //!  [`CashFlow`]: super::cash_flows::CashFlow
+use sea_orm::DbErr;
 use thiserror::Error;
 
 /// Engine custom errors.
@@ -27,4 +28,12 @@ pub enum EngineError {
     InvalidFlow(String),
     #[error("Currency mismatch: {0}")]
     CurrencyMismatch(String),
+    #[error("Database error: {0}")]
+    Database(String),
+}
+
+impl From<DbErr> for EngineError {
+    fn from(err: DbErr) -> Self {
+        Self::Database(err.to_string())
+    }
 }

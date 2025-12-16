@@ -753,9 +753,11 @@ name = "engine"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "migration",
  "sea-orm",
  "serde",
  "thiserror 2.0.17",
+ "tokio",
  "uuid",
 ]
 
@@ -2946,6 +2948,7 @@ dependencies = [
  "serde",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -3440,6 +3443,7 @@ dependencies = [
  "csv",
  "engine",
  "reqwest",
+ "serde",
  "serde_json",
  "teloxide",
  "tokio",

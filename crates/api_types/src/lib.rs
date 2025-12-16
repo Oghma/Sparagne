@@ -51,36 +51,6 @@ pub mod user {
     }
 }
 
-pub mod entry {
-    use super::*;
-
-    #[derive(Debug, Serialize, Deserialize)]
-    pub struct EntryNew {
-        pub vault_id: String,
-        pub amount_minor: i64,
-        pub category: String,
-        pub note: String,
-        /// Cash flow id (UUID). Optional for wallet-only entries.
-        pub cash_flow_id: Option<Uuid>,
-        /// Wallet id (UUID). Optional for flow-only entries.
-        pub wallet_id: Option<Uuid>,
-        /// RFC3339 timestamp, including timezone offset (local user time).
-        ///
-        /// Examples:
-        /// - `2025-12-14T12:34:56Z`
-        /// - `2025-12-14T13:34:56+01:00`
-        pub date: DateTime<FixedOffset>,
-    }
-
-    #[derive(Debug, Serialize, Deserialize)]
-    pub struct EntryDelete {
-        pub vault_id: String,
-        pub entry_id: String,
-        pub cash_flow_id: Option<Uuid>,
-        pub wallet_id: Option<Uuid>,
-    }
-}
-
 pub mod stats {
     use super::*;
 
@@ -90,5 +60,114 @@ pub mod stats {
         pub balance_minor: i64,
         pub total_income_minor: i64,
         pub total_expenses_minor: i64,
+    }
+}
+
+pub mod transaction {
+    use super::*;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum TransactionKind {
+        Income,
+        Expense,
+        TransferWallet,
+        TransferFlow,
+        Refund,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionList {
+        pub vault_id: String,
+        pub flow_id: Option<Uuid>,
+        pub wallet_id: Option<Uuid>,
+        pub limit: Option<u64>,
+        pub include_voided: Option<bool>,
+        pub include_transfers: Option<bool>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionView {
+        pub id: Uuid,
+        pub kind: TransactionKind,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+        /// Signed amount for the selected target (wallet/flow).
+        pub amount_minor: i64,
+        pub category: Option<String>,
+        pub note: Option<String>,
+        pub voided: bool,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionListResponse {
+        pub transactions: Vec<TransactionView>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionCreated {
+        pub id: Uuid,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct IncomeNew {
+        pub vault_id: String,
+        pub amount_minor: i64,
+        pub flow_id: Option<Uuid>,
+        pub wallet_id: Option<Uuid>,
+        pub category: Option<String>,
+        pub note: Option<String>,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct ExpenseNew {
+        pub vault_id: String,
+        pub amount_minor: i64,
+        pub flow_id: Option<Uuid>,
+        pub wallet_id: Option<Uuid>,
+        pub category: Option<String>,
+        pub note: Option<String>,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransferWalletNew {
+        pub vault_id: String,
+        pub amount_minor: i64,
+        pub from_wallet_id: Uuid,
+        pub to_wallet_id: Uuid,
+        pub note: Option<String>,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransferFlowNew {
+        pub vault_id: String,
+        pub amount_minor: i64,
+        pub from_flow_id: Uuid,
+        pub to_flow_id: Uuid,
+        pub note: Option<String>,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionUpdate {
+        pub vault_id: String,
+        pub amount_minor: i64,
+        pub category: Option<String>,
+        pub note: Option<String>,
+        pub occurred_at: Option<DateTime<FixedOffset>>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionVoid {
+        pub vault_id: String,
+        /// Optional: if absent, server uses now().
+        pub voided_at: Option<DateTime<FixedOffset>>,
     }
 }

@@ -15,7 +15,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::{cash_flow, entry, statistics, user, vault};
+use crate::{cash_flow, statistics, transactions, user, vault};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
@@ -103,24 +103,56 @@ async fn auth(
     Ok(next.run(request).await)
 }
 
+fn router(state: ServerState) -> Router {
+    Router::new()
+        .route("/cashFlow", get(cash_flow::get))
+        .route("/transactions", get(transactions::list))
+        .route("/income", post(transactions::income_new))
+        .route("/expense", post(transactions::expense_new))
+        .route("/transferWallet", post(transactions::transfer_wallet_new))
+        .route("/transferFlow", post(transactions::transfer_flow_new))
+        .route("/transactions/:id", axum::routing::patch(transactions::update))
+        .route("/transactions/:id/void", post(transactions::void_tx))
+        .route("/vault", post(vault::vault_new).get(vault::get))
+        .route("/user/pair", post(user::pair).delete(user::unpair))
+        .route("/stats", get(statistics::get_stats))
+        .route_layer(middleware::from_fn_with_state(state.clone(), auth))
+        .with_state(state)
+}
+
 pub async fn run(engine: Engine, db: DatabaseConnection) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
+    run_with_listener(engine, db, listener).await;
+}
+
+pub async fn run_with_listener(
+    engine: Engine,
+    db: DatabaseConnection,
+    listener: tokio::net::TcpListener,
+) {
+    let addr = listener.local_addr().unwrap();
+    tracing::info!("Server listening on {}", addr);
+
     let state = ServerState {
         engine: Arc::new(RwLock::new(engine)),
         db,
     };
 
-    let app = Router::new()
-        .route("/cashFlow", get(cash_flow::get))
-        .route("/entry", post(entry::entry_new).delete(entry::entry_delete))
-        .route("/vault", post(vault::vault_new).get(vault::get))
-        .route("/user/pair", post(user::pair).delete(user::unpair))
-        .route("/stats", get(statistics::get_stats))
-        .route_layer(middleware::from_fn_with_state(state.clone(), auth))
-        .with_state(state);
+    axum::serve(listener, router(state)).await.unwrap();
+}
 
-    // TODO: Avoid to hardcode ip
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
-    axum::serve(listener, app).await.unwrap();
+pub fn spawn_with_listener(
+    engine: Engine,
+    db: DatabaseConnection,
+    listener: tokio::net::TcpListener,
+) -> std::net::SocketAddr {
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        run_with_listener(engine, db, listener).await;
+    });
+
+    addr
 }

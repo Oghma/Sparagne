@@ -17,27 +17,16 @@ pub async fn get_stats(
 
     let engine = state.engine.read().await;
     let vault = engine.vault(payload.id.as_deref(), payload.name, &user.username)?;
-
-    let result = vault
-        .cash_flow
-        .iter()
-        .fold((0i64, 0i64, 0i64), |acc, (_, flow)| {
-            let (income, expenses) = flow.entries.iter().fold((acc.0, acc.1), |acc, entry| {
-                if entry.amount_minor >= 0 {
-                    (acc.0 + entry.amount_minor, acc.1)
-                } else {
-                    (acc.0, acc.1 + entry.amount_minor.abs())
-                }
-            });
-            (income, expenses, acc.2 + flow.balance)
-        });
+    let (currency, balance_minor, total_income_minor, total_expenses_minor) = engine
+        .vault_statistics(&vault.id, &user.username, false)
+        .await?;
 
     Ok(Json(Statistic {
-        currency: match vault.currency {
+        currency: match currency {
             engine::Currency::Eur => api_types::Currency::Eur,
         },
-        balance_minor: result.2,
-        total_income_minor: result.0,
-        total_expenses_minor: result.1,
+        balance_minor,
+        total_income_minor,
+        total_expenses_minor,
     }))
 }

@@ -20,3 +20,4 @@ serde = { workspace = true }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
+uuid = { workspace = true }

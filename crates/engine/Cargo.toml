@@ -16,3 +16,7 @@ serde = { workspace = true }
 sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 thiserror = { workspace = true }
 uuid = { workspace = true , features = ["v4", "serde", "macro-diagnostics"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+migration = { workspace = true }

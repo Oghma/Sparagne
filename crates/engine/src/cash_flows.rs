@@ -1,11 +1,10 @@
-//! The module contains the representation of a cash flow.
-use chrono::{DateTime, Utc};
+//! Cash flows.
 
 use sea_orm::entity::{ActiveValue, prelude::*};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{ResultEngine, entry::Entry, error::EngineError};
+use super::{ResultEngine, error::EngineError};
 use crate::Currency;
 
 pub(crate) const UNALLOCATED_INTERNAL_NAME: &str = "unallocated";
@@ -106,7 +105,6 @@ pub struct CashFlow {
     pub max_balance: Option<i64>,
     pub income_balance: Option<i64>,
     pub currency: Currency,
-    pub entries: Vec<Entry>,
     pub archived: bool,
 }
 
@@ -165,7 +163,6 @@ impl CashFlow {
             max_balance,
             income_balance,
             currency,
-            entries: Vec::new(),
             archived: false,
         })
     }
@@ -209,22 +206,20 @@ impl CashFlow {
             max_balance,
             income_balance,
             currency,
-            entries: Vec::new(),
             archived: false,
         })
     }
 
-    pub fn add_entry(
+    pub fn apply_leg_change(
         &mut self,
-        amount_minor: i64,
-        category: String,
-        note: String,
-        date: DateTime<Utc>,
-    ) -> ResultEngine<&Entry> {
-        let entry = Entry::new(amount_minor, self.currency, category, note, date);
+        old_amount_minor: i64,
+        new_amount_minor: i64,
+    ) -> ResultEngine<()> {
+        let mode = self.mode();
+        let is_unallocated = self.is_unallocated();
+        let new_balance = self.balance - old_amount_minor + new_amount_minor;
 
-        let new_balance = self.balance + entry.amount_minor;
-        if !self.is_unallocated() {
+        if !is_unallocated {
             if self.balance >= 0 {
                 if new_balance < 0 {
                     return Err(EngineError::InsufficientFunds(self.name.clone()));
@@ -236,7 +231,7 @@ impl CashFlow {
             }
         }
 
-        match self.mode() {
+        match mode {
             FlowMode::Unlimited => {}
             FlowMode::NetCapped { cap_minor } => {
                 if new_balance > cap_minor {
@@ -247,8 +242,9 @@ impl CashFlow {
                 cap_minor,
                 income_total_minor,
             } => {
-                let new_income_total =
-                    income_total_minor + income_contribution_minor(entry.amount_minor);
+                let new_income_total = income_total_minor
+                    - income_contribution_minor(old_amount_minor)
+                    + income_contribution_minor(new_amount_minor);
                 if new_income_total > cap_minor {
                     return Err(EngineError::MaxBalanceReached(self.name.clone()));
                 }
@@ -257,101 +253,11 @@ impl CashFlow {
         }
 
         self.balance = new_balance;
-        self.entries.push(entry);
-
-        Ok(&self.entries[self.entries.len() - 1])
+        Ok(())
     }
 
     pub fn archive(&mut self) {
         self.archived = true;
-    }
-
-    pub fn delete_entry(&mut self, id: &str) -> ResultEngine<Entry> {
-        match self.entries.iter().position(|entry| entry.id == id) {
-            Some(index) => {
-                let entry = self.entries.remove(index);
-                let new_balance = self.balance - entry.amount_minor;
-                if !self.is_unallocated() {
-                    if self.balance >= 0 {
-                        if new_balance < 0 {
-                            return Err(EngineError::InsufficientFunds(self.name.clone()));
-                        }
-                    } else if new_balance < self.balance {
-                        return Err(EngineError::InsufficientFunds(self.name.clone()));
-                    }
-                }
-                self.balance = new_balance;
-
-                if let FlowMode::IncomeCapped { .. } = self.mode()
-                    && let Some(income_total_minor) = self.income_balance
-                {
-                    self.income_balance =
-                        Some(income_total_minor - income_contribution_minor(entry.amount_minor));
-                }
-
-                Ok(entry)
-            }
-            None => Err(EngineError::KeyNotFound(id.to_string())),
-        }
-    }
-
-    pub fn update_entry(
-        &mut self,
-        id: &str,
-        amount_minor: i64,
-        category: String,
-        note: String,
-    ) -> ResultEngine<&Entry> {
-        match self.entries.iter().position(|entry| entry.id == id) {
-            Some(index) => {
-                let old_amount_minor = self.entries[index].amount_minor;
-                let mode = self.mode();
-                let is_unallocated = self.is_unallocated();
-
-                let new_balance = self.balance - old_amount_minor + amount_minor;
-
-                if !is_unallocated {
-                    if self.balance >= 0 {
-                        if new_balance < 0 {
-                            return Err(EngineError::InsufficientFunds(self.name.clone()));
-                        }
-                    } else if new_balance < self.balance {
-                        return Err(EngineError::InsufficientFunds(self.name.clone()));
-                    }
-                }
-
-                match mode {
-                    FlowMode::Unlimited => {}
-                    FlowMode::NetCapped { cap_minor } => {
-                        if new_balance > cap_minor {
-                            return Err(EngineError::MaxBalanceReached(self.name.clone()));
-                        }
-                    }
-                    FlowMode::IncomeCapped {
-                        cap_minor,
-                        income_total_minor,
-                    } => {
-                        let new_income_total = income_total_minor
-                            - income_contribution_minor(old_amount_minor)
-                            + income_contribution_minor(amount_minor);
-                        if new_income_total > cap_minor {
-                            return Err(EngineError::MaxBalanceReached(self.name.clone()));
-                        }
-                        self.income_balance = Some(new_income_total);
-                    }
-                }
-
-                self.balance = new_balance;
-
-                let entry = &mut self.entries[index];
-                entry.amount_minor = amount_minor;
-                entry.category = category;
-                entry.note = note;
-
-                Ok(entry)
-            }
-            None => Err(EngineError::KeyNotFound(id.to_string())),
-        }
     }
 }
 
@@ -372,8 +278,6 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::entry::Entity")]
-    Entries,
     #[sea_orm(
         belongs_to = "super::vault::Entity",
         from = "Column::VaultId",
@@ -382,12 +286,6 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     Vaults,
-}
-
-impl Related<super::entry::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Entries.def()
-    }
 }
 
 impl Related<super::vault::Entity> for Entity {
@@ -432,8 +330,6 @@ impl From<&mut CashFlow> for ActiveModel {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
-
     use super::*;
 
     fn net_capped() -> CashFlow {
@@ -475,181 +371,82 @@ mod tests {
             max_balance: None,
             income_balance: None,
             currency: Currency::Eur,
-            entries: Vec::new(),
             archived: false,
         }
     }
 
     #[test]
-    fn add_entry() {
+    fn apply_leg_change() {
         let mut flow = unbounded();
-        flow.add_entry(
-            123,
-            String::from("Income"),
-            String::from("First"),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
-        let entry = &flow.entries[0];
-
-        assert_eq!(flow.name, "Cash".to_string());
+        flow.apply_leg_change(0, 123).unwrap();
         assert_eq!(flow.balance, 123);
-        assert_eq!(entry.amount_minor, 123);
-        assert_eq!(entry.currency, Currency::Eur);
-        assert_eq!(entry.category, "Income".to_string());
     }
 
     #[test]
-    fn delete_entry() {
+    fn apply_leg_change_remove() {
         let mut flow = unbounded();
-        flow.add_entry(
-            123,
-            "Income".to_string(),
-            "Weekly".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
-        let entry_id = flow.entries[0].id.clone();
-        flow.delete_entry(&entry_id).unwrap();
-
+        flow.apply_leg_change(0, 123).unwrap();
+        flow.apply_leg_change(123, 0).unwrap();
         assert_eq!(flow.balance, 0);
-        assert!(flow.entries.is_empty())
     }
 
     #[test]
-    fn update_entry() {
+    fn apply_leg_change_update() {
         let mut flow = unbounded();
-        flow.add_entry(
-            123,
-            "Income".to_string(),
-            "Weekly".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
-        let entry_id = flow.entries[0].id.clone();
-
-        flow.update_entry(
-            &entry_id,
-            1000,
-            String::from("Income"),
-            String::from("Monthly"),
-        )
-        .unwrap();
-        let entry = &flow.entries[0];
-
+        flow.apply_leg_change(0, 123).unwrap();
+        flow.apply_leg_change(123, 1000).unwrap();
         assert_eq!(flow.balance, 1000);
-        assert_eq!(entry.amount_minor, 1000);
-        assert_eq!(entry.category, String::from("Income"));
-        assert_eq!(entry.note, String::from("Monthly"))
     }
 
     #[test]
     #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
     fn fail_net_capped_add_income_over_cap() {
         let mut flow = net_capped();
-        flow.add_entry(
-            2044,
-            "Income".to_string(),
-            "Weekly".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
+        flow.apply_leg_change(0, 2044).unwrap();
     }
 
     #[test]
     #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
     fn fail_net_capped_update_over_cap() {
         let mut flow = net_capped();
-        flow.add_entry(
-            123,
-            "Income".to_string(),
-            "Weekly".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
-        let entry_id = flow.entries[0].id.clone();
-
-        flow.update_entry(
-            &entry_id,
-            2000,
-            String::from("Income"),
-            String::from("Monthly"),
-        )
-        .unwrap();
+        flow.apply_leg_change(0, 123).unwrap();
+        flow.apply_leg_change(123, 2000).unwrap();
     }
 
     #[test]
     #[should_panic(expected = "InsufficientFunds(\"Cash\")")]
     fn fail_non_unallocated_negative_balance() {
         let mut flow = unbounded();
-        flow.add_entry(
-            -1,
-            "Expense".to_string(),
-            "Too much".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
+        flow.apply_leg_change(0, -1).unwrap();
     }
 
     #[test]
     fn allow_unallocated_negative_balance() {
         let mut flow = unallocated();
-        flow.add_entry(
-            -1,
-            "Expense".to_string(),
-            "Allowed".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
+        flow.apply_leg_change(0, -1).unwrap();
         assert_eq!(flow.balance, -1);
     }
 
     #[test]
     fn legacy_negative_flow_allows_recovery_incomes_only() {
         let mut flow = legacy_negative_flow();
-        flow.add_entry(
-            5,
-            "Income".to_string(),
-            "Recover".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
+        flow.apply_leg_change(0, 5).unwrap();
         assert_eq!(flow.balance, -5);
 
-        flow.add_entry(
-            -1,
-            "Expense".to_string(),
-            "Should fail".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap_err();
+        flow.apply_leg_change(0, -1).unwrap_err();
     }
 
     #[test]
     fn income_capped_tracks_income_total_on_update_and_delete() {
         let mut flow = income_capped();
-        flow.add_entry(
-            100,
-            "Income".to_string(),
-            "First".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
-        flow.add_entry(
-            100,
-            "Income".to_string(),
-            "Second".to_string(),
-            Utc.timestamp_opt(0, 0).unwrap(),
-        )
-        .unwrap();
+        flow.apply_leg_change(0, 100).unwrap();
+        flow.apply_leg_change(0, 100).unwrap();
         assert_eq!(flow.income_balance, Some(200));
 
-        let entry_id = flow.entries[0].id.clone();
-        flow.update_entry(&entry_id, -50, "Expense".to_string(), "Switch".to_string())
-            .unwrap();
+        flow.apply_leg_change(100, -50).unwrap();
         assert_eq!(flow.income_balance, Some(100));
 
-        flow.delete_entry(&entry_id).unwrap();
+        flow.apply_leg_change(-50, 0).unwrap();
         assert_eq!(flow.income_balance, Some(100));
     }
 }

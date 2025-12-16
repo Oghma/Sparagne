@@ -3,11 +3,12 @@ use engine::EngineError;
 
 use serde::Serialize;
 pub use server::run;
+pub use server::{run_with_listener, spawn_with_listener};
 
 mod cash_flow;
-mod entry;
 mod server;
 mod statistics;
+mod transactions;
 mod user;
 mod vault;
 
@@ -25,8 +26,12 @@ pub mod types {
         pub use api_types::user::PairUser;
     }
 
-    pub mod entry {
-        pub use api_types::entry::{EntryDelete, EntryNew};
+    pub mod transaction {
+        pub use api_types::transaction::{
+            ExpenseNew, IncomeNew, TransactionCreated, TransactionList, TransactionListResponse,
+            TransactionUpdate, TransactionView, TransactionVoid, TransferFlowNew,
+            TransferWalletNew,
+        };
     }
 
     pub mod stats {
