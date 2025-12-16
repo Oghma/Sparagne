@@ -8,6 +8,7 @@ mod cash_flow;
 mod entry;
 mod server;
 mod statistics;
+mod transactions;
 mod user;
 mod vault;
 
@@ -27,6 +28,12 @@ pub mod types {
 
     pub mod entry {
         pub use api_types::entry::{EntryDelete, EntryNew};
+    }
+
+    pub mod transaction {
+        pub use api_types::transaction::{
+            TransactionList, TransactionListResponse, TransactionView,
+        };
     }
 
     pub mod stats {
