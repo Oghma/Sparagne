@@ -1053,10 +1053,18 @@ impl Engine {
             unallocated.apply_leg_change(0, -balance)?;
         }
         vault.cash_flow.insert(flow_id, flow);
+
         Ok(flow_id)
     }
 
     /// Add a new wallet inside a vault.
+    ///
+    /// `balance_minor` is modeled as an opening transaction against the system
+    /// flow `Unallocated`:
+    /// - if `balance_minor > 0`: an opening `Income`
+    /// - if `balance_minor < 0`: an opening `Expense`
+    ///
+    /// The opening transaction uses `Utc::now()` as `occurred_at`.
     pub async fn new_wallet(
         &mut self,
         vault_id: &str,
@@ -1064,23 +1072,109 @@ impl Engine {
         balance_minor: i64,
         user_id: &str,
     ) -> ResultEngine<Uuid> {
-        let (vault_db_id, currency) = {
+        let occurred_at = Utc::now();
+        let (vault_db_id, currency, unallocated_flow_id) = {
             let vault = self.vault(Some(vault_id), None, user_id)?;
             if vault.wallet.values().any(|w| w.name == name) {
                 return Err(EngineError::ExistingKey(name.to_string()));
             }
-            (vault.id.clone(), vault.currency)
+            (
+                vault.id.clone(),
+                vault.currency,
+                vault.unallocated_flow_id()?,
+            )
         };
 
-        let wallet = Wallet::new(name.to_string(), balance_minor, currency);
+        // Create the wallet with a 0 balance. If `balance_minor != 0`, we represent it
+        // as an opening transaction that affects both the wallet and
+        // Unallocated.
+        let mut wallet = Wallet::new(name.to_string(), 0, currency);
         let wallet_id = wallet.id;
+        let db_tx = self.database.begin().await?;
         let mut wallet_model: wallets::ActiveModel = (&wallet).into();
         wallet_model.vault_id = ActiveValue::Set(vault_db_id);
-        let db_tx = self.database.begin().await?;
         wallet_model.insert(&db_tx).await?;
+
+        if balance_minor != 0 {
+            let (kind, signed_amount) = if balance_minor > 0 {
+                (TransactionKind::Income, balance_minor)
+            } else {
+                (TransactionKind::Expense, balance_minor)
+            };
+            let amount_minor = balance_minor.abs();
+
+            let tx = Transaction::new(
+                vault_id.to_string(),
+                kind,
+                occurred_at,
+                amount_minor,
+                currency,
+                Some("opening".to_string()),
+                Some(format!("opening balance for wallet '{name}'")),
+                user_id.to_string(),
+            )?;
+
+            // Validate Unallocated constraints (it may go negative).
+            let mut unallocated_preview = {
+                let vault = self.vault(Some(vault_id), None, user_id)?;
+                vault
+                    .cash_flow
+                    .get(&unallocated_flow_id)
+                    .ok_or_else(|| {
+                        EngineError::InvalidFlow("missing Unallocated flow".to_string())
+                    })?
+                    .clone()
+            };
+            unallocated_preview.apply_leg_change(0, signed_amount)?;
+
+            let legs = vec![
+                Leg::new(
+                    tx.id,
+                    LegTarget::Wallet { wallet_id },
+                    signed_amount,
+                    currency,
+                ),
+                Leg::new(
+                    tx.id,
+                    LegTarget::Flow {
+                        flow_id: unallocated_flow_id,
+                    },
+                    signed_amount,
+                    currency,
+                ),
+            ];
+
+            transactions::ActiveModel::from(&tx).insert(&db_tx).await?;
+            for leg in &legs {
+                legs::ActiveModel::from(leg).insert(&db_tx).await?;
+            }
+
+            // Update denormalized balances.
+            wallet.apply_leg_change(0, signed_amount);
+            let wallet_balance_model = wallets::ActiveModel {
+                id: ActiveValue::Set(wallet_id.to_string()),
+                balance: ActiveValue::Set(wallet.balance),
+                ..Default::default()
+            };
+            wallet_balance_model.update(&db_tx).await?;
+
+            let unallocated_model = cash_flows::ActiveModel {
+                id: ActiveValue::Set(unallocated_flow_id.to_string()),
+                balance: ActiveValue::Set(unallocated_preview.balance),
+                income_balance: ActiveValue::Set(unallocated_preview.income_balance),
+                ..Default::default()
+            };
+            unallocated_model.update(&db_tx).await?;
+        }
+
         db_tx.commit().await?;
 
         let vault = self.vault_mut(vault_id, user_id)?;
+        if balance_minor != 0
+            && let Some(unallocated) = vault.cash_flow.get_mut(&unallocated_flow_id)
+        {
+            unallocated.apply_leg_change(0, balance_minor)?;
+        }
         vault.wallet.insert(wallet_id, wallet);
         Ok(wallet_id)
     }
@@ -1262,9 +1356,8 @@ impl Engine {
                 }
             }
         } else {
-            let name = vault_name.ok_or_else(|| {
-                EngineError::KeyNotFound("missing vault id or name".to_string())
-            })?;
+            let name = vault_name
+                .ok_or_else(|| EngineError::KeyNotFound("missing vault id or name".to_string()))?;
 
             match self
                 .vaults
@@ -1480,7 +1573,8 @@ impl EngineBuilder {
         let vault_models: Vec<vault::Model> = vault::Entity::find().all(&self.database).await?;
 
         for vault_model in vault_models {
-            let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let vault_currency =
+                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
             let mut flows = HashMap::new();
             let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
