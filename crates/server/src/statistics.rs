@@ -15,9 +15,12 @@ pub async fn get_stats(
         return Err(ServerError::Generic("id or name required".to_string()));
     }
 
-    let engine = state.engine.read().await;
-    let vault = engine.vault(payload.id.as_deref(), payload.name, &user.username)?;
-    let (currency, balance_minor, total_income_minor, total_expenses_minor) = engine
+    let vault = state
+        .engine
+        .vault_snapshot(payload.id.as_deref(), payload.name, &user.username)
+        .await?;
+    let (currency, balance_minor, total_income_minor, total_expenses_minor) = state
+        .engine
         .vault_statistics(&vault.id, &user.username, false)
         .await?;
 

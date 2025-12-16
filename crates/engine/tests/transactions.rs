@@ -33,21 +33,24 @@ fn default_wallet_id(vault: &engine::Vault) -> uuid::Uuid {
 
 #[tokio::test]
 async fn new_vault_creates_unallocated_and_default_wallet() {
-    let (mut engine, _db) = engine_with_db().await;
+    let (engine, _db) = engine_with_db().await;
 
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
         .await
         .unwrap();
 
-    let vault = engine.vault(Some(&vault_id), None, "alice").unwrap();
+    let vault = engine
+        .vault_snapshot(Some(&vault_id), None, "alice")
+        .await
+        .unwrap();
     assert!(vault.cash_flow.values().any(|f| f.is_unallocated()));
     assert!(vault.wallet.values().any(|w| w.name == "Cash"));
 }
 
 #[tokio::test]
 async fn income_expense_void_reverts_balances() {
-    let (mut engine, _db) = engine_with_db().await;
+    let (engine, _db) = engine_with_db().await;
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
         .await
@@ -59,8 +62,11 @@ async fn income_expense_void_reverts_balances() {
         .unwrap();
 
     let wallet_id = {
-        let vault = engine.vault(Some(&vault_id), None, "alice").unwrap();
-        default_wallet_id(vault)
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
     };
 
     engine
@@ -77,9 +83,9 @@ async fn income_expense_void_reverts_balances() {
         .await
         .unwrap();
 
-    let flow = engine.cash_flow(flow_id, &vault_id, "alice").unwrap();
+    let flow = engine.cash_flow(flow_id, &vault_id, "alice").await.unwrap();
     assert_eq!(flow.balance, 1000);
-    let wallet = engine.wallet(wallet_id, &vault_id, "alice").unwrap();
+    let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
     assert_eq!(wallet.balance, 1000);
 
     let expense_id = engine
@@ -96,9 +102,9 @@ async fn income_expense_void_reverts_balances() {
         .await
         .unwrap();
 
-    let flow = engine.cash_flow(flow_id, &vault_id, "alice").unwrap();
+    let flow = engine.cash_flow(flow_id, &vault_id, "alice").await.unwrap();
     assert_eq!(flow.balance, 800);
-    let wallet = engine.wallet(wallet_id, &vault_id, "alice").unwrap();
+    let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
     assert_eq!(wallet.balance, 800);
 
     engine
@@ -106,23 +112,26 @@ async fn income_expense_void_reverts_balances() {
         .await
         .unwrap();
 
-    let flow = engine.cash_flow(flow_id, &vault_id, "alice").unwrap();
+    let flow = engine.cash_flow(flow_id, &vault_id, "alice").await.unwrap();
     assert_eq!(flow.balance, 1000);
-    let wallet = engine.wallet(wallet_id, &vault_id, "alice").unwrap();
+    let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
     assert_eq!(wallet.balance, 1000);
 }
 
 #[tokio::test]
 async fn transfer_wallet_does_not_touch_flows() {
-    let (mut engine, _db) = engine_with_db().await;
+    let (engine, _db) = engine_with_db().await;
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
         .await
         .unwrap();
 
     let wallet_cash = {
-        let vault = engine.vault(Some(&vault_id), None, "alice").unwrap();
-        default_wallet_id(vault)
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
     };
     let wallet_bank = engine
         .new_wallet(&vault_id, "Bank", 0, "alice")
@@ -130,7 +139,8 @@ async fn transfer_wallet_does_not_touch_flows() {
         .unwrap();
 
     let unallocated_flow_id = engine
-        .vault(Some(&vault_id), None, "alice")
+        .vault_snapshot(Some(&vault_id), None, "alice")
+        .await
         .unwrap()
         .unallocated_flow_id()
         .unwrap();
@@ -162,32 +172,37 @@ async fn transfer_wallet_does_not_touch_flows() {
         .await
         .unwrap();
 
-    let cash = engine.wallet(wallet_cash, &vault_id, "alice").unwrap();
-    let bank = engine.wallet(wallet_bank, &vault_id, "alice").unwrap();
+    let cash = engine.wallet(wallet_cash, &vault_id, "alice").await.unwrap();
+    let bank = engine.wallet(wallet_bank, &vault_id, "alice").await.unwrap();
     assert_eq!(cash.balance, 750);
     assert_eq!(bank.balance, 250);
 
     let unallocated = engine
         .cash_flow(unallocated_flow_id, &vault_id, "alice")
+        .await
         .unwrap();
     assert_eq!(unallocated.balance, 1000);
 }
 
 #[tokio::test]
 async fn income_capped_counts_transfers_in() {
-    let (mut engine, _db) = engine_with_db().await;
+    let (engine, _db) = engine_with_db().await;
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
         .await
         .unwrap();
 
     let wallet_id = {
-        let vault = engine.vault(Some(&vault_id), None, "alice").unwrap();
-        default_wallet_id(vault)
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
     };
 
     let from_flow = engine
-        .vault(Some(&vault_id), None, "alice")
+        .vault_snapshot(Some(&vault_id), None, "alice")
+        .await
         .unwrap()
         .unallocated_flow_id()
         .unwrap();
@@ -228,7 +243,7 @@ async fn income_capped_counts_transfers_in() {
 
 #[tokio::test]
 async fn update_transaction_updates_balances() {
-    let (mut engine, _db) = engine_with_db().await;
+    let (engine, _db) = engine_with_db().await;
     let vault_id = engine
         .new_vault("Main", "alice", Some(Currency::Eur))
         .await
@@ -239,8 +254,11 @@ async fn update_transaction_updates_balances() {
         .await
         .unwrap();
     let wallet_id = {
-        let vault = engine.vault(Some(&vault_id), None, "alice").unwrap();
-        default_wallet_id(vault)
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
     };
 
     engine
@@ -284,15 +302,15 @@ async fn update_transaction_updates_balances() {
         .await
         .unwrap();
 
-    let flow = engine.cash_flow(flow_id, &vault_id, "alice").unwrap();
+    let flow = engine.cash_flow(flow_id, &vault_id, "alice").await.unwrap();
     assert_eq!(flow.balance, 850);
-    let wallet = engine.wallet(wallet_id, &vault_id, "alice").unwrap();
+    let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
     assert_eq!(wallet.balance, 850);
 }
 
 #[tokio::test]
 async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
-    let (mut engine, db) = engine_with_db().await;
+    let (engine, db) = engine_with_db().await;
     let backend = db.get_database_backend();
 
     let vault_id = engine
@@ -301,11 +319,15 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
         .unwrap();
 
     let wallet_cash = {
-        let vault = engine.vault(Some(&vault_id), None, "alice").unwrap();
-        default_wallet_id(vault)
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
     };
     let unallocated_flow = engine
-        .vault(Some(&vault_id), None, "alice")
+        .vault_snapshot(Some(&vault_id), None, "alice")
+        .await
         .unwrap()
         .unallocated_flow_id()
         .unwrap();
@@ -389,18 +411,22 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
     // - vacanze_flow: +1000 (income), voided expense ignored
     // - capped_flow: +300 (transfer in)
     // - unallocated: -300 (transfer out); untouched by wallet+vacanze income
-    let wallet = engine.wallet(wallet_cash, &vault_id, "alice").unwrap();
+    let wallet = engine.wallet(wallet_cash, &vault_id, "alice").await.unwrap();
     assert_eq!(wallet.balance, 1000);
 
-    let vacanze = engine.cash_flow(vacanze_flow, &vault_id, "alice").unwrap();
+    let vacanze = engine
+        .cash_flow(vacanze_flow, &vault_id, "alice")
+        .await
+        .unwrap();
     assert_eq!(vacanze.balance, 1000);
 
-    let capped = engine.cash_flow(capped_flow, &vault_id, "alice").unwrap();
+    let capped = engine.cash_flow(capped_flow, &vault_id, "alice").await.unwrap();
     assert_eq!(capped.balance, 300);
     assert_eq!(capped.income_balance, Some(300));
 
     let unallocated = engine
         .cash_flow(unallocated_flow, &vault_id, "alice")
+        .await
         .unwrap();
     assert_eq!(unallocated.balance, -300);
 

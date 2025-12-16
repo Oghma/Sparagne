@@ -13,7 +13,6 @@ use axum_extra::{
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use crate::{cash_flow, statistics, transactions, user, vault};
 use engine::Engine;
@@ -23,7 +22,7 @@ static TELEGRAM_HEADER: axum::http::HeaderName =
 
 #[derive(Clone)]
 pub struct ServerState {
-    pub engine: Arc<RwLock<Engine>>,
+    pub engine: Arc<Engine>,
     pub db: DatabaseConnection,
 }
 
@@ -139,7 +138,7 @@ pub async fn run_with_listener(
     tracing::info!("Server listening on {}", addr);
 
     let state = ServerState {
-        engine: Arc::new(RwLock::new(engine)),
+        engine: Arc::new(engine),
         db,
     };
 

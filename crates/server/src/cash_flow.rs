@@ -11,10 +11,15 @@ pub async fn get(
     State(state): State<ServerState>,
     Json(payload): Json<CashFlowGet>,
 ) -> Result<Json<CashFlow>, ServerError> {
-    let engine = state.engine.read().await;
     let flow = match (payload.id, payload.name.as_deref()) {
-        (Some(id), _) => engine.cash_flow(id, &payload.vault_id, &user.username)?,
-        (None, Some(name)) => engine.cash_flow_by_name(name, &payload.vault_id, &user.username)?,
+        (Some(id), _) => state
+            .engine
+            .cash_flow(id, &payload.vault_id, &user.username)
+            .await?,
+        (None, Some(name)) => state
+            .engine
+            .cash_flow_by_name(name, &payload.vault_id, &user.username)
+            .await?,
         (None, None) => {
             return Err(ServerError::Generic(
                 "cash flow id or name required".to_string(),
@@ -22,5 +27,5 @@ pub async fn get(
         }
     };
 
-    Ok(Json(flow.clone()))
+    Ok(Json(flow))
 }

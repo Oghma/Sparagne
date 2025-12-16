@@ -20,7 +20,7 @@ pub async fn list(
     State(state): State<ServerState>,
     Json(payload): Json<TransactionList>,
 ) -> Result<Json<TransactionListResponse>, ServerError> {
-    let engine = state.engine.read().await;
+    let engine = &state.engine;
 
     let limit = payload.limit.unwrap_or(50);
     let include_voided = payload.include_voided.unwrap_or(false);
@@ -91,9 +91,8 @@ pub async fn income_new(
     State(state): State<ServerState>,
     Json(payload): Json<IncomeNew>,
 ) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
-    let mut engine = state.engine.write().await;
-
-    let id = engine
+    let id = state
+        .engine
         .income(
             &payload.vault_id,
             payload.amount_minor,
@@ -114,9 +113,8 @@ pub async fn expense_new(
     State(state): State<ServerState>,
     Json(payload): Json<ExpenseNew>,
 ) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
-    let mut engine = state.engine.write().await;
-
-    let id = engine
+    let id = state
+        .engine
         .expense(
             &payload.vault_id,
             payload.amount_minor,
@@ -137,9 +135,8 @@ pub async fn transfer_wallet_new(
     State(state): State<ServerState>,
     Json(payload): Json<TransferWalletNew>,
 ) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
-    let mut engine = state.engine.write().await;
-
-    let id = engine
+    let id = state
+        .engine
         .transfer_wallet(
             &payload.vault_id,
             payload.amount_minor,
@@ -159,9 +156,8 @@ pub async fn transfer_flow_new(
     State(state): State<ServerState>,
     Json(payload): Json<TransferFlowNew>,
 ) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
-    let mut engine = state.engine.write().await;
-
-    let id = engine
+    let id = state
+        .engine
         .transfer_flow(
             &payload.vault_id,
             payload.amount_minor,
@@ -182,10 +178,9 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(payload): Json<TransactionUpdate>,
 ) -> Result<StatusCode, ServerError> {
-    let mut engine = state.engine.write().await;
-
     let occurred_at_utc = payload.occurred_at.map(|dt| dt.with_timezone(&Utc));
-    engine
+    state
+        .engine
         .update_transaction(
             &payload.vault_id,
             id,
@@ -206,13 +201,12 @@ pub async fn void_tx(
     Path(id): Path<Uuid>,
     Json(payload): Json<TransactionVoid>,
 ) -> Result<StatusCode, ServerError> {
-    let mut engine = state.engine.write().await;
-
     let voided_at = payload
         .voided_at
         .map(|dt| dt.with_timezone(&Utc))
         .unwrap_or_else(Utc::now);
-    engine
+    state
+        .engine
         .void_transaction(&payload.vault_id, id, &user.username, voided_at)
         .await?;
 

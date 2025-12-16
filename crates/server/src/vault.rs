@@ -11,9 +11,9 @@ pub async fn vault_new(
     State(state): State<ServerState>,
     Json(payload): Json<VaultNew>,
 ) -> Result<Json<Vault>, ServerError> {
-    let mut engine = state.engine.write().await;
     let currency = payload.currency.unwrap_or(api_types::Currency::Eur);
-    let vault_id = engine
+    let vault_id = state
+        .engine
         .new_vault(
             &payload.name,
             &user.username,
@@ -40,8 +40,10 @@ pub async fn get(
         return Err(ServerError::Generic("id or name required".to_string()));
     }
 
-    let engine = state.engine.read().await;
-    let vault = engine.vault(payload.id.as_deref(), payload.name, &user.username)?;
+    let vault = state
+        .engine
+        .vault_snapshot(payload.id.as_deref(), payload.name, &user.username)
+        .await?;
 
     Ok(Json(Vault {
         id: Some(vault.id.clone()),
