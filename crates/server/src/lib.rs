@@ -3,6 +3,7 @@ use engine::EngineError;
 
 use serde::Serialize;
 pub use server::run;
+pub use server::{run_with_listener, spawn_with_listener};
 
 mod cash_flow;
 mod server;

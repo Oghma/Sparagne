@@ -103,13 +103,8 @@ async fn auth(
     Ok(next.run(request).await)
 }
 
-pub async fn run(engine: Engine, db: DatabaseConnection) {
-    let state = ServerState {
-        engine: Arc::new(RwLock::new(engine)),
-        db,
-    };
-
-    let app = Router::new()
+fn router(state: ServerState) -> Router {
+    Router::new()
         .route("/cashFlow", get(cash_flow::get))
         .route("/transactions", get(transactions::list))
         .route("/income", post(transactions::income_new))
@@ -122,11 +117,42 @@ pub async fn run(engine: Engine, db: DatabaseConnection) {
         .route("/user/pair", post(user::pair).delete(user::unpair))
         .route("/stats", get(statistics::get_stats))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth))
-        .with_state(state);
+        .with_state(state)
+}
 
-    // TODO: Avoid to hardcode ip
+pub async fn run(engine: Engine, db: DatabaseConnection) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
-    axum::serve(listener, app).await.unwrap();
+    run_with_listener(engine, db, listener).await;
+}
+
+pub async fn run_with_listener(
+    engine: Engine,
+    db: DatabaseConnection,
+    listener: tokio::net::TcpListener,
+) {
+    let addr = listener.local_addr().unwrap();
+    tracing::info!("Server listening on {}", addr);
+
+    let state = ServerState {
+        engine: Arc::new(RwLock::new(engine)),
+        db,
+    };
+
+    axum::serve(listener, router(state)).await.unwrap();
+}
+
+pub fn spawn_with_listener(
+    engine: Engine,
+    db: DatabaseConnection,
+    listener: tokio::net::TcpListener,
+) -> std::net::SocketAddr {
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        run_with_listener(engine, db, listener).await;
+    });
+
+    addr
 }
