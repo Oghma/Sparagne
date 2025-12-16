@@ -1,0 +1,8 @@
+[default]
+extend-ignore-re = [
+  # Project name / brand.
+  "Sparagne",
+]
+
+[default.extend-words]
+sparagne = "sparagne"
