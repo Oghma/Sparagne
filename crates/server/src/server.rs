@@ -111,7 +111,10 @@ fn router(state: ServerState) -> Router {
         .route("/expense", post(transactions::expense_new))
         .route("/transferWallet", post(transactions::transfer_wallet_new))
         .route("/transferFlow", post(transactions::transfer_flow_new))
-        .route("/transactions/:id", axum::routing::patch(transactions::update))
+        .route(
+            "/transactions/:id",
+            axum::routing::patch(transactions::update),
+        )
         .route("/transactions/:id/void", post(transactions::void_tx))
         .route("/vault", post(vault::vault_new).get(vault::get))
         .route("/user/pair", post(user::pair).delete(user::unpair))
