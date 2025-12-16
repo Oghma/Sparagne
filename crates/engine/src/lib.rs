@@ -1038,6 +1038,54 @@ impl Engine {
         }
         Ok(out)
     }
+
+    /// Lists recent transactions that affect a given wallet.
+    ///
+    /// Returns `(transaction, signed_amount_minor)` where `signed_amount_minor`
+    /// is the leg amount for that wallet.
+    pub async fn list_transactions_for_wallet(
+        &self,
+        vault_id: &str,
+        wallet_id: Uuid,
+        user_id: &str,
+        limit: u64,
+        include_voided: bool,
+        include_transfers: bool,
+    ) -> ResultEngine<Vec<(Transaction, i64)>> {
+        // Authorization check via vault lookup.
+        self.vault(Some(vault_id), None, user_id)?;
+
+        let mut query = legs::Entity::find()
+            .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Wallet.as_str()))
+            .filter(legs::Column::TargetId.eq(wallet_id.to_string()))
+            .join(JoinType::InnerJoin, legs::Relation::Transactions.def())
+            .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+            .order_by_desc(transactions::Column::OccurredAt)
+            .limit(limit);
+
+        if !include_voided {
+            query = query.filter(transactions::Column::VoidedAt.is_null());
+        }
+        if !include_transfers {
+            query = query.filter(transactions::Column::Kind.is_not_in([
+                TransactionKind::TransferWallet.as_str(),
+                TransactionKind::TransferFlow.as_str(),
+            ]));
+        }
+
+        let rows: Vec<(legs::Model, Option<transactions::Model>)> = query
+            .find_also_related(transactions::Entity)
+            .all(&self.database)
+            .await?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for (leg_model, tx_model) in rows {
+            let Some(tx_model) = tx_model else { continue };
+            let tx = Transaction::try_from(tx_model)?;
+            out.push((tx, leg_model.amount_minor));
+        }
+        Ok(out)
+    }
 }
 
 /// The builder for `Engine`

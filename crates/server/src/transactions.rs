@@ -19,27 +19,42 @@ pub async fn list(
     let include_voided = payload.include_voided.unwrap_or(false);
     let include_transfers = payload.include_transfers.unwrap_or(false);
 
-    let Some(flow_id) = payload.flow_id else {
-        return Err(ServerError::Generic(
-            "flow_id required (for now)".to_string(),
-        ));
+    let txs = match (payload.flow_id, payload.wallet_id) {
+        (Some(flow_id), None) => {
+            engine
+                .list_transactions_for_flow(
+                    &payload.vault_id,
+                    flow_id,
+                    &user.username,
+                    limit,
+                    include_voided,
+                    include_transfers,
+                )
+                .await?
+        }
+        (None, Some(wallet_id)) => {
+            engine
+                .list_transactions_for_wallet(
+                    &payload.vault_id,
+                    wallet_id,
+                    &user.username,
+                    limit,
+                    include_voided,
+                    include_transfers,
+                )
+                .await?
+        }
+        (None, None) => {
+            return Err(ServerError::Generic(
+                "either flow_id or wallet_id is required".to_string(),
+            ));
+        }
+        (Some(_), Some(_)) => {
+            return Err(ServerError::Generic(
+                "provide only one of flow_id or wallet_id".to_string(),
+            ));
+        }
     };
-    if payload.wallet_id.is_some() {
-        return Err(ServerError::Generic(
-            "wallet_id is not supported yet".to_string(),
-        ));
-    }
-
-    let txs = engine
-        .list_transactions_for_flow(
-            &payload.vault_id,
-            flow_id,
-            &user.username,
-            limit,
-            include_voided,
-            include_transfers,
-        )
-        .await?;
 
     let utc = FixedOffset::east_opt(0).unwrap();
     let transactions = txs
