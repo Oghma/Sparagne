@@ -13,7 +13,7 @@ pub mod user;
 pub enum GlobalState {
     #[default]
     Idle,
-    InDelete(Vec<(String, Uuid)>),
+    InDelete(Vec<Uuid>),
 }
 
 type GlobalDialogue = Dialogue<GlobalState, InMemStorage<GlobalState>>;
