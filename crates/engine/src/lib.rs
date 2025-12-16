@@ -749,34 +749,135 @@ impl Engine {
         cash_flow_id: Uuid,
         archive: bool,
     ) -> ResultEngine<()> {
-        match self.vaults.get_mut(vault_id) {
-            Some(vault) => {
-                let mut flow_model = vault.delete_flow(&cash_flow_id, archive)?;
-                flow_model.vault_id = ActiveValue::Set(vault.id.clone());
+        // NOTE: this API does not take `user_id` yet; authZ is handled elsewhere for now.
+        // Add ownership checks when we introduce authorization in the engine.
+        let flow = {
+            let vault = self
+                .vaults
+                .get(vault_id)
+                .ok_or_else(|| EngineError::KeyNotFound(vault_id.to_string()))?;
+            vault
+                .cash_flow
+                .get(&cash_flow_id)
+                .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?
+                .clone()
+        };
 
-                if archive {
-                    flow_model.archived = ActiveValue::Set(true);
-                    flow_model.save(&self.database).await.unwrap();
-                } else {
-                    flow_model.delete(&self.database).await.unwrap();
-                }
-                Ok(())
-            }
-            None => Err(EngineError::KeyNotFound(vault_id.to_string())),
+        if flow.is_unallocated() {
+            return Err(EngineError::InvalidFlow(if archive {
+                "cannot archive Unallocated".to_string()
+            } else {
+                "cannot delete Unallocated".to_string()
+            }));
         }
+
+        let db_tx = self.database.begin().await?;
+        if archive {
+            let flow_model = cash_flows::ActiveModel {
+                id: ActiveValue::Set(cash_flow_id.to_string()),
+                archived: ActiveValue::Set(true),
+                ..Default::default()
+            };
+            flow_model.update(&db_tx).await?;
+        } else {
+            cash_flows::Entity::delete_by_id(cash_flow_id.to_string())
+                .exec(&db_tx)
+                .await?;
+        }
+        db_tx.commit().await?;
+
+        // Apply the change to memory only after the DB commit.
+        let vault = self
+            .vaults
+            .get_mut(vault_id)
+            .ok_or_else(|| EngineError::KeyNotFound(vault_id.to_string()))?;
+        if archive {
+            let flow = vault
+                .cash_flow
+                .get_mut(&cash_flow_id)
+                .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+            flow.archived = true;
+        } else {
+            vault.cash_flow.remove(&cash_flow_id);
+        }
+
+        Ok(())
     }
 
     /// Delete or archive a vault
     /// TODO: Add `archive`
     pub async fn delete_vault(&mut self, vault_id: &str) -> ResultEngine<()> {
-        match self.vaults.remove(vault_id) {
-            Some(vault) => {
-                let vault_model: vault::ActiveModel = (&vault).into();
-                vault_model.delete(&self.database).await?;
-                Ok(())
-            }
-            None => Err(EngineError::KeyNotFound(vault_id.to_string())),
-        }
+        // NOTE: this API does not take `user_id` yet; authZ is handled elsewhere for now.
+        // Add ownership checks when we introduce authorization in the engine.
+        let vault_db_id = self
+            .vaults
+            .get(vault_id)
+            .ok_or_else(|| EngineError::KeyNotFound(vault_id.to_string()))?
+            .id
+            .clone();
+
+        // Best-effort cascade delete within one DB transaction.
+        // (FKs currently don't declare ON DELETE CASCADE everywhere, and some
+        // relationships are not FK-backed, so we do it explicitly.)
+        let backend = self.database.get_database_backend();
+        let db_tx = self.database.begin().await?;
+
+        // 1) legs for transactions in this vault
+        db_tx
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "DELETE FROM legs WHERE transaction_id IN (SELECT id FROM transactions WHERE vault_id = ?);",
+                vec![vault_db_id.clone().into()],
+            ))
+            .await?;
+
+        // 2) transactions
+        db_tx
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "DELETE FROM transactions WHERE vault_id = ?;",
+                vec![vault_db_id.clone().into()],
+            ))
+            .await?;
+
+        // 3) flows and wallets
+        // (Legacy) entries table (kept for now) references wallets/flows via FK.
+        db_tx
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "DELETE FROM entries WHERE vault_id = ?;",
+                vec![vault_db_id.clone().into()],
+            ))
+            .await?;
+
+        db_tx
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "DELETE FROM cash_flows WHERE vault_id = ?;",
+                vec![vault_db_id.clone().into()],
+            ))
+            .await?;
+        db_tx
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "DELETE FROM wallets WHERE vault_id = ?;",
+                vec![vault_db_id.clone().into()],
+            ))
+            .await?;
+
+        // 4) vault
+        db_tx
+            .execute(Statement::from_sql_and_values(
+                backend,
+                "DELETE FROM vaults WHERE id = ?;",
+                vec![vault_db_id.clone().into()],
+            ))
+            .await?;
+
+        db_tx.commit().await?;
+
+        self.vaults.remove(vault_id);
+        Ok(())
     }
 
     /// Add a new vault
@@ -791,7 +892,8 @@ impl Engine {
         let new_vault_id = new_vault.id.clone();
         let vault_entry: vault::ActiveModel = (&new_vault).into();
 
-        vault_entry.insert(&self.database).await?;
+        let db_tx = self.database.begin().await?;
+        vault_entry.insert(&db_tx).await?;
 
         // Create the system flow "Unallocated".
         let mut unallocated = CashFlow::new(
@@ -804,15 +906,18 @@ impl Engine {
         unallocated.system_kind = Some(cash_flows::SystemFlowKind::Unallocated);
         let mut unallocated_model: cash_flows::ActiveModel = (&unallocated).into();
         unallocated_model.vault_id = ActiveValue::Set(new_vault_id.clone());
-        unallocated_model.insert(&self.database).await?;
-        new_vault.cash_flow.insert(unallocated.id, unallocated);
+        unallocated_model.insert(&db_tx).await?;
 
         // Create a default wallet ("Cash") so clients can start immediately.
         let default_wallet = Wallet::new("Cash".to_string(), 0, new_vault.currency);
         let default_wallet_id = default_wallet.id;
         let mut default_wallet_model: wallets::ActiveModel = (&default_wallet).into();
         default_wallet_model.vault_id = ActiveValue::Set(new_vault_id.clone());
-        default_wallet_model.insert(&self.database).await?;
+        default_wallet_model.insert(&db_tx).await?;
+
+        db_tx.commit().await?;
+
+        new_vault.cash_flow.insert(unallocated.id, unallocated);
         new_vault.wallet.insert(default_wallet_id, default_wallet);
 
         self.vaults.insert(new_vault_id.clone(), new_vault);
@@ -828,16 +933,45 @@ impl Engine {
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
     ) -> ResultEngine<Uuid> {
-        match self.vaults.get_mut(vault_id) {
-            Some(vault) => {
-                let (id, mut flow) =
-                    vault.new_flow(name.to_string(), balance, max_balance, income_bounded)?;
-                flow.vault_id = ActiveValue::Set(vault.id.clone());
-                flow.insert(&self.database).await?;
-                Ok(id)
+        // NOTE: this API does not take `user_id` yet; authZ is handled elsewhere for now.
+        // Add ownership checks when we introduce authorization in the engine.
+        let (vault_db_id, vault_currency) = {
+            let vault = self
+                .vaults
+                .get(vault_id)
+                .ok_or_else(|| EngineError::KeyNotFound(vault_id.to_string()))?;
+            if name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
+                return Err(EngineError::InvalidFlow(
+                    "flow name is reserved".to_string(),
+                ));
             }
-            None => Err(EngineError::KeyNotFound(vault_id.to_string())),
-        }
+            if vault.cash_flow.values().any(|flow| flow.name == name) {
+                return Err(EngineError::ExistingKey(name.to_string()));
+            }
+            (vault.id.clone(), vault.currency)
+        };
+
+        let flow = CashFlow::new(
+            name.to_string(),
+            balance,
+            max_balance,
+            income_bounded,
+            vault_currency,
+        )?;
+        let flow_id = flow.id;
+
+        let db_tx = self.database.begin().await?;
+        let mut flow_model: cash_flows::ActiveModel = (&flow).into();
+        flow_model.vault_id = ActiveValue::Set(vault_db_id);
+        flow_model.insert(&db_tx).await?;
+        db_tx.commit().await?;
+
+        let vault = self
+            .vaults
+            .get_mut(vault_id)
+            .ok_or_else(|| EngineError::KeyNotFound(vault_id.to_string()))?;
+        vault.cash_flow.insert(flow_id, flow);
+        Ok(flow_id)
     }
 
     /// Add a new wallet inside a vault.
@@ -860,7 +994,9 @@ impl Engine {
         let wallet_id = wallet.id;
         let mut wallet_model: wallets::ActiveModel = (&wallet).into();
         wallet_model.vault_id = ActiveValue::Set(vault_db_id);
-        wallet_model.insert(&self.database).await?;
+        let db_tx = self.database.begin().await?;
+        wallet_model.insert(&db_tx).await?;
+        db_tx.commit().await?;
 
         let vault = self.vault_mut(vault_id, user_id)?;
         vault.wallet.insert(wallet_id, wallet);
@@ -892,7 +1028,9 @@ impl Engine {
                 }
             }
         } else {
-            let name = vault_name.unwrap();
+            let name = vault_name.ok_or_else(|| {
+                EngineError::KeyNotFound("missing vault id or name".to_string())
+            })?;
 
             match self
                 .vaults
@@ -1102,25 +1240,27 @@ impl EngineBuilder {
     }
 
     /// Construct `Engine`
-    pub async fn build(self) -> Engine {
+    pub async fn build(self) -> ResultEngine<Engine> {
         let mut vaults = HashMap::new();
 
-        let vault_models: Vec<vault::Model> =
-            vault::Entity::find().all(&self.database).await.unwrap();
+        let vault_models: Vec<vault::Model> = vault::Entity::find().all(&self.database).await?;
 
         for vault_model in vault_models {
-            let vault_currency =
-                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
             let mut flows = HashMap::new();
             let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
                 .filter(cash_flows::Column::VaultId.eq(vault_model.id.clone()))
                 .all(&self.database)
-                .await
-                .unwrap();
+                .await?;
 
             for flow_model in flow_models {
-                let id = Uuid::parse_str(&flow_model.id).unwrap();
+                let id = Uuid::parse_str(&flow_model.id).map_err(|e| {
+                    EngineError::Database(sea_orm::DbErr::Custom(format!(
+                        "invalid cash_flows.id uuid '{}': {e}",
+                        flow_model.id
+                    )))
+                })?;
                 let system_kind = flow_model
                     .system_kind
                     .as_deref()
@@ -1143,11 +1283,15 @@ impl EngineBuilder {
             let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
                 .filter(wallets::Column::VaultId.eq(vault_model.id.clone()))
                 .all(&self.database)
-                .await
-                .unwrap();
+                .await?;
 
             for wallet_model in wallet_models {
-                let id = Uuid::parse_str(&wallet_model.id).unwrap();
+                let id = Uuid::parse_str(&wallet_model.id).map_err(|e| {
+                    EngineError::Database(sea_orm::DbErr::Custom(format!(
+                        "invalid wallets.id uuid '{}': {e}",
+                        wallet_model.id
+                    )))
+                })?;
                 let wallet = Wallet {
                     id,
                     name: wallet_model.name,
@@ -1172,9 +1316,9 @@ impl EngineBuilder {
             );
         }
 
-        Engine {
+        Ok(Engine {
             vaults,
             database: self.database,
-        }
+        })
     }
 }
