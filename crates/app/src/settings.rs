@@ -21,7 +21,8 @@ pub struct Server {
     pub database: Database,
     /// Bind address for the HTTP server.
     ///
-    /// Examples: `127.0.0.1` (local only), `0.0.0.0` (all interfaces, e.g. docker).
+    /// Examples: `127.0.0.1` (local only), `0.0.0.0` (all interfaces, e.g.
+    /// docker).
     pub bind: Option<String>,
     pub port: u16,
 }

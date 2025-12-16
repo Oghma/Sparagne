@@ -749,8 +749,9 @@ impl Engine {
         cash_flow_id: Uuid,
         archive: bool,
     ) -> ResultEngine<()> {
-        // NOTE: this API does not take `user_id` yet; authZ is handled elsewhere for now.
-        // Add ownership checks when we introduce authorization in the engine.
+        // NOTE: this API does not take `user_id` yet; authZ is handled elsewhere for
+        // now. Add ownership checks when we introduce authorization in the
+        // engine.
         let flow = {
             let vault = self
                 .vaults
@@ -807,8 +808,9 @@ impl Engine {
     /// Delete or archive a vault
     /// TODO: Add `archive`
     pub async fn delete_vault(&mut self, vault_id: &str) -> ResultEngine<()> {
-        // NOTE: this API does not take `user_id` yet; authZ is handled elsewhere for now.
-        // Add ownership checks when we introduce authorization in the engine.
+        // NOTE: this API does not take `user_id` yet; authZ is handled elsewhere for
+        // now. Add ownership checks when we introduce authorization in the
+        // engine.
         let vault_db_id = self
             .vaults
             .get(vault_id)
