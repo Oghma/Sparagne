@@ -1556,7 +1556,7 @@ impl Engine {
         let mut query = legs::Entity::find()
             .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Flow.as_str()))
             .filter(legs::Column::TargetId.eq(flow_id.to_string()))
-            .join(JoinType::InnerJoin, legs::Relation::Transactions.def())
+            .find_also_related(transactions::Entity)
             .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
             .order_by_desc(transactions::Column::OccurredAt)
             .limit(limit);
@@ -1571,10 +1571,7 @@ impl Engine {
             ]));
         }
 
-        let rows: Vec<(legs::Model, Option<transactions::Model>)> = query
-            .find_also_related(transactions::Entity)
-            .all(&db_tx)
-            .await?;
+        let rows: Vec<(legs::Model, Option<transactions::Model>)> = query.all(&db_tx).await?;
 
         let mut out = Vec::with_capacity(rows.len());
         for (leg_model, tx_model) in rows {
@@ -1605,7 +1602,7 @@ impl Engine {
         let mut query = legs::Entity::find()
             .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Wallet.as_str()))
             .filter(legs::Column::TargetId.eq(wallet_id.to_string()))
-            .join(JoinType::InnerJoin, legs::Relation::Transactions.def())
+            .find_also_related(transactions::Entity)
             .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
             .order_by_desc(transactions::Column::OccurredAt)
             .limit(limit);
@@ -1620,10 +1617,7 @@ impl Engine {
             ]));
         }
 
-        let rows: Vec<(legs::Model, Option<transactions::Model>)> = query
-            .find_also_related(transactions::Entity)
-            .all(&db_tx)
-            .await?;
+        let rows: Vec<(legs::Model, Option<transactions::Model>)> = query.all(&db_tx).await?;
 
         let mut out = Vec::with_capacity(rows.len());
         for (leg_model, tx_model) in rows {

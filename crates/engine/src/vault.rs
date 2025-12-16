@@ -181,16 +181,18 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "InvalidFlow(\"flow name is reserved\")")]
     fn fail_add_reserved_unallocated_name() {
         let mut vault = Vault::new(String::from("Main"), "foo");
-        vault
+        let err = vault
             .new_flow("unallocated".to_string(), 0, None, None)
-            .unwrap();
+            .unwrap_err();
+        assert_eq!(
+            err,
+            EngineError::InvalidFlow("flow name is reserved".to_string())
+        );
     }
 
     #[test]
-    #[should_panic(expected = "InvalidFlow(\"cannot delete Unallocated\")")]
     fn fail_delete_unallocated() {
         let mut vault = Vault::new(String::from("Main"), "foo");
         let mut flow =
@@ -199,16 +201,20 @@ mod tests {
         let id = flow.id;
         vault.cash_flow.insert(id, flow);
 
-        vault.delete_flow(&id, false).unwrap();
+        let err = vault.delete_flow(&id, false).unwrap_err();
+        assert_eq!(
+            err,
+            EngineError::InvalidFlow("cannot delete Unallocated".to_string())
+        );
     }
 
     #[test]
-    #[should_panic(expected = "ExistingKey(\"Cash\")")]
     fn fail_add_same_flow() {
         let (_, mut vault) = vault();
-        vault
+        let err = vault
             .new_flow("Cash".to_string(), 100, Some(1000), None)
-            .unwrap();
+            .unwrap_err();
+        assert_eq!(err, EngineError::ExistingKey("Cash".to_string()));
     }
 
     #[test]

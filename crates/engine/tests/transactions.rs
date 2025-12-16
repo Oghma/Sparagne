@@ -3,6 +3,7 @@ use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Statement};
 
 use engine::{Currency, Engine, EngineError};
 use migration::MigratorTrait;
+use uuid::Uuid;
 
 async fn engine_with_db() -> (Engine, DatabaseConnection) {
     let db = Database::connect("sqlite::memory:").await.unwrap();
@@ -21,6 +22,33 @@ async fn engine_with_db() -> (Engine, DatabaseConnection) {
         .await
         .unwrap();
     (engine, db)
+}
+
+async fn engine_with_file_db() -> (Engine, DatabaseConnection, String, std::path::PathBuf) {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/test_dbs");
+    std::fs::create_dir_all(&root).unwrap();
+
+    let path = root.join(format!("engine_{}.db", Uuid::new_v4()));
+    let url = format!("sqlite:{}?mode=rwc", path.display());
+
+    let db = Database::connect(&url).await.unwrap();
+    migration::Migrator::up(&db, None).await.unwrap();
+    let backend = db.get_database_backend();
+    db.execute(Statement::from_sql_and_values(
+        backend,
+        "INSERT INTO users (username, password) VALUES (?, ?)",
+        vec!["alice".into(), "password".into()],
+    ))
+    .await
+    .unwrap();
+    let engine = Engine::builder()
+        .database(db.clone())
+        .build()
+        .await
+        .unwrap();
+
+    (engine, db, url, path)
 }
 
 fn default_wallet_id(vault: &engine::Vault) -> uuid::Uuid {
@@ -442,4 +470,165 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
         .unwrap();
     let db_balance: i64 = row.try_get("", "balance").unwrap();
     assert_eq!(db_balance, 1000);
+}
+
+#[tokio::test]
+async fn expense_on_flow_without_balance_fails() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let flow_id = engine
+        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, "alice")
+        .await
+        .unwrap();
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    let err = engine
+        .expense(
+            &vault_id,
+            1,
+            Some(flow_id),
+            Some(wallet_id),
+            Some("food"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::InsufficientFunds("Vacanze".to_string()));
+}
+
+#[tokio::test]
+async fn list_transactions_excludes_voided_and_transfers_by_default() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    engine
+        .income(
+            &vault_id,
+            1000,
+            None,
+            Some(wallet_id),
+            Some("salary"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let spend_id = engine
+        .expense(
+            &vault_id,
+            100,
+            None,
+            Some(wallet_id),
+            Some("food"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    engine
+        .void_transaction(&vault_id, spend_id, "alice", Utc::now())
+        .await
+        .unwrap();
+
+    // Transfers should be excluded when include_transfers=false.
+    let other_wallet = engine
+        .new_wallet(&vault_id, "Bank", 0, "alice")
+        .await
+        .unwrap();
+    engine
+        .transfer_wallet(
+            &vault_id,
+            50,
+            wallet_id,
+            other_wallet,
+            Some("move"),
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let txs = engine
+        .list_transactions_for_wallet(&vault_id, wallet_id, "alice", 50, false, false)
+        .await
+        .unwrap();
+    assert_eq!(txs.len(), 1);
+    assert_eq!(txs[0].0.kind, engine::TransactionKind::Income);
+
+    let txs = engine
+        .list_transactions_for_wallet(&vault_id, wallet_id, "alice", 50, true, true)
+        .await
+        .unwrap();
+    assert_eq!(txs.len(), 3);
+    assert!(txs.iter().any(|(tx, _)| tx.voided_at.is_some()));
+    assert!(txs
+        .iter()
+        .any(|(tx, _)| tx.kind == engine::TransactionKind::TransferWallet));
+}
+
+#[tokio::test]
+async fn restart_engine_reads_same_state() {
+    let (engine, db, url, path) = engine_with_file_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+    engine
+        .income(
+            &vault_id,
+            1000,
+            None,
+            Some(wallet_id),
+            Some("salary"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    drop(engine);
+    drop(db);
+
+    let db2 = Database::connect(&url).await.unwrap();
+    let engine2 = Engine::builder().database(db2.clone()).build().await.unwrap();
+
+    let wallet = engine2.wallet(wallet_id, &vault_id, "alice").await.unwrap();
+    assert_eq!(wallet.balance, 1000);
+
+    drop(db2);
+    let _ = std::fs::remove_file(path);
 }

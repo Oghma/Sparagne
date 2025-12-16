@@ -399,25 +399,25 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
     fn fail_net_capped_add_income_over_cap() {
         let mut flow = net_capped();
-        flow.apply_leg_change(0, 2044).unwrap();
+        let err = flow.apply_leg_change(0, 2044).unwrap_err();
+        assert_eq!(err, EngineError::MaxBalanceReached("Cash".to_string()));
     }
 
     #[test]
-    #[should_panic(expected = "MaxBalanceReached(\"Cash\")")]
     fn fail_net_capped_update_over_cap() {
         let mut flow = net_capped();
         flow.apply_leg_change(0, 123).unwrap();
-        flow.apply_leg_change(123, 2000).unwrap();
+        let err = flow.apply_leg_change(123, 2000).unwrap_err();
+        assert_eq!(err, EngineError::MaxBalanceReached("Cash".to_string()));
     }
 
     #[test]
-    #[should_panic(expected = "InsufficientFunds(\"Cash\")")]
     fn fail_non_unallocated_negative_balance() {
         let mut flow = unbounded();
-        flow.apply_leg_change(0, -1).unwrap();
+        let err = flow.apply_leg_change(0, -1).unwrap_err();
+        assert_eq!(err, EngineError::InsufficientFunds("Cash".to_string()));
     }
 
     #[test]
