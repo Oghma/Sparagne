@@ -12,7 +12,7 @@ use sea_orm::DbErr;
 use thiserror::Error;
 
 /// Engine custom errors.
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum EngineError {
     #[error("Max balance reached!")]
     MaxBalanceReached(String),
@@ -28,12 +28,22 @@ pub enum EngineError {
     InvalidFlow(String),
     #[error("Currency mismatch: {0}")]
     CurrencyMismatch(String),
-    #[error("Database error: {0}")]
-    Database(String),
+    #[error(transparent)]
+    Database(#[from] DbErr),
 }
 
-impl From<DbErr> for EngineError {
-    fn from(err: DbErr) -> Self {
-        Self::Database(err.to_string())
+impl PartialEq for EngineError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::MaxBalanceReached(a), Self::MaxBalanceReached(b)) => a == b,
+            (Self::InsufficientFunds(a), Self::InsufficientFunds(b)) => a == b,
+            (Self::KeyNotFound(a), Self::KeyNotFound(b)) => a == b,
+            (Self::ExistingKey(a), Self::ExistingKey(b)) => a == b,
+            (Self::InvalidAmount(a), Self::InvalidAmount(b)) => a == b,
+            (Self::InvalidFlow(a), Self::InvalidFlow(b)) => a == b,
+            (Self::CurrencyMismatch(a), Self::CurrencyMismatch(b)) => a == b,
+            (Self::Database(a), Self::Database(b)) => a.to_string() == b.to_string(),
+            _ => false,
+        }
     }
 }
