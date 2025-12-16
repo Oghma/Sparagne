@@ -15,7 +15,7 @@ async fn engine_with_db() -> Engine {
     ))
     .await
     .unwrap();
-    Engine::builder().database(db).build().await
+    Engine::builder().database(db).build().await.unwrap()
 }
 
 fn default_wallet_id(vault: &engine::Vault) -> uuid::Uuid {

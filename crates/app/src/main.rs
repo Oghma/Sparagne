@@ -20,7 +20,11 @@ async fn main() {
             tracing::info!("Found server settings...");
             let db = parse_database(&server.database).await;
 
-            let engine = engine::Engine::builder().database(db.clone()).build().await;
+            let engine = engine::Engine::builder()
+                .database(db.clone())
+                .build()
+                .await
+                .expect("Failed to build engine from database");
             let bind = server.bind.unwrap_or_else(|| "127.0.0.1".to_string());
             let addr = format!("{}:{}", bind, server.port);
             let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
