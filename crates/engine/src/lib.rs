@@ -17,7 +17,6 @@ pub use wallets::Wallet;
 
 mod cash_flows;
 mod currency;
-mod entry;
 mod error;
 mod legs;
 mod money;
