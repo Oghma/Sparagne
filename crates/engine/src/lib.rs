@@ -925,6 +925,12 @@ impl Engine {
     }
 
     /// Add a new cash flow inside a vault.
+    ///
+    /// `balance` represents the initial allocation for the flow and is modeled
+    /// as an opening `TransferFlow` from `Unallocated → this flow` (so
+    /// transfers do not inflate income/expense stats).
+    ///
+    /// The opening transfer uses `Utc::now()` as `occurred_at`.
     pub async fn new_cash_flow(
         &mut self,
         vault_id: &str,
@@ -932,14 +938,17 @@ impl Engine {
         balance: i64,
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
+        user_id: &str,
     ) -> ResultEngine<Uuid> {
-        // NOTE: this API does not take `user_id` yet; authZ is handled elsewhere for now.
-        // Add ownership checks when we introduce authorization in the engine.
-        let (vault_db_id, vault_currency) = {
-            let vault = self
-                .vaults
-                .get(vault_id)
-                .ok_or_else(|| EngineError::KeyNotFound(vault_id.to_string()))?;
+        let occurred_at = Utc::now();
+        if balance < 0 {
+            return Err(EngineError::InvalidAmount(
+                "flow balance must be >= 0".to_string(),
+            ));
+        }
+
+        let (vault_db_id, vault_currency, unallocated_flow_id) = {
+            let vault = self.vault(Some(vault_id), None, user_id)?;
             if name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
                 return Err(EngineError::InvalidFlow(
                     "flow name is reserved".to_string(),
@@ -948,28 +957,101 @@ impl Engine {
             if vault.cash_flow.values().any(|flow| flow.name == name) {
                 return Err(EngineError::ExistingKey(name.to_string()));
             }
-            (vault.id.clone(), vault.currency)
+            (
+                vault.id.clone(),
+                vault.currency,
+                vault.unallocated_flow_id()?,
+            )
         };
 
-        let flow = CashFlow::new(
+        // Create the flow with a 0 balance. If `balance > 0`, we represent it as an
+        // opening allocation transfer from Unallocated → new flow.
+        let mut flow = CashFlow::new(
             name.to_string(),
-            balance,
+            0,
             max_balance,
             income_bounded,
             vault_currency,
         )?;
         let flow_id = flow.id;
 
+        // Validate opening allocation invariants by previewing flow changes.
+        let mut unallocated_preview = {
+            let vault = self.vault(Some(vault_id), None, user_id)?;
+            vault
+                .cash_flow
+                .get(&unallocated_flow_id)
+                .ok_or_else(|| EngineError::InvalidFlow("missing Unallocated flow".to_string()))?
+                .clone()
+        };
+        if balance > 0 {
+            // To-flow must accept +balance (cap/non-negativity), and Unallocated accepts
+            // -balance.
+            flow.apply_leg_change(0, balance)?;
+            unallocated_preview.apply_leg_change(0, -balance)?;
+        }
+
         let db_tx = self.database.begin().await?;
         let mut flow_model: cash_flows::ActiveModel = (&flow).into();
-        flow_model.vault_id = ActiveValue::Set(vault_db_id);
+        flow_model.vault_id = ActiveValue::Set(vault_db_id.clone());
         flow_model.insert(&db_tx).await?;
+
+        if balance > 0 {
+            let tx = Transaction::new(
+                vault_id.to_string(),
+                TransactionKind::TransferFlow,
+                occurred_at,
+                balance,
+                vault_currency,
+                None,
+                Some(format!("opening allocation for flow '{name}'")),
+                user_id.to_string(),
+            )?;
+
+            let legs = vec![
+                Leg::new(
+                    tx.id,
+                    LegTarget::Flow {
+                        flow_id: unallocated_flow_id,
+                    },
+                    -balance,
+                    vault_currency,
+                ),
+                Leg::new(tx.id, LegTarget::Flow { flow_id }, balance, vault_currency),
+            ];
+
+            transactions::ActiveModel::from(&tx).insert(&db_tx).await?;
+            for leg in &legs {
+                legs::ActiveModel::from(leg).insert(&db_tx).await?;
+            }
+
+            // Update denormalized balances.
+            let to_flow_model = cash_flows::ActiveModel {
+                id: ActiveValue::Set(flow_id.to_string()),
+                balance: ActiveValue::Set(flow.balance),
+                income_balance: ActiveValue::Set(flow.income_balance),
+                ..Default::default()
+            };
+            to_flow_model.update(&db_tx).await?;
+
+            let from_flow_model = cash_flows::ActiveModel {
+                id: ActiveValue::Set(unallocated_flow_id.to_string()),
+                balance: ActiveValue::Set(unallocated_preview.balance),
+                income_balance: ActiveValue::Set(unallocated_preview.income_balance),
+                ..Default::default()
+            };
+            from_flow_model.update(&db_tx).await?;
+        }
+
         db_tx.commit().await?;
 
-        let vault = self
-            .vaults
-            .get_mut(vault_id)
-            .ok_or_else(|| EngineError::KeyNotFound(vault_id.to_string()))?;
+        // Update memory only after commit.
+        let vault = self.vault_mut(vault_id, user_id)?;
+        if balance > 0
+            && let Some(unallocated) = vault.cash_flow.get_mut(&unallocated_flow_id)
+        {
+            unallocated.apply_leg_change(0, -balance)?;
+        }
         vault.cash_flow.insert(flow_id, flow);
         Ok(flow_id)
     }
