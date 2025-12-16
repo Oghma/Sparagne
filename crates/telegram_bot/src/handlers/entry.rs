@@ -13,7 +13,7 @@ use teloxide::{
 use crate::{
     ConfigParameters,
     commands::{EntryCommands, UserStatisticsCommands, split_entry},
-    delete_check, get_check, post_check,
+    get_check, post_check,
 };
 
 use super::{GlobalDialogue, GlobalState};
@@ -172,16 +172,15 @@ async fn handle_delete_entry(
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
-    let (user_response, _) = delete_check!(
+    let (user_response, _) = post_check!(
         cfg.client,
-        format!("{}/entry", cfg.server),
+        format!("{}/transactions/{}/void", cfg.server, entry_id),
         user_id,
-        &api_types::entry::EntryDelete {
+        &api_types::transaction::TransactionVoid {
             vault_id: vault.id.unwrap(),
-            entry_id: entry_id.to_string(),
-            cash_flow_id: None,
-            wallet_id: None,
+            voided_at: None,
         },
+        StatusCode::OK,
         "Voce eliminata",
         "Problemi di connessione con il server. Riprova più tardi!"
     );
@@ -412,7 +411,7 @@ async fn send_entry(
         api_types::Currency::Eur => Currency::Eur,
     };
 
-    let mut amount = match Money::parse_major(amount_str, currency) {
+    let amount = match Money::parse_major(amount_str, currency) {
         Ok(v) => v,
         Err(_) => {
             bot.send_message(msg.chat.id, "Importo non valido (es: 10 o 10.50)")
@@ -421,32 +420,46 @@ async fn send_entry(
         }
     };
 
-    if is_expense && amount.is_positive() {
-        amount = -amount;
-    }
+    let amount_minor = amount.minor().abs();
 
-    let success_str = if amount.is_negative() {
-        "Uscita inserita"
+    let endpoint = if is_expense { "expense" } else { "income" };
+    let (user_response, _) = if is_expense {
+        post_check!(
+            client,
+            format!("{}/{}", url, endpoint),
+            user_id,
+            &api_types::transaction::ExpenseNew {
+                vault_id: vault.id.unwrap(),
+                amount_minor,
+                flow_id: Some(flow.id),
+                wallet_id: None,
+                category: Some(category.to_string()),
+                note: Some(note.to_string()),
+                occurred_at: Utc::now().into(),
+            },
+            StatusCode::CREATED,
+            "Uscita inserita",
+            "Problemi di connessione con il server. Riprova più tardi!"
+        )
     } else {
-        "Entrata inserita"
+        post_check!(
+            client,
+            format!("{}/{}", url, endpoint),
+            user_id,
+            &api_types::transaction::IncomeNew {
+                vault_id: vault.id.unwrap(),
+                amount_minor,
+                flow_id: Some(flow.id),
+                wallet_id: None,
+                category: Some(category.to_string()),
+                note: Some(note.to_string()),
+                occurred_at: Utc::now().into(),
+            },
+            StatusCode::CREATED,
+            "Entrata inserita",
+            "Problemi di connessione con il server. Riprova più tardi!"
+        )
     };
-    let (user_response, _) = post_check!(
-        client,
-        format!("{}/entry", url),
-        user_id,
-        &api_types::entry::EntryNew {
-            vault_id: vault.id.unwrap(),
-            amount_minor: amount.minor(),
-            category: category.to_string(),
-            note: note.to_string(),
-            cash_flow_id: Some(flow.id),
-            wallet_id: None,
-            date: Utc::now().into(),
-        },
-        StatusCode::CREATED,
-        success_str,
-        "Problemi di connessione con il server. Riprova più tardi!"
-    );
 
     bot.send_message(msg.chat.id, user_response).await?;
 

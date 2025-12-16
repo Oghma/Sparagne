@@ -5,7 +5,6 @@ use serde::Serialize;
 pub use server::run;
 
 mod cash_flow;
-mod entry;
 mod server;
 mod statistics;
 mod transactions;
@@ -26,13 +25,11 @@ pub mod types {
         pub use api_types::user::PairUser;
     }
 
-    pub mod entry {
-        pub use api_types::entry::{EntryDelete, EntryNew};
-    }
-
     pub mod transaction {
         pub use api_types::transaction::{
-            TransactionList, TransactionListResponse, TransactionView,
+            ExpenseNew, IncomeNew, TransactionCreated, TransactionList, TransactionListResponse,
+            TransactionUpdate, TransactionView, TransactionVoid, TransferFlowNew,
+            TransferWalletNew,
         };
     }
 

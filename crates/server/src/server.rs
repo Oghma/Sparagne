@@ -15,7 +15,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::{cash_flow, entry, statistics, transactions, user, vault};
+use crate::{cash_flow, statistics, transactions, user, vault};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
@@ -111,8 +111,13 @@ pub async fn run(engine: Engine, db: DatabaseConnection) {
 
     let app = Router::new()
         .route("/cashFlow", get(cash_flow::get))
-        .route("/entry", post(entry::entry_new).delete(entry::entry_delete))
         .route("/transactions", get(transactions::list))
+        .route("/income", post(transactions::income_new))
+        .route("/expense", post(transactions::expense_new))
+        .route("/transferWallet", post(transactions::transfer_wallet_new))
+        .route("/transferFlow", post(transactions::transfer_flow_new))
+        .route("/transactions/:id", axum::routing::patch(transactions::update))
+        .route("/transactions/:id/void", post(transactions::void_tx))
         .route("/vault", post(vault::vault_new).get(vault::get))
         .route("/user/pair", post(user::pair).delete(user::unpair))
         .route("/stats", get(statistics::get_stats))
