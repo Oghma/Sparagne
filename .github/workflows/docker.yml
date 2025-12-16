@@ -1,0 +1,35 @@
+name: Docker
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "Dockerfile"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "config/**"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "config/**"
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build --pull --tag sparagne:ci .
