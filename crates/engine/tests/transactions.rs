@@ -1,7 +1,7 @@
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Statement};
 
-use engine::{Currency, Engine, EngineError};
+use engine::{Currency, Engine, EngineError, TransactionKind, TransactionListFilter};
 use migration::MigratorTrait;
 use uuid::Uuid;
 
@@ -498,7 +498,17 @@ async fn update_income_can_retarget_wallet_and_flow_and_keeps_metadata_when_omit
     assert_eq!(f2.balance, 100);
 
     let txs = engine
-        .list_transactions_for_wallet(&vault_id, wallet2, "alice", 10, false, true)
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet2,
+            "alice",
+            10,
+            &TransactionListFilter {
+                include_voided: false,
+                include_transfers: true,
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
     let updated = txs.into_iter().find(|(tx, _)| tx.id == tx_id).unwrap().0;
@@ -670,7 +680,17 @@ async fn update_transfer_wallet_can_change_endpoints_and_amount() {
 
     // Note cleared by whitespace patch.
     let txs = engine
-        .list_transactions_for_wallet(&vault_id, wallet_card, "alice", 10, false, true)
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_card,
+            "alice",
+            10,
+            &TransactionListFilter {
+                include_voided: false,
+                include_transfers: true,
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
     let updated = txs.into_iter().find(|(tx, _)| tx.id == tx_id).unwrap().0;
@@ -1028,14 +1048,34 @@ async fn list_transactions_excludes_voided_and_transfers_by_default() {
         .unwrap();
 
     let txs = engine
-        .list_transactions_for_wallet(&vault_id, wallet_id, "alice", 50, false, false)
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            50,
+            &TransactionListFilter {
+                include_voided: false,
+                include_transfers: false,
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
     assert_eq!(txs.len(), 1);
     assert_eq!(txs[0].0.kind, engine::TransactionKind::Income);
 
     let txs = engine
-        .list_transactions_for_wallet(&vault_id, wallet_id, "alice", 50, true, true)
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            50,
+            &TransactionListFilter {
+                include_voided: true,
+                include_transfers: true,
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
     assert_eq!(txs.len(), 3);
@@ -1087,8 +1127,11 @@ async fn transactions_pagination_cursor_walks_pages_without_duplicates() {
                 "alice",
                 2,
                 cursor.as_deref(),
-                false,
-                true,
+                &TransactionListFilter {
+                    include_voided: false,
+                    include_transfers: true,
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
@@ -1330,12 +1373,136 @@ async fn category_and_note_are_trimmed_and_empty_becomes_none() {
         .unwrap();
 
     let txs = engine
-        .list_transactions_for_wallet(&vault_id, wallet_id, "alice", 10, false, true)
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            10,
+            &TransactionListFilter {
+                include_voided: false,
+                include_transfers: true,
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
     assert_eq!(txs.len(), 1);
     assert_eq!(txs[0].0.category, None);
     assert_eq!(txs[0].0.note.as_deref(), Some("hello"));
+}
+
+#[tokio::test]
+async fn list_transactions_can_filter_by_date_range_and_kinds() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    let t0 = Utc.with_ymd_and_hms(2025, 1, 1, 10, 0, 0).unwrap();
+    let t1 = Utc.with_ymd_and_hms(2025, 1, 2, 10, 0, 0).unwrap();
+    let t2 = Utc.with_ymd_and_hms(2025, 1, 3, 10, 0, 0).unwrap();
+
+    let id0 = engine
+        .income(&vault_id, 10, None, Some(wallet_id), None, None, None, "alice", t0)
+        .await
+        .unwrap();
+    let id1 = engine
+        .expense(&vault_id, 5, None, Some(wallet_id), None, None, None, "alice", t1)
+        .await
+        .unwrap();
+    let id2 = engine
+        .refund(&vault_id, 2, None, Some(wallet_id), None, None, None, "alice", t2)
+        .await
+        .unwrap();
+    let _ = (id0, id1, id2);
+
+    // [t1, t2) includes only the expense at t1.
+    let filter = TransactionListFilter {
+        from: Some(t1),
+        to: Some(t2),
+        include_transfers: true,
+        ..Default::default()
+    };
+    let txs = engine
+        .list_transactions_for_wallet(&vault_id, wallet_id, "alice", 50, &filter)
+        .await
+        .unwrap();
+    assert_eq!(txs.len(), 1);
+    assert_eq!(txs[0].0.kind, TransactionKind::Expense);
+
+    // Kinds allow-list.
+    let filter = TransactionListFilter {
+        kinds: Some(vec![TransactionKind::Income]),
+        include_transfers: true,
+        ..Default::default()
+    };
+    let txs = engine
+        .list_transactions_for_wallet(&vault_id, wallet_id, "alice", 50, &filter)
+        .await
+        .unwrap();
+    assert_eq!(txs.len(), 1);
+    assert_eq!(txs[0].0.kind, TransactionKind::Income);
+}
+
+#[tokio::test]
+async fn list_transactions_rejects_invalid_filters() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    let from = Utc.with_ymd_and_hms(2025, 1, 2, 0, 0, 0).unwrap();
+    let to = Utc.with_ymd_and_hms(2025, 1, 2, 0, 0, 0).unwrap();
+
+    let err = engine
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            10,
+            &TransactionListFilter {
+                from: Some(from),
+                to: Some(to),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::InvalidAmount("invalid range: from must be < to".to_string())
+    );
+
+    let err = engine
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            10,
+            &TransactionListFilter {
+                kinds: Some(vec![]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::InvalidAmount("kinds must not be empty".to_string()));
 }
 
 #[tokio::test]

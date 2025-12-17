@@ -153,6 +153,21 @@ impl TransactionsCursor {
     }
 }
 
+/// Filters for listing transactions.
+///
+/// `from` is inclusive and `to` is exclusive (`[from, to)`), both in UTC.
+#[derive(Clone, Debug, Default)]
+pub struct TransactionListFilter {
+    pub from: Option<DateTime<Utc>>,
+    pub to: Option<DateTime<Utc>>,
+    /// If present, acts as an allow-list of kinds to return.
+    pub kinds: Option<Vec<TransactionKind>>,
+    /// If true, includes voided transactions (default: false).
+    pub include_voided: bool,
+    /// If true, includes internal transfers (default: false).
+    pub include_transfers: bool,
+}
+
 #[derive(Debug)]
 pub struct Engine {
     database: DatabaseConnection,
@@ -2660,8 +2675,7 @@ impl Engine {
         flow_id: Uuid,
         user_id: &str,
         limit: u64,
-        include_voided: bool,
-        include_transfers: bool,
+        filter: &TransactionListFilter,
     ) -> ResultEngine<Vec<(Transaction, i64)>> {
         let (items, _next) = self
             .list_transactions_for_flow_page(
@@ -2670,8 +2684,7 @@ impl Engine {
                 user_id,
                 limit,
                 None,
-                include_voided,
-                include_transfers,
+                filter,
             )
             .await?;
         Ok(items)
@@ -2687,12 +2700,24 @@ impl Engine {
         user_id: &str,
         limit: u64,
         cursor: Option<&str>,
-        include_voided: bool,
-        include_transfers: bool,
+        filter: &TransactionListFilter,
     ) -> ResultEngine<(Vec<(Transaction, i64)>, Option<String>)> {
         let db_tx = self.database.begin().await?;
         self.require_flow_read(&db_tx, vault_id, flow_id, user_id)
             .await?;
+
+        if let (Some(from), Some(to)) = (filter.from, filter.to)
+            && from >= to
+        {
+            return Err(EngineError::InvalidAmount(
+                "invalid range: from must be < to".to_string(),
+            ));
+        }
+        if filter.kinds.as_ref().is_some_and(|k| k.is_empty()) {
+            return Err(EngineError::InvalidAmount(
+                "kinds must not be empty".to_string(),
+            ));
+        }
 
         let limit_plus_one = limit.saturating_add(1);
         let mut query = legs::Entity::find()
@@ -2703,6 +2728,13 @@ impl Engine {
             .order_by_desc(transactions::Column::OccurredAt)
             .order_by_desc(transactions::Column::Id)
             .limit(limit_plus_one);
+
+        if let Some(from) = filter.from {
+            query = query.filter(transactions::Column::OccurredAt.gte(from));
+        }
+        if let Some(to) = filter.to {
+            query = query.filter(transactions::Column::OccurredAt.lt(to));
+        }
 
         if let Some(cursor) = cursor {
             let cursor = TransactionsCursor::decode(cursor)?;
@@ -2717,10 +2749,13 @@ impl Engine {
             );
         }
 
-        if !include_voided {
+        if !filter.include_voided {
             query = query.filter(transactions::Column::VoidedAt.is_null());
         }
-        if !include_transfers {
+        if let Some(kinds) = &filter.kinds {
+            let kinds: Vec<String> = kinds.iter().map(|k| k.as_str().to_string()).collect();
+            query = query.filter(transactions::Column::Kind.is_in(kinds));
+        } else if !filter.include_transfers {
             query = query.filter(transactions::Column::Kind.is_not_in([
                 TransactionKind::TransferWallet.as_str(),
                 TransactionKind::TransferFlow.as_str(),
@@ -2761,8 +2796,7 @@ impl Engine {
         wallet_id: Uuid,
         user_id: &str,
         limit: u64,
-        include_voided: bool,
-        include_transfers: bool,
+        filter: &TransactionListFilter,
     ) -> ResultEngine<Vec<(Transaction, i64)>> {
         let (items, _next) = self
             .list_transactions_for_wallet_page(
@@ -2771,8 +2805,7 @@ impl Engine {
                 user_id,
                 limit,
                 None,
-                include_voided,
-                include_transfers,
+                filter,
             )
             .await?;
         Ok(items)
@@ -2788,11 +2821,23 @@ impl Engine {
         user_id: &str,
         limit: u64,
         cursor: Option<&str>,
-        include_voided: bool,
-        include_transfers: bool,
+        filter: &TransactionListFilter,
     ) -> ResultEngine<(Vec<(Transaction, i64)>, Option<String>)> {
         let db_tx = self.database.begin().await?;
         self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+
+        if let (Some(from), Some(to)) = (filter.from, filter.to)
+            && from >= to
+        {
+            return Err(EngineError::InvalidAmount(
+                "invalid range: from must be < to".to_string(),
+            ));
+        }
+        if filter.kinds.as_ref().is_some_and(|k| k.is_empty()) {
+            return Err(EngineError::InvalidAmount(
+                "kinds must not be empty".to_string(),
+            ));
+        }
 
         let limit_plus_one = limit.saturating_add(1);
         let mut query = legs::Entity::find()
@@ -2803,6 +2848,13 @@ impl Engine {
             .order_by_desc(transactions::Column::OccurredAt)
             .order_by_desc(transactions::Column::Id)
             .limit(limit_plus_one);
+
+        if let Some(from) = filter.from {
+            query = query.filter(transactions::Column::OccurredAt.gte(from));
+        }
+        if let Some(to) = filter.to {
+            query = query.filter(transactions::Column::OccurredAt.lt(to));
+        }
 
         if let Some(cursor) = cursor {
             let cursor = TransactionsCursor::decode(cursor)?;
@@ -2817,10 +2869,13 @@ impl Engine {
             );
         }
 
-        if !include_voided {
+        if !filter.include_voided {
             query = query.filter(transactions::Column::VoidedAt.is_null());
         }
-        if !include_transfers {
+        if let Some(kinds) = &filter.kinds {
+            let kinds: Vec<String> = kinds.iter().map(|k| k.as_str().to_string()).collect();
+            query = query.filter(transactions::Column::Kind.is_in(kinds));
+        } else if !filter.include_transfers {
             query = query.filter(transactions::Column::Kind.is_not_in([
                 TransactionKind::TransferWallet.as_str(),
                 TransactionKind::TransferFlow.as_str(),
@@ -2849,6 +2904,45 @@ impl Engine {
 
         db_tx.commit().await?;
         Ok((out, next_cursor))
+    }
+
+    /// Returns a single transaction with all its legs (detail view).
+    ///
+    /// Authorization: requires vault read access.
+    pub async fn transaction_with_legs(
+        &self,
+        vault_id: &str,
+        transaction_id: Uuid,
+        user_id: &str,
+    ) -> ResultEngine<Transaction> {
+        let db_tx = self.database.begin().await?;
+        self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+
+        let tx_model = transactions::Entity::find_by_id(transaction_id.to_string())
+            .one(&db_tx)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("transaction not exists".to_string()))?;
+        if tx_model.vault_id != vault_id {
+            return Err(EngineError::KeyNotFound(
+                "transaction not exists".to_string(),
+            ));
+        }
+
+        let mut tx = Transaction::try_from(tx_model)?;
+
+        let leg_models: Vec<legs::Model> = legs::Entity::find()
+            .filter(legs::Column::TransactionId.eq(transaction_id.to_string()))
+            .order_by_asc(legs::Column::Id)
+            .all(&db_tx)
+            .await?;
+        let mut out = Vec::with_capacity(leg_models.len());
+        for leg_model in leg_models {
+            out.push(Leg::try_from(leg_model)?);
+        }
+        tx.legs = out;
+
+        db_tx.commit().await?;
+        Ok(tx)
     }
 }
 
