@@ -14,7 +14,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 use std::sync::Arc;
 
-use crate::{cash_flow, statistics, transactions, user, vault};
+use crate::{cash_flow, memberships, statistics, transactions, user, vault};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
@@ -117,6 +117,22 @@ fn router(state: ServerState) -> Router {
         )
         .route("/transactions/:id/void", post(transactions::void_tx))
         .route("/vault", post(vault::vault_new).get(vault::get))
+        .route(
+            "/vault/:vault_id/members",
+            get(memberships::list_vault_members).post(memberships::upsert_vault_member),
+        )
+        .route(
+            "/vault/:vault_id/members/:username",
+            axum::routing::delete(memberships::remove_vault_member),
+        )
+        .route(
+            "/vault/:vault_id/flows/:flow_id/members",
+            get(memberships::list_flow_members).post(memberships::upsert_flow_member),
+        )
+        .route(
+            "/vault/:vault_id/flows/:flow_id/members/:username",
+            axum::routing::delete(memberships::remove_flow_member),
+        )
         .route("/user/pair", post(user::pair).delete(user::unpair))
         .route("/stats", get(statistics::get_stats))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth))

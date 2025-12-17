@@ -5,6 +5,7 @@ use serde::Serialize;
 pub use server::{run, run_with_listener, spawn_with_listener};
 
 mod cash_flow;
+mod memberships;
 mod server;
 mod statistics;
 mod transactions;
