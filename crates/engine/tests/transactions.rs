@@ -9,13 +9,15 @@ async fn engine_with_db() -> (Engine, DatabaseConnection) {
     let db = Database::connect("sqlite::memory:").await.unwrap();
     migration::Migrator::up(&db, None).await.unwrap();
     let backend = db.get_database_backend();
-    db.execute(Statement::from_sql_and_values(
-        backend,
-        "INSERT INTO users (username, password) VALUES (?, ?)",
-        vec!["alice".into(), "password".into()],
-    ))
-    .await
-    .unwrap();
+    for username in ["alice", "bob", "charlie"] {
+        db.execute(Statement::from_sql_and_values(
+            backend,
+            "INSERT INTO users (username, password) VALUES (?, ?)",
+            vec![username.into(), "password".into()],
+        ))
+        .await
+        .unwrap();
+    }
     let engine = Engine::builder()
         .database(db.clone())
         .build()
@@ -35,13 +37,15 @@ async fn engine_with_file_db() -> (Engine, DatabaseConnection, String, std::path
     let db = Database::connect(&url).await.unwrap();
     migration::Migrator::up(&db, None).await.unwrap();
     let backend = db.get_database_backend();
-    db.execute(Statement::from_sql_and_values(
-        backend,
-        "INSERT INTO users (username, password) VALUES (?, ?)",
-        vec!["alice".into(), "password".into()],
-    ))
-    .await
-    .unwrap();
+    for username in ["alice", "bob", "charlie"] {
+        db.execute(Statement::from_sql_and_values(
+            backend,
+            "INSERT INTO users (username, password) VALUES (?, ?)",
+            vec![username.into(), "password".into()],
+        ))
+        .await
+        .unwrap();
+    }
     let engine = Engine::builder()
         .database(db.clone())
         .build()
@@ -1002,4 +1006,118 @@ async fn flow_membership_editor_can_transfer_between_shared_flows_without_vault_
     let f2_model = engine.cash_flow(f2, &vault_id, "bob").await.unwrap();
     assert_eq!(f1_model.balance, 50);
     assert_eq!(f2_model.balance, 50);
+}
+
+#[tokio::test]
+async fn vault_owner_can_manage_vault_members() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    engine
+        .upsert_vault_member(&vault_id, "bob", "viewer", "alice")
+        .await
+        .unwrap();
+
+    // Members can read the vault snapshot (role is enforced only for writes).
+    engine
+        .vault_snapshot(Some(&vault_id), None, "bob")
+        .await
+        .unwrap();
+
+    let members = engine.list_vault_members(&vault_id, "alice").await.unwrap();
+    assert!(members.iter().any(|(u, r)| u == "alice" && r == "owner"));
+    assert!(members.iter().any(|(u, r)| u == "bob" && r == "viewer"));
+
+    // Role update via upsert.
+    engine
+        .upsert_vault_member(&vault_id, "bob", "editor", "alice")
+        .await
+        .unwrap();
+    let members = engine.list_vault_members(&vault_id, "alice").await.unwrap();
+    assert!(members.iter().any(|(u, r)| u == "bob" && r == "editor"));
+
+    engine
+        .remove_vault_member(&vault_id, "bob", "alice")
+        .await
+        .unwrap();
+    let members = engine.list_vault_members(&vault_id, "alice").await.unwrap();
+    assert!(!members.iter().any(|(u, _)| u == "bob"));
+}
+
+#[tokio::test]
+async fn non_owner_cannot_manage_memberships() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    // Even if "bob" is a member, only the vault owner can manage memberships.
+    engine
+        .upsert_vault_member(&vault_id, "bob", "viewer", "alice")
+        .await
+        .unwrap();
+
+    let err = engine
+        .upsert_vault_member(&vault_id, "charlie", "viewer", "bob")
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::KeyNotFound("vault not exists".to_string()));
+
+    let err = engine
+        .remove_vault_member(&vault_id, "bob", "bob")
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::KeyNotFound("vault not exists".to_string()));
+}
+
+#[tokio::test]
+async fn vault_owner_can_manage_flow_members_and_unallocated_is_not_shareable() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let flow_id = engine
+        .new_cash_flow(&vault_id, "SharedFlow", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    engine
+        .upsert_flow_member(&vault_id, flow_id, "bob", "viewer", "alice")
+        .await
+        .unwrap();
+
+    let members = engine
+        .list_flow_members(&vault_id, flow_id, "alice")
+        .await
+        .unwrap();
+    assert!(members.iter().any(|(u, r)| u == "bob" && r == "viewer"));
+
+    engine
+        .remove_flow_member(&vault_id, flow_id, "bob", "alice")
+        .await
+        .unwrap();
+    let members = engine
+        .list_flow_members(&vault_id, flow_id, "alice")
+        .await
+        .unwrap();
+    assert!(!members.iter().any(|(u, _)| u == "bob"));
+
+    // Unallocated flow cannot be shared.
+    let unallocated = engine
+        .vault_snapshot(Some(&vault_id), None, "alice")
+        .await
+        .unwrap()
+        .unallocated_flow_id()
+        .unwrap();
+    let err = engine
+        .upsert_flow_member(&vault_id, unallocated, "bob", "viewer", "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::InvalidFlow("cannot share Unallocated".to_string()));
 }
