@@ -30,6 +30,34 @@ mod wallets;
 
 type ResultEngine<T> = Result<T, EngineError>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MembershipRole {
+    Owner,
+    Editor,
+    Viewer,
+}
+
+impl MembershipRole {
+    fn can_write(self) -> bool {
+        matches!(self, Self::Owner | Self::Editor)
+    }
+}
+
+impl TryFrom<&str> for MembershipRole {
+    type Error = EngineError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "owner" => Ok(Self::Owner),
+            "editor" => Ok(Self::Editor),
+            "viewer" => Ok(Self::Viewer),
+            other => Err(EngineError::InvalidAmount(format!(
+                "invalid membership role: {other}"
+            ))),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct TransactionsCursor {
     occurred_at: DateTime<Utc>,
@@ -62,6 +90,135 @@ impl Engine {
     /// Return a builder for `Engine`. Help to build the struct.
     pub fn builder() -> EngineBuilder {
         EngineBuilder::default()
+    }
+
+    async fn vault_membership_role(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<Option<MembershipRole>> {
+        let row = vault_memberships::Entity::find_by_id((vault_id.to_string(), user_id.to_string()))
+            .one(db)
+            .await?;
+        row.as_ref()
+            .map(|m| MembershipRole::try_from(m.role.as_str()))
+            .transpose()
+    }
+
+    async fn require_vault_by_id_write(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<vault::Model> {
+        let model = self.require_vault_by_id(db, vault_id, user_id).await?;
+        if model.user_id == user_id {
+            return Ok(model);
+        }
+        let role = self
+            .vault_membership_role(db, vault_id, user_id)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+        if !role.can_write() {
+            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+        }
+        Ok(model)
+    }
+
+    async fn flow_membership_role(
+        &self,
+        db: &DatabaseTransaction,
+        flow_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<Option<MembershipRole>> {
+        let row = flow_memberships::Entity::find_by_id((flow_id.to_string(), user_id.to_string()))
+            .one(db)
+            .await?;
+        row.as_ref()
+            .map(|m| MembershipRole::try_from(m.role.as_str()))
+            .transpose()
+    }
+
+    async fn has_vault_read_access(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<bool> {
+        let Some(vault) = vault::Entity::find_by_id(vault_id.to_string()).one(db).await? else {
+            return Ok(false);
+        };
+        if vault.user_id == user_id {
+            return Ok(true);
+        }
+        Ok(self
+            .vault_membership_role(db, vault_id, user_id)
+            .await?
+            .is_some())
+    }
+
+    async fn has_vault_write_access(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<bool> {
+        let Some(vault) = vault::Entity::find_by_id(vault_id.to_string()).one(db).await? else {
+            return Ok(false);
+        };
+        if vault.user_id == user_id {
+            return Ok(true);
+        }
+        let role = self.vault_membership_role(db, vault_id, user_id).await?;
+        Ok(role.is_some_and(|r| r.can_write()))
+    }
+
+    async fn require_flow_read(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+        flow_id: Uuid,
+        user_id: &str,
+    ) -> ResultEngine<cash_flows::Model> {
+        let Some(model) = cash_flows::Entity::find_by_id(flow_id.to_string())
+            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+            .one(db)
+            .await?
+        else {
+            return Err(EngineError::KeyNotFound("cash_flow not exists".to_string()));
+        };
+
+        if self.has_vault_read_access(db, vault_id, user_id).await? {
+            return Ok(model);
+        }
+        let role = self
+            .flow_membership_role(db, &model.id, user_id)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+        let _ = role;
+        Ok(model)
+    }
+
+    async fn require_flow_write(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+        flow_id: Uuid,
+        user_id: &str,
+    ) -> ResultEngine<cash_flows::Model> {
+        let model = self.require_flow_read(db, vault_id, flow_id, user_id).await?;
+        if self.has_vault_write_access(db, vault_id, user_id).await? {
+            return Ok(model);
+        }
+        let role = self
+            .flow_membership_role(db, &model.id, user_id)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+        if !role.can_write() {
+            return Err(EngineError::KeyNotFound("cash_flow not exists".to_string()));
+        }
+        Ok(model)
     }
 
     async fn require_vault_by_id(
