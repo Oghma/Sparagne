@@ -404,7 +404,13 @@ async fn update_transaction_updates_balances() {
             &vault_id,
             expense_id,
             "alice",
-            150,
+            Some(150),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
             Some("food"),
             Some("bigger lunch"),
             None,
@@ -416,6 +422,355 @@ async fn update_transaction_updates_balances() {
     assert_eq!(flow.balance, 850);
     let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
     assert_eq!(wallet.balance, 850);
+}
+
+#[tokio::test]
+async fn update_income_can_retarget_wallet_and_flow_and_keeps_metadata_when_omitted() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let flow1 = engine
+        .new_cash_flow(&vault_id, "F1", 0, None, None, "alice")
+        .await
+        .unwrap();
+    let flow2 = engine
+        .new_cash_flow(&vault_id, "F2", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    let wallet1 = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+    let wallet2 = engine
+        .new_wallet(&vault_id, "Bank", 0, "alice")
+        .await
+        .unwrap();
+
+    let tx_id = engine
+        .income(
+            &vault_id,
+            100,
+            Some(flow1),
+            Some(wallet1),
+            Some("salary"),
+            Some("  hi  "),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    engine
+        .update_transaction(
+            &vault_id,
+            tx_id,
+            "alice",
+            None,
+            Some(wallet2),
+            Some(flow2),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let w1 = engine.wallet(wallet1, &vault_id, "alice").await.unwrap();
+    let w2 = engine.wallet(wallet2, &vault_id, "alice").await.unwrap();
+    assert_eq!(w1.balance, 0);
+    assert_eq!(w2.balance, 100);
+
+    let f1 = engine.cash_flow(flow1, &vault_id, "alice").await.unwrap();
+    let f2 = engine.cash_flow(flow2, &vault_id, "alice").await.unwrap();
+    assert_eq!(f1.balance, 0);
+    assert_eq!(f2.balance, 100);
+
+    let txs = engine
+        .list_transactions_for_wallet(&vault_id, wallet2, "alice", 10, false, true)
+        .await
+        .unwrap();
+    let updated = txs.into_iter().find(|(tx, _)| tx.id == tx_id).unwrap().0;
+    assert_eq!(updated.category.as_deref(), Some("salary"));
+    assert_eq!(updated.note.as_deref(), Some("hi"));
+}
+
+#[tokio::test]
+async fn update_expense_retarget_flow_fails_if_insufficient_and_is_atomic() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let flow1 = engine
+        .new_cash_flow(&vault_id, "F1", 0, None, None, "alice")
+        .await
+        .unwrap();
+    let flow2 = engine
+        .new_cash_flow(&vault_id, "F2", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    let wallet1 = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    engine
+        .income(
+            &vault_id,
+            100,
+            Some(flow1),
+            Some(wallet1),
+            None,
+            None,
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    let expense_id = engine
+        .expense(
+            &vault_id,
+            80,
+            Some(flow1),
+            Some(wallet1),
+            None,
+            None,
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let err = engine
+        .update_transaction(
+            &vault_id,
+            expense_id,
+            "alice",
+            None,
+            None,
+            Some(flow2),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::InsufficientFunds("F2".to_string()));
+
+    // No state change on failure.
+    let w1 = engine.wallet(wallet1, &vault_id, "alice").await.unwrap();
+    assert_eq!(w1.balance, 20);
+    let f1 = engine.cash_flow(flow1, &vault_id, "alice").await.unwrap();
+    assert_eq!(f1.balance, 20);
+    let f2 = engine.cash_flow(flow2, &vault_id, "alice").await.unwrap();
+    assert_eq!(f2.balance, 0);
+}
+
+#[tokio::test]
+async fn update_transfer_wallet_can_change_endpoints_and_amount() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_cash = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+    let wallet_bank = engine
+        .new_wallet(&vault_id, "Bank", 0, "alice")
+        .await
+        .unwrap();
+    let wallet_card = engine
+        .new_wallet(&vault_id, "Card", 0, "alice")
+        .await
+        .unwrap();
+
+    engine
+        .income(
+            &vault_id,
+            100,
+            None,
+            Some(wallet_cash),
+            None,
+            None,
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let tx_id = engine
+        .transfer_wallet(
+            &vault_id,
+            50,
+            wallet_cash,
+            wallet_bank,
+            Some(" move "),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    engine
+        .update_transaction(
+            &vault_id,
+            tx_id,
+            "alice",
+            Some(30),
+            None,
+            None,
+            Some(wallet_bank),
+            Some(wallet_card),
+            None,
+            None,
+            None,
+            Some("   "),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let cash = engine.wallet(wallet_cash, &vault_id, "alice").await.unwrap();
+    let bank = engine.wallet(wallet_bank, &vault_id, "alice").await.unwrap();
+    let card = engine.wallet(wallet_card, &vault_id, "alice").await.unwrap();
+    assert_eq!(cash.balance, 100);
+    assert_eq!(bank.balance, -30);
+    assert_eq!(card.balance, 30);
+
+    // Note cleared by whitespace patch.
+    let txs = engine
+        .list_transactions_for_wallet(&vault_id, wallet_card, "alice", 10, false, true)
+        .await
+        .unwrap();
+    let updated = txs.into_iter().find(|(tx, _)| tx.id == tx_id).unwrap().0;
+    assert_eq!(updated.note, None);
+}
+
+#[tokio::test]
+async fn update_transfer_flow_can_change_endpoints_and_amount() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_cash = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+    // Seed Unallocated with funds so we can allocate.
+    engine
+        .income(
+            &vault_id,
+            100,
+            None,
+            Some(wallet_cash),
+            None,
+            None,
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let f1 = engine
+        .new_cash_flow(&vault_id, "F1", 0, None, None, "alice")
+        .await
+        .unwrap();
+    let f2 = engine
+        .new_cash_flow(&vault_id, "F2", 0, None, None, "alice")
+        .await
+        .unwrap();
+    let f3 = engine
+        .new_cash_flow(&vault_id, "F3", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    let unallocated = engine
+        .vault_snapshot(Some(&vault_id), None, "alice")
+        .await
+        .unwrap()
+        .unallocated_flow_id()
+        .unwrap();
+    engine
+        .transfer_flow(
+            &vault_id,
+            60,
+            unallocated,
+            f1,
+            Some("seed"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let tx_id = engine
+        .transfer_flow(&vault_id, 40, f1, f2, Some("move"), None, "alice", Utc::now())
+        .await
+        .unwrap();
+
+    engine
+        .update_transaction(
+            &vault_id,
+            tx_id,
+            "alice",
+            Some(10),
+            None,
+            None,
+            None,
+            None,
+            Some(f1),
+            Some(f3),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let f1m = engine.cash_flow(f1, &vault_id, "alice").await.unwrap();
+    let f2m = engine.cash_flow(f2, &vault_id, "alice").await.unwrap();
+    let f3m = engine.cash_flow(f3, &vault_id, "alice").await.unwrap();
+    assert_eq!(f1m.balance, 50);
+    assert_eq!(f2m.balance, 0);
+    assert_eq!(f3m.balance, 10);
 }
 
 #[tokio::test]
