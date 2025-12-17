@@ -231,17 +231,13 @@ impl Engine {
             .one(db)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if model.user_id != user_id {
-            let has_membership = vault_memberships::Entity::find_by_id((
-                vault_id.to_string(),
-                user_id.to_string(),
-            ))
-            .one(db)
-            .await?
-            .is_some();
-            if !has_membership {
-                return Err(EngineError::KeyNotFound("vault not exists".to_string()));
-            }
+        if model.user_id != user_id
+            && self
+                .vault_membership_role(db, vault_id, user_id)
+                .await?
+                .is_none()
+        {
+            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
         }
         Ok(model)
     }
@@ -252,24 +248,31 @@ impl Engine {
         vault_name: &str,
         user_id: &str,
     ) -> ResultEngine<vault::Model> {
-        let model = vault::Entity::find()
+        let models: Vec<vault::Model> = vault::Entity::find()
             .filter(vault::Column::Name.eq(vault_name.to_string()))
-            .one(db)
-            .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if model.user_id != user_id {
-            let has_membership = vault_memberships::Entity::find_by_id((
-                model.id.clone(),
-                user_id.to_string(),
-            ))
-            .one(db)
-            .await?
-            .is_some();
-            if !has_membership {
-                return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+            .all(db)
+            .await?;
+
+        let mut out: Option<vault::Model> = None;
+        for model in models {
+            let allowed = if model.user_id == user_id {
+                true
+            } else {
+                self.vault_membership_role(db, &model.id, user_id)
+                    .await?
+                    .is_some()
+            };
+            if allowed {
+                if out.is_some() {
+                    return Err(EngineError::InvalidAmount(
+                        "ambiguous vault name".to_string(),
+                    ));
+                }
+                out = Some(model);
             }
         }
-        Ok(model)
+
+        out.ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))
     }
 
     async fn unallocated_flow_id(
@@ -604,7 +607,9 @@ impl Engine {
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
         let resolved_flow_id = self.resolve_flow_id(&db_tx, vault_id, flow_id).await?;
         let resolved_wallet_id = self.resolve_wallet_id(&db_tx, vault_id, wallet_id).await?;
@@ -660,7 +665,9 @@ impl Engine {
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
         let resolved_flow_id = self.resolve_flow_id(&db_tx, vault_id, flow_id).await?;
         let resolved_wallet_id = self.resolve_wallet_id(&db_tx, vault_id, wallet_id).await?;
@@ -719,7 +726,9 @@ impl Engine {
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
         let resolved_flow_id = self.resolve_flow_id(&db_tx, vault_id, flow_id).await?;
         let resolved_wallet_id = self.resolve_wallet_id(&db_tx, vault_id, wallet_id).await?;
@@ -778,7 +787,9 @@ impl Engine {
             ));
         }
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
         // Ensure wallets belong to the vault.
         self.resolve_wallet_id(&db_tx, vault_id, Some(from_wallet_id))
@@ -839,12 +850,24 @@ impl Engine {
             ));
         }
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = vault::Entity::find_by_id(vault_id.to_string())
+            .one(&db_tx)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
-        // Ensure flows belong to the vault.
-        self.resolve_flow_id(&db_tx, vault_id, Some(from_flow_id))
-            .await?;
-        self.resolve_flow_id(&db_tx, vault_id, Some(to_flow_id)).await?;
+        // AuthZ:
+        // - Vault owner/editor can transfer between any flows in the vault.
+        // - Otherwise, user must be editor/owner on both flows (via flow_memberships).
+        if self.has_vault_write_access(&db_tx, vault_id, user_id).await? {
+            self.resolve_flow_id(&db_tx, vault_id, Some(from_flow_id))
+                .await?;
+            self.resolve_flow_id(&db_tx, vault_id, Some(to_flow_id)).await?;
+        } else {
+            self.require_flow_write(&db_tx, vault_id, from_flow_id, user_id)
+                .await?;
+            self.require_flow_write(&db_tx, vault_id, to_flow_id, user_id)
+                .await?;
+        }
 
         let tx = Transaction::new(
             vault_id.to_string(),
@@ -898,7 +921,9 @@ impl Engine {
         voided_at: DateTime<Utc>,
     ) -> ResultEngine<()> {
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
         let tx_model = transactions::Entity::find_by_id(transaction_id.to_string())
@@ -967,7 +992,9 @@ impl Engine {
         }
 
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
         let tx_model = transactions::Entity::find_by_id(transaction_id.to_string())
@@ -1090,14 +1117,15 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<CashFlow> {
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
-        let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+        let model = self
+            .require_flow_read(&db_tx, vault_id, cash_flow_id, user_id)
+            .await?;
 
-        let model = cash_flows::Entity::find_by_id(cash_flow_id.to_string())
-            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+        let vault_model = vault::Entity::find_by_id(vault_id.to_string())
             .one(&db_tx)
             .await?
-            .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+        let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
         let system_kind = model
             .system_kind
@@ -1132,7 +1160,10 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<CashFlow> {
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = vault::Entity::find_by_id(vault_id.to_string())
+            .one(&db_tx)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
         let model = cash_flows::Entity::find()
@@ -1141,6 +1172,14 @@ impl Engine {
             .one(&db_tx)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+
+        if !self.has_vault_read_access(&db_tx, vault_id, user_id).await? {
+            let role = self
+                .flow_membership_role(&db_tx, &model.id, user_id)
+                .await?
+                .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+            let _ = role;
+        }
 
         let flow_id = Uuid::parse_str(&model.id)
             .map_err(|_| EngineError::InvalidAmount("invalid cash_flow id".to_string()))?;
@@ -1179,7 +1218,8 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<()> {
         let db_tx = self.database.begin().await?;
-        self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        self.require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
 
         let flow_model = cash_flows::Entity::find_by_id(cash_flow_id.to_string())
             .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
@@ -1223,7 +1263,9 @@ impl Engine {
     /// TODO: Add `archive`
     pub async fn delete_vault(&self, vault_id: &str, user_id: &str) -> ResultEngine<()> {
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let vault_db_id = vault_model.id;
 
         // Best-effort cascade delete within one DB transaction.
@@ -1358,7 +1400,9 @@ impl Engine {
         }
 
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
         if name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
@@ -1441,7 +1485,9 @@ impl Engine {
     ) -> ResultEngine<Uuid> {
         let occurred_at = Utc::now();
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
         let exists = wallets::Entity::find()
@@ -1517,7 +1563,9 @@ impl Engine {
     /// - Refreshes the in-memory vault state from DB models post-commit.
     pub async fn recompute_balances(&self, vault_id: &str, user_id: &str) -> ResultEngine<()> {
         let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = self
+            .require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
         // Load all wallets/flows from DB (including archived) to avoid stale RAM
@@ -1906,7 +1954,8 @@ impl Engine {
         include_transfers: bool,
     ) -> ResultEngine<(Vec<(Transaction, i64)>, Option<String>)> {
         let db_tx = self.database.begin().await?;
-        self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        self.require_flow_read(&db_tx, vault_id, flow_id, user_id)
+            .await?;
 
         let limit_plus_one = limit.saturating_add(1);
         let mut query = legs::Entity::find()

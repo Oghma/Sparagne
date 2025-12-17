@@ -901,3 +901,105 @@ async fn vault_statistics_treats_refunds_as_expense_reduction() {
     assert_eq!(total_income_minor, 1000);
     assert_eq!(total_expenses_minor, 250);
 }
+
+#[tokio::test]
+async fn flow_membership_allows_reading_flow_without_vault_access() {
+    let (engine, db) = engine_with_db().await;
+    let backend = db.get_database_backend();
+
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let flow_id = engine
+        .new_cash_flow(&vault_id, "Shared", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    // "bob" is not a vault member, but is a flow viewer.
+    db.execute(Statement::from_sql_and_values(
+        backend,
+        "INSERT INTO flow_memberships (flow_id, user_id, role) VALUES (?, ?, ?);",
+        vec![flow_id.to_string().into(), "bob".into(), "viewer".into()],
+    ))
+    .await
+    .unwrap();
+
+    let shared = engine.cash_flow(flow_id, &vault_id, "bob").await.unwrap();
+    assert_eq!(shared.name, "Shared");
+
+    let err = engine
+        .vault_snapshot(Some(&vault_id), None, "bob")
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::KeyNotFound("vault not exists".to_string()));
+}
+
+#[tokio::test]
+async fn flow_membership_editor_can_transfer_between_shared_flows_without_vault_membership() {
+    let (engine, db) = engine_with_db().await;
+    let backend = db.get_database_backend();
+
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let f1 = engine
+        .new_cash_flow(&vault_id, "F1", 0, None, None, "alice")
+        .await
+        .unwrap();
+    let f2 = engine
+        .new_cash_flow(&vault_id, "F2", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    for fid in [f1, f2] {
+        db.execute(Statement::from_sql_and_values(
+            backend,
+            "INSERT INTO flow_memberships (flow_id, user_id, role) VALUES (?, ?, ?);",
+            vec![fid.to_string().into(), "bob".into(), "editor".into()],
+        ))
+        .await
+        .unwrap();
+    }
+
+    // Allocate funds via owner first (Unallocated -> F1).
+    let unallocated_row = db
+        .query_one(Statement::from_sql_and_values(
+            backend,
+            "SELECT id FROM cash_flows WHERE vault_id = ? AND system_kind = 'unallocated';",
+            vec![vault_id.clone().into()],
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    let unallocated_id: String = unallocated_row.try_get("", "id").unwrap();
+    let unallocated_id = Uuid::parse_str(&unallocated_id).unwrap();
+
+    engine
+        .transfer_flow(
+            &vault_id,
+            100,
+            unallocated_id,
+            f1,
+            Some("seed"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    // "bob" can move allocation between F1 and F2.
+    engine
+        .transfer_flow(&vault_id, 50, f1, f2, Some("move"), None, "bob", Utc::now())
+        .await
+        .unwrap();
+
+    let f1_model = engine.cash_flow(f1, &vault_id, "bob").await.unwrap();
+    let f2_model = engine.cash_flow(f2, &vault_id, "bob").await.unwrap();
+    assert_eq!(f1_model.balance, 50);
+    assert_eq!(f2_model.balance, 50);
+}
