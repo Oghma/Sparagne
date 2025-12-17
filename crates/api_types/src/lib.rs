@@ -236,7 +236,20 @@ pub mod transaction {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct TransactionUpdate {
         pub vault_id: String,
-        pub amount_minor: i64,
+        /// If present, updates the transaction amount (must be `> 0`).
+        pub amount_minor: Option<i64>,
+        /// If present, updates the wallet target (Income/Expense/Refund).
+        pub wallet_id: Option<Uuid>,
+        /// If present, updates the flow target (Income/Expense/Refund).
+        pub flow_id: Option<Uuid>,
+        /// If present, updates the "from" wallet (TransferWallet).
+        pub from_wallet_id: Option<Uuid>,
+        /// If present, updates the "to" wallet (TransferWallet).
+        pub to_wallet_id: Option<Uuid>,
+        /// If present, updates the "from" flow (TransferFlow).
+        pub from_flow_id: Option<Uuid>,
+        /// If present, updates the "to" flow (TransferFlow).
+        pub to_flow_id: Option<Uuid>,
         pub category: Option<String>,
         pub note: Option<String>,
         pub occurred_at: Option<DateTime<FixedOffset>>,
