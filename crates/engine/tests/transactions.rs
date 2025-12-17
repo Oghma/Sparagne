@@ -1611,6 +1611,60 @@ async fn flow_membership_allows_reading_flow_without_vault_access() {
 }
 
 #[tokio::test]
+async fn flow_member_cannot_access_transaction_detail() {
+    let (engine, db) = engine_with_db().await;
+    let backend = db.get_database_backend();
+
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let flow_id = engine
+        .new_cash_flow(&vault_id, "Shared", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    let tx_id = engine
+        .income(
+            &vault_id,
+            100,
+            Some(flow_id),
+            Some(wallet_id),
+            None,
+            None,
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    // "bob" is not a vault member, but is a flow viewer.
+    db.execute(Statement::from_sql_and_values(
+        backend,
+        "INSERT INTO flow_memberships (flow_id, user_id, role) VALUES (?, ?, ?);",
+        vec![flow_id.to_string().into(), "bob".into(), "viewer".into()],
+    ))
+    .await
+    .unwrap();
+
+    let err = engine
+        .transaction_with_legs(&vault_id, tx_id, "bob")
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::Forbidden("forbidden".to_string()));
+}
+
+#[tokio::test]
 async fn flow_membership_editor_can_transfer_between_shared_flows_without_vault_membership() {
     let (engine, db) = engine_with_db().await;
     let backend = db.get_database_backend();

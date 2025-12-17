@@ -2916,7 +2916,21 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<Transaction> {
         let db_tx = self.database.begin().await?;
-        self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_model = vault::Entity::find_by_id(vault_id.to_string())
+            .one(&db_tx)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+        if vault_model.user_id != user_id {
+            let member = vault_memberships::Entity::find_by_id((
+                vault_id.to_string(),
+                user_id.to_string(),
+            ))
+            .one(&db_tx)
+            .await?;
+            if member.is_none() {
+                return Err(EngineError::Forbidden("forbidden".to_string()));
+            }
+        }
 
         let tx_model = transactions::Entity::find_by_id(transaction_id.to_string())
             .one(&db_tx)
