@@ -100,6 +100,7 @@ pub async fn income_new(
             payload.wallet_id,
             payload.category.as_deref(),
             payload.note.as_deref(),
+            payload.idempotency_key.as_deref(),
             &user.username,
             payload.occurred_at.with_timezone(&Utc),
         )
@@ -122,6 +123,7 @@ pub async fn expense_new(
             payload.wallet_id,
             payload.category.as_deref(),
             payload.note.as_deref(),
+            payload.idempotency_key.as_deref(),
             &user.username,
             payload.occurred_at.with_timezone(&Utc),
         )
@@ -144,6 +146,7 @@ pub async fn refund_new(
             payload.wallet_id,
             payload.category.as_deref(),
             payload.note.as_deref(),
+            payload.idempotency_key.as_deref(),
             &user.username,
             payload.occurred_at.with_timezone(&Utc),
         )
@@ -165,6 +168,7 @@ pub async fn transfer_wallet_new(
             payload.from_wallet_id,
             payload.to_wallet_id,
             payload.note.as_deref(),
+            payload.idempotency_key.as_deref(),
             &user.username,
             payload.occurred_at.with_timezone(&Utc),
         )
@@ -186,6 +190,7 @@ pub async fn transfer_flow_new(
             payload.from_flow_id,
             payload.to_flow_id,
             payload.note.as_deref(),
+            payload.idempotency_key.as_deref(),
             &user.username,
             payload.occurred_at.with_timezone(&Utc),
         )

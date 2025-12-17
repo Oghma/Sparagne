@@ -421,6 +421,7 @@ async fn send_entry(
     };
 
     let amount_minor = amount.minor().abs();
+    let idempotency_key = format!("tg:{}:{}", msg.chat.id.0, msg.id.0);
 
     let endpoint = if is_expense { "expense" } else { "income" };
     let (user_response, _) = if is_expense {
@@ -435,6 +436,7 @@ async fn send_entry(
                 wallet_id: None,
                 category: Some(category.to_string()),
                 note: Some(note.to_string()),
+                idempotency_key: Some(idempotency_key.clone()),
                 occurred_at: Utc::now().into(),
             },
             StatusCode::CREATED,
@@ -453,6 +455,7 @@ async fn send_entry(
                 wallet_id: None,
                 category: Some(category.to_string()),
                 note: Some(note.to_string()),
+                idempotency_key: Some(idempotency_key.clone()),
                 occurred_at: Utc::now().into(),
             },
             StatusCode::CREATED,
