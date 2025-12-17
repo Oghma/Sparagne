@@ -13,10 +13,21 @@ use teloxide::{
 use crate::{
     ConfigParameters,
     commands::{EntryCommands, UserStatisticsCommands, split_entry},
-    get_check, post_check,
+    post_check,
 };
 
 use super::{GlobalDialogue, GlobalState};
+
+struct SendEntryCmd<'a> {
+    client: &'a Client,
+    server_url: &'a str,
+    amount_str: &'a str,
+    is_expense: bool,
+    category: &'a str,
+    note: &'a str,
+    msg: &'a Message,
+    bot: &'a Bot,
+}
 
 /// Build the schema for EntryCommands commands
 pub fn schema() -> UpdateHandler<RequestError> {
@@ -64,16 +75,16 @@ async fn handle_user_commands(
             category,
             note,
         } => {
-            send_entry(
-                &cfg.client,
-                &cfg.server,
-                &amount,
-                false,
-                &category,
-                &note,
-                &msg,
-                &bot,
-            )
+            send_entry(SendEntryCmd {
+                client: &cfg.client,
+                server_url: &cfg.server,
+                amount_str: &amount,
+                is_expense: false,
+                category: &category,
+                note: &note,
+                msg: &msg,
+                bot: &bot,
+            })
             .await?;
         }
         EntryCommands::Uscita {
@@ -81,16 +92,16 @@ async fn handle_user_commands(
             category,
             note,
         } => {
-            send_entry(
-                &cfg.client,
-                &cfg.server,
-                &amount,
-                true,
-                &category,
-                &note,
-                &msg,
-                &bot,
-            )
+            send_entry(SendEntryCmd {
+                client: &cfg.client,
+                server_url: &cfg.server,
+                amount_str: &amount,
+                is_expense: true,
+                category: &category,
+                note: &note,
+                msg: &msg,
+                bot: &bot,
+            })
             .await?;
         }
         EntryCommands::Sommario => {
@@ -164,7 +175,7 @@ async fn handle_delete_entry(
     };
     let entry_id = entries[idx - 1];
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
         format!("{}/vault/get", cfg.server),
         user_id.clone(),
@@ -226,7 +237,7 @@ async fn get_main_cash_flow(
         }
     };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
         format!("{}/vault/get", cfg.server),
         user_id.clone(),
@@ -247,7 +258,7 @@ async fn get_main_cash_flow(
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
         format!("{}/cashFlow/get", cfg.server),
         user_id,
@@ -313,7 +324,7 @@ async fn vault_currency(
         Some(user) => user.id.to_string(),
         None => return Ok(Currency::Eur),
     };
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
         format!("{}/vault/get", cfg.server),
         user_id,
@@ -351,7 +362,7 @@ async fn get_flow_transactions(
         }
     };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
         format!("{}/vault/get", cfg.server),
         user_id.clone(),
@@ -407,16 +418,17 @@ async fn get_flow_transactions(
     Ok(list.transactions)
 }
 
-async fn send_entry(
-    client: &Client,
-    url: &str,
-    amount_str: &str,
-    is_expense: bool,
-    category: &str,
-    note: &str,
-    msg: &Message,
-    bot: &Bot,
-) -> ResponseResult<()> {
+async fn send_entry(cmd: SendEntryCmd<'_>) -> ResponseResult<()> {
+    let SendEntryCmd {
+        client,
+        server_url,
+        amount_str,
+        is_expense,
+        category,
+        note,
+        msg,
+        bot,
+    } = cmd;
     let user_id = match msg.from.as_ref() {
         Some(user) => user.id.to_string(),
         None => {
@@ -426,9 +438,9 @@ async fn send_entry(
         }
     };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         client,
-        format!("{}/vault/get", url),
+        format!("{}/vault/get", server_url),
         user_id.clone(),
         &api_types::vault::Vault {
             id: None,
@@ -447,9 +459,9 @@ async fn send_entry(
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         client,
-        format!("{}/cashFlow/get", url),
+        format!("{}/cashFlow/get", server_url),
         user_id.clone(),
         &api_types::cash_flow::CashFlowGet {
             vault_id: match vault.id.clone() {
@@ -501,7 +513,7 @@ async fn send_entry(
     let (user_response, _) = if is_expense {
         post_check!(
             client,
-            format!("{}/{}", url, endpoint),
+            format!("{}/{}", server_url, endpoint),
             user_id,
             &api_types::transaction::ExpenseNew {
                 vault_id: vault_id.clone(),
@@ -520,7 +532,7 @@ async fn send_entry(
     } else {
         post_check!(
             client,
-            format!("{}/{}", url, endpoint),
+            format!("{}/{}", server_url, endpoint),
             user_id,
             &api_types::transaction::IncomeNew {
                 vault_id,

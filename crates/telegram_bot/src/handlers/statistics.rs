@@ -4,7 +4,7 @@ use engine::{Currency, Money};
 use reqwest::StatusCode;
 use teloxide::{RequestError, dispatching::UpdateHandler, prelude::*};
 
-use crate::{ConfigParameters, commands::UserStatisticsCommands, get_check};
+use crate::{ConfigParameters, commands::UserStatisticsCommands, post_check};
 
 /// Build the schema for Statistics commands
 pub fn schema() -> UpdateHandler<RequestError> {
@@ -30,7 +30,7 @@ async fn handle_statistics(
 
     match cmd {
         UserStatisticsCommands::Stats => {
-            let (user_response, response) = get_check!(
+            let (user_response, response) = post_check!(
                 cfg.client,
                 format!("{}/stats/get", cfg.server),
                 user_id,

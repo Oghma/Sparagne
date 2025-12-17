@@ -6,7 +6,7 @@ use reqwest::StatusCode;
 use serde::Serialize;
 use teloxide::{RequestError, dispatching::UpdateHandler, prelude::*, types::InputFile};
 
-use crate::{ConfigParameters, commands::UserExportCommands, get_check, post_check};
+use crate::{ConfigParameters, commands::UserExportCommands, post_check};
 
 /// Build the schema for Export commands
 pub fn schema() -> UpdateHandler<RequestError> {
@@ -25,7 +25,7 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
         }
     };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
         format!("{}/vault/get", cfg.server),
         user_id.clone(),
@@ -46,7 +46,7 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
         format!("{}/cashFlow/get", cfg.server),
         user_id.clone(),

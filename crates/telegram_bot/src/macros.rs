@@ -19,20 +19,6 @@ macro_rules! post {
 }
 
 #[macro_export]
-macro_rules! get {
-    ($client:expr, $url:expr, $user_id:expr,$json:expr) => {
-        $crate::request!(post, $client, $url, $user_id, $json)
-    };
-}
-
-#[macro_export]
-macro_rules! delete {
-    ($client:expr, $url:expr, $user_id:expr,$json:expr) => {
-        $crate::request!(post, $client, $url, $user_id, $json)
-    };
-}
-
-#[macro_export]
 macro_rules! request_check {
     ($verb:ident, $client:expr, $url:expr, $user_id:expr,$json:expr, $success_cond:pat, $success:expr, $failure:expr) => {{
         match $crate::request!($verb, $client, $url, $user_id, $json) {
@@ -94,45 +80,5 @@ macro_rules! post_check {
 
     ($client:expr, $url:expr, $user_id:expr,$json:expr, $success:expr, $failure:expr) => {
         $crate::request_check!(post, $client, $url, $user_id, $json, $success, $failure)
-    };
-}
-
-#[macro_export]
-macro_rules! get_check {
-    ($client:expr, $url:expr, $user_id:expr, $json:expr, $success_cond:pat, $success:expr, $failure:expr) => {
-        $crate::request_check!(
-            get,
-            $client,
-            $url,
-            $user_id,
-            $json,
-            $success_cond,
-            $success,
-            $failure
-        )
-    };
-
-    ($client:expr, $url:expr, $user_id:expr, $json:expr, $success:expr, $failure:expr) => {
-        $crate::request_check!(get, $client, $url, $user_id, $json, $success, $failure)
-    };
-}
-
-#[macro_export]
-macro_rules! delete_check {
-    ($client:expr, $url:expr, $user_id:expr, $json:expr, $success_cond:pat, $success:expr, $failure:expr) => {
-        $crate::request_check!(
-            delete,
-            $client,
-            $url,
-            $user_id,
-            $json,
-            $success_cond,
-            $success,
-            $failure
-        )
-    };
-
-    ($client:expr, $url:expr, $user_id:expr, $json:expr, $success:expr, $failure:expr) => {
-        $crate::request_check!(delete, $client, $url, $user_id, $json, $success, $failure)
     };
 }
