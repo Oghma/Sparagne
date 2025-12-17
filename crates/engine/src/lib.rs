@@ -1630,12 +1630,26 @@ impl Engine {
             row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)
         };
 
+        let total_refunds_minor: i64 = {
+            let stmt = Statement::from_sql_and_values(
+                backend,
+                format!(
+                    "SELECT COALESCE(SUM(amount_minor), 0) AS sum \
+                     FROM transactions \
+                     WHERE vault_id = ? AND kind = ?{void_cond}"
+                ),
+                vec![vault_id.into(), TransactionKind::Refund.as_str().into()],
+            );
+            let row = db_tx.query_one(stmt).await?;
+            row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)
+        };
+
         db_tx.commit().await?;
         Ok((
             currency,
             balance_minor,
             total_income_minor,
-            total_expenses_minor,
+            total_expenses_minor - total_refunds_minor,
         ))
     }
 

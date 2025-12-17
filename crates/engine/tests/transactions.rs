@@ -769,3 +769,74 @@ async fn idempotency_key_dedupes_create() {
     let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
     assert_eq!(wallet.balance, 1000);
 }
+
+#[tokio::test]
+async fn vault_statistics_treats_refunds_as_expense_reduction() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    engine
+        .income(
+            &vault_id,
+            1000,
+            None,
+            Some(wallet_id),
+            Some("salary"),
+            None,
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    engine
+        .expense(
+            &vault_id,
+            300,
+            None,
+            Some(wallet_id),
+            Some("food"),
+            None,
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    engine
+        .refund(
+            &vault_id,
+            50,
+            None,
+            Some(wallet_id),
+            Some("food"),
+            None,
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let (currency, balance_minor, total_income_minor, total_expenses_minor) = engine
+        .vault_statistics(&vault_id, "alice", false)
+        .await
+        .unwrap();
+    assert_eq!(currency, engine::Currency::Eur);
+    assert_eq!(balance_minor, 750);
+    assert_eq!(total_income_minor, 1000);
+    assert_eq!(total_expenses_minor, 250);
+}
