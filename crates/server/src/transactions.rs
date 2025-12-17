@@ -25,6 +25,28 @@ pub async fn list(
     let limit = payload.limit.unwrap_or(50);
     let include_voided = payload.include_voided.unwrap_or(false);
     let include_transfers = payload.include_transfers.unwrap_or(false);
+    let from = payload.from.map(|dt| dt.with_timezone(&Utc));
+    let to = payload.to.map(|dt| dt.with_timezone(&Utc));
+    let kinds = payload.kinds.map(|kinds| {
+        kinds
+            .into_iter()
+            .map(|k| match k {
+                ApiKind::Income => engine::TransactionKind::Income,
+                ApiKind::Expense => engine::TransactionKind::Expense,
+                ApiKind::TransferWallet => engine::TransactionKind::TransferWallet,
+                ApiKind::TransferFlow => engine::TransactionKind::TransferFlow,
+                ApiKind::Refund => engine::TransactionKind::Refund,
+            })
+            .collect::<Vec<_>>()
+    });
+
+    let filter = engine::TransactionListFilter {
+        from,
+        to,
+        kinds,
+        include_voided,
+        include_transfers,
+    };
 
     let (txs, next_cursor) = match (payload.flow_id, payload.wallet_id) {
         (Some(flow_id), None) => {
@@ -35,8 +57,7 @@ pub async fn list(
                     &user.username,
                     limit,
                     payload.cursor.as_deref(),
-                    include_voided,
-                    include_transfers,
+                    &filter,
                 )
                 .await?
         }
@@ -48,8 +69,7 @@ pub async fn list(
                     &user.username,
                     limit,
                     payload.cursor.as_deref(),
-                    include_voided,
-                    include_transfers,
+                    &filter,
                 )
                 .await?
         }

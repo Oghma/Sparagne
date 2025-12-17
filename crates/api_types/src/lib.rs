@@ -135,6 +135,12 @@ pub mod transaction {
         ///
         /// Newest → older pagination.
         pub cursor: Option<String>,
+        /// Inclusive start of the time range filter (RFC3339, with offset).
+        pub from: Option<DateTime<FixedOffset>>,
+        /// Exclusive end of the time range filter (RFC3339, with offset).
+        pub to: Option<DateTime<FixedOffset>>,
+        /// Optional allow-list of kinds to include.
+        pub kinds: Option<Vec<TransactionKind>>,
         pub include_voided: Option<bool>,
         pub include_transfers: Option<bool>,
     }
