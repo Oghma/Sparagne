@@ -108,7 +108,7 @@ async fn auth(
 fn router(state: ServerState) -> Router {
     Router::new()
         .route("/cashFlow", get(cash_flow::get))
-        .route("/transactions", get(transactions::list))
+        .route("/transactions", post(transactions::list))
         .route("/transactions/get", post(transactions::get_detail))
         .route("/income", post(transactions::income_new))
         .route("/expense", post(transactions::expense_new))

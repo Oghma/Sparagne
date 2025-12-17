@@ -327,7 +327,7 @@ async fn get_flow_transactions(
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
         format!("{}/transactions", cfg.server),
         user_id,
