@@ -51,6 +51,55 @@ pub mod user {
     }
 }
 
+pub mod membership {
+    use super::*;
+
+    /// Role of a user in a shared resource (vault or flow).
+    ///
+    /// The server treats roles as:
+    /// - `owner`: full access and can manage members.
+    /// - `editor`: can write but cannot manage members.
+    /// - `viewer`: read-only.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum MembershipRole {
+        Owner,
+        Editor,
+        Viewer,
+    }
+
+    impl MembershipRole {
+        /// Returns the canonical role string used by the engine/database.
+        pub fn as_str(self) -> &'static str {
+            match self {
+                Self::Owner => "owner",
+                Self::Editor => "editor",
+                Self::Viewer => "viewer",
+            }
+        }
+    }
+
+    /// Request body for adding/updating a member.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct MemberUpsert {
+        pub username: String,
+        pub role: MembershipRole,
+    }
+
+    /// Response body for listing members.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct MembersResponse {
+        pub members: Vec<MemberView>,
+    }
+
+    /// A member with their role.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct MemberView {
+        pub username: String,
+        pub role: MembershipRole,
+    }
+}
+
 pub mod stats {
     use super::*;
 
