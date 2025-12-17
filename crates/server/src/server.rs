@@ -108,6 +108,7 @@ fn router(state: ServerState) -> Router {
         .route("/transactions", get(transactions::list))
         .route("/income", post(transactions::income_new))
         .route("/expense", post(transactions::expense_new))
+        .route("/refund", post(transactions::refund_new))
         .route("/transferWallet", post(transactions::transfer_wallet_new))
         .route("/transferFlow", post(transactions::transfer_flow_new))
         .route(

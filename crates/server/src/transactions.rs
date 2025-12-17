@@ -1,9 +1,9 @@
 //! Transactions API endpoints
 
 use api_types::transaction::{
-    ExpenseNew, IncomeNew, TransactionCreated, TransactionKind as ApiKind, TransactionList,
-    TransactionListResponse, TransactionUpdate, TransactionView, TransactionVoid, TransferFlowNew,
-    TransferWalletNew,
+    ExpenseNew, IncomeNew, Refund, TransactionCreated, TransactionKind as ApiKind,
+    TransactionList, TransactionListResponse, TransactionUpdate, TransactionView, TransactionVoid,
+    TransferFlowNew, TransferWalletNew,
 };
 use axum::{
     Extension, Json,
@@ -116,6 +116,28 @@ pub async fn expense_new(
     let id = state
         .engine
         .expense(
+            &payload.vault_id,
+            payload.amount_minor,
+            payload.flow_id,
+            payload.wallet_id,
+            payload.category.as_deref(),
+            payload.note.as_deref(),
+            &user.username,
+            payload.occurred_at.with_timezone(&Utc),
+        )
+        .await?;
+
+    Ok((StatusCode::CREATED, Json(TransactionCreated { id })))
+}
+
+pub async fn refund_new(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Json(payload): Json<Refund>,
+) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
+    let id = state
+        .engine
+        .refund(
             &payload.vault_id,
             payload.amount_minor,
             payload.flow_id,
