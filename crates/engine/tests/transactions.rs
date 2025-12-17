@@ -508,13 +508,23 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
     .await
     .unwrap();
     for flow_id in [unallocated_flow, capped_flow, vacanze_flow] {
-        db.execute(Statement::from_sql_and_values(
-            backend,
-            "UPDATE cash_flows SET balance = ?, income_balance = ? WHERE id = ?;",
-            vec![999i64.into(), 0i64.into(), flow_id.to_string().into()],
-        ))
-        .await
-        .unwrap();
+        if flow_id == capped_flow {
+            db.execute(Statement::from_sql_and_values(
+                backend,
+                "UPDATE cash_flows SET balance = ?, income_balance = ? WHERE id = ?;",
+                vec![999i64.into(), 0i64.into(), flow_id.to_string().into()],
+            ))
+            .await
+            .unwrap();
+        } else {
+            db.execute(Statement::from_sql_and_values(
+                backend,
+                "UPDATE cash_flows SET balance = ?, income_balance = NULL WHERE id = ?;",
+                vec![999i64.into(), flow_id.to_string().into()],
+            ))
+            .await
+            .unwrap();
+        }
     }
 
     engine.recompute_balances(&vault_id, "alice").await.unwrap();
@@ -833,6 +843,144 @@ async fn idempotency_key_dedupes_create() {
     assert_eq!(id1, id2);
     let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
     assert_eq!(wallet.balance, 1000);
+}
+
+#[tokio::test]
+async fn names_are_trimmed_and_unique_case_insensitive() {
+    let (engine, db) = engine_with_db().await;
+    let backend = db.get_database_backend();
+
+    let vault_id = engine
+        .new_vault("  Main  ", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let vault = engine
+        .vault_snapshot(Some(&vault_id), None, "alice")
+        .await
+        .unwrap();
+    assert_eq!(vault.name, "Main");
+
+    let err = engine
+        .new_vault("main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::ExistingKey("main".to_string()));
+
+    let wallet_id = engine
+        .new_wallet(&vault_id, "  Bank  ", 0, "alice")
+        .await
+        .unwrap();
+
+    let err = engine
+        .new_wallet(&vault_id, "bank", 0, "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::ExistingKey("bank".to_string()));
+
+    let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
+    assert_eq!(wallet.name, "Bank");
+
+    let flow_id = engine
+        .new_cash_flow(&vault_id, "  Vacanze  ", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    let err = engine
+        .new_cash_flow(&vault_id, "vacanze", 0, None, None, "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(err, EngineError::ExistingKey("vacanze".to_string()));
+
+    let flow = engine.cash_flow(flow_id, &vault_id, "alice").await.unwrap();
+    assert_eq!(flow.name, "Vacanze");
+
+    // Empty names are rejected.
+    let err = engine
+        .new_wallet(&vault_id, "   ", 0, "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::InvalidAmount("wallet name must not be empty".to_string())
+    );
+
+    let err = engine
+        .new_cash_flow(&vault_id, "   ", 0, None, None, "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::InvalidFlow("flow name must not be empty".to_string())
+    );
+
+    // Degenerate FlowMode in DB is a hard error.
+    let unallocated_id = engine
+        .vault_snapshot(Some(&vault_id), None, "alice")
+        .await
+        .unwrap()
+        .unallocated_flow_id()
+        .unwrap();
+
+    db.execute(Statement::from_sql_and_values(
+        backend,
+        "UPDATE cash_flows SET income_balance = 0, max_balance = NULL WHERE id = ?;",
+        vec![unallocated_id.to_string().into()],
+    ))
+    .await
+    .unwrap();
+
+    let err = engine
+        .vault_snapshot(Some(&vault_id), None, "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::InvalidFlow(
+            "invalid FlowMode for flow 'unallocated': income_balance requires max_balance"
+                .to_string()
+        )
+    );
+}
+
+#[tokio::test]
+async fn category_and_note_are_trimmed_and_empty_becomes_none() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    engine
+        .income(
+            &vault_id,
+            100,
+            None,
+            Some(wallet_id),
+            Some("   "),
+            Some("  hello  "),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let txs = engine
+        .list_transactions_for_wallet(&vault_id, wallet_id, "alice", 10, false, true)
+        .await
+        .unwrap();
+    assert_eq!(txs.len(), 1);
+    assert_eq!(txs[0].0.category, None);
+    assert_eq!(txs[0].0.note.as_deref(), Some("hello"));
 }
 
 #[tokio::test]

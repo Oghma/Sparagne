@@ -13,6 +13,7 @@ use sea_orm::{
     ActiveValue, Condition, DatabaseTransaction, JoinType, QueryFilter, QueryOrder, QuerySelect,
     Statement, TransactionTrait, prelude::*,
 };
+use sea_orm::sea_query::Expr;
 pub use transactions::{Transaction, TransactionKind};
 pub use vault::Vault;
 pub use wallets::Wallet;
@@ -30,6 +31,65 @@ mod vault;
 mod wallets;
 
 type ResultEngine<T> = Result<T, EngineError>;
+
+fn normalize_required_name(value: &str, label: &str) -> ResultEngine<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(EngineError::InvalidAmount(format!(
+            "{label} name must not be empty"
+        )));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn normalize_required_flow_name(value: &str) -> ResultEngine<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(EngineError::InvalidFlow("flow name must not be empty".to_string()));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn normalize_optional_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
+fn validate_flow_mode_fields(
+    flow_name: &str,
+    max_balance: Option<i64>,
+    income_balance: Option<i64>,
+) -> ResultEngine<()> {
+    if let Some(cap_minor) = max_balance
+        && cap_minor <= 0
+    {
+        return Err(EngineError::InvalidFlow(format!(
+            "invalid cap for flow '{flow_name}': cap must be > 0"
+        )));
+    }
+    if income_balance.is_some() && max_balance.is_none() {
+        return Err(EngineError::InvalidFlow(format!(
+            "invalid FlowMode for flow '{flow_name}': income_balance requires max_balance"
+        )));
+    }
+    if let Some(income_total_minor) = income_balance
+        && income_total_minor < 0
+    {
+        return Err(EngineError::InvalidFlow(format!(
+            "invalid FlowMode for flow '{flow_name}': income_balance must be >= 0"
+        )));
+    }
+    if let (Some(cap_minor), Some(income_total_minor)) = (max_balance, income_balance)
+        && income_total_minor > cap_minor
+    {
+        return Err(EngineError::InvalidFlow(format!(
+            "invalid FlowMode for flow '{flow_name}': income_balance exceeds cap"
+        )));
+    }
+    Ok(())
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MembershipRole {
@@ -280,8 +340,10 @@ impl Engine {
         vault_name: &str,
         user_id: &str,
     ) -> ResultEngine<vault::Model> {
+        let vault_name = normalize_required_name(vault_name, "vault")?;
+        let vault_name_lower = vault_name.to_lowercase();
         let models: Vec<vault::Model> = vault::Entity::find()
-            .filter(vault::Column::Name.eq(vault_name.to_string()))
+            .filter(Expr::cust("LOWER(name)").eq(vault_name_lower))
             .all(db)
             .await?;
 
@@ -390,6 +452,131 @@ impl Engine {
         tx: &Transaction,
         legs: &[Leg],
     ) -> ResultEngine<Uuid> {
+        if legs.is_empty() {
+            return Err(EngineError::InvalidAmount(
+                "transaction must have at least one leg".to_string(),
+            ));
+        }
+        for leg in legs {
+            if leg.transaction_id != tx.id {
+                return Err(EngineError::InvalidAmount(
+                    "invalid leg: transaction_id mismatch".to_string(),
+                ));
+            }
+            if leg.amount_minor == 0 {
+                return Err(EngineError::InvalidAmount(
+                    "invalid leg: amount_minor must not be 0".to_string(),
+                ));
+            }
+        }
+
+        // Validate kind-specific invariants (kept strict for now).
+        match tx.kind {
+            TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
+                if legs.len() != 2 {
+                    return Err(EngineError::InvalidAmount(
+                        "invalid transaction: expected 2 legs".to_string(),
+                    ));
+                }
+                let expected = match tx.kind {
+                    TransactionKind::Income | TransactionKind::Refund => tx.amount_minor,
+                    TransactionKind::Expense => -tx.amount_minor,
+                    _ => unreachable!(),
+                };
+                let (mut wallet_legs, mut flow_legs) = (0, 0);
+                for leg in legs {
+                    match leg.target {
+                        LegTarget::Wallet { .. } => wallet_legs += 1,
+                        LegTarget::Flow { .. } => flow_legs += 1,
+                    }
+                    if leg.amount_minor != expected {
+                        return Err(EngineError::InvalidAmount(
+                            "invalid transaction: unexpected leg amount".to_string(),
+                        ));
+                    }
+                }
+                if wallet_legs != 1 || flow_legs != 1 {
+                    return Err(EngineError::InvalidAmount(
+                        "invalid transaction: expected one wallet leg and one flow leg".to_string(),
+                    ));
+                }
+            }
+            TransactionKind::TransferWallet => {
+                if legs.len() != 2 {
+                    return Err(EngineError::InvalidAmount(
+                        "invalid transfer: expected 2 legs".to_string(),
+                    ));
+                }
+                let mut wallet_ids: Vec<Uuid> = Vec::new();
+                let mut has_neg = false;
+                let mut has_pos = false;
+                for leg in legs {
+                    let LegTarget::Wallet { wallet_id } = leg.target else {
+                        return Err(EngineError::InvalidAmount(
+                            "invalid transfer_wallet: expected wallet legs".to_string(),
+                        ));
+                    };
+                    wallet_ids.push(wallet_id);
+                    if leg.amount_minor == -tx.amount_minor {
+                        has_neg = true;
+                    } else if leg.amount_minor == tx.amount_minor {
+                        has_pos = true;
+                    } else {
+                        return Err(EngineError::InvalidAmount(
+                            "invalid transfer_wallet: unexpected leg amount".to_string(),
+                        ));
+                    }
+                }
+                if !has_neg || !has_pos {
+                    return Err(EngineError::InvalidAmount(
+                        "invalid transfer_wallet: missing positive/negative leg".to_string(),
+                    ));
+                }
+                if wallet_ids.len() == 2 && wallet_ids[0] == wallet_ids[1] {
+                    return Err(EngineError::InvalidAmount(
+                        "invalid transfer_wallet: from/to must differ".to_string(),
+                    ));
+                }
+            }
+            TransactionKind::TransferFlow => {
+                if legs.len() != 2 {
+                    return Err(EngineError::InvalidAmount(
+                        "invalid transfer: expected 2 legs".to_string(),
+                    ));
+                }
+                let mut flow_ids: Vec<Uuid> = Vec::new();
+                let mut has_neg = false;
+                let mut has_pos = false;
+                for leg in legs {
+                    let LegTarget::Flow { flow_id } = leg.target else {
+                        return Err(EngineError::InvalidAmount(
+                            "invalid transfer_flow: expected flow legs".to_string(),
+                        ));
+                    };
+                    flow_ids.push(flow_id);
+                    if leg.amount_minor == -tx.amount_minor {
+                        has_neg = true;
+                    } else if leg.amount_minor == tx.amount_minor {
+                        has_pos = true;
+                    } else {
+                        return Err(EngineError::InvalidAmount(
+                            "invalid transfer_flow: unexpected leg amount".to_string(),
+                        ));
+                    }
+                }
+                if !has_neg || !has_pos {
+                    return Err(EngineError::InvalidAmount(
+                        "invalid transfer_flow: missing positive/negative leg".to_string(),
+                    ));
+                }
+                if flow_ids.len() == 2 && flow_ids[0] == flow_ids[1] {
+                    return Err(EngineError::InvalidAmount(
+                        "invalid transfer_flow: from/to must differ".to_string(),
+                    ));
+                }
+            }
+        }
+
         if tx.currency != vault_currency {
             return Err(EngineError::CurrencyMismatch(format!(
                 "vault currency is {}, got {}",
@@ -453,6 +640,11 @@ impl Engine {
                         .ok_or_else(|| {
                             EngineError::KeyNotFound("cash_flow not exists".to_string())
                         })?;
+                    validate_flow_mode_fields(
+                        &flow_model.name,
+                        flow_model.max_balance,
+                        flow_model.income_balance,
+                    )?;
                     let flow_currency =
                         Currency::try_from(flow_model.currency.as_str()).unwrap_or(vault_currency);
                     if flow_currency != vault_currency {
@@ -566,6 +758,11 @@ impl Engine {
                         .ok_or_else(|| {
                             EngineError::KeyNotFound("cash_flow not exists".to_string())
                         })?;
+                    validate_flow_mode_fields(
+                        &flow_model.name,
+                        flow_model.max_balance,
+                        flow_model.income_balance,
+                    )?;
                     let flow_currency =
                         Currency::try_from(flow_model.currency.as_str()).unwrap_or(vault_currency);
                     if flow_currency != vault_currency {
@@ -638,6 +835,8 @@ impl Engine {
         user_id: &str,
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
+        let category = normalize_optional_text(category);
+        let note = normalize_optional_text(note);
         let db_tx = self.database.begin().await?;
         let vault_model = self
             .require_vault_by_id_write(&db_tx, vault_id, user_id)
@@ -652,8 +851,8 @@ impl Engine {
             occurred_at,
             amount_minor,
             currency,
-            category.map(|s| s.to_string()),
-            note.map(|s| s.to_string()),
+            category,
+            note,
             user_id.to_string(),
             idempotency_key.map(|s| s.to_string()),
         )?;
@@ -696,6 +895,8 @@ impl Engine {
         user_id: &str,
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
+        let category = normalize_optional_text(category);
+        let note = normalize_optional_text(note);
         let db_tx = self.database.begin().await?;
         let vault_model = self
             .require_vault_by_id_write(&db_tx, vault_id, user_id)
@@ -710,8 +911,8 @@ impl Engine {
             occurred_at,
             amount_minor,
             currency,
-            category.map(|s| s.to_string()),
-            note.map(|s| s.to_string()),
+            category,
+            note,
             user_id.to_string(),
             idempotency_key.map(|s| s.to_string()),
         )?;
@@ -757,6 +958,8 @@ impl Engine {
         user_id: &str,
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
+        let category = normalize_optional_text(category);
+        let note = normalize_optional_text(note);
         let db_tx = self.database.begin().await?;
         let vault_model = self
             .require_vault_by_id_write(&db_tx, vault_id, user_id)
@@ -771,8 +974,8 @@ impl Engine {
             occurred_at,
             amount_minor,
             currency,
-            category.map(|s| s.to_string()),
-            note.map(|s| s.to_string()),
+            category,
+            note,
             user_id.to_string(),
             idempotency_key.map(|s| s.to_string()),
         )?;
@@ -818,6 +1021,7 @@ impl Engine {
                 "from_wallet_id and to_wallet_id must differ".to_string(),
             ));
         }
+        let note = normalize_optional_text(note);
         let db_tx = self.database.begin().await?;
         let vault_model = self
             .require_vault_by_id_write(&db_tx, vault_id, user_id)
@@ -835,7 +1039,7 @@ impl Engine {
             amount_minor,
             currency,
             None,
-            note.map(|s| s.to_string()),
+            note,
             user_id.to_string(),
             idempotency_key.map(|s| s.to_string()),
         )?;
@@ -881,6 +1085,7 @@ impl Engine {
                 "from_flow_id and to_flow_id must differ".to_string(),
             ));
         }
+        let note = normalize_optional_text(note);
         let db_tx = self.database.begin().await?;
         let vault_model = vault::Entity::find_by_id(vault_id.to_string())
             .one(&db_tx)
@@ -908,7 +1113,7 @@ impl Engine {
             amount_minor,
             currency,
             None,
-            note.map(|s| s.to_string()),
+            note,
             user_id.to_string(),
             idempotency_key.map(|s| s.to_string()),
         )?;
@@ -1022,6 +1227,8 @@ impl Engine {
                 "amount_minor must be > 0".to_string(),
             ));
         }
+        let category = normalize_optional_text(category);
+        let note = normalize_optional_text(note);
 
         let db_tx = self.database.begin().await?;
         let vault_model = self
@@ -1112,8 +1319,8 @@ impl Engine {
         let tx_active = transactions::ActiveModel {
             id: ActiveValue::Set(transaction_id.to_string()),
             amount_minor: ActiveValue::Set(amount_minor),
-            category: ActiveValue::Set(category.map(|s| s.to_string())),
-            note: ActiveValue::Set(note.map(|s| s.to_string())),
+            category: ActiveValue::Set(category),
+            note: ActiveValue::Set(note),
             occurred_at: ActiveValue::Set(occurred_at.unwrap_or(tx_model.occurred_at)),
             ..Default::default()
         };
@@ -1171,6 +1378,7 @@ impl Engine {
                 currency.code()
             )));
         }
+        validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
 
         db_tx.commit().await?;
         Ok(CashFlow {
@@ -1191,6 +1399,8 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<CashFlow> {
+        let name = normalize_required_flow_name(name)?;
+        let name_lower = name.to_lowercase();
         let db_tx = self.database.begin().await?;
         let vault_model = vault::Entity::find_by_id(vault_id.to_string())
             .one(&db_tx)
@@ -1200,7 +1410,7 @@ impl Engine {
 
         let model = cash_flows::Entity::find()
             .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
-            .filter(cash_flows::Column::Name.eq(name.to_string()))
+            .filter(Expr::cust("LOWER(name)").eq(name_lower))
             .one(&db_tx)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
@@ -1227,6 +1437,7 @@ impl Engine {
                 currency.code()
             )));
         }
+        validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
 
         db_tx.commit().await?;
         Ok(CashFlow {
@@ -1369,12 +1580,27 @@ impl Engine {
         user_id: &str,
         currency: Option<Currency>,
     ) -> ResultEngine<String> {
-        let mut new_vault = Vault::new(name.to_string(), user_id);
+        let name = normalize_required_name(name, "vault")?;
+
+        let mut new_vault = Vault::new(name.clone(), user_id);
         new_vault.currency = currency.unwrap_or_default();
         let new_vault_id = new_vault.id.clone();
         let vault_entry: vault::ActiveModel = (&new_vault).into();
 
         let db_tx = self.database.begin().await?;
+
+        // Enforce unique vault names per owner (case-insensitive) to avoid
+        // ambiguous name lookups.
+        let exists = vault::Entity::find()
+            .filter(vault::Column::UserId.eq(user_id.to_string()))
+            .filter(Expr::cust("LOWER(name)").eq(name.to_lowercase()))
+            .one(&db_tx)
+            .await?
+            .is_some();
+        if exists {
+            return Err(EngineError::ExistingKey(name));
+        }
+
         vault_entry.insert(&db_tx).await?;
 
         // Create the system flow "Unallocated".
@@ -1602,6 +1828,7 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<Uuid> {
         let occurred_at = Utc::now();
+        let name = normalize_required_flow_name(name)?;
         if balance < 0 {
             return Err(EngineError::InvalidAmount(
                 "flow balance must be >= 0".to_string(),
@@ -1621,7 +1848,7 @@ impl Engine {
         }
         let exists = cash_flows::Entity::find()
             .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
-            .filter(cash_flows::Column::Name.eq(name.to_string()))
+            .filter(Expr::cust("LOWER(name)").eq(name.to_lowercase()))
             .one(&db_tx)
             .await?
             .is_some();
@@ -1693,6 +1920,7 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<Uuid> {
         let occurred_at = Utc::now();
+        let name = normalize_required_name(name, "wallet")?;
         let db_tx = self.database.begin().await?;
         let vault_model = self
             .require_vault_by_id_write(&db_tx, vault_id, user_id)
@@ -1701,7 +1929,7 @@ impl Engine {
 
         let exists = wallets::Entity::find()
             .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
-            .filter(wallets::Column::Name.eq(name.to_string()))
+            .filter(Expr::cust("LOWER(name)").eq(name.to_lowercase()))
             .one(&db_tx)
             .await?
             .is_some();
@@ -1824,6 +2052,7 @@ impl Engine {
                     flow_currency.code()
                 )));
             }
+            validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
             let system_kind = model
                 .system_kind
                 .as_deref()
@@ -1836,11 +2065,7 @@ impl Engine {
                     system_kind,
                     balance: 0,
                     max_balance: model.max_balance,
-                    income_balance: if model.max_balance.is_some() {
-                        model.income_balance.map(|_| 0)
-                    } else {
-                        None
-                    },
+                    income_balance: model.income_balance.map(|_| 0),
                     currency: flow_currency,
                     archived: model.archived,
                 },
@@ -1957,6 +2182,11 @@ impl Engine {
                     currency.code()
                 )));
             }
+            validate_flow_mode_fields(
+                &flow_model.name,
+                flow_model.max_balance,
+                flow_model.income_balance,
+            )?;
             flows.insert(
                 id,
                 CashFlow {
