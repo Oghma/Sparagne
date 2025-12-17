@@ -134,6 +134,19 @@ pub mod transaction {
     }
 
     #[derive(Debug, Serialize, Deserialize)]
+    pub struct Refund {
+        pub vault_id: String,
+        /// Must be > 0. The kind defines the sign of the legs.
+        pub amount_minor: i64,
+        pub flow_id: Option<Uuid>,
+        pub wallet_id: Option<Uuid>,
+        pub category: Option<String>,
+        pub note: Option<String>,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
     pub struct TransferWalletNew {
         pub vault_id: String,
         pub amount_minor: i64,
