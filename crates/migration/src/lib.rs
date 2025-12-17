@@ -9,6 +9,7 @@ mod m20251212_120000_currency;
 mod m20251214_090000_stable_ids;
 mod m20251215_090000_system_flows;
 mod m20251215_120000_transactions;
+mod m20251217_090000_idempotency_key;
 
 pub struct Migrator;
 
@@ -25,6 +26,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20251214_090000_stable_ids::Migration),
             Box::new(m20251215_090000_system_flows::Migration),
             Box::new(m20251215_120000_transactions::Migration),
+            Box::new(m20251217_090000_idempotency_key::Migration),
         ]
     }
 }
