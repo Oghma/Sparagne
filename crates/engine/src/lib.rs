@@ -20,9 +20,11 @@ pub use wallets::Wallet;
 mod cash_flows;
 mod currency;
 mod error;
+mod flow_memberships;
 mod legs;
 mod money;
 mod transactions;
+mod vault_memberships;
 mod vault;
 mod wallets;
 
@@ -73,7 +75,16 @@ impl Engine {
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         if model.user_id != user_id {
-            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+            let has_membership = vault_memberships::Entity::find_by_id((
+                vault_id.to_string(),
+                user_id.to_string(),
+            ))
+            .one(db)
+            .await?
+            .is_some();
+            if !has_membership {
+                return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+            }
         }
         Ok(model)
     }
@@ -86,10 +97,21 @@ impl Engine {
     ) -> ResultEngine<vault::Model> {
         let model = vault::Entity::find()
             .filter(vault::Column::Name.eq(vault_name.to_string()))
-            .filter(vault::Column::UserId.eq(user_id.to_string()))
             .one(db)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+        if model.user_id != user_id {
+            let has_membership = vault_memberships::Entity::find_by_id((
+                model.id.clone(),
+                user_id.to_string(),
+            ))
+            .one(db)
+            .await?
+            .is_some();
+            if !has_membership {
+                return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+            }
+        }
         Ok(model)
     }
 
@@ -1142,6 +1164,14 @@ impl Engine {
         let mut default_wallet_model: wallets::ActiveModel = (&default_wallet).into();
         default_wallet_model.vault_id = ActiveValue::Set(new_vault_id.clone());
         default_wallet_model.insert(&db_tx).await?;
+
+        // Scaffolding for future sharing: create the owner membership row.
+        let membership = vault_memberships::ActiveModel {
+            vault_id: ActiveValue::Set(new_vault_id.clone()),
+            user_id: ActiveValue::Set(user_id.to_string()),
+            role: ActiveValue::Set("owner".to_string()),
+        };
+        membership.insert(&db_tx).await?;
 
         db_tx.commit().await?;
         Ok(new_vault_id)
