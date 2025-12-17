@@ -336,6 +336,7 @@ async fn get_flow_transactions(
             flow_id: Some(*flow_id),
             wallet_id: None,
             limit: Some(limit),
+            cursor: None,
             include_voided: Some(false),
             include_transfers: Some(false),
         },

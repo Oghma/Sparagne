@@ -69,6 +69,7 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
             flow_id: Some(flow.id),
             wallet_id: None,
             limit: Some(10_000),
+            cursor: None,
             include_voided: Some(false),
             include_transfers: Some(false),
         },

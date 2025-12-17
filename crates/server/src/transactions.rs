@@ -26,14 +26,15 @@ pub async fn list(
     let include_voided = payload.include_voided.unwrap_or(false);
     let include_transfers = payload.include_transfers.unwrap_or(false);
 
-    let txs = match (payload.flow_id, payload.wallet_id) {
+    let (txs, next_cursor) = match (payload.flow_id, payload.wallet_id) {
         (Some(flow_id), None) => {
             engine
-                .list_transactions_for_flow(
+                .list_transactions_for_flow_page(
                     &payload.vault_id,
                     flow_id,
                     &user.username,
                     limit,
+                    payload.cursor.as_deref(),
                     include_voided,
                     include_transfers,
                 )
@@ -41,11 +42,12 @@ pub async fn list(
         }
         (None, Some(wallet_id)) => {
             engine
-                .list_transactions_for_wallet(
+                .list_transactions_for_wallet_page(
                     &payload.vault_id,
                     wallet_id,
                     &user.username,
                     limit,
+                    payload.cursor.as_deref(),
                     include_voided,
                     include_transfers,
                 )
@@ -83,7 +85,10 @@ pub async fn list(
         })
         .collect();
 
-    Ok(Json(TransactionListResponse { transactions }))
+    Ok(Json(TransactionListResponse {
+        transactions,
+        next_cursor,
+    }))
 }
 
 pub async fn income_new(
