@@ -159,6 +159,19 @@ impl Engine {
             )));
         }
 
+        if let Some(key) = tx.idempotency_key.as_deref() {
+            let existing = transactions::Entity::find()
+                .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+                .filter(transactions::Column::CreatedBy.eq(tx.created_by.clone()))
+                .filter(transactions::Column::IdempotencyKey.eq(key.to_string()))
+                .one(db_tx)
+                .await?;
+            if let Some(existing) = existing {
+                return Uuid::parse_str(&existing.id)
+                    .map_err(|_| EngineError::InvalidAmount("invalid transaction id".to_string()));
+            }
+        }
+
         // Validate currency and domain invariants by simulating balance changes, while also
         // computing the resulting denormalized balances to persist.
         let mut wallet_new_balances: HashMap<Uuid, i64> = HashMap::new();
@@ -233,7 +246,23 @@ impl Engine {
             }
         }
 
-        transactions::ActiveModel::from(tx).insert(db_tx).await?;
+        if let Err(err) = transactions::ActiveModel::from(tx).insert(db_tx).await {
+            if tx.idempotency_key.is_some() {
+                let key = tx.idempotency_key.as_deref().unwrap_or_default();
+                let existing = transactions::Entity::find()
+                    .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+                    .filter(transactions::Column::CreatedBy.eq(tx.created_by.clone()))
+                    .filter(transactions::Column::IdempotencyKey.eq(key.to_string()))
+                    .one(db_tx)
+                    .await?;
+                if let Some(existing) = existing {
+                    return Uuid::parse_str(&existing.id).map_err(|_| {
+                        EngineError::InvalidAmount("invalid transaction id".to_string())
+                    });
+                }
+            }
+            return Err(err.into());
+        }
         for leg in legs {
             legs::ActiveModel::from(leg).insert(db_tx).await?;
         }
@@ -366,6 +395,7 @@ impl Engine {
         wallet_id: Option<Uuid>,
         category: Option<&str>,
         note: Option<&str>,
+        idempotency_key: Option<&str>,
         user_id: &str,
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
@@ -384,6 +414,7 @@ impl Engine {
             category.map(|s| s.to_string()),
             note.map(|s| s.to_string()),
             user_id.to_string(),
+            idempotency_key.map(|s| s.to_string()),
         )?;
         let legs = vec![
             Leg::new(
@@ -404,10 +435,11 @@ impl Engine {
             ),
         ];
 
-        self.create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
+        let id = self
+            .create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
             .await?;
         db_tx.commit().await?;
-        Ok(tx.id)
+        Ok(id)
     }
 
     /// Create an expense transaction (decreases both wallet and flow).
@@ -419,6 +451,7 @@ impl Engine {
         wallet_id: Option<Uuid>,
         category: Option<&str>,
         note: Option<&str>,
+        idempotency_key: Option<&str>,
         user_id: &str,
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
@@ -437,6 +470,7 @@ impl Engine {
             category.map(|s| s.to_string()),
             note.map(|s| s.to_string()),
             user_id.to_string(),
+            idempotency_key.map(|s| s.to_string()),
         )?;
         let legs = vec![
             Leg::new(
@@ -457,10 +491,11 @@ impl Engine {
             ),
         ];
 
-        self.create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
+        let id = self
+            .create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
             .await?;
         db_tx.commit().await?;
-        Ok(tx.id)
+        Ok(id)
     }
 
     /// Create a refund transaction (increases both wallet and flow).
@@ -475,6 +510,7 @@ impl Engine {
         wallet_id: Option<Uuid>,
         category: Option<&str>,
         note: Option<&str>,
+        idempotency_key: Option<&str>,
         user_id: &str,
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
@@ -493,6 +529,7 @@ impl Engine {
             category.map(|s| s.to_string()),
             note.map(|s| s.to_string()),
             user_id.to_string(),
+            idempotency_key.map(|s| s.to_string()),
         )?;
         let legs = vec![
             Leg::new(
@@ -513,10 +550,11 @@ impl Engine {
             ),
         ];
 
-        self.create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
+        let id = self
+            .create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
             .await?;
         db_tx.commit().await?;
-        Ok(tx.id)
+        Ok(id)
     }
 
     pub async fn transfer_wallet(
@@ -526,6 +564,7 @@ impl Engine {
         from_wallet_id: Uuid,
         to_wallet_id: Uuid,
         note: Option<&str>,
+        idempotency_key: Option<&str>,
         user_id: &str,
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
@@ -551,6 +590,7 @@ impl Engine {
             None,
             note.map(|s| s.to_string()),
             user_id.to_string(),
+            idempotency_key.map(|s| s.to_string()),
         )?;
         let legs = vec![
             Leg::new(
@@ -571,10 +611,11 @@ impl Engine {
             ),
         ];
 
-        self.create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
+        let id = self
+            .create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
             .await?;
         db_tx.commit().await?;
-        Ok(tx.id)
+        Ok(id)
     }
 
     pub async fn transfer_flow(
@@ -584,6 +625,7 @@ impl Engine {
         from_flow_id: Uuid,
         to_flow_id: Uuid,
         note: Option<&str>,
+        idempotency_key: Option<&str>,
         user_id: &str,
         occurred_at: DateTime<Utc>,
     ) -> ResultEngine<Uuid> {
@@ -609,6 +651,7 @@ impl Engine {
             None,
             note.map(|s| s.to_string()),
             user_id.to_string(),
+            idempotency_key.map(|s| s.to_string()),
         )?;
         let legs = vec![
             Leg::new(
@@ -629,10 +672,11 @@ impl Engine {
             ),
         ];
 
-        self.create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
+        let id = self
+            .create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
             .await?;
         db_tx.commit().await?;
-        Ok(tx.id)
+        Ok(id)
     }
 
     /// Voids a transaction (soft delete).
@@ -1145,6 +1189,7 @@ impl Engine {
                 None,
                 Some(format!("opening allocation for flow '{name}'")),
                 user_id.to_string(),
+                None,
             )?;
 
             let legs = vec![
@@ -1223,6 +1268,7 @@ impl Engine {
                 Some("opening".to_string()),
                 Some(format!("opening balance for wallet '{name}'")),
                 user_id.to_string(),
+                None,
             )?;
 
             let unallocated_flow_id = self.unallocated_flow_id(&db_tx, vault_id).await?;

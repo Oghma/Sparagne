@@ -58,6 +58,7 @@ pub struct Transaction {
     pub kind: TransactionKind,
     pub occurred_at: DateTime<Utc>,
     pub amount_minor: i64,
+    pub idempotency_key: Option<String>,
     pub currency: Currency,
     pub category: Option<String>,
     pub note: Option<String>,
@@ -78,10 +79,18 @@ impl Transaction {
         category: Option<String>,
         note: Option<String>,
         created_by: String,
+        idempotency_key: Option<String>,
     ) -> ResultEngine<Self> {
         if amount_minor <= 0 {
             return Err(EngineError::InvalidAmount(
                 "amount_minor must be > 0".to_string(),
+            ));
+        }
+        if let Some(key) = &idempotency_key
+            && key.trim().is_empty()
+        {
+            return Err(EngineError::InvalidAmount(
+                "idempotency_key must not be empty".to_string(),
             ));
         }
         Ok(Self {
@@ -90,6 +99,7 @@ impl Transaction {
             kind,
             occurred_at,
             amount_minor,
+            idempotency_key,
             currency,
             category,
             note,
@@ -111,6 +121,7 @@ pub struct Model {
     pub kind: String,
     pub occurred_at: DateTimeUtc,
     pub amount_minor: i64,
+    pub idempotency_key: Option<String>,
     pub currency: String,
     pub category: Option<String>,
     pub note: Option<String>,
@@ -142,6 +153,7 @@ impl From<&Transaction> for ActiveModel {
             kind: ActiveValue::Set(tx.kind.as_str().to_string()),
             occurred_at: ActiveValue::Set(tx.occurred_at),
             amount_minor: ActiveValue::Set(tx.amount_minor),
+            idempotency_key: ActiveValue::Set(tx.idempotency_key.clone()),
             currency: ActiveValue::Set(tx.currency.code().to_string()),
             category: ActiveValue::Set(tx.category.clone()),
             note: ActiveValue::Set(tx.note.clone()),
@@ -166,6 +178,7 @@ impl TryFrom<Model> for Transaction {
             kind: TransactionKind::try_from(model.kind.as_str())?,
             occurred_at: model.occurred_at,
             amount_minor: model.amount_minor,
+            idempotency_key: model.idempotency_key,
             currency: Currency::try_from(model.currency.as_str()).unwrap_or_default(),
             category: model.category,
             note: model.note,

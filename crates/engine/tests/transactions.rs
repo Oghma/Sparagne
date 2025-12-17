@@ -105,6 +105,7 @@ async fn income_expense_void_reverts_balances() {
             Some(wallet_id),
             Some("salary"),
             Some("January"),
+            None,
             "alice",
             Utc::now(),
         )
@@ -124,6 +125,7 @@ async fn income_expense_void_reverts_balances() {
             Some(wallet_id),
             Some("food"),
             Some("Lunch"),
+            None,
             "alice",
             Utc::now(),
         )
@@ -175,6 +177,7 @@ async fn refund_increases_balances() {
             Some(wallet_id),
             Some("salary"),
             None,
+            None,
             "alice",
             Utc::now(),
         )
@@ -187,6 +190,7 @@ async fn refund_increases_balances() {
             Some(flow_id),
             Some(wallet_id),
             Some("food"),
+            None,
             None,
             "alice",
             Utc::now(),
@@ -201,6 +205,7 @@ async fn refund_increases_balances() {
             Some(wallet_id),
             Some("food"),
             Some("refund"),
+            None,
             "alice",
             Utc::now(),
         )
@@ -248,6 +253,7 @@ async fn transfer_wallet_does_not_touch_flows() {
             Some(wallet_cash),
             Some("salary"),
             None,
+            None,
             "alice",
             Utc::now(),
         )
@@ -261,6 +267,7 @@ async fn transfer_wallet_does_not_touch_flows() {
             wallet_cash,
             wallet_bank,
             Some("move"),
+            None,
             "alice",
             Utc::now(),
         )
@@ -314,6 +321,7 @@ async fn income_capped_counts_transfers_in() {
             Some(wallet_id),
             Some("salary"),
             None,
+            None,
             "alice",
             Utc::now(),
         )
@@ -327,6 +335,7 @@ async fn income_capped_counts_transfers_in() {
             from_flow,
             capped_flow,
             Some("allocate"),
+            None,
             "alice",
             Utc::now(),
         )
@@ -364,6 +373,7 @@ async fn update_transaction_updates_balances() {
             Some(wallet_id),
             None,
             None,
+            None,
             "alice",
             Utc::now(),
         )
@@ -377,6 +387,7 @@ async fn update_transaction_updates_balances() {
             Some(flow_id),
             Some(wallet_id),
             Some("food"),
+            None,
             None,
             "alice",
             Utc::now(),
@@ -439,6 +450,7 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
             unallocated_flow,
             capped_flow,
             Some("allocate"),
+            None,
             "alice",
             Utc::now(),
         )
@@ -458,6 +470,7 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
             Some(wallet_cash),
             Some("salary"),
             None,
+            None,
             "alice",
             Utc::now(),
         )
@@ -470,6 +483,7 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
             Some(vacanze_flow),
             Some(wallet_cash),
             Some("food"),
+            None,
             None,
             "alice",
             Utc::now(),
@@ -567,6 +581,7 @@ async fn expense_on_flow_without_balance_fails() {
             Some(wallet_id),
             Some("food"),
             None,
+            None,
             "alice",
             Utc::now(),
         )
@@ -598,6 +613,7 @@ async fn list_transactions_excludes_voided_and_transfers_by_default() {
             Some(wallet_id),
             Some("salary"),
             None,
+            None,
             "alice",
             Utc::now(),
         )
@@ -611,6 +627,7 @@ async fn list_transactions_excludes_voided_and_transfers_by_default() {
             None,
             Some(wallet_id),
             Some("food"),
+            None,
             None,
             "alice",
             Utc::now(),
@@ -634,6 +651,7 @@ async fn list_transactions_excludes_voided_and_transfers_by_default() {
             wallet_id,
             other_wallet,
             Some("move"),
+            None,
             "alice",
             Utc::now(),
         )
@@ -681,6 +699,7 @@ async fn restart_engine_reads_same_state() {
             Some(wallet_id),
             Some("salary"),
             None,
+            None,
             "alice",
             Utc::now(),
         )
@@ -698,4 +717,55 @@ async fn restart_engine_reads_same_state() {
 
     drop(db2);
     let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn idempotency_key_dedupes_create() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    let id1 = engine
+        .income(
+            &vault_id,
+            1000,
+            None,
+            Some(wallet_id),
+            Some("salary"),
+            None,
+            Some("test-key-1"),
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let id2 = engine
+        .income(
+            &vault_id,
+            1000,
+            None,
+            Some(wallet_id),
+            Some("salary"),
+            None,
+            Some("test-key-1"),
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(id1, id2);
+    let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
+    assert_eq!(wallet.balance, 1000);
 }
