@@ -27,8 +27,7 @@ async fn engine_with_db() -> (Engine, DatabaseConnection) {
 }
 
 async fn engine_with_file_db() -> (Engine, DatabaseConnection, String, std::path::PathBuf) {
-    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/test_dbs");
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/test_dbs");
     std::fs::create_dir_all(&root).unwrap();
 
     let path = root.join(format!("engine_{}.db", Uuid::new_v4()));
@@ -278,8 +277,14 @@ async fn transfer_wallet_does_not_touch_flows() {
         .await
         .unwrap();
 
-    let cash = engine.wallet(wallet_cash, &vault_id, "alice").await.unwrap();
-    let bank = engine.wallet(wallet_bank, &vault_id, "alice").await.unwrap();
+    let cash = engine
+        .wallet(wallet_cash, &vault_id, "alice")
+        .await
+        .unwrap();
+    let bank = engine
+        .wallet(wallet_bank, &vault_id, "alice")
+        .await
+        .unwrap();
     assert_eq!(cash.balance, 750);
     assert_eq!(bank.balance, 250);
 
@@ -671,9 +676,18 @@ async fn update_transfer_wallet_can_change_endpoints_and_amount() {
         .await
         .unwrap();
 
-    let cash = engine.wallet(wallet_cash, &vault_id, "alice").await.unwrap();
-    let bank = engine.wallet(wallet_bank, &vault_id, "alice").await.unwrap();
-    let card = engine.wallet(wallet_card, &vault_id, "alice").await.unwrap();
+    let cash = engine
+        .wallet(wallet_cash, &vault_id, "alice")
+        .await
+        .unwrap();
+    let bank = engine
+        .wallet(wallet_bank, &vault_id, "alice")
+        .await
+        .unwrap();
+    let card = engine
+        .wallet(wallet_card, &vault_id, "alice")
+        .await
+        .unwrap();
     assert_eq!(cash.balance, 100);
     assert_eq!(bank.balance, -30);
     assert_eq!(card.balance, 30);
@@ -762,7 +776,16 @@ async fn update_transfer_flow_can_change_endpoints_and_amount() {
         .unwrap();
 
     let tx_id = engine
-        .transfer_flow(&vault_id, 40, f1, f2, Some("move"), None, "alice", Utc::now())
+        .transfer_flow(
+            &vault_id,
+            40,
+            f1,
+            f2,
+            Some("move"),
+            None,
+            "alice",
+            Utc::now(),
+        )
         .await
         .unwrap();
 
@@ -909,7 +932,10 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
     // - vacanze_flow: +1000 (income), voided expense ignored
     // - capped_flow: +300 (transfer in)
     // - unallocated: -300 (transfer out); untouched by wallet+vacanze income
-    let wallet = engine.wallet(wallet_cash, &vault_id, "alice").await.unwrap();
+    let wallet = engine
+        .wallet(wallet_cash, &vault_id, "alice")
+        .await
+        .unwrap();
     assert_eq!(wallet.balance, 1000);
 
     let vacanze = engine
@@ -918,7 +944,10 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
         .unwrap();
     assert_eq!(vacanze.balance, 1000);
 
-    let capped = engine.cash_flow(capped_flow, &vault_id, "alice").await.unwrap();
+    let capped = engine
+        .cash_flow(capped_flow, &vault_id, "alice")
+        .await
+        .unwrap();
     assert_eq!(capped.balance, 300);
     assert_eq!(capped.income_balance, Some(300));
 
@@ -1080,9 +1109,10 @@ async fn list_transactions_excludes_voided_and_transfers_by_default() {
         .unwrap();
     assert_eq!(txs.len(), 3);
     assert!(txs.iter().any(|(tx, _)| tx.voided_at.is_some()));
-    assert!(txs
-        .iter()
-        .any(|(tx, _)| tx.kind == engine::TransactionKind::TransferWallet));
+    assert!(
+        txs.iter()
+            .any(|(tx, _)| tx.kind == engine::TransactionKind::TransferWallet)
+    );
 }
 
 #[tokio::test]
@@ -1183,7 +1213,11 @@ async fn restart_engine_reads_same_state() {
     drop(db);
 
     let db2 = Database::connect(&url).await.unwrap();
-    let engine2 = Engine::builder().database(db2.clone()).build().await.unwrap();
+    let engine2 = Engine::builder()
+        .database(db2.clone())
+        .build()
+        .await
+        .unwrap();
 
     let wallet = engine2.wallet(wallet_id, &vault_id, "alice").await.unwrap();
     assert_eq!(wallet.balance, 1000);
@@ -1411,15 +1445,45 @@ async fn list_transactions_can_filter_by_date_range_and_kinds() {
     let t2 = Utc.with_ymd_and_hms(2025, 1, 3, 10, 0, 0).unwrap();
 
     let id0 = engine
-        .income(&vault_id, 10, None, Some(wallet_id), None, None, None, "alice", t0)
+        .income(
+            &vault_id,
+            10,
+            None,
+            Some(wallet_id),
+            None,
+            None,
+            None,
+            "alice",
+            t0,
+        )
         .await
         .unwrap();
     let id1 = engine
-        .expense(&vault_id, 5, None, Some(wallet_id), None, None, None, "alice", t1)
+        .expense(
+            &vault_id,
+            5,
+            None,
+            Some(wallet_id),
+            None,
+            None,
+            None,
+            "alice",
+            t1,
+        )
         .await
         .unwrap();
     let id2 = engine
-        .refund(&vault_id, 2, None, Some(wallet_id), None, None, None, "alice", t2)
+        .refund(
+            &vault_id,
+            2,
+            None,
+            Some(wallet_id),
+            None,
+            None,
+            None,
+            "alice",
+            t2,
+        )
         .await
         .unwrap();
     let _ = (id0, id1, id2);
@@ -1502,7 +1566,10 @@ async fn list_transactions_rejects_invalid_filters() {
         )
         .await
         .unwrap_err();
-    assert_eq!(err, EngineError::InvalidAmount("kinds must not be empty".to_string()));
+    assert_eq!(
+        err,
+        EngineError::InvalidAmount("kinds must not be empty".to_string())
+    );
 }
 
 #[tokio::test]
@@ -1607,7 +1674,10 @@ async fn flow_membership_allows_reading_flow_without_vault_access() {
         .vault_snapshot(Some(&vault_id), None, "bob")
         .await
         .unwrap_err();
-    assert_eq!(err, EngineError::KeyNotFound("vault not exists".to_string()));
+    assert_eq!(
+        err,
+        EngineError::KeyNotFound("vault not exists".to_string())
+    );
 }
 
 #[tokio::test]
@@ -1789,13 +1859,19 @@ async fn non_owner_cannot_manage_memberships() {
         .upsert_vault_member(&vault_id, "charlie", "viewer", "bob")
         .await
         .unwrap_err();
-    assert_eq!(err, EngineError::KeyNotFound("vault not exists".to_string()));
+    assert_eq!(
+        err,
+        EngineError::KeyNotFound("vault not exists".to_string())
+    );
 
     let err = engine
         .remove_vault_member(&vault_id, "bob", "bob")
         .await
         .unwrap_err();
-    assert_eq!(err, EngineError::KeyNotFound("vault not exists".to_string()));
+    assert_eq!(
+        err,
+        EngineError::KeyNotFound("vault not exists".to_string())
+    );
 }
 
 #[tokio::test]
@@ -1843,5 +1919,8 @@ async fn vault_owner_can_manage_flow_members_and_unallocated_is_not_shareable() 
         .upsert_flow_member(&vault_id, unallocated, "bob", "viewer", "alice")
         .await
         .unwrap_err();
-    assert_eq!(err, EngineError::InvalidFlow("cannot share Unallocated".to_string()));
+    assert_eq!(
+        err,
+        EngineError::InvalidFlow("cannot share Unallocated".to_string())
+    );
 }

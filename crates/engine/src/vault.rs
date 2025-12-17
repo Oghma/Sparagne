@@ -48,7 +48,9 @@ impl Vault {
     ) -> ResultEngine<(Uuid, cash_flows::ActiveModel)> {
         let name = name.trim().to_string();
         if name.is_empty() {
-            return Err(EngineError::InvalidFlow("flow name must not be empty".to_string()));
+            return Err(EngineError::InvalidFlow(
+                "flow name must not be empty".to_string(),
+            ));
         }
         if name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
             return Err(EngineError::InvalidFlow(

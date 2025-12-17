@@ -78,7 +78,9 @@ fn message_for_engine_error(err: EngineError) -> String {
 impl IntoResponse for ServerError {
     fn into_response(self) -> axum::response::Response {
         let (status, error) = match self {
-            ServerError::Engine(err) => (status_for_engine_error(&err), message_for_engine_error(err)),
+            ServerError::Engine(err) => {
+                (status_for_engine_error(&err), message_for_engine_error(err))
+            }
             ServerError::Generic(err) => (StatusCode::BAD_REQUEST, err),
         };
 
@@ -98,7 +100,8 @@ mod tests {
 
     #[test]
     fn engine_forbidden_maps_to_403() {
-        let res = ServerError::from(EngineError::Forbidden("forbidden".to_string())).into_response();
+        let res =
+            ServerError::from(EngineError::Forbidden("forbidden".to_string())).into_response();
         assert_eq!(res.status(), StatusCode::FORBIDDEN);
     }
 

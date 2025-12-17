@@ -31,4 +31,3 @@ impl Related<super::cash_flows::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-

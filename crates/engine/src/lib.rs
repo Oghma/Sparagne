@@ -11,9 +11,8 @@ pub use legs::{Leg, LegTarget};
 pub use money::Money;
 use sea_orm::{
     ActiveValue, Condition, DatabaseTransaction, JoinType, QueryFilter, QueryOrder, QuerySelect,
-    Statement, TransactionTrait, prelude::*,
+    Statement, TransactionTrait, prelude::*, sea_query::Expr,
 };
-use sea_orm::sea_query::Expr;
 pub use transactions::{Transaction, TransactionKind};
 pub use vault::Vault;
 pub use wallets::Wallet;
@@ -26,8 +25,8 @@ mod legs;
 mod money;
 mod transactions;
 mod users;
-mod vault_memberships;
 mod vault;
+mod vault_memberships;
 mod wallets;
 
 type ResultEngine<T> = Result<T, EngineError>;
@@ -45,7 +44,9 @@ fn normalize_required_name(value: &str, label: &str) -> ResultEngine<String> {
 fn normalize_required_flow_name(value: &str) -> ResultEngine<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        return Err(EngineError::InvalidFlow("flow name must not be empty".to_string()));
+        return Err(EngineError::InvalidFlow(
+            "flow name must not be empty".to_string(),
+        ));
     }
     Ok(trimmed.to_string())
 }
@@ -64,7 +65,10 @@ fn apply_optional_text_patch(existing: Option<String>, patch: Option<&str>) -> O
     }
 }
 
-fn apply_optional_datetime_patch(existing: DateTime<Utc>, patch: Option<DateTime<Utc>>) -> DateTime<Utc> {
+fn apply_optional_datetime_patch(
+    existing: DateTime<Utc>,
+    patch: Option<DateTime<Utc>>,
+) -> DateTime<Utc> {
     patch.unwrap_or(existing)
 }
 
@@ -138,9 +142,8 @@ struct TransactionsCursor {
 
 impl TransactionsCursor {
     fn encode(&self) -> ResultEngine<String> {
-        let bytes = serde_json::to_vec(self).map_err(|_| {
-            EngineError::InvalidAmount("invalid transactions cursor".to_string())
-        })?;
+        let bytes = serde_json::to_vec(self)
+            .map_err(|_| EngineError::InvalidAmount("invalid transactions cursor".to_string()))?;
         Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
     }
 
@@ -185,9 +188,10 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<Option<MembershipRole>> {
-        let row = vault_memberships::Entity::find_by_id((vault_id.to_string(), user_id.to_string()))
-            .one(db)
-            .await?;
+        let row =
+            vault_memberships::Entity::find_by_id((vault_id.to_string(), user_id.to_string()))
+                .one(db)
+                .await?;
         row.as_ref()
             .map(|m| MembershipRole::try_from(m.role.as_str()))
             .transpose()
@@ -264,7 +268,10 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<bool> {
-        let Some(vault) = vault::Entity::find_by_id(vault_id.to_string()).one(db).await? else {
+        let Some(vault) = vault::Entity::find_by_id(vault_id.to_string())
+            .one(db)
+            .await?
+        else {
             return Ok(false);
         };
         if vault.user_id == user_id {
@@ -282,7 +289,10 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<bool> {
-        let Some(vault) = vault::Entity::find_by_id(vault_id.to_string()).one(db).await? else {
+        let Some(vault) = vault::Entity::find_by_id(vault_id.to_string())
+            .one(db)
+            .await?
+        else {
             return Ok(false);
         };
         if vault.user_id == user_id {
@@ -325,7 +335,9 @@ impl Engine {
         flow_id: Uuid,
         user_id: &str,
     ) -> ResultEngine<cash_flows::Model> {
-        let model = self.require_flow_read(db, vault_id, flow_id, user_id).await?;
+        let model = self
+            .require_flow_read(db, vault_id, flow_id, user_id)
+            .await?;
         if self.has_vault_write_access(db, vault_id, user_id).await? {
             return Ok(model);
         }
@@ -658,8 +670,8 @@ impl Engine {
             }
         }
 
-        // Validate currency and domain invariants by simulating balance changes, while also
-        // computing the resulting denormalized balances to persist.
+        // Validate currency and domain invariants by simulating balance changes, while
+        // also computing the resulting denormalized balances to persist.
         let mut wallet_new_balances: HashMap<Uuid, i64> = HashMap::new();
         let mut flow_previews: HashMap<Uuid, CashFlow> = HashMap::new();
 
@@ -678,8 +690,8 @@ impl Engine {
                         .one(db_tx)
                         .await?
                         .ok_or_else(|| EngineError::KeyNotFound("wallet not exists".to_string()))?;
-                    let wallet_currency =
-                        Currency::try_from(wallet_model.currency.as_str()).unwrap_or(vault_currency);
+                    let wallet_currency = Currency::try_from(wallet_model.currency.as_str())
+                        .unwrap_or(vault_currency);
                     if wallet_currency != vault_currency {
                         return Err(EngineError::CurrencyMismatch(format!(
                             "wallet currency is {}, got {}",
@@ -798,8 +810,8 @@ impl Engine {
                         .one(db_tx)
                         .await?
                         .ok_or_else(|| EngineError::KeyNotFound("wallet not exists".to_string()))?;
-                    let wallet_currency =
-                        Currency::try_from(wallet_model.currency.as_str()).unwrap_or(vault_currency);
+                    let wallet_currency = Currency::try_from(wallet_model.currency.as_str())
+                        .unwrap_or(vault_currency);
                     if wallet_currency != vault_currency {
                         return Err(EngineError::CurrencyMismatch(format!(
                             "vault currency is {}, got {}",
@@ -807,7 +819,9 @@ impl Engine {
                             wallet_currency.code()
                         )));
                     }
-                    let entry = wallet_new_balances.entry(wallet_id).or_insert(wallet_model.balance);
+                    let entry = wallet_new_balances
+                        .entry(wallet_id)
+                        .or_insert(wallet_model.balance);
                     *entry = *entry - *old_amount_minor + *new_amount_minor;
                 }
                 LegTarget::Flow { flow_id } => {
@@ -1090,7 +1104,8 @@ impl Engine {
         // Ensure wallets belong to the vault.
         self.resolve_wallet_id(&db_tx, vault_id, Some(from_wallet_id))
             .await?;
-        self.resolve_wallet_id(&db_tx, vault_id, Some(to_wallet_id)).await?;
+        self.resolve_wallet_id(&db_tx, vault_id, Some(to_wallet_id))
+            .await?;
 
         let tx = Transaction::new(
             vault_id.to_string(),
@@ -1155,10 +1170,14 @@ impl Engine {
         // AuthZ:
         // - Vault owner/editor can transfer between any flows in the vault.
         // - Otherwise, user must be editor/owner on both flows (via flow_memberships).
-        if self.has_vault_write_access(&db_tx, vault_id, user_id).await? {
+        if self
+            .has_vault_write_access(&db_tx, vault_id, user_id)
+            .await?
+        {
             self.resolve_flow_id(&db_tx, vault_id, Some(from_flow_id))
                 .await?;
-            self.resolve_flow_id(&db_tx, vault_id, Some(to_flow_id)).await?;
+            self.resolve_flow_id(&db_tx, vault_id, Some(to_flow_id))
+                .await?;
         } else {
             self.require_flow_write(&db_tx, vault_id, from_flow_id, user_id)
                 .await?;
@@ -1249,9 +1268,9 @@ impl Engine {
             updates.push((leg.target, leg.amount_minor, 0));
         }
 
-        let (wallet_new_balances, flow_previews) =
-            self.preview_apply_leg_updates(&db_tx, vault_id, vault_currency, &updates)
-                .await?;
+        let (wallet_new_balances, flow_previews) = self
+            .preview_apply_leg_updates(&db_tx, vault_id, vault_currency, &updates)
+            .await?;
 
         let tx_active = transactions::ActiveModel {
             id: ActiveValue::Set(transaction_id.to_string()),
@@ -1354,7 +1373,9 @@ impl Engine {
                     }
                 }
                 let existing_wallet_id = existing_wallet_id.ok_or_else(|| {
-                    EngineError::InvalidAmount("invalid transaction: missing wallet leg".to_string())
+                    EngineError::InvalidAmount(
+                        "invalid transaction: missing wallet leg".to_string(),
+                    )
                 })?;
                 let existing_flow_id = existing_flow_id.ok_or_else(|| {
                     EngineError::InvalidAmount("invalid transaction: missing flow leg".to_string())
@@ -1364,7 +1385,8 @@ impl Engine {
                 let new_flow_id = flow_id.unwrap_or(existing_flow_id);
                 self.require_wallet_in_vault(&db_tx, vault_id, new_wallet_id)
                     .await?;
-                self.require_flow_in_vault(&db_tx, vault_id, new_flow_id).await?;
+                self.require_flow_in_vault(&db_tx, vault_id, new_flow_id)
+                    .await?;
 
                 let sign = match kind {
                     TransactionKind::Income | TransactionKind::Refund => 1,
@@ -1390,7 +1412,9 @@ impl Engine {
                             new_signed_amount,
                         ),
                         LegTarget::Flow { .. } => (
-                            LegTarget::Flow { flow_id: new_flow_id },
+                            LegTarget::Flow {
+                                flow_id: new_flow_id,
+                            },
                             new_signed_amount,
                         ),
                     };
@@ -1455,13 +1479,18 @@ impl Engine {
                 }
                 self.require_wallet_in_vault(&db_tx, vault_id, new_from)
                     .await?;
-                self.require_wallet_in_vault(&db_tx, vault_id, new_to).await?;
+                self.require_wallet_in_vault(&db_tx, vault_id, new_to)
+                    .await?;
 
                 let from_leg_id = from_leg_id.ok_or_else(|| {
-                    EngineError::InvalidAmount("invalid transfer_wallet: missing leg id".to_string())
+                    EngineError::InvalidAmount(
+                        "invalid transfer_wallet: missing leg id".to_string(),
+                    )
                 })?;
                 let to_leg_id = to_leg_id.ok_or_else(|| {
-                    EngineError::InvalidAmount("invalid transfer_wallet: missing leg id".to_string())
+                    EngineError::InvalidAmount(
+                        "invalid transfer_wallet: missing leg id".to_string(),
+                    )
                 })?;
 
                 for (model, leg) in &leg_pairs {
@@ -1476,14 +1505,13 @@ impl Engine {
                         .map_err(|_| EngineError::InvalidAmount("invalid leg id".to_string()))?;
                     let (new_target, new_amount) = if id == from_leg_id {
                         (
-                            LegTarget::Wallet { wallet_id: new_from },
+                            LegTarget::Wallet {
+                                wallet_id: new_from,
+                            },
                             -new_amount_minor,
                         )
                     } else if id == to_leg_id {
-                        (
-                            LegTarget::Wallet { wallet_id: new_to },
-                            new_amount_minor,
-                        )
+                        (LegTarget::Wallet { wallet_id: new_to }, new_amount_minor)
                     } else {
                         return Err(EngineError::InvalidAmount(
                             "invalid transfer_wallet: unexpected legs".to_string(),
@@ -1548,7 +1576,8 @@ impl Engine {
                         "from_flow_id and to_flow_id must differ".to_string(),
                     ));
                 }
-                self.require_flow_in_vault(&db_tx, vault_id, new_from).await?;
+                self.require_flow_in_vault(&db_tx, vault_id, new_from)
+                    .await?;
                 self.require_flow_in_vault(&db_tx, vault_id, new_to).await?;
 
                 let from_leg_id = from_leg_id.ok_or_else(|| {
@@ -1569,10 +1598,7 @@ impl Engine {
                     let id = Uuid::parse_str(&model.id)
                         .map_err(|_| EngineError::InvalidAmount("invalid leg id".to_string()))?;
                     let (new_target, new_amount) = if id == from_leg_id {
-                        (
-                            LegTarget::Flow { flow_id: new_from },
-                            -new_amount_minor,
-                        )
+                        (LegTarget::Flow { flow_id: new_from }, -new_amount_minor)
                     } else if id == to_leg_id {
                         (LegTarget::Flow { flow_id: new_to }, new_amount_minor)
                     } else {
@@ -1606,7 +1632,11 @@ impl Engine {
                 }
             }
             TransactionKind::TransferWallet => {
-                if wallet_id.is_some() || flow_id.is_some() || from_flow_id.is_some() || to_flow_id.is_some() {
+                if wallet_id.is_some()
+                    || flow_id.is_some()
+                    || from_flow_id.is_some()
+                    || to_flow_id.is_some()
+                {
                     return Err(EngineError::InvalidAmount(
                         "invalid update: unexpected wallet/flow fields".to_string(),
                     ));
@@ -1728,7 +1758,10 @@ impl Engine {
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
 
-        if !self.has_vault_read_access(&db_tx, vault_id, user_id).await? {
+        if !self
+            .has_vault_read_access(&db_tx, vault_id, user_id)
+            .await?
+        {
             let role = self
                 .flow_membership_role(&db_tx, &model.id, user_id)
                 .await?
@@ -1968,9 +2001,12 @@ impl Engine {
         };
 
         // Upsert: insert if missing, otherwise update role.
-        match vault_memberships::Entity::find_by_id((vault_id.to_string(), member_username.to_string()))
-            .one(&db_tx)
-            .await?
+        match vault_memberships::Entity::find_by_id((
+            vault_id.to_string(),
+            member_username.to_string(),
+        ))
+        .one(&db_tx)
+        .await?
         {
             Some(_) => {
                 active.update(&db_tx).await?;
@@ -2024,10 +2060,7 @@ impl Engine {
             .all(&db_tx)
             .await?;
         db_tx.commit().await?;
-        Ok(rows
-            .into_iter()
-            .map(|m| (m.user_id, m.role))
-            .collect())
+        Ok(rows.into_iter().map(|m| (m.user_id, m.role)).collect())
     }
 
     /// Adds or updates a flow member (owner-only, flow belongs to the vault).
@@ -2065,9 +2098,12 @@ impl Engine {
             role: ActiveValue::Set(role.to_string()),
         };
 
-        match flow_memberships::Entity::find_by_id((flow_id.to_string(), member_username.to_string()))
-            .one(&db_tx)
-            .await?
+        match flow_memberships::Entity::find_by_id((
+            flow_id.to_string(),
+            member_username.to_string(),
+        ))
+        .one(&db_tx)
+        .await?
         {
             Some(_) => {
                 active.update(&db_tx).await?;
@@ -2093,7 +2129,8 @@ impl Engine {
         self.require_vault_owner(&db_tx, vault_id, user_id).await?;
 
         // Ensure flow exists and belongs to vault.
-        self.require_flow_read(&db_tx, vault_id, flow_id, user_id).await?;
+        self.require_flow_read(&db_tx, vault_id, flow_id, user_id)
+            .await?;
 
         flow_memberships::Entity::delete_by_id((flow_id.to_string(), member_username.to_string()))
             .exec(&db_tx)
@@ -2111,17 +2148,15 @@ impl Engine {
     ) -> ResultEngine<Vec<(String, String)>> {
         let db_tx = self.database.begin().await?;
         self.require_vault_owner(&db_tx, vault_id, user_id).await?;
-        self.require_flow_read(&db_tx, vault_id, flow_id, user_id).await?;
+        self.require_flow_read(&db_tx, vault_id, flow_id, user_id)
+            .await?;
 
         let rows = flow_memberships::Entity::find()
             .filter(flow_memberships::Column::FlowId.eq(flow_id.to_string()))
             .all(&db_tx)
             .await?;
         db_tx.commit().await?;
-        Ok(rows
-            .into_iter()
-            .map(|m| (m.user_id, m.role))
-            .collect())
+        Ok(rows.into_iter().map(|m| (m.user_id, m.role)).collect())
     }
 
     /// Add a new cash flow inside a vault.
@@ -2463,9 +2498,8 @@ impl Engine {
         let vault_model = if let Some(id) = vault_id {
             self.require_vault_by_id(&db_tx, id, user_id).await?
         } else {
-            let name = vault_name.ok_or_else(|| {
-                EngineError::KeyNotFound("missing vault id or name".to_string())
-            })?;
+            let name = vault_name
+                .ok_or_else(|| EngineError::KeyNotFound("missing vault id or name".to_string()))?;
             self.require_vault_by_name(&db_tx, &name, user_id).await?
         };
         let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
@@ -2487,7 +2521,8 @@ impl Engine {
                 .system_kind
                 .as_deref()
                 .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-            let currency = Currency::try_from(flow_model.currency.as_str()).unwrap_or(vault_currency);
+            let currency =
+                Currency::try_from(flow_model.currency.as_str()).unwrap_or(vault_currency);
             if currency != vault_currency {
                 return Err(EngineError::CurrencyMismatch(format!(
                     "vault currency is {}, got {}",
@@ -2601,7 +2636,11 @@ impl Engine {
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
         let backend = self.database.get_database_backend();
-        let void_cond = if include_voided { "" } else { " AND voided_at IS NULL" };
+        let void_cond = if include_voided {
+            ""
+        } else {
+            " AND voided_at IS NULL"
+        };
 
         let balance_minor: i64 = {
             let stmt = Statement::from_sql_and_values(
@@ -2678,21 +2717,16 @@ impl Engine {
         filter: &TransactionListFilter,
     ) -> ResultEngine<Vec<(Transaction, i64)>> {
         let (items, _next) = self
-            .list_transactions_for_flow_page(
-                vault_id,
-                flow_id,
-                user_id,
-                limit,
-                None,
-                filter,
-            )
+            .list_transactions_for_flow_page(vault_id, flow_id, user_id, limit, None, filter)
             .await?;
         Ok(items)
     }
 
-    /// Lists recent transactions that affect a given flow, with cursor-based pagination.
+    /// Lists recent transactions that affect a given flow, with cursor-based
+    /// pagination.
     ///
-    /// Pagination is newest → older by `(occurred_at DESC, transaction_id DESC)`.
+    /// Pagination is newest → older by `(occurred_at DESC, transaction_id
+    /// DESC)`.
     pub async fn list_transactions_for_flow_page(
         &self,
         vault_id: &str,
@@ -2799,21 +2833,16 @@ impl Engine {
         filter: &TransactionListFilter,
     ) -> ResultEngine<Vec<(Transaction, i64)>> {
         let (items, _next) = self
-            .list_transactions_for_wallet_page(
-                vault_id,
-                wallet_id,
-                user_id,
-                limit,
-                None,
-                filter,
-            )
+            .list_transactions_for_wallet_page(vault_id, wallet_id, user_id, limit, None, filter)
             .await?;
         Ok(items)
     }
 
-    /// Lists recent transactions that affect a given wallet, with cursor-based pagination.
+    /// Lists recent transactions that affect a given wallet, with cursor-based
+    /// pagination.
     ///
-    /// Pagination is newest → older by `(occurred_at DESC, transaction_id DESC)`.
+    /// Pagination is newest → older by `(occurred_at DESC, transaction_id
+    /// DESC)`.
     pub async fn list_transactions_for_wallet_page(
         &self,
         vault_id: &str,
@@ -2921,12 +2950,10 @@ impl Engine {
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         if vault_model.user_id != user_id {
-            let member = vault_memberships::Entity::find_by_id((
-                vault_id.to_string(),
-                user_id.to_string(),
-            ))
-            .one(&db_tx)
-            .await?;
+            let member =
+                vault_memberships::Entity::find_by_id((vault_id.to_string(), user_id.to_string()))
+                    .one(&db_tx)
+                    .await?;
             if member.is_none() {
                 return Err(EngineError::Forbidden("forbidden".to_string()));
             }

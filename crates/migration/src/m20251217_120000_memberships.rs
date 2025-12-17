@@ -35,7 +35,11 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(VaultMemberships::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(VaultMemberships::VaultId).string().not_null())
+                    .col(
+                        ColumnDef::new(VaultMemberships::VaultId)
+                            .string()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(VaultMemberships::UserId).string().not_null())
                     .col(ColumnDef::new(VaultMemberships::Role).string().not_null())
                     .primary_key(

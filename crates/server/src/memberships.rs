@@ -42,7 +42,12 @@ pub async fn upsert_vault_member(
 ) -> Result<StatusCode, ServerError> {
     state
         .engine
-        .upsert_vault_member(&vault_id, &payload.username, payload.role.as_str(), &user.username)
+        .upsert_vault_member(
+            &vault_id,
+            &payload.username,
+            payload.role.as_str(),
+            &user.username,
+        )
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -112,4 +117,3 @@ pub async fn remove_flow_member(
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
-

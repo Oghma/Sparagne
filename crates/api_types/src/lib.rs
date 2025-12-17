@@ -220,7 +220,8 @@ pub mod transaction {
         pub wallet_id: Option<Uuid>,
         pub category: Option<String>,
         pub note: Option<String>,
-        /// Optional idempotency key for safely retrying the same create request.
+        /// Optional idempotency key for safely retrying the same create
+        /// request.
         pub idempotency_key: Option<String>,
         /// RFC3339 timestamp, including timezone offset (local user time).
         pub occurred_at: DateTime<FixedOffset>,
@@ -234,7 +235,8 @@ pub mod transaction {
         pub wallet_id: Option<Uuid>,
         pub category: Option<String>,
         pub note: Option<String>,
-        /// Optional idempotency key for safely retrying the same create request.
+        /// Optional idempotency key for safely retrying the same create
+        /// request.
         pub idempotency_key: Option<String>,
         /// RFC3339 timestamp, including timezone offset (local user time).
         pub occurred_at: DateTime<FixedOffset>,
@@ -249,7 +251,8 @@ pub mod transaction {
         pub wallet_id: Option<Uuid>,
         pub category: Option<String>,
         pub note: Option<String>,
-        /// Optional idempotency key for safely retrying the same create request.
+        /// Optional idempotency key for safely retrying the same create
+        /// request.
         pub idempotency_key: Option<String>,
         /// RFC3339 timestamp, including timezone offset (local user time).
         pub occurred_at: DateTime<FixedOffset>,
@@ -262,7 +265,8 @@ pub mod transaction {
         pub from_wallet_id: Uuid,
         pub to_wallet_id: Uuid,
         pub note: Option<String>,
-        /// Optional idempotency key for safely retrying the same create request.
+        /// Optional idempotency key for safely retrying the same create
+        /// request.
         pub idempotency_key: Option<String>,
         /// RFC3339 timestamp, including timezone offset (local user time).
         pub occurred_at: DateTime<FixedOffset>,
@@ -275,7 +279,8 @@ pub mod transaction {
         pub from_flow_id: Uuid,
         pub to_flow_id: Uuid,
         pub note: Option<String>,
-        /// Optional idempotency key for safely retrying the same create request.
+        /// Optional idempotency key for safely retrying the same create
+        /// request.
         pub idempotency_key: Option<String>,
         /// RFC3339 timestamp, including timezone offset (local user time).
         pub occurred_at: DateTime<FixedOffset>,

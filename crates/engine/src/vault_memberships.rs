@@ -31,4 +31,3 @@ impl Related<super::vault::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
