@@ -463,6 +463,62 @@ impl Engine {
         Ok(tx.id)
     }
 
+    /// Create a refund transaction (increases both wallet and flow).
+    ///
+    /// A refund is modeled as its own `TransactionKind::Refund` instead of a
+    /// negative expense, to keep reporting correct and explicit.
+    pub async fn refund(
+        &self,
+        vault_id: &str,
+        amount_minor: i64,
+        flow_id: Option<Uuid>,
+        wallet_id: Option<Uuid>,
+        category: Option<&str>,
+        note: Option<&str>,
+        user_id: &str,
+        occurred_at: DateTime<Utc>,
+    ) -> ResultEngine<Uuid> {
+        let db_tx = self.database.begin().await?;
+        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+        let resolved_flow_id = self.resolve_flow_id(&db_tx, vault_id, flow_id).await?;
+        let resolved_wallet_id = self.resolve_wallet_id(&db_tx, vault_id, wallet_id).await?;
+
+        let tx = Transaction::new(
+            vault_id.to_string(),
+            TransactionKind::Refund,
+            occurred_at,
+            amount_minor,
+            currency,
+            category.map(|s| s.to_string()),
+            note.map(|s| s.to_string()),
+            user_id.to_string(),
+        )?;
+        let legs = vec![
+            Leg::new(
+                tx.id,
+                LegTarget::Wallet {
+                    wallet_id: resolved_wallet_id,
+                },
+                amount_minor,
+                currency,
+            ),
+            Leg::new(
+                tx.id,
+                LegTarget::Flow {
+                    flow_id: resolved_flow_id,
+                },
+                amount_minor,
+                currency,
+            ),
+        ];
+
+        self.create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
+            .await?;
+        db_tx.commit().await?;
+        Ok(tx.id)
+    }
+
     pub async fn transfer_wallet(
         &self,
         vault_id: &str,
