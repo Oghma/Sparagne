@@ -1,7 +1,8 @@
 //! Transactions API endpoints
 
 use api_types::transaction::{
-    ExpenseNew, IncomeNew, Refund, TransactionCreated, TransactionKind as ApiKind,
+    ExpenseNew, IncomeNew, LegTarget, Refund, TransactionCreated, TransactionDetailResponse,
+    TransactionGet, TransactionHeaderView, TransactionKind as ApiKind, TransactionLegView,
     TransactionList, TransactionListResponse, TransactionUpdate, TransactionView, TransactionVoid,
     TransferFlowNew, TransferWalletNew,
 };
@@ -14,6 +15,29 @@ use chrono::{FixedOffset, Utc};
 use uuid::Uuid;
 
 use crate::{ServerError, server::ServerState, user};
+
+fn map_kind(kind: engine::TransactionKind) -> ApiKind {
+    match kind {
+        engine::TransactionKind::Income => ApiKind::Income,
+        engine::TransactionKind::Expense => ApiKind::Expense,
+        engine::TransactionKind::TransferWallet => ApiKind::TransferWallet,
+        engine::TransactionKind::TransferFlow => ApiKind::TransferFlow,
+        engine::TransactionKind::Refund => ApiKind::Refund,
+    }
+}
+
+fn map_currency(currency: engine::Currency) -> api_types::Currency {
+    match currency {
+        engine::Currency::Eur => api_types::Currency::Eur,
+    }
+}
+
+fn map_leg_target(target: engine::LegTarget) -> LegTarget {
+    match target {
+        engine::LegTarget::Wallet { wallet_id } => LegTarget::Wallet { wallet_id },
+        engine::LegTarget::Flow { flow_id } => LegTarget::Flow { flow_id },
+    }
+}
 
 pub async fn list(
     Extension(user): Extension<user::Model>,
@@ -85,18 +109,13 @@ pub async fn list(
         }
     };
 
-    let utc = FixedOffset::east_opt(0).unwrap();
+    let utc = FixedOffset::east_opt(0)
+        .ok_or_else(|| ServerError::Generic("invalid UTC offset".to_string()))?;
     let transactions = txs
         .into_iter()
         .map(|(tx, amount_minor)| TransactionView {
             id: tx.id,
-            kind: match tx.kind {
-                engine::TransactionKind::Income => ApiKind::Income,
-                engine::TransactionKind::Expense => ApiKind::Expense,
-                engine::TransactionKind::TransferWallet => ApiKind::TransferWallet,
-                engine::TransactionKind::TransferFlow => ApiKind::TransferFlow,
-                engine::TransactionKind::Refund => ApiKind::Refund,
-            },
+            kind: map_kind(tx.kind),
             occurred_at: tx.occurred_at.with_timezone(&utc),
             amount_minor,
             category: tx.category,
@@ -109,6 +128,44 @@ pub async fn list(
         transactions,
         next_cursor,
     }))
+}
+
+pub async fn get_detail(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Json(payload): Json<TransactionGet>,
+) -> Result<Json<TransactionDetailResponse>, ServerError> {
+    let tx = state
+        .engine
+        .transaction_with_legs(&payload.vault_id, payload.id, &user.username)
+        .await?;
+
+    let utc = FixedOffset::east_opt(0)
+        .ok_or_else(|| ServerError::Generic("invalid UTC offset".to_string()))?;
+
+    let transaction = TransactionHeaderView {
+        id: tx.id,
+        kind: map_kind(tx.kind),
+        occurred_at: tx.occurred_at.with_timezone(&utc),
+        amount_minor: tx.amount_minor,
+        currency: map_currency(tx.currency),
+        category: tx.category,
+        note: tx.note,
+        voided: tx.voided_at.is_some(),
+    };
+
+    let legs = tx
+        .legs
+        .into_iter()
+        .map(|leg| TransactionLegView {
+            target: map_leg_target(leg.target),
+            amount_minor: leg.amount_minor,
+            attributed_user_id: leg.attributed_user_id,
+            currency: map_currency(leg.currency),
+        })
+        .collect();
+
+    Ok(Json(TransactionDetailResponse { transaction, legs }))
 }
 
 pub async fn income_new(
