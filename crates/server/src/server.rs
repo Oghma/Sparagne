@@ -54,8 +54,11 @@ impl Header for TelegramHeader {
     }
 
     fn encode<E: Extend<axum::http::HeaderValue>>(&self, values: &mut E) {
-        let value = axum::http::HeaderValue::from_str(&self.0.to_string()).unwrap();
-        values.extend(std::iter::once(value));
+        let as_string = self.0.to_string();
+        match axum::http::HeaderValue::from_str(&as_string) {
+            Ok(value) => values.extend(std::iter::once(value)),
+            Err(_) => tracing::error!("failed to encode telegram-user-id header"),
+        }
     }
 }
 
@@ -106,6 +109,7 @@ fn router(state: ServerState) -> Router {
     Router::new()
         .route("/cashFlow", get(cash_flow::get))
         .route("/transactions", get(transactions::list))
+        .route("/transactions/get", post(transactions::get_detail))
         .route("/income", post(transactions::income_new))
         .route("/expense", post(transactions::expense_new))
         .route("/refund", post(transactions::refund_new))
@@ -140,18 +144,24 @@ fn router(state: ServerState) -> Router {
 }
 
 pub async fn run(engine: Engine, db: DatabaseConnection) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
-    run_with_listener(engine, db, listener).await;
+    let listener = match tokio::net::TcpListener::bind("127.0.0.1:3000").await {
+        Ok(listener) => listener,
+        Err(err) => {
+            tracing::error!("failed to bind server listener: {err}");
+            return;
+        }
+    };
+    if let Err(err) = run_with_listener(engine, db, listener).await {
+        tracing::error!("server failed: {err}");
+    }
 }
 
 pub async fn run_with_listener(
     engine: Engine,
     db: DatabaseConnection,
     listener: tokio::net::TcpListener,
-) {
-    let addr = listener.local_addr().unwrap();
+) -> Result<(), std::io::Error> {
+    let addr = listener.local_addr()?;
     tracing::info!("Server listening on {}", addr);
 
     let state = ServerState {
@@ -159,19 +169,21 @@ pub async fn run_with_listener(
         db,
     };
 
-    axum::serve(listener, router(state)).await.unwrap();
+    axum::serve(listener, router(state)).await
 }
 
 pub fn spawn_with_listener(
     engine: Engine,
     db: DatabaseConnection,
     listener: tokio::net::TcpListener,
-) -> std::net::SocketAddr {
-    let addr = listener.local_addr().unwrap();
+) -> Result<std::net::SocketAddr, std::io::Error> {
+    let addr = listener.local_addr()?;
 
     tokio::spawn(async move {
-        run_with_listener(engine, db, listener).await;
+        if let Err(err) = run_with_listener(engine, db, listener).await {
+            tracing::error!("server failed: {err}");
+        }
     });
 
-    addr
+    Ok(addr)
 }

@@ -24,14 +24,13 @@ unsafe_code = "forbid"
 
 # Keep Clippy baseline light for now; tighten during engine refactor.
 [workspace.lints.clippy]
-all = "allow"
-pedantic = "allow"
-nursery = "allow"
-# Future tightening candidates:
-# unwrap_used = "warn"
-# expect_used = "warn"
-# todo = "warn"
-# dbg_macro = "warn"
+all = { level = "allow", priority = -1 }
+pedantic = { level = "allow", priority = -1 }
+nursery = { level = "allow", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+todo = "warn"
+dbg_macro = "warn"
 
 [workspace.dependencies]
 axum = "0.8.7"

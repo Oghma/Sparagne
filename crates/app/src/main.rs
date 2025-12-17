@@ -28,7 +28,9 @@ async fn main() {
             let bind = server.bind.unwrap_or_else(|| "127.0.0.1".to_string());
             let addr = format!("{}:{}", bind, server.port);
             let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-            server::run_with_listener(engine, db, listener).await;
+            if let Err(err) = server::run_with_listener(engine, db, listener).await {
+                tracing::error!("server failed: {err}");
+            }
         });
     }
 

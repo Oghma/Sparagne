@@ -166,6 +166,48 @@ pub mod transaction {
     }
 
     #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionGet {
+        pub vault_id: String,
+        pub id: Uuid,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(tag = "target", rename_all = "snake_case")]
+    pub enum LegTarget {
+        Wallet { wallet_id: Uuid },
+        Flow { flow_id: Uuid },
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionLegView {
+        #[serde(flatten)]
+        pub target: LegTarget,
+        pub amount_minor: i64,
+        pub attributed_user_id: Option<String>,
+        pub currency: Currency,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionHeaderView {
+        pub id: Uuid,
+        pub kind: TransactionKind,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+        /// Positive absolute amount of the transaction.
+        pub amount_minor: i64,
+        pub currency: Currency,
+        pub category: Option<String>,
+        pub note: Option<String>,
+        pub voided: bool,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct TransactionDetailResponse {
+        pub transaction: TransactionHeaderView,
+        pub legs: Vec<TransactionLegView>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
     pub struct TransactionCreated {
         pub id: Uuid,
     }
