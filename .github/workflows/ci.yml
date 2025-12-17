@@ -46,8 +46,8 @@ jobs:
       - name: Clippy
         run: cargo +1.92.0 clippy --workspace --all-targets
 
-      - name: Clippy (engine/server strict)
-        run: cargo +1.92.0 clippy -p engine -p server --lib -- -W clippy::unwrap_used -W clippy::expect_used
+      - name: Clippy (no unwrap/expect)
+        run: cargo +1.92.0 clippy --workspace --all-targets -- -D clippy::unwrap_used -D clippy::expect_used
 
       - name: Test
         run: cargo +1.92.0 test --workspace --all-targets

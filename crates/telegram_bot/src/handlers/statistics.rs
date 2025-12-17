@@ -19,13 +19,20 @@ async fn handle_statistics(
     msg: Message,
     cmd: UserStatisticsCommands,
 ) -> ResponseResult<()> {
-    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
+    let user_id = match msg.from.as_ref() {
+        Some(user) => user.id.to_string(),
+        None => {
+            bot.send_message(msg.chat.id, "Impossibile identificare l'utente.")
+                .await?;
+            return Ok(());
+        }
+    };
 
     match cmd {
         UserStatisticsCommands::Stats => {
             let (user_response, response) = get_check!(
                 cfg.client,
-                format!("{}/stats", cfg.server),
+                format!("{}/stats/get", cfg.server),
                 user_id,
                 &api_types::vault::Vault {
                     id: None,

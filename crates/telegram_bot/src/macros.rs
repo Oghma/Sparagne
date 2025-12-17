@@ -8,7 +8,6 @@ macro_rules! request {
             .json($json)
             .send()
             .await
-            .unwrap()
     };
 }
 
@@ -36,28 +35,42 @@ macro_rules! delete {
 #[macro_export]
 macro_rules! request_check {
     ($verb:ident, $client:expr, $url:expr, $user_id:expr,$json:expr, $success_cond:pat, $success:expr, $failure:expr) => {{
-        let response = $crate::request!($verb, $client, $url, $user_id, $json);
+        match $crate::request!($verb, $client, $url, $user_id, $json) {
+            Ok(response) => match response.status() {
+                $success_cond => ($success, Some(response)),
+                _ => {
+                    tracing::debug!("{:?}", response);
+                    match response.text().await {
+                        Ok(body) => tracing::debug!("body: {body}"),
+                        Err(err) => tracing::debug!("body read failed: {err}"),
+                    }
 
-        match response.status() {
-            $success_cond => ($success, Some(response)),
-            _ => {
-                tracing::debug!("{:?}", response);
-                tracing::debug!("body: {}", response.text().await.unwrap());
-
+                    ($failure, None)
+                }
+            },
+            Err(err) => {
+                tracing::debug!("request failed: {err}");
                 ($failure, None)
             }
         }
     }};
 
     ($verb:ident, $client:expr, $url:expr, $user_id:expr,$json:expr, $success:expr, $failure:expr) => {{
-        let response = $crate::request!($verb, $client, $url, $user_id, $json);
+        match $crate::request!($verb, $client, $url, $user_id, $json) {
+            Ok(response) => match response.status() {
+                StatusCode::OK => ($success, Some(response)),
+                _ => {
+                    tracing::debug!("{:?}", response);
+                    match response.text().await {
+                        Ok(body) => tracing::debug!("body: {body}"),
+                        Err(err) => tracing::debug!("body read failed: {err}"),
+                    }
 
-        match response.status() {
-            StatusCode::OK => ($success, Some(response)),
-            _ => {
-                tracing::debug!("{:?}", response);
-                tracing::debug!("body: {}", response.text().await.unwrap());
-
+                    ($failure, None)
+                }
+            },
+            Err(err) => {
+                tracing::debug!("request failed: {err}");
                 ($failure, None)
             }
         }

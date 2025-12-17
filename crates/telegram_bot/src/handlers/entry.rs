@@ -129,10 +129,9 @@ async fn handle_delete_list(
             format_transactions(&transactions, 10, vault_currency(&cfg, &bot, &msg).await?)
         );
         bot.send_message(msg.chat.id, user_response).await?;
-        dialogue
-            .update(GlobalState::InDelete(entries_id))
-            .await
-            .unwrap();
+        if let Err(err) = dialogue.update(GlobalState::InDelete(entries_id)).await {
+            tracing::error!("failed to update dialogue: {err}");
+        }
     };
 
     Ok(())
@@ -148,12 +147,26 @@ async fn handle_delete_entry(
     dialogue: GlobalDialogue,
     entries: Vec<uuid::Uuid>,
 ) -> ResponseResult<()> {
-    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
-    let entry_id = entries[msg.text().unwrap().parse::<usize>().unwrap() - 1];
+    let user_id = match msg.from.as_ref() {
+        Some(user) => user.id.to_string(),
+        None => {
+            bot.send_message(msg.chat.id, "Impossibile identificare l'utente.")
+                .await?;
+            return Ok(());
+        }
+    };
+    let idx = match msg.text().and_then(|t| t.parse::<usize>().ok()) {
+        Some(idx) if idx > 0 && idx <= entries.len() => idx,
+        _ => {
+            bot.send_message(msg.chat.id, "Indice non valido.").await?;
+            return Ok(());
+        }
+    };
+    let entry_id = entries[idx - 1];
 
     let (user_response, response) = get_check!(
         cfg.client,
-        format!("{}/vault", cfg.server),
+        format!("{}/vault/get", cfg.server),
         user_id.clone(),
         &api_types::vault::Vault {
             id: None,
@@ -177,7 +190,13 @@ async fn handle_delete_entry(
         format!("{}/transactions/{}/void", cfg.server, entry_id),
         user_id,
         &api_types::transaction::TransactionVoid {
-            vault_id: vault.id.unwrap(),
+            vault_id: match vault.id {
+                Some(id) => id,
+                None => {
+                    bot.send_message(msg.chat.id, "Vault non valido.").await?;
+                    return Ok(());
+                }
+            },
             voided_at: None,
         },
         StatusCode::OK,
@@ -186,7 +205,9 @@ async fn handle_delete_entry(
     );
 
     bot.send_message(msg.chat.id, user_response).await?;
-    dialogue.exit().await.unwrap();
+    if let Err(err) = dialogue.exit().await {
+        tracing::error!("failed to exit dialogue: {err}");
+    }
     Ok(())
 }
 
@@ -196,11 +217,18 @@ async fn get_main_cash_flow(
     msg: &Message,
     cfg: &ConfigParameters,
 ) -> ResponseResult<Option<CashFlow>> {
-    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
+    let user_id = match msg.from.as_ref() {
+        Some(user) => user.id.to_string(),
+        None => {
+            bot.send_message(msg.chat.id, "Impossibile identificare l'utente.")
+                .await?;
+            return Ok(None);
+        }
+    };
 
     let (user_response, response) = get_check!(
         cfg.client,
-        format!("{}/vault", cfg.server),
+        format!("{}/vault/get", cfg.server),
         user_id.clone(),
         &api_types::vault::Vault {
             id: None,
@@ -221,10 +249,16 @@ async fn get_main_cash_flow(
 
     let (user_response, response) = get_check!(
         cfg.client,
-        format!("{}/cashFlow", cfg.server),
+        format!("{}/cashFlow/get", cfg.server),
         user_id,
         &api_types::cash_flow::CashFlowGet {
-            vault_id: vault.id.unwrap(),
+            vault_id: match vault.id {
+                Some(id) => id,
+                None => {
+                    bot.send_message(msg.chat.id, "Vault non valido.").await?;
+                    return Ok(None);
+                }
+            },
             id: None,
             name: Some("Main".to_string()),
         },
@@ -275,10 +309,13 @@ async fn vault_currency(
     bot: &Bot,
     msg: &Message,
 ) -> ResponseResult<Currency> {
-    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
+    let user_id = match msg.from.as_ref() {
+        Some(user) => user.id.to_string(),
+        None => return Ok(Currency::Eur),
+    };
     let (user_response, response) = get_check!(
         cfg.client,
-        format!("{}/vault", cfg.server),
+        format!("{}/vault/get", cfg.server),
         user_id,
         &api_types::vault::Vault {
             id: None,
@@ -305,11 +342,18 @@ async fn get_flow_transactions(
     flow_id: &uuid::Uuid,
     limit: u64,
 ) -> ResponseResult<Vec<api_types::transaction::TransactionView>> {
-    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
+    let user_id = match msg.from.as_ref() {
+        Some(user) => user.id.to_string(),
+        None => {
+            bot.send_message(msg.chat.id, "Impossibile identificare l'utente.")
+                .await?;
+            return Ok(Vec::new());
+        }
+    };
 
     let (user_response, response) = get_check!(
         cfg.client,
-        format!("{}/vault", cfg.server),
+        format!("{}/vault/get", cfg.server),
         user_id.clone(),
         &api_types::vault::Vault {
             id: None,
@@ -332,7 +376,13 @@ async fn get_flow_transactions(
         format!("{}/transactions", cfg.server),
         user_id,
         &api_types::transaction::TransactionList {
-            vault_id: vault.id.unwrap(),
+            vault_id: match vault.id {
+                Some(id) => id,
+                None => {
+                    bot.send_message(msg.chat.id, "Vault non valido.").await?;
+                    return Ok(Vec::new());
+                }
+            },
             flow_id: Some(*flow_id),
             wallet_id: None,
             limit: Some(limit),
@@ -367,11 +417,18 @@ async fn send_entry(
     msg: &Message,
     bot: &Bot,
 ) -> ResponseResult<()> {
-    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
+    let user_id = match msg.from.as_ref() {
+        Some(user) => user.id.to_string(),
+        None => {
+            bot.send_message(msg.chat.id, "Impossibile identificare l'utente.")
+                .await?;
+            return Ok(());
+        }
+    };
 
     let (user_response, response) = get_check!(
         client,
-        format!("{}/vault", url),
+        format!("{}/vault/get", url),
         user_id.clone(),
         &api_types::vault::Vault {
             id: None,
@@ -392,10 +449,16 @@ async fn send_entry(
 
     let (user_response, response) = get_check!(
         client,
-        format!("{}/cashFlow", url),
+        format!("{}/cashFlow/get", url),
         user_id.clone(),
         &api_types::cash_flow::CashFlowGet {
-            vault_id: vault.id.clone().unwrap(),
+            vault_id: match vault.id.clone() {
+                Some(id) => id,
+                None => {
+                    bot.send_message(msg.chat.id, "Vault non valido.").await?;
+                    return Ok(());
+                }
+            },
             id: None,
             name: Some("Main".to_string()),
         },
@@ -428,13 +491,20 @@ async fn send_entry(
     let idempotency_key = format!("tg:{}:{}", msg.chat.id.0, msg.id.0);
 
     let endpoint = if is_expense { "expense" } else { "income" };
+    let vault_id = match vault.id {
+        Some(id) => id,
+        None => {
+            bot.send_message(msg.chat.id, "Vault non valido.").await?;
+            return Ok(());
+        }
+    };
     let (user_response, _) = if is_expense {
         post_check!(
             client,
             format!("{}/{}", url, endpoint),
             user_id,
             &api_types::transaction::ExpenseNew {
-                vault_id: vault.id.unwrap(),
+                vault_id: vault_id.clone(),
                 amount_minor,
                 flow_id: Some(flow.id),
                 wallet_id: None,
@@ -453,7 +523,7 @@ async fn send_entry(
             format!("{}/{}", url, endpoint),
             user_id,
             &api_types::transaction::IncomeNew {
-                vault_id: vault.id.unwrap(),
+                vault_id,
                 amount_minor,
                 flow_id: Some(flow.id),
                 wallet_id: None,
