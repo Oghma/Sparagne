@@ -82,6 +82,10 @@ pub mod transaction {
         pub flow_id: Option<Uuid>,
         pub wallet_id: Option<Uuid>,
         pub limit: Option<u64>,
+        /// Opaque pagination cursor (base64), from `next_cursor`.
+        ///
+        /// Newest → older pagination.
+        pub cursor: Option<String>,
         pub include_voided: Option<bool>,
         pub include_transfers: Option<bool>,
     }
@@ -102,6 +106,8 @@ pub mod transaction {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct TransactionListResponse {
         pub transactions: Vec<TransactionView>,
+        /// Opaque cursor for fetching the next page (older items).
+        pub next_cursor: Option<String>,
     }
 
     #[derive(Debug, Serialize, Deserialize)]

@@ -677,6 +677,67 @@ async fn list_transactions_excludes_voided_and_transfers_by_default() {
 }
 
 #[tokio::test]
+async fn transactions_pagination_cursor_walks_pages_without_duplicates() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    for i in 0..5 {
+        engine
+            .income(
+                &vault_id,
+                10,
+                None,
+                Some(wallet_id),
+                Some("salary"),
+                Some(&format!("income {i}")),
+                None,
+                "alice",
+                Utc::now(),
+            )
+            .await
+            .unwrap();
+    }
+
+    let mut cursor: Option<String> = None;
+    let mut seen = std::collections::HashSet::new();
+    loop {
+        let (items, next) = engine
+            .list_transactions_for_wallet_page(
+                &vault_id,
+                wallet_id,
+                "alice",
+                2,
+                cursor.as_deref(),
+                false,
+                true,
+            )
+            .await
+            .unwrap();
+
+        for (tx, _) in items {
+            assert!(seen.insert(tx.id), "duplicate transaction id in paging");
+        }
+
+        cursor = next;
+        if cursor.is_none() {
+            break;
+        }
+    }
+
+    assert_eq!(seen.len(), 5);
+}
+
+#[tokio::test]
 async fn restart_engine_reads_same_state() {
     let (engine, db, url, path) = engine_with_file_db().await;
     let vault_id = engine
