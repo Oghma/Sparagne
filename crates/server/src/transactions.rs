@@ -175,17 +175,19 @@ pub async fn income_new(
 ) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
     let id = state
         .engine
-        .income(
-            &payload.vault_id,
-            payload.amount_minor,
-            payload.flow_id,
-            payload.wallet_id,
-            payload.category.as_deref(),
-            payload.note.as_deref(),
-            payload.idempotency_key.as_deref(),
-            &user.username,
-            payload.occurred_at.with_timezone(&Utc),
-        )
+        .income(engine::IncomeCmd {
+            vault_id: payload.vault_id,
+            amount_minor: payload.amount_minor,
+            flow_id: payload.flow_id,
+            wallet_id: payload.wallet_id,
+            meta: engine::TxMeta {
+                category: payload.category,
+                note: payload.note,
+                idempotency_key: payload.idempotency_key,
+                occurred_at: payload.occurred_at.with_timezone(&Utc),
+            },
+            user_id: user.username.clone(),
+        })
         .await?;
 
     Ok((StatusCode::CREATED, Json(TransactionCreated { id })))
@@ -198,17 +200,19 @@ pub async fn expense_new(
 ) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
     let id = state
         .engine
-        .expense(
-            &payload.vault_id,
-            payload.amount_minor,
-            payload.flow_id,
-            payload.wallet_id,
-            payload.category.as_deref(),
-            payload.note.as_deref(),
-            payload.idempotency_key.as_deref(),
-            &user.username,
-            payload.occurred_at.with_timezone(&Utc),
-        )
+        .expense(engine::ExpenseCmd {
+            vault_id: payload.vault_id,
+            amount_minor: payload.amount_minor,
+            flow_id: payload.flow_id,
+            wallet_id: payload.wallet_id,
+            meta: engine::TxMeta {
+                category: payload.category,
+                note: payload.note,
+                idempotency_key: payload.idempotency_key,
+                occurred_at: payload.occurred_at.with_timezone(&Utc),
+            },
+            user_id: user.username.clone(),
+        })
         .await?;
 
     Ok((StatusCode::CREATED, Json(TransactionCreated { id })))
@@ -221,17 +225,19 @@ pub async fn refund_new(
 ) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
     let id = state
         .engine
-        .refund(
-            &payload.vault_id,
-            payload.amount_minor,
-            payload.flow_id,
-            payload.wallet_id,
-            payload.category.as_deref(),
-            payload.note.as_deref(),
-            payload.idempotency_key.as_deref(),
-            &user.username,
-            payload.occurred_at.with_timezone(&Utc),
-        )
+        .refund(engine::RefundCmd {
+            vault_id: payload.vault_id,
+            amount_minor: payload.amount_minor,
+            flow_id: payload.flow_id,
+            wallet_id: payload.wallet_id,
+            meta: engine::TxMeta {
+                category: payload.category,
+                note: payload.note,
+                idempotency_key: payload.idempotency_key,
+                occurred_at: payload.occurred_at.with_timezone(&Utc),
+            },
+            user_id: user.username.clone(),
+        })
         .await?;
 
     Ok((StatusCode::CREATED, Json(TransactionCreated { id })))
@@ -244,16 +250,16 @@ pub async fn transfer_wallet_new(
 ) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
     let id = state
         .engine
-        .transfer_wallet(
-            &payload.vault_id,
-            payload.amount_minor,
-            payload.from_wallet_id,
-            payload.to_wallet_id,
-            payload.note.as_deref(),
-            payload.idempotency_key.as_deref(),
-            &user.username,
-            payload.occurred_at.with_timezone(&Utc),
-        )
+        .transfer_wallet(engine::TransferWalletCmd {
+            vault_id: payload.vault_id,
+            amount_minor: payload.amount_minor,
+            from_wallet_id: payload.from_wallet_id,
+            to_wallet_id: payload.to_wallet_id,
+            note: payload.note,
+            idempotency_key: payload.idempotency_key,
+            occurred_at: payload.occurred_at.with_timezone(&Utc),
+            user_id: user.username.clone(),
+        })
         .await?;
 
     Ok((StatusCode::CREATED, Json(TransactionCreated { id })))
@@ -266,16 +272,16 @@ pub async fn transfer_flow_new(
 ) -> Result<(StatusCode, Json<TransactionCreated>), ServerError> {
     let id = state
         .engine
-        .transfer_flow(
-            &payload.vault_id,
-            payload.amount_minor,
-            payload.from_flow_id,
-            payload.to_flow_id,
-            payload.note.as_deref(),
-            payload.idempotency_key.as_deref(),
-            &user.username,
-            payload.occurred_at.with_timezone(&Utc),
-        )
+        .transfer_flow(engine::TransferFlowCmd {
+            vault_id: payload.vault_id,
+            amount_minor: payload.amount_minor,
+            from_flow_id: payload.from_flow_id,
+            to_flow_id: payload.to_flow_id,
+            note: payload.note,
+            idempotency_key: payload.idempotency_key,
+            occurred_at: payload.occurred_at.with_timezone(&Utc),
+            user_id: user.username.clone(),
+        })
         .await?;
 
     Ok((StatusCode::CREATED, Json(TransactionCreated { id })))
@@ -290,21 +296,21 @@ pub async fn update(
     let occurred_at_utc = payload.occurred_at.map(|dt| dt.with_timezone(&Utc));
     state
         .engine
-        .update_transaction(
-            &payload.vault_id,
-            id,
-            &user.username,
-            payload.amount_minor,
-            payload.wallet_id,
-            payload.flow_id,
-            payload.from_wallet_id,
-            payload.to_wallet_id,
-            payload.from_flow_id,
-            payload.to_flow_id,
-            payload.category.as_deref(),
-            payload.note.as_deref(),
-            occurred_at_utc,
-        )
+        .update_transaction(engine::UpdateTransactionCmd {
+            vault_id: payload.vault_id,
+            transaction_id: id,
+            user_id: user.username.clone(),
+            amount_minor: payload.amount_minor,
+            wallet_id: payload.wallet_id,
+            flow_id: payload.flow_id,
+            from_wallet_id: payload.from_wallet_id,
+            to_wallet_id: payload.to_wallet_id,
+            from_flow_id: payload.from_flow_id,
+            to_flow_id: payload.to_flow_id,
+            category: payload.category,
+            note: payload.note,
+            occurred_at: occurred_at_utc,
+        })
         .await?;
 
     Ok(StatusCode::OK)

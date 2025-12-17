@@ -104,15 +104,11 @@ async fn income_expense_void_reverts_balances() {
 
     engine
         .income(
-            &vault_id,
-            1000,
-            Some(flow_id),
-            Some(wallet_id),
-            Some("salary"),
-            Some("January"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .flow_id(flow_id)
+                .wallet_id(wallet_id)
+                .category("salary")
+                .note("January"),
         )
         .await
         .unwrap();
@@ -124,15 +120,11 @@ async fn income_expense_void_reverts_balances() {
 
     let expense_id = engine
         .expense(
-            &vault_id,
-            200,
-            Some(flow_id),
-            Some(wallet_id),
-            Some("food"),
-            Some("Lunch"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::ExpenseCmd::new(&vault_id, "alice", 200, Utc::now())
+                .flow_id(flow_id)
+                .wallet_id(wallet_id)
+                .category("food")
+                .note("Lunch"),
         )
         .await
         .unwrap();
@@ -176,43 +168,29 @@ async fn refund_increases_balances() {
 
     engine
         .income(
-            &vault_id,
-            1000,
-            Some(flow_id),
-            Some(wallet_id),
-            Some("salary"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .flow_id(flow_id)
+                .wallet_id(wallet_id)
+                .category("salary"),
         )
         .await
         .unwrap();
     engine
         .expense(
-            &vault_id,
-            200,
-            Some(flow_id),
-            Some(wallet_id),
-            Some("food"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::ExpenseCmd::new(&vault_id, "alice", 200, Utc::now())
+                .flow_id(flow_id)
+                .wallet_id(wallet_id)
+                .category("food"),
         )
         .await
         .unwrap();
     engine
         .refund(
-            &vault_id,
-            50,
-            Some(flow_id),
-            Some(wallet_id),
-            Some("food"),
-            Some("refund"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::RefundCmd::new(&vault_id, "alice", 50, Utc::now())
+                .flow_id(flow_id)
+                .wallet_id(wallet_id)
+                .category("food")
+                .note("refund"),
         )
         .await
         .unwrap();
@@ -252,29 +230,17 @@ async fn transfer_wallet_does_not_touch_flows() {
 
     engine
         .income(
-            &vault_id,
-            1000,
-            None,
-            Some(wallet_cash),
-            Some("salary"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .wallet_id(wallet_cash)
+                .category("salary"),
         )
         .await
         .unwrap();
 
     engine
         .transfer_wallet(
-            &vault_id,
-            250,
-            wallet_cash,
-            wallet_bank,
-            Some("move"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::TransferWalletCmd::new(&vault_id, "alice", 250, wallet_cash, wallet_bank, Utc::now())
+                .note("move"),
         )
         .await
         .unwrap();
@@ -326,29 +292,17 @@ async fn income_capped_counts_transfers_in() {
 
     engine
         .income(
-            &vault_id,
-            600,
-            None,
-            Some(wallet_id),
-            Some("salary"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 600, Utc::now())
+                .wallet_id(wallet_id)
+                .category("salary"),
         )
         .await
         .unwrap();
 
     let err = engine
         .transfer_flow(
-            &vault_id,
-            600,
-            from_flow,
-            capped_flow,
-            Some("allocate"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::TransferFlowCmd::new(&vault_id, "alice", 600, from_flow, capped_flow, Utc::now())
+                .note("allocate"),
         )
         .await
         .unwrap_err();
@@ -378,49 +332,29 @@ async fn update_transaction_updates_balances() {
 
     engine
         .income(
-            &vault_id,
-            1000,
-            Some(flow_id),
-            Some(wallet_id),
-            None,
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .flow_id(flow_id)
+                .wallet_id(wallet_id),
         )
         .await
         .unwrap();
 
     let expense_id = engine
         .expense(
-            &vault_id,
-            100,
-            Some(flow_id),
-            Some(wallet_id),
-            Some("food"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::ExpenseCmd::new(&vault_id, "alice", 100, Utc::now())
+                .flow_id(flow_id)
+                .wallet_id(wallet_id)
+                .category("food"),
         )
         .await
         .unwrap();
 
     engine
         .update_transaction(
-            &vault_id,
-            expense_id,
-            "alice",
-            Some(150),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some("food"),
-            Some("bigger lunch"),
-            None,
+            engine::UpdateTransactionCmd::new(&vault_id, expense_id, "alice")
+                .amount_minor(150)
+                .category("food")
+                .note("bigger lunch"),
         )
         .await
         .unwrap();
@@ -462,34 +396,20 @@ async fn update_income_can_retarget_wallet_and_flow_and_keeps_metadata_when_omit
 
     let tx_id = engine
         .income(
-            &vault_id,
-            100,
-            Some(flow1),
-            Some(wallet1),
-            Some("salary"),
-            Some("  hi  "),
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now())
+                .flow_id(flow1)
+                .wallet_id(wallet1)
+                .category("salary")
+                .note("  hi  "),
         )
         .await
         .unwrap();
 
     engine
         .update_transaction(
-            &vault_id,
-            tx_id,
-            "alice",
-            None,
-            Some(wallet2),
-            Some(flow2),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+            engine::UpdateTransactionCmd::new(&vault_id, tx_id, "alice")
+                .wallet_id(wallet2)
+                .flow_id(flow2),
         )
         .await
         .unwrap();
@@ -550,48 +470,24 @@ async fn update_expense_retarget_flow_fails_if_insufficient_and_is_atomic() {
 
     engine
         .income(
-            &vault_id,
-            100,
-            Some(flow1),
-            Some(wallet1),
-            None,
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now())
+                .flow_id(flow1)
+                .wallet_id(wallet1),
         )
         .await
         .unwrap();
     let expense_id = engine
         .expense(
-            &vault_id,
-            80,
-            Some(flow1),
-            Some(wallet1),
-            None,
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::ExpenseCmd::new(&vault_id, "alice", 80, Utc::now())
+                .flow_id(flow1)
+                .wallet_id(wallet1),
         )
         .await
         .unwrap();
 
     let err = engine
         .update_transaction(
-            &vault_id,
-            expense_id,
-            "alice",
-            None,
-            None,
-            Some(flow2),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+            engine::UpdateTransactionCmd::new(&vault_id, expense_id, "alice").flow_id(flow2),
         )
         .await
         .unwrap_err();
@@ -632,48 +528,26 @@ async fn update_transfer_wallet_can_change_endpoints_and_amount() {
 
     engine
         .income(
-            &vault_id,
-            100,
-            None,
-            Some(wallet_cash),
-            None,
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now()).wallet_id(wallet_cash),
         )
         .await
         .unwrap();
 
     let tx_id = engine
         .transfer_wallet(
-            &vault_id,
-            50,
-            wallet_cash,
-            wallet_bank,
-            Some(" move "),
-            None,
-            "alice",
-            Utc::now(),
+            engine::TransferWalletCmd::new(&vault_id, "alice", 50, wallet_cash, wallet_bank, Utc::now())
+                .note(" move "),
         )
         .await
         .unwrap();
 
     engine
         .update_transaction(
-            &vault_id,
-            tx_id,
-            "alice",
-            Some(30),
-            None,
-            None,
-            Some(wallet_bank),
-            Some(wallet_card),
-            None,
-            None,
-            None,
-            Some("   "),
-            None,
+            engine::UpdateTransactionCmd::new(&vault_id, tx_id, "alice")
+                .amount_minor(30)
+                .from_wallet_id(wallet_bank)
+                .to_wallet_id(wallet_card)
+                .note("   "),
         )
         .await
         .unwrap();
@@ -730,17 +604,7 @@ async fn update_transfer_flow_can_change_endpoints_and_amount() {
     };
     // Seed Unallocated with funds so we can allocate.
     engine
-        .income(
-            &vault_id,
-            100,
-            None,
-            Some(wallet_cash),
-            None,
-            None,
-            None,
-            "alice",
-            Utc::now(),
-        )
+        .income(engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now()).wallet_id(wallet_cash))
         .await
         .unwrap();
 
@@ -765,47 +629,25 @@ async fn update_transfer_flow_can_change_endpoints_and_amount() {
         .unwrap();
     engine
         .transfer_flow(
-            &vault_id,
-            60,
-            unallocated,
-            f1,
-            Some("seed"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::TransferFlowCmd::new(&vault_id, "alice", 60, unallocated, f1, Utc::now())
+                .note("seed"),
         )
         .await
         .unwrap();
 
     let tx_id = engine
         .transfer_flow(
-            &vault_id,
-            40,
-            f1,
-            f2,
-            Some("move"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::TransferFlowCmd::new(&vault_id, "alice", 40, f1, f2, Utc::now()).note("move"),
         )
         .await
         .unwrap();
 
     engine
         .update_transaction(
-            &vault_id,
-            tx_id,
-            "alice",
-            Some(10),
-            None,
-            None,
-            None,
-            None,
-            Some(f1),
-            Some(f3),
-            None,
-            None,
-            None,
+            engine::UpdateTransactionCmd::new(&vault_id, tx_id, "alice")
+                .amount_minor(10)
+                .from_flow_id(f1)
+                .to_flow_id(f3),
         )
         .await
         .unwrap();
@@ -849,14 +691,15 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
         .unwrap();
     engine
         .transfer_flow(
-            &vault_id,
-            300,
-            unallocated_flow,
-            capped_flow,
-            Some("allocate"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::TransferFlowCmd::new(
+                &vault_id,
+                "alice",
+                300,
+                unallocated_flow,
+                capped_flow,
+                Utc::now(),
+            )
+            .note("allocate"),
         )
         .await
         .unwrap();
@@ -868,29 +711,19 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
         .unwrap();
     engine
         .income(
-            &vault_id,
-            1000,
-            Some(vacanze_flow),
-            Some(wallet_cash),
-            Some("salary"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .flow_id(vacanze_flow)
+                .wallet_id(wallet_cash)
+                .category("salary"),
         )
         .await
         .unwrap();
     let expense_id = engine
         .expense(
-            &vault_id,
-            200,
-            Some(vacanze_flow),
-            Some(wallet_cash),
-            Some("food"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::ExpenseCmd::new(&vault_id, "alice", 200, Utc::now())
+                .flow_id(vacanze_flow)
+                .wallet_id(wallet_cash)
+                .category("food"),
         )
         .await
         .unwrap();
@@ -995,15 +828,10 @@ async fn expense_on_flow_without_balance_fails() {
 
     let err = engine
         .expense(
-            &vault_id,
-            1,
-            Some(flow_id),
-            Some(wallet_id),
-            Some("food"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::ExpenseCmd::new(&vault_id, "alice", 1, Utc::now())
+                .flow_id(flow_id)
+                .wallet_id(wallet_id)
+                .category("food"),
         )
         .await
         .unwrap_err();
@@ -1027,30 +855,18 @@ async fn list_transactions_excludes_voided_and_transfers_by_default() {
 
     engine
         .income(
-            &vault_id,
-            1000,
-            None,
-            Some(wallet_id),
-            Some("salary"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .wallet_id(wallet_id)
+                .category("salary"),
         )
         .await
         .unwrap();
 
     let spend_id = engine
         .expense(
-            &vault_id,
-            100,
-            None,
-            Some(wallet_id),
-            Some("food"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::ExpenseCmd::new(&vault_id, "alice", 100, Utc::now())
+                .wallet_id(wallet_id)
+                .category("food"),
         )
         .await
         .unwrap();
@@ -1066,14 +882,15 @@ async fn list_transactions_excludes_voided_and_transfers_by_default() {
         .unwrap();
     engine
         .transfer_wallet(
-            &vault_id,
-            50,
-            wallet_id,
-            other_wallet,
-            Some("move"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::TransferWalletCmd::new(
+                &vault_id,
+                "alice",
+                50,
+                wallet_id,
+                other_wallet,
+                Utc::now(),
+            )
+            .note("move"),
         )
         .await
         .unwrap();
@@ -1135,15 +952,10 @@ async fn transactions_pagination_cursor_walks_pages_without_duplicates() {
     for i in 0..5 {
         engine
             .income(
-                &vault_id,
-                10,
-                None,
-                Some(wallet_id),
-                Some("salary"),
-                Some(&format!("income {i}")),
-                None,
-                "alice",
-                Utc::now(),
+                engine::IncomeCmd::new(&vault_id, "alice", 10, Utc::now())
+                    .wallet_id(wallet_id)
+                    .category("salary")
+                    .note(format!("income {i}")),
             )
             .await
             .unwrap();
@@ -1198,15 +1010,9 @@ async fn restart_engine_reads_same_state() {
     };
     engine
         .income(
-            &vault_id,
-            1000,
-            None,
-            Some(wallet_id),
-            Some("salary"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .wallet_id(wallet_id)
+                .category("salary"),
         )
         .await
         .unwrap();
@@ -1246,30 +1052,20 @@ async fn idempotency_key_dedupes_create() {
 
     let id1 = engine
         .income(
-            &vault_id,
-            1000,
-            None,
-            Some(wallet_id),
-            Some("salary"),
-            None,
-            Some("test-key-1"),
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .wallet_id(wallet_id)
+                .category("salary")
+                .idempotency_key("test-key-1"),
         )
         .await
         .unwrap();
 
     let id2 = engine
         .income(
-            &vault_id,
-            1000,
-            None,
-            Some(wallet_id),
-            Some("salary"),
-            None,
-            Some("test-key-1"),
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .wallet_id(wallet_id)
+                .category("salary")
+                .idempotency_key("test-key-1"),
         )
         .await
         .unwrap();
@@ -1395,15 +1191,10 @@ async fn category_and_note_are_trimmed_and_empty_becomes_none() {
 
     engine
         .income(
-            &vault_id,
-            100,
-            None,
-            Some(wallet_id),
-            Some("   "),
-            Some("  hello  "),
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now())
+                .wallet_id(wallet_id)
+                .category("   ")
+                .note("  hello  "),
         )
         .await
         .unwrap();
@@ -1447,45 +1238,15 @@ async fn list_transactions_can_filter_by_date_range_and_kinds() {
     let t2 = Utc.with_ymd_and_hms(2025, 1, 3, 10, 0, 0).unwrap();
 
     let id0 = engine
-        .income(
-            &vault_id,
-            10,
-            None,
-            Some(wallet_id),
-            None,
-            None,
-            None,
-            "alice",
-            t0,
-        )
+        .income(engine::IncomeCmd::new(&vault_id, "alice", 10, t0).wallet_id(wallet_id))
         .await
         .unwrap();
     let id1 = engine
-        .expense(
-            &vault_id,
-            5,
-            None,
-            Some(wallet_id),
-            None,
-            None,
-            None,
-            "alice",
-            t1,
-        )
+        .expense(engine::ExpenseCmd::new(&vault_id, "alice", 5, t1).wallet_id(wallet_id))
         .await
         .unwrap();
     let id2 = engine
-        .refund(
-            &vault_id,
-            2,
-            None,
-            Some(wallet_id),
-            None,
-            None,
-            None,
-            "alice",
-            t2,
-        )
+        .refund(engine::RefundCmd::new(&vault_id, "alice", 2, t2).wallet_id(wallet_id))
         .await
         .unwrap();
     let _ = (id0, id1, id2);
@@ -1592,45 +1353,27 @@ async fn vault_statistics_treats_refunds_as_expense_reduction() {
 
     engine
         .income(
-            &vault_id,
-            1000,
-            None,
-            Some(wallet_id),
-            Some("salary"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 1000, Utc::now())
+                .wallet_id(wallet_id)
+                .category("salary"),
         )
         .await
         .unwrap();
 
     engine
         .expense(
-            &vault_id,
-            300,
-            None,
-            Some(wallet_id),
-            Some("food"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::ExpenseCmd::new(&vault_id, "alice", 300, Utc::now())
+                .wallet_id(wallet_id)
+                .category("food"),
         )
         .await
         .unwrap();
 
     engine
         .refund(
-            &vault_id,
-            50,
-            None,
-            Some(wallet_id),
-            Some("food"),
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::RefundCmd::new(&vault_id, "alice", 50, Utc::now())
+                .wallet_id(wallet_id)
+                .category("food"),
         )
         .await
         .unwrap();
@@ -1707,15 +1450,9 @@ async fn flow_member_cannot_access_transaction_detail() {
 
     let tx_id = engine
         .income(
-            &vault_id,
-            100,
-            Some(flow_id),
-            Some(wallet_id),
-            None,
-            None,
-            None,
-            "alice",
-            Utc::now(),
+            engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now())
+                .flow_id(flow_id)
+                .wallet_id(wallet_id),
         )
         .await
         .unwrap();
@@ -1780,21 +1517,15 @@ async fn flow_membership_editor_can_transfer_between_shared_flows_without_vault_
 
     engine
         .transfer_flow(
-            &vault_id,
-            100,
-            unallocated_id,
-            f1,
-            Some("seed"),
-            None,
-            "alice",
-            Utc::now(),
+            engine::TransferFlowCmd::new(&vault_id, "alice", 100, unallocated_id, f1, Utc::now())
+                .note("seed"),
         )
         .await
         .unwrap();
 
     // "bob" can move allocation between F1 and F2.
     engine
-        .transfer_flow(&vault_id, 50, f1, f2, Some("move"), None, "bob", Utc::now())
+        .transfer_flow(engine::TransferFlowCmd::new(&vault_id, "bob", 50, f1, f2, Utc::now()).note("move"))
         .await
         .unwrap();
 

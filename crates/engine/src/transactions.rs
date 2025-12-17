@@ -12,6 +12,20 @@ use crate::{Currency, EngineError, ResultEngine};
 
 use super::legs;
 
+#[derive(Clone, Debug)]
+pub struct TransactionNew {
+    pub vault_id: String,
+    pub kind: TransactionKind,
+    pub occurred_at: DateTime<Utc>,
+    pub amount_minor: i64,
+    pub currency: Currency,
+    pub category: Option<String>,
+    pub note: Option<String>,
+    pub created_by: String,
+    pub idempotency_key: Option<String>,
+    pub refunded_transaction_id: Option<Uuid>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TransactionKind {
@@ -70,23 +84,13 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn new(
-        vault_id: String,
-        kind: TransactionKind,
-        occurred_at: DateTime<Utc>,
-        amount_minor: i64,
-        currency: Currency,
-        category: Option<String>,
-        note: Option<String>,
-        created_by: String,
-        idempotency_key: Option<String>,
-    ) -> ResultEngine<Self> {
-        if amount_minor <= 0 {
+    pub fn new(input: TransactionNew) -> ResultEngine<Self> {
+        if input.amount_minor <= 0 {
             return Err(EngineError::InvalidAmount(
                 "amount_minor must be > 0".to_string(),
             ));
         }
-        if let Some(key) = &idempotency_key
+        if let Some(key) = &input.idempotency_key
             && key.trim().is_empty()
         {
             return Err(EngineError::InvalidAmount(
@@ -95,18 +99,18 @@ impl Transaction {
         }
         Ok(Self {
             id: Uuid::new_v4(),
-            vault_id,
-            kind,
-            occurred_at,
-            amount_minor,
-            idempotency_key,
-            currency,
-            category,
-            note,
-            created_by,
+            vault_id: input.vault_id,
+            kind: input.kind,
+            occurred_at: input.occurred_at,
+            amount_minor: input.amount_minor,
+            idempotency_key: input.idempotency_key,
+            currency: input.currency,
+            category: input.category,
+            note: input.note,
+            created_by: input.created_by,
             voided_at: None,
             voided_by: None,
-            refunded_transaction_id: None,
+            refunded_transaction_id: input.refunded_transaction_id,
             legs: Vec::new(),
         })
     }

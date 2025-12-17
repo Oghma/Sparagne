@@ -280,17 +280,19 @@ mod http_tests {
             .id;
 
         let tx_id = engine
-            .income(
-                &vault_id,
-                1000,
-                Some(flow_id),
-                Some(wallet_id),
-                None,
-                None,
-                None,
-                OWNER,
-                Utc::now(),
-            )
+            .income(engine::IncomeCmd {
+                vault_id: vault_id.clone(),
+                amount_minor: 1000,
+                flow_id: Some(flow_id),
+                wallet_id: Some(wallet_id),
+                meta: engine::TxMeta {
+                    category: None,
+                    note: None,
+                    idempotency_key: None,
+                    occurred_at: Utc::now(),
+                },
+                user_id: OWNER.to_string(),
+            })
             .await
             .unwrap();
 
@@ -366,17 +368,19 @@ mod http_tests {
             .unwrap()
             .id;
         let tx_id = engine
-            .income(
-                &vault_id,
-                1000,
-                Some(flow_id),
-                Some(wallet_id),
-                None,
-                None,
-                None,
-                OWNER,
-                Utc::now(),
-            )
+            .income(engine::IncomeCmd {
+                vault_id: vault_id.clone(),
+                amount_minor: 1000,
+                flow_id: Some(flow_id),
+                wallet_id: Some(wallet_id),
+                meta: engine::TxMeta {
+                    category: None,
+                    note: None,
+                    idempotency_key: None,
+                    occurred_at: Utc::now(),
+                },
+                user_id: OWNER.to_string(),
+            })
             .await
             .unwrap();
 
