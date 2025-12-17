@@ -147,6 +147,73 @@ async fn income_expense_void_reverts_balances() {
 }
 
 #[tokio::test]
+async fn refund_increases_balances() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let flow_id = engine
+        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    engine
+        .income(
+            &vault_id,
+            1000,
+            Some(flow_id),
+            Some(wallet_id),
+            Some("salary"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    engine
+        .expense(
+            &vault_id,
+            200,
+            Some(flow_id),
+            Some(wallet_id),
+            Some("food"),
+            None,
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    engine
+        .refund(
+            &vault_id,
+            50,
+            Some(flow_id),
+            Some(wallet_id),
+            Some("food"),
+            Some("refund"),
+            "alice",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    let flow = engine.cash_flow(flow_id, &vault_id, "alice").await.unwrap();
+    assert_eq!(flow.balance, 850);
+    let wallet = engine.wallet(wallet_id, &vault_id, "alice").await.unwrap();
+    assert_eq!(wallet.balance, 850);
+}
+
+#[tokio::test]
 async fn transfer_wallet_does_not_touch_flows() {
     let (engine, _db) = engine_with_db().await;
     let vault_id = engine
