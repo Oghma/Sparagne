@@ -1,6 +1,6 @@
 use sea_orm_migration::prelude::*;
 
-use crate::m20230531_190127_vaults::Vaults;
+use crate::{m20230531_190127_vaults::Vaults, m20230828_064600_users::Users};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -50,6 +50,13 @@ impl MigrationTrait for Migration {
                             .to(Vaults::Table, Vaults::Id)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-vault_memberships-user_id")
+                            .from(VaultMemberships::Table, VaultMemberships::UserId)
+                            .to(Users::Table, Users::Username)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -82,6 +89,13 @@ impl MigrationTrait for Migration {
                             .name("fk-flow_memberships-flow_id")
                             .from(FlowMemberships::Table, FlowMemberships::FlowId)
                             .to(CashFlows::Table, CashFlows::Id)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk-flow_memberships-user_id")
+                            .from(FlowMemberships::Table, FlowMemberships::UserId)
+                            .to(Users::Table, Users::Username)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
