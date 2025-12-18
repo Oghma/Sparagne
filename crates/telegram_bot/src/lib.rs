@@ -101,7 +101,7 @@ impl Bot {
                 tracing::warn!("Unhandled update {:?}", upd);
             })
             .error_handler(LoggingErrorHandler::with_custom_text(
-                "An error has occured in the dispatcher",
+                "An error has occurred in the dispatcher",
             ))
             .enable_ctrlc_handler()
             .build()

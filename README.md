@@ -59,7 +59,7 @@ docker run -dit -v ./path to settings folder:/sparagne/config oghma/sparagne
 
 ### Option 2: From Source
 
-Clone the `sparagne` respository and navigate to the root directory
+Clone the `sparagne` repository and navigate to the root directory
 
 ``` sh
 git clone git@github.com:Oghma/Sparagne.git
