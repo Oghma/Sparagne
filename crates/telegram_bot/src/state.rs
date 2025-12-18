@@ -102,6 +102,7 @@ pub(crate) enum PendingAction {
     WalletForQuickAdd(DraftCreate),
     EditAmount { tx_id: Uuid },
     EditNote { tx_id: Uuid },
+    WizardDraft { kind: QuickKind },
 }
 
 #[derive(Clone, Debug)]
@@ -112,12 +113,20 @@ pub(crate) struct ListSession {
     pub next: Option<String>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct WizardSession {
+    pub kind: QuickKind,
+    pub category: Option<String>,
+    pub categories: Vec<String>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Session {
     pub hub_message_id: Option<MessageId>,
     pub pending: Option<PendingAction>,
     pub list: Option<ListSession>,
     pub last_detail_tx: Option<Uuid>,
+    pub wizard: Option<WizardSession>,
 }
 
 #[derive(Clone, Default)]

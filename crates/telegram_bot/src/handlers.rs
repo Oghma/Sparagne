@@ -12,7 +12,7 @@ use crate::{
     ConfigParameters,
     api::{ApiClient, ApiError},
     parsing::{ParseError, QuickKind, parse_quick_add},
-    state::{DraftCreate, PendingAction},
+    state::{DraftCreate, PendingAction, WizardSession},
     ui,
 };
 
@@ -64,6 +64,7 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::Home => {
+                cfg.sessions.update(chat_id, |s| s.wizard = None).await;
                 show_home(&bot, chat_id, user_id, &cfg).await?;
                 return Ok(());
             }
@@ -79,6 +80,130 @@ pub(crate) async fn handle_message(
     }
 
     Ok(())
+}
+
+async fn start_wizard(
+    bot: &Bot,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    kind: QuickKind,
+) -> ResponseResult<()> {
+    cfg.sessions
+        .update(chat_id, |s| {
+            s.wizard = Some(WizardSession {
+                kind,
+                category: None,
+                categories: Vec::new(),
+            });
+        })
+        .await;
+    show_wizard(bot, chat_id, user_id, cfg).await
+}
+
+async fn show_wizard(
+    bot: &Bot,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+) -> ResponseResult<()> {
+    let session = cfg.sessions.get(chat_id).await;
+    let Some(wizard) = session.wizard else {
+        return show_home(bot, chat_id, user_id, cfg).await;
+    };
+
+    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+        Ok(s) => s,
+        Err(err) => {
+            bot.send_message(chat_id, user_message_for_api_error(err))
+                .await?;
+            return Ok(());
+        }
+    };
+    let currency = engine_currency(snapshot.currency);
+
+    let mut prefs = cfg.prefs.get_or_default(user_id).await;
+    if (prefs.last_flow_id.is_none() || prefs.default_flow_id.is_none())
+        && let Ok(updated) = cfg
+            .prefs
+            .update(user_id, |p| {
+                if p.last_flow_id.is_none() {
+                    p.last_flow_id = Some(snapshot.unallocated_flow_id);
+                }
+                if p.default_flow_id.is_none() {
+                    p.default_flow_id = Some(snapshot.unallocated_flow_id);
+                }
+            })
+            .await
+    {
+        prefs = updated;
+    }
+    let Some(wallet_id) = prefs.default_wallet_id else {
+        show_wallet_picker(bot, chat_id, user_id, cfg).await?;
+        return Ok(());
+    };
+
+    let kind_filter = match wizard.kind {
+        QuickKind::Expense => api_types::transaction::TransactionKind::Expense,
+        QuickKind::Income => api_types::transaction::TransactionKind::Income,
+        QuickKind::Refund => api_types::transaction::TransactionKind::Refund,
+    };
+
+    let recents = match cfg
+        .api
+        .transactions_list(
+            user_id,
+            &api_types::transaction::TransactionList {
+                vault_id: snapshot.id.clone(),
+                flow_id: None,
+                wallet_id: Some(wallet_id),
+                limit: Some(6),
+                cursor: None,
+                from: None,
+                to: None,
+                kinds: Some(vec![kind_filter]),
+                include_voided: Some(false),
+                include_transfers: Some(false),
+            },
+        )
+        .await
+    {
+        Ok(v) => v,
+        Err(err) => {
+            bot.send_message(chat_id, user_message_for_api_error(err))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let mut categories: Vec<String> = Vec::new();
+    for tx in &recents.transactions {
+        let Some(cat) = tx.category.as_deref() else {
+            continue;
+        };
+        if categories.iter().any(|c| c == cat) {
+            continue;
+        }
+        categories.push(cat.to_string());
+        if categories.len() >= 6 {
+            break;
+        }
+    }
+
+    let session = cfg
+        .sessions
+        .update(chat_id, |s| {
+            if let Some(w) = &mut s.wizard {
+                w.categories = categories;
+            }
+        })
+        .await;
+    let Some(wizard) = session.wizard else {
+        return show_home(bot, chat_id, user_id, cfg).await;
+    };
+
+    let (text, kb) = ui::render_wizard(currency, &snapshot, &prefs, &wizard, &recents.transactions);
+    edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
 pub(crate) async fn handle_callback(
@@ -103,7 +228,10 @@ pub(crate) async fn handle_callback(
     };
 
     if data == "nav:home" {
+        cfg.sessions.update(chat_id, |s| s.wizard = None).await;
         show_home(&bot, chat_id, user_id, &cfg).await?;
+    } else if data == "nav:wizard" {
+        show_wizard(&bot, chat_id, user_id, &cfg).await?;
     } else if data == "home:pair" {
         cfg.sessions
             .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
@@ -115,18 +243,73 @@ pub(crate) async fn handle_callback(
     } else if data == "home:pick_flow" {
         show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
     } else if data == "home:expense" {
-        bot.send_message(chat_id, "Scrivi una uscita, es:\n\n12.50 bar caffè")
-            .await?;
+        start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Expense).await?;
     } else if data == "home:income" {
-        bot.send_message(chat_id, "Scrivi una entrata, es:\n\n+1000 stipendio")
-            .await?;
+        start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Income).await?;
     } else if data == "home:refund" {
-        bot.send_message(chat_id, "Scrivi un rimborso/storno, es:\n\nr 5.20 amazon")
-            .await?;
+        start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Refund).await?;
     } else if data == "home:list" || data == "nav:list" {
         show_list(&bot, chat_id, user_id, &cfg).await?;
     } else if data == "home:stats" {
         show_stats(&bot, chat_id, user_id, &cfg).await?;
+    } else if data == "wiz:close" {
+        cfg.sessions.update(chat_id, |s| s.wizard = None).await;
+        show_home(&bot, chat_id, user_id, &cfg).await?;
+    } else if data == "wiz:pick_wallet" {
+        show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
+    } else if data == "wiz:pick_flow" {
+        show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
+    } else if data == "wiz:input" {
+        let kind = cfg
+            .sessions
+            .get(chat_id)
+            .await
+            .wizard
+            .as_ref()
+            .map(|w| w.kind);
+        let Some(kind) = kind else {
+            show_home(&bot, chat_id, user_id, &cfg).await?;
+            return Ok(());
+        };
+
+        cfg.sessions
+            .update(chat_id, |s| {
+                s.pending = Some(PendingAction::WizardDraft { kind })
+            })
+            .await;
+        bot.send_message(chat_id, wizard_prompt(kind)).await?;
+    } else if data == "wiz:cat:none" || data == "wiz:cat:reset" {
+        cfg.sessions
+            .update(chat_id, |s| {
+                if let Some(w) = &mut s.wizard {
+                    w.category = None;
+                }
+            })
+            .await;
+        show_wizard(&bot, chat_id, user_id, &cfg).await?;
+    } else if let Some(idx) = data.strip_prefix("wiz:cat:") {
+        let Ok(idx) = idx.parse::<usize>() else {
+            return Ok(());
+        };
+        cfg.sessions
+            .update(chat_id, |s| {
+                let Some(w) = &mut s.wizard else {
+                    return;
+                };
+                let Some(cat) = w.categories.get(idx).cloned() else {
+                    return;
+                };
+                w.category = Some(cat);
+            })
+            .await;
+        show_wizard(&bot, chat_id, user_id, &cfg).await?;
+    } else if let Some(tx_id) = data.strip_prefix("wiz:recent:") {
+        let Ok(tx_id) = Uuid::parse_str(tx_id) else {
+            bot.send_message(chat_id, "Transazione non valida.").await?;
+            return Ok(());
+        };
+        repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
+        show_wizard(&bot, chat_id, user_id, &cfg).await?;
     } else if data == "prefs:toggle_voided" {
         let updated = cfg
             .prefs
@@ -177,9 +360,15 @@ pub(crate) async fn handle_callback(
         if let Some(PendingAction::WalletForQuickAdd(draft)) = pending {
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
             finalize_quick_add(&bot, chat_id, user_id, &cfg, wallet_id, draft).await?;
+            show_home(&bot, chat_id, user_id, &cfg).await?;
+            return Ok(());
         }
 
-        show_home(&bot, chat_id, user_id, &cfg).await?;
+        if cfg.sessions.get(chat_id).await.wizard.is_some() {
+            show_wizard(&bot, chat_id, user_id, &cfg).await?;
+        } else {
+            show_home(&bot, chat_id, user_id, &cfg).await?;
+        }
     } else if let Some(flow_id) = data.strip_prefix("flow:set:") {
         let Ok(flow_id) = Uuid::parse_str(flow_id) else {
             bot.send_message(chat_id, "Flow non valido.").await?;
@@ -197,7 +386,11 @@ pub(crate) async fn handle_callback(
             bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
                 .await?;
         }
-        show_home(&bot, chat_id, user_id, &cfg).await?;
+        if cfg.sessions.get(chat_id).await.wizard.is_some() {
+            show_wizard(&bot, chat_id, user_id, &cfg).await?;
+        } else {
+            show_home(&bot, chat_id, user_id, &cfg).await?;
+        }
     } else if let Some(tx_id) = data.strip_prefix("tx:detail:") {
         let Ok(tx_id) = Uuid::parse_str(tx_id) else {
             bot.send_message(chat_id, "Transazione non valida.").await?;
@@ -303,6 +496,151 @@ async fn handle_pending_message(
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
             bot.send_message(chat_id, welcome_text()).await?;
             show_home(bot, chat_id, user_id, cfg).await?;
+            Ok(true)
+        }
+        PendingAction::WizardDraft { kind } => {
+            let Some(text) = msg.text() else {
+                return Ok(true);
+            };
+
+            let input = match normalize_wizard_input(kind, text) {
+                Ok(v) => v,
+                Err(err) => {
+                    bot.send_message(chat_id, err).await?;
+                    return Ok(true);
+                }
+            };
+
+            let parsed = match parse_quick_add(&input, EngineCurrency::Eur) {
+                Ok(v) => v,
+                Err(ParseError::Empty) => return Ok(true),
+                Err(ParseError::TooManyTags) => {
+                    bot.send_message(chat_id, "Troppi tag: massimo 1.").await?;
+                    return Ok(true);
+                }
+                Err(ParseError::InvalidAmount) => {
+                    bot.send_message(chat_id, "Importo non valido (es: 10 o 10.50).")
+                        .await?;
+                    return Ok(true);
+                }
+            };
+
+            let session = cfg.sessions.get(chat_id).await;
+            let selected_category = session.wizard.as_ref().and_then(|w| w.category.clone());
+            let category = parsed.category.or(selected_category);
+
+            cfg.sessions.update(chat_id, |s| s.pending = None).await;
+
+            let prefs = cfg.prefs.get_or_default(user_id).await;
+            let Some(wallet_id) = prefs.default_wallet_id else {
+                show_wallet_picker(bot, chat_id, user_id, cfg).await?;
+                return Ok(true);
+            };
+
+            let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+                Ok(s) => s,
+                Err(err) => {
+                    bot.send_message(chat_id, user_message_for_api_error(err))
+                        .await?;
+                    return Ok(true);
+                }
+            };
+
+            let flow_id = prefs.last_flow_id.or(Some(snapshot.unallocated_flow_id));
+            let idempotency_key = format!("tg:{}:{}", msg.chat.id.0, msg.id.0);
+            let occurred_at = now_rome();
+
+            let created = match kind {
+                QuickKind::Expense => {
+                    cfg.api
+                        .create_expense(
+                            user_id,
+                            &api_types::transaction::ExpenseNew {
+                                vault_id: snapshot.id.clone(),
+                                amount_minor: parsed.amount_minor,
+                                flow_id,
+                                wallet_id: Some(wallet_id),
+                                category,
+                                note: parsed.note,
+                                idempotency_key: Some(idempotency_key),
+                                occurred_at,
+                            },
+                        )
+                        .await
+                }
+                QuickKind::Income => {
+                    cfg.api
+                        .create_income(
+                            user_id,
+                            &api_types::transaction::IncomeNew {
+                                vault_id: snapshot.id.clone(),
+                                amount_minor: parsed.amount_minor,
+                                flow_id,
+                                wallet_id: Some(wallet_id),
+                                category,
+                                note: parsed.note,
+                                idempotency_key: Some(idempotency_key),
+                                occurred_at,
+                            },
+                        )
+                        .await
+                }
+                QuickKind::Refund => {
+                    cfg.api
+                        .create_refund(
+                            user_id,
+                            &api_types::transaction::Refund {
+                                vault_id: snapshot.id.clone(),
+                                amount_minor: parsed.amount_minor,
+                                flow_id,
+                                wallet_id: Some(wallet_id),
+                                category,
+                                note: parsed.note,
+                                idempotency_key: Some(idempotency_key),
+                                occurred_at,
+                            },
+                        )
+                        .await
+                }
+            };
+
+            match created {
+                Ok(created) => {
+                    let currency = engine_currency(snapshot.currency);
+                    let signed_minor = match kind {
+                        QuickKind::Expense => -parsed.amount_minor,
+                        QuickKind::Income | QuickKind::Refund => parsed.amount_minor,
+                    };
+                    let saved_msg =
+                        format!("✅ Salvato: {}", Money::new(signed_minor).format(currency));
+                    let kb = InlineKeyboardMarkup::new(vec![vec![
+                        InlineKeyboardButton::callback(
+                            "↩ Undo",
+                            format!("tx:void:{id}", id = created.id),
+                        ),
+                        InlineKeyboardButton::callback(
+                            "✏️ Edit",
+                            format!("tx:edit:{id}", id = created.id),
+                        ),
+                        InlineKeyboardButton::callback(
+                            "📌 Ripeti",
+                            format!("tx:repeat:{id}", id = created.id),
+                        ),
+                    ]]);
+                    bot.send_message(chat_id, saved_msg)
+                        .reply_markup(kb)
+                        .await?;
+                }
+                Err(ApiError::Server { status, .. }) if status == StatusCode::CONFLICT => {
+                    bot.send_message(chat_id, "✅ Già salvato.").await?;
+                }
+                Err(err) => {
+                    bot.send_message(chat_id, user_message_for_api_error(err))
+                        .await?;
+                }
+            }
+
+            show_wizard(bot, chat_id, user_id, cfg).await?;
             Ok(true)
         }
         PendingAction::EditAmount { tx_id } => {
@@ -424,8 +762,10 @@ async fn handle_quick_add(
     cfg: &ConfigParameters,
     user_id: u64,
 ) -> ResponseResult<()> {
-    let currency = EngineCurrency::Eur;
-    let parsed = match parse_quick_add(msg.text().unwrap_or_default(), currency) {
+    let Some(text) = msg.text() else {
+        return Ok(());
+    };
+    let parsed = match parse_quick_add(text, EngineCurrency::Eur) {
         Ok(v) => v,
         Err(ParseError::Empty) => return Ok(()),
         Err(ParseError::TooManyTags) => {
@@ -643,6 +983,11 @@ async fn show_wallet_picker(
     user_id: u64,
     cfg: &ConfigParameters,
 ) -> ResponseResult<()> {
+    let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
+        "nav:wizard"
+    } else {
+        "nav:home"
+    };
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
@@ -661,7 +1006,7 @@ async fn show_wallet_picker(
             return Ok(());
         }
     };
-    let (text, kb) = ui::render_wallet_picker(&snapshot);
+    let (text, kb) = ui::render_wallet_picker(&snapshot, back_callback);
     edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -671,6 +1016,11 @@ async fn show_flow_picker(
     user_id: u64,
     cfg: &ConfigParameters,
 ) -> ResponseResult<()> {
+    let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
+        "nav:wizard"
+    } else {
+        "nav:home"
+    };
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
@@ -689,7 +1039,7 @@ async fn show_flow_picker(
             return Ok(());
         }
     };
-    let (text, kb) = ui::render_flow_picker(&snapshot);
+    let (text, kb) = ui::render_flow_picker(&snapshot, back_callback);
     edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -1073,6 +1423,55 @@ fn welcome_text() -> &'static str {
 
 fn help_text() -> &'static str {
     "Esempi:\n\n12.50 bar caffè\n-12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\n#tag opzionale (max 1): 12.50 bar #food caffè"
+}
+
+fn wizard_prompt(kind: QuickKind) -> &'static str {
+    match kind {
+        QuickKind::Expense => {
+            "Invia una uscita, es:\n\n12.50 bar caffè\n12.50 bar #food caffè\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
+        }
+        QuickKind::Income => {
+            "Invia una entrata, es:\n\n1000 stipendio\n+1000 #salary stipendio\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
+        }
+        QuickKind::Refund => {
+            "Invia un rimborso/storno, es:\n\nr 5.20 amazon\nr 5.20 #shopping amazon\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
+        }
+    }
+}
+
+fn normalize_wizard_input(kind: QuickKind, raw: &str) -> Result<String, &'static str> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("Testo vuoto.");
+    }
+    match kind {
+        QuickKind::Expense => {
+            if trimmed.starts_with('+') {
+                return Err("Selezionato: uscita. Rimuovi il '+' (es: 12.50 bar).");
+            }
+            if trimmed.starts_with('r') || trimmed.starts_with('R') {
+                return Err("Selezionato: uscita. Per refund usa il bottone “Refund”.");
+            }
+            Ok(trimmed.to_string())
+        }
+        QuickKind::Income => {
+            if trimmed.starts_with('r') || trimmed.starts_with('R') {
+                return Err("Selezionato: entrata. Rimuovi 'r' (es: 1000 stipendio).");
+            }
+            if trimmed.starts_with('+') {
+                Ok(trimmed.to_string())
+            } else {
+                Ok(format!("+{trimmed}"))
+            }
+        }
+        QuickKind::Refund => {
+            if trimmed.starts_with('r') || trimmed.starts_with('R') {
+                Ok(trimmed.to_string())
+            } else {
+                Ok(format!("r {trimmed}"))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
