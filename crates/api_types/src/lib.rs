@@ -39,6 +39,37 @@ pub mod vault {
         pub name: Option<String>,
         pub currency: Option<Currency>,
     }
+
+    /// A vault snapshot for UI clients (bot/TUI).
+    ///
+    /// This is a single "read model" response that includes wallets and flows,
+    /// so clients don't need DB access or multiple ad-hoc queries.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct VaultSnapshot {
+        pub id: String,
+        pub name: String,
+        pub currency: Currency,
+        pub wallets: Vec<WalletView>,
+        pub flows: Vec<FlowView>,
+        pub unallocated_flow_id: Uuid,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct WalletView {
+        pub id: Uuid,
+        pub name: String,
+        pub balance_minor: i64,
+        pub archived: bool,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowView {
+        pub id: Uuid,
+        pub name: String,
+        pub balance_minor: i64,
+        pub archived: bool,
+        pub is_unallocated: bool,
+    }
 }
 
 pub mod user {
