@@ -76,10 +76,20 @@ cargo run -p sparagne --release
 ### Database
 
 Sparagne requires a database to store users and their entries. At the moment
-only `Sqlite3` is supported. There is no utility to create users and their
-vaults so you have to create them manually inside the database.
+only `Sqlite3` is supported.
 
 NOTE: Telegram bot requires its account for the authentication.
+
+To bootstrap users and vaults, use the admin CLI (it runs migrations on startup
+and uses `DATABASE_URL`, defaulting to `sqlite:./sparagne.db?mode=rwc`):
+
+```sh
+# Create a user
+cargo run -p sparagne_admin -- user create --username alice
+
+# Create a vault (also creates Unallocated + default wallet)
+cargo run -p sparagne_admin -- vault create --owner alice --name Main --currency EUR
+```
 
 ## Settings
 
