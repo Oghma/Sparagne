@@ -30,7 +30,7 @@ pub struct ServerState {
 ///
 /// Telegram requests must contain "telegram-user-id" entry in the header.
 #[derive(Debug)]
-struct TelegramHeader(u64);
+struct TelegramHeader(String);
 
 impl Header for TelegramHeader {
     fn name() -> &'static axum::http::HeaderName {
@@ -46,16 +46,11 @@ impl Header for TelegramHeader {
         let Ok(value) = value.to_str() else {
             return Err(AxumError::invalid());
         };
-        let Ok(value) = value.parse() else {
-            return Err(AxumError::invalid());
-        };
-
-        Ok(TelegramHeader(value))
+        Ok(TelegramHeader(value.to_string()))
     }
 
     fn encode<E: Extend<axum::http::HeaderValue>>(&self, values: &mut E) {
-        let as_string = self.0.to_string();
-        match axum::http::HeaderValue::from_str(&as_string) {
+        match axum::http::HeaderValue::from_str(&self.0) {
             Ok(value) => values.extend(std::iter::once(value)),
             Err(_) => tracing::error!("failed to encode telegram-user-id header"),
         }
