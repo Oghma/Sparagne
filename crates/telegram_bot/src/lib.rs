@@ -1,15 +1,28 @@
-//! Library for the telegram bot
+//! Telegram bot.
+//!
+//! The bot is a thin client: it talks only to the HTTP server API and never
+//! accesses the database directly.
+
+use std::path::PathBuf;
+
 use base64::Engine;
 use reqwest::{Client, header};
-use teloxide::{Bot as TBot, dispatching::dialogue::InMemStorage, prelude::*};
+use teloxide::prelude::*;
 
+mod api;
+mod handlers;
+mod parsing;
+mod state;
+mod ui;
 
+const DEFAULT_STATE_PATH: &str = "config/telegram_bot_state.json";
 
 #[derive(Clone)]
 pub struct ConfigParameters {
     allowed_users: Option<Vec<UserId>>,
-    client: Client,
-    server: String,
+    api: api::ApiClient,
+    prefs: state::PrefsStore,
+    sessions: state::SessionStore,
 }
 
 pub struct Bot {
@@ -17,6 +30,7 @@ pub struct Bot {
     allowed_users: Option<Vec<UserId>>,
     server: String,
     client: Client,
+    state_path: PathBuf,
 }
 
 impl Bot {
@@ -26,10 +40,11 @@ impl Bot {
         server: &str,
         username: &str,
         password: &str,
+        state_path: PathBuf,
     ) -> Result<Self, String> {
         // Basic authorization is in the form "Basic `secret`" where `secret` is
-        // the base64 of the string "username:password"
-        let secret = format!("{}:{}", username, password);
+        // the base64 of the string "username:password".
+        let secret = format!("{username}:{password}");
         let secret = format!("Basic {}", base64::prelude::BASE64_STANDARD.encode(secret));
 
         let mut auth = header::HeaderValue::try_from(secret)
@@ -49,6 +64,7 @@ impl Bot {
             allowed_users,
             server: server.to_string(),
             client,
+            state_path,
         })
     }
 
@@ -56,45 +72,27 @@ impl Bot {
         BotBuilder::default()
     }
 
-    /// Run the telegram bot.
     pub async fn run(&self) {
         tracing::info!("Starting telegram bot...");
 
-        let bot = TBot::new(&self.token);
+        let bot = teloxide::Bot::new(&self.token);
+        let prefs = state::PrefsStore::load_or_empty(self.state_path.clone());
+
         let parameters = ConfigParameters {
             allowed_users: self.allowed_users.clone(),
-            client: self.client.clone(),
-            server: self.server.clone(),
+            api: api::ApiClient::new(self.client.clone(), self.server.clone()),
+            prefs,
+            sessions: state::SessionStore::default(),
         };
 
-        let handler = Update::filter_message()
-            .branch(
-                dptree::filter(
-                    // Only allowed users can use the bot
-                    |cfg: ConfigParameters, msg: Message| {
-                        msg.from
-                            .as_ref()
-                            .map(|user| match cfg.allowed_users {
-                                None => true,
-                                Some(ids) => ids.contains(&user.id),
-                            })
-                            .unwrap_or_default()
-                    },
-                )
-                .branch(handlers::entry::schema())
-                .branch(handlers::statistics::schema())
-                .branch(handlers::exports::schema()),
-            )
-            .branch(handlers::user::schema())
-            .branch(handlers::start::schema());
+        let handler = dptree::entry()
+            .branch(Update::filter_message().endpoint(handlers::handle_message))
+            .branch(Update::filter_callback_query().endpoint(handlers::handle_callback));
 
         Dispatcher::builder(bot, handler)
-            .dependencies(dptree::deps![
-                InMemStorage::<GlobalState>::new(),
-                parameters
-            ])
+            .dependencies(dptree::deps![parameters])
             .default_handler(|upd| async move {
-                tracing::warn!("Unhandled update {:?}", upd);
+                tracing::warn!("Unhandled update: {:?}", upd);
             })
             .error_handler(LoggingErrorHandler::with_custom_text(
                 "An error has occurred in the dispatcher",
@@ -113,6 +111,7 @@ pub struct BotBuilder {
     server: String,
     username: String,
     password: String,
+    state_path: Option<PathBuf>,
 }
 
 impl BotBuilder {
@@ -135,14 +134,23 @@ impl BotBuilder {
         self
     }
 
+    pub fn state_path(mut self, path: impl Into<PathBuf>) -> BotBuilder {
+        self.state_path = Some(path.into());
+        self
+    }
+
     pub fn build(self) -> Result<Bot, String> {
-        tracing::info!("Initializing...");
+        tracing::info!("Initializing telegram bot...");
+        let state_path = self
+            .state_path
+            .unwrap_or_else(|| PathBuf::from(DEFAULT_STATE_PATH));
         Bot::new(
             &self.token,
             self.allowed_users,
             &self.server,
             &self.username,
             &self.password,
+            state_path,
         )
     }
 }
