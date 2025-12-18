@@ -12,14 +12,18 @@ pub async fn get(
     Json(payload): Json<CashFlowGet>,
 ) -> Result<Json<CashFlow>, ServerError> {
     let flow = match (payload.id, payload.name.as_deref()) {
-        (Some(id), _) => state
-            .engine
-            .cash_flow(id, &payload.vault_id, &user.username)
-            .await?,
-        (None, Some(name)) => state
-            .engine
-            .cash_flow_by_name(name, &payload.vault_id, &user.username)
-            .await?,
+        (Some(id), _) => {
+            state
+                .engine
+                .cash_flow(id, &payload.vault_id, &user.username)
+                .await?
+        }
+        (None, Some(name)) => {
+            state
+                .engine
+                .cash_flow_by_name(name, &payload.vault_id, &user.username)
+                .await?
+        }
         (None, None) => {
             return Err(ServerError::Generic(
                 "cash flow id or name required".to_string(),

@@ -6,7 +6,7 @@ use reqwest::StatusCode;
 use serde::Serialize;
 use teloxide::{RequestError, dispatching::UpdateHandler, prelude::*, types::InputFile};
 
-use crate::{ConfigParameters, commands::UserExportCommands, get_check};
+use crate::{ConfigParameters, commands::UserExportCommands, post_check};
 
 /// Build the schema for Export commands
 pub fn schema() -> UpdateHandler<RequestError> {
@@ -16,11 +16,18 @@ pub fn schema() -> UpdateHandler<RequestError> {
 }
 
 async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> ResponseResult<()> {
-    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
+    let user_id = match msg.from.as_ref() {
+        Some(user) => user.id.to_string(),
+        None => {
+            bot.send_message(msg.chat.id, "Impossibile identificare l'utente.")
+                .await?;
+            return Ok(());
+        }
+    };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
-        format!("{}/vault", cfg.server),
+        format!("{}/vault/get", cfg.server),
         user_id.clone(),
         &api_types::vault::Vault {
             id: None,
@@ -39,12 +46,18 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
         Some(response) => response.json::<api_types::vault::Vault>().await?,
     };
 
-    let (user_response, response) = get_check!(
+    let (user_response, response) = post_check!(
         cfg.client,
-        format!("{}/cashFlow", cfg.server),
+        format!("{}/cashFlow/get", cfg.server),
         user_id.clone(),
         &api_types::cash_flow::CashFlowGet {
-            vault_id: vault.id.clone().unwrap(),
+            vault_id: match vault.id.clone() {
+                Some(id) => id,
+                None => {
+                    bot.send_message(msg.chat.id, "Vault non valido.").await?;
+                    return Ok(());
+                }
+            },
             id: None,
             name: Some("Main".to_string()),
         },
@@ -60,16 +73,27 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
         Some(response) => response.json::<CashFlow>().await?,
     };
 
-    let (user_response, response) = get_check!(
+    let vault_id = match vault.id {
+        Some(id) => id,
+        None => {
+            bot.send_message(msg.chat.id, "Vault non valido.").await?;
+            return Ok(());
+        }
+    };
+
+    let (user_response, response) = post_check!(
         cfg.client,
         format!("{}/transactions", cfg.server),
         user_id,
         &api_types::transaction::TransactionList {
-            vault_id: vault.id.unwrap(),
+            vault_id: vault_id.clone(),
             flow_id: Some(flow.id),
             wallet_id: None,
             limit: Some(10_000),
             cursor: None,
+            from: None,
+            to: None,
+            kinds: None,
             include_voided: Some(false),
             include_transfers: Some(false),
         },
@@ -96,20 +120,33 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
 
     let mut writer = Writer::from_writer(vec![]);
     for tx in list.transactions {
-        writer
-            .serialize(ExportRow {
-                occurred_at: tx.occurred_at.to_rfc3339(),
-                amount_minor: tx.amount_minor,
-                category: tx.category,
-                note: tx.note,
-                id: tx.id.to_string(),
-            })
-            .unwrap();
+        if let Err(err) = writer.serialize(ExportRow {
+            occurred_at: tx.occurred_at.to_rfc3339(),
+            amount_minor: tx.amount_minor,
+            category: tx.category,
+            note: tx.note,
+            id: tx.id.to_string(),
+        }) {
+            tracing::error!("failed to serialize export row: {err}");
+            bot.send_message(msg.chat.id, "Errore durante l'esportazione.")
+                .await?;
+            return Ok(());
+        }
     }
+
+    let data = match writer.into_inner() {
+        Ok(data) => data,
+        Err(err) => {
+            tracing::error!("failed to finalize export: {err}");
+            bot.send_message(msg.chat.id, "Errore durante l'esportazione.")
+                .await?;
+            return Ok(());
+        }
+    };
 
     bot.send_document(
         msg.chat.id,
-        InputFile::memory(writer.into_inner().unwrap()).file_name("entries.csv"),
+        InputFile::memory(data).file_name("entries.csv"),
     )
     .await?;
 

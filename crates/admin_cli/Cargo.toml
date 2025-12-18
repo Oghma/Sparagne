@@ -1,0 +1,15 @@
+[package]
+name = "sparagne_admin"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+crossterm = { workspace = true }
+engine = { workspace = true }
+migration = { workspace = true }
+sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+tokio = { workspace = true, features = ["full"] }

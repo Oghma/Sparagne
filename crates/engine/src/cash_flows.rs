@@ -330,6 +330,8 @@ impl From<&mut CashFlow> for ActiveModel {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
     use super::*;
 
     fn net_capped() -> CashFlow {

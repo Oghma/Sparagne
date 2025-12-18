@@ -4,7 +4,7 @@ use engine::{Currency, Money};
 use reqwest::StatusCode;
 use teloxide::{RequestError, dispatching::UpdateHandler, prelude::*};
 
-use crate::{ConfigParameters, commands::UserStatisticsCommands, get_check};
+use crate::{ConfigParameters, commands::UserStatisticsCommands, post_check};
 
 /// Build the schema for Statistics commands
 pub fn schema() -> UpdateHandler<RequestError> {
@@ -19,13 +19,20 @@ async fn handle_statistics(
     msg: Message,
     cmd: UserStatisticsCommands,
 ) -> ResponseResult<()> {
-    let user_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
+    let user_id = match msg.from.as_ref() {
+        Some(user) => user.id.to_string(),
+        None => {
+            bot.send_message(msg.chat.id, "Impossibile identificare l'utente.")
+                .await?;
+            return Ok(());
+        }
+    };
 
     match cmd {
         UserStatisticsCommands::Stats => {
-            let (user_response, response) = get_check!(
+            let (user_response, response) = post_check!(
                 cfg.client,
-                format!("{}/stats", cfg.server),
+                format!("{}/stats/get", cfg.server),
                 user_id,
                 &api_types::vault::Vault {
                     id: None,

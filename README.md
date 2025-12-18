@@ -11,6 +11,34 @@ The app consists of:
 - a telegram bot
 - in future a TUI interface
 
+## HTTP API (Server)
+
+- Base URL: `http://127.0.0.1:3000`
+- Auth: Basic auth (`Authorization: Basic base64(username:password)`).
+- Telegram bot requests may also include `telegram-user-id` header.
+- JSON request bodies are used for read and write endpoints (POST everywhere for bodies).
+
+Core endpoints:
+- `POST /vault/new` (`api_types::vault::VaultNew`) → `api_types::vault::Vault`
+- `POST /vault/get` (`api_types::vault::Vault`) → `api_types::vault::Vault`
+- `POST /cashFlow/get` (`api_types::cash_flow::CashFlowGet`) → `engine::CashFlow`
+- `POST /stats/get` (`api_types::vault::Vault`) → `api_types::stats::Statistic`
+
+Transactions:
+- `POST /transactions` (`api_types::transaction::TransactionList`) → `TransactionListResponse`
+- `POST /transactions/get` (`TransactionGet`) → `TransactionDetailResponse`
+- `POST /income` (`IncomeNew`) → `TransactionCreated`
+- `POST /expense` (`ExpenseNew`) → `TransactionCreated`
+- `POST /refund` (`Refund`) → `TransactionCreated`
+- `POST /transferWallet` (`TransferWalletNew`) → `TransactionCreated`
+- `POST /transferFlow` (`TransferFlowNew`) → `TransactionCreated`
+- `PATCH /transactions/{id}` (`TransactionUpdate`) → `200 OK`
+- `POST /transactions/{id}/void` (`TransactionVoid`) → `200 OK`
+
+Sharing/memberships:
+- `GET /vault/{vault_id}/members` / `POST /vault/{vault_id}/members` / `DELETE /vault/{vault_id}/members/{username}`
+- `GET /vault/{vault_id}/flows/{flow_id}/members` / `POST /vault/{vault_id}/flows/{flow_id}/members` / `DELETE /vault/{vault_id}/flows/{flow_id}/members/{username}`
+
 ## Installation
 
 ### Option 1: From Docker
@@ -48,10 +76,20 @@ cargo run -p sparagne --release
 ### Database
 
 Sparagne requires a database to store users and their entries. At the moment
-only `Sqlite3` is supported. There is no utility to create users and their
-vaults so you have to create them manually inside the database.
+only `Sqlite3` is supported.
 
 NOTE: Telegram bot requires its account for the authentication.
+
+To bootstrap users and vaults, use the admin CLI (it runs migrations on startup
+and uses `DATABASE_URL`, defaulting to `sqlite:./sparagne.db?mode=rwc`):
+
+```sh
+# Create a user
+cargo run -p sparagne_admin -- user create --username alice
+
+# Create a vault (also creates Unallocated + default wallet)
+cargo run -p sparagne_admin -- vault create --owner alice --name Main --currency EUR
+```
 
 ## Settings
 
@@ -62,4 +100,3 @@ To use the telegram bot `[telegram]` settings need to have enabled
 - `server`: ip address of the sparagne server. For now is hardcoded to `"http://127.0.0.1:3000"`
 - `username`: username of the telegram database account. See [Database](#Database)
 - `password`: password of the telegram database account
-

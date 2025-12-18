@@ -30,26 +30,30 @@ impl Bot {
         server: &str,
         username: &str,
         password: &str,
-    ) -> Self {
+    ) -> Result<Self, String> {
         // Basic authorization is in the form "Basic `secret`" where `secret` is
         // the base64 of the string "username:password"
         let secret = format!("{}:{}", username, password);
         let secret = format!("Basic {}", base64::prelude::BASE64_STANDARD.encode(secret));
 
-        let mut auth = header::HeaderValue::try_from(secret).unwrap();
+        let mut auth = header::HeaderValue::try_from(secret)
+            .map_err(|err| format!("invalid auth header value: {err}"))?;
         auth.set_sensitive(true);
 
         let mut headers = header::HeaderMap::new();
         headers.insert(header::AUTHORIZATION, auth);
 
-        let client = Client::builder().default_headers(headers).build().unwrap();
+        let client = Client::builder()
+            .default_headers(headers)
+            .build()
+            .map_err(|err| format!("failed to build http client: {err}"))?;
 
-        Self {
+        Ok(Self {
             token: token.to_string(),
             allowed_users,
             server: server.to_string(),
             client,
-        }
+        })
     }
 
     pub fn builder() -> BotBuilder {
@@ -135,7 +139,7 @@ impl BotBuilder {
         self
     }
 
-    pub fn build(self) -> Bot {
+    pub fn build(self) -> Result<Bot, String> {
         tracing::info!("Initializing...");
         Bot::new(
             &self.token,

@@ -20,17 +20,35 @@ async fn handle_pair_user(
     msg: Message,
     cmd: HandleUserAccount,
 ) -> ResponseResult<()> {
-    let telegram_id = msg.from.as_ref().map(|user| user.id.to_string()).unwrap();
+    let telegram_id = match msg.from.as_ref() {
+        Some(user) => user.id.to_string(),
+        None => {
+            bot.send_message(msg.chat.id, "Impossibile identificare l'utente.")
+                .await?;
+            return Ok(());
+        }
+    };
 
     match cmd {
         HandleUserAccount::Pair { code } => {
-            let response = cfg
+            let response = match cfg
                 .client
                 .post(cfg.server.to_string() + "/user/pair")
                 .json(&api_types::user::PairUser { code, telegram_id })
                 .send()
                 .await
-                .unwrap();
+            {
+                Ok(response) => response,
+                Err(err) => {
+                    tracing::debug!("request failed: {err}");
+                    bot.send_message(
+                        msg.chat.id,
+                        "Connection problems with the server. Retry later!",
+                    )
+                    .await?;
+                    return Ok(());
+                }
+            };
 
             match response.status() {
                 StatusCode::CREATED => {
@@ -39,7 +57,10 @@ async fn handle_pair_user(
                 }
                 _ => {
                     tracing::debug!("{:?}", response);
-                    tracing::debug!("body: {}", response.text().await.unwrap());
+                    match response.text().await {
+                        Ok(body) => tracing::debug!("body: {body}"),
+                        Err(err) => tracing::debug!("body read failed: {err}"),
+                    }
                     bot.send_message(
                         msg.chat.id,
                         "Connection problems with the server. Retry later!",
@@ -49,19 +70,33 @@ async fn handle_pair_user(
             };
         }
         HandleUserAccount::UnPair => {
-            let response = cfg
+            let response = match cfg
                 .client
                 .delete(cfg.server + "/user/pair")
                 .header("telegram-user-id", telegram_id)
                 .send()
                 .await
-                .unwrap();
+            {
+                Ok(response) => response,
+                Err(err) => {
+                    tracing::debug!("request failed: {err}");
+                    bot.send_message(
+                        msg.chat.id,
+                        "Connection problems with the server. Retry later!",
+                    )
+                    .await?;
+                    return Ok(());
+                }
+            };
 
             let user_response = match response.status() {
                 StatusCode::ACCEPTED => "Account unpaired",
                 _ => {
                     tracing::debug!("{:?}", response);
-                    tracing::debug!("body: {}", response.text().await.unwrap());
+                    match response.text().await {
+                        Ok(body) => tracing::debug!("body: {body}"),
+                        Err(err) => tracing::debug!("body read failed: {err}"),
+                    }
 
                     "Connection problems with the server. Retry later!"
                 }

@@ -46,12 +46,22 @@ impl Vault {
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
     ) -> ResultEngine<(Uuid, cash_flows::ActiveModel)> {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return Err(EngineError::InvalidFlow(
+                "flow name must not be empty".to_string(),
+            ));
+        }
         if name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
             return Err(EngineError::InvalidFlow(
                 "flow name is reserved".to_string(),
             ));
         }
-        if self.cash_flow.values().any(|flow| flow.name == name) {
+        if self
+            .cash_flow
+            .values()
+            .any(|flow| flow.name.eq_ignore_ascii_case(&name))
+        {
             return Err(EngineError::ExistingKey(name));
         }
         let flow = CashFlow::new(
@@ -151,6 +161,8 @@ impl From<&Vault> for ActiveModel {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
     use super::*;
 
     fn vault() -> (Uuid, Vault) {
