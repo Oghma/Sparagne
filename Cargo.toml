@@ -43,7 +43,7 @@ config = "0.15.19"
 csv = "1.4.0"
 crossterm = "0.29.0"
 http-body-util = "0.1.3"
-reqwest = "0.12.25"
+reqwest = "0.12.26"
 sea-orm = "0.12.15"
 sea-orm-migration = { version = "0.12.15", default-features = false }
 serde = { version = "1.0.228", features = ["derive"] }
