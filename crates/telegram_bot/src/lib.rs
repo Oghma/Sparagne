@@ -3,11 +3,7 @@ use base64::Engine;
 use reqwest::{Client, header};
 use teloxide::{Bot as TBot, dispatching::dialogue::InMemStorage, prelude::*};
 
-use crate::handlers::GlobalState;
 
-mod commands;
-mod handlers;
-mod macros;
 
 #[derive(Clone)]
 pub struct ConfigParameters {
