@@ -218,11 +218,7 @@ mod http_tests {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         Migrator::up(&db, None).await.unwrap();
 
-        async fn insert_user(
-            db: &sea_orm::DatabaseConnection,
-            username: &str,
-            password: &str,
-        ) {
+        async fn insert_user(db: &sea_orm::DatabaseConnection, username: &str, password: &str) {
             let active = crate::user::ActiveModel {
                 username: ActiveValue::Set(username.to_string()),
                 password: ActiveValue::Set(password.to_string()),

@@ -26,11 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 }
             };
 
-            let engine = match engine::Engine::builder()
-                .database(db.clone())
-                .build()
-                .await
-            {
+            let engine = match engine::Engine::builder().database(db.clone()).build().await {
                 Ok(engine) => engine,
                 Err(err) => {
                     tracing::error!("failed to build engine from database: {err}");

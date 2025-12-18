@@ -121,12 +121,12 @@ async fn handle_exports(bot: Bot, cfg: ConfigParameters, msg: Message) -> Respon
     let mut writer = Writer::from_writer(vec![]);
     for tx in list.transactions {
         if let Err(err) = writer.serialize(ExportRow {
-                occurred_at: tx.occurred_at.to_rfc3339(),
-                amount_minor: tx.amount_minor,
-                category: tx.category,
-                note: tx.note,
-                id: tx.id.to_string(),
-            }) {
+            occurred_at: tx.occurred_at.to_rfc3339(),
+            amount_minor: tx.amount_minor,
+            category: tx.category,
+            note: tx.note,
+            id: tx.id.to_string(),
+        }) {
             tracing::error!("failed to serialize export row: {err}");
             bot.send_message(msg.chat.id, "Errore durante l'esportazione.")
                 .await?;

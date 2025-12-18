@@ -1,7 +1,8 @@
 //! Command structs for engine operations.
 //!
-//! These types group parameters for write operations (income/expense/transfer/update),
-//! keeping call sites readable and avoiding long argument lists.
+//! These types group parameters for write operations
+//! (income/expense/transfer/update), keeping call sites readable and avoiding
+//! long argument lists.
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -367,7 +368,11 @@ pub struct UpdateTransactionCmd {
 
 impl UpdateTransactionCmd {
     #[must_use]
-    pub fn new(vault_id: impl Into<String>, transaction_id: Uuid, user_id: impl Into<String>) -> Self {
+    pub fn new(
+        vault_id: impl Into<String>,
+        transaction_id: Uuid,
+        user_id: impl Into<String>,
+    ) -> Self {
         Self {
             vault_id: vault_id.into(),
             transaction_id,

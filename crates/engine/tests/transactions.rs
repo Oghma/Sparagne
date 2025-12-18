@@ -239,8 +239,15 @@ async fn transfer_wallet_does_not_touch_flows() {
 
     engine
         .transfer_wallet(
-            engine::TransferWalletCmd::new(&vault_id, "alice", 250, wallet_cash, wallet_bank, Utc::now())
-                .note("move"),
+            engine::TransferWalletCmd::new(
+                &vault_id,
+                "alice",
+                250,
+                wallet_cash,
+                wallet_bank,
+                Utc::now(),
+            )
+            .note("move"),
         )
         .await
         .unwrap();
@@ -301,8 +308,15 @@ async fn income_capped_counts_transfers_in() {
 
     let err = engine
         .transfer_flow(
-            engine::TransferFlowCmd::new(&vault_id, "alice", 600, from_flow, capped_flow, Utc::now())
-                .note("allocate"),
+            engine::TransferFlowCmd::new(
+                &vault_id,
+                "alice",
+                600,
+                from_flow,
+                capped_flow,
+                Utc::now(),
+            )
+            .note("allocate"),
         )
         .await
         .unwrap_err();
@@ -527,16 +541,21 @@ async fn update_transfer_wallet_can_change_endpoints_and_amount() {
         .unwrap();
 
     engine
-        .income(
-            engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now()).wallet_id(wallet_cash),
-        )
+        .income(engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now()).wallet_id(wallet_cash))
         .await
         .unwrap();
 
     let tx_id = engine
         .transfer_wallet(
-            engine::TransferWalletCmd::new(&vault_id, "alice", 50, wallet_cash, wallet_bank, Utc::now())
-                .note(" move "),
+            engine::TransferWalletCmd::new(
+                &vault_id,
+                "alice",
+                50,
+                wallet_cash,
+                wallet_bank,
+                Utc::now(),
+            )
+            .note(" move "),
         )
         .await
         .unwrap();
@@ -1525,7 +1544,9 @@ async fn flow_membership_editor_can_transfer_between_shared_flows_without_vault_
 
     // "bob" can move allocation between F1 and F2.
     engine
-        .transfer_flow(engine::TransferFlowCmd::new(&vault_id, "bob", 50, f1, f2, Utc::now()).note("move"))
+        .transfer_flow(
+            engine::TransferFlowCmd::new(&vault_id, "bob", 50, f1, f2, Utc::now()).note("move"),
+        )
         .await
         .unwrap();
 

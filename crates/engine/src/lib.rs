@@ -17,8 +17,7 @@ use sea_orm::{
     ActiveValue, Condition, DatabaseTransaction, JoinType, QueryFilter, QueryOrder, QuerySelect,
     Statement, TransactionTrait, prelude::*, sea_query::Expr,
 };
-pub use transactions::{Transaction, TransactionKind};
-pub use transactions::TransactionNew;
+pub use transactions::{Transaction, TransactionKind, TransactionNew};
 pub use vault::Vault;
 pub use wallets::Wallet;
 
