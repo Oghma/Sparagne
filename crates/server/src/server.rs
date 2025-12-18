@@ -117,6 +117,7 @@ fn router(state: ServerState) -> Router {
         .route("/transactions/{id}/void", post(transactions::void_tx))
         .route("/vault/new", post(vault::vault_new))
         .route("/vault/get", post(vault::get))
+        .route("/vault/snapshot", post(vault::snapshot))
         .route(
             "/vault/{vault_id}/members",
             get(memberships::list_vault_members).post(memberships::upsert_vault_member),
