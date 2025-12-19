@@ -123,6 +123,7 @@ pub(crate) struct WizardSession {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Session {
     pub hub_message_id: Option<MessageId>,
+    pub display_name: Option<String>,
     pub pending: Option<PendingAction>,
     pub list: Option<ListSession>,
     pub last_detail_tx: Option<Uuid>,

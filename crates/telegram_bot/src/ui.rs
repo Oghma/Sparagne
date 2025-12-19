@@ -15,6 +15,7 @@ use crate::{
 };
 
 pub(crate) fn render_home(
+    display_name: &str,
     snapshot: &VaultSnapshot,
     prefs: &UserPrefs,
 ) -> (String, InlineKeyboardMarkup) {
@@ -37,8 +38,8 @@ pub(crate) fn render_home(
         .unwrap_or("Non in flow");
 
     let text = format!(
-        "Sparagne • Vault: {}\nWallet default: {}\nFlow default: {}\nUltimo flow: {}",
-        snapshot.name, default_wallet, default_flow, last_flow
+        "{display_name} • Vault: {}\nWallet default: {}\nFlow default: {}\nUltimo flow: {}",
+        snapshot.name, default_wallet, default_flow, last_flow,
     );
 
     let kb = InlineKeyboardMarkup::new(vec![
@@ -55,7 +56,6 @@ pub(crate) fn render_home(
             InlineKeyboardButton::callback("👛 Wallet default", "home:pick_wallet"),
             InlineKeyboardButton::callback("🎯 Flow default", "home:pick_flow"),
         ],
-        vec![InlineKeyboardButton::callback("⚙️ Pairing", "home:pair")],
     ]);
 
     (text, kb)

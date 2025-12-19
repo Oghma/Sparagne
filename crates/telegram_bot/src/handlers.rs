@@ -32,6 +32,11 @@ pub(crate) async fn handle_message(
     };
     let user_id = from.id.0;
     let chat_id = msg.chat.id;
+    cfg.sessions
+        .update(chat_id, |s| {
+            s.display_name = Some(display_name_from_telegram(from))
+        })
+        .await;
 
     // If we are waiting for an input (pair/edit), handle it first.
     if let Some(pending) = cfg.sessions.get(chat_id).await.pending
@@ -55,7 +60,14 @@ pub(crate) async fn handle_message(
                     }
 
                     cfg.sessions.update(chat_id, |s| s.pending = None).await;
-                    bot.send_message(chat_id, welcome_text()).await?;
+                    let display_name = cfg
+                        .sessions
+                        .get(chat_id)
+                        .await
+                        .display_name
+                        .unwrap_or_else(|| "Sparagne".to_string());
+                    bot.send_message(chat_id, welcome_text(&display_name))
+                        .await?;
                     show_home(&bot, chat_id, user_id, &cfg).await?;
                     return Ok(());
                 }
@@ -220,6 +232,11 @@ pub(crate) async fn handle_callback(
     };
     let chat_id = message.chat().id;
     let user_id = q.from.id.0;
+    cfg.sessions
+        .update(chat_id, |s| {
+            s.display_name = Some(display_name_from_telegram(&q.from))
+        })
+        .await;
 
     let _ = bot.answer_callback_query(q.id.clone()).await;
 
@@ -494,7 +511,14 @@ async fn handle_pending_message(
             }
 
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
-            bot.send_message(chat_id, welcome_text()).await?;
+            let display_name = cfg
+                .sessions
+                .get(chat_id)
+                .await
+                .display_name
+                .unwrap_or_else(|| "Sparagne".to_string());
+            bot.send_message(chat_id, welcome_text(&display_name))
+                .await?;
             show_home(bot, chat_id, user_id, cfg).await?;
             Ok(true)
         }
@@ -910,10 +934,22 @@ async fn finalize_quick_add(
                     .unwrap_or_default(),
             );
 
-            let kb = InlineKeyboardMarkup::new(vec![vec![
-                InlineKeyboardButton::callback("↩ Undo", format!("tx:void:{id}", id = created.id)),
-                InlineKeyboardButton::callback("✏️ Edit", format!("tx:edit:{id}", id = created.id)),
-            ]]);
+            let kb = InlineKeyboardMarkup::new(vec![
+                vec![
+                    InlineKeyboardButton::callback(
+                        "↩ Undo",
+                        format!("tx:void:{id}", id = created.id),
+                    ),
+                    InlineKeyboardButton::callback(
+                        "✏️ Edit",
+                        format!("tx:edit:{id}", id = created.id),
+                    ),
+                ],
+                vec![InlineKeyboardButton::callback(
+                    "📌 Ripeti",
+                    format!("tx:repeat:{id}", id = created.id),
+                )],
+            ]);
 
             bot.send_message(chat_id, saved_msg)
                 .reply_markup(kb)
@@ -945,13 +981,14 @@ async fn show_home(
                 ApiError::Server { status, .. }
                     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
             );
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
             if needs_pairing {
+                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
+                    .await?;
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
+            } else {
+                bot.send_message(chat_id, user_message_for_api_error(err))
                     .await?;
             }
             return Ok(());
@@ -973,7 +1010,13 @@ async fn show_home(
     {
         prefs = updated;
     }
-    let (text, kb) = ui::render_home(&snapshot, &prefs);
+    let display_name = cfg
+        .sessions
+        .get(chat_id)
+        .await
+        .display_name
+        .unwrap_or_else(|| "Sparagne".to_string());
+    let (text, kb) = ui::render_home(&display_name, &snapshot, &prefs);
     edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -996,12 +1039,15 @@ async fn show_wallet_picker(
                 ApiError::Server { status, .. }
                     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
             );
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
             if needs_pairing {
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
+                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
+                    .await?;
+            } else {
+                bot.send_message(chat_id, user_message_for_api_error(err))
+                    .await?;
             }
             return Ok(());
         }
@@ -1029,12 +1075,15 @@ async fn show_flow_picker(
                 ApiError::Server { status, .. }
                     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
             );
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
             if needs_pairing {
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
+                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
+                    .await?;
+            } else {
+                bot.send_message(chat_id, user_message_for_api_error(err))
+                    .await?;
             }
             return Ok(());
         }
@@ -1057,12 +1106,15 @@ async fn show_list(
                 ApiError::Server { status, .. }
                     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
             );
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
             if needs_pairing {
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
+                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
+                    .await?;
+            } else {
+                bot.send_message(chat_id, user_message_for_api_error(err))
+                    .await?;
             }
             return Ok(());
         }
@@ -1401,6 +1453,13 @@ fn user_message_for_api_error(err: ApiError) -> String {
                 "Risorsa non trovata. Prova a reimpostare i default.".to_string()
             }
             reqwest::StatusCode::CONFLICT => "Richiesta duplicata (già salvata).".to_string(),
+            reqwest::StatusCode::BAD_REQUEST => {
+                if message == "user not found" {
+                    "Codice di pairing non valido (o stai usando un database diverso da quello del server).".to_string()
+                } else {
+                    message
+                }
+            }
             reqwest::StatusCode::UNPROCESSABLE_ENTITY => message,
             _ => "Errore server.".to_string(),
         },
@@ -1417,12 +1476,24 @@ fn engine_currency(currency: api_types::Currency) -> EngineCurrency {
     }
 }
 
-fn welcome_text() -> &'static str {
-    "Benvenuto!\n\nOra puoi inserire voci al volo scrivendo ad esempio:\n\n12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\nImposta i default (wallet/flow) usando i bottoni."
+fn welcome_text(display_name: &str) -> String {
+    format!(
+        "Benvenuto, {display_name}!\n\nOra puoi inserire voci al volo scrivendo ad esempio:\n\n12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\nImposta i default (wallet/flow) usando i bottoni."
+    )
 }
 
 fn help_text() -> &'static str {
     "Esempi:\n\n12.50 bar caffè\n-12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\n#tag opzionale (max 1): 12.50 bar #food caffè"
+}
+
+fn display_name_from_telegram(user: &User) -> String {
+    if let Some(username) = user.username.as_deref().filter(|u| !u.is_empty()) {
+        format!("@{username}")
+    } else if !user.first_name.is_empty() {
+        user.first_name.clone()
+    } else {
+        "Sparagne".to_string()
+    }
 }
 
 fn wizard_prompt(kind: QuickKind) -> &'static str {
