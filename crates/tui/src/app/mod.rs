@@ -8,6 +8,7 @@ use crate::{
     error::{AppError, Result},
     ui,
 };
+use crate::quick_add::QuickAddKind;
 
 use api_types::{
     transaction::{
@@ -74,6 +75,7 @@ pub struct AppState {
     pub section: Section,
     pub transactions: TransactionsState,
     pub base_url: String,
+    pub last_flow_id: Option<uuid::Uuid>,
 }
 
 pub struct App {
@@ -99,6 +101,7 @@ impl App {
             section: Section::Home,
             transactions: TransactionsState::default(),
             base_url: config.base_url.clone(),
+            last_flow_id: None,
         };
 
         Ok(Self {
@@ -162,7 +165,13 @@ impl App {
                             self.state.transactions.edit_error = None;
                         }
                         TransactionsMode::List => {
-                            self.state.section = Section::Home;
+                            if self.state.transactions.quick_active {
+                                self.state.transactions.quick_active = false;
+                                self.state.transactions.quick_input.clear();
+                                self.state.transactions.quick_error = None;
+                            } else {
+                                self.state.section = Section::Home;
+                            }
                         }
                     }
                 } else {
@@ -187,6 +196,11 @@ impl App {
                     && self.state.transactions.mode == TransactionsMode::Edit
                 {
                     self.state.transactions.edit_input.pop();
+                } else if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                    && self.state.transactions.quick_active
+                {
+                    self.state.transactions.quick_input.pop();
                 }
             }
             crate::ui::keymap::AppAction::Up => {
@@ -214,6 +228,11 @@ impl App {
                         && self.state.transactions.mode == TransactionsMode::Edit
                     {
                         self.state.transactions.edit_input.push(ch);
+                    } else if self.state.section == Section::Transactions
+                        && self.state.transactions.mode == TransactionsMode::List
+                        && self.state.transactions.quick_active
+                    {
+                        self.state.transactions.quick_input.push(ch);
                     } else {
                         self.handle_non_login_key(ch).await?;
                     }
@@ -258,6 +277,7 @@ impl App {
                     .await
                 {
                     Ok(snapshot) => {
+                        self.state.last_flow_id = Some(snapshot.unallocated_flow_id);
                         self.state.snapshot = Some(snapshot);
                         self.state.screen = Screen::Home;
                         self.state.login.message = None;
@@ -278,7 +298,13 @@ impl App {
 
     async fn handle_transactions_submit(&mut self) -> Result<()> {
         match self.state.transactions.mode {
-            TransactionsMode::List => self.open_transaction_detail().await,
+            TransactionsMode::List => {
+                if self.state.transactions.quick_active {
+                    self.submit_quick_add().await
+                } else {
+                    self.open_transaction_detail().await
+                }
+            }
             TransactionsMode::Detail => Ok(()),
             TransactionsMode::Edit => self.apply_transaction_edit().await,
         }
@@ -377,6 +403,15 @@ impl App {
             'k' | 'K' => {
                 if self.state.section == Section::Transactions {
                     self.state.transactions.select_prev();
+                }
+                return Ok(());
+            }
+            'a' | 'A' => {
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.state.transactions.quick_active = true;
+                    self.state.transactions.quick_error = None;
                 }
                 return Ok(());
             }
@@ -643,9 +678,11 @@ impl App {
         };
         let occurred_at = self.now_in_timezone();
 
+        let mut last_flow_id = None;
         let res = match detail.transaction.kind {
             api_types::transaction::TransactionKind::Income => {
                 let (wallet_id, flow_id) = extract_wallet_flow(detail);
+                last_flow_id = flow_id;
                 self.client
                     .income_new(
                         self.state.login.username.as_str(),
@@ -665,6 +702,7 @@ impl App {
             }
             api_types::transaction::TransactionKind::Expense => {
                 let (wallet_id, flow_id) = extract_wallet_flow(detail);
+                last_flow_id = flow_id;
                 self.client
                     .expense_new(
                         self.state.login.username.as_str(),
@@ -684,6 +722,7 @@ impl App {
             }
             api_types::transaction::TransactionKind::Refund => {
                 let (wallet_id, flow_id) = extract_wallet_flow(detail);
+                last_flow_id = flow_id;
                 self.client
                     .refund_new(
                         self.state.login.username.as_str(),
@@ -741,6 +780,9 @@ impl App {
 
         match res {
             Ok(_) => {
+                if let Some(flow_id) = last_flow_id {
+                    self.state.last_flow_id = Some(flow_id);
+                }
                 self.load_transactions(true).await?;
             }
             Err(err) => {
@@ -758,6 +800,113 @@ impl App {
         let offset = local.offset().fix();
         local.with_timezone(&offset)
     }
+
+    async fn submit_quick_add(&mut self) -> Result<()> {
+        let vault_id = self
+            .state
+            .vault
+            .as_ref()
+            .and_then(|v| v.id.as_deref())
+            .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
+
+        let (wallet_id, flow_id, _wallet_name, _flow_name) =
+            match default_wallet_flow(&self.state) {
+                Ok(res) => res,
+                Err(message) => {
+                    self.state.transactions.quick_error = Some(message);
+                    return Ok(());
+                }
+            };
+
+        let currency = self
+            .state
+            .vault
+            .as_ref()
+            .and_then(|v| v.currency.as_ref())
+            .map(map_currency)
+            .unwrap_or(engine::Currency::Eur);
+
+        let parsed = match crate::quick_add::parse(&self.state.transactions.quick_input, currency)
+        {
+            Ok(parsed) => parsed,
+            Err(message) => {
+                self.state.transactions.quick_error = Some(message);
+                return Ok(());
+            }
+        };
+
+        let occurred_at = self.now_in_timezone();
+        let res = match parsed.kind {
+            QuickAddKind::Income => {
+                self.client
+                    .income_new(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        IncomeNew {
+                            vault_id: vault_id.to_string(),
+                            amount_minor: parsed.amount_minor,
+                            flow_id: Some(flow_id),
+                            wallet_id: Some(wallet_id),
+                            category: parsed.category.clone(),
+                            note: parsed.note.clone(),
+                            idempotency_key: None,
+                            occurred_at,
+                        },
+                    )
+                    .await
+            }
+            QuickAddKind::Expense => {
+                self.client
+                    .expense_new(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        ExpenseNew {
+                            vault_id: vault_id.to_string(),
+                            amount_minor: parsed.amount_minor,
+                            flow_id: Some(flow_id),
+                            wallet_id: Some(wallet_id),
+                            category: parsed.category.clone(),
+                            note: parsed.note.clone(),
+                            idempotency_key: None,
+                            occurred_at,
+                        },
+                    )
+                    .await
+            }
+            QuickAddKind::Refund => {
+                self.client
+                    .refund_new(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        Refund {
+                            vault_id: vault_id.to_string(),
+                            amount_minor: parsed.amount_minor,
+                            flow_id: Some(flow_id),
+                            wallet_id: Some(wallet_id),
+                            category: parsed.category.clone(),
+                            note: parsed.note.clone(),
+                            idempotency_key: None,
+                            occurred_at,
+                        },
+                    )
+                    .await
+            }
+        };
+
+        match res {
+            Ok(_) => {
+                self.state.last_flow_id = Some(flow_id);
+                self.state.transactions.quick_input.clear();
+                self.state.transactions.quick_error = None;
+                self.load_transactions(true).await?;
+            }
+            Err(err) => {
+                self.state.transactions.quick_error = Some(login_message_for_error(err));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -774,6 +923,9 @@ pub struct TransactionsState {
     pub detail: Option<TransactionDetailResponse>,
     pub edit_input: String,
     pub edit_error: Option<String>,
+    pub quick_input: String,
+    pub quick_error: Option<String>,
+    pub quick_active: bool,
 }
 
 impl Default for TransactionsState {
@@ -791,6 +943,9 @@ impl Default for TransactionsState {
             detail: None,
             edit_input: String::new(),
             edit_error: None,
+            quick_input: String::new(),
+            quick_error: None,
+            quick_active: false,
         }
     }
 }
@@ -806,6 +961,9 @@ impl TransactionsState {
         self.detail = None;
         self.edit_input.clear();
         self.edit_error = None;
+        self.quick_input.clear();
+        self.quick_error = None;
+        self.quick_active = false;
     }
 
     fn push_cursor(&mut self, cursor: Option<String>) {
@@ -917,4 +1075,31 @@ fn map_currency(currency: &api_types::Currency) -> engine::Currency {
     match currency {
         api_types::Currency::Eur => engine::Currency::Eur,
     }
+}
+
+fn default_wallet_flow(
+    state: &AppState,
+) -> std::result::Result<(uuid::Uuid, uuid::Uuid, String, String), String> {
+    let snapshot = state
+        .snapshot
+        .as_ref()
+        .ok_or_else(|| "Snapshot non disponibile.".to_string())?;
+
+    let wallet = snapshot
+        .wallets
+        .iter()
+        .find(|wallet| !wallet.archived)
+        .ok_or_else(|| "Nessun wallet disponibile.".to_string())?;
+    let flow = state
+        .last_flow_id
+        .and_then(|last_id| {
+            snapshot
+                .flows
+                .iter()
+                .find(|flow| flow.id == last_id && !flow.archived)
+        })
+        .or_else(|| snapshot.flows.iter().find(|flow| flow.is_unallocated))
+        .ok_or_else(|| "Flow Unallocated mancante.".to_string())?;
+
+    Ok((wallet.id, flow.id, wallet.name.clone(), flow.name.clone()))
 }

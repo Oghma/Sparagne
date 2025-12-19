@@ -64,6 +64,13 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(2), Constraint::Min(0)])
+        .split(area);
+
+    render_quick_add(frame, layout[0], state, theme);
+
     let currency = state
         .vault
         .as_ref()
@@ -106,7 +113,46 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         )
         .highlight_symbol("» ");
 
-    frame.render_stateful_widget(list, area, &mut list_state);
+    frame.render_stateful_widget(list, layout[1], &mut list_state);
+}
+
+fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let (wallet_name, flow_name) = default_wallet_flow_names(state);
+    let focus = if state.transactions.quick_active {
+        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.dim)
+    };
+
+    let input = state.transactions.quick_input.as_str();
+    let mut lines = vec![Line::from(vec![
+        Span::styled("Quick add", focus),
+        Span::raw(": "),
+        Span::styled(input, Style::default().fg(theme.text)),
+        Span::raw("   "),
+        Span::styled("wallet", Style::default().fg(theme.dim)),
+        Span::raw(format!(": {wallet_name}   ")),
+        Span::styled("flow", Style::default().fg(theme.dim)),
+        Span::raw(format!(": {flow_name}")),
+    ])];
+
+    if let Some(err) = &state.transactions.quick_error {
+        lines.push(Line::from(Span::styled(
+            err.as_str(),
+            Style::default().fg(theme.error),
+        )));
+    } else if state.transactions.quick_active {
+        lines.push(Line::from(Span::styled(
+            "Formato: 12.50 bar  |  +1000 stipendio  |  r 5.20 amazon  |  #tag opzionale",
+            Style::default().fg(theme.dim),
+        )));
+    }
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title("Quick add (a)");
+    let widget = Paragraph::new(lines).block(block);
+    frame.render_widget(widget, area);
 }
 
 fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -264,4 +310,38 @@ fn resolve_flow_name(state: &AppState, flow_id: Uuid) -> String {
                 .map(|flow| flow.name.clone())
         })
         .unwrap_or_else(|| flow_id.to_string())
+}
+
+fn default_wallet_flow_names(state: &AppState) -> (String, String) {
+    let snapshot = match state.snapshot.as_ref() {
+        Some(snapshot) => snapshot,
+        None => return ("-".to_string(), "-".to_string()),
+    };
+
+    let wallet_name = snapshot
+        .wallets
+        .iter()
+        .find(|wallet| !wallet.archived)
+        .map(|wallet| wallet.name.clone())
+        .unwrap_or_else(|| "-".to_string());
+
+    let flow_name = state
+        .last_flow_id
+        .and_then(|flow_id| {
+            snapshot
+                .flows
+                .iter()
+                .find(|flow| flow.id == flow_id && !flow.archived)
+                .map(|flow| flow.name.clone())
+        })
+        .or_else(|| {
+            snapshot
+                .flows
+                .iter()
+                .find(|flow| flow.is_unallocated)
+                .map(|flow| flow.name.clone())
+        })
+        .unwrap_or_else(|| "Non in flow".to_string());
+
+    (wallet_name, flow_name)
 }

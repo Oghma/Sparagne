@@ -2,6 +2,7 @@ mod app;
 mod client;
 mod config;
 mod error;
+mod quick_add;
 mod ui;
 
 use crate::error::Result;

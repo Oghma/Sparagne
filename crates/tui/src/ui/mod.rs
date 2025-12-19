@@ -133,6 +133,8 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
                 parts.push(Span::raw(" voided "));
                 parts.push(Span::styled("t", Style::default().fg(theme.accent)));
                 parts.push(Span::raw(" transfers "));
+                parts.push(Span::styled("a", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" quick add "));
                 parts.push(Span::styled("↑/↓", Style::default().fg(theme.accent)));
                 parts.push(Span::raw(" select "));
                 parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
