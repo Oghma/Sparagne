@@ -9,7 +9,10 @@ use crate::{
     ui,
 };
 
-use api_types::vault::{Vault, VaultSnapshot};
+use api_types::{
+    transaction::{TransactionList, TransactionListResponse, TransactionView},
+    vault::{Vault, VaultSnapshot},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
@@ -61,6 +64,8 @@ pub struct AppState {
     pub vault: Option<Vault>,
     pub snapshot: Option<VaultSnapshot>,
     pub section: Section,
+    pub transactions: TransactionsState,
+    pub base_url: String,
 }
 
 pub struct App {
@@ -84,6 +89,8 @@ impl App {
             vault: None,
             snapshot: None,
             section: Section::Home,
+            transactions: TransactionsState::default(),
+            base_url: config.base_url.clone(),
         };
 
         Ok(Self {
@@ -138,12 +145,24 @@ impl App {
                 let field = self.active_field_mut();
                 field.pop();
             }
+            crate::ui::keymap::AppAction::Up => {
+                if self.state.screen == Screen::Home && self.state.section == Section::Transactions
+                {
+                    self.state.transactions.select_prev();
+                }
+            }
+            crate::ui::keymap::AppAction::Down => {
+                if self.state.screen == Screen::Home && self.state.section == Section::Transactions
+                {
+                    self.state.transactions.select_next();
+                }
+            }
             crate::ui::keymap::AppAction::Input(ch) => {
                 if self.state.screen == Screen::Login {
                     let field = self.active_field_mut();
                     field.push(ch);
                 } else {
-                    self.handle_section_key(ch);
+                    self.handle_non_login_key(ch).await?;
                 }
             }
             crate::ui::keymap::AppAction::None => {}
@@ -188,6 +207,7 @@ impl App {
                         self.state.snapshot = Some(snapshot);
                         self.state.screen = Screen::Home;
                         self.state.login.message = None;
+                        self.load_transactions(true).await?;
                     }
                     Err(err) => {
                         self.state.login.message = Some(login_message_for_error(err));
@@ -212,16 +232,210 @@ impl App {
         &self.config
     }
 
-    fn handle_section_key(&mut self, ch: char) {
-        self.state.section = match ch {
-            'h' | 'H' => Section::Home,
-            't' | 'T' => Section::Transactions,
-            'w' | 'W' => Section::Wallets,
-            'f' | 'F' => Section::Flows,
-            'v' | 'V' => Section::Vault,
-            's' | 'S' => Section::Stats,
-            _ => self.state.section,
+    async fn handle_non_login_key(&mut self, ch: char) -> Result<()> {
+        match ch {
+            'h' | 'H' => {
+                self.state.section = Section::Home;
+                return Ok(());
+            }
+            't' | 'T' => {
+                if self.state.section == Section::Transactions {
+                    self.state.transactions.include_transfers =
+                        !self.state.transactions.include_transfers;
+                    self.load_transactions(true).await?;
+                } else {
+                    self.state.section = Section::Transactions;
+                    if self.state.transactions.items.is_empty() {
+                        self.load_transactions(true).await?;
+                    }
+                }
+                return Ok(());
+            }
+            'w' | 'W' => {
+                self.state.section = Section::Wallets;
+                return Ok(());
+            }
+            'f' | 'F' => {
+                self.state.section = Section::Flows;
+                return Ok(());
+            }
+            'v' | 'V' => {
+                if self.state.section == Section::Transactions {
+                    self.state.transactions.include_voided =
+                        !self.state.transactions.include_voided;
+                    self.load_transactions(true).await?;
+                } else {
+                    self.state.section = Section::Vault;
+                }
+                return Ok(());
+            }
+            's' | 'S' => {
+                self.state.section = Section::Stats;
+                return Ok(());
+            }
+            'r' | 'R' => {
+                if self.state.section == Section::Transactions {
+                    self.load_transactions(true).await?;
+                }
+                return Ok(());
+            }
+            'n' | 'N' => {
+                if self.state.section == Section::Transactions {
+                    self.load_transactions_next().await?;
+                }
+                return Ok(());
+            }
+            'p' | 'P' => {
+                if self.state.section == Section::Transactions {
+                    self.load_transactions_prev().await?;
+                }
+                return Ok(());
+            }
+            'j' | 'J' => {
+                if self.state.section == Section::Transactions {
+                    self.state.transactions.select_next();
+                }
+                return Ok(());
+            }
+            'k' | 'K' => {
+                if self.state.section == Section::Transactions {
+                    self.state.transactions.select_prev();
+                }
+                return Ok(());
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    async fn load_transactions(&mut self, reset: bool) -> Result<()> {
+        let vault_id = self
+            .state
+            .vault
+            .as_ref()
+            .and_then(|v| v.id.as_deref())
+            .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
+
+        if reset {
+            self.state.transactions.reset();
+        }
+
+        let payload = TransactionList {
+            vault_id: vault_id.to_string(),
+            flow_id: None,
+            wallet_id: None,
+            limit: Some(20),
+            cursor: self.state.transactions.cursor.clone(),
+            from: None,
+            to: None,
+            kinds: None,
+            include_voided: Some(self.state.transactions.include_voided),
+            include_transfers: Some(self.state.transactions.include_transfers),
         };
+
+        let res = self
+            .client
+            .transactions_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                payload,
+            )
+            .await;
+
+        match res {
+            Ok(TransactionListResponse {
+                transactions,
+                next_cursor,
+            }) => {
+                self.state.transactions.items = transactions;
+                self.state.transactions.next_cursor = next_cursor;
+                self.state.transactions.error = None;
+                self.state.transactions.selected = 0;
+            }
+            Err(err) => {
+                self.state.transactions.error = Some(login_message_for_error(err));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn load_transactions_next(&mut self) -> Result<()> {
+        if let Some(next) = self.state.transactions.next_cursor.clone() {
+            self.state
+                .transactions
+                .push_cursor(self.state.transactions.cursor.clone());
+            self.state.transactions.cursor = Some(next);
+            self.load_transactions(false).await?;
+        }
+        Ok(())
+    }
+
+    async fn load_transactions_prev(&mut self) -> Result<()> {
+        if let Some(prev) = self.state.transactions.pop_cursor() {
+            self.state.transactions.cursor = prev;
+            self.load_transactions(false).await?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct TransactionsState {
+    pub items: Vec<TransactionView>,
+    pub cursor: Option<String>,
+    pub next_cursor: Option<String>,
+    pub prev_cursors: Vec<Option<String>>,
+    pub selected: usize,
+    pub include_voided: bool,
+    pub include_transfers: bool,
+    pub error: Option<String>,
+}
+
+impl Default for TransactionsState {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            cursor: None,
+            next_cursor: None,
+            prev_cursors: Vec::new(),
+            selected: 0,
+            include_voided: false,
+            include_transfers: false,
+            error: None,
+        }
+    }
+}
+
+impl TransactionsState {
+    fn reset(&mut self) {
+        self.cursor = None;
+        self.next_cursor = None;
+        self.prev_cursors.clear();
+        self.items.clear();
+        self.selected = 0;
+    }
+
+    fn push_cursor(&mut self, cursor: Option<String>) {
+        self.prev_cursors.push(cursor);
+    }
+
+    fn pop_cursor(&mut self) -> Option<Option<String>> {
+        self.prev_cursors.pop()
+    }
+
+    fn select_next(&mut self) {
+        if self.items.is_empty() {
+            return;
+        }
+        self.selected = (self.selected + 1).min(self.items.len() - 1);
+    }
+
+    fn select_prev(&mut self) {
+        if self.items.is_empty() {
+            return;
+        }
+        self.selected = self.selected.saturating_sub(1);
     }
 }
 

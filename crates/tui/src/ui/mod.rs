@@ -46,10 +46,11 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     match state.section {
         crate::app::Section::Home => screens::home::render(frame, body[1], state),
+        crate::app::Section::Transactions => screens::transactions::render(frame, body[1], state),
         _ => screens::placeholder::render(frame, body[1], state),
     }
 
-    render_bottom_bar(frame, layout[2], &theme);
+    render_bottom_bar(frame, layout[2], state, &theme);
 }
 
 fn render_top_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
