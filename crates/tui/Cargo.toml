@@ -11,6 +11,8 @@ api_types = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 config = { workspace = true }
 crossterm = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
 engine = { workspace = true }
 ratatui = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
@@ -18,3 +20,4 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tracing = { workspace = true }
+uuid = { workspace = true }

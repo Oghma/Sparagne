@@ -3,6 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppAction {
     Quit,
+    Cancel,
     NextField,
     Submit,
     Backspace,
@@ -20,7 +21,8 @@ pub fn map_key(key: KeyEvent) -> AppAction {
     }
 
     match key.code {
-        KeyCode::Char('q') | KeyCode::Esc => AppAction::Quit,
+        KeyCode::Char('q') => AppAction::Quit,
+        KeyCode::Esc => AppAction::Cancel,
         KeyCode::Tab => AppAction::NextField,
         KeyCode::Enter => AppAction::Submit,
         KeyCode::Backspace => AppAction::Backspace,

@@ -121,18 +121,44 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 
     if state.section == crate::app::Section::Transactions {
         parts.push(Span::raw(" | "));
-        parts.push(Span::styled("r", Style::default().fg(theme.accent)));
-        parts.push(Span::raw(" refresh "));
-        parts.push(Span::styled("n", Style::default().fg(theme.accent)));
-        parts.push(Span::raw(" next "));
-        parts.push(Span::styled("p", Style::default().fg(theme.accent)));
-        parts.push(Span::raw(" prev "));
-        parts.push(Span::styled("v", Style::default().fg(theme.accent)));
-        parts.push(Span::raw(" voided "));
-        parts.push(Span::styled("t", Style::default().fg(theme.accent)));
-        parts.push(Span::raw(" transfers "));
-        parts.push(Span::styled("↑/↓", Style::default().fg(theme.accent)));
-        parts.push(Span::raw(" select "));
+        match state.transactions.mode {
+            crate::app::TransactionsMode::List => {
+                parts.push(Span::styled("r", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" refresh "));
+                parts.push(Span::styled("n", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" next "));
+                parts.push(Span::styled("p", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" prev "));
+                parts.push(Span::styled("v", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" voided "));
+                parts.push(Span::styled("t", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" transfers "));
+                parts.push(Span::styled("↑/↓", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" select "));
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" detail "));
+            }
+            crate::app::TransactionsMode::Detail => {
+                parts.push(Span::styled("b", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" back "));
+                parts.push(Span::styled("esc", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" back "));
+                parts.push(Span::styled("v", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" void "));
+                parts.push(Span::styled("e", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" edit "));
+                parts.push(Span::styled("r", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" repeat "));
+            }
+            crate::app::TransactionsMode::Edit => {
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" save "));
+                parts.push(Span::styled("b", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" back "));
+                parts.push(Span::styled("esc", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" back "));
+            }
+        }
     }
 
     parts.push(Span::styled("q", Style::default().fg(theme.accent)));

@@ -1,10 +1,14 @@
 use api_types::{
-    transaction::{TransactionList, TransactionListResponse},
+    transaction::{
+        ExpenseNew, IncomeNew, Refund, TransactionCreated, TransactionDetailResponse,
+        TransactionGet, TransactionList, TransactionListResponse, TransactionUpdate,
+        TransactionVoid, TransferFlowNew, TransferWalletNew,
+    },
     vault::{Vault, VaultSnapshot},
 };
 use reqwest::Url;
 
-use serde::Deserialize;
+use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::error::{AppError, Result};
 
@@ -66,26 +70,7 @@ impl Client {
             .await
             .map_err(ClientError::Transport)?;
 
-        if res.status().is_success() {
-            return res.json::<Vault>().await.map_err(ClientError::Transport);
-        }
-
-        let status = res.status();
-        let body = res
-            .json::<ErrorResponse>()
-            .await
-            .map(|err| err.error)
-            .unwrap_or_else(|_| "unknown error".to_string());
-
-        let err = match status.as_u16() {
-            401 => ClientError::Unauthorized,
-            403 => ClientError::Forbidden,
-            404 => ClientError::NotFound,
-            409 => ClientError::Conflict(body),
-            422 => ClientError::Validation(body),
-            _ => ClientError::Server(body),
-        };
-        Err(err)
+        handle_json(res).await
     }
 
     pub async fn vault_snapshot(
@@ -114,29 +99,7 @@ impl Client {
             .await
             .map_err(ClientError::Transport)?;
 
-        if res.status().is_success() {
-            return res
-                .json::<VaultSnapshot>()
-                .await
-                .map_err(ClientError::Transport);
-        }
-
-        let status = res.status();
-        let body = res
-            .json::<ErrorResponse>()
-            .await
-            .map(|err| err.error)
-            .unwrap_or_else(|_| "unknown error".to_string());
-
-        let err = match status.as_u16() {
-            401 => ClientError::Unauthorized,
-            403 => ClientError::Forbidden,
-            404 => ClientError::NotFound,
-            409 => ClientError::Conflict(body),
-            422 => ClientError::Validation(body),
-            _ => ClientError::Server(body),
-        };
-        Err(err)
+        handle_json(res).await
     }
 
     pub async fn transactions_list(
@@ -159,28 +122,187 @@ impl Client {
             .await
             .map_err(ClientError::Transport)?;
 
-        if res.status().is_success() {
-            return res
-                .json::<TransactionListResponse>()
-                .await
-                .map_err(ClientError::Transport);
-        }
+        handle_json(res).await
+    }
 
-        let status = res.status();
-        let body = res
-            .json::<ErrorResponse>()
+    pub async fn transaction_detail(
+        &self,
+        username: &str,
+        password: &str,
+        payload: TransactionGet,
+    ) -> std::result::Result<TransactionDetailResponse, ClientError> {
+        let endpoint = self
+            .base_url
+            .join("transactions/get")
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
             .await
-            .map(|err| err.error)
-            .unwrap_or_else(|_| "unknown error".to_string());
+            .map_err(ClientError::Transport)?;
 
-        let err = match status.as_u16() {
-            401 => ClientError::Unauthorized,
-            403 => ClientError::Forbidden,
-            404 => ClientError::NotFound,
-            409 => ClientError::Conflict(body),
-            422 => ClientError::Validation(body),
-            _ => ClientError::Server(body),
-        };
-        Err(err)
+        handle_json(res).await
+    }
+
+    pub async fn transaction_void(
+        &self,
+        username: &str,
+        password: &str,
+        transaction_id: uuid::Uuid,
+        payload: TransactionVoid,
+    ) -> std::result::Result<(), ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("transactions/{transaction_id}/void"))
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_empty(res).await
+    }
+
+    pub async fn transaction_update(
+        &self,
+        username: &str,
+        password: &str,
+        transaction_id: uuid::Uuid,
+        payload: TransactionUpdate,
+    ) -> std::result::Result<(), ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("transactions/{transaction_id}"))
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .patch(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_empty(res).await
+    }
+
+    pub async fn income_new(
+        &self,
+        username: &str,
+        password: &str,
+        payload: IncomeNew,
+    ) -> std::result::Result<TransactionCreated, ClientError> {
+        post_create(self, "income", username, password, payload).await
+    }
+
+    pub async fn expense_new(
+        &self,
+        username: &str,
+        password: &str,
+        payload: ExpenseNew,
+    ) -> std::result::Result<TransactionCreated, ClientError> {
+        post_create(self, "expense", username, password, payload).await
+    }
+
+    pub async fn refund_new(
+        &self,
+        username: &str,
+        password: &str,
+        payload: Refund,
+    ) -> std::result::Result<TransactionCreated, ClientError> {
+        post_create(self, "refund", username, password, payload).await
+    }
+
+    pub async fn transfer_wallet_new(
+        &self,
+        username: &str,
+        password: &str,
+        payload: TransferWalletNew,
+    ) -> std::result::Result<TransactionCreated, ClientError> {
+        post_create(self, "transferWallet", username, password, payload).await
+    }
+
+    pub async fn transfer_flow_new(
+        &self,
+        username: &str,
+        password: &str,
+        payload: TransferFlowNew,
+    ) -> std::result::Result<TransactionCreated, ClientError> {
+        post_create(self, "transferFlow", username, password, payload).await
+    }
+}
+
+async fn post_create<T: serde::Serialize>(
+    client: &Client,
+    path: &str,
+    username: &str,
+    password: &str,
+    payload: T,
+) -> std::result::Result<TransactionCreated, ClientError> {
+    let endpoint = client
+        .base_url
+        .join(path)
+        .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+    let res = client
+        .http
+        .post(endpoint)
+        .basic_auth(username, Some(password))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(ClientError::Transport)?;
+
+    handle_json(res).await
+}
+
+async fn handle_json<T: DeserializeOwned>(
+    res: reqwest::Response,
+) -> std::result::Result<T, ClientError> {
+    if res.status().is_success() {
+        return res.json::<T>().await.map_err(ClientError::Transport);
+    }
+
+    let status = res.status();
+    let body = res
+        .json::<ErrorResponse>()
+        .await
+        .map(|err| err.error)
+        .unwrap_or_else(|_| "unknown error".to_string());
+
+    Err(map_error(status.as_u16(), body))
+}
+
+async fn handle_empty(res: reqwest::Response) -> std::result::Result<(), ClientError> {
+    if res.status().is_success() {
+        return Ok(());
+    }
+    let status = res.status();
+    let body = res
+        .json::<ErrorResponse>()
+        .await
+        .map(|err| err.error)
+        .unwrap_or_else(|_| "unknown error".to_string());
+    Err(map_error(status.as_u16(), body))
+}
+
+fn map_error(status: u16, body: String) -> ClientError {
+    match status {
+        401 => ClientError::Unauthorized,
+        403 => ClientError::Forbidden,
+        404 => ClientError::NotFound,
+        409 => ClientError::Conflict(body),
+        422 => ClientError::Validation(body),
+        _ => ClientError::Server(body),
     }
 }
