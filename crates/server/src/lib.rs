@@ -5,6 +5,7 @@ use serde::Serialize;
 pub use server::{run, run_with_listener, spawn_with_listener};
 
 mod cash_flow;
+mod flows;
 mod memberships;
 mod server;
 mod statistics;
@@ -37,6 +38,10 @@ pub mod types {
 
     pub mod stats {
         pub use api_types::stats::Statistic;
+    }
+
+    pub mod flow {
+        pub use api_types::flow::{FlowCreated, FlowMode, FlowNew, FlowUpdate};
     }
 }
 
