@@ -139,6 +139,8 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
                 parts.push(Span::raw(" wallet scope "));
                 parts.push(Span::styled("f", Style::default().fg(theme.accent)));
                 parts.push(Span::raw(" flow scope "));
+                parts.push(Span::styled("/", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" filters "));
                 parts.push(Span::styled("v", Style::default().fg(theme.accent)));
                 parts.push(Span::raw(" voided "));
                 parts.push(Span::styled("t", Style::default().fg(theme.accent)));
@@ -171,6 +173,27 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
                 parts.push(Span::raw(" back "));
             }
             crate::app::TransactionsMode::PickWallet | crate::app::TransactionsMode::PickFlow => {
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" apply "));
+                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" cancel "));
+            }
+            crate::app::TransactionsMode::TransferWallet
+            | crate::app::TransactionsMode::TransferFlow => {
+                parts.push(Span::styled("Tab", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" next "));
+                parts.push(Span::styled("↑/↓", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" change "));
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" save "));
+                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" cancel "));
+            }
+            crate::app::TransactionsMode::Filter => {
+                parts.push(Span::styled("Tab", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" next "));
+                parts.push(Span::styled("i/e/r/w/f", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" toggle "));
                 parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
                 parts.push(Span::raw(" apply "));
                 parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));

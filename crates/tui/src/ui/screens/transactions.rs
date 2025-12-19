@@ -11,7 +11,7 @@ use engine::{Currency, Money};
 use uuid::Uuid;
 
 use crate::{
-    app::{AppState, TransactionsMode},
+    app::{AppState, FilterField, TransactionsMode, TransferField},
     ui::{components::centered_rect, theme::Theme},
 };
 
@@ -24,13 +24,25 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     render_header(frame, layout[0], state);
     match state.transactions.mode {
-        TransactionsMode::List | TransactionsMode::PickWallet | TransactionsMode::PickFlow => {
+        TransactionsMode::List
+        | TransactionsMode::PickWallet
+        | TransactionsMode::PickFlow
+        | TransactionsMode::TransferWallet
+        | TransactionsMode::TransferFlow
+        | TransactionsMode::Filter => {
             render_list(frame, layout[1], state, &theme);
             if matches!(
                 state.transactions.mode,
                 TransactionsMode::PickWallet | TransactionsMode::PickFlow
             ) {
                 render_scope_picker(frame, layout[1], state, &theme);
+            } else if matches!(
+                state.transactions.mode,
+                TransactionsMode::TransferWallet | TransactionsMode::TransferFlow
+            ) {
+                render_transfer_form(frame, layout[1], state, &theme);
+            } else if state.transactions.mode == TransactionsMode::Filter {
+                render_filter_form(frame, layout[1], state, &theme);
             }
         }
         TransactionsMode::Detail | TransactionsMode::Edit => {
@@ -53,6 +65,7 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     };
 
     let scope = scope_label(state);
+    let filter_summary = filter_summary(state);
     let mut line = vec![
         Span::styled("Scope", Style::default().fg(theme.dim)),
         Span::raw(format!(": {scope}   ")),
@@ -61,6 +74,11 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         Span::styled("Transfers", Style::default().fg(theme.dim)),
         Span::raw(format!(": {include_transfers}")),
     ];
+
+    if let Some(summary) = filter_summary {
+        line.push(Span::raw("   "));
+        line.push(Span::styled(summary, Style::default().fg(theme.dim)));
+    }
 
     if let Some(err) = &state.transactions.error {
         line.push(Span::raw("   "));
@@ -178,6 +196,219 @@ fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, them
         .highlight_symbol("» ");
 
     frame.render_stateful_widget(list, popup_area, &mut list_state);
+}
+
+fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return;
+    };
+    let (title, items) = match state.transactions.mode {
+        TransactionsMode::TransferWallet => {
+            let list = snapshot
+                .wallets
+                .iter()
+                .filter(|wallet| !wallet.archived)
+                .map(|wallet| wallet.name.clone())
+                .collect::<Vec<_>>();
+            ("Transfer Wallet", list)
+        }
+        TransactionsMode::TransferFlow => {
+            let list = snapshot
+                .flows
+                .iter()
+                .filter(|flow| !flow.archived)
+                .map(|flow| flow.name.clone())
+                .collect::<Vec<_>>();
+            ("Transfer Flow", list)
+        }
+        _ => return,
+    };
+
+    let transfer = &state.transactions.transfer;
+    let from = items
+        .get(transfer.from_index)
+        .map(|name| name.as_str())
+        .unwrap_or("-");
+    let to = items
+        .get(transfer.to_index)
+        .map(|name| name.as_str())
+        .unwrap_or("-");
+
+    let popup = centered_rect(70, 60, area);
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(7), Constraint::Min(0)])
+        .split(popup);
+
+    let mut lines = vec![
+        render_transfer_field("From", from, transfer.focus == TransferField::From, theme),
+        render_transfer_field("To", to, transfer.focus == TransferField::To, theme),
+        render_transfer_field(
+            "Amount",
+            transfer.amount.as_str(),
+            transfer.focus == TransferField::Amount,
+            theme,
+        ),
+        render_transfer_field(
+            "Note",
+            transfer.note.as_str(),
+            transfer.focus == TransferField::Note,
+            theme,
+        ),
+        Line::from(Span::styled(
+            "Tab: next • ↑/↓: change • Enter: save • Esc: cancel",
+            Style::default().fg(theme.dim),
+        )),
+    ];
+
+    if let Some(err) = transfer.error.as_ref() {
+        lines.push(Line::from(Span::styled(
+            err.as_str(),
+            Style::default().fg(theme.error),
+        )));
+    }
+
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.accent));
+    frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
+
+    let hint_block = Block::default()
+        .title("Available")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.accent));
+    let list_items = items
+        .iter()
+        .enumerate()
+        .map(|(idx, name)| {
+            let marker = if idx == transfer.from_index {
+                " [from]"
+            } else if idx == transfer.to_index {
+                " [to]"
+            } else {
+                ""
+            };
+            ListItem::new(Line::from(format!("{name}{marker}")))
+        })
+        .collect::<Vec<_>>();
+
+    let list = List::new(list_items).block(hint_block);
+    frame.render_widget(list, layout[1]);
+}
+
+fn render_transfer_field(label: &str, value: &str, focused: bool, theme: &Theme) -> Line<'static> {
+    let label_style = if focused {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+    let value_style = if focused {
+        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+    Line::from(vec![
+        Span::styled(format!("{label:<8}"), label_style),
+        Span::raw(": "),
+        Span::styled(value.to_string(), value_style),
+    ])
+}
+
+fn render_filter_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let filter = &state.transactions.filter;
+    let popup = centered_rect(70, 60, area);
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(8), Constraint::Min(0)])
+        .split(popup);
+
+    let mut lines = vec![
+        render_filter_field(
+            "From",
+            filter.from_input.as_str(),
+            filter.focus == FilterField::From,
+            theme,
+        ),
+        render_filter_field(
+            "To",
+            filter.to_input.as_str(),
+            filter.focus == FilterField::To,
+            theme,
+        ),
+        Line::from(vec![
+            Span::styled(
+                "Kinds",
+                if filter.focus == FilterField::Kinds {
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(theme.text)
+                },
+            ),
+            Span::raw(": "),
+            kind_chip("Income", filter.kind_income, theme),
+            Span::raw(" "),
+            kind_chip("Expense", filter.kind_expense, theme),
+            Span::raw(" "),
+            kind_chip("Refund", filter.kind_refund, theme),
+            Span::raw(" "),
+            kind_chip("T.Wallet", filter.kind_transfer_wallet, theme),
+            Span::raw(" "),
+            kind_chip("T.Flow", filter.kind_transfer_flow, theme),
+        ]),
+        Line::from(Span::styled(
+            "Tab: next • i/e/r/w/f toggle kinds • Enter: apply • Esc: cancel",
+            Style::default().fg(theme.dim),
+        )),
+    ];
+
+    if let Some(err) = filter.error.as_ref() {
+        lines.push(Line::from(Span::styled(
+            err.as_str(),
+            Style::default().fg(theme.error),
+        )));
+    }
+
+    let block = Block::default()
+        .title("Filters")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.accent));
+    frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
+}
+
+fn render_filter_field(label: &str, value: &str, focused: bool, theme: &Theme) -> Line<'static> {
+    let label_style = if focused {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+    let value_style = if focused {
+        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+    Line::from(vec![
+        Span::styled(format!("{label:<8}"), label_style),
+        Span::raw(": "),
+        Span::styled(value.to_string(), value_style),
+    ])
+}
+
+fn kind_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> {
+    let style = if enabled {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.dim)
+    };
+    Span::styled(format!("[{label}]"), style)
 }
 
 fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -477,4 +708,35 @@ fn scope_label(state: &AppState) -> String {
     }
 
     "All".to_string()
+}
+
+fn filter_summary(state: &AppState) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(from) = state.transactions.filter_from {
+        parts.push(format!("from {}", from.format("%Y-%m-%d")));
+    }
+    if let Some(to) = state.transactions.filter_to {
+        parts.push(format!("to {}", to.format("%Y-%m-%d")));
+    }
+    if let Some(kinds) = state.transactions.filter_kinds.as_ref() {
+        if !kinds.is_empty() {
+            let labels = kinds
+                .iter()
+                .map(|kind| match kind {
+                    TransactionKind::Income => "inc",
+                    TransactionKind::Expense => "exp",
+                    TransactionKind::Refund => "ref",
+                    TransactionKind::TransferWallet => "tw",
+                    TransactionKind::TransferFlow => "tf",
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            parts.push(format!("kinds {labels}"));
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(format!("Filters: {}", parts.join(" • ")))
+    }
 }
