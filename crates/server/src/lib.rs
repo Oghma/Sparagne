@@ -12,6 +12,7 @@ mod statistics;
 mod transactions;
 mod user;
 mod vault;
+mod wallets;
 
 pub mod types {
     pub mod cash_flow {
@@ -38,6 +39,10 @@ pub mod types {
 
     pub mod stats {
         pub use api_types::stats::Statistic;
+    }
+
+    pub mod wallet {
+        pub use api_types::wallet::{WalletCreated, WalletNew, WalletUpdate};
     }
 
     pub mod flow {
