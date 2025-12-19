@@ -1,10 +1,13 @@
 use api_types::{
+    flow::{FlowCreated, FlowNew, FlowUpdate},
+    stats::Statistic,
     transaction::{
         ExpenseNew, IncomeNew, Refund, TransactionCreated, TransactionDetailResponse,
         TransactionGet, TransactionList, TransactionListResponse, TransactionUpdate,
         TransactionVoid, TransferFlowNew, TransferWalletNew,
     },
-    vault::{Vault, VaultSnapshot},
+    vault::{Vault, VaultNew, VaultSnapshot},
+    wallet::{WalletCreated, WalletNew, WalletUpdate},
 };
 use reqwest::Url;
 
@@ -89,6 +92,52 @@ impl Client {
             name: Some(vault_name.to_string()),
             currency: None,
         };
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn vault_new(
+        &self,
+        username: &str,
+        password: &str,
+        payload: VaultNew,
+    ) -> std::result::Result<Vault, ClientError> {
+        let endpoint = self
+            .base_url
+            .join("vault/new")
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn stats_get(
+        &self,
+        username: &str,
+        password: &str,
+        payload: Vault,
+    ) -> std::result::Result<Statistic, ClientError> {
+        let endpoint = self
+            .base_url
+            .join("stats/get")
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -239,6 +288,100 @@ impl Client {
         payload: TransferFlowNew,
     ) -> std::result::Result<TransactionCreated, ClientError> {
         post_create(self, "transferFlow", username, password, payload).await
+    }
+
+    pub async fn wallet_new(
+        &self,
+        username: &str,
+        password: &str,
+        payload: WalletNew,
+    ) -> std::result::Result<WalletCreated, ClientError> {
+        let endpoint = self
+            .base_url
+            .join("wallets")
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn wallet_update(
+        &self,
+        username: &str,
+        password: &str,
+        wallet_id: uuid::Uuid,
+        payload: WalletUpdate,
+    ) -> std::result::Result<(), ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("wallets/{wallet_id}"))
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .patch(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_empty(res).await
+    }
+
+    pub async fn flow_new(
+        &self,
+        username: &str,
+        password: &str,
+        payload: FlowNew,
+    ) -> std::result::Result<FlowCreated, ClientError> {
+        let endpoint = self
+            .base_url
+            .join("flows")
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn flow_update(
+        &self,
+        username: &str,
+        password: &str,
+        flow_id: uuid::Uuid,
+        payload: FlowUpdate,
+    ) -> std::result::Result<(), ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("flows/{flow_id}"))
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .patch(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_empty(res).await
     }
 }
 

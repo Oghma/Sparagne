@@ -47,7 +47,10 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     match state.section {
         crate::app::Section::Home => screens::home::render(frame, body[1], state),
         crate::app::Section::Transactions => screens::transactions::render(frame, body[1], state),
-        _ => screens::placeholder::render(frame, body[1], state),
+        crate::app::Section::Wallets => screens::wallets::render(frame, body[1], state),
+        crate::app::Section::Flows => screens::flows::render(frame, body[1], state),
+        crate::app::Section::Vault => screens::vault::render(frame, body[1], state),
+        crate::app::Section::Stats => screens::stats::render(frame, body[1], state),
     }
 
     render_bottom_bar(frame, layout[2], state, &theme);
@@ -161,6 +164,78 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
                 parts.push(Span::raw(" back "));
             }
         }
+    } else if state.section == crate::app::Section::Wallets {
+        parts.push(Span::raw(" | "));
+        match state.wallets.mode {
+            crate::app::WalletsMode::List => {
+                parts.push(Span::styled("c", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" create "));
+                parts.push(Span::styled("e", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" rename "));
+                parts.push(Span::styled("a", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" archive "));
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" detail "));
+            }
+            crate::app::WalletsMode::Detail => {
+                parts.push(Span::styled("b", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" back "));
+            }
+            crate::app::WalletsMode::Create | crate::app::WalletsMode::Rename => {
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" save "));
+                parts.push(Span::styled("Tab", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" next "));
+                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" cancel "));
+            }
+        }
+    } else if state.section == crate::app::Section::Flows {
+        parts.push(Span::raw(" | "));
+        match state.flows.mode {
+            crate::app::FlowsMode::List => {
+                parts.push(Span::styled("c", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" create "));
+                parts.push(Span::styled("e", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" rename "));
+                parts.push(Span::styled("a", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" archive "));
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" detail "));
+            }
+            crate::app::FlowsMode::Detail => {
+                parts.push(Span::styled("b", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" back "));
+            }
+            crate::app::FlowsMode::Create | crate::app::FlowsMode::Rename => {
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" save "));
+                parts.push(Span::styled("Tab", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" next "));
+                parts.push(Span::styled("m", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" mode "));
+                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" cancel "));
+            }
+        }
+    } else if state.section == crate::app::Section::Vault {
+        parts.push(Span::raw(" | "));
+        match state.vault_ui.mode {
+            crate::app::VaultMode::View => {
+                parts.push(Span::styled("c", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" create "));
+            }
+            crate::app::VaultMode::Create => {
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" save "));
+                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" cancel "));
+            }
+        }
+    } else if state.section == crate::app::Section::Stats {
+        parts.push(Span::raw(" | "));
+        parts.push(Span::styled("r", Style::default().fg(theme.accent)));
+        parts.push(Span::raw(" refresh "));
     }
 
     parts.push(Span::styled("q", Style::default().fg(theme.accent)));
