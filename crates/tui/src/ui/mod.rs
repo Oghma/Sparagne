@@ -132,6 +132,10 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
                 parts.push(Span::raw(" next "));
                 parts.push(Span::styled("p", Style::default().fg(theme.accent)));
                 parts.push(Span::raw(" prev "));
+                parts.push(Span::styled("w", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" wallet scope "));
+                parts.push(Span::styled("f", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" flow scope "));
                 parts.push(Span::styled("v", Style::default().fg(theme.accent)));
                 parts.push(Span::raw(" voided "));
                 parts.push(Span::styled("t", Style::default().fg(theme.accent)));
@@ -162,6 +166,12 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
                 parts.push(Span::raw(" back "));
                 parts.push(Span::styled("esc", Style::default().fg(theme.accent)));
                 parts.push(Span::raw(" back "));
+            }
+            crate::app::TransactionsMode::PickWallet | crate::app::TransactionsMode::PickFlow => {
+                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" apply "));
+                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
+                parts.push(Span::raw(" cancel "));
             }
         }
     } else if state.section == crate::app::Section::Wallets {

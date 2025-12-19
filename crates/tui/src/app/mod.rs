@@ -175,6 +175,10 @@ impl App {
                             self.state.transactions.edit_input.clear();
                             self.state.transactions.edit_error = None;
                         }
+                        TransactionsMode::PickWallet | TransactionsMode::PickFlow => {
+                            self.state.transactions.mode = TransactionsMode::List;
+                            self.state.transactions.picker_index = 0;
+                        }
                         TransactionsMode::List => {
                             if self.state.transactions.quick_active {
                                 self.state.transactions.quick_active = false;
@@ -270,6 +274,14 @@ impl App {
                 {
                     self.state.transactions.select_prev();
                 } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Transactions
+                    && matches!(
+                        self.state.transactions.mode,
+                        TransactionsMode::PickWallet | TransactionsMode::PickFlow
+                    )
+                {
+                    self.transactions_picker_prev();
+                } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Wallets
                     && self.state.wallets.mode == WalletsMode::List
                 {
@@ -287,6 +299,14 @@ impl App {
                     && self.state.transactions.mode == TransactionsMode::List
                 {
                     self.state.transactions.select_next();
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Transactions
+                    && matches!(
+                        self.state.transactions.mode,
+                        TransactionsMode::PickWallet | TransactionsMode::PickFlow
+                    )
+                {
+                    self.transactions_picker_next();
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Wallets
                     && self.state.wallets.mode == WalletsMode::List
@@ -449,6 +469,8 @@ impl App {
             }
             TransactionsMode::Detail => Ok(()),
             TransactionsMode::Edit => self.apply_transaction_edit().await,
+            TransactionsMode::PickWallet => self.apply_wallet_picker().await,
+            TransactionsMode::PickFlow => self.apply_flow_picker().await,
         }
     }
 
@@ -510,18 +532,30 @@ impl App {
                 return Ok(());
             }
             'w' | 'W' => {
-                self.state.section = Section::Wallets;
-                self.state.transactions.mode = TransactionsMode::List;
-                if self.state.snapshot.is_none() {
-                    self.refresh_snapshot().await?;
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.open_wallet_picker();
+                } else {
+                    self.state.section = Section::Wallets;
+                    self.state.transactions.mode = TransactionsMode::List;
+                    if self.state.snapshot.is_none() {
+                        self.refresh_snapshot().await?;
+                    }
                 }
                 return Ok(());
             }
             'f' | 'F' => {
-                self.state.section = Section::Flows;
-                self.state.transactions.mode = TransactionsMode::List;
-                if self.state.snapshot.is_none() {
-                    self.refresh_snapshot().await?;
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.open_flow_picker();
+                } else {
+                    self.state.section = Section::Flows;
+                    self.state.transactions.mode = TransactionsMode::List;
+                    if self.state.snapshot.is_none() {
+                        self.refresh_snapshot().await?;
+                    }
                 }
                 return Ok(());
             }
@@ -807,6 +841,116 @@ impl App {
         self.state.flows.selected = self.state.flows.selected.saturating_sub(1);
     }
 
+    fn transactions_picker_next(&mut self) {
+        let len = self.transactions_picker_len();
+        if len == 0 {
+            return;
+        }
+        self.state.transactions.picker_index =
+            (self.state.transactions.picker_index + 1).min(len - 1);
+    }
+
+    fn transactions_picker_prev(&mut self) {
+        let len = self.transactions_picker_len();
+        if len == 0 {
+            return;
+        }
+        self.state.transactions.picker_index =
+            self.state.transactions.picker_index.saturating_sub(1);
+    }
+
+    fn transactions_picker_len(&self) -> usize {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            return 0;
+        };
+        match self.state.transactions.mode {
+            TransactionsMode::PickWallet => snapshot.wallets.len() + 1,
+            TransactionsMode::PickFlow => snapshot.flows.len() + 1,
+            _ => 0,
+        }
+    }
+
+    fn open_wallet_picker(&mut self) {
+        self.state.transactions.quick_active = false;
+        self.state.transactions.picker_index = self
+            .state
+            .transactions
+            .scope_wallet_id
+            .and_then(|wallet_id| {
+                self.state.snapshot.as_ref().and_then(|snap| {
+                    snap.wallets
+                        .iter()
+                        .position(|wallet| wallet.id == wallet_id)
+                })
+            })
+            .map(|idx| idx + 1)
+            .unwrap_or(0);
+        self.state.transactions.mode = TransactionsMode::PickWallet;
+    }
+
+    fn open_flow_picker(&mut self) {
+        self.state.transactions.quick_active = false;
+        self.state.transactions.picker_index = self
+            .state
+            .transactions
+            .scope_flow_id
+            .and_then(|flow_id| {
+                self.state.snapshot.as_ref().and_then(|snap| {
+                    snap.flows.iter().position(|flow| flow.id == flow_id)
+                })
+            })
+            .map(|idx| idx + 1)
+            .unwrap_or(0);
+        self.state.transactions.mode = TransactionsMode::PickFlow;
+    }
+
+    async fn apply_wallet_picker(&mut self) -> Result<()> {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            self.state.transactions.error = Some("Snapshot non disponibile.".to_string());
+            self.state.transactions.mode = TransactionsMode::List;
+            return Ok(());
+        };
+
+        if self.state.transactions.picker_index == 0 {
+            self.state.transactions.scope_wallet_id = None;
+        } else {
+            let index = self.state.transactions.picker_index - 1;
+            if let Some(wallet) = snapshot.wallets.get(index) {
+                self.state.transactions.scope_wallet_id = Some(wallet.id);
+            }
+        }
+
+        self.state.transactions.scope_flow_id = None;
+        self.state.transactions.mode = TransactionsMode::List;
+        self.state.transactions.picker_index = 0;
+        self.load_transactions(true).await?;
+        Ok(())
+    }
+
+    async fn apply_flow_picker(&mut self) -> Result<()> {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            self.state.transactions.error = Some("Snapshot non disponibile.".to_string());
+            self.state.transactions.mode = TransactionsMode::List;
+            return Ok(());
+        };
+
+        if self.state.transactions.picker_index == 0 {
+            self.state.transactions.scope_flow_id = None;
+        } else {
+            let index = self.state.transactions.picker_index - 1;
+            if let Some(flow) = snapshot.flows.get(index) {
+                self.state.transactions.scope_flow_id = Some(flow.id);
+                self.state.last_flow_id = Some(flow.id);
+            }
+        }
+
+        self.state.transactions.scope_wallet_id = None;
+        self.state.transactions.mode = TransactionsMode::List;
+        self.state.transactions.picker_index = 0;
+        self.load_transactions(true).await?;
+        Ok(())
+    }
+
     fn wallets_len(&self) -> usize {
         self.state
             .snapshot
@@ -990,8 +1134,8 @@ impl App {
 
         let payload = TransactionList {
             vault_id: vault_id.to_string(),
-            flow_id: None,
-            wallet_id: None,
+            flow_id: self.state.transactions.scope_flow_id,
+            wallet_id: self.state.transactions.scope_wallet_id,
             limit: Some(20),
             cursor: self.state.transactions.cursor.clone(),
             from: None,
@@ -1907,6 +2051,9 @@ pub struct TransactionsState {
     pub next_cursor: Option<String>,
     pub prev_cursors: Vec<Option<String>>,
     pub selected: usize,
+    pub scope_wallet_id: Option<uuid::Uuid>,
+    pub scope_flow_id: Option<uuid::Uuid>,
+    pub picker_index: usize,
     pub include_voided: bool,
     pub include_transfers: bool,
     pub error: Option<String>,
@@ -1927,6 +2074,9 @@ impl Default for TransactionsState {
             next_cursor: None,
             prev_cursors: Vec::new(),
             selected: 0,
+            scope_wallet_id: None,
+            scope_flow_id: None,
+            picker_index: 0,
             include_voided: false,
             include_transfers: false,
             error: None,
@@ -1985,6 +2135,8 @@ pub enum TransactionsMode {
     List,
     Detail,
     Edit,
+    PickWallet,
+    PickFlow,
 }
 
 #[derive(Debug)]
@@ -2265,18 +2417,33 @@ fn default_wallet_flow(
         .as_ref()
         .ok_or_else(|| "Snapshot non disponibile.".to_string())?;
 
-    let wallet = snapshot
-        .wallets
-        .iter()
-        .find(|wallet| !wallet.archived)
+    let wallet = state
+        .transactions
+        .scope_wallet_id
+        .and_then(|wallet_id| {
+            snapshot
+                .wallets
+                .iter()
+                .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+        })
+        .or_else(|| snapshot.wallets.iter().find(|wallet| !wallet.archived))
         .ok_or_else(|| "Nessun wallet disponibile.".to_string())?;
     let flow = state
-        .last_flow_id
-        .and_then(|last_id| {
+        .transactions
+        .scope_flow_id
+        .and_then(|flow_id| {
             snapshot
                 .flows
                 .iter()
-                .find(|flow| flow.id == last_id && !flow.archived)
+                .find(|flow| flow.id == flow_id && !flow.archived)
+        })
+        .or_else(|| {
+            state.last_flow_id.and_then(|last_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == last_id && !flow.archived)
+            })
         })
         .or_else(|| snapshot.flows.iter().find(|flow| flow.is_unallocated))
         .ok_or_else(|| "Flow Unallocated mancante.".to_string())?;

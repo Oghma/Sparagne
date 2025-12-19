@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     app::{AppState, TransactionsMode},
-    ui::theme::Theme,
+    ui::{components::centered_rect, theme::Theme},
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
@@ -24,7 +24,15 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     render_header(frame, layout[0], state);
     match state.transactions.mode {
-        TransactionsMode::List => render_list(frame, layout[1], state, &theme),
+        TransactionsMode::List | TransactionsMode::PickWallet | TransactionsMode::PickFlow => {
+            render_list(frame, layout[1], state, &theme);
+            if matches!(
+                state.transactions.mode,
+                TransactionsMode::PickWallet | TransactionsMode::PickFlow
+            ) {
+                render_scope_picker(frame, layout[1], state, &theme);
+            }
+        }
         TransactionsMode::Detail | TransactionsMode::Edit => {
             render_detail(frame, layout[1], state, &theme)
         }
@@ -44,9 +52,10 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         "Off"
     };
 
+    let scope = scope_label(state);
     let mut line = vec![
         Span::styled("Scope", Style::default().fg(theme.dim)),
-        Span::raw(": All   "),
+        Span::raw(format!(": {scope}   ")),
         Span::styled("Voided", Style::default().fg(theme.dim)),
         Span::raw(format!(": {include_voided}   ")),
         Span::styled("Transfers", Style::default().fg(theme.dim)),
@@ -116,6 +125,61 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     frame.render_stateful_widget(list, layout[1], &mut list_state);
 }
 
+fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return;
+    };
+
+    let (title, items) = match state.transactions.mode {
+        TransactionsMode::PickWallet => {
+            let mut list = vec![ListItem::new(Line::from("All wallets"))];
+            for wallet in &snapshot.wallets {
+                let archived = if wallet.archived { " (archived)" } else { "" };
+                list.push(ListItem::new(Line::from(format!(
+                    "{}{archived}",
+                    wallet.name
+                ))));
+            }
+            ("Select wallet scope", list)
+        }
+        TransactionsMode::PickFlow => {
+            let mut list = vec![ListItem::new(Line::from("All flows"))];
+            for flow in &snapshot.flows {
+                let archived = if flow.archived { " (archived)" } else { "" };
+                let marker = if flow.is_unallocated { " [Unallocated]" } else { "" };
+                list.push(ListItem::new(Line::from(format!(
+                    "{}{marker}{archived}",
+                    flow.name
+                ))));
+            }
+            ("Select flow scope", list)
+        }
+        _ => return,
+    };
+
+    let popup_area = centered_rect(60, 60, area);
+    let mut list_state = ListState::default();
+    if !items.is_empty() {
+        list_state.select(Some(state.transactions.picker_index));
+    }
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.accent)),
+        )
+        .highlight_style(
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("» ");
+
+    frame.render_stateful_widget(list, popup_area, &mut list_state);
+}
+
 fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let (wallet_name, flow_name) = default_wallet_flow_names(state);
     let focus = if state.transactions.quick_active {
@@ -125,10 +189,27 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
     };
 
     let input = state.transactions.quick_input.as_str();
+    let placeholder = "scrivi qui...";
+    let (input_text, input_style) = if input.is_empty() {
+        (placeholder, Style::default().fg(theme.dim))
+    } else {
+        (input, Style::default().fg(theme.text))
+    };
+    let cursor = if state.transactions.quick_active {
+        "|"
+    } else {
+        ""
+    };
+
     let mut lines = vec![Line::from(vec![
         Span::styled("Quick add", focus),
         Span::raw(": "),
-        Span::styled(input, Style::default().fg(theme.text)),
+        Span::styled(">", Style::default().fg(theme.accent)),
+        Span::raw(" "),
+        Span::styled("[", Style::default().fg(theme.dim)),
+        Span::styled(input_text.to_string(), input_style),
+        Span::styled(cursor, Style::default().fg(theme.accent)),
+        Span::styled("]", Style::default().fg(theme.dim)),
         Span::raw("   "),
         Span::styled("wallet", Style::default().fg(theme.dim)),
         Span::raw(format!(": {wallet_name}   ")),
@@ -318,21 +399,43 @@ fn default_wallet_flow_names(state: &AppState) -> (String, String) {
         None => return ("-".to_string(), "-".to_string()),
     };
 
-    let wallet_name = snapshot
-        .wallets
-        .iter()
-        .find(|wallet| !wallet.archived)
-        .map(|wallet| wallet.name.clone())
+    let wallet_name = state
+        .transactions
+        .scope_wallet_id
+        .and_then(|wallet_id| {
+            snapshot
+                .wallets
+                .iter()
+                .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+                .map(|wallet| wallet.name.clone())
+        })
+        .or_else(|| {
+            snapshot
+                .wallets
+                .iter()
+                .find(|wallet| !wallet.archived)
+                .map(|wallet| wallet.name.clone())
+        })
         .unwrap_or_else(|| "-".to_string());
 
     let flow_name = state
-        .last_flow_id
+        .transactions
+        .scope_flow_id
         .and_then(|flow_id| {
             snapshot
                 .flows
                 .iter()
                 .find(|flow| flow.id == flow_id && !flow.archived)
                 .map(|flow| flow.name.clone())
+        })
+        .or_else(|| {
+            state.last_flow_id.and_then(|flow_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id && !flow.archived)
+                    .map(|flow| flow.name.clone())
+            })
         })
         .or_else(|| {
             snapshot
@@ -344,4 +447,34 @@ fn default_wallet_flow_names(state: &AppState) -> (String, String) {
         .unwrap_or_else(|| "Non in flow".to_string());
 
     (wallet_name, flow_name)
+}
+
+fn scope_label(state: &AppState) -> String {
+    if let Some(flow_id) = state.transactions.scope_flow_id {
+        return state
+            .snapshot
+            .as_ref()
+            .and_then(|snap| {
+                snap.flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id)
+                    .map(|flow| format!("Flow: {}", flow.name))
+            })
+            .unwrap_or_else(|| "Flow: ?".to_string());
+    }
+
+    if let Some(wallet_id) = state.transactions.scope_wallet_id {
+        return state
+            .snapshot
+            .as_ref()
+            .and_then(|snap| {
+                snap.wallets
+                    .iter()
+                    .find(|wallet| wallet.id == wallet_id)
+                    .map(|wallet| format!("Wallet: {}", wallet.name))
+            })
+            .unwrap_or_else(|| "Wallet: ?".to_string());
+    }
+
+    "All".to_string()
 }
