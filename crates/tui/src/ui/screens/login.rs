@@ -24,14 +24,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         .title("Vault Login")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.accent));
-    frame.render_widget(block, card_area);
+    frame.render_widget(&block, card_area);
 
     let inner = block.inner(card_area);
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
-            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -42,14 +40,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     let login = &state.login;
     let fields = [
-        ("Server URL", login.base_url.as_str(), LoginField::ServerUrl),
         ("Username", login.username.as_str(), LoginField::Username),
         (
             "Password",
             masked_password(&login.password),
             LoginField::Password,
         ),
-        ("Vault", login.vault.as_str(), LoginField::Vault),
     ];
 
     for (idx, (label, value, field)) in fields.iter().enumerate() {
@@ -66,7 +62,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         Span::styled("Esc", Style::default().fg(theme.accent)),
         Span::raw(" quit"),
     ]);
-    frame.render_widget(Paragraph::new(hint), rows[4]);
+    frame.render_widget(Paragraph::new(hint), rows[3]);
 
     if let Some(message) = &login.message {
         let msg = Paragraph::new(Line::from(Span::styled(
@@ -74,7 +70,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
             Style::default().fg(theme.error),
         )))
         .alignment(Alignment::Left);
-        frame.render_widget(msg, rows[5]);
+        frame.render_widget(msg, rows[4]);
     }
 }
 
@@ -106,19 +102,30 @@ fn masked_password(value: &str) -> &str {
 
 fn vault_background() -> Vec<Line<'static>> {
     vec![
-        Line::from("  _______________________________  "),
-        Line::from(" /                               \\ "),
-        Line::from("|   ________           ________   |"),
-        Line::from("|  |  ____  |         |  ____  |  |"),
-        Line::from("|  | |    | |         | |    | |  |"),
-        Line::from("|  | |____| |         | |____| |  |"),
-        Line::from("|  |________|   ___   |________|  |"),
-        Line::from("|             .'   '.             |"),
-        Line::from("|            /  .-.  \\            |"),
-        Line::from("|            | (   ) |            |"),
-        Line::from("|            \\  `-'  /            |"),
-        Line::from("|             '.___.'             |"),
-        Line::from("|                               | |"),
-        Line::from("|_______________________________|_|"),
+        Line::from("               _____________________________               "),
+        Line::from("          .-''                               ''-.          "),
+        Line::from("       .-'                                       '-.       "),
+        Line::from("     .'     ___________________________________     '.     "),
+        Line::from("    /     .'                                   '.     \\    "),
+        Line::from("   |     /     _____________     ___________     \\     |   "),
+        Line::from("   |    |     /             \\   /           \\     |    |   "),
+        Line::from("   |    |    |   _________   | |   _______   |    |    |   "),
+        Line::from("   |    |    |  /         \\  | |  /       \\  |    |    |   "),
+        Line::from("   |    |    | |  .-----.  | | | |  .---. | |    |    |   "),
+        Line::from("   |    |    | |  |  o  |  | | | |  | o | | |    |    |   "),
+        Line::from("   |    |    | |  '-----'  | | | |  '---' | |    |    |   "),
+        Line::from("   |    |    |  \\_________/  | |  \\_______/  |    |    |   "),
+        Line::from("   |    |     \\             /   \\           /     |    |   "),
+        Line::from("   |    |      '.         .'     '.       .'      |    |   "),
+        Line::from("   |    |        '-.   .-'           '-.-'        |    |   "),
+        Line::from("   |    |           | |    .-----.    | |         |    |   "),
+        Line::from("   |    |           | |   /  o  \\    | |         |    |   "),
+        Line::from("   |    |           | |   \\_____/    | |         |    |   "),
+        Line::from("   |    |           | |      |       | |         |    |   "),
+        Line::from("   |     \\          | |     / \\      | |        /     |   "),
+        Line::from("    \\      '.        \\ \\   /___\\    / /      .'      /    "),
+        Line::from("     '.       '-.      '---------''      .-'       .'     "),
+        Line::from("       '-.         _____________       .-'          "),
+        Line::from("          ''-.___.'             '.__.-''           "),
     ]
 }

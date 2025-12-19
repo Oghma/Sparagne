@@ -61,7 +61,10 @@ fn render_top_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         .and_then(|v| v.name.as_deref())
         .unwrap_or("Main");
     let username = state.login.username.as_str();
-    let base = format!("Vault: {vault_name}  •  User: {username}");
+    let base = format!(
+        "Vault: {vault_name}  •  User: {username}  •  {base_url}",
+        base_url = state.base_url
+    );
     let bar = Paragraph::new(Line::from(Span::styled(
         base,
         Style::default()
@@ -100,8 +103,8 @@ fn render_nav(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     frame.render_widget(list, area);
 }
 
-fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, theme: &theme::Theme) {
-    let line = Line::from(vec![
+fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &theme::Theme) {
+    let mut parts = vec![
         Span::styled("h", Style::default().fg(theme.accent)),
         Span::raw(" home  "),
         Span::styled("t", Style::default().fg(theme.accent)),
@@ -114,9 +117,27 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, theme: &theme::Theme) {
         Span::raw(" vault  "),
         Span::styled("s", Style::default().fg(theme.accent)),
         Span::raw(" stats  "),
-        Span::styled("q", Style::default().fg(theme.accent)),
-        Span::raw(" quit"),
-    ]);
-    let bar = Paragraph::new(line);
+    ];
+
+    if state.section == crate::app::Section::Transactions {
+        parts.push(Span::raw(" | "));
+        parts.push(Span::styled("r", Style::default().fg(theme.accent)));
+        parts.push(Span::raw(" refresh "));
+        parts.push(Span::styled("n", Style::default().fg(theme.accent)));
+        parts.push(Span::raw(" next "));
+        parts.push(Span::styled("p", Style::default().fg(theme.accent)));
+        parts.push(Span::raw(" prev "));
+        parts.push(Span::styled("v", Style::default().fg(theme.accent)));
+        parts.push(Span::raw(" voided "));
+        parts.push(Span::styled("t", Style::default().fg(theme.accent)));
+        parts.push(Span::raw(" transfers "));
+        parts.push(Span::styled("↑/↓", Style::default().fg(theme.accent)));
+        parts.push(Span::raw(" select "));
+    }
+
+    parts.push(Span::styled("q", Style::default().fg(theme.accent)));
+    parts.push(Span::raw(" quit"));
+
+    let bar = Paragraph::new(Line::from(parts));
     frame.render_widget(bar, area);
 }

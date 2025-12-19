@@ -6,6 +6,8 @@ pub enum AppAction {
     NextField,
     Submit,
     Backspace,
+    Up,
+    Down,
     Input(char),
     None,
 }
@@ -22,6 +24,8 @@ pub fn map_key(key: KeyEvent) -> AppAction {
         KeyCode::Tab => AppAction::NextField,
         KeyCode::Enter => AppAction::Submit,
         KeyCode::Backspace => AppAction::Backspace,
+        KeyCode::Up => AppAction::Up,
+        KeyCode::Down => AppAction::Down,
         KeyCode::Char(ch) => AppAction::Input(ch),
         _ => AppAction::None,
     }
