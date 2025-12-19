@@ -24,6 +24,83 @@ pub mod cash_flow {
     }
 }
 
+pub mod wallet {
+    use super::*;
+
+    /// Create a new wallet in a vault.
+    ///
+    /// `opening_balance_minor` is applied as an "opening" transaction at
+    /// `occurred_at`.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct WalletNew {
+        pub vault_id: String,
+        pub name: String,
+        /// Initial balance in minor units (can be negative).
+        pub opening_balance_minor: i64,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+    }
+
+    /// Response body for wallet creation.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct WalletCreated {
+        pub id: Uuid,
+    }
+
+    /// Patch an existing wallet.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct WalletUpdate {
+        pub vault_id: String,
+        pub name: Option<String>,
+        pub archived: Option<bool>,
+    }
+}
+
+pub mod flow {
+    use super::*;
+
+    /// How a flow enforces an upper bound.
+    ///
+    /// Amounts are expressed in integer minor units (e.g. cents for EUR).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(tag = "mode", rename_all = "snake_case")]
+    pub enum FlowMode {
+        Unlimited,
+        NetCapped { cap_minor: i64 },
+        IncomeCapped { cap_minor: i64 },
+    }
+
+    /// Create a new flow in a vault.
+    ///
+    /// `opening_balance_minor` is modeled as an opening allocation transfer
+    /// from Unallocated → this flow at `occurred_at`.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowNew {
+        pub vault_id: String,
+        pub name: String,
+        pub mode: FlowMode,
+        /// Initial allocation for this flow (must be >= 0).
+        pub opening_balance_minor: i64,
+        /// RFC3339 timestamp, including timezone offset (local user time).
+        pub occurred_at: DateTime<FixedOffset>,
+    }
+
+    /// Response body for flow creation.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowCreated {
+        pub id: Uuid,
+    }
+
+    /// Patch an existing flow.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowUpdate {
+        pub vault_id: String,
+        pub name: Option<String>,
+        pub archived: Option<bool>,
+        pub mode: Option<FlowMode>,
+    }
+}
+
 pub mod vault {
     use super::*;
 

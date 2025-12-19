@@ -2792,6 +2792,342 @@ impl Engine {
         Ok((out, next_cursor))
     }
 
+    /// Lists recent transactions in a vault (vault-wide), with cursor-based
+    /// pagination.
+    ///
+    /// Pagination is newest → older by `(occurred_at DESC, transaction_id
+    /// DESC)`.
+    ///
+    /// Authorization: requires vault read access.
+    pub async fn list_transactions_for_vault_page(
+        &self,
+        vault_id: &str,
+        user_id: &str,
+        limit: u64,
+        cursor: Option<&str>,
+        filter: &TransactionListFilter,
+    ) -> ResultEngine<(Vec<Transaction>, Option<String>)> {
+        let db_tx = self.database.begin().await?;
+        self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+
+        if let (Some(from), Some(to)) = (filter.from, filter.to)
+            && from >= to
+        {
+            return Err(EngineError::InvalidAmount(
+                "invalid range: from must be < to".to_string(),
+            ));
+        }
+        if filter.kinds.as_ref().is_some_and(|k| k.is_empty()) {
+            return Err(EngineError::InvalidAmount(
+                "kinds must not be empty".to_string(),
+            ));
+        }
+
+        let limit_plus_one = limit.saturating_add(1);
+        let mut query = transactions::Entity::find()
+            .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+            .order_by_desc(transactions::Column::OccurredAt)
+            .order_by_desc(transactions::Column::Id)
+            .limit(limit_plus_one);
+
+        if let Some(from) = filter.from {
+            query = query.filter(transactions::Column::OccurredAt.gte(from));
+        }
+        if let Some(to) = filter.to {
+            query = query.filter(transactions::Column::OccurredAt.lt(to));
+        }
+
+        if let Some(cursor) = cursor {
+            let cursor = TransactionsCursor::decode(cursor)?;
+            query = query.filter(
+                Condition::any()
+                    .add(transactions::Column::OccurredAt.lt(cursor.occurred_at))
+                    .add(
+                        Condition::all()
+                            .add(transactions::Column::OccurredAt.eq(cursor.occurred_at))
+                            .add(transactions::Column::Id.lt(cursor.transaction_id)),
+                    ),
+            );
+        }
+
+        if !filter.include_voided {
+            query = query.filter(transactions::Column::VoidedAt.is_null());
+        }
+        if let Some(kinds) = &filter.kinds {
+            let kinds: Vec<String> = kinds.iter().map(|k| k.as_str().to_string()).collect();
+            query = query.filter(transactions::Column::Kind.is_in(kinds));
+        } else if !filter.include_transfers {
+            query = query.filter(transactions::Column::Kind.is_not_in([
+                TransactionKind::TransferWallet.as_str(),
+                TransactionKind::TransferFlow.as_str(),
+            ]));
+        }
+
+        let rows: Vec<transactions::Model> = query.all(&db_tx).await?;
+        let has_more = rows.len() > limit as usize;
+
+        let mut out: Vec<Transaction> = Vec::with_capacity(rows.len().min(limit as usize));
+        for tx_model in rows.into_iter().take(limit as usize) {
+            out.push(Transaction::try_from(tx_model)?);
+        }
+
+        let next_cursor = out.last().map(|tx| TransactionsCursor {
+            occurred_at: tx.occurred_at,
+            transaction_id: tx.id.to_string(),
+        });
+        let next_cursor = if has_more {
+            next_cursor.map(|c| c.encode()).transpose()?
+        } else {
+            None
+        };
+
+        db_tx.commit().await?;
+        Ok((out, next_cursor))
+    }
+
+    /// Renames an existing wallet.
+    ///
+    /// Authorization: requires vault write access.
+    pub async fn rename_wallet(
+        &self,
+        vault_id: &str,
+        wallet_id: Uuid,
+        new_name: &str,
+        user_id: &str,
+    ) -> ResultEngine<()> {
+        let new_name = normalize_required_name(new_name, "wallet")?;
+
+        let db_tx = self.database.begin().await?;
+        self.require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
+        self.require_wallet_in_vault(&db_tx, vault_id, wallet_id)
+            .await?;
+
+        let exists = wallets::Entity::find()
+            .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+            .filter(Expr::cust("LOWER(name)").eq(new_name.to_lowercase()))
+            .filter(wallets::Column::Id.ne(wallet_id.to_string()))
+            .one(&db_tx)
+            .await?
+            .is_some();
+        if exists {
+            return Err(EngineError::ExistingKey(new_name));
+        }
+
+        let active = wallets::ActiveModel {
+            id: ActiveValue::Set(wallet_id.to_string()),
+            name: ActiveValue::Set(new_name),
+            ..Default::default()
+        };
+        active.update(&db_tx).await?;
+        db_tx.commit().await?;
+        Ok(())
+    }
+
+    /// Archives/unarchives an existing wallet.
+    ///
+    /// Authorization: requires vault write access.
+    pub async fn set_wallet_archived(
+        &self,
+        vault_id: &str,
+        wallet_id: Uuid,
+        archived: bool,
+        user_id: &str,
+    ) -> ResultEngine<()> {
+        let db_tx = self.database.begin().await?;
+        self.require_vault_by_id_write(&db_tx, vault_id, user_id)
+            .await?;
+        self.require_wallet_in_vault(&db_tx, vault_id, wallet_id)
+            .await?;
+
+        let active = wallets::ActiveModel {
+            id: ActiveValue::Set(wallet_id.to_string()),
+            archived: ActiveValue::Set(archived),
+            ..Default::default()
+        };
+        active.update(&db_tx).await?;
+        db_tx.commit().await?;
+        Ok(())
+    }
+
+    /// Renames an existing cash flow.
+    ///
+    /// Authorization: requires flow write access.
+    pub async fn rename_cash_flow(
+        &self,
+        vault_id: &str,
+        flow_id: Uuid,
+        new_name: &str,
+        user_id: &str,
+    ) -> ResultEngine<()> {
+        let new_name = normalize_required_flow_name(new_name)?;
+        if new_name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
+            return Err(EngineError::InvalidFlow(
+                "flow name is reserved".to_string(),
+            ));
+        }
+
+        let db_tx = self.database.begin().await?;
+        let flow_model = self
+            .require_flow_write(&db_tx, vault_id, flow_id, user_id)
+            .await?;
+        let system_kind = flow_model
+            .system_kind
+            .as_deref()
+            .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
+        if system_kind.is_some() {
+            return Err(EngineError::InvalidFlow(
+                "cannot rename system flow".to_string(),
+            ));
+        }
+
+        let exists = cash_flows::Entity::find()
+            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+            .filter(Expr::cust("LOWER(name)").eq(new_name.to_lowercase()))
+            .filter(cash_flows::Column::Id.ne(flow_id.to_string()))
+            .one(&db_tx)
+            .await?
+            .is_some();
+        if exists {
+            return Err(EngineError::ExistingKey(new_name));
+        }
+
+        let active = cash_flows::ActiveModel {
+            id: ActiveValue::Set(flow_id.to_string()),
+            name: ActiveValue::Set(new_name),
+            ..Default::default()
+        };
+        active.update(&db_tx).await?;
+        db_tx.commit().await?;
+        Ok(())
+    }
+
+    /// Archives/unarchives an existing cash flow.
+    ///
+    /// Authorization: requires flow write access.
+    pub async fn set_cash_flow_archived(
+        &self,
+        vault_id: &str,
+        flow_id: Uuid,
+        archived: bool,
+        user_id: &str,
+    ) -> ResultEngine<()> {
+        let db_tx = self.database.begin().await?;
+        let flow_model = self
+            .require_flow_write(&db_tx, vault_id, flow_id, user_id)
+            .await?;
+        let system_kind = flow_model
+            .system_kind
+            .as_deref()
+            .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
+        if system_kind.is_some() {
+            return Err(EngineError::InvalidFlow(
+                "cannot archive system flow".to_string(),
+            ));
+        }
+
+        let active = cash_flows::ActiveModel {
+            id: ActiveValue::Set(flow_id.to_string()),
+            archived: ActiveValue::Set(archived),
+            ..Default::default()
+        };
+        active.update(&db_tx).await?;
+        db_tx.commit().await?;
+        Ok(())
+    }
+
+    /// Updates the cap mode for a cash flow.
+    ///
+    /// `max_balance` defines the cap value:
+    /// - `None`: Unlimited
+    /// - `Some(cap)`: NetCapped or IncomeCapped, depending on `income_capped`
+    ///
+    /// If `income_capped` is true, this method sets `income_balance` to the
+    /// cumulative sum of positive legs for this flow (ignoring voided
+    /// transactions), and validates `income_balance <= cap`.
+    ///
+    /// Authorization: requires flow write access.
+    pub async fn set_cash_flow_mode(
+        &self,
+        vault_id: &str,
+        flow_id: Uuid,
+        max_balance: Option<i64>,
+        income_capped: bool,
+        user_id: &str,
+    ) -> ResultEngine<()> {
+        if income_capped && max_balance.is_none() {
+            return Err(EngineError::InvalidFlow(
+                "income-capped flow requires a cap".to_string(),
+            ));
+        }
+        if let Some(cap_minor) = max_balance
+            && cap_minor <= 0
+        {
+            return Err(EngineError::InvalidFlow("cap must be > 0".to_string()));
+        }
+
+        let db_tx = self.database.begin().await?;
+        let flow_model = self
+            .require_flow_write(&db_tx, vault_id, flow_id, user_id)
+            .await?;
+        let flow_name = flow_model.name.clone();
+        let system_kind = flow_model
+            .system_kind
+            .as_deref()
+            .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
+        if system_kind.is_some() {
+            return Err(EngineError::InvalidFlow(
+                "cannot change mode for system flow".to_string(),
+            ));
+        }
+
+        let (max_balance, income_balance) = match max_balance {
+            None => (None, None),
+            Some(cap_minor) if !income_capped => {
+                if flow_model.balance > cap_minor {
+                    return Err(EngineError::MaxBalanceReached(flow_name));
+                }
+                (Some(cap_minor), None)
+            }
+            Some(cap_minor) => {
+                let stmt = Statement::from_sql_and_values(
+                    db_tx.get_database_backend(),
+                    "SELECT COALESCE(SUM(l.amount_minor), 0) AS sum \
+                     FROM legs l \
+                     JOIN transactions t ON t.id = l.transaction_id \
+                     WHERE t.vault_id = ? \
+                       AND t.voided_at IS NULL \
+                       AND l.target_kind = ? \
+                       AND l.target_id = ? \
+                       AND l.amount_minor > 0",
+                    vec![
+                        vault_id.into(),
+                        crate::legs::LegTargetKind::Flow.as_str().into(),
+                        flow_id.to_string().into(),
+                    ],
+                );
+                let row = db_tx.query_one(stmt).await?;
+                let income_total_minor = row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0);
+                if income_total_minor > cap_minor {
+                    return Err(EngineError::MaxBalanceReached(flow_name));
+                }
+                (Some(cap_minor), Some(income_total_minor))
+            }
+        };
+
+        validate_flow_mode_fields(&flow_name, max_balance, income_balance)?;
+
+        let active = cash_flows::ActiveModel {
+            id: ActiveValue::Set(flow_id.to_string()),
+            max_balance: ActiveValue::Set(max_balance),
+            income_balance: ActiveValue::Set(income_balance),
+            ..Default::default()
+        };
+        active.update(&db_tx).await?;
+        db_tx.commit().await?;
+        Ok(())
+    }
+
     /// Lists recent transactions that affect a given wallet.
     ///
     /// Returns `(transaction, signed_amount_minor)` where `signed_amount_minor`
