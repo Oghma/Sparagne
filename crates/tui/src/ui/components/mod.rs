@@ -24,3 +24,5 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
 
     horizontal[1]
 }
+
+pub mod command_palette;

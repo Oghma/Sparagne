@@ -2,6 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppAction {
+    TogglePalette,
     Quit,
     Cancel,
     NextField,
@@ -17,6 +18,9 @@ pub fn map_key(key: KeyEvent) -> AppAction {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         if let KeyCode::Char('c') = key.code {
             return AppAction::Quit;
+        }
+        if let KeyCode::Char('p') = key.code {
+            return AppAction::TogglePalette;
         }
     }
 

@@ -81,6 +81,7 @@ pub struct AppState {
     pub flows: FlowsState,
     pub vault_ui: VaultState,
     pub stats: StatsState,
+    pub palette: CommandPaletteState,
     pub base_url: String,
     pub last_flow_id: Option<uuid::Uuid>,
 }
@@ -111,6 +112,7 @@ impl App {
             flows: FlowsState::default(),
             vault_ui: VaultState::default(),
             stats: StatsState::default(),
+            palette: CommandPaletteState::default(),
             base_url: config.base_url.clone(),
             last_flow_id: None,
         };
@@ -151,7 +153,18 @@ impl App {
     }
 
     async fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
-        match crate::ui::keymap::map_key(key) {
+        let action = crate::ui::keymap::map_key(key);
+        if self.state.palette.active {
+            self.handle_palette_action(action).await?;
+            return Ok(());
+        }
+
+        match action {
+            crate::ui::keymap::AppAction::TogglePalette => {
+                if self.state.screen == Screen::Home {
+                    self.open_palette();
+                }
+            }
             crate::ui::keymap::AppAction::Quit => {
                 if self.state.screen == Screen::Login {
                     self.should_quit = true;
@@ -2023,6 +2036,129 @@ impl App {
             .unwrap_or(engine::Currency::Eur)
     }
 
+    fn open_palette(&mut self) {
+        self.state.palette.active = true;
+        self.state.palette.query.clear();
+        self.state.palette.selected = 0;
+    }
+
+    async fn handle_palette_action(
+        &mut self,
+        action: crate::ui::keymap::AppAction,
+    ) -> Result<()> {
+        match action {
+            crate::ui::keymap::AppAction::Cancel => {
+                self.state.palette.active = false;
+            }
+            crate::ui::keymap::AppAction::Backspace => {
+                self.state.palette.query.pop();
+                self.state.palette.selected = 0;
+            }
+            crate::ui::keymap::AppAction::Up => {
+                if self.state.palette.selected > 0 {
+                    self.state.palette.selected -= 1;
+                }
+            }
+            crate::ui::keymap::AppAction::Down => {
+                let max = self.filtered_commands().len();
+                if max > 0 {
+                    self.state.palette.selected =
+                        (self.state.palette.selected + 1).min(max - 1);
+                }
+            }
+            crate::ui::keymap::AppAction::Input(ch) => {
+                self.state.palette.query.push(ch);
+                self.state.palette.selected = 0;
+            }
+            crate::ui::keymap::AppAction::Submit => {
+                if let Some(command) = self.filtered_commands().get(self.state.palette.selected) {
+                    self.execute_command(*command).await?;
+                    self.state.palette.active = false;
+                }
+            }
+            crate::ui::keymap::AppAction::TogglePalette => {
+                self.state.palette.active = false;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn filtered_commands(&self) -> Vec<PaletteCommand> {
+        let query = self.state.palette.query.trim().to_lowercase();
+        let all = PaletteCommand::all();
+        if query.is_empty() {
+            return all;
+        }
+        all.into_iter()
+            .filter(|cmd| cmd.label().to_lowercase().contains(&query))
+            .collect()
+    }
+
+    async fn execute_command(&mut self, command: PaletteCommand) -> Result<()> {
+        match command {
+            PaletteCommand::NewExpense => {
+                self.state.section = Section::Transactions;
+                self.state.transactions.mode = TransactionsMode::List;
+                self.state.transactions.quick_active = true;
+                self.state.transactions.quick_input = "-".to_string();
+            }
+            PaletteCommand::NewIncome => {
+                self.state.section = Section::Transactions;
+                self.state.transactions.mode = TransactionsMode::List;
+                self.state.transactions.quick_active = true;
+                self.state.transactions.quick_input = "+".to_string();
+            }
+            PaletteCommand::NewRefund => {
+                self.state.section = Section::Transactions;
+                self.state.transactions.mode = TransactionsMode::List;
+                self.state.transactions.quick_active = true;
+                self.state.transactions.quick_input = "r ".to_string();
+            }
+            PaletteCommand::NewTransferWallet => {
+                self.state.section = Section::Transactions;
+                self.state.transactions.error =
+                    Some("Transfer wallet non ancora disponibile.".to_string());
+            }
+            PaletteCommand::NewTransferFlow => {
+                self.state.section = Section::Transactions;
+                self.state.transactions.error =
+                    Some("Transfer flow non ancora disponibile.".to_string());
+            }
+            PaletteCommand::WalletNew => {
+                self.state.section = Section::Wallets;
+                self.start_wallet_create();
+            }
+            PaletteCommand::FlowNew => {
+                self.state.section = Section::Flows;
+                self.start_flow_create();
+            }
+            PaletteCommand::VaultCreate => {
+                self.state.section = Section::Vault;
+                self.start_vault_create();
+            }
+            PaletteCommand::Refresh => {
+                self.refresh_snapshot().await?;
+                if self.state.section == Section::Transactions {
+                    self.load_transactions(true).await?;
+                } else if self.state.section == Section::Stats {
+                    self.load_stats().await?;
+                }
+            }
+            PaletteCommand::ToggleVoided => {
+                if self.state.section != Section::Transactions {
+                    self.state.section = Section::Transactions;
+                }
+                self.state.transactions.include_voided =
+                    !self.state.transactions.include_voided;
+                self.load_transactions(true).await?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn parse_flow_cap(&mut self, currency: engine::Currency) -> Option<i64> {
         let cap_raw = self.state.flows.form.cap.trim();
         if cap_raw.is_empty() {
@@ -2137,6 +2273,23 @@ pub enum TransactionsMode {
     Edit,
     PickWallet,
     PickFlow,
+}
+
+#[derive(Debug)]
+pub struct CommandPaletteState {
+    pub active: bool,
+    pub query: String,
+    pub selected: usize,
+}
+
+impl Default for CommandPaletteState {
+    fn default() -> Self {
+        Self {
+            active: false,
+            query: String::new(),
+            selected: 0,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -2326,6 +2479,52 @@ impl Default for VaultFormState {
 pub struct StatsState {
     pub data: Option<Statistic>,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaletteCommand {
+    NewExpense,
+    NewIncome,
+    NewRefund,
+    NewTransferWallet,
+    NewTransferFlow,
+    WalletNew,
+    FlowNew,
+    VaultCreate,
+    Refresh,
+    ToggleVoided,
+}
+
+impl PaletteCommand {
+    pub fn all() -> Vec<Self> {
+        vec![
+            Self::NewExpense,
+            Self::NewIncome,
+            Self::NewRefund,
+            Self::NewTransferWallet,
+            Self::NewTransferFlow,
+            Self::WalletNew,
+            Self::FlowNew,
+            Self::VaultCreate,
+            Self::Refresh,
+            Self::ToggleVoided,
+        ]
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NewExpense => "Transactions: New Expense",
+            Self::NewIncome => "Transactions: New Income",
+            Self::NewRefund => "Transactions: New Refund",
+            Self::NewTransferWallet => "Transactions: New Transfer Wallet",
+            Self::NewTransferFlow => "Transactions: New Transfer Flow",
+            Self::WalletNew => "Wallets: New",
+            Self::FlowNew => "Flows: New",
+            Self::VaultCreate => "Vault: Create",
+            Self::Refresh => "Refresh",
+            Self::ToggleVoided => "Transactions: Toggle voided",
+        }
+    }
 }
 
 fn login_message_for_error(err: ClientError) -> String {

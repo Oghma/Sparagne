@@ -54,6 +54,7 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     }
 
     render_bottom_bar(frame, layout[2], state, &theme);
+    components::command_palette::render(frame, area, state);
 }
 
 fn render_top_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
@@ -120,6 +121,8 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         Span::raw(" vault  "),
         Span::styled("s", Style::default().fg(theme.accent)),
         Span::raw(" stats  "),
+        Span::styled("Ctrl+P", Style::default().fg(theme.accent)),
+        Span::raw(" palette  "),
     ];
 
     if state.section == crate::app::Section::Transactions {
