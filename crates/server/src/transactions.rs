@@ -72,42 +72,65 @@ pub async fn list(
         include_transfers,
     };
 
-    let (txs, next_cursor) = match (payload.flow_id, payload.wallet_id) {
-        (Some(flow_id), None) => {
-            engine
-                .list_transactions_for_flow_page(
-                    &payload.vault_id,
-                    flow_id,
-                    &user.username,
-                    limit,
-                    payload.cursor.as_deref(),
-                    &filter,
-                )
-                .await?
-        }
-        (None, Some(wallet_id)) => {
-            engine
-                .list_transactions_for_wallet_page(
-                    &payload.vault_id,
-                    wallet_id,
-                    &user.username,
-                    limit,
-                    payload.cursor.as_deref(),
-                    &filter,
-                )
-                .await?
-        }
-        (None, None) => {
-            return Err(ServerError::Generic(
-                "either flow_id or wallet_id is required".to_string(),
-            ));
-        }
-        (Some(_), Some(_)) => {
-            return Err(ServerError::Generic(
-                "provide only one of flow_id or wallet_id".to_string(),
-            ));
-        }
-    };
+    let (txs, next_cursor): (Vec<(engine::Transaction, i64)>, Option<String>) =
+        match (payload.flow_id, payload.wallet_id) {
+            (Some(flow_id), None) => {
+                engine
+                    .list_transactions_for_flow_page(
+                        &payload.vault_id,
+                        flow_id,
+                        &user.username,
+                        limit,
+                        payload.cursor.as_deref(),
+                        &filter,
+                    )
+                    .await?
+            }
+            (None, Some(wallet_id)) => {
+                engine
+                    .list_transactions_for_wallet_page(
+                        &payload.vault_id,
+                        wallet_id,
+                        &user.username,
+                        limit,
+                        payload.cursor.as_deref(),
+                        &filter,
+                    )
+                    .await?
+            }
+            (None, None) => {
+                let (items, next) = engine
+                    .list_transactions_for_vault_page(
+                        &payload.vault_id,
+                        &user.username,
+                        limit,
+                        payload.cursor.as_deref(),
+                        &filter,
+                    )
+                    .await?;
+
+                let items = items
+                    .into_iter()
+                    .map(|tx| {
+                        let signed_amount = match tx.kind {
+                            engine::TransactionKind::Income => tx.amount_minor,
+                            engine::TransactionKind::Expense => -tx.amount_minor,
+                            engine::TransactionKind::Refund => tx.amount_minor,
+                            engine::TransactionKind::TransferWallet
+                            | engine::TransactionKind::TransferFlow => tx.amount_minor,
+                        };
+                        (tx, signed_amount)
+                    })
+                    .collect();
+
+                (items, next)
+            }
+            (Some(_), Some(_)) => {
+                return Err(ServerError::Generic(
+                    "provide only one of flow_id or wallet_id".to_string(),
+                ));
+            }
+        };
 
     let utc = FixedOffset::east_opt(0)
         .ok_or_else(|| ServerError::Generic("invalid UTC offset".to_string()))?;
