@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
 use crate::{
@@ -15,7 +15,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(2), Constraint::Min(0)])
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(area);
 
     render_header(frame, layout[0], state, &theme);
@@ -39,7 +39,11 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         line.push(Span::raw("   "));
         line.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
     }
-    let block = Block::default().borders(Borders::ALL).title("Vault");
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border))
+        .title("Vault");
     frame.render_widget(Paragraph::new(Line::from(line)).block(block), area);
 }
 
@@ -96,6 +100,7 @@ fn render_view(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     let block = Block::default()
         .title("Vault Overview")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
@@ -127,6 +132,7 @@ fn render_create(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     let block = Block::default()
         .title("Create Vault")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }

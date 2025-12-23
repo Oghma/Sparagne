@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
 };
 
 use api_types::transaction::{LegTarget, TransactionKind};
@@ -19,7 +19,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(2), Constraint::Min(0)])
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(area);
 
     render_header(frame, layout[0], state);
@@ -85,7 +85,11 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         line.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
     }
 
-    let block = Block::default().borders(Borders::ALL).title("Transactions");
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border))
+        .title("Transactions");
     let content = Paragraph::new(Line::from(line)).block(block);
     frame.render_widget(content, area);
 }
@@ -93,7 +97,7 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(2), Constraint::Min(0)])
+        .constraints([Constraint::Length(4), Constraint::Min(0)])
         .split(area);
 
     render_quick_add(frame, layout[0], state, theme);
@@ -126,13 +130,28 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         })
         .collect::<Vec<_>>();
 
-    let mut list_state = ListState::default();
-    if !items.is_empty() {
-        list_state.select(Some(state.transactions.selected));
+    let list_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border));
+
+    if items.is_empty() {
+        let empty_msg = Paragraph::new(Line::from(vec![
+            Span::raw("No transactions yet. Press "),
+            Span::styled("a", Style::default().fg(theme.accent)),
+            Span::raw(" to add one."),
+        ]))
+        .alignment(ratatui::layout::Alignment::Center)
+        .block(list_block);
+        frame.render_widget(empty_msg, layout[1]);
+        return;
     }
 
+    let mut list_state = ListState::default();
+    list_state.select(Some(state.transactions.selected));
+
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL))
+        .block(list_block)
         .highlight_style(
             Style::default()
                 .fg(theme.accent)
@@ -186,6 +205,7 @@ fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, them
             Block::default()
                 .title(title)
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(theme.accent)),
         )
         .highlight_style(
@@ -271,12 +291,14 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
 
     let hint_block = Block::default()
         .title("Available")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     let list_items = items
         .iter()
@@ -376,6 +398,7 @@ fn render_filter_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
     let block = Block::default()
         .title("Filters")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
 }
@@ -462,6 +485,8 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
 
     let block = Block::default()
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border))
         .title("Quick add (a)");
     let widget = Paragraph::new(lines).block(block);
     frame.render_widget(widget, area);
@@ -472,6 +497,7 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         let block = Block::default()
             .title("Transaction")
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(theme.accent));
         frame.render_widget(
             Paragraph::new(Line::from("Nessun dettaglio disponibile."))
@@ -554,6 +580,7 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     let header_block = Block::default()
         .title("Transaction Detail")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(Paragraph::new(lines).block(header_block), layout[0]);
 
@@ -577,6 +604,7 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     let legs_block = Block::default()
         .title("Legs")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     let list = List::new(legs).block(legs_block);
     frame.render_widget(list, layout[1]);
@@ -584,11 +612,11 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
 
 fn kind_label(kind: TransactionKind) -> &'static str {
     match kind {
-        TransactionKind::Income => "Income",
-        TransactionKind::Expense => "Expense",
-        TransactionKind::Refund => "Refund",
-        TransactionKind::TransferWallet => "Transfer Wallet",
-        TransactionKind::TransferFlow => "Transfer Flow",
+        TransactionKind::Income => "▲ Income",
+        TransactionKind::Expense => "▼ Expense",
+        TransactionKind::Refund => "↩ Refund",
+        TransactionKind::TransferWallet => "⇄ Transfer",
+        TransactionKind::TransferFlow => "⇄ Transfer",
     }
 }
 

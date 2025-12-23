@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
 };
 
 use crate::{
@@ -40,12 +40,13 @@ fn render_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &The
         Span::styled("Command Palette", Style::default().fg(theme.accent)),
         Span::raw("  "),
         Span::styled(text.to_string(), style),
-        Span::styled(" |", Style::default().fg(theme.accent)),
+        Span::styled(" │", Style::default().fg(theme.accent)),
     ]);
 
     let block = Block::default()
         .title("Ctrl+P")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(Paragraph::new(line).block(block), area);
 }
@@ -65,8 +66,9 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     let list = List::new(items)
         .block(
             Block::default()
-                .title("Comandi")
+                .title("Commands")
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(theme.accent)),
         )
         .highlight_style(

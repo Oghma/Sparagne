@@ -21,7 +21,7 @@ use api_types::{
     vault::{Vault, VaultNew, VaultSnapshot},
     wallet::{WalletNew, WalletUpdate},
 };
-use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, Offset, TimeZone, Utc};
 use chrono_tz::Tz;
 use engine::Money;
 use std::str::FromStr;
@@ -631,61 +631,81 @@ impl App {
                 self.state.transactions.mode = TransactionsMode::List;
                 return Ok(());
             }
+            // Navigation keys - always navigate to section
             't' | 'T' => {
-                if self.state.section == Section::Transactions {
-                    if self.state.transactions.mode == TransactionsMode::List {
-                        self.state.transactions.include_transfers =
-                            !self.state.transactions.include_transfers;
-                        self.load_transactions(true).await?;
-                    }
-                } else {
-                    self.state.section = Section::Transactions;
-                    if self.state.transactions.items.is_empty() {
-                        self.load_transactions(true).await?;
-                    }
+                self.state.section = Section::Transactions;
+                self.state.transactions.mode = TransactionsMode::List;
+                if self.state.transactions.items.is_empty() {
+                    self.load_transactions(true).await?;
                 }
                 return Ok(());
             }
             'w' | 'W' => {
-                if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::List
-                {
-                    self.open_wallet_picker();
-                } else {
-                    self.state.section = Section::Wallets;
-                    self.state.transactions.mode = TransactionsMode::List;
-                    if self.state.snapshot.is_none() {
-                        self.refresh_snapshot().await?;
-                    }
+                self.state.section = Section::Wallets;
+                self.state.transactions.mode = TransactionsMode::List;
+                if self.state.snapshot.is_none() {
+                    self.refresh_snapshot().await?;
                 }
                 return Ok(());
             }
             'f' | 'F' => {
-                if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::List
-                {
-                    self.open_flow_picker();
-                } else {
-                    self.state.section = Section::Flows;
-                    self.state.transactions.mode = TransactionsMode::List;
-                    if self.state.snapshot.is_none() {
-                        self.refresh_snapshot().await?;
-                    }
+                self.state.section = Section::Flows;
+                self.state.transactions.mode = TransactionsMode::List;
+                if self.state.snapshot.is_none() {
+                    self.refresh_snapshot().await?;
                 }
                 return Ok(());
             }
             'v' | 'V' => {
-                if self.state.section == Section::Transactions {
-                    if self.state.transactions.mode == TransactionsMode::Detail {
-                        self.void_transaction().await?;
-                    } else {
-                        self.state.transactions.include_voided =
-                            !self.state.transactions.include_voided;
-                        self.load_transactions(true).await?;
-                    }
+                // In transaction detail, 'v' voids the transaction
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::Detail
+                {
+                    self.void_transaction().await?;
                 } else {
                     self.state.section = Section::Vault;
                     self.state.transactions.mode = TransactionsMode::List;
+                }
+                return Ok(());
+            }
+            // Transaction list context actions (use different keys)
+            'x' | 'X' => {
+                // Toggle transfers visibility in transactions list
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.state.transactions.include_transfers =
+                        !self.state.transactions.include_transfers;
+                    self.load_transactions(true).await?;
+                }
+                return Ok(());
+            }
+            'z' | 'Z' => {
+                // Toggle voided visibility in transactions list
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.state.transactions.include_voided =
+                        !self.state.transactions.include_voided;
+                    self.load_transactions(true).await?;
+                }
+                return Ok(());
+            }
+            '1' => {
+                // Open wallet picker in transactions list
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.open_wallet_picker();
+                }
+                return Ok(());
+            }
+            '2' => {
+                // Open flow picker in transactions list
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.open_flow_picker();
                 }
                 return Ok(());
             }
@@ -713,12 +733,16 @@ impl App {
             'n' | 'N' => {
                 if self.state.section == Section::Transactions {
                     self.load_transactions_next().await?;
+                } else if self.state.section == Section::Stats {
+                    self.stats_next_month();
                 }
                 return Ok(());
             }
             'p' | 'P' => {
                 if self.state.section == Section::Transactions {
                     self.load_transactions_prev().await?;
+                } else if self.state.section == Section::Stats {
+                    self.stats_prev_month();
                 }
                 return Ok(());
             }
@@ -2564,6 +2588,26 @@ impl App {
         Ok(())
     }
 
+    /// Navigate to next month in stats view
+    fn stats_next_month(&mut self) {
+        let (year, month) = self.state.stats.current_month;
+        if month == 12 {
+            self.state.stats.current_month = (year + 1, 1);
+        } else {
+            self.state.stats.current_month = (year, month + 1);
+        }
+    }
+
+    /// Navigate to previous month in stats view
+    fn stats_prev_month(&mut self) {
+        let (year, month) = self.state.stats.current_month;
+        if month == 1 {
+            self.state.stats.current_month = (year - 1, 12);
+        } else {
+            self.state.stats.current_month = (year, month - 1);
+        }
+    }
+
     fn current_currency(&self) -> engine::Currency {
         self.state
             .vault
@@ -3092,10 +3136,29 @@ impl Default for VaultFormState {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct StatsState {
     pub data: Option<Statistic>,
     pub error: Option<String>,
+    /// Current month being viewed (year, month 1-12)
+    pub current_month: (i32, u32),
+    /// Category breakdown computed from transactions
+    pub category_breakdown: Vec<(String, i64)>,
+    /// Monthly trend data (last 6 months of expenses)
+    pub monthly_trend: Vec<(String, i64)>,
+}
+
+impl Default for StatsState {
+    fn default() -> Self {
+        let now = chrono::Local::now();
+        Self {
+            data: None,
+            error: None,
+            current_month: (now.year(), now.month()),
+            category_breakdown: Vec::new(),
+            monthly_trend: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

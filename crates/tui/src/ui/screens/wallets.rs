@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
 };
 
 use api_types::transaction::TransactionKind;
@@ -18,7 +18,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(2), Constraint::Min(0)])
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(area);
 
     render_header(frame, layout[0], state, &theme);
@@ -47,7 +47,11 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         line.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
     }
 
-    let block = Block::default().borders(Borders::ALL).title("Wallets");
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border))
+        .title("Wallets");
     frame.render_widget(Paragraph::new(Line::from(line)).block(block), area);
 }
 
@@ -89,13 +93,28 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         })
         .unwrap_or_else(Vec::new);
 
-    let mut list_state = ListState::default();
-    if !items.is_empty() {
-        list_state.select(Some(state.wallets.selected));
+    let list_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border));
+
+    if items.is_empty() {
+        let empty_msg = Paragraph::new(Line::from(vec![
+            Span::raw("No wallets. Press "),
+            Span::styled("c", Style::default().fg(theme.accent)),
+            Span::raw(" to create one."),
+        ]))
+        .alignment(Alignment::Center)
+        .block(list_block);
+        frame.render_widget(empty_msg, list_area);
+        return;
     }
 
+    let mut list_state = ListState::default();
+    list_state.select(Some(state.wallets.selected));
+
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL))
+        .block(list_block)
         .highlight_style(
             Style::default()
                 .fg(theme.accent)
@@ -144,6 +163,7 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     let block = Block::default()
         .title(if is_rename { "Rename Wallet" } else { "New Wallet" })
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
@@ -194,6 +214,7 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     let header_block = Block::default()
         .title("Wallet Detail")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(Paragraph::new(header_lines).block(header_block), layout[0]);
 
@@ -201,6 +222,7 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         let block = Block::default()
             .title("Recent Transactions")
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(theme.error));
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
@@ -232,7 +254,9 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     let list = List::new(items).block(
         Block::default()
             .title("Recent Transactions")
-            .borders(Borders::ALL),
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(theme.border)),
     );
     frame.render_widget(list, layout[1]);
 }
@@ -261,6 +285,7 @@ fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str)
     let block = Block::default()
         .title("Wallet Detail")
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(
         Paragraph::new(Line::from(message))
@@ -272,11 +297,11 @@ fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str)
 
 fn kind_label(kind: TransactionKind) -> &'static str {
     match kind {
-        TransactionKind::Income => "Income",
-        TransactionKind::Expense => "Expense",
-        TransactionKind::Refund => "Refund",
-        TransactionKind::TransferWallet => "Transfer W",
-        TransactionKind::TransferFlow => "Transfer F",
+        TransactionKind::Income => "▲ Income",
+        TransactionKind::Expense => "▼ Expense",
+        TransactionKind::Refund => "↩ Refund",
+        TransactionKind::TransferWallet => "⇄ Transfer",
+        TransactionKind::TransferFlow => "⇄ Transfer",
     }
 }
 

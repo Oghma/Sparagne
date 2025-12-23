@@ -7,15 +7,16 @@ mod theme;
 
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    layout::{Constraint, Direction, Layout, Rect},
+    style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::Paragraph,
 };
 
 use crate::app::AppState;
 
 pub use terminal::{AppTerminal as Terminal, restore_terminal, setup_terminal};
+pub use theme::Theme;
 
 pub fn render(frame: &mut Frame<'_>, state: &AppState) {
     let area = frame.area();
@@ -26,257 +27,202 @@ pub fn render(frame: &mut Frame<'_>, state: &AppState) {
 }
 
 fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = theme::Theme::default();
+    let theme = Theme::default();
+
+    // Main layout: tabs (2 rows for label + underline), content, bottom bar
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
-            Constraint::Min(0),
-            Constraint::Length(1),
+            Constraint::Length(2), // Tab bar (label + underline)
+            Constraint::Min(0),    // Main content
+            Constraint::Length(1), // Bottom bar
         ])
         .split(area);
 
-    render_top_bar(frame, layout[0], state);
+    components::tabs::render_tabs(frame, layout[0], state.section, &theme);
 
-    let body = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(20), Constraint::Min(0)])
-        .split(layout[1]);
-    render_nav(frame, body[0], state);
+    // Content area (no top border needed, tabs provide visual separation)
+    let content_inner = layout[1];
 
     match state.section {
-        crate::app::Section::Home => screens::home::render(frame, body[1], state),
-        crate::app::Section::Transactions => screens::transactions::render(frame, body[1], state),
-        crate::app::Section::Wallets => screens::wallets::render(frame, body[1], state),
-        crate::app::Section::Flows => screens::flows::render(frame, body[1], state),
-        crate::app::Section::Vault => screens::vault::render(frame, body[1], state),
-        crate::app::Section::Stats => screens::stats::render(frame, body[1], state),
+        crate::app::Section::Home => screens::home::render(frame, content_inner, state),
+        crate::app::Section::Transactions => {
+            screens::transactions::render(frame, content_inner, state)
+        }
+        crate::app::Section::Wallets => screens::wallets::render(frame, content_inner, state),
+        crate::app::Section::Flows => screens::flows::render(frame, content_inner, state),
+        crate::app::Section::Vault => screens::vault::render(frame, content_inner, state),
+        crate::app::Section::Stats => screens::stats::render(frame, content_inner, state),
     }
 
     render_bottom_bar(frame, layout[2], state, &theme);
     components::command_palette::render(frame, area, state);
 }
 
-fn render_top_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = theme::Theme::default();
-    let vault_name = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.name.as_deref())
-        .unwrap_or("Main");
-    let username = state.login.username.as_str();
-    let base = format!(
-        "Vault: {vault_name}  •  User: {username}  •  {base_url}",
-        base_url = state.base_url
-    );
-    let bar = Paragraph::new(Line::from(Span::styled(
-        base,
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD),
-    )))
-    .alignment(Alignment::Left);
-    frame.render_widget(bar, area);
-}
+fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    // Global shortcuts (always shown, compact)
+    let mut parts = components::tabs::tab_shortcuts(theme);
 
-fn render_nav(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = theme::Theme::default();
-    let sections = [
-        crate::app::Section::Home,
-        crate::app::Section::Transactions,
-        crate::app::Section::Wallets,
-        crate::app::Section::Flows,
-        crate::app::Section::Vault,
-        crate::app::Section::Stats,
-    ];
-    let items = sections
-        .iter()
-        .map(|section| {
-            let style = if *section == state.section {
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(theme.text)
-            };
-            ListItem::new(Line::from(Span::styled(section.label(), style)))
-        })
-        .collect::<Vec<_>>();
+    parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
+    parts.push(Span::styled("Ctrl+P", Style::default().fg(theme.accent)));
+    parts.push(Span::raw(" cmd"));
 
-    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Menu"));
-    frame.render_widget(list, area);
-}
-
-fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &theme::Theme) {
-    let mut parts = vec![
-        Span::styled("h", Style::default().fg(theme.accent)),
-        Span::raw(" home  "),
-        Span::styled("t", Style::default().fg(theme.accent)),
-        Span::raw(" transazioni  "),
-        Span::styled("w", Style::default().fg(theme.accent)),
-        Span::raw(" wallet  "),
-        Span::styled("f", Style::default().fg(theme.accent)),
-        Span::raw(" flows  "),
-        Span::styled("v", Style::default().fg(theme.accent)),
-        Span::raw(" vault  "),
-        Span::styled("s", Style::default().fg(theme.accent)),
-        Span::raw(" stats  "),
-        Span::styled("Ctrl+P", Style::default().fg(theme.accent)),
-        Span::raw(" palette  "),
-    ];
-
-    if state.section == crate::app::Section::Transactions {
-        parts.push(Span::raw(" | "));
-        match state.transactions.mode {
-            crate::app::TransactionsMode::List => {
-                parts.push(Span::styled("r", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" refresh "));
-                parts.push(Span::styled("n", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" next "));
-                parts.push(Span::styled("p", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" prev "));
-                parts.push(Span::styled("w", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" wallet scope "));
-                parts.push(Span::styled("f", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" flow scope "));
-                parts.push(Span::styled("/", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" filters "));
-                parts.push(Span::styled("v", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" voided "));
-                parts.push(Span::styled("t", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" transfers "));
-                parts.push(Span::styled("a", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" quick add "));
-                parts.push(Span::styled("↑/↓", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" select "));
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" detail "));
-            }
-            crate::app::TransactionsMode::Detail => {
-                parts.push(Span::styled("b", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" back "));
-                parts.push(Span::styled("esc", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" back "));
-                parts.push(Span::styled("v", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" void "));
-                parts.push(Span::styled("e", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" edit "));
-                parts.push(Span::styled("r", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" repeat "));
-            }
-            crate::app::TransactionsMode::Edit => {
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" save "));
-                parts.push(Span::styled("b", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" back "));
-                parts.push(Span::styled("esc", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" back "));
-            }
-            crate::app::TransactionsMode::PickWallet | crate::app::TransactionsMode::PickFlow => {
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" apply "));
-                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" cancel "));
-            }
-            crate::app::TransactionsMode::TransferWallet
-            | crate::app::TransactionsMode::TransferFlow => {
-                parts.push(Span::styled("Tab", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" next "));
-                parts.push(Span::styled("↑/↓", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" change "));
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" save "));
-                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" cancel "));
-            }
-            crate::app::TransactionsMode::Filter => {
-                parts.push(Span::styled("Tab", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" next "));
-                parts.push(Span::styled("i/e/r/w/f", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" toggle "));
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" apply "));
-                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" cancel "));
-            }
-        }
-    } else if state.section == crate::app::Section::Wallets {
-        parts.push(Span::raw(" | "));
-        match state.wallets.mode {
-            crate::app::WalletsMode::List => {
-                parts.push(Span::styled("c", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" create "));
-                parts.push(Span::styled("e", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" rename "));
-                parts.push(Span::styled("a", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" archive "));
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" detail "));
-            }
-            crate::app::WalletsMode::Detail => {
-                parts.push(Span::styled("b", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" back "));
-            }
-            crate::app::WalletsMode::Create | crate::app::WalletsMode::Rename => {
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" save "));
-                parts.push(Span::styled("Tab", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" next "));
-                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" cancel "));
-            }
-        }
-    } else if state.section == crate::app::Section::Flows {
-        parts.push(Span::raw(" | "));
-        match state.flows.mode {
-            crate::app::FlowsMode::List => {
-                parts.push(Span::styled("c", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" create "));
-                parts.push(Span::styled("e", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" rename "));
-                parts.push(Span::styled("a", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" archive "));
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" detail "));
-            }
-            crate::app::FlowsMode::Detail => {
-                parts.push(Span::styled("b", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" back "));
-            }
-            crate::app::FlowsMode::Create | crate::app::FlowsMode::Rename => {
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" save "));
-                parts.push(Span::styled("Tab", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" next "));
-                parts.push(Span::styled("m", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" mode "));
-                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" cancel "));
-            }
-        }
-    } else if state.section == crate::app::Section::Vault {
-        parts.push(Span::raw(" | "));
-        match state.vault_ui.mode {
-            crate::app::VaultMode::View => {
-                parts.push(Span::styled("c", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" create "));
-            }
-            crate::app::VaultMode::Create => {
-                parts.push(Span::styled("Enter", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" save "));
-                parts.push(Span::styled("Esc", Style::default().fg(theme.accent)));
-                parts.push(Span::raw(" cancel "));
-            }
-        }
-    } else if state.section == crate::app::Section::Stats {
-        parts.push(Span::raw(" | "));
-        parts.push(Span::styled("r", Style::default().fg(theme.accent)));
-        parts.push(Span::raw(" refresh "));
+    // Context-specific hints based on section and mode
+    let context_hints = get_context_hints(state, theme);
+    if !context_hints.is_empty() {
+        parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
+        parts.extend(context_hints);
     }
 
+    // Quit hint at the end
+    parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
     parts.push(Span::styled("q", Style::default().fg(theme.accent)));
     parts.push(Span::raw(" quit"));
 
     let bar = Paragraph::new(Line::from(parts));
     frame.render_widget(bar, area);
+}
+
+/// Returns context-specific keyboard hints based on current section and mode.
+fn get_context_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+    match state.section {
+        crate::app::Section::Home => vec![
+            Span::styled("a", Style::default().fg(theme.accent)),
+            Span::raw(" expense  "),
+            Span::styled("i", Style::default().fg(theme.accent)),
+            Span::raw(" income  "),
+            Span::styled("r", Style::default().fg(theme.accent)),
+            Span::raw(" refresh"),
+        ],
+        crate::app::Section::Transactions => get_transactions_hints(state, theme),
+        crate::app::Section::Wallets => get_wallets_hints(state, theme),
+        crate::app::Section::Flows => get_flows_hints(state, theme),
+        crate::app::Section::Vault => get_vault_hints(state, theme),
+        crate::app::Section::Stats => vec![
+            Span::styled("r", Style::default().fg(theme.accent)),
+            Span::raw(" refresh  "),
+            Span::styled("n", Style::default().fg(theme.accent)),
+            Span::raw("/"),
+            Span::styled("p", Style::default().fg(theme.accent)),
+            Span::raw(" month"),
+        ],
+    }
+}
+
+fn get_transactions_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+    match state.transactions.mode {
+        crate::app::TransactionsMode::List => vec![
+            Span::styled("a", Style::default().fg(theme.accent)),
+            Span::raw(" add  "),
+            Span::styled("/", Style::default().fg(theme.accent)),
+            Span::raw(" filter  "),
+            Span::styled("1", Style::default().fg(theme.accent)),
+            Span::raw("/"),
+            Span::styled("2", Style::default().fg(theme.accent)),
+            Span::raw(" wallet/flow  "),
+            Span::styled("x", Style::default().fg(theme.accent)),
+            Span::raw("/"),
+            Span::styled("z", Style::default().fg(theme.accent)),
+            Span::raw(" transfers/voided"),
+        ],
+        crate::app::TransactionsMode::Detail => vec![
+            Span::styled("b", Style::default().fg(theme.accent)),
+            Span::raw(" back  "),
+            Span::styled("e", Style::default().fg(theme.accent)),
+            Span::raw(" edit  "),
+            Span::styled("v", Style::default().fg(theme.accent)),
+            Span::raw(" void  "),
+            Span::styled("r", Style::default().fg(theme.accent)),
+            Span::raw(" repeat"),
+        ],
+        crate::app::TransactionsMode::Edit
+        | crate::app::TransactionsMode::PickWallet
+        | crate::app::TransactionsMode::PickFlow => vec![
+            Span::styled("Enter", Style::default().fg(theme.accent)),
+            Span::raw(" save  "),
+            Span::styled("Esc", Style::default().fg(theme.accent)),
+            Span::raw(" cancel"),
+        ],
+        crate::app::TransactionsMode::TransferWallet
+        | crate::app::TransactionsMode::TransferFlow
+        | crate::app::TransactionsMode::Filter => vec![
+            Span::styled("Tab", Style::default().fg(theme.accent)),
+            Span::raw(" next  "),
+            Span::styled("Enter", Style::default().fg(theme.accent)),
+            Span::raw(" apply  "),
+            Span::styled("Esc", Style::default().fg(theme.accent)),
+            Span::raw(" cancel"),
+        ],
+    }
+}
+
+fn get_wallets_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+    match state.wallets.mode {
+        crate::app::WalletsMode::List => vec![
+            Span::styled("c", Style::default().fg(theme.accent)),
+            Span::raw(" create  "),
+            Span::styled("e", Style::default().fg(theme.accent)),
+            Span::raw(" rename  "),
+            Span::styled("a", Style::default().fg(theme.accent)),
+            Span::raw(" archive  "),
+            Span::styled("Enter", Style::default().fg(theme.accent)),
+            Span::raw(" detail"),
+        ],
+        crate::app::WalletsMode::Detail => vec![
+            Span::styled("b", Style::default().fg(theme.accent)),
+            Span::raw(" back"),
+        ],
+        crate::app::WalletsMode::Create | crate::app::WalletsMode::Rename => vec![
+            Span::styled("Enter", Style::default().fg(theme.accent)),
+            Span::raw(" save  "),
+            Span::styled("Tab", Style::default().fg(theme.accent)),
+            Span::raw(" next  "),
+            Span::styled("Esc", Style::default().fg(theme.accent)),
+            Span::raw(" cancel"),
+        ],
+    }
+}
+
+fn get_flows_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+    match state.flows.mode {
+        crate::app::FlowsMode::List => vec![
+            Span::styled("c", Style::default().fg(theme.accent)),
+            Span::raw(" create  "),
+            Span::styled("e", Style::default().fg(theme.accent)),
+            Span::raw(" rename  "),
+            Span::styled("a", Style::default().fg(theme.accent)),
+            Span::raw(" archive  "),
+            Span::styled("Enter", Style::default().fg(theme.accent)),
+            Span::raw(" detail"),
+        ],
+        crate::app::FlowsMode::Detail => vec![
+            Span::styled("b", Style::default().fg(theme.accent)),
+            Span::raw(" back"),
+        ],
+        crate::app::FlowsMode::Create | crate::app::FlowsMode::Rename => vec![
+            Span::styled("Enter", Style::default().fg(theme.accent)),
+            Span::raw(" save  "),
+            Span::styled("Tab", Style::default().fg(theme.accent)),
+            Span::raw(" next  "),
+            Span::styled("m", Style::default().fg(theme.accent)),
+            Span::raw(" mode  "),
+            Span::styled("Esc", Style::default().fg(theme.accent)),
+            Span::raw(" cancel"),
+        ],
+    }
+}
+
+fn get_vault_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+    match state.vault_ui.mode {
+        crate::app::VaultMode::View => vec![
+            Span::styled("c", Style::default().fg(theme.accent)),
+            Span::raw(" create"),
+        ],
+        crate::app::VaultMode::Create => vec![
+            Span::styled("Enter", Style::default().fg(theme.accent)),
+            Span::raw(" save  "),
+            Span::styled("Esc", Style::default().fg(theme.accent)),
+            Span::raw(" cancel"),
+        ],
+    }
 }
