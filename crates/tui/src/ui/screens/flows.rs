@@ -24,7 +24,14 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     render_header(frame, layout[0], state, &theme);
 
     match state.flows.mode {
-        FlowsMode::Detail => render_detail(frame, layout[1], state, &theme),
+        FlowsMode::Detail => {
+            let columns = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+                .split(layout[1]);
+            render_list(frame, columns[0], state, &theme);
+            render_detail(frame, columns[1], state, &theme);
+        }
         FlowsMode::Create | FlowsMode::Rename | FlowsMode::List => {
             render_list(frame, layout[1], state, &theme)
         }

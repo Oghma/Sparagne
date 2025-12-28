@@ -45,8 +45,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     // Clear the area behind the form
     frame.render_widget(Clear, card_area);
 
-    // Main container with rounded borders
+    // Main container with rounded borders and title
     let block = Block::default()
+        .title(" login ")
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border));

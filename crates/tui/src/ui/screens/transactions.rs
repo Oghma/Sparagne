@@ -49,7 +49,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
             }
         }
         TransactionsMode::Detail | TransactionsMode::Edit => {
-            render_detail(frame, layout[1], state, &theme)
+            let columns = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+                .split(layout[1]);
+            render_list(frame, columns[0], state, &theme);
+            render_detail(frame, columns[1], state, &theme);
         }
     }
 }

@@ -340,9 +340,15 @@ impl App {
             crate::ui::keymap::AppAction::Up => {
                 if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::List
+                    && matches!(
+                        self.state.transactions.mode,
+                        TransactionsMode::List | TransactionsMode::Detail
+                    )
                 {
                     self.state.transactions.select_prev();
+                    if self.state.transactions.mode == TransactionsMode::Detail {
+                        self.open_transaction_detail().await?;
+                    }
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
                     && matches!(
@@ -366,22 +372,34 @@ impl App {
                     self.transaction_form_select_prev();
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Wallets
-                    && self.state.wallets.mode == WalletsMode::List
+                    && matches!(self.state.wallets.mode, WalletsMode::List | WalletsMode::Detail)
                 {
                     self.wallets_select_prev();
+                    if self.state.wallets.mode == WalletsMode::Detail {
+                        self.open_wallet_detail().await?;
+                    }
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Flows
-                    && self.state.flows.mode == FlowsMode::List
+                    && matches!(self.state.flows.mode, FlowsMode::List | FlowsMode::Detail)
                 {
                     self.flows_select_prev();
+                    if self.state.flows.mode == FlowsMode::Detail {
+                        self.open_flow_detail().await?;
+                    }
                 }
             }
             crate::ui::keymap::AppAction::Down => {
                 if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::List
+                    && matches!(
+                        self.state.transactions.mode,
+                        TransactionsMode::List | TransactionsMode::Detail
+                    )
                 {
                     self.state.transactions.select_next();
+                    if self.state.transactions.mode == TransactionsMode::Detail {
+                        self.open_transaction_detail().await?;
+                    }
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
                     && matches!(
@@ -405,14 +423,20 @@ impl App {
                     self.transaction_form_select_next();
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Wallets
-                    && self.state.wallets.mode == WalletsMode::List
+                    && matches!(self.state.wallets.mode, WalletsMode::List | WalletsMode::Detail)
                 {
                     self.wallets_select_next();
+                    if self.state.wallets.mode == WalletsMode::Detail {
+                        self.open_wallet_detail().await?;
+                    }
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Flows
-                    && self.state.flows.mode == FlowsMode::List
+                    && matches!(self.state.flows.mode, FlowsMode::List | FlowsMode::Detail)
                 {
                     self.flows_select_next();
+                    if self.state.flows.mode == FlowsMode::Detail {
+                        self.open_flow_detail().await?;
+                    }
                 }
             }
             crate::ui::keymap::AppAction::Input(ch) => {
