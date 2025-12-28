@@ -216,7 +216,7 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     let archived = if flow.archived { "YES" } else { "NO" };
     let unallocated = if flow.is_unallocated { "YES" } else { "NO" };
 
-    let header_lines = vec![
+    let mut header_lines = vec![
         Line::from(vec![
             Span::styled("Flow", Style::default().fg(theme.dim)),
             Span::raw(format!(": {}", flow.name)),
@@ -233,6 +233,12 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
             Span::raw(format!(": {unallocated}")),
         ]),
     ];
+
+    if let Some(detail) = state.flows.detail.detail.as_ref() {
+        if let Some(line) = cap_progress_line(detail, currency, theme) {
+            header_lines.push(line);
+        }
+    }
     let header_block = Block::default()
         .title("Flow Detail")
         .borders(Borders::ALL)
@@ -331,4 +337,35 @@ fn map_currency(currency: &api_types::Currency) -> Currency {
     match currency {
         api_types::Currency::Eur => Currency::Eur,
     }
+}
+
+fn cap_progress_line(
+    detail: &engine::CashFlow,
+    currency: Currency,
+    theme: &Theme,
+) -> Option<Line<'static>> {
+    let cap = detail.max_balance?;
+    if cap <= 0 {
+        return None;
+    }
+
+    let (label, current) = if let Some(income_total_minor) = detail.income_balance {
+        ("Income cap", income_total_minor)
+    } else {
+        ("Net cap", detail.balance)
+    };
+
+    let current = current.max(0);
+    let ratio = (current.min(cap) * 20) / cap;
+    let filled = ratio as usize;
+    let empty = 20usize.saturating_sub(filled);
+    let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
+    let current_fmt = Money::new(current).format(currency);
+    let cap_fmt = Money::new(cap).format(currency);
+
+    Some(Line::from(vec![
+        Span::styled(label, Style::default().fg(theme.dim)),
+        Span::raw(format!(": {current_fmt} / {cap_fmt}  ")),
+        Span::styled(bar, Style::default().fg(theme.accent)),
+    ]))
 }

@@ -28,6 +28,8 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
 pub mod card;
 pub mod charts;
 pub mod command_palette;
+pub mod help_overlay;
 pub mod hints;
 pub mod money;
 pub mod tabs;
+pub mod toast;

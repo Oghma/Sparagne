@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, PaletteCommand},
+    app::{filter_commands, AppState},
     ui::{components::centered_rect, theme::Theme},
 };
 
@@ -52,7 +52,7 @@ fn render_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &The
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let commands = filtered_commands(state);
+    let commands = filter_commands(state.palette.query.as_str());
     let items = commands
         .iter()
         .map(|cmd| ListItem::new(Line::from(cmd.label())))
@@ -78,15 +78,4 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         )
         .highlight_symbol("» ");
     frame.render_stateful_widget(list, area, &mut list_state);
-}
-
-fn filtered_commands(state: &AppState) -> Vec<PaletteCommand> {
-    let query = state.palette.query.trim().to_lowercase();
-    let all = PaletteCommand::all();
-    if query.is_empty() {
-        return all;
-    }
-    all.into_iter()
-        .filter(|cmd| cmd.label().to_lowercase().contains(&query))
-        .collect()
 }

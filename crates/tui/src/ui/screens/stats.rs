@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{BarChart, Block, BorderType, Borders, Gauge, Paragraph},
+    widgets::{BarChart, Block, BorderType, Borders, Gauge, Paragraph, Sparkline},
 };
 
 use engine::{Currency, Money};
@@ -61,19 +61,21 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         return;
     }
 
-    // Main layout: Month summary, Category breakdown, Monthly trend
+    // Main layout: Month summary, Sparkline, Category breakdown, Monthly trend
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(9),  // Month summary with navigation
+            Constraint::Length(6),  // Sparkline
             Constraint::Length(12), // Category breakdown
-            Constraint::Min(5),     // Monthly trend chart
+            Constraint::Min(6),     // Monthly trend chart
         ])
         .split(area);
 
     render_month_summary(frame, layout[0], state, &theme);
-    render_category_breakdown(frame, layout[1], state, &theme);
-    render_monthly_trend(frame, layout[2], state, &theme);
+    render_sparkline(frame, layout[1], state, &theme);
+    render_category_breakdown(frame, layout[2], state, &theme);
+    render_monthly_trend(frame, layout[3], state, &theme);
 }
 
 fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -127,15 +129,8 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 .fg(theme.text)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw("              "),
-        Span::styled("◀ ", Style::default().fg(theme.accent)),
-        Span::styled("p", Style::default().fg(theme.accent)),
-        Span::raw(" Prev    "),
+        Span::raw("  "),
         Span::styled("[Current]", Style::default().fg(theme.dim)),
-        Span::raw("    "),
-        Span::styled("n", Style::default().fg(theme.accent)),
-        Span::styled(" ▶", Style::default().fg(theme.accent)),
-        Span::raw(" Next"),
     ]);
     frame.render_widget(Paragraph::new(nav_line), inner_layout[0]);
 
@@ -293,8 +288,7 @@ fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppState
 
     let currency = get_currency(state);
 
-    // Get category breakdown from transactions
-    let breakdown = compute_category_breakdown(state);
+    let breakdown = &state.stats.category_breakdown;
 
     if breakdown.is_empty() {
         frame.render_widget(
@@ -357,10 +351,10 @@ fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Generate trend data from current stats (simplified - showing placeholder)
-    let trend_data = compute_monthly_trend(state);
+    let expense_trend = &state.stats.monthly_trend;
+    let income_trend = &state.stats.monthly_income;
 
-    if trend_data.is_empty() {
+    if expense_trend.is_empty() && income_trend.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled(
                 "Monthly trend data not available. Press 'r' to refresh stats.",
@@ -372,70 +366,68 @@ fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         return;
     }
 
-    // Convert to BarChart data
-    let bar_data: Vec<(&str, u64)> = trend_data
-        .iter()
-        .map(|(label, value)| (label.as_str(), *value as u64))
-        .collect();
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(6), Constraint::Min(0)])
+        .split(inner);
 
-    let chart = BarChart::default()
-        .data(&bar_data)
+    let income_data: Vec<(&str, u64)> = income_trend
+        .iter()
+        .map(|(label, value)| (label.as_str(), (*value).max(0) as u64))
+        .collect();
+    let income_chart = BarChart::default()
+        .data(&income_data)
         .bar_width(5)
         .bar_gap(2)
-        .bar_style(Style::default().fg(theme.accent))
+        .bar_style(Style::default().fg(theme.positive))
         .value_style(Style::default().fg(theme.dim).add_modifier(Modifier::BOLD))
-        .label_style(Style::default().fg(theme.dim));
+        .label_style(Style::default().fg(theme.dim))
+        .max(income_data.iter().map(|(_, v)| *v).max().unwrap_or(1));
+    frame.render_widget(income_chart, layout[0]);
 
-    frame.render_widget(chart, inner);
+    let expense_data: Vec<(&str, u64)> = expense_trend
+        .iter()
+        .map(|(label, value)| (label.as_str(), (*value).max(0) as u64))
+        .collect();
+    let expense_chart = BarChart::default()
+        .data(&expense_data)
+        .bar_width(5)
+        .bar_gap(2)
+        .bar_style(Style::default().fg(theme.negative))
+        .value_style(Style::default().fg(theme.dim).add_modifier(Modifier::BOLD))
+        .label_style(Style::default().fg(theme.dim))
+        .max(expense_data.iter().map(|(_, v)| *v).max().unwrap_or(1));
+    frame.render_widget(expense_chart, layout[1]);
 }
 
-/// Computes category breakdown from current transaction data.
-fn compute_category_breakdown(state: &AppState) -> Vec<(String, i64)> {
-    use api_types::transaction::TransactionKind;
-    use std::collections::HashMap;
+fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let block = Block::default()
+        .title(Span::styled(
+            " Balance Trend (30d) ",
+            Style::default().fg(theme.accent),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    let mut breakdown: HashMap<String, i64> = HashMap::new();
-
-    for tx in &state.transactions.items {
-        if tx.kind == TransactionKind::Expense && !tx.voided {
-            let category = tx
-                .category
-                .clone()
-                .unwrap_or_else(|| "Other".to_string());
-            *breakdown.entry(category).or_insert(0) += tx.amount_minor.abs();
-        }
+    if state.stats.sparkline.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "No data. Press 'r' to refresh stats.",
+                Style::default().fg(theme.dim),
+            ))
+            .alignment(Alignment::Center),
+            inner,
+        );
+        return;
     }
 
-    let mut result: Vec<_> = breakdown.into_iter().collect();
-    result.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by amount descending
-    result
-}
-
-/// Computes monthly trend data (simplified version using current stats).
-fn compute_monthly_trend(state: &AppState) -> Vec<(String, i64)> {
-    // For now, create a simplified trend with current month data
-    // In a full implementation, this would query historical data
-    let (_year, month) = state.stats.current_month;
-
-    let current_expenses = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| s.total_expenses_minor)
-        .unwrap_or(0);
-
-    if current_expenses == 0 {
-        return Vec::new();
-    }
-
-    // Show just the current month for now
-    // A full implementation would fetch historical months
-    let month_label = month_name_short(month).to_string();
-
-    vec![
-        (format!("{}...", month_label), 0), // Placeholder for older months
-        (month_label, current_expenses / 100), // Convert to major units for display
-    ]
+    let sparkline = Sparkline::default()
+        .data(&state.stats.sparkline)
+        .style(Style::default().fg(theme.accent));
+    frame.render_widget(sparkline, inner);
 }
 
 fn get_currency(state: &AppState) -> Currency {
@@ -468,24 +460,6 @@ fn month_name(month: u32) -> &'static str {
         11 => "November",
         12 => "December",
         _ => "Unknown",
-    }
-}
-
-fn month_name_short(month: u32) -> &'static str {
-    match month {
-        1 => "Jan",
-        2 => "Feb",
-        3 => "Mar",
-        4 => "Apr",
-        5 => "May",
-        6 => "Jun",
-        7 => "Jul",
-        8 => "Aug",
-        9 => "Sep",
-        10 => "Oct",
-        11 => "Nov",
-        12 => "Dec",
-        _ => "???",
     }
 }
 

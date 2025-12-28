@@ -109,33 +109,45 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .map(map_currency)
         .unwrap_or(Currency::Eur);
 
-    let items = state
-        .transactions
-        .items
-        .iter()
-        .map(|tx| {
-            let date = tx.occurred_at.format("%d %b %H:%M").to_string();
-            let kind = kind_label(tx.kind);
-            let amount = Money::new(tx.amount_minor).format(currency);
-            let note = tx.note.as_deref().unwrap_or("");
-            let category = tx
-                .category
-                .as_deref()
-                .map(|c| format!("#{c} "))
-                .unwrap_or_default();
-            let voided = if tx.voided { " void" } else { "" };
+    let mut rows = Vec::new();
+    let mut selected_row = None;
+    let mut last_day = None;
 
-            let text = format!("{date}  {kind:<14} {amount:<14} {category}{note}{voided}");
-            ListItem::new(Line::from(text))
-        })
-        .collect::<Vec<_>>();
+    for (idx, tx) in state.transactions.items.iter().enumerate() {
+        let day_label = tx.occurred_at.format("%Y-%m-%d").to_string();
+        if last_day.as_ref() != Some(&day_label) {
+            last_day = Some(day_label.clone());
+            rows.push(ListItem::new(Line::from(Span::styled(
+                format!("── {day_label} ──"),
+                Style::default().fg(theme.dim),
+            ))));
+        }
+
+        if idx == state.transactions.selected {
+            selected_row = Some(rows.len());
+        }
+
+        let time = tx.occurred_at.format("%H:%M").to_string();
+        let kind = kind_label(tx.kind);
+        let amount = Money::new(tx.amount_minor).format(currency);
+        let note = tx.note.as_deref().unwrap_or("");
+        let category = tx
+            .category
+            .as_deref()
+            .map(|c| format!("#{c} "))
+            .unwrap_or_default();
+        let badge = badge_label(tx.kind, tx.voided);
+
+        let text = format!("{time}  {badge:<8} {kind:<14} {amount:<14} {category}{note}");
+        rows.push(ListItem::new(Line::from(text)));
+    }
 
     let list_block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border));
 
-    if items.is_empty() {
+    if rows.is_empty() {
         let empty_msg = Paragraph::new(Line::from(vec![
             Span::raw("No transactions yet. Press "),
             Span::styled("a", Style::default().fg(theme.accent)),
@@ -148,9 +160,11 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     }
 
     let mut list_state = ListState::default();
-    list_state.select(Some(state.transactions.selected));
+    if let Some(row) = selected_row {
+        list_state.select(Some(row));
+    }
 
-    let list = List::new(items)
+    let list = List::new(rows)
         .block(list_block)
         .highlight_style(
             Style::default()
@@ -481,6 +495,19 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             "Formato: 12.50 bar  |  +1000 stipendio  |  r 5.20 amazon  |  #tag opzionale",
             Style::default().fg(theme.dim),
         )));
+        if !state.transactions.recent_categories.is_empty() {
+            let recents = state
+                .transactions
+                .recent_categories
+                .iter()
+                .map(|cat| format!("#{cat}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            lines.push(Line::from(Span::styled(
+                format!("Recenti: {recents}"),
+                Style::default().fg(theme.dim),
+            )));
+        }
     }
 
     let block = Block::default()
@@ -617,6 +644,21 @@ fn kind_label(kind: TransactionKind) -> &'static str {
         TransactionKind::Refund => "↩ Refund",
         TransactionKind::TransferWallet => "⇄ Transfer",
         TransactionKind::TransferFlow => "⇄ Transfer",
+    }
+}
+
+fn badge_label(kind: TransactionKind, voided: bool) -> String {
+    let mut badge = String::new();
+    if matches!(kind, TransactionKind::TransferWallet | TransactionKind::TransferFlow) {
+        badge.push_str("[TR]");
+    }
+    if voided {
+        badge.push_str("[VOID]");
+    }
+    if badge.is_empty() {
+        "-".to_string()
+    } else {
+        badge
     }
 }
 

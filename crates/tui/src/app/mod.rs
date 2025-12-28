@@ -82,6 +82,10 @@ pub struct AppState {
     pub vault_ui: VaultState,
     pub stats: StatsState,
     pub palette: CommandPaletteState,
+    pub help: HelpState,
+    pub toast: Option<ToastState>,
+    pub connection: ConnectionState,
+    pub last_refresh: Option<DateTime<FixedOffset>>,
     pub base_url: String,
     pub last_flow_id: Option<uuid::Uuid>,
 }
@@ -113,6 +117,10 @@ impl App {
             vault_ui: VaultState::default(),
             stats: StatsState::default(),
             palette: CommandPaletteState::default(),
+            help: HelpState::default(),
+            toast: None,
+            connection: ConnectionState::default(),
+            last_refresh: None,
             base_url: config.base_url.clone(),
             last_flow_id: None,
         };
@@ -136,6 +144,7 @@ impl App {
         let tick_rate = Duration::from_millis(200);
 
         while !self.should_quit {
+            self.expire_toast();
             terminal
                 .draw(|frame| ui::render(frame, &self.state))
                 .map_err(|err| AppError::Terminal(err.to_string()))?;
@@ -154,6 +163,10 @@ impl App {
 
     async fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
         let action = crate::ui::keymap::map_key(key);
+        if self.state.help.active {
+            self.handle_help_action(action);
+            return Ok(());
+        }
         if self.state.palette.active {
             self.handle_palette_action(action).await?;
             return Ok(());
@@ -775,6 +788,14 @@ impl App {
                 }
                 return Ok(());
             }
+            'u' | 'U' => {
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.undo_last_transaction().await?;
+                }
+                return Ok(());
+            }
             'e' | 'E' => {
                 if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::Detail
@@ -819,7 +840,11 @@ impl App {
                 return Ok(());
             }
             'c' | 'C' => {
-                if self.state.section == Section::Wallets
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.clear_filters().await?;
+                } else if self.state.section == Section::Wallets
                     && self.state.wallets.mode == WalletsMode::List
                 {
                     self.start_wallet_create();
@@ -848,6 +873,12 @@ impl App {
                     && self.state.transactions.mode == TransactionsMode::List
                 {
                     self.open_filter();
+                }
+                return Ok(());
+            }
+            '?' => {
+                if self.state.screen == Screen::Home {
+                    self.state.help.active = true;
                 }
                 return Ok(());
             }
@@ -900,6 +931,18 @@ impl App {
         false
     }
 
+    fn handle_help_action(&mut self, action: crate::ui::keymap::AppAction) {
+        match action {
+            crate::ui::keymap::AppAction::Cancel => {
+                self.state.help.active = false;
+            }
+            crate::ui::keymap::AppAction::Input('?') => {
+                self.state.help.active = false;
+            }
+            _ => {}
+        }
+    }
+
     fn advance_filter_focus(&mut self) {
         let filter = &mut self.state.transactions.filter;
         filter.focus = match filter.focus {
@@ -929,6 +972,65 @@ impl App {
                 }
             }
         }
+    }
+
+    fn expire_toast(&mut self) {
+        if let Some(toast) = &self.state.toast {
+            if std::time::Instant::now() >= toast.expires_at {
+                self.state.toast = None;
+            }
+        }
+    }
+
+    fn set_toast(&mut self, message: &str, level: ToastLevel) {
+        self.state.toast = Some(ToastState {
+            message: message.to_string(),
+            level,
+            expires_at: std::time::Instant::now() + Duration::from_secs(3),
+        });
+    }
+
+    fn connection_ok(&mut self, message: Option<&str>) {
+        self.state.connection.ok = true;
+        self.state.connection.message = message.map(|msg| msg.to_string());
+        self.state.last_refresh = Some(self.now_in_timezone());
+    }
+
+    fn connection_error(&mut self, message: &str) {
+        self.state.connection.ok = false;
+        self.state.connection.message = Some(message.to_string());
+    }
+
+    fn handle_auth_error(&mut self, err: &ClientError) -> bool {
+        if matches!(err, ClientError::Unauthorized | ClientError::Forbidden) {
+            self.state.screen = Screen::Login;
+            self.state.login.password.clear();
+            self.state.login.message =
+                Some("Credenziali errate o pairing mancante.".to_string());
+            self.state.vault = None;
+            self.state.snapshot = None;
+            self.state.section = Section::Home;
+            self.state.transactions = TransactionsState::default();
+            return true;
+        }
+        false
+    }
+
+    fn update_recents(&mut self) {
+        let mut seen = std::collections::HashSet::new();
+        let mut categories = Vec::new();
+        for tx in &self.state.transactions.items {
+            if let Some(category) = tx.category.as_ref() {
+                let key = category.to_lowercase();
+                if seen.insert(key) {
+                    categories.push(category.clone());
+                }
+            }
+            if categories.len() >= 5 {
+                break;
+            }
+        }
+        self.state.transactions.recent_categories = categories;
     }
 
     fn backspace_wallet_form(&mut self) {
@@ -1303,13 +1405,19 @@ impl App {
             .await;
 
         match res {
-            Ok(_) => {
+            Ok(created) => {
                 self.state.transactions.mode = TransactionsMode::List;
                 self.state.transactions.transfer = TransferFormState::default();
+                self.state.transactions.last_created_id = Some(created.id);
+                self.set_toast("Transfer wallet salvato.", ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                self.set_toast("Errore transfer wallet.", ToastLevel::Error);
             }
         }
 
@@ -1373,13 +1481,19 @@ impl App {
             .await;
 
         match res {
-            Ok(_) => {
+            Ok(created) => {
                 self.state.transactions.mode = TransactionsMode::List;
                 self.state.transactions.transfer = TransferFormState::default();
+                self.state.transactions.last_created_id = Some(created.id);
+                self.set_toast("Transfer flow salvato.", ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                self.set_toast("Errore transfer flow.", ToastLevel::Error);
             }
         }
 
@@ -1490,6 +1604,58 @@ impl App {
         Ok(())
     }
 
+    async fn clear_filters(&mut self) -> Result<()> {
+        self.state.transactions.scope_wallet_id = None;
+        self.state.transactions.scope_flow_id = None;
+        self.state.transactions.filter_from = None;
+        self.state.transactions.filter_to = None;
+        self.state.transactions.filter_kinds = None;
+        self.state.transactions.filter = TransactionsFilterState::default();
+        self.load_transactions(true).await?;
+        Ok(())
+    }
+
+    async fn undo_last_transaction(&mut self) -> Result<()> {
+        let Some(id) = self.state.transactions.last_created_id else {
+            self.set_toast("Nessuna transazione da annullare.", ToastLevel::Info);
+            return Ok(());
+        };
+        self.void_transaction_by_id(id).await?;
+        Ok(())
+    }
+
+    async fn void_transaction_by_id(&mut self, transaction_id: uuid::Uuid) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let res = self
+            .client
+            .transaction_void(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                transaction_id,
+                TransactionVoid {
+                    vault_id,
+                    voided_at: None,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(()) => {
+                self.state.transactions.last_created_id = None;
+                self.set_toast("Transazione annullata.", ToastLevel::Success);
+                self.load_transactions(true).await?;
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.set_toast(&login_message_for_error(err), ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
     fn has_kind(&self, kind: api_types::transaction::TransactionKind) -> bool {
         self.state
             .transactions
@@ -1518,12 +1684,6 @@ impl App {
         Ok(dt.with_timezone(&offset))
     }
 
-    fn format_local_datetime(&self, dt: DateTime<FixedOffset>) -> String {
-        let tz = Tz::from_str(self.config.timezone.as_str()).unwrap_or(Tz::UTC);
-        dt.with_timezone(&tz)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    }
 
     fn wallets_len(&self) -> usize {
         self.state
@@ -1624,12 +1784,17 @@ impl App {
                 } else if self.state.flows.selected >= flows_len {
                     self.state.flows.selected = flows_len - 1;
                 }
+                self.connection_ok(None);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 let message = login_message_for_error(err);
                 self.state.wallets.error = Some(message.clone());
                 self.state.flows.error = Some(message.clone());
                 self.state.stats.error = Some(message);
+                self.connection_error("Errore connessione");
             }
         }
 
@@ -1737,9 +1902,15 @@ impl App {
                 self.state.transactions.next_cursor = next_cursor;
                 self.state.transactions.error = None;
                 self.state.transactions.selected = 0;
+                self.update_recents();
+                self.connection_ok(None);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.transactions.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
             }
         }
 
@@ -1799,9 +1970,14 @@ impl App {
                 self.state.transactions.mode = TransactionsMode::Detail;
                 self.state.transactions.edit_input.clear();
                 self.state.transactions.edit_error = None;
+                self.connection_ok(None);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.transactions.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
             }
         }
 
@@ -1836,10 +2012,15 @@ impl App {
             Ok(()) => {
                 self.state.transactions.mode = TransactionsMode::List;
                 self.state.transactions.detail = None;
+                self.set_toast("Transazione annullata.", ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.transactions.error = Some(login_message_for_error(err));
+                self.set_toast("Errore durante l'annullamento.", ToastLevel::Error);
             }
         }
 
@@ -1909,10 +2090,15 @@ impl App {
                 self.state.transactions.mode = TransactionsMode::Detail;
                 self.state.transactions.edit_input.clear();
                 self.state.transactions.edit_error = None;
+                self.set_toast("Transazione aggiornata.", ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.transactions.edit_error = Some(login_message_for_error(err));
+                self.set_toast("Errore aggiornamento.", ToastLevel::Error);
             }
         }
 
@@ -2032,14 +2218,20 @@ impl App {
         };
 
         match res {
-            Ok(_) => {
+            Ok(created) => {
                 if let Some(flow_id) = last_flow_id {
                     self.state.last_flow_id = Some(flow_id);
                 }
+                self.state.transactions.last_created_id = Some(created.id);
+                self.set_toast("Transazione ripetuta.", ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.transactions.error = Some(login_message_for_error(err));
+                self.set_toast("Errore durante la ripetizione.", ToastLevel::Error);
             }
         }
 
@@ -2147,14 +2339,20 @@ impl App {
         };
 
         match res {
-            Ok(_) => {
+            Ok(created) => {
                 self.state.last_flow_id = Some(flow_id);
+                self.state.transactions.last_created_id = Some(created.id);
                 self.state.transactions.quick_input.clear();
                 self.state.transactions.quick_error = None;
+                self.set_toast("Transazione salvata.", ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.transactions.quick_error = Some(login_message_for_error(err));
+                self.set_toast("Errore durante il salvataggio.", ToastLevel::Error);
             }
         }
 
@@ -2199,9 +2397,14 @@ impl App {
             Ok(list) => {
                 self.state.wallets.detail.transactions = list.transactions;
                 self.state.wallets.detail.error = None;
+                self.connection_ok(None);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.wallets.detail.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
             }
         }
 
@@ -2247,9 +2450,14 @@ impl App {
                 self.state.wallets.mode = WalletsMode::List;
                 self.refresh_snapshot().await?;
                 self.select_wallet_by_id(created.id);
+                self.set_toast("Wallet creato.", ToastLevel::Success);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.wallets.form.error = Some(login_message_for_error(err));
+                self.set_toast("Errore creazione wallet.", ToastLevel::Error);
             }
         }
 
@@ -2286,9 +2494,14 @@ impl App {
                 self.reset_wallet_form();
                 self.state.wallets.mode = WalletsMode::List;
                 self.refresh_snapshot().await?;
+                self.set_toast("Wallet aggiornato.", ToastLevel::Success);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.wallets.form.error = Some(login_message_for_error(err));
+                self.set_toast("Errore aggiornamento wallet.", ToastLevel::Error);
             }
         }
 
@@ -2317,9 +2530,14 @@ impl App {
         match res {
             Ok(()) => {
                 self.refresh_snapshot().await?;
+                self.set_toast("Wallet aggiornato.", ToastLevel::Success);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.wallets.error = Some(login_message_for_error(err));
+                self.set_toast("Errore archivio wallet.", ToastLevel::Error);
             }
         }
 
@@ -2334,6 +2552,7 @@ impl App {
         self.state.flows.detail.flow_id = Some(flow_id);
         self.state.flows.mode = FlowsMode::Detail;
         self.load_flow_transactions(flow_id).await?;
+        self.load_flow_detail(flow_id).await?;
         Ok(())
     }
 
@@ -2364,9 +2583,46 @@ impl App {
             Ok(list) => {
                 self.state.flows.detail.transactions = list.transactions;
                 self.state.flows.detail.error = None;
+                self.connection_ok(None);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.flows.detail.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn load_flow_detail(&mut self, flow_id: uuid::Uuid) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let res = self
+            .client
+            .cash_flow_get(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                api_types::cash_flow::CashFlowGet {
+                    vault_id,
+                    id: Some(flow_id),
+                    name: None,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(flow) => {
+                self.state.flows.detail.detail = Some(flow);
+                self.connection_ok(None);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.flows.detail.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
             }
         }
 
@@ -2436,9 +2692,14 @@ impl App {
                 self.state.flows.mode = FlowsMode::List;
                 self.refresh_snapshot().await?;
                 self.select_flow_by_id(created.id);
+                self.set_toast("Flow creato.", ToastLevel::Success);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.flows.form.error = Some(login_message_for_error(err));
+                self.set_toast("Errore creazione flow.", ToastLevel::Error);
             }
         }
 
@@ -2480,9 +2741,14 @@ impl App {
                 self.reset_flow_form();
                 self.state.flows.mode = FlowsMode::List;
                 self.refresh_snapshot().await?;
+                self.set_toast("Flow aggiornato.", ToastLevel::Success);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.flows.form.error = Some(login_message_for_error(err));
+                self.set_toast("Errore aggiornamento flow.", ToastLevel::Error);
             }
         }
 
@@ -2516,9 +2782,14 @@ impl App {
         match res {
             Ok(()) => {
                 self.refresh_snapshot().await?;
+                self.set_toast("Flow aggiornato.", ToastLevel::Success);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.flows.error = Some(login_message_for_error(err));
+                self.set_toast("Errore archivio flow.", ToastLevel::Error);
             }
         }
 
@@ -2550,9 +2821,14 @@ impl App {
                 self.state.vault_ui.mode = VaultMode::View;
                 self.reset_vault_form();
                 self.refresh_snapshot().await?;
+                self.set_toast("Vault creato.", ToastLevel::Success);
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.vault_ui.form.error = Some(login_message_for_error(err));
+                self.set_toast("Errore creazione vault.", ToastLevel::Error);
             }
         }
 
@@ -2579,13 +2855,202 @@ impl App {
             Ok(stat) => {
                 self.state.stats.data = Some(stat);
                 self.state.stats.error = None;
+                self.connection_ok(None);
+                self.load_stats_series().await?;
             }
             Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
                 self.state.stats.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
             }
         }
 
         Ok(())
+    }
+
+    async fn load_stats_series(&mut self) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let to = self.now_in_timezone();
+        let from = to - chrono::Duration::days(180);
+
+        let mut cursor = None;
+        let mut transactions = Vec::new();
+        loop {
+            let payload = TransactionList {
+                vault_id: vault_id.clone(),
+                flow_id: None,
+                wallet_id: None,
+                limit: Some(200),
+                cursor,
+                from: Some(from),
+                to: Some(to),
+                kinds: None,
+                include_voided: Some(false),
+                include_transfers: Some(false),
+            };
+
+            let res = self
+                .client
+                .transactions_list(
+                    self.state.login.username.as_str(),
+                    self.state.login.password.as_str(),
+                    payload,
+                )
+                .await;
+
+            match res {
+                Ok(list) => {
+                    transactions.extend(list.transactions);
+                    if let Some(next) = list.next_cursor {
+                        cursor = Some(next);
+                    } else {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    if self.handle_auth_error(&err) {
+                        return Ok(());
+                    }
+                    self.state.stats.error = Some(login_message_for_error(err));
+                    return Ok(());
+                }
+            }
+        }
+
+        self.compute_stats_series(&transactions, to);
+        Ok(())
+    }
+
+    fn compute_stats_series(
+        &mut self,
+        transactions: &[TransactionView],
+        to: DateTime<FixedOffset>,
+    ) {
+        use api_types::transaction::TransactionKind;
+        use std::collections::HashMap;
+
+        let tz = Tz::from_str(self.config.timezone.as_str()).unwrap_or(Tz::UTC);
+        let start_day = (to - chrono::Duration::days(29))
+            .with_timezone(&tz)
+            .date_naive();
+        let end_day = to.with_timezone(&tz).date_naive();
+        let days_count = (end_day - start_day).num_days().max(0) as usize + 1;
+        let mut daily_net = vec![0i64; days_count];
+
+        let mut category_breakdown: HashMap<String, i64> = HashMap::new();
+        let mut monthly_income: HashMap<(i32, u32), i64> = HashMap::new();
+        let mut monthly_expense: HashMap<(i32, u32), (i64, i64)> = HashMap::new(); // (expense, refund)
+
+        let (current_year, current_month) = self.state.stats.current_month;
+
+        for tx in transactions {
+            if tx.voided {
+                continue;
+            }
+
+            let local = tx.occurred_at.with_timezone(&tz);
+            let date = local.date_naive();
+            let year = date.year();
+            let month = date.month();
+
+            match tx.kind {
+                TransactionKind::Income => {
+                    if date >= start_day && date <= end_day {
+                        let idx = (date - start_day).num_days() as usize;
+                        daily_net[idx] += tx.amount_minor.abs();
+                    }
+                    *monthly_income.entry((year, month)).or_insert(0) += tx.amount_minor.abs();
+                }
+                TransactionKind::Expense => {
+                    if date >= start_day && date <= end_day {
+                        let idx = (date - start_day).num_days() as usize;
+                        daily_net[idx] -= tx.amount_minor.abs();
+                    }
+                    let entry = monthly_expense.entry((year, month)).or_insert((0, 0));
+                    entry.0 += tx.amount_minor.abs();
+
+                    if year == current_year && month == current_month {
+                        let category = tx
+                            .category
+                            .clone()
+                            .unwrap_or_else(|| "Other".to_string());
+                        *category_breakdown.entry(category).or_insert(0) +=
+                            tx.amount_minor.abs();
+                    }
+                }
+                TransactionKind::Refund => {
+                    if date >= start_day && date <= end_day {
+                        let idx = (date - start_day).num_days() as usize;
+                        daily_net[idx] += tx.amount_minor.abs();
+                    }
+                    let entry = monthly_expense.entry((year, month)).or_insert((0, 0));
+                    entry.1 += tx.amount_minor.abs();
+                }
+                TransactionKind::TransferWallet | TransactionKind::TransferFlow => {}
+            }
+        }
+
+        let mut cumulative = Vec::with_capacity(daily_net.len());
+        let mut running = 0i64;
+        for delta in daily_net {
+            running += delta;
+            cumulative.push(running);
+        }
+
+        let min = cumulative.iter().copied().min().unwrap_or(0);
+        let max = cumulative.iter().copied().max().unwrap_or(0);
+        let shift = if min < 0 { -min } else { 0 };
+        let sparkline = cumulative
+            .iter()
+            .map(|value| (value + shift) as u64)
+            .collect::<Vec<_>>();
+
+        let mut breakdown = category_breakdown.into_iter().collect::<Vec<_>>();
+        breakdown.sort_by(|a, b| b.1.cmp(&a.1));
+
+        let months = Self::build_last_months(to, 6);
+        let mut monthly_expenses_vec = Vec::new();
+        let mut monthly_income_vec = Vec::new();
+        for (year, month, label) in months {
+            let income = monthly_income.get(&(year, month)).copied().unwrap_or(0);
+            let (expense, refund) = monthly_expense.get(&(year, month)).copied().unwrap_or((0, 0));
+            let net_expense = (expense - refund).max(0);
+            monthly_income_vec.push((label.clone(), income));
+            monthly_expenses_vec.push((label, net_expense));
+        }
+
+        self.state.stats.category_breakdown = breakdown;
+        self.state.stats.monthly_trend = monthly_expenses_vec;
+        self.state.stats.monthly_income = monthly_income_vec;
+        self.state.stats.sparkline = sparkline;
+        self.state.stats.sparkline_min = min;
+        self.state.stats.sparkline_max = max;
+    }
+
+    fn build_last_months(to: DateTime<FixedOffset>, count: usize) -> Vec<(i32, u32, String)> {
+        let mut months = Vec::new();
+        let mut year = to.year();
+        let mut month = to.month();
+        for _ in 0..count {
+            months.push((year, month, month_label(month)));
+            if month == 1 {
+                month = 12;
+                year -= 1;
+            } else {
+                month -= 1;
+            }
+        }
+        months.reverse();
+        months
+    }
+
+    fn format_local_datetime(&self, dt: DateTime<FixedOffset>) -> String {
+        let tz = Tz::from_str(self.config.timezone.as_str()).unwrap_or(Tz::UTC);
+        dt.with_timezone(&tz)
+            .format("%Y-%m-%d %H:%M")
+            .to_string()
     }
 
     /// Navigate to next month in stats view
@@ -2667,14 +3132,7 @@ impl App {
     }
 
     fn filtered_commands(&self) -> Vec<PaletteCommand> {
-        let query = self.state.palette.query.trim().to_lowercase();
-        let all = PaletteCommand::all();
-        if query.is_empty() {
-            return all;
-        }
-        all.into_iter()
-            .filter(|cmd| cmd.label().to_lowercase().contains(&query))
-            .collect()
+        filter_commands(self.state.palette.query.as_str())
     }
 
     async fn execute_command(&mut self, command: PaletteCommand) -> Result<()> {
@@ -2784,6 +3242,8 @@ pub struct TransactionsState {
     pub filter_to: Option<DateTime<FixedOffset>>,
     pub filter_kinds: Option<Vec<api_types::transaction::TransactionKind>>,
     pub filter: TransactionsFilterState,
+    pub last_created_id: Option<uuid::Uuid>,
+    pub recent_categories: Vec<String>,
 }
 
 impl Default for TransactionsState {
@@ -2812,6 +3272,8 @@ impl Default for TransactionsState {
             filter_to: None,
             filter_kinds: None,
             filter: TransactionsFilterState::default(),
+            last_created_id: None,
+            recent_categories: Vec::new(),
         }
     }
 }
@@ -2832,6 +3294,8 @@ impl TransactionsState {
         self.quick_active = false;
         self.transfer = TransferFormState::default();
         self.filter = TransactionsFilterState::default();
+        self.last_created_id = None;
+        self.recent_categories.clear();
     }
 
     fn push_cursor(&mut self, cursor: Option<String>) {
@@ -2934,6 +3398,31 @@ pub enum FilterField {
     From,
     To,
     Kinds,
+}
+
+#[derive(Debug, Default)]
+pub struct HelpState {
+    pub active: bool,
+}
+
+#[derive(Debug)]
+pub struct ToastState {
+    pub message: String,
+    pub level: ToastLevel,
+    pub expires_at: std::time::Instant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToastLevel {
+    Info,
+    Success,
+    Error,
+}
+
+#[derive(Debug, Default)]
+pub struct ConnectionState {
+    pub ok: bool,
+    pub message: Option<String>,
 }
 
 #[derive(Debug)]
@@ -3043,11 +3532,23 @@ pub enum FlowsMode {
     Rename,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FlowDetailState {
     pub flow_id: Option<uuid::Uuid>,
     pub transactions: Vec<TransactionView>,
+    pub detail: Option<engine::CashFlow>,
     pub error: Option<String>,
+}
+
+impl Default for FlowDetailState {
+    fn default() -> Self {
+        Self {
+            flow_id: None,
+            transactions: Vec::new(),
+            detail: None,
+            error: None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -3146,6 +3647,12 @@ pub struct StatsState {
     pub category_breakdown: Vec<(String, i64)>,
     /// Monthly trend data (last 6 months of expenses)
     pub monthly_trend: Vec<(String, i64)>,
+    /// Monthly trend data (last 6 months of income)
+    pub monthly_income: Vec<(String, i64)>,
+    /// Sparkline data for last 30 days (shifted to >= 0)
+    pub sparkline: Vec<u64>,
+    pub sparkline_min: i64,
+    pub sparkline_max: i64,
 }
 
 impl Default for StatsState {
@@ -3157,6 +3664,10 @@ impl Default for StatsState {
             current_month: (now.year(), now.month()),
             category_breakdown: Vec::new(),
             monthly_trend: Vec::new(),
+            monthly_income: Vec::new(),
+            sparkline: Vec::new(),
+            sparkline_min: 0,
+            sparkline_max: 0,
         }
     }
 }
@@ -3205,6 +3716,39 @@ impl PaletteCommand {
             Self::ToggleVoided => "Transactions: Toggle voided",
         }
     }
+}
+
+pub(crate) fn filter_commands(query: &str) -> Vec<PaletteCommand> {
+    let query = query.trim().to_lowercase();
+    let all = PaletteCommand::all();
+    if query.is_empty() {
+        return all;
+    }
+
+    let mut scored = all
+        .into_iter()
+        .filter_map(|cmd| {
+            let label = cmd.label().to_lowercase();
+            fuzzy_score(&label, &query).map(|score| (score, cmd))
+        })
+        .collect::<Vec<_>>();
+
+    scored.sort_by_key(|(score, _)| *score);
+    scored.into_iter().map(|(_, cmd)| cmd).collect()
+}
+
+fn fuzzy_score(label: &str, query: &str) -> Option<usize> {
+    let mut score = 0usize;
+    let mut pos = 0usize;
+    for ch in query.chars() {
+        if let Some(idx) = label[pos..].find(ch) {
+            score += idx;
+            pos += idx + 1;
+        } else {
+            return None;
+        }
+    }
+    Some(score)
 }
 
 fn login_message_for_error(err: ClientError) -> String {
@@ -3286,6 +3830,25 @@ fn map_currency(currency: &api_types::Currency) -> engine::Currency {
     match currency {
         api_types::Currency::Eur => engine::Currency::Eur,
     }
+}
+
+fn month_label(month: u32) -> String {
+    let label = match month {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        12 => "Dec",
+        _ => "???",
+    };
+    label.to_string()
 }
 
 fn default_wallet_flow(

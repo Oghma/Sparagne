@@ -29,20 +29,22 @@ pub fn render(frame: &mut Frame<'_>, state: &AppState) {
 fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
 
-    // Main layout: tabs (2 rows for label + underline), content, bottom bar
+    // Main layout: info bar, tabs, content, bottom bar
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(1), // Info bar
             Constraint::Length(2), // Tab bar (label + underline)
             Constraint::Min(0),    // Main content
             Constraint::Length(1), // Bottom bar
         ])
         .split(area);
 
-    components::tabs::render_tabs(frame, layout[0], state.section, &theme);
+    render_info_bar(frame, layout[0], state, &theme);
+    components::tabs::render_tabs(frame, layout[1], state.section, &theme);
 
     // Content area (no top border needed, tabs provide visual separation)
-    let content_inner = layout[1];
+    let content_inner = layout[2];
 
     match state.section {
         crate::app::Section::Home => screens::home::render(frame, content_inner, state),
@@ -55,8 +57,44 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         crate::app::Section::Stats => screens::stats::render(frame, content_inner, state),
     }
 
-    render_bottom_bar(frame, layout[2], state, &theme);
+    render_bottom_bar(frame, layout[3], state, &theme);
     components::command_palette::render(frame, area, state);
+    components::help_overlay::render(frame, area, state);
+    components::toast::render(frame, area, state.toast.as_ref());
+}
+
+fn render_info_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let vault = state
+        .vault
+        .as_ref()
+        .and_then(|v| v.name.as_deref())
+        .unwrap_or("Main");
+    let user = state.login.username.as_str();
+    let refresh = state
+        .last_refresh
+        .map(|dt| dt.format("%H:%M:%S").to_string())
+        .unwrap_or_else(|| "-".to_string());
+    let status = if state.connection.ok { "OK" } else { "ERR" };
+    let status_style = if state.connection.ok {
+        Style::default().fg(theme.positive)
+    } else {
+        Style::default().fg(theme.error)
+    };
+    let scope = scope_label(state);
+
+    let line = Line::from(vec![
+        Span::styled("Vault", Style::default().fg(theme.text_muted)),
+        Span::raw(format!(": {vault}  ")),
+        Span::styled("User", Style::default().fg(theme.text_muted)),
+        Span::raw(format!(": {user}  ")),
+        Span::styled("Scope", Style::default().fg(theme.text_muted)),
+        Span::raw(format!(": {scope}  ")),
+        Span::styled("Refresh", Style::default().fg(theme.text_muted)),
+        Span::raw(format!(": {refresh}  ")),
+        Span::styled(status, status_style),
+    ]);
+
+    frame.render_widget(Paragraph::new(line), area);
 }
 
 fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -87,12 +125,12 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 fn get_context_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
     match state.section {
         crate::app::Section::Home => vec![
-            Span::styled("a", Style::default().fg(theme.accent)),
-            Span::raw(" expense  "),
-            Span::styled("i", Style::default().fg(theme.accent)),
-            Span::raw(" income  "),
-            Span::styled("r", Style::default().fg(theme.accent)),
-            Span::raw(" refresh"),
+            Span::styled("t", Style::default().fg(theme.accent)),
+            Span::raw(" transactions  "),
+            Span::styled("w", Style::default().fg(theme.accent)),
+            Span::raw(" wallets  "),
+            Span::styled("f", Style::default().fg(theme.accent)),
+            Span::raw(" flows"),
         ],
         crate::app::Section::Transactions => get_transactions_hints(state, theme),
         crate::app::Section::Wallets => get_wallets_hints(state, theme),
@@ -100,11 +138,7 @@ fn get_context_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
         crate::app::Section::Vault => get_vault_hints(state, theme),
         crate::app::Section::Stats => vec![
             Span::styled("r", Style::default().fg(theme.accent)),
-            Span::raw(" refresh  "),
-            Span::styled("n", Style::default().fg(theme.accent)),
-            Span::raw("/"),
-            Span::styled("p", Style::default().fg(theme.accent)),
-            Span::raw(" month"),
+            Span::raw(" refresh"),
         ],
     }
 }
@@ -113,17 +147,19 @@ fn get_transactions_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>>
     match state.transactions.mode {
         crate::app::TransactionsMode::List => vec![
             Span::styled("a", Style::default().fg(theme.accent)),
-            Span::raw(" add  "),
+            Span::raw(" quick add  "),
             Span::styled("/", Style::default().fg(theme.accent)),
-            Span::raw(" filter  "),
-            Span::styled("1", Style::default().fg(theme.accent)),
-            Span::raw("/"),
-            Span::styled("2", Style::default().fg(theme.accent)),
-            Span::raw(" wallet/flow  "),
-            Span::styled("x", Style::default().fg(theme.accent)),
-            Span::raw("/"),
-            Span::styled("z", Style::default().fg(theme.accent)),
-            Span::raw(" transfers/voided"),
+            Span::raw(" filters  "),
+            Span::styled("w", Style::default().fg(theme.accent)),
+            Span::raw(" wallet scope  "),
+            Span::styled("f", Style::default().fg(theme.accent)),
+            Span::raw(" flow scope  "),
+            Span::styled("c", Style::default().fg(theme.accent)),
+            Span::raw(" clear  "),
+            Span::styled("u", Style::default().fg(theme.accent)),
+            Span::raw(" undo  "),
+            Span::styled("Enter", Style::default().fg(theme.accent)),
+            Span::raw(" detail"),
         ],
         crate::app::TransactionsMode::Detail => vec![
             Span::styled("b", Style::default().fg(theme.accent)),
@@ -225,4 +261,32 @@ fn get_vault_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
             Span::raw(" cancel"),
         ],
     }
+}
+
+fn scope_label(state: &AppState) -> String {
+    if let Some(flow_id) = state.transactions.scope_flow_id {
+        return state
+            .snapshot
+            .as_ref()
+            .and_then(|snap| {
+                snap.flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id)
+                    .map(|flow| format!("Flow: {}", flow.name))
+            })
+            .unwrap_or_else(|| "Flow: ?".to_string());
+    }
+    if let Some(wallet_id) = state.transactions.scope_wallet_id {
+        return state
+            .snapshot
+            .as_ref()
+            .and_then(|snap| {
+                snap.wallets
+                    .iter()
+                    .find(|wallet| wallet.id == wallet_id)
+                    .map(|wallet| format!("Wallet: {}", wallet.name))
+            })
+            .unwrap_or_else(|| "Wallet: ?".to_string());
+    }
+    "All".to_string()
 }

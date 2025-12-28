@@ -1,4 +1,5 @@
 use api_types::{
+    cash_flow::CashFlowGet,
     flow::{FlowCreated, FlowNew, FlowUpdate},
     stats::Statistic,
     transaction::{
@@ -382,6 +383,29 @@ impl Client {
             .map_err(ClientError::Transport)?;
 
         handle_empty(res).await
+    }
+
+    pub async fn cash_flow_get(
+        &self,
+        username: &str,
+        password: &str,
+        payload: CashFlowGet,
+    ) -> std::result::Result<engine::CashFlow, ClientError> {
+        let endpoint = self
+            .base_url
+            .join("cashFlow/get")
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
     }
 }
 
