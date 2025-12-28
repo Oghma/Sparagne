@@ -70,6 +70,14 @@ fn help_lines(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
                 Span::raw(" filters"),
             ]));
             lines.push(Line::from(vec![
+                Span::styled("i", Style::default().fg(theme.accent)),
+                Span::raw(" income form  "),
+                Span::styled("e", Style::default().fg(theme.accent)),
+                Span::raw(" expense form  "),
+                Span::styled("R", Style::default().fg(theme.accent)),
+                Span::raw(" refund form"),
+            ]));
+            lines.push(Line::from(vec![
                 Span::styled("w", Style::default().fg(theme.accent)),
                 Span::raw(" wallet scope  "),
                 Span::styled("f", Style::default().fg(theme.accent)),
@@ -98,6 +106,16 @@ fn help_lines(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
                     ]));
                 }
                 TransactionsMode::TransferWallet | TransactionsMode::TransferFlow => {
+                    lines.push(Line::from(vec![
+                        Span::styled("Tab", Style::default().fg(theme.accent)),
+                        Span::raw(" next field  "),
+                        Span::styled("↑/↓", Style::default().fg(theme.accent)),
+                        Span::raw(" change  "),
+                        Span::styled("Enter", Style::default().fg(theme.accent)),
+                        Span::raw(" save"),
+                    ]));
+                }
+                TransactionsMode::Form => {
                     lines.push(Line::from(vec![
                         Span::styled("Tab", Style::default().fg(theme.accent)),
                         Span::raw(" next field  "),

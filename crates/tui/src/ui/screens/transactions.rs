@@ -11,7 +11,7 @@ use engine::{Currency, Money};
 use uuid::Uuid;
 
 use crate::{
-    app::{AppState, FilterField, TransactionsMode, TransferField},
+    app::{AppState, FilterField, TransactionFormField, TransactionsMode, TransferField},
     ui::{components::centered_rect, theme::Theme},
 };
 
@@ -29,7 +29,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         | TransactionsMode::PickFlow
         | TransactionsMode::TransferWallet
         | TransactionsMode::TransferFlow
-        | TransactionsMode::Filter => {
+        | TransactionsMode::Filter
+        | TransactionsMode::Form => {
             render_list(frame, layout[1], state, &theme);
             if matches!(
                 state.transactions.mode,
@@ -41,6 +42,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
                 TransactionsMode::TransferWallet | TransactionsMode::TransferFlow
             ) {
                 render_transfer_form(frame, layout[1], state, &theme);
+            } else if state.transactions.mode == TransactionsMode::Form {
+                render_transaction_form(frame, layout[1], state, &theme);
             } else if state.transactions.mode == TransactionsMode::Filter {
                 render_filter_form(frame, layout[1], state, &theme);
             }
@@ -334,6 +337,271 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 }
 
 fn render_transfer_field(label: &str, value: &str, focused: bool, theme: &Theme) -> Line<'static> {
+    let label_style = if focused {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+    let value_style = if focused {
+        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+    Line::from(vec![
+        Span::styled(format!("{label:<8}"), label_style),
+        Span::raw(": "),
+        Span::styled(value.to_string(), value_style),
+    ])
+}
+
+fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return;
+    };
+    let form = &state.transactions.form;
+    let wallets = snapshot
+        .wallets
+        .iter()
+        .filter(|wallet| !wallet.archived)
+        .collect::<Vec<_>>();
+    let flows = snapshot
+        .flows
+        .iter()
+        .filter(|flow| !flow.archived)
+        .collect::<Vec<_>>();
+
+    let wallet_name = wallets
+        .get(form.wallet_index)
+        .map(|wallet| wallet.name.as_str())
+        .unwrap_or("-");
+    let flow_name = flows
+        .get(form.flow_index)
+        .map(|flow| flow.name.as_str())
+        .unwrap_or("-");
+
+    let category_raw = form.category.trim().trim_start_matches('#');
+    let category = if category_raw.is_empty() {
+        "-".to_string()
+    } else {
+        format!("#{category_raw}")
+    };
+    let note = if form.note.trim().is_empty() {
+        "-".to_string()
+    } else {
+        form.note.trim().to_string()
+    };
+    let occurred_at = if form.occurred_at.trim().is_empty() {
+        "-".to_string()
+    } else {
+        form.occurred_at.trim().to_string()
+    };
+
+    let title = match form.kind {
+        TransactionKind::Income => "New Income",
+        TransactionKind::Expense => "New Expense",
+        TransactionKind::Refund => "New Refund",
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => "New Transaction",
+    };
+
+    let popup = centered_rect(70, 70, area);
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(9), Constraint::Min(0)])
+        .split(popup);
+
+    let mut lines = vec![
+        render_transaction_field(
+            "Amount",
+            form.amount.as_str(),
+            form.focus == TransactionFormField::Amount,
+            theme,
+        ),
+        render_transaction_field(
+            "Wallet",
+            wallet_name,
+            form.focus == TransactionFormField::Wallet,
+            theme,
+        ),
+        render_transaction_field(
+            "Flow",
+            flow_name,
+            form.focus == TransactionFormField::Flow,
+            theme,
+        ),
+        render_transaction_field(
+            "Category",
+            category.as_str(),
+            form.focus == TransactionFormField::Category,
+            theme,
+        ),
+        render_transaction_field(
+            "Note",
+            note.as_str(),
+            form.focus == TransactionFormField::Note,
+            theme,
+        ),
+        render_transaction_field(
+            "When",
+            occurred_at.as_str(),
+            form.focus == TransactionFormField::OccurredAt,
+            theme,
+        ),
+        Line::from(Span::styled(
+            "Tab: next • ↑/↓: change • Enter: save • Esc: cancel",
+            Style::default().fg(theme.dim),
+        )),
+    ];
+
+    if let Some(err) = form.error.as_ref() {
+        lines.push(Line::from(Span::styled(
+            err.as_str(),
+            Style::default().fg(theme.error),
+        )));
+    }
+
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.accent));
+    frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
+
+    let bottom_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(5)])
+        .split(layout[1]);
+
+    let list_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(bottom_layout[0]);
+
+    render_picker_list(
+        frame,
+        list_layout[0],
+        "Wallets",
+        wallets
+            .iter()
+            .map(|wallet| wallet.name.as_str())
+            .collect::<Vec<_>>(),
+        form.wallet_index,
+        form.focus == TransactionFormField::Wallet,
+        theme,
+    );
+    render_picker_list(
+        frame,
+        list_layout[1],
+        "Flows",
+        flows
+            .iter()
+            .map(|flow| flow.name.as_str())
+            .collect::<Vec<_>>(),
+        form.flow_index,
+        form.focus == TransactionFormField::Flow,
+        theme,
+    );
+
+    render_category_list(frame, bottom_layout[1], state, theme);
+}
+
+fn render_picker_list(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    title: &str,
+    items: Vec<&str>,
+    selected: usize,
+    focused: bool,
+    theme: &Theme,
+) {
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border));
+    if items.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Line::from("Nessun elemento."))
+                .alignment(ratatui::layout::Alignment::Center)
+                .block(block),
+            area,
+        );
+        return;
+    }
+
+    let items = items
+        .into_iter()
+        .map(|name| ListItem::new(Line::from(name.to_string())))
+        .collect::<Vec<_>>();
+    let mut list_state = ListState::default();
+    list_state.select(Some(selected.min(items.len() - 1)));
+
+    let highlight_style = if focused {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(highlight_style)
+        .highlight_symbol("» ");
+    frame.render_stateful_widget(list, area, &mut list_state);
+}
+
+fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let block = Block::default()
+        .title("Categorie recenti")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border));
+
+    if state.transactions.recent_categories.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Line::from("Nessuna categoria recente."))
+                .alignment(ratatui::layout::Alignment::Center)
+                .block(block),
+            area,
+        );
+        return;
+    }
+
+    let items = state
+        .transactions
+        .recent_categories
+        .iter()
+        .map(|category| ListItem::new(Line::from(format!("#{category}"))))
+        .collect::<Vec<_>>();
+
+    let mut list_state = ListState::default();
+    if let Some(idx) = state.transactions.form.category_index {
+        list_state.select(Some(idx.min(items.len() - 1)));
+    }
+
+    let highlight_style = if state.transactions.form.focus == TransactionFormField::Category {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(highlight_style)
+        .highlight_symbol("» ");
+    frame.render_stateful_widget(list, area, &mut list_state);
+}
+
+fn render_transaction_field(
+    label: &str,
+    value: &str,
+    focused: bool,
+    theme: &Theme,
+) -> Line<'static> {
     let label_style = if focused {
         Style::default()
             .fg(theme.accent)
