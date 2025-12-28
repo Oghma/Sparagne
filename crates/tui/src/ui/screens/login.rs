@@ -1,8 +1,8 @@
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
-    text::{Line, Span},
+    style::Style,
+    text::Span,
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
 };
 
@@ -37,9 +37,9 @@ fn centered_box(width: u16, height: u16, area: Rect) -> Rect {
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
 
-    // Centered login box - minimal size
-    let box_width = 40;
-    let box_height = 8;
+    // Centered login box - compact
+    let box_width = 32;
+    let box_height = 6;
     let card_area = centered_box(box_width, box_height, area);
 
     // Clear the area behind the form
@@ -54,58 +54,28 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let inner = block.inner(card_area);
     frame.render_widget(block, card_area);
 
-    // Layout: username, password, hint
+    // Layout: just two input rows with spacer
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1), // Username
             Constraint::Length(1), // Spacer
             Constraint::Length(1), // Password
-            Constraint::Length(1), // Spacer
-            Constraint::Length(1), // Hint
         ])
+        .margin(1)
         .split(inner);
 
     let login = &state.login;
 
-    // Username field
+    // Username field (no label)
     let username_focused = login.focus == LoginField::Username;
-    render_field(
-        frame,
-        rows[0],
-        "Username",
-        &login.username,
-        false,
-        username_focused,
-        &theme,
-    );
+    render_input(frame, rows[0], &login.username, false, username_focused, &theme);
 
-    // Password field
+    // Password field (no label)
     let password_focused = login.focus == LoginField::Password;
-    let password_display = mask_password(&login.password);
-    render_field(
-        frame,
-        rows[2],
-        "Password",
-        &password_display,
-        true,
-        password_focused,
-        &theme,
-    );
+    render_input(frame, rows[2], &login.password, true, password_focused, &theme);
 
-    // Hint line
-    let hint = Line::from(vec![
-        Span::styled("Enter", Style::default().fg(theme.accent)),
-        Span::styled(" to login  ", Style::default().fg(theme.dim)),
-        Span::styled("Tab", Style::default().fg(theme.accent)),
-        Span::styled(" to switch", Style::default().fg(theme.dim)),
-    ]);
-    frame.render_widget(
-        Paragraph::new(hint).alignment(Alignment::Center),
-        rows[4],
-    );
-
-    // Error message below the box
+    // Error message below the box (only shown when there's an error)
     if let Some(message) = &login.message {
         let error_area = Rect {
             x: card_area.x,
@@ -124,41 +94,30 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     }
 }
 
-fn render_field(
+/// Renders a simple input field - just value and cursor, no labels
+fn render_input(
     frame: &mut Frame<'_>,
     area: Rect,
-    label: &str,
     value: &str,
     is_password: bool,
     focused: bool,
     theme: &Theme,
 ) {
-    let label_style = Style::default().fg(theme.dim);
-    let value_style = if focused {
-        Style::default()
-            .fg(theme.text)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text_muted)
-    };
-
     let cursor = if focused { "│" } else { "" };
 
-    // Show placeholder for empty password field
-    let display_value = if is_password && value.is_empty() && !focused {
-        "••••••••".to_string()
-    } else if value.is_empty() && !focused {
-        "".to_string()
+    let display = if is_password {
+        format!("{}{}", mask_password(value), cursor)
     } else {
         format!("{value}{cursor}")
     };
 
-    let line = Line::from(vec![
-        Span::styled(format!("{label}: "), label_style),
-        Span::styled(display_value, value_style),
-    ]);
+    let style = if focused {
+        Style::default().fg(theme.accent) // teal when focused
+    } else {
+        Style::default().fg(theme.text_muted)
+    };
 
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(Paragraph::new(Span::styled(display, style)), area);
 }
 
 /// Masks password with bullets, one per character
