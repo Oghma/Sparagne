@@ -29,22 +29,20 @@ pub fn render(frame: &mut Frame<'_>, state: &AppState) {
 fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
 
-    // Main layout: info bar, tabs, content, bottom bar
+    // Main layout: header, content, bottom bar
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1), // Info bar
-            Constraint::Length(2), // Tab bar (label + underline)
+            Constraint::Length(1), // Header (tabs + status)
             Constraint::Min(0),    // Main content
             Constraint::Length(1), // Bottom bar
         ])
         .split(area);
 
-    render_info_bar(frame, layout[0], state, &theme);
-    components::tabs::render_tabs(frame, layout[1], state.section, &theme);
+    render_header(frame, layout[0], state, &theme);
 
-    // Content area (no top border needed, tabs provide visual separation)
-    let content_inner = layout[2];
+    // Content area
+    let content_inner = layout[1];
 
     match state.section {
         crate::app::Section::Home => screens::home::render(frame, content_inner, state),
@@ -57,22 +55,68 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         crate::app::Section::Stats => screens::stats::render(frame, content_inner, state),
     }
 
-    render_bottom_bar(frame, layout[3], state, &theme);
+    render_bottom_bar(frame, layout[2], state, &theme);
     components::command_palette::render(frame, area, state);
     components::help_overlay::render(frame, area, state);
     components::toast::render(frame, area, state.toast.as_ref());
 }
 
-fn render_info_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .split(area);
+
+    components::tabs::render_tabs(frame, layout[0], state.section, theme);
+    render_status_bar(frame, layout[1], state, theme);
+}
+
+fn render_status_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let vault = state
         .vault
         .as_ref()
         .and_then(|v| v.name.as_deref())
         .unwrap_or("Main");
     let user = state.login.username.as_str();
+    let line = Line::from(vec![
+        Span::styled("Vault", Style::default().fg(theme.text_muted)),
+        Span::raw(format!(": {vault} | ")),
+        Span::styled("User", Style::default().fg(theme.text_muted)),
+        Span::raw(format!(": {user}")),
+    ]);
+
+    frame.render_widget(Paragraph::new(line).alignment(ratatui::layout::Alignment::Right), area);
+}
+
+fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+        .split(area);
+
+    // Left: shortcuts + context hints
+    let mut parts = components::tabs::tab_shortcuts(theme);
+
+    parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
+    parts.push(Span::styled("Ctrl+P", Style::default().fg(theme.accent)));
+    parts.push(Span::raw(" cmd"));
+
+    let context_hints = get_context_hints(state, theme);
+    if !context_hints.is_empty() {
+        parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
+        parts.extend(context_hints);
+    }
+
+    parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
+    parts.push(Span::styled("q", Style::default().fg(theme.accent)));
+    parts.push(Span::raw(" quit"));
+
+    frame.render_widget(Paragraph::new(Line::from(parts)), layout[0]);
+
+    // Right: refresh status
     let refresh = state
         .last_refresh
-        .map(|dt| dt.format("%H:%M:%S").to_string())
+        .map(|dt| dt.format("%H:%M").to_string())
         .unwrap_or_else(|| "-".to_string());
     let status = if state.connection.ok { "OK" } else { "ERR" };
     let status_style = if state.connection.ok {
@@ -80,45 +124,15 @@ fn render_info_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
     } else {
         Style::default().fg(theme.error)
     };
-    let scope = scope_label(state);
-
-    let line = Line::from(vec![
-        Span::styled("Vault", Style::default().fg(theme.text_muted)),
-        Span::raw(format!(": {vault}  ")),
-        Span::styled("User", Style::default().fg(theme.text_muted)),
-        Span::raw(format!(": {user}  ")),
-        Span::styled("Scope", Style::default().fg(theme.text_muted)),
-        Span::raw(format!(": {scope}  ")),
-        Span::styled("Refresh", Style::default().fg(theme.text_muted)),
-        Span::raw(format!(": {refresh}  ")),
+    let right_line = Line::from(vec![
+        Span::styled("⟳", Style::default().fg(theme.text_muted)),
+        Span::raw(format!(" {refresh} ")),
         Span::styled(status, status_style),
     ]);
-
-    frame.render_widget(Paragraph::new(line), area);
-}
-
-fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    // Global shortcuts (always shown, compact)
-    let mut parts = components::tabs::tab_shortcuts(theme);
-
-    parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
-    parts.push(Span::styled("Ctrl+P", Style::default().fg(theme.accent)));
-    parts.push(Span::raw(" cmd"));
-
-    // Context-specific hints based on section and mode
-    let context_hints = get_context_hints(state, theme);
-    if !context_hints.is_empty() {
-        parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
-        parts.extend(context_hints);
-    }
-
-    // Quit hint at the end
-    parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
-    parts.push(Span::styled("q", Style::default().fg(theme.accent)));
-    parts.push(Span::raw(" quit"));
-
-    let bar = Paragraph::new(Line::from(parts));
-    frame.render_widget(bar, area);
+    frame.render_widget(
+        Paragraph::new(right_line).alignment(ratatui::layout::Alignment::Right),
+        layout[1],
+    );
 }
 
 /// Returns context-specific keyboard hints based on current section and mode.
@@ -275,32 +289,4 @@ fn get_vault_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
             Span::raw(" cancel"),
         ],
     }
-}
-
-fn scope_label(state: &AppState) -> String {
-    if let Some(flow_id) = state.transactions.scope_flow_id {
-        return state
-            .snapshot
-            .as_ref()
-            .and_then(|snap| {
-                snap.flows
-                    .iter()
-                    .find(|flow| flow.id == flow_id)
-                    .map(|flow| format!("Flow: {}", flow.name))
-            })
-            .unwrap_or_else(|| "Flow: ?".to_string());
-    }
-    if let Some(wallet_id) = state.transactions.scope_wallet_id {
-        return state
-            .snapshot
-            .as_ref()
-            .and_then(|snap| {
-                snap.wallets
-                    .iter()
-                    .find(|wallet| wallet.id == wallet_id)
-                    .map(|wallet| format!("Wallet: {}", wallet.name))
-            })
-            .unwrap_or_else(|| "Wallet: ?".to_string());
-    }
-    "All".to_string()
 }
