@@ -69,6 +69,63 @@ impl Engine {
             .await
     }
 
+    async fn create_flow_wallet_transaction_cmd(
+        &self,
+        vault_id: String,
+        amount_minor: i64,
+        flow_id: Option<Uuid>,
+        wallet_id: Option<Uuid>,
+        meta: TxMeta,
+        user_id: String,
+        kind: TransactionKind,
+    ) -> ResultEngine<Uuid> {
+        with_tx!(self, |db_tx| {
+            let id = self
+                .create_flow_wallet_transaction(
+                    &db_tx,
+                    &vault_id,
+                    &user_id,
+                    flow_id,
+                    wallet_id,
+                    amount_minor,
+                    kind,
+                    meta,
+                )
+                .await?;
+            Ok(id)
+        })
+    }
+
+    async fn create_transfer_transaction(
+        &self,
+        db_tx: &DatabaseTransaction,
+        vault_id: &str,
+        user_id: &str,
+        amount_minor: i64,
+        occurred_at: DateTime<Utc>,
+        note: Option<String>,
+        idempotency_key: Option<String>,
+        kind: TransactionKind,
+        currency: Currency,
+        build_legs: impl FnOnce(Uuid) -> Vec<Leg>,
+    ) -> ResultEngine<Uuid> {
+        let tx = build_transaction(
+            vault_id,
+            kind,
+            occurred_at,
+            amount_minor,
+            currency,
+            None,
+            note,
+            user_id,
+            idempotency_key,
+            None,
+        )?;
+        let legs = build_legs(tx.id);
+        self.create_transaction_with_legs(db_tx, vault_id, currency, &tx, &legs)
+            .await
+    }
+
     async fn apply_wallet_delta(
         &self,
         db_tx: &DatabaseTransaction,
@@ -337,21 +394,16 @@ impl Engine {
             meta,
             user_id,
         } = cmd;
-        with_tx!(self, |db_tx| {
-            let id = self
-                .create_flow_wallet_transaction(
-                    &db_tx,
-                    &vault_id,
-                    &user_id,
-                    flow_id,
-                    wallet_id,
-                    amount_minor,
-                    TransactionKind::Income,
-                    meta,
-                )
-                .await?;
-            Ok(id)
-        })
+        self.create_flow_wallet_transaction_cmd(
+            vault_id,
+            amount_minor,
+            flow_id,
+            wallet_id,
+            meta,
+            user_id,
+            TransactionKind::Income,
+        )
+        .await
     }
 
     /// Create an expense transaction (decreases both wallet and flow).
@@ -364,21 +416,16 @@ impl Engine {
             meta,
             user_id,
         } = cmd;
-        with_tx!(self, |db_tx| {
-            let id = self
-                .create_flow_wallet_transaction(
-                    &db_tx,
-                    &vault_id,
-                    &user_id,
-                    flow_id,
-                    wallet_id,
-                    amount_minor,
-                    TransactionKind::Expense,
-                    meta,
-                )
-                .await?;
-            Ok(id)
-        })
+        self.create_flow_wallet_transaction_cmd(
+            vault_id,
+            amount_minor,
+            flow_id,
+            wallet_id,
+            meta,
+            user_id,
+            TransactionKind::Expense,
+        )
+        .await
     }
 
     /// Create a refund transaction (increases both wallet and flow).
@@ -394,21 +441,16 @@ impl Engine {
             meta,
             user_id,
         } = cmd;
-        with_tx!(self, |db_tx| {
-            let id = self
-                .create_flow_wallet_transaction(
-                    &db_tx,
-                    &vault_id,
-                    &user_id,
-                    flow_id,
-                    wallet_id,
-                    amount_minor,
-                    TransactionKind::Refund,
-                    meta,
-                )
-                .await?;
-            Ok(id)
-        })
+        self.create_flow_wallet_transaction_cmd(
+            vault_id,
+            amount_minor,
+            flow_id,
+            wallet_id,
+            meta,
+            user_id,
+            TransactionKind::Refund,
+        )
+        .await
     }
 
     pub async fn transfer_wallet(&self, cmd: TransferWalletCmd) -> ResultEngine<Uuid> {
@@ -439,28 +481,27 @@ impl Engine {
             self.resolve_wallet_id(&db_tx, &vault_id, Some(to_wallet_id))
                 .await?;
 
-            let tx = build_transaction(
-                &vault_id,
-                TransactionKind::TransferWallet,
-                occurred_at,
-                amount_minor,
-                currency,
-                None,
-                note,
-                &user_id,
-                idempotency_key,
-                None,
-            )?;
-            let legs = transfer_wallet_legs(
-                tx.id,
-                from_wallet_id,
-                to_wallet_id,
-                amount_minor,
-                currency,
-            );
-
             let id = self
-                .create_transaction_with_legs(&db_tx, &vault_id, currency, &tx, &legs)
+                .create_transfer_transaction(
+                    &db_tx,
+                    &vault_id,
+                    &user_id,
+                    amount_minor,
+                    occurred_at,
+                    note,
+                    idempotency_key,
+                    TransactionKind::TransferWallet,
+                    currency,
+                    |tx_id| {
+                        transfer_wallet_legs(
+                            tx_id,
+                            from_wallet_id,
+                            to_wallet_id,
+                            amount_minor,
+                            currency,
+                        )
+                    },
+                )
                 .await?;
             Ok(id)
         })
@@ -507,22 +548,27 @@ impl Engine {
                     .await?;
             }
 
-            let tx = build_transaction(
-                &vault_id,
-                TransactionKind::TransferFlow,
-                occurred_at,
-                amount_minor,
-                currency,
-                None,
-                note,
-                &user_id,
-                idempotency_key,
-                None,
-            )?;
-            let legs = transfer_flow_legs(tx.id, from_flow_id, to_flow_id, amount_minor, currency);
-
             let id = self
-                .create_transaction_with_legs(&db_tx, &vault_id, currency, &tx, &legs)
+                .create_transfer_transaction(
+                    &db_tx,
+                    &vault_id,
+                    &user_id,
+                    amount_minor,
+                    occurred_at,
+                    note,
+                    idempotency_key,
+                    TransactionKind::TransferFlow,
+                    currency,
+                    |tx_id| {
+                        transfer_flow_legs(
+                            tx_id,
+                            from_flow_id,
+                            to_flow_id,
+                            amount_minor,
+                            currency,
+                        )
+                    },
+                )
                 .await?;
             Ok(id)
         })
