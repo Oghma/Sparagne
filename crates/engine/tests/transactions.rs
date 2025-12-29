@@ -64,6 +64,14 @@ fn default_wallet_id(vault: &engine::Vault) -> uuid::Uuid {
         .expect("default wallet Cash missing")
 }
 
+fn unallocated_flow_id(vault: &engine::Vault) -> uuid::Uuid {
+    *vault
+        .cash_flow
+        .iter()
+        .find_map(|(id, flow)| flow.is_unallocated().then_some(id))
+        .expect("unallocated flow missing")
+}
+
 #[tokio::test]
 async fn new_vault_creates_unallocated_and_default_wallet() {
     let (engine, _db) = engine_with_db().await;
@@ -221,12 +229,13 @@ async fn transfer_wallet_does_not_touch_flows() {
         .await
         .unwrap();
 
-    let unallocated_flow_id = engine
-        .vault_snapshot(Some(&vault_id), None, "alice")
-        .await
-        .unwrap()
-        .unallocated_flow_id()
-        .unwrap();
+    let unallocated_flow_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        unallocated_flow_id(&vault)
+    };
 
     engine
         .income(
@@ -286,12 +295,13 @@ async fn income_capped_counts_transfers_in() {
         default_wallet_id(&vault)
     };
 
-    let from_flow = engine
-        .vault_snapshot(Some(&vault_id), None, "alice")
-        .await
-        .unwrap()
-        .unallocated_flow_id()
-        .unwrap();
+    let from_flow = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        unallocated_flow_id(&vault)
+    };
     let capped_flow = engine
         .new_cash_flow(&vault_id, "Capped", 0, Some(500), Some(true), "alice")
         .await
@@ -640,12 +650,13 @@ async fn update_transfer_flow_can_change_endpoints_and_amount() {
         .await
         .unwrap();
 
-    let unallocated = engine
-        .vault_snapshot(Some(&vault_id), None, "alice")
-        .await
-        .unwrap()
-        .unallocated_flow_id()
-        .unwrap();
+    let unallocated = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        unallocated_flow_id(&vault)
+    };
     engine
         .transfer_flow(
             engine::TransferFlowCmd::new(&vault_id, "alice", 60, unallocated, f1, Utc::now())
@@ -696,12 +707,13 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
             .unwrap();
         default_wallet_id(&vault)
     };
-    let unallocated_flow = engine
-        .vault_snapshot(Some(&vault_id), None, "alice")
-        .await
-        .unwrap()
-        .unallocated_flow_id()
-        .unwrap();
+    let unallocated_flow = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        unallocated_flow_id(&vault)
+    };
 
     // Flow allocation (no wallets involved).
     let capped_flow = engine
@@ -752,27 +764,36 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
         .unwrap();
 
     // Corrupt denormalized balances directly in DB.
+    let values: Vec<sea_orm::Value> =
+        vec![999i64.into(), wallet_cash.to_string().into()];
     db.execute(Statement::from_sql_and_values(
         backend,
         "UPDATE wallets SET balance = ? WHERE id = ?;",
-        vec![999i64.into(), wallet_cash.to_string().into()],
+        values,
     ))
     .await
     .unwrap();
     for flow_id in [unallocated_flow, capped_flow, vacanze_flow] {
         if flow_id == capped_flow {
+            let values: Vec<sea_orm::Value> = vec![
+                999i64.into(),
+                0i64.into(),
+                flow_id.to_string().into(),
+            ];
             db.execute(Statement::from_sql_and_values(
                 backend,
                 "UPDATE cash_flows SET balance = ?, income_balance = ? WHERE id = ?;",
-                vec![999i64.into(), 0i64.into(), flow_id.to_string().into()],
+                values,
             ))
             .await
             .unwrap();
         } else {
+            let values: Vec<sea_orm::Value> =
+                vec![999i64.into(), flow_id.to_string().into()];
             db.execute(Statement::from_sql_and_values(
                 backend,
                 "UPDATE cash_flows SET balance = ?, income_balance = NULL WHERE id = ?;",
-                vec![999i64.into(), flow_id.to_string().into()],
+                values,
             ))
             .await
             .unwrap();
@@ -1164,12 +1185,13 @@ async fn names_are_trimmed_and_unique_case_insensitive() {
     );
 
     // Degenerate FlowMode in DB is a hard error.
-    let unallocated_id = engine
-        .vault_snapshot(Some(&vault_id), None, "alice")
-        .await
-        .unwrap()
-        .unallocated_flow_id()
-        .unwrap();
+    let unallocated_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        unallocated_flow_id(&vault)
+    };
 
     db.execute(Statement::from_sql_and_values(
         backend,
@@ -1663,12 +1685,13 @@ async fn vault_owner_can_manage_flow_members_and_unallocated_is_not_shareable() 
     assert!(!members.iter().any(|(u, _)| u == "bob"));
 
     // Unallocated flow cannot be shared.
-    let unallocated = engine
-        .vault_snapshot(Some(&vault_id), None, "alice")
-        .await
-        .unwrap()
-        .unallocated_flow_id()
-        .unwrap();
+    let unallocated = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        unallocated_flow_id(&vault)
+    };
     let err = engine
         .upsert_flow_member(&vault_id, unallocated, "bob", "viewer", "alice")
         .await
