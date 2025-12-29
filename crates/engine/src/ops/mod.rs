@@ -74,6 +74,19 @@ fn normalize_optional_text(value: Option<&str>) -> Option<String> {
         .map(ToString::to_string)
 }
 
+fn flow_wallet_signed_amount(
+    kind: TransactionKind,
+    amount_minor: i64,
+) -> ResultEngine<i64> {
+    match kind {
+        TransactionKind::Income | TransactionKind::Refund => Ok(amount_minor),
+        TransactionKind::Expense => Ok(-amount_minor),
+        _ => Err(EngineError::InvalidAmount(
+            "invalid transaction: unexpected kind".to_string(),
+        )),
+    }
+}
+
 fn build_transaction(
     vault_id: &str,
     kind: TransactionKind,

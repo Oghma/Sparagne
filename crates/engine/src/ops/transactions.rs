@@ -17,8 +17,8 @@ use crate::{
 use crate::util::validate_flow_mode_fields;
 
 use super::{
-    build_transaction, flow_wallet_legs, normalize_optional_text, transfer_flow_legs,
-    transfer_wallet_legs, with_tx, Engine,
+    build_transaction, flow_wallet_legs, flow_wallet_signed_amount, normalize_optional_text,
+    transfer_flow_legs, transfer_wallet_legs, with_tx, Engine,
 };
 
 /// Filters for listing transactions.
@@ -286,15 +286,7 @@ fn validate_flow_wallet_legs(
             "invalid transaction: expected 2 legs".to_string(),
         ));
     }
-    let expected = match kind {
-        TransactionKind::Income | TransactionKind::Refund => amount_minor,
-        TransactionKind::Expense => -amount_minor,
-        _ => {
-            return Err(EngineError::InvalidAmount(
-                "invalid transaction: unexpected kind".to_string(),
-            ))
-        }
-    };
+    let expected = flow_wallet_signed_amount(kind, amount_minor)?;
     let (mut wallet_legs, mut flow_legs) = (0, 0);
     for leg in legs {
         match leg.target {
@@ -440,6 +432,13 @@ impl TransactionsCursor {
     }
 }
 
+fn normalize_tx_meta(meta: &TxMeta) -> (Option<String>, Option<String>) {
+    (
+        normalize_optional_text(meta.category.as_deref()),
+        normalize_optional_text(meta.note.as_deref()),
+    )
+}
+
 fn apply_optional_text_patch(existing: Option<String>, patch: Option<&str>) -> Option<String> {
     match patch {
         None => existing,
@@ -465,16 +464,15 @@ impl Engine {
         amount_minor: i64,
         kind: TransactionKind,
         meta: TxMeta,
-        leg_amount_minor: i64,
     ) -> ResultEngine<Uuid> {
-        let category = normalize_optional_text(meta.category.as_deref());
-        let note = normalize_optional_text(meta.note.as_deref());
+        let (category, note) = normalize_tx_meta(&meta);
         let vault_model = self
             .require_vault_by_id_write(db_tx, vault_id, user_id)
             .await?;
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
         let resolved_flow_id = self.resolve_flow_id(db_tx, vault_id, flow_id).await?;
         let resolved_wallet_id = self.resolve_wallet_id(db_tx, vault_id, wallet_id).await?;
+        let leg_amount_minor = flow_wallet_signed_amount(kind, amount_minor)?;
 
         let tx = build_transaction(
             vault_id,
@@ -816,7 +814,6 @@ impl Engine {
                     amount_minor,
                     TransactionKind::Income,
                     meta,
-                    amount_minor,
                 )
                 .await?;
             Ok(id)
@@ -844,7 +841,6 @@ impl Engine {
                     amount_minor,
                     TransactionKind::Expense,
                     meta,
-                    -amount_minor,
                 )
                 .await?;
             Ok(id)
@@ -875,7 +871,6 @@ impl Engine {
                     amount_minor,
                     TransactionKind::Refund,
                     meta,
-                    amount_minor,
                 )
                 .await?;
             Ok(id)
@@ -1146,12 +1141,7 @@ impl Engine {
                     self.require_flow_in_vault(&db_tx, vault_id, new_flow_id)
                         .await?;
 
-                    let sign = match kind {
-                        TransactionKind::Income | TransactionKind::Refund => 1,
-                        TransactionKind::Expense => -1,
-                        _ => unreachable!(),
-                    };
-                    let new_signed_amount = sign * new_amount_minor;
+                    let new_signed_amount = flow_wallet_signed_amount(kind, new_amount_minor)?;
 
                     apply_flow_wallet_leg_updates(
                         &leg_pairs,

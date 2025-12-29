@@ -7,7 +7,10 @@ use crate::{
     wallets, Currency, EngineError, ResultEngine, TransactionKind, Wallet,
 };
 
-use super::{build_transaction, flow_wallet_legs, normalize_required_name, with_tx, Engine};
+use super::{
+    build_transaction, flow_wallet_legs, flow_wallet_signed_amount, normalize_required_name,
+    with_tx, Engine,
+};
 
 impl Engine {
     /// Return a wallet snapshot from DB.
@@ -76,12 +79,13 @@ impl Engine {
             wallet_model.insert(&db_tx).await?;
 
             if balance_minor != 0 {
-                let (kind, signed_amount) = if balance_minor > 0 {
-                    (TransactionKind::Income, balance_minor)
-                } else {
-                    (TransactionKind::Expense, balance_minor)
-                };
                 let amount_minor = balance_minor.abs();
+                let kind = if balance_minor > 0 {
+                    TransactionKind::Income
+                } else {
+                    TransactionKind::Expense
+                };
+                let signed_amount = flow_wallet_signed_amount(kind, amount_minor)?;
 
             let tx = build_transaction(
                 vault_id,
