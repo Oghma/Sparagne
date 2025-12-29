@@ -12,11 +12,14 @@ use sea_orm::{
 use crate::{
     cash_flows, legs, transactions, vault, vault_memberships, wallets, Currency, EngineError,
     ExpenseCmd, IncomeCmd, Leg, LegTarget, RefundCmd, ResultEngine, Transaction, TransactionKind,
-    TransactionNew, TransferFlowCmd, TransferWalletCmd, TxMeta, UpdateTransactionCmd,
+    TransferFlowCmd, TransferWalletCmd, TxMeta, UpdateTransactionCmd,
 };
 use crate::util::validate_flow_mode_fields;
 
-use super::{normalize_optional_text, with_tx, Engine};
+use super::{
+    build_transaction, flow_wallet_legs, normalize_optional_text, transfer_flow_legs,
+    transfer_wallet_legs, with_tx, Engine,
+};
 
 /// Filters for listing transactions.
 ///
@@ -473,36 +476,25 @@ impl Engine {
         let resolved_flow_id = self.resolve_flow_id(db_tx, vault_id, flow_id).await?;
         let resolved_wallet_id = self.resolve_wallet_id(db_tx, vault_id, wallet_id).await?;
 
-        let tx = Transaction::new(TransactionNew {
-            vault_id: vault_id.to_string(),
+        let tx = build_transaction(
+            vault_id,
             kind,
-            occurred_at: meta.occurred_at,
+            meta.occurred_at,
             amount_minor,
             currency,
             category,
             note,
-            created_by: user_id.to_string(),
-            idempotency_key: meta.idempotency_key,
-            refunded_transaction_id: None,
-        })?;
-        let legs = vec![
-            Leg::new(
-                tx.id,
-                LegTarget::Wallet {
-                    wallet_id: resolved_wallet_id,
-                },
-                leg_amount_minor,
-                currency,
-            ),
-            Leg::new(
-                tx.id,
-                LegTarget::Flow {
-                    flow_id: resolved_flow_id,
-                },
-                leg_amount_minor,
-                currency,
-            ),
-        ];
+            user_id,
+            meta.idempotency_key,
+            None,
+        )?;
+        let legs = flow_wallet_legs(
+            tx.id,
+            resolved_wallet_id,
+            resolved_flow_id,
+            leg_amount_minor,
+            currency,
+        );
 
         self.create_transaction_with_legs(db_tx, vault_id, currency, &tx, &legs)
             .await
@@ -918,36 +910,25 @@ impl Engine {
             self.resolve_wallet_id(&db_tx, &vault_id, Some(to_wallet_id))
                 .await?;
 
-            let tx = Transaction::new(TransactionNew {
-                vault_id: vault_id.clone(),
-                kind: TransactionKind::TransferWallet,
+            let tx = build_transaction(
+                &vault_id,
+                TransactionKind::TransferWallet,
                 occurred_at,
                 amount_minor,
                 currency,
-                category: None,
+                None,
                 note,
-                created_by: user_id.clone(),
+                &user_id,
                 idempotency_key,
-                refunded_transaction_id: None,
-            })?;
-            let legs = vec![
-                Leg::new(
-                    tx.id,
-                    LegTarget::Wallet {
-                        wallet_id: from_wallet_id,
-                    },
-                    -amount_minor,
-                    currency,
-                ),
-                Leg::new(
-                    tx.id,
-                    LegTarget::Wallet {
-                        wallet_id: to_wallet_id,
-                    },
-                    amount_minor,
-                    currency,
-                ),
-            ];
+                None,
+            )?;
+            let legs = transfer_wallet_legs(
+                tx.id,
+                from_wallet_id,
+                to_wallet_id,
+                amount_minor,
+                currency,
+            );
 
             let id = self
                 .create_transaction_with_legs(&db_tx, &vault_id, currency, &tx, &legs)
@@ -997,34 +978,19 @@ impl Engine {
                     .await?;
             }
 
-            let tx = Transaction::new(TransactionNew {
-                vault_id: vault_id.clone(),
-                kind: TransactionKind::TransferFlow,
+            let tx = build_transaction(
+                &vault_id,
+                TransactionKind::TransferFlow,
                 occurred_at,
                 amount_minor,
                 currency,
-                category: None,
+                None,
                 note,
-                created_by: user_id.clone(),
+                &user_id,
                 idempotency_key,
-                refunded_transaction_id: None,
-            })?;
-            let legs = vec![
-                Leg::new(
-                    tx.id,
-                    LegTarget::Flow {
-                        flow_id: from_flow_id,
-                    },
-                    -amount_minor,
-                    currency,
-                ),
-                Leg::new(
-                    tx.id,
-                    LegTarget::Flow { flow_id: to_flow_id },
-                    amount_minor,
-                    currency,
-                ),
-            ];
+                None,
+            )?;
+            let legs = transfer_flow_legs(tx.id, from_flow_id, to_flow_id, amount_minor, currency);
 
             let id = self
                 .create_transaction_with_legs(&db_tx, &vault_id, currency, &tx, &legs)

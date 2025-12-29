@@ -4,11 +4,10 @@ use uuid::Uuid;
 use sea_orm::{ActiveValue, QueryFilter, TransactionTrait, prelude::*, sea_query::Expr};
 
 use crate::{
-    wallets, Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind,
-    TransactionNew, Wallet,
+    wallets, Currency, EngineError, ResultEngine, TransactionKind, Wallet,
 };
 
-use super::{normalize_required_name, with_tx, Engine};
+use super::{build_transaction, flow_wallet_legs, normalize_required_name, with_tx, Engine};
 
 impl Engine {
     /// Return a wallet snapshot from DB.
@@ -84,36 +83,22 @@ impl Engine {
                 };
                 let amount_minor = balance_minor.abs();
 
-                let tx = Transaction::new(TransactionNew {
-                    vault_id: vault_id.to_string(),
-                    kind,
-                    occurred_at,
-                    amount_minor,
-                    currency,
-                    category: Some("opening".to_string()),
-                    note: Some(format!("opening balance for wallet '{name}'")),
-                    created_by: user_id.to_string(),
-                    idempotency_key: None,
-                    refunded_transaction_id: None,
-                })?;
+            let tx = build_transaction(
+                vault_id,
+                kind,
+                occurred_at,
+                amount_minor,
+                currency,
+                Some("opening".to_string()),
+                Some(format!("opening balance for wallet '{name}'")),
+                user_id,
+                None,
+                None,
+            )?;
 
-                let unallocated_flow_id = self.unallocated_flow_id(&db_tx, vault_id).await?;
-                let legs = vec![
-                    Leg::new(
-                        tx.id,
-                        LegTarget::Wallet { wallet_id },
-                        signed_amount,
-                        currency,
-                    ),
-                    Leg::new(
-                        tx.id,
-                        LegTarget::Flow {
-                            flow_id: unallocated_flow_id,
-                        },
-                        signed_amount,
-                        currency,
-                    ),
-                ];
+            let unallocated_flow_id = self.unallocated_flow_id(&db_tx, vault_id).await?;
+            let legs =
+                flow_wallet_legs(tx.id, wallet_id, unallocated_flow_id, signed_amount, currency);
                 self.create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
                     .await?;
             }

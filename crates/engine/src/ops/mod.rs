@@ -1,6 +1,11 @@
+use chrono::{DateTime, Utc};
 use sea_orm::DatabaseConnection;
+use uuid::Uuid;
 
-use crate::{EngineError, ResultEngine};
+use crate::{
+    Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind,
+    TransactionNew,
+};
 
 mod access;
 mod balances;
@@ -67,6 +72,107 @@ fn normalize_optional_text(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
+}
+
+fn build_transaction(
+    vault_id: &str,
+    kind: TransactionKind,
+    occurred_at: DateTime<Utc>,
+    amount_minor: i64,
+    currency: Currency,
+    category: Option<String>,
+    note: Option<String>,
+    created_by: &str,
+    idempotency_key: Option<String>,
+    refunded_transaction_id: Option<Uuid>,
+) -> ResultEngine<Transaction> {
+    Transaction::new(TransactionNew {
+        vault_id: vault_id.to_string(),
+        kind,
+        occurred_at,
+        amount_minor,
+        currency,
+        category,
+        note,
+        created_by: created_by.to_string(),
+        idempotency_key,
+        refunded_transaction_id,
+    })
+}
+
+fn flow_wallet_legs(
+    tx_id: Uuid,
+    wallet_id: Uuid,
+    flow_id: Uuid,
+    signed_amount_minor: i64,
+    currency: Currency,
+) -> Vec<Leg> {
+    vec![
+        Leg::new(
+            tx_id,
+            LegTarget::Wallet { wallet_id },
+            signed_amount_minor,
+            currency,
+        ),
+        Leg::new(
+            tx_id,
+            LegTarget::Flow { flow_id },
+            signed_amount_minor,
+            currency,
+        ),
+    ]
+}
+
+fn transfer_wallet_legs(
+    tx_id: Uuid,
+    from_wallet_id: Uuid,
+    to_wallet_id: Uuid,
+    amount_minor: i64,
+    currency: Currency,
+) -> Vec<Leg> {
+    vec![
+        Leg::new(
+            tx_id,
+            LegTarget::Wallet {
+                wallet_id: from_wallet_id,
+            },
+            -amount_minor,
+            currency,
+        ),
+        Leg::new(
+            tx_id,
+            LegTarget::Wallet {
+                wallet_id: to_wallet_id,
+            },
+            amount_minor,
+            currency,
+        ),
+    ]
+}
+
+fn transfer_flow_legs(
+    tx_id: Uuid,
+    from_flow_id: Uuid,
+    to_flow_id: Uuid,
+    amount_minor: i64,
+    currency: Currency,
+) -> Vec<Leg> {
+    vec![
+        Leg::new(
+            tx_id,
+            LegTarget::Flow {
+                flow_id: from_flow_id,
+            },
+            -amount_minor,
+            currency,
+        ),
+        Leg::new(
+            tx_id,
+            LegTarget::Flow { flow_id: to_flow_id },
+            amount_minor,
+            currency,
+        ),
+    ]
 }
 
 /// The builder for `Engine`

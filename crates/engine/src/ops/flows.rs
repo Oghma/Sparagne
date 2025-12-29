@@ -6,12 +6,13 @@ use sea_orm::{
 };
 
 use crate::{
-    cash_flows, vault, CashFlow, Currency, EngineError, Leg, LegTarget, ResultEngine,
-    TransactionKind, TransactionNew,
+    cash_flows, vault, CashFlow, Currency, EngineError, ResultEngine, TransactionKind,
 };
 use crate::util::validate_flow_mode_fields;
 
-use super::{normalize_required_flow_name, with_tx, Engine};
+use super::{
+    build_transaction, normalize_required_flow_name, transfer_flow_legs, with_tx, Engine,
+};
 
 impl Engine {
     /// Return a [`CashFlow`] (snapshot from DB).
@@ -186,34 +187,20 @@ impl Engine {
 
             if balance > 0 {
                 let unallocated_flow_id = self.unallocated_flow_id(&db_tx, vault_id).await?;
-                let tx = crate::Transaction::new(TransactionNew {
-                    vault_id: vault_id.to_string(),
-                    kind: TransactionKind::TransferFlow,
-                    occurred_at,
-                    amount_minor: balance,
-                    currency: vault_currency,
-                    category: None,
-                    note: Some(format!("opening allocation for flow '{name}'")),
-                    created_by: user_id.to_string(),
-                    idempotency_key: None,
-                    refunded_transaction_id: None,
-                })?;
-                let legs = vec![
-                    Leg::new(
-                        tx.id,
-                        LegTarget::Flow {
-                            flow_id: unallocated_flow_id,
-                        },
-                        -balance,
-                        vault_currency,
-                    ),
-                    Leg::new(
-                        tx.id,
-                        LegTarget::Flow { flow_id },
-                        balance,
-                        vault_currency,
-                    ),
-                ];
+            let tx = build_transaction(
+                vault_id,
+                TransactionKind::TransferFlow,
+                occurred_at,
+                balance,
+                vault_currency,
+                None,
+                Some(format!("opening allocation for flow '{name}'")),
+                user_id,
+                None,
+                None,
+            )?;
+            let legs =
+                transfer_flow_legs(tx.id, unallocated_flow_id, flow_id, balance, vault_currency);
                 self.create_transaction_with_legs(&db_tx, vault_id, vault_currency, &tx, &legs)
                     .await?;
             }
