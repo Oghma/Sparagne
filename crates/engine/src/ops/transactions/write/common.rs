@@ -15,8 +15,8 @@ use super::super::helpers::{
     resolve_transfer_targets, validate_flow_wallet_legs, validate_transfer_legs,
 };
 use super::super::super::{
-    build_transaction, flow_wallet_legs, flow_wallet_signed_amount, parse_vault_currency, with_tx,
-    Engine,
+    build_transaction, flow_wallet_legs, flow_wallet_signed_amount, parse_vault_currency,
+    TransactionBuildInput, with_tx, Engine,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -25,39 +25,94 @@ pub(super) enum TransferTargetKind {
     Flow,
 }
 
+pub(super) struct FlowWalletCmd {
+    pub(super) vault_id: String,
+    pub(super) amount_minor: i64,
+    pub(super) flow_id: Option<Uuid>,
+    pub(super) wallet_id: Option<Uuid>,
+    pub(super) meta: TxMeta,
+    pub(super) user_id: String,
+    pub(super) kind: TransactionKind,
+}
+
+struct FlowWalletTxInput<'a> {
+    vault_id: &'a str,
+    user_id: &'a str,
+    flow_id: Option<Uuid>,
+    wallet_id: Option<Uuid>,
+    amount_minor: i64,
+    kind: TransactionKind,
+    meta: &'a TxMeta,
+}
+
+pub(super) struct TransferTransactionInput<'a> {
+    pub(super) vault_id: &'a str,
+    pub(super) user_id: &'a str,
+    pub(super) amount_minor: i64,
+    pub(super) occurred_at: DateTime<Utc>,
+    pub(super) note: Option<String>,
+    pub(super) idempotency_key: Option<String>,
+    pub(super) kind: TransactionKind,
+    pub(super) currency: Currency,
+}
+
+pub(super) struct TransferUpdateInput<'a> {
+    pub(super) db_tx: &'a DatabaseTransaction,
+    pub(super) vault_id: &'a str,
+    pub(super) leg_pairs: &'a [(legs::Model, Leg)],
+    pub(super) from_override: Option<Uuid>,
+    pub(super) to_override: Option<Uuid>,
+    pub(super) kind: TransferTargetKind,
+    pub(super) vault_currency: Currency,
+    pub(super) new_amount_minor: i64,
+}
+
+pub(super) struct TransferUpdateOutput<'a> {
+    pub(super) balance_updates: &'a mut Vec<(LegTarget, i64, i64)>,
+    pub(super) leg_updates: &'a mut Vec<(String, LegTarget, i64)>,
+}
+
+struct FlowChangeInput<'a> {
+    db_tx: &'a DatabaseTransaction,
+    vault_id: &'a str,
+    vault_currency: Currency,
+    flow_previews: &'a mut HashMap<Uuid, crate::CashFlow>,
+    flow_id: Uuid,
+    old_amount_minor: i64,
+    new_amount_minor: i64,
+}
+
 impl Engine {
     async fn create_flow_wallet_transaction(
         &self,
         db_tx: &DatabaseTransaction,
-        vault_id: &str,
-        user_id: &str,
-        flow_id: Option<Uuid>,
-        wallet_id: Option<Uuid>,
-        amount_minor: i64,
-        kind: TransactionKind,
-        meta: TxMeta,
+        input: FlowWalletTxInput<'_>,
     ) -> ResultEngine<Uuid> {
-        let (category, note) = normalize_tx_meta(&meta);
+        let (category, note) = normalize_tx_meta(input.meta);
         let vault_model = self
-            .require_vault_by_id_write(db_tx, vault_id, user_id)
+            .require_vault_by_id_write(db_tx, input.vault_id, input.user_id)
             .await?;
         let currency = parse_vault_currency(vault_model.currency.as_str())?;
-        let resolved_flow_id = self.resolve_flow_id(db_tx, vault_id, flow_id).await?;
-        let resolved_wallet_id = self.resolve_wallet_id(db_tx, vault_id, wallet_id).await?;
-        let leg_amount_minor = flow_wallet_signed_amount(kind, amount_minor)?;
+        let resolved_flow_id = self
+            .resolve_flow_id(db_tx, input.vault_id, input.flow_id)
+            .await?;
+        let resolved_wallet_id = self
+            .resolve_wallet_id(db_tx, input.vault_id, input.wallet_id)
+            .await?;
+        let leg_amount_minor = flow_wallet_signed_amount(input.kind, input.amount_minor)?;
 
-        let tx = build_transaction(
-            vault_id,
-            kind,
-            meta.occurred_at,
-            amount_minor,
+        let tx = build_transaction(TransactionBuildInput {
+            vault_id: input.vault_id,
+            kind: input.kind,
+            occurred_at: input.meta.occurred_at,
+            amount_minor: input.amount_minor,
             currency,
             category,
             note,
-            user_id,
-            meta.idempotency_key,
-            None,
-        )?;
+            created_by: input.user_id,
+            idempotency_key: input.meta.idempotency_key.clone(),
+            refunded_transaction_id: None,
+        })?;
         let legs = flow_wallet_legs(
             tx.id,
             resolved_wallet_id,
@@ -66,32 +121,26 @@ impl Engine {
             currency,
         );
 
-        self.create_transaction_with_legs(db_tx, vault_id, currency, &tx, &legs)
+        self.create_transaction_with_legs(db_tx, input.vault_id, currency, &tx, &legs)
             .await
     }
 
     pub(super) async fn create_flow_wallet_transaction_cmd(
         &self,
-        vault_id: String,
-        amount_minor: i64,
-        flow_id: Option<Uuid>,
-        wallet_id: Option<Uuid>,
-        meta: TxMeta,
-        user_id: String,
-        kind: TransactionKind,
+        cmd: FlowWalletCmd,
     ) -> ResultEngine<Uuid> {
         with_tx!(self, |db_tx| {
+            let input = FlowWalletTxInput {
+                vault_id: &cmd.vault_id,
+                user_id: &cmd.user_id,
+                flow_id: cmd.flow_id,
+                wallet_id: cmd.wallet_id,
+                amount_minor: cmd.amount_minor,
+                kind: cmd.kind,
+                meta: &cmd.meta,
+            };
             let id = self
-                .create_flow_wallet_transaction(
-                    &db_tx,
-                    &vault_id,
-                    &user_id,
-                    flow_id,
-                    wallet_id,
-                    amount_minor,
-                    kind,
-                    meta,
-                )
+                .create_flow_wallet_transaction(&db_tx, input)
                 .await?;
             Ok(id)
         })
@@ -100,47 +149,32 @@ impl Engine {
     pub(super) async fn create_transfer_transaction(
         &self,
         db_tx: &DatabaseTransaction,
-        vault_id: &str,
-        user_id: &str,
-        amount_minor: i64,
-        occurred_at: DateTime<Utc>,
-        note: Option<String>,
-        idempotency_key: Option<String>,
-        kind: TransactionKind,
-        currency: Currency,
+        input: TransferTransactionInput<'_>,
         build_legs: impl FnOnce(Uuid) -> Vec<Leg>,
     ) -> ResultEngine<Uuid> {
-        let tx = build_transaction(
-            vault_id,
-            kind,
-            occurred_at,
-            amount_minor,
-            currency,
-            None,
-            note,
-            user_id,
-            idempotency_key,
-            None,
-        )?;
+        let tx = build_transaction(TransactionBuildInput {
+            vault_id: input.vault_id,
+            kind: input.kind,
+            occurred_at: input.occurred_at,
+            amount_minor: input.amount_minor,
+            currency: input.currency,
+            category: None,
+            note: input.note,
+            created_by: input.user_id,
+            idempotency_key: input.idempotency_key,
+            refunded_transaction_id: None,
+        })?;
         let legs = build_legs(tx.id);
-        self.create_transaction_with_legs(db_tx, vault_id, currency, &tx, &legs)
+        self.create_transaction_with_legs(db_tx, input.vault_id, input.currency, &tx, &legs)
             .await
     }
 
     pub(super) async fn update_transfer_targets(
         &self,
-        db_tx: &DatabaseTransaction,
-        vault_id: &str,
-        leg_pairs: &[(legs::Model, Leg)],
-        from_override: Option<Uuid>,
-        to_override: Option<Uuid>,
-        kind: TransferTargetKind,
-        vault_currency: Currency,
-        new_amount_minor: i64,
-        balance_updates: &mut Vec<(LegTarget, i64, i64)>,
-        leg_updates: &mut Vec<(String, LegTarget, i64)>,
+        input: TransferUpdateInput<'_>,
+        output: TransferUpdateOutput<'_>,
     ) -> ResultEngine<()> {
-        let (kind_label, target_label, diff_error) = match kind {
+        let (kind_label, target_label, diff_error) = match input.kind {
             TransferTargetKind::Wallet => (
                 "transfer_wallet",
                 "wallet",
@@ -153,51 +187,57 @@ impl Engine {
             ),
         };
 
-        let info = parse_transfer_leg_pairs(leg_pairs, kind_label, target_label, |target| match target
-        {
-            LegTarget::Wallet { wallet_id } => match kind {
-                TransferTargetKind::Wallet => Some(*wallet_id),
-                TransferTargetKind::Flow => None,
-            },
-            LegTarget::Flow { flow_id } => match kind {
-                TransferTargetKind::Flow => Some(*flow_id),
-                TransferTargetKind::Wallet => None,
-            },
+        let info = parse_transfer_leg_pairs(input.leg_pairs, kind_label, target_label, |target| {
+            match target {
+                LegTarget::Wallet { wallet_id } => match input.kind {
+                    TransferTargetKind::Wallet => Some(*wallet_id),
+                    TransferTargetKind::Flow => None,
+                },
+                LegTarget::Flow { flow_id } => match input.kind {
+                    TransferTargetKind::Flow => Some(*flow_id),
+                    TransferTargetKind::Wallet => None,
+                },
+            }
         })?;
-        let (new_from, new_to) =
-            resolve_transfer_targets(&info, from_override, to_override, diff_error)?;
+        let (new_from, new_to) = resolve_transfer_targets(
+            &info,
+            input.from_override,
+            input.to_override,
+            diff_error,
+        )?;
 
-        match kind {
+        match input.kind {
             TransferTargetKind::Wallet => {
-                self.require_wallet_in_vault(db_tx, vault_id, new_from)
+                self.require_wallet_in_vault(input.db_tx, input.vault_id, new_from)
                     .await?;
-                self.require_wallet_in_vault(db_tx, vault_id, new_to)
+                self.require_wallet_in_vault(input.db_tx, input.vault_id, new_to)
                     .await?;
             }
             TransferTargetKind::Flow => {
-                self.require_flow_in_vault(db_tx, vault_id, new_from)
+                self.require_flow_in_vault(input.db_tx, input.vault_id, new_from)
                     .await?;
-                self.require_flow_in_vault(db_tx, vault_id, new_to)
+                self.require_flow_in_vault(input.db_tx, input.vault_id, new_to)
                     .await?;
             }
         }
 
-        apply_transfer_leg_updates(
-            leg_pairs,
+        let ctx = super::super::helpers::TransferLegUpdateContext {
             kind_label,
-            vault_currency,
-            info.from_leg_id,
-            info.to_leg_id,
+            vault_currency: input.vault_currency,
+            from_leg_id: info.from_leg_id,
+            to_leg_id: info.to_leg_id,
             new_from,
             new_to,
-            new_amount_minor,
-            |id| match kind {
-                TransferTargetKind::Wallet => LegTarget::Wallet { wallet_id: id },
-                TransferTargetKind::Flow => LegTarget::Flow { flow_id: id },
-            },
-            balance_updates,
-            leg_updates,
-        )?;
+            new_amount_minor: input.new_amount_minor,
+        };
+        let sink = super::super::helpers::TransferLegUpdateSink {
+            balance_updates: output.balance_updates,
+            leg_updates: output.leg_updates,
+        };
+        apply_transfer_leg_updates(input.leg_pairs, ctx, sink, |id| match input.kind {
+            TransferTargetKind::Wallet => LegTarget::Wallet { wallet_id: id },
+            TransferTargetKind::Flow => LegTarget::Flow { flow_id: id },
+        })?;
 
         Ok(())
     }
@@ -226,19 +266,10 @@ impl Engine {
         Ok(())
     }
 
-    async fn apply_flow_change(
-        &self,
-        db_tx: &DatabaseTransaction,
-        vault_id: &str,
-        vault_currency: Currency,
-        flow_previews: &mut HashMap<Uuid, crate::CashFlow>,
-        flow_id: Uuid,
-        old_amount_minor: i64,
-        new_amount_minor: i64,
-    ) -> ResultEngine<()> {
-        let flow_model = cash_flows::Entity::find_by_id(flow_id.to_string())
-            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
-            .one(db_tx)
+    async fn apply_flow_change(&self, input: FlowChangeInput<'_>) -> ResultEngine<()> {
+        let flow_model = cash_flows::Entity::find_by_id(input.flow_id.to_string())
+            .filter(cash_flows::Column::VaultId.eq(input.vault_id.to_string()))
+            .one(input.db_tx)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
         validate_flow_mode_fields(
@@ -247,13 +278,13 @@ impl Engine {
             flow_model.income_balance,
         )?;
         let flow_currency = model_currency(flow_model.currency.as_str())?;
-        ensure_vault_currency(vault_currency, flow_currency)?;
+        ensure_vault_currency(input.vault_currency, flow_currency)?;
         let system_kind = flow_model
             .system_kind
             .as_deref()
             .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-        let entry = flow_previews.entry(flow_id).or_insert_with(|| crate::CashFlow {
-            id: flow_id,
+        let entry = input.flow_previews.entry(input.flow_id).or_insert_with(|| crate::CashFlow {
+            id: input.flow_id,
             name: flow_model.name.clone(),
             system_kind,
             balance: flow_model.balance,
@@ -262,7 +293,7 @@ impl Engine {
             currency: flow_currency,
             archived: flow_model.archived,
         });
-        entry.apply_leg_change(old_amount_minor, new_amount_minor)?;
+        entry.apply_leg_change(input.old_amount_minor, input.new_amount_minor)?;
         Ok(())
     }
 
@@ -342,7 +373,7 @@ impl Engine {
                 .await?;
             if let Some(existing) = existing {
                 return Uuid::parse_str(&existing.id)
-                    .map_err(|_| EngineError::InvalidAmount("invalid transaction id".to_string()));
+                    .map_err(|_| EngineError::InvalidId("invalid transaction id".to_string()));
             }
         }
 
@@ -374,7 +405,7 @@ impl Engine {
                     .await?;
                 if let Some(existing) = existing {
                     return Uuid::parse_str(&existing.id).map_err(|_| {
-                        EngineError::InvalidAmount("invalid transaction id".to_string())
+                        EngineError::InvalidId("invalid transaction id".to_string())
                     });
                 }
             }
@@ -415,15 +446,15 @@ impl Engine {
                     .await?;
                 }
                 LegTarget::Flow { flow_id } => {
-                    self.apply_flow_change(
+                    self.apply_flow_change(FlowChangeInput {
                         db_tx,
                         vault_id,
                         vault_currency,
-                        &mut flow_previews,
+                        flow_previews: &mut flow_previews,
                         flow_id,
-                        *old_amount_minor,
-                        *new_amount_minor,
-                    )
+                        old_amount_minor: *old_amount_minor,
+                        new_amount_minor: *new_amount_minor,
+                    })
                     .await?;
                 }
             }

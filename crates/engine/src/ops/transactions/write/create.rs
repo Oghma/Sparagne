@@ -2,6 +2,7 @@ use uuid::Uuid;
 
 use crate::{ExpenseCmd, IncomeCmd, RefundCmd, ResultEngine, TransactionKind};
 
+use super::common::FlowWalletCmd;
 use super::super::super::Engine;
 
 impl Engine {
@@ -15,15 +16,15 @@ impl Engine {
             meta,
             user_id,
         } = cmd;
-        self.create_flow_wallet_transaction_cmd(
+        self.create_flow_wallet_transaction_cmd(FlowWalletCmd {
             vault_id,
             amount_minor,
             flow_id,
             wallet_id,
             meta,
             user_id,
-            TransactionKind::Income,
-        )
+            kind: TransactionKind::Income,
+        })
         .await
     }
 
@@ -37,15 +38,15 @@ impl Engine {
             meta,
             user_id,
         } = cmd;
-        self.create_flow_wallet_transaction_cmd(
+        self.create_flow_wallet_transaction_cmd(FlowWalletCmd {
             vault_id,
             amount_minor,
             flow_id,
             wallet_id,
             meta,
             user_id,
-            TransactionKind::Expense,
-        )
+            kind: TransactionKind::Expense,
+        })
         .await
     }
 
@@ -62,15 +63,15 @@ impl Engine {
             meta,
             user_id,
         } = cmd;
-        self.create_flow_wallet_transaction_cmd(
+        self.create_flow_wallet_transaction_cmd(FlowWalletCmd {
             vault_id,
             amount_minor,
             flow_id,
             wallet_id,
             meta,
             user_id,
-            TransactionKind::Refund,
-        )
+            kind: TransactionKind::Refund,
+        })
         .await
     }
 }

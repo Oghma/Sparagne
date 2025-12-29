@@ -5,7 +5,7 @@ use crate::{
     UpdateTransactionCmd,
 };
 
-use super::common::TransferTargetKind;
+use super::common::{TransferTargetKind, TransferUpdateInput, TransferUpdateOutput};
 use super::super::helpers::{
     apply_flow_wallet_leg_updates, apply_optional_datetime_patch, apply_optional_text_patch,
     extract_flow_wallet_targets, validate_update_fields,
@@ -107,31 +107,39 @@ impl Engine {
                 }
                 TransactionKind::TransferWallet => {
                     self.update_transfer_targets(
-                        &db_tx,
-                        vault_id,
-                        &leg_pairs,
-                        from_wallet_id,
-                        to_wallet_id,
-                        TransferTargetKind::Wallet,
-                        vault_currency,
-                        new_amount_minor,
-                        &mut balance_updates,
-                        &mut leg_updates,
+                        TransferUpdateInput {
+                            db_tx: &db_tx,
+                            vault_id,
+                            leg_pairs: &leg_pairs,
+                            from_override: from_wallet_id,
+                            to_override: to_wallet_id,
+                            kind: TransferTargetKind::Wallet,
+                            vault_currency,
+                            new_amount_minor,
+                        },
+                        TransferUpdateOutput {
+                            balance_updates: &mut balance_updates,
+                            leg_updates: &mut leg_updates,
+                        },
                     )
                     .await?;
                 }
                 TransactionKind::TransferFlow => {
                     self.update_transfer_targets(
-                        &db_tx,
-                        vault_id,
-                        &leg_pairs,
-                        from_flow_id,
-                        to_flow_id,
-                        TransferTargetKind::Flow,
-                        vault_currency,
-                        new_amount_minor,
-                        &mut balance_updates,
-                        &mut leg_updates,
+                        TransferUpdateInput {
+                            db_tx: &db_tx,
+                            vault_id,
+                            leg_pairs: &leg_pairs,
+                            from_override: from_flow_id,
+                            to_override: to_flow_id,
+                            kind: TransferTargetKind::Flow,
+                            vault_currency,
+                            new_amount_minor,
+                        },
+                        TransferUpdateOutput {
+                            balance_updates: &mut balance_updates,
+                            leg_updates: &mut leg_updates,
+                        },
                     )
                     .await?;
                 }

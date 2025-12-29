@@ -84,22 +84,27 @@ impl Engine {
                 };
                 let signed_amount = flow_wallet_signed_amount(kind, amount_minor)?;
 
-            let tx = build_transaction(
-                vault_id,
-                kind,
-                occurred_at,
-                amount_minor,
-                currency,
-                Some("opening".to_string()),
-                Some(format!("opening balance for wallet '{name}'")),
-                user_id,
-                None,
-                None,
-            )?;
+                let tx = build_transaction(super::TransactionBuildInput {
+                    vault_id,
+                    kind,
+                    occurred_at,
+                    amount_minor,
+                    currency,
+                    category: Some("opening".to_string()),
+                    note: Some(format!("opening balance for wallet '{name}'")),
+                    created_by: user_id,
+                    idempotency_key: None,
+                    refunded_transaction_id: None,
+                })?;
 
-            let unallocated_flow_id = self.unallocated_flow_id(&db_tx, vault_id).await?;
-            let legs =
-                flow_wallet_legs(tx.id, wallet_id, unallocated_flow_id, signed_amount, currency);
+                let unallocated_flow_id = self.unallocated_flow_id(&db_tx, vault_id).await?;
+                let legs = flow_wallet_legs(
+                    tx.id,
+                    wallet_id,
+                    unallocated_flow_id,
+                    signed_amount,
+                    currency,
+                );
                 self.create_transaction_with_legs(&db_tx, vault_id, currency, &tx, &legs)
                     .await?;
             }

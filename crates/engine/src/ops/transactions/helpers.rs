@@ -173,49 +173,61 @@ pub(super) fn resolve_transfer_targets<T: Copy + Eq>(
     Ok((new_from, new_to))
 }
 
+pub(super) struct TransferLegUpdateContext<'a, T> {
+    pub(super) kind_label: &'a str,
+    pub(super) vault_currency: Currency,
+    pub(super) from_leg_id: Uuid,
+    pub(super) to_leg_id: Uuid,
+    pub(super) new_from: T,
+    pub(super) new_to: T,
+    pub(super) new_amount_minor: i64,
+}
+
+pub(super) struct TransferLegUpdateSink<'a> {
+    pub(super) balance_updates: &'a mut Vec<(LegTarget, i64, i64)>,
+    pub(super) leg_updates: &'a mut Vec<(String, LegTarget, i64)>,
+}
+
 pub(super) fn apply_transfer_leg_updates<T, F>(
     leg_pairs: &[(crate::legs::Model, Leg)],
-    kind_label: &str,
-    vault_currency: Currency,
-    from_leg_id: Uuid,
-    to_leg_id: Uuid,
-    new_from: T,
-    new_to: T,
-    new_amount_minor: i64,
+    ctx: TransferLegUpdateContext<'_, T>,
+    sink: TransferLegUpdateSink<'_>,
     make_target: F,
-    balance_updates: &mut Vec<(LegTarget, i64, i64)>,
-    leg_updates: &mut Vec<(String, LegTarget, i64)>,
 ) -> ResultEngine<()>
 where
     T: Copy + Eq,
     F: Fn(T) -> LegTarget,
 {
     for (model, leg) in leg_pairs {
-        if leg.currency != vault_currency {
+        if leg.currency != ctx.vault_currency {
             return Err(EngineError::CurrencyMismatch(format!(
                 "vault currency is {}, got {}",
-                vault_currency.code(),
+                ctx.vault_currency.code(),
                 leg.currency.code()
             )));
         }
         let id = parse_leg_id(&model.id)?;
-        let (new_target, new_amount) = if id == from_leg_id {
-            (make_target(new_from), -new_amount_minor)
-        } else if id == to_leg_id {
-            (make_target(new_to), new_amount_minor)
+        let (new_target, new_amount) = if id == ctx.from_leg_id {
+            (make_target(ctx.new_from), -ctx.new_amount_minor)
+        } else if id == ctx.to_leg_id {
+            (make_target(ctx.new_to), ctx.new_amount_minor)
         } else {
             return Err(EngineError::InvalidAmount(format!(
-                "invalid {kind_label}: unexpected legs"
+                "invalid {kind_label}: unexpected legs",
+                kind_label = ctx.kind_label
             )));
         };
 
         if leg.target == new_target {
-            balance_updates.push((leg.target, leg.amount_minor, new_amount));
+            sink.balance_updates
+                .push((leg.target, leg.amount_minor, new_amount));
         } else {
-            balance_updates.push((leg.target, leg.amount_minor, 0));
-            balance_updates.push((new_target, 0, new_amount));
+            sink.balance_updates
+                .push((leg.target, leg.amount_minor, 0));
+            sink.balance_updates.push((new_target, 0, new_amount));
         }
-        leg_updates.push((model.id.clone(), new_target, new_amount));
+        sink.leg_updates
+            .push((model.id.clone(), new_target, new_amount));
     }
 
     Ok(())

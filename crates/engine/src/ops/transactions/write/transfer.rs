@@ -4,6 +4,7 @@ use sea_orm::{EntityTrait, TransactionTrait};
 
 use crate::{vault, EngineError, ResultEngine, TransactionKind, TransferFlowCmd, TransferWalletCmd};
 
+use super::common::TransferTransactionInput;
 use super::super::super::{
     normalize_optional_text, parse_vault_currency, transfer_flow_legs, transfer_wallet_legs,
     with_tx, Engine,
@@ -41,14 +42,16 @@ impl Engine {
             let id = self
                 .create_transfer_transaction(
                     &db_tx,
-                    &vault_id,
-                    &user_id,
-                    amount_minor,
-                    occurred_at,
-                    note,
-                    idempotency_key,
-                    TransactionKind::TransferWallet,
-                    currency,
+                    TransferTransactionInput {
+                        vault_id: &vault_id,
+                        user_id: &user_id,
+                        amount_minor,
+                        occurred_at,
+                        note,
+                        idempotency_key,
+                        kind: TransactionKind::TransferWallet,
+                        currency,
+                    },
                     |tx_id| {
                         transfer_wallet_legs(
                             tx_id,
@@ -108,14 +111,16 @@ impl Engine {
             let id = self
                 .create_transfer_transaction(
                     &db_tx,
-                    &vault_id,
-                    &user_id,
-                    amount_minor,
-                    occurred_at,
-                    note,
-                    idempotency_key,
-                    TransactionKind::TransferFlow,
-                    currency,
+                    TransferTransactionInput {
+                        vault_id: &vault_id,
+                        user_id: &user_id,
+                        amount_minor,
+                        occurred_at,
+                        note,
+                        idempotency_key,
+                        kind: TransactionKind::TransferFlow,
+                        currency,
+                    },
                     |tx_id| {
                         transfer_flow_legs(
                             tx_id,
