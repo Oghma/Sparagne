@@ -225,6 +225,54 @@ where
     Ok(())
 }
 
+fn validate_update_fields(
+    kind: TransactionKind,
+    wallet_id: Option<Uuid>,
+    flow_id: Option<Uuid>,
+    from_wallet_id: Option<Uuid>,
+    to_wallet_id: Option<Uuid>,
+    from_flow_id: Option<Uuid>,
+    to_flow_id: Option<Uuid>,
+) -> ResultEngine<()> {
+    match kind {
+        TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
+            if from_wallet_id.is_some()
+                || to_wallet_id.is_some()
+                || from_flow_id.is_some()
+                || to_flow_id.is_some()
+            {
+                return Err(EngineError::InvalidAmount(
+                    "invalid update: unexpected transfer fields".to_string(),
+                ));
+            }
+        }
+        TransactionKind::TransferWallet => {
+            if wallet_id.is_some()
+                || flow_id.is_some()
+                || from_flow_id.is_some()
+                || to_flow_id.is_some()
+            {
+                return Err(EngineError::InvalidAmount(
+                    "invalid update: unexpected wallet/flow fields".to_string(),
+                ));
+            }
+        }
+        TransactionKind::TransferFlow => {
+            if wallet_id.is_some()
+                || flow_id.is_some()
+                || from_wallet_id.is_some()
+                || to_wallet_id.is_some()
+            {
+                return Err(EngineError::InvalidAmount(
+                    "invalid update: unexpected wallet fields".to_string(),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 trait ApplyTxFilters: QueryFilter + Sized {
     fn apply_tx_filters(self, filter: &TransactionListFilter) -> Self;
 }
@@ -597,24 +645,8 @@ impl Engine {
             legs::ActiveModel::from(leg).insert(db_tx).await?;
         }
 
-        for (wallet_id, new_balance) in wallet_new_balances {
-            let wallet_model = wallets::ActiveModel {
-                id: ActiveValue::Set(wallet_id.to_string()),
-                balance: ActiveValue::Set(new_balance),
-                ..Default::default()
-            };
-            wallet_model.update(db_tx).await?;
-        }
-
-        for (flow_id, flow) in flow_previews {
-            let flow_model = cash_flows::ActiveModel {
-                id: ActiveValue::Set(flow_id.to_string()),
-                balance: ActiveValue::Set(flow.balance),
-                income_balance: ActiveValue::Set(flow.income_balance),
-                ..Default::default()
-            };
-            flow_model.update(db_tx).await?;
-        }
+        self.persist_targets(db_tx, wallet_new_balances, flow_previews)
+            .await?;
 
         Ok(tx.id)
     }
@@ -1207,41 +1239,15 @@ impl Engine {
             }
 
             // Reject unexpected target fields for this kind (avoid silent no-ops).
-            match kind {
-                TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
-                    if from_wallet_id.is_some()
-                        || to_wallet_id.is_some()
-                        || from_flow_id.is_some()
-                        || to_flow_id.is_some()
-                    {
-                        return Err(EngineError::InvalidAmount(
-                            "invalid update: unexpected transfer fields".to_string(),
-                        ));
-                    }
-                }
-                TransactionKind::TransferWallet => {
-                    if wallet_id.is_some()
-                        || flow_id.is_some()
-                        || from_flow_id.is_some()
-                        || to_flow_id.is_some()
-                    {
-                        return Err(EngineError::InvalidAmount(
-                            "invalid update: unexpected wallet/flow fields".to_string(),
-                        ));
-                    }
-                }
-                TransactionKind::TransferFlow => {
-                    if wallet_id.is_some()
-                        || flow_id.is_some()
-                        || from_wallet_id.is_some()
-                        || to_wallet_id.is_some()
-                    {
-                        return Err(EngineError::InvalidAmount(
-                            "invalid update: unexpected wallet fields".to_string(),
-                        ));
-                    }
-                }
-            }
+            validate_update_fields(
+                kind,
+                wallet_id,
+                flow_id,
+                from_wallet_id,
+                to_wallet_id,
+                from_flow_id,
+                to_flow_id,
+            )?;
 
             let (wallet_new_balances, flow_previews) = self
                 .preview_apply_leg_updates(&db_tx, vault_id, vault_currency, &balance_updates)
