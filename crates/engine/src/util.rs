@@ -44,8 +44,7 @@ pub(crate) fn validate_flow_mode_fields(
 
 /// Parse a UUID from storage and return a labeled error on failure.
 pub(crate) fn parse_uuid(value: &str, label: &str) -> ResultEngine<Uuid> {
-    Uuid::parse_str(value)
-        .map_err(|_| EngineError::InvalidAmount(format!("invalid {label} id")))
+    Uuid::parse_str(value).map_err(|_| EngineError::InvalidAmount(format!("invalid {label} id")))
 }
 
 /// Parse a currency code stored in the DB into a strongly typed `Currency`.

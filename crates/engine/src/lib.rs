@@ -1,8 +1,7 @@
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::future::Future;
+use std::{collections::HashMap, future::Future};
 use uuid::Uuid;
 
 pub use cash_flows::CashFlow;
@@ -519,12 +518,8 @@ impl Engine {
             .require_vault_by_id_write(db_tx, vault_id, user_id)
             .await?;
         let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
-        let resolved_flow_id = self
-            .resolve_flow_id(db_tx, vault_id, flow_id)
-            .await?;
-        let resolved_wallet_id = self
-            .resolve_wallet_id(db_tx, vault_id, wallet_id)
-            .await?;
+        let resolved_flow_id = self.resolve_flow_id(db_tx, vault_id, flow_id).await?;
+        let resolved_wallet_id = self.resolve_wallet_id(db_tx, vault_id, wallet_id).await?;
 
         let tx = Transaction::new(TransactionNew {
             vault_id: vault_id.to_string(),
@@ -1683,10 +1678,7 @@ impl Engine {
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
 
-            if !self
-                .has_vault_read_access(db_tx, vault_id, user_id)
-                .await?
-            {
+            if !self.has_vault_read_access(db_tx, vault_id, user_id).await? {
                 let role = self
                     .flow_membership_role(db_tx, &model.id, user_id)
                     .await?
@@ -2359,8 +2351,7 @@ impl Engine {
                 let name = vault_name.ok_or_else(|| {
                     EngineError::KeyNotFound("missing vault id or name".to_string())
                 })?;
-                self.require_vault_by_name(db_tx, &name, user_id)
-                    .await?
+                self.require_vault_by_name(db_tx, &name, user_id).await?
             };
             let vault_currency =
                 Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
