@@ -16,8 +16,8 @@ use crate::util::{ensure_vault_currency, model_currency, validate_flow_mode_fiel
 use super::helpers::{
     apply_flow_wallet_leg_updates, apply_optional_datetime_patch, apply_optional_text_patch,
     apply_transfer_leg_updates, extract_flow_wallet_targets, normalize_tx_meta,
-    parse_transfer_leg_pairs, validate_flow_wallet_legs, validate_transfer_legs,
-    validate_update_fields,
+    parse_transfer_leg_pairs, resolve_transfer_targets, validate_flow_wallet_legs,
+    validate_transfer_legs, validate_update_fields,
 };
 use super::super::{
     build_transaction, flow_wallet_legs, flow_wallet_signed_amount, normalize_optional_text,
@@ -215,9 +215,7 @@ impl Engine {
 
         // Validate currency and domain invariants by simulating balance changes, while
         // also computing the resulting denormalized balances to persist.
-        let mut wallet_new_balances: HashMap<Uuid, i64> = HashMap::new();
-        let mut flow_previews: HashMap<Uuid, crate::CashFlow> = HashMap::new();
-
+        let mut updates: Vec<(LegTarget, i64, i64)> = Vec::with_capacity(legs.len());
         for leg in legs {
             if leg.currency != vault_currency {
                 return Err(EngineError::CurrencyMismatch(format!(
@@ -226,32 +224,11 @@ impl Engine {
                     leg.currency.code()
                 )));
             }
-            match leg.target {
-                LegTarget::Wallet { wallet_id } => {
-                    self.apply_wallet_delta(
-                        db_tx,
-                        vault_id,
-                        vault_currency,
-                        &mut wallet_new_balances,
-                        wallet_id,
-                        leg.amount_minor,
-                    )
-                    .await?;
-                }
-                LegTarget::Flow { flow_id } => {
-                    self.apply_flow_change(
-                        db_tx,
-                        vault_id,
-                        vault_currency,
-                        &mut flow_previews,
-                        flow_id,
-                        0,
-                        leg.amount_minor,
-                    )
-                    .await?;
-                }
-            }
+            updates.push((leg.target, 0, leg.amount_minor));
         }
+        let (wallet_new_balances, flow_previews) = self
+            .preview_apply_leg_updates(db_tx, vault_id, vault_currency, &updates)
+            .await?;
 
         if let Err(err) = transactions::ActiveModel::from(tx).insert(db_tx).await {
             if tx.idempotency_key.is_some() {
@@ -718,14 +695,12 @@ impl Engine {
                             _ => None,
                         },
                     )?;
-
-                    let new_from = from_wallet_id.unwrap_or(info.from_target);
-                    let new_to = to_wallet_id.unwrap_or(info.to_target);
-                    if new_from == new_to {
-                        return Err(EngineError::InvalidAmount(
-                            "from_wallet_id and to_wallet_id must differ".to_string(),
-                        ));
-                    }
+                    let (new_from, new_to) = resolve_transfer_targets(
+                        &info,
+                        from_wallet_id,
+                        to_wallet_id,
+                        "from_wallet_id and to_wallet_id must differ",
+                    )?;
                     self.require_wallet_in_vault(&db_tx, vault_id, new_from)
                         .await?;
                     self.require_wallet_in_vault(&db_tx, vault_id, new_to)
@@ -755,14 +730,12 @@ impl Engine {
                             _ => None,
                         },
                     )?;
-
-                    let new_from = from_flow_id.unwrap_or(info.from_target);
-                    let new_to = to_flow_id.unwrap_or(info.to_target);
-                    if new_from == new_to {
-                        return Err(EngineError::InvalidAmount(
-                            "from_flow_id and to_flow_id must differ".to_string(),
-                        ));
-                    }
+                    let (new_from, new_to) = resolve_transfer_targets(
+                        &info,
+                        from_flow_id,
+                        to_flow_id,
+                        "from_flow_id and to_flow_id must differ",
+                    )?;
                     self.require_flow_in_vault(&db_tx, vault_id, new_from)
                         .await?;
                     self.require_flow_in_vault(&db_tx, vault_id, new_to).await?;
