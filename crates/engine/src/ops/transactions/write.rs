@@ -24,6 +24,12 @@ use super::super::{
     parse_vault_currency, transfer_flow_legs, transfer_wallet_legs, with_tx, Engine,
 };
 
+#[derive(Clone, Copy, Debug)]
+enum TransferTargetKind {
+    Wallet,
+    Flow,
+}
+
 impl Engine {
     async fn create_flow_wallet_transaction(
         &self,
@@ -124,6 +130,81 @@ impl Engine {
         let legs = build_legs(tx.id);
         self.create_transaction_with_legs(db_tx, vault_id, currency, &tx, &legs)
             .await
+    }
+
+    async fn update_transfer_targets(
+        &self,
+        db_tx: &DatabaseTransaction,
+        vault_id: &str,
+        leg_pairs: &[(legs::Model, Leg)],
+        from_override: Option<Uuid>,
+        to_override: Option<Uuid>,
+        kind: TransferTargetKind,
+        vault_currency: Currency,
+        new_amount_minor: i64,
+        balance_updates: &mut Vec<(LegTarget, i64, i64)>,
+        leg_updates: &mut Vec<(String, LegTarget, i64)>,
+    ) -> ResultEngine<()> {
+        let (kind_label, target_label, diff_error) = match kind {
+            TransferTargetKind::Wallet => (
+                "transfer_wallet",
+                "wallet",
+                "from_wallet_id and to_wallet_id must differ",
+            ),
+            TransferTargetKind::Flow => (
+                "transfer_flow",
+                "flow",
+                "from_flow_id and to_flow_id must differ",
+            ),
+        };
+
+        let info = parse_transfer_leg_pairs(leg_pairs, kind_label, target_label, |target| match target
+        {
+            LegTarget::Wallet { wallet_id } => match kind {
+                TransferTargetKind::Wallet => Some(*wallet_id),
+                TransferTargetKind::Flow => None,
+            },
+            LegTarget::Flow { flow_id } => match kind {
+                TransferTargetKind::Flow => Some(*flow_id),
+                TransferTargetKind::Wallet => None,
+            },
+        })?;
+        let (new_from, new_to) =
+            resolve_transfer_targets(&info, from_override, to_override, diff_error)?;
+
+        match kind {
+            TransferTargetKind::Wallet => {
+                self.require_wallet_in_vault(db_tx, vault_id, new_from)
+                    .await?;
+                self.require_wallet_in_vault(db_tx, vault_id, new_to)
+                    .await?;
+            }
+            TransferTargetKind::Flow => {
+                self.require_flow_in_vault(db_tx, vault_id, new_from)
+                    .await?;
+                self.require_flow_in_vault(db_tx, vault_id, new_to)
+                    .await?;
+            }
+        }
+
+        apply_transfer_leg_updates(
+            leg_pairs,
+            kind_label,
+            vault_currency,
+            info.from_leg_id,
+            info.to_leg_id,
+            new_from,
+            new_to,
+            new_amount_minor,
+            |id| match kind {
+                TransferTargetKind::Wallet => LegTarget::Wallet { wallet_id: id },
+                TransferTargetKind::Flow => LegTarget::Flow { flow_id: id },
+            },
+            balance_updates,
+            leg_updates,
+        )?;
+
+        Ok(())
     }
 
     async fn apply_wallet_delta(
@@ -732,73 +813,34 @@ impl Engine {
                     )?;
                 }
                 TransactionKind::TransferWallet => {
-                    let info = parse_transfer_leg_pairs(
+                    self.update_transfer_targets(
+                        &db_tx,
+                        vault_id,
                         &leg_pairs,
-                        "transfer_wallet",
-                        "wallet",
-                        |target| match target {
-                            LegTarget::Wallet { wallet_id } => Some(*wallet_id),
-                            _ => None,
-                        },
-                    )?;
-                    let (new_from, new_to) = resolve_transfer_targets(
-                        &info,
                         from_wallet_id,
                         to_wallet_id,
-                        "from_wallet_id and to_wallet_id must differ",
-                    )?;
-                    self.require_wallet_in_vault(&db_tx, vault_id, new_from)
-                        .await?;
-                    self.require_wallet_in_vault(&db_tx, vault_id, new_to)
-                        .await?;
-
-                    apply_transfer_leg_updates(
-                        &leg_pairs,
-                        "transfer_wallet",
+                        TransferTargetKind::Wallet,
                         vault_currency,
-                        info.from_leg_id,
-                        info.to_leg_id,
-                        new_from,
-                        new_to,
                         new_amount_minor,
-                        |wallet_id| LegTarget::Wallet { wallet_id },
                         &mut balance_updates,
                         &mut leg_updates,
-                    )?;
+                    )
+                    .await?;
                 }
                 TransactionKind::TransferFlow => {
-                    let info = parse_transfer_leg_pairs(
+                    self.update_transfer_targets(
+                        &db_tx,
+                        vault_id,
                         &leg_pairs,
-                        "transfer_flow",
-                        "flow",
-                        |target| match target {
-                            LegTarget::Flow { flow_id } => Some(*flow_id),
-                            _ => None,
-                        },
-                    )?;
-                    let (new_from, new_to) = resolve_transfer_targets(
-                        &info,
                         from_flow_id,
                         to_flow_id,
-                        "from_flow_id and to_flow_id must differ",
-                    )?;
-                    self.require_flow_in_vault(&db_tx, vault_id, new_from)
-                        .await?;
-                    self.require_flow_in_vault(&db_tx, vault_id, new_to).await?;
-
-                    apply_transfer_leg_updates(
-                        &leg_pairs,
-                        "transfer_flow",
+                        TransferTargetKind::Flow,
                         vault_currency,
-                        info.from_leg_id,
-                        info.to_leg_id,
-                        new_from,
-                        new_to,
                         new_amount_minor,
-                        |flow_id| LegTarget::Flow { flow_id },
                         &mut balance_updates,
                         &mut leg_updates,
-                    )?;
+                    )
+                    .await?;
                 }
             }
 
