@@ -273,6 +273,115 @@ fn validate_update_fields(
     Ok(())
 }
 
+fn validate_flow_wallet_legs(
+    kind: TransactionKind,
+    amount_minor: i64,
+    legs: &[Leg],
+) -> ResultEngine<()> {
+    if legs.len() != 2 {
+        return Err(EngineError::InvalidAmount(
+            "invalid transaction: expected 2 legs".to_string(),
+        ));
+    }
+    let expected = match kind {
+        TransactionKind::Income | TransactionKind::Refund => amount_minor,
+        TransactionKind::Expense => -amount_minor,
+        _ => {
+            return Err(EngineError::InvalidAmount(
+                "invalid transaction: unexpected kind".to_string(),
+            ))
+        }
+    };
+    let (mut wallet_legs, mut flow_legs) = (0, 0);
+    for leg in legs {
+        match leg.target {
+            LegTarget::Wallet { .. } => wallet_legs += 1,
+            LegTarget::Flow { .. } => flow_legs += 1,
+        }
+        if leg.amount_minor != expected {
+            return Err(EngineError::InvalidAmount(
+                "invalid transaction: unexpected leg amount".to_string(),
+            ));
+        }
+    }
+    if wallet_legs != 1 || flow_legs != 1 {
+        return Err(EngineError::InvalidAmount(
+            "invalid transaction: expected one wallet leg and one flow leg".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn extract_flow_wallet_targets(
+    leg_pairs: &[(legs::Model, Leg)],
+) -> ResultEngine<(Uuid, Uuid)> {
+    if leg_pairs.len() != 2 {
+        return Err(EngineError::InvalidAmount(
+            "invalid transaction: expected 2 legs".to_string(),
+        ));
+    }
+
+    let mut existing_wallet_id: Option<Uuid> = None;
+    let mut existing_flow_id: Option<Uuid> = None;
+    for (_, leg) in leg_pairs {
+        match leg.target {
+            LegTarget::Wallet { wallet_id } => existing_wallet_id = Some(wallet_id),
+            LegTarget::Flow { flow_id } => existing_flow_id = Some(flow_id),
+        }
+    }
+    let existing_wallet_id = existing_wallet_id.ok_or_else(|| {
+        EngineError::InvalidAmount("invalid transaction: missing wallet leg".to_string())
+    })?;
+    let existing_flow_id = existing_flow_id.ok_or_else(|| {
+        EngineError::InvalidAmount("invalid transaction: missing flow leg".to_string())
+    })?;
+
+    Ok((existing_wallet_id, existing_flow_id))
+}
+
+fn apply_flow_wallet_leg_updates(
+    leg_pairs: &[(legs::Model, Leg)],
+    vault_currency: Currency,
+    new_wallet_id: Uuid,
+    new_flow_id: Uuid,
+    new_signed_amount: i64,
+    balance_updates: &mut Vec<(LegTarget, i64, i64)>,
+    leg_updates: &mut Vec<(String, LegTarget, i64)>,
+) -> ResultEngine<()> {
+    for (model, leg) in leg_pairs {
+        if leg.currency != vault_currency {
+            return Err(EngineError::CurrencyMismatch(format!(
+                "vault currency is {}, got {}",
+                vault_currency.code(),
+                leg.currency.code()
+            )));
+        }
+
+        let (new_target, new_amount) = match leg.target {
+            LegTarget::Wallet { .. } => (
+                LegTarget::Wallet {
+                    wallet_id: new_wallet_id,
+                },
+                new_signed_amount,
+            ),
+            LegTarget::Flow { .. } => (
+                LegTarget::Flow { flow_id: new_flow_id },
+                new_signed_amount,
+            ),
+        };
+
+        if leg.target == new_target {
+            balance_updates.push((leg.target, leg.amount_minor, new_amount));
+        } else {
+            balance_updates.push((leg.target, leg.amount_minor, 0));
+            balance_updates.push((new_target, 0, new_amount));
+        }
+        leg_updates.push((model.id.clone(), new_target, new_amount));
+    }
+
+    Ok(())
+}
+
 trait ApplyTxFilters: QueryFilter + Sized {
     fn apply_tx_filters(self, filter: &TransactionListFilter) -> Self;
 }
@@ -506,34 +615,7 @@ impl Engine {
         // Validate kind-specific invariants (kept strict for now).
         match tx.kind {
             TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
-                if legs.len() != 2 {
-                    return Err(EngineError::InvalidAmount(
-                        "invalid transaction: expected 2 legs".to_string(),
-                    ));
-                }
-                let expected = match tx.kind {
-                    TransactionKind::Income | TransactionKind::Refund => tx.amount_minor,
-                    TransactionKind::Expense => -tx.amount_minor,
-                    _ => unreachable!(),
-                };
-                let (mut wallet_legs, mut flow_legs) = (0, 0);
-                for leg in legs {
-                    match leg.target {
-                        LegTarget::Wallet { .. } => wallet_legs += 1,
-                        LegTarget::Flow { .. } => flow_legs += 1,
-                    }
-                    if leg.amount_minor != expected {
-                        return Err(EngineError::InvalidAmount(
-                            "invalid transaction: unexpected leg amount".to_string(),
-                        ));
-                    }
-                }
-                if wallet_legs != 1 || flow_legs != 1 {
-                    return Err(EngineError::InvalidAmount(
-                        "invalid transaction: expected one wallet leg and one flow leg"
-                            .to_string(),
-                    ));
-                }
+                validate_flow_wallet_legs(tx.kind, tx.amount_minor, legs)?;
             }
             TransactionKind::TransferWallet => {
                 validate_transfer_legs(
@@ -1089,33 +1171,8 @@ impl Engine {
 
             match kind {
                 TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
-                    if leg_pairs.len() != 2 {
-                        return Err(EngineError::InvalidAmount(
-                            "invalid transaction: expected 2 legs".to_string(),
-                        ));
-                    }
-
-                    let mut existing_wallet_id: Option<Uuid> = None;
-                    let mut existing_flow_id: Option<Uuid> = None;
-                    for (_, leg) in &leg_pairs {
-                        match leg.target {
-                            LegTarget::Wallet { wallet_id } => {
-                                existing_wallet_id = Some(wallet_id)
-                            }
-                            LegTarget::Flow { flow_id } => existing_flow_id = Some(flow_id),
-                        }
-                    }
-                    let existing_wallet_id = existing_wallet_id.ok_or_else(|| {
-                        EngineError::InvalidAmount(
-                            "invalid transaction: missing wallet leg".to_string(),
-                        )
-                    })?;
-                    let existing_flow_id = existing_flow_id.ok_or_else(|| {
-                        EngineError::InvalidAmount(
-                            "invalid transaction: missing flow leg".to_string(),
-                        )
-                    })?;
-
+                    let (existing_wallet_id, existing_flow_id) =
+                        extract_flow_wallet_targets(&leg_pairs)?;
                     let new_wallet_id = wallet_id.unwrap_or(existing_wallet_id);
                     let new_flow_id = flow_id.unwrap_or(existing_flow_id);
                     self.require_wallet_in_vault(&db_tx, vault_id, new_wallet_id)
@@ -1130,38 +1187,15 @@ impl Engine {
                     };
                     let new_signed_amount = sign * new_amount_minor;
 
-                    for (model, leg) in &leg_pairs {
-                        if leg.currency != vault_currency {
-                            return Err(EngineError::CurrencyMismatch(format!(
-                                "vault currency is {}, got {}",
-                                vault_currency.code(),
-                                leg.currency.code()
-                            )));
-                        }
-
-                        let (new_target, new_amount) = match leg.target {
-                            LegTarget::Wallet { .. } => (
-                                LegTarget::Wallet {
-                                    wallet_id: new_wallet_id,
-                                },
-                                new_signed_amount,
-                            ),
-                            LegTarget::Flow { .. } => (
-                                LegTarget::Flow {
-                                    flow_id: new_flow_id,
-                                },
-                                new_signed_amount,
-                            ),
-                        };
-
-                        if leg.target == new_target {
-                            balance_updates.push((leg.target, leg.amount_minor, new_amount));
-                        } else {
-                            balance_updates.push((leg.target, leg.amount_minor, 0));
-                            balance_updates.push((new_target, 0, new_amount));
-                        }
-                        leg_updates.push((model.id.clone(), new_target, new_amount));
-                    }
+                    apply_flow_wallet_leg_updates(
+                        &leg_pairs,
+                        vault_currency,
+                        new_wallet_id,
+                        new_flow_id,
+                        new_signed_amount,
+                        &mut balance_updates,
+                        &mut leg_updates,
+                    )?;
                 }
                 TransactionKind::TransferWallet => {
                     let info = parse_transfer_leg_pairs(
