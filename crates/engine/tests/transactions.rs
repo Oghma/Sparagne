@@ -1172,7 +1172,7 @@ async fn names_are_trimmed_and_unique_case_insensitive() {
         .unwrap_err();
     assert_eq!(
         err,
-        EngineError::InvalidAmount("wallet name must not be empty".to_string())
+        EngineError::InvalidName("wallet name must not be empty".to_string())
     );
 
     let err = engine
@@ -1181,7 +1181,7 @@ async fn names_are_trimmed_and_unique_case_insensitive() {
         .unwrap_err();
     assert_eq!(
         err,
-        EngineError::InvalidFlow("flow name must not be empty".to_string())
+        EngineError::InvalidName("flow name must not be empty".to_string())
     );
 
     // Degenerate FlowMode in DB is a hard error.

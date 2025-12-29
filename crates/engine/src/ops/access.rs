@@ -311,7 +311,7 @@ impl Engine {
             .await?
             .ok_or_else(|| EngineError::InvalidFlow("missing Unallocated flow".to_string()))?;
         Uuid::parse_str(&model.id)
-            .map_err(|_| EngineError::InvalidAmount("invalid cash_flow id".to_string()))
+            .map_err(|_| EngineError::InvalidId("invalid cash_flow id".to_string()))
     }
 
     pub(super) async fn resolve_flow_id(
@@ -355,7 +355,7 @@ impl Engine {
             ));
         }
         Uuid::parse_str(&first.id)
-            .map_err(|_| EngineError::InvalidAmount("invalid wallet id".to_string()))
+            .map_err(|_| EngineError::InvalidId("invalid wallet id".to_string()))
     }
 
     pub(super) async fn require_wallet_in_vault(

@@ -149,7 +149,7 @@ impl TryFrom<Model> for Leg {
             .map_err(|_| EngineError::KeyNotFound("transaction not exists".to_string()))?;
         let target_kind = LegTargetKind::try_from(model.target_kind.as_str())?;
         let target_id = Uuid::parse_str(&model.target_id)
-            .map_err(|_| EngineError::InvalidAmount("invalid leg target id".to_string()))?;
+            .map_err(|_| EngineError::InvalidId("invalid leg target id".to_string()))?;
 
         let target = match target_kind {
             LegTargetKind::Wallet => LegTarget::Wallet {
@@ -160,7 +160,7 @@ impl TryFrom<Model> for Leg {
 
         Ok(Self {
             id: Uuid::parse_str(&model.id)
-                .map_err(|_| EngineError::InvalidAmount("invalid leg id".to_string()))?,
+                .map_err(|_| EngineError::InvalidId("invalid leg id".to_string()))?,
             transaction_id,
             target,
             amount_minor: model.amount_minor,

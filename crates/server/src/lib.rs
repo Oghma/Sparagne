@@ -70,7 +70,11 @@ fn status_for_engine_error(err: &EngineError) -> StatusCode {
         EngineError::MaxBalanceReached(_)
         | EngineError::InsufficientFunds(_)
         | EngineError::InvalidAmount(_)
+        | EngineError::InvalidName(_)
+        | EngineError::InvalidId(_)
+        | EngineError::InvalidCursor(_)
         | EngineError::InvalidFlow(_)
+        | EngineError::InvalidRole(_)
         | EngineError::CurrencyMismatch(_) => StatusCode::UNPROCESSABLE_ENTITY,
     }
 }

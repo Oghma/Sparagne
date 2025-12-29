@@ -9,8 +9,8 @@ use crate::{cash_flows, vault, CashFlow, EngineError, ResultEngine, TransactionK
 use crate::util::validate_flow_mode_fields;
 
 use super::{
-    build_transaction, normalize_required_flow_name, parse_vault_currency, transfer_flow_legs,
-    with_tx, Engine,
+    build_transaction, normalize_required_name, parse_vault_currency, transfer_flow_legs, with_tx,
+    Engine,
 };
 
 impl Engine {
@@ -41,7 +41,7 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<CashFlow> {
-        let name = normalize_required_flow_name(name)?;
+        let name = normalize_required_name(name, "flow")?;
         let name_lower = name.to_lowercase();
         with_tx!(self, |db_tx| {
             let vault_model = vault::Entity::find_by_id(vault_id.to_string())
@@ -140,7 +140,7 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<Uuid> {
         let occurred_at = Utc::now();
-        let name = normalize_required_flow_name(name)?;
+        let name = normalize_required_name(name, "flow")?;
         if balance < 0 {
             return Err(EngineError::InvalidAmount(
                 "flow balance must be >= 0".to_string(),
@@ -183,18 +183,18 @@ impl Engine {
 
             if balance > 0 {
                 let unallocated_flow_id = self.unallocated_flow_id(&db_tx, vault_id).await?;
-                let tx = build_transaction(
+                let tx = build_transaction(super::TransactionBuildInput {
                     vault_id,
-                    TransactionKind::TransferFlow,
+                    kind: TransactionKind::TransferFlow,
                     occurred_at,
-                    balance,
-                    vault_currency,
-                    None,
-                    Some(format!("opening allocation for flow '{name}'")),
-                    user_id,
-                    None,
-                    None,
-                )?;
+                    amount_minor: balance,
+                    currency: vault_currency,
+                    category: None,
+                    note: Some(format!("opening allocation for flow '{name}'")),
+                    created_by: user_id,
+                    idempotency_key: None,
+                    refunded_transaction_id: None,
+                })?;
                 let legs = transfer_flow_legs(
                     tx.id,
                     unallocated_flow_id,
@@ -220,7 +220,7 @@ impl Engine {
         new_name: &str,
         user_id: &str,
     ) -> ResultEngine<()> {
-        let new_name = normalize_required_flow_name(new_name)?;
+        let new_name = normalize_required_name(new_name, "flow")?;
         if new_name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
             return Err(EngineError::InvalidFlow(
                 "flow name is reserved".to_string(),

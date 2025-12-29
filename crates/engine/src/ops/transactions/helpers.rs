@@ -33,7 +33,7 @@ pub(super) fn apply_optional_datetime_patch(
 
 pub(super) fn parse_leg_id(raw: &str) -> ResultEngine<Uuid> {
     Uuid::parse_str(raw)
-        .map_err(|_| EngineError::InvalidAmount("invalid leg id".to_string()))
+        .map_err(|_| EngineError::InvalidId("invalid leg id".to_string()))
 }
 
 pub(super) fn validate_transfer_legs<T, F>(

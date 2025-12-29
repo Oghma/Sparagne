@@ -51,19 +51,9 @@ impl Engine {
 fn normalize_required_name(value: &str, label: &str) -> ResultEngine<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        return Err(EngineError::InvalidAmount(format!(
+        return Err(EngineError::InvalidName(format!(
             "{label} name must not be empty"
         )));
-    }
-    Ok(trimmed.to_string())
-}
-
-fn normalize_required_flow_name(value: &str) -> ResultEngine<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(EngineError::InvalidFlow(
-            "flow name must not be empty".to_string(),
-        ));
     }
     Ok(trimmed.to_string())
 }
@@ -92,29 +82,31 @@ fn parse_vault_currency(value: &str) -> ResultEngine<Currency> {
     model_currency(value)
 }
 
-fn build_transaction(
-    vault_id: &str,
-    kind: TransactionKind,
-    occurred_at: DateTime<Utc>,
-    amount_minor: i64,
-    currency: Currency,
-    category: Option<String>,
-    note: Option<String>,
-    created_by: &str,
-    idempotency_key: Option<String>,
-    refunded_transaction_id: Option<Uuid>,
-) -> ResultEngine<Transaction> {
+pub(super) struct TransactionBuildInput<'a> {
+    pub(super) vault_id: &'a str,
+    pub(super) kind: TransactionKind,
+    pub(super) occurred_at: DateTime<Utc>,
+    pub(super) amount_minor: i64,
+    pub(super) currency: Currency,
+    pub(super) category: Option<String>,
+    pub(super) note: Option<String>,
+    pub(super) created_by: &'a str,
+    pub(super) idempotency_key: Option<String>,
+    pub(super) refunded_transaction_id: Option<Uuid>,
+}
+
+fn build_transaction(input: TransactionBuildInput<'_>) -> ResultEngine<Transaction> {
     Transaction::new(TransactionNew {
-        vault_id: vault_id.to_string(),
-        kind,
-        occurred_at,
-        amount_minor,
-        currency,
-        category,
-        note,
-        created_by: created_by.to_string(),
-        idempotency_key,
-        refunded_transaction_id,
+        vault_id: input.vault_id.to_string(),
+        kind: input.kind,
+        occurred_at: input.occurred_at,
+        amount_minor: input.amount_minor,
+        currency: input.currency,
+        category: input.category,
+        note: input.note,
+        created_by: input.created_by.to_string(),
+        idempotency_key: input.idempotency_key,
+        refunded_transaction_id: input.refunded_transaction_id,
     })
 }
 

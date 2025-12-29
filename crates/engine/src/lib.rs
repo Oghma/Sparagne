@@ -1,3 +1,8 @@
+//! Sparagne budgeting engine core types and operations.
+//!
+//! This crate exposes the domain model, commands, and the main [`Engine`]
+//! facade used by the server and bots.
+
 pub use cash_flows::CashFlow;
 pub use commands::{
     ExpenseCmd, IncomeCmd, RefundCmd, TransferFlowCmd, TransferWalletCmd, TxMeta,
