@@ -19,9 +19,7 @@ use sea_orm::{
     Statement, TransactionTrait, prelude::*, sea_query::Expr,
 };
 pub use transactions::{Transaction, TransactionKind, TransactionNew};
-use util::{
-    cash_flow_from_model, ensure_vault_currency, validate_flow_mode_fields, wallet_from_model,
-};
+use util::{ensure_vault_currency, validate_flow_mode_fields};
 pub use vault::Vault;
 pub use wallets::Wallet;
 
@@ -80,40 +78,6 @@ fn apply_optional_datetime_patch(
     patch: Option<DateTime<Utc>>,
 ) -> DateTime<Utc> {
     patch.unwrap_or(existing)
-}
-
-fn validate_flow_mode_fields(
-    flow_name: &str,
-    max_balance: Option<i64>,
-    income_balance: Option<i64>,
-) -> ResultEngine<()> {
-    if let Some(cap_minor) = max_balance
-        && cap_minor <= 0
-    {
-        return Err(EngineError::InvalidFlow(format!(
-            "invalid cap for flow '{flow_name}': cap must be > 0"
-        )));
-    }
-    if income_balance.is_some() && max_balance.is_none() {
-        return Err(EngineError::InvalidFlow(format!(
-            "invalid FlowMode for flow '{flow_name}': income_balance requires max_balance"
-        )));
-    }
-    if let Some(income_total_minor) = income_balance
-        && income_total_minor < 0
-    {
-        return Err(EngineError::InvalidFlow(format!(
-            "invalid FlowMode for flow '{flow_name}': income_balance must be >= 0"
-        )));
-    }
-    if let (Some(cap_minor), Some(income_total_minor)) = (max_balance, income_balance)
-        && income_total_minor > cap_minor
-    {
-        return Err(EngineError::InvalidFlow(format!(
-            "invalid FlowMode for flow '{flow_name}': income_balance exceeds cap"
-        )));
-    }
-    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -979,110 +943,56 @@ impl Engine {
 
     /// Create an income transaction (increases both wallet and flow).
     pub async fn income(&self, cmd: IncomeCmd) -> ResultEngine<Uuid> {
-        let category = normalize_optional_text(cmd.meta.category.as_deref());
-        let note = normalize_optional_text(cmd.meta.note.as_deref());
-        let db_tx = self.database.begin().await?;
-        let vault_model = self
-            .require_vault_by_id_write(&db_tx, &cmd.vault_id, &cmd.user_id)
-            .await?;
-        let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
-        let resolved_flow_id = self
-            .resolve_flow_id(&db_tx, &cmd.vault_id, cmd.flow_id)
-            .await?;
-        let resolved_wallet_id = self
-            .resolve_wallet_id(&db_tx, &cmd.vault_id, cmd.wallet_id)
-            .await?;
-
-        let tx = Transaction::new(TransactionNew {
-            vault_id: cmd.vault_id.clone(),
-            kind: TransactionKind::Income,
-            occurred_at: cmd.meta.occurred_at,
-            amount_minor: cmd.amount_minor,
-            currency,
-            category,
-            note,
-            created_by: cmd.user_id.clone(),
-            idempotency_key: cmd.meta.idempotency_key.clone(),
-            refunded_transaction_id: None,
-        })?;
-        let legs = vec![
-            Leg::new(
-                tx.id,
-                LegTarget::Wallet {
-                    wallet_id: resolved_wallet_id,
-                },
-                cmd.amount_minor,
-                currency,
-            ),
-            Leg::new(
-                tx.id,
-                LegTarget::Flow {
-                    flow_id: resolved_flow_id,
-                },
-                cmd.amount_minor,
-                currency,
-            ),
-        ];
-
-        let id = self
-            .create_transaction_with_legs(&db_tx, &cmd.vault_id, currency, &tx, &legs)
-            .await?;
-        db_tx.commit().await?;
-        Ok(id)
+        let IncomeCmd {
+            vault_id,
+            amount_minor,
+            flow_id,
+            wallet_id,
+            meta,
+            user_id,
+        } = cmd;
+        self.with_tx(|db_tx| async move {
+            self.create_flow_wallet_transaction(
+                db_tx,
+                &vault_id,
+                &user_id,
+                flow_id,
+                wallet_id,
+                amount_minor,
+                TransactionKind::Income,
+                meta,
+                amount_minor,
+            )
+            .await
+        })
+        .await
     }
 
     /// Create an expense transaction (decreases both wallet and flow).
     pub async fn expense(&self, cmd: ExpenseCmd) -> ResultEngine<Uuid> {
-        let category = normalize_optional_text(cmd.meta.category.as_deref());
-        let note = normalize_optional_text(cmd.meta.note.as_deref());
-        let db_tx = self.database.begin().await?;
-        let vault_model = self
-            .require_vault_by_id_write(&db_tx, &cmd.vault_id, &cmd.user_id)
-            .await?;
-        let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
-        let resolved_flow_id = self
-            .resolve_flow_id(&db_tx, &cmd.vault_id, cmd.flow_id)
-            .await?;
-        let resolved_wallet_id = self
-            .resolve_wallet_id(&db_tx, &cmd.vault_id, cmd.wallet_id)
-            .await?;
-
-        let tx = Transaction::new(TransactionNew {
-            vault_id: cmd.vault_id.clone(),
-            kind: TransactionKind::Expense,
-            occurred_at: cmd.meta.occurred_at,
-            amount_minor: cmd.amount_minor,
-            currency,
-            category,
-            note,
-            created_by: cmd.user_id.clone(),
-            idempotency_key: cmd.meta.idempotency_key.clone(),
-            refunded_transaction_id: None,
-        })?;
-        let legs = vec![
-            Leg::new(
-                tx.id,
-                LegTarget::Wallet {
-                    wallet_id: resolved_wallet_id,
-                },
-                -cmd.amount_minor,
-                currency,
-            ),
-            Leg::new(
-                tx.id,
-                LegTarget::Flow {
-                    flow_id: resolved_flow_id,
-                },
-                -cmd.amount_minor,
-                currency,
-            ),
-        ];
-
-        let id = self
-            .create_transaction_with_legs(&db_tx, &cmd.vault_id, currency, &tx, &legs)
-            .await?;
-        db_tx.commit().await?;
-        Ok(id)
+        let ExpenseCmd {
+            vault_id,
+            amount_minor,
+            flow_id,
+            wallet_id,
+            meta,
+            user_id,
+        } = cmd;
+        self.with_tx(|db_tx| async move {
+            self.create_flow_wallet_transaction(
+                db_tx,
+                &vault_id,
+                &user_id,
+                flow_id,
+                wallet_id,
+                amount_minor,
+                TransactionKind::Expense,
+                meta,
+                -amount_minor,
+            )
+            .await
+        })
+        .await
     }
 
     /// Create a refund transaction (increases both wallet and flow).
@@ -1090,56 +1000,29 @@ impl Engine {
     /// A refund is modeled as its own `TransactionKind::Refund` instead of a
     /// negative expense, to keep reporting correct and explicit.
     pub async fn refund(&self, cmd: RefundCmd) -> ResultEngine<Uuid> {
-        let category = normalize_optional_text(cmd.meta.category.as_deref());
-        let note = normalize_optional_text(cmd.meta.note.as_deref());
-        let db_tx = self.database.begin().await?;
-        let vault_model = self
-            .require_vault_by_id_write(&db_tx, &cmd.vault_id, &cmd.user_id)
-            .await?;
-        let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
-        let resolved_flow_id = self
-            .resolve_flow_id(&db_tx, &cmd.vault_id, cmd.flow_id)
-            .await?;
-        let resolved_wallet_id = self
-            .resolve_wallet_id(&db_tx, &cmd.vault_id, cmd.wallet_id)
-            .await?;
-
-        let tx = Transaction::new(TransactionNew {
-            vault_id: cmd.vault_id.clone(),
-            kind: TransactionKind::Refund,
-            occurred_at: cmd.meta.occurred_at,
-            amount_minor: cmd.amount_minor,
-            currency,
-            category,
-            note,
-            created_by: cmd.user_id.clone(),
-            idempotency_key: cmd.meta.idempotency_key.clone(),
-            refunded_transaction_id: None,
-        })?;
-        let legs = vec![
-            Leg::new(
-                tx.id,
-                LegTarget::Wallet {
-                    wallet_id: resolved_wallet_id,
-                },
-                cmd.amount_minor,
-                currency,
-            ),
-            Leg::new(
-                tx.id,
-                LegTarget::Flow {
-                    flow_id: resolved_flow_id,
-                },
-                cmd.amount_minor,
-                currency,
-            ),
-        ];
-
-        let id = self
-            .create_transaction_with_legs(&db_tx, &cmd.vault_id, currency, &tx, &legs)
-            .await?;
-        db_tx.commit().await?;
-        Ok(id)
+        let RefundCmd {
+            vault_id,
+            amount_minor,
+            flow_id,
+            wallet_id,
+            meta,
+            user_id,
+        } = cmd;
+        self.with_tx(|db_tx| async move {
+            self.create_flow_wallet_transaction(
+                db_tx,
+                &vault_id,
+                &user_id,
+                flow_id,
+                wallet_id,
+                amount_minor,
+                TransactionKind::Refund,
+                meta,
+                amount_minor,
+            )
+            .await
+        })
+        .await
     }
 
     pub async fn transfer_wallet(&self, cmd: TransferWalletCmd) -> ResultEngine<Uuid> {
@@ -1148,54 +1031,63 @@ impl Engine {
                 "from_wallet_id and to_wallet_id must differ".to_string(),
             ));
         }
-        let note = normalize_optional_text(cmd.note.as_deref());
-        let db_tx = self.database.begin().await?;
-        let vault_model = self
-            .require_vault_by_id_write(&db_tx, &cmd.vault_id, &cmd.user_id)
-            .await?;
-        let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
-        // Ensure wallets belong to the vault.
-        self.resolve_wallet_id(&db_tx, &cmd.vault_id, Some(cmd.from_wallet_id))
-            .await?;
-        self.resolve_wallet_id(&db_tx, &cmd.vault_id, Some(cmd.to_wallet_id))
-            .await?;
-
-        let tx = Transaction::new(TransactionNew {
-            vault_id: cmd.vault_id.clone(),
-            kind: TransactionKind::TransferWallet,
-            occurred_at: cmd.occurred_at,
-            amount_minor: cmd.amount_minor,
-            currency,
-            category: None,
+        let TransferWalletCmd {
+            vault_id,
+            amount_minor,
+            from_wallet_id,
+            to_wallet_id,
             note,
-            created_by: cmd.user_id.clone(),
-            idempotency_key: cmd.idempotency_key.clone(),
-            refunded_transaction_id: None,
-        })?;
-        let legs = vec![
-            Leg::new(
-                tx.id,
-                LegTarget::Wallet {
-                    wallet_id: cmd.from_wallet_id,
-                },
-                -cmd.amount_minor,
-                currency,
-            ),
-            Leg::new(
-                tx.id,
-                LegTarget::Wallet {
-                    wallet_id: cmd.to_wallet_id,
-                },
-                cmd.amount_minor,
-                currency,
-            ),
-        ];
+            idempotency_key,
+            occurred_at,
+            user_id,
+        } = cmd;
+        let note = normalize_optional_text(note.as_deref());
+        self.with_tx(|db_tx| async move {
+            let vault_model = self
+                .require_vault_by_id_write(db_tx, &vault_id, &user_id)
+                .await?;
+            let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            // Ensure wallets belong to the vault.
+            self.resolve_wallet_id(db_tx, &vault_id, Some(from_wallet_id))
+                .await?;
+            self.resolve_wallet_id(db_tx, &vault_id, Some(to_wallet_id))
+                .await?;
 
-        let id = self
-            .create_transaction_with_legs(&db_tx, &cmd.vault_id, currency, &tx, &legs)
-            .await?;
-        db_tx.commit().await?;
-        Ok(id)
+            let tx = Transaction::new(TransactionNew {
+                vault_id: vault_id.clone(),
+                kind: TransactionKind::TransferWallet,
+                occurred_at,
+                amount_minor,
+                currency,
+                category: None,
+                note,
+                created_by: user_id.clone(),
+                idempotency_key,
+                refunded_transaction_id: None,
+            })?;
+            let legs = vec![
+                Leg::new(
+                    tx.id,
+                    LegTarget::Wallet {
+                        wallet_id: from_wallet_id,
+                    },
+                    -amount_minor,
+                    currency,
+                ),
+                Leg::new(
+                    tx.id,
+                    LegTarget::Wallet {
+                        wallet_id: to_wallet_id,
+                    },
+                    amount_minor,
+                    currency,
+                ),
+            ];
+
+            self.create_transaction_with_legs(db_tx, &vault_id, currency, &tx, &legs)
+                .await
+        })
+        .await
     }
 
     pub async fn transfer_flow(&self, cmd: TransferFlowCmd) -> ResultEngine<Uuid> {
@@ -1204,67 +1096,76 @@ impl Engine {
                 "from_flow_id and to_flow_id must differ".to_string(),
             ));
         }
-        let note = normalize_optional_text(cmd.note.as_deref());
-        let db_tx = self.database.begin().await?;
-        let vault_model = vault::Entity::find_by_id(cmd.vault_id.to_string())
-            .one(&db_tx)
-            .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
-        // AuthZ:
-        // - Vault owner/editor can transfer between any flows in the vault.
-        // - Otherwise, user must be editor/owner on both flows (via flow_memberships).
-        if self
-            .has_vault_write_access(&db_tx, &cmd.vault_id, &cmd.user_id)
-            .await?
-        {
-            self.resolve_flow_id(&db_tx, &cmd.vault_id, Some(cmd.from_flow_id))
-                .await?;
-            self.resolve_flow_id(&db_tx, &cmd.vault_id, Some(cmd.to_flow_id))
-                .await?;
-        } else {
-            self.require_flow_write(&db_tx, &cmd.vault_id, cmd.from_flow_id, &cmd.user_id)
-                .await?;
-            self.require_flow_write(&db_tx, &cmd.vault_id, cmd.to_flow_id, &cmd.user_id)
-                .await?;
-        }
-
-        let tx = Transaction::new(TransactionNew {
-            vault_id: cmd.vault_id.clone(),
-            kind: TransactionKind::TransferFlow,
-            occurred_at: cmd.occurred_at,
-            amount_minor: cmd.amount_minor,
-            currency,
-            category: None,
+        let TransferFlowCmd {
+            vault_id,
+            amount_minor,
+            from_flow_id,
+            to_flow_id,
             note,
-            created_by: cmd.user_id.clone(),
-            idempotency_key: cmd.idempotency_key.clone(),
-            refunded_transaction_id: None,
-        })?;
-        let legs = vec![
-            Leg::new(
-                tx.id,
-                LegTarget::Flow {
-                    flow_id: cmd.from_flow_id,
-                },
-                -cmd.amount_minor,
-                currency,
-            ),
-            Leg::new(
-                tx.id,
-                LegTarget::Flow {
-                    flow_id: cmd.to_flow_id,
-                },
-                cmd.amount_minor,
-                currency,
-            ),
-        ];
+            idempotency_key,
+            occurred_at,
+            user_id,
+        } = cmd;
+        let note = normalize_optional_text(note.as_deref());
+        self.with_tx(|db_tx| async move {
+            let vault_model = vault::Entity::find_by_id(vault_id.to_string())
+                .one(db_tx)
+                .await?
+                .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+            let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            // AuthZ:
+            // - Vault owner/editor can transfer between any flows in the vault.
+            // - Otherwise, user must be editor/owner on both flows (via flow_memberships).
+            if self
+                .has_vault_write_access(db_tx, &vault_id, &user_id)
+                .await?
+            {
+                self.resolve_flow_id(db_tx, &vault_id, Some(from_flow_id))
+                    .await?;
+                self.resolve_flow_id(db_tx, &vault_id, Some(to_flow_id))
+                    .await?;
+            } else {
+                self.require_flow_write(db_tx, &vault_id, from_flow_id, &user_id)
+                    .await?;
+                self.require_flow_write(db_tx, &vault_id, to_flow_id, &user_id)
+                    .await?;
+            }
 
-        let id = self
-            .create_transaction_with_legs(&db_tx, &cmd.vault_id, currency, &tx, &legs)
-            .await?;
-        db_tx.commit().await?;
-        Ok(id)
+            let tx = Transaction::new(TransactionNew {
+                vault_id: vault_id.clone(),
+                kind: TransactionKind::TransferFlow,
+                occurred_at,
+                amount_minor,
+                currency,
+                category: None,
+                note,
+                created_by: user_id.clone(),
+                idempotency_key,
+                refunded_transaction_id: None,
+            })?;
+            let legs = vec![
+                Leg::new(
+                    tx.id,
+                    LegTarget::Flow {
+                        flow_id: from_flow_id,
+                    },
+                    -amount_minor,
+                    currency,
+                ),
+                Leg::new(
+                    tx.id,
+                    LegTarget::Flow {
+                        flow_id: to_flow_id,
+                    },
+                    amount_minor,
+                    currency,
+                ),
+            ];
+
+            self.create_transaction_with_legs(db_tx, &vault_id, currency, &tx, &legs)
+                .await
+        })
+        .await
     }
 
     /// Voids a transaction (soft delete).
@@ -1744,42 +1645,19 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<CashFlow> {
-        let db_tx = self.database.begin().await?;
-        let model = self
-            .require_flow_read(&db_tx, vault_id, cash_flow_id, user_id)
-            .await?;
-
-        let vault_model = vault::Entity::find_by_id(vault_id.to_string())
-            .one(&db_tx)
-            .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
-
-        let system_kind = model
-            .system_kind
-            .as_deref()
-            .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-        let currency = Currency::try_from(model.currency.as_str()).unwrap_or(vault_currency);
-        if currency != vault_currency {
-            return Err(EngineError::CurrencyMismatch(format!(
-                "vault currency is {}, got {}",
-                vault_currency.code(),
-                currency.code()
-            )));
-        }
-        validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
-
-        db_tx.commit().await?;
-        Ok(CashFlow {
-            id: cash_flow_id,
-            name: model.name,
-            system_kind,
-            balance: model.balance,
-            max_balance: model.max_balance,
-            income_balance: model.income_balance,
-            currency,
-            archived: model.archived,
+        self.with_tx(|db_tx| async move {
+            let model = self
+                .require_flow_read(db_tx, vault_id, cash_flow_id, user_id)
+                .await?;
+            let vault_model = vault::Entity::find_by_id(vault_id.to_string())
+                .one(db_tx)
+                .await?
+                .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+            let vault_currency =
+                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            CashFlow::try_from((model, vault_currency))
         })
+        .await
     }
 
     pub async fn cash_flow_by_name(
@@ -1790,58 +1668,35 @@ impl Engine {
     ) -> ResultEngine<CashFlow> {
         let name = normalize_required_flow_name(name)?;
         let name_lower = name.to_lowercase();
-        let db_tx = self.database.begin().await?;
-        let vault_model = vault::Entity::find_by_id(vault_id.to_string())
-            .one(&db_tx)
-            .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+        self.with_tx(|db_tx| async move {
+            let vault_model = vault::Entity::find_by_id(vault_id.to_string())
+                .one(db_tx)
+                .await?
+                .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+            let vault_currency =
+                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
-        let model = cash_flows::Entity::find()
-            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
-            .filter(Expr::cust("LOWER(name)").eq(name_lower))
-            .one(&db_tx)
-            .await?
-            .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
-
-        if !self
-            .has_vault_read_access(&db_tx, vault_id, user_id)
-            .await?
-        {
-            let role = self
-                .flow_membership_role(&db_tx, &model.id, user_id)
+            let model = cash_flows::Entity::find()
+                .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+                .filter(Expr::cust("LOWER(name)").eq(name_lower))
+                .one(db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
-            let _ = role;
-        }
 
-        let flow_id = Uuid::parse_str(&model.id)
-            .map_err(|_| EngineError::InvalidAmount("invalid cash_flow id".to_string()))?;
-        let system_kind = model
-            .system_kind
-            .as_deref()
-            .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-        let currency = Currency::try_from(model.currency.as_str()).unwrap_or(vault_currency);
-        if currency != vault_currency {
-            return Err(EngineError::CurrencyMismatch(format!(
-                "vault currency is {}, got {}",
-                vault_currency.code(),
-                currency.code()
-            )));
-        }
-        validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
+            if !self
+                .has_vault_read_access(db_tx, vault_id, user_id)
+                .await?
+            {
+                let role = self
+                    .flow_membership_role(db_tx, &model.id, user_id)
+                    .await?
+                    .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+                let _ = role;
+            }
 
-        db_tx.commit().await?;
-        Ok(CashFlow {
-            id: flow_id,
-            name: model.name,
-            system_kind,
-            balance: model.balance,
-            max_balance: model.max_balance,
-            income_balance: model.income_balance,
-            currency,
-            archived: model.archived,
+            CashFlow::try_from((model, vault_currency))
         })
+        .await
     }
 
     /// Delete a cash flow contained by a vault.
@@ -2395,137 +2250,93 @@ impl Engine {
     /// - Validates flow invariants while replaying legs in chronological order.
     /// - Refreshes the in-memory vault state from DB models post-commit.
     pub async fn recompute_balances(&self, vault_id: &str, user_id: &str) -> ResultEngine<()> {
-        let db_tx = self.database.begin().await?;
-        let vault_model = self
-            .require_vault_by_id_write(&db_tx, vault_id, user_id)
-            .await?;
-        let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+        self.with_tx(|db_tx| async move {
+            let vault_model = self
+                .require_vault_by_id_write(db_tx, vault_id, user_id)
+                .await?;
+            let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
-        // Load all wallets/flows from DB (including archived) to avoid stale RAM
-        // issues.
-        let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
-            .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
-            .all(&db_tx)
-            .await?;
-        let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
-            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
-            .all(&db_tx)
-            .await?;
+            // Load all wallets/flows from DB (including archived) to avoid stale RAM
+            // issues.
+            let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
+                .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+                .all(db_tx)
+                .await?;
+            let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
+                .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+                .all(db_tx)
+                .await?;
 
-        let mut wallets_by_id: HashMap<Uuid, Wallet> = HashMap::new();
-        for model in wallet_models {
-            let id = Uuid::parse_str(&model.id)
-                .map_err(|_| EngineError::InvalidAmount("invalid wallet id".to_string()))?;
-            let wallet_currency = Currency::try_from(model.currency.as_str()).unwrap_or(currency);
-            if wallet_currency != currency {
-                return Err(EngineError::CurrencyMismatch(format!(
-                    "vault currency is {}, got {}",
-                    currency.code(),
-                    wallet_currency.code()
-                )));
-            }
-            wallets_by_id.insert(
-                id,
-                Wallet {
-                    id,
-                    name: model.name,
-                    balance: 0,
-                    currency: wallet_currency,
-                    archived: model.archived,
-                },
-            );
-        }
-
-        let mut flows: HashMap<Uuid, CashFlow> = HashMap::new();
-        for model in flow_models {
-            let id = Uuid::parse_str(&model.id)
-                .map_err(|_| EngineError::InvalidAmount("invalid cash_flow id".to_string()))?;
-            let flow_currency = Currency::try_from(model.currency.as_str()).unwrap_or(currency);
-            if flow_currency != currency {
-                return Err(EngineError::CurrencyMismatch(format!(
-                    "vault currency is {}, got {}",
-                    currency.code(),
-                    flow_currency.code()
-                )));
-            }
-            validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
-            let system_kind = model
-                .system_kind
-                .as_deref()
-                .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-            flows.insert(
-                id,
-                CashFlow {
-                    id,
-                    name: model.name,
-                    system_kind,
-                    balance: 0,
-                    max_balance: model.max_balance,
-                    income_balance: model.income_balance.map(|_| 0),
-                    currency: flow_currency,
-                    archived: model.archived,
-                },
-            );
-        }
-
-        // Replay all non-voided legs in chronological order to validate invariants.
-        let leg_models: Vec<legs::Model> = legs::Entity::find()
-            .join(JoinType::InnerJoin, legs::Relation::Transactions.def())
-            .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
-            .filter(transactions::Column::VoidedAt.is_null())
-            .order_by_asc(transactions::Column::OccurredAt)
-            .order_by_asc(legs::Column::Id)
-            .all(&db_tx)
-            .await?;
-
-        for leg_model in leg_models {
-            let leg = Leg::try_from(leg_model)?;
-            if leg.currency != currency {
-                return Err(EngineError::CurrencyMismatch(format!(
-                    "vault currency is {}, got {}",
-                    currency.code(),
-                    leg.currency.code()
-                )));
+            let mut wallets_by_id: HashMap<Uuid, Wallet> = HashMap::new();
+            for model in wallet_models {
+                let mut wallet = Wallet::try_from((model, currency))?;
+                wallet.balance = 0;
+                wallets_by_id.insert(wallet.id, wallet);
             }
 
-            match leg.target {
-                LegTarget::Wallet { wallet_id } => {
-                    let wallet = wallets_by_id
-                        .get_mut(&wallet_id)
-                        .ok_or_else(|| EngineError::KeyNotFound("wallet not exists".to_string()))?;
-                    wallet.balance += leg.amount_minor;
+            let mut flows: HashMap<Uuid, CashFlow> = HashMap::new();
+            for model in flow_models {
+                let mut flow = CashFlow::try_from((model, currency))?;
+                flow.balance = 0;
+                if flow.income_balance.is_some() {
+                    flow.income_balance = Some(0);
                 }
-                LegTarget::Flow { flow_id } => {
-                    let flow = flows.get_mut(&flow_id).ok_or_else(|| {
-                        EngineError::KeyNotFound("cash_flow not exists".to_string())
-                    })?;
-                    flow.apply_leg_change(0, leg.amount_minor)?;
+                flows.insert(flow.id, flow);
+            }
+
+            // Replay all non-voided legs in chronological order to validate invariants.
+            let leg_models: Vec<legs::Model> = legs::Entity::find()
+                .join(JoinType::InnerJoin, legs::Relation::Transactions.def())
+                .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+                .filter(transactions::Column::VoidedAt.is_null())
+                .order_by_asc(transactions::Column::OccurredAt)
+                .order_by_asc(legs::Column::Id)
+                .all(db_tx)
+                .await?;
+
+            for leg_model in leg_models {
+                let leg = Leg::try_from(leg_model)?;
+                ensure_vault_currency(currency, leg.currency)?;
+
+                match leg.target {
+                    LegTarget::Wallet { wallet_id } => {
+                        let wallet = wallets_by_id.get_mut(&wallet_id).ok_or_else(|| {
+                            EngineError::KeyNotFound("wallet not exists".to_string())
+                        })?;
+                        wallet.balance += leg.amount_minor;
+                    }
+                    LegTarget::Flow { flow_id } => {
+                        let flow = flows.get_mut(&flow_id).ok_or_else(|| {
+                            EngineError::KeyNotFound("cash_flow not exists".to_string())
+                        })?;
+                        flow.apply_leg_change(0, leg.amount_minor)?;
+                    }
                 }
             }
-        }
 
-        // Persist denormalized balances.
-        for (wallet_id, wallet) in &wallets_by_id {
-            let wallet_model = wallets::ActiveModel {
-                id: ActiveValue::Set(wallet_id.to_string()),
-                balance: ActiveValue::Set(wallet.balance),
-                ..Default::default()
-            };
-            wallet_model.update(&db_tx).await?;
-        }
+            // Persist denormalized balances.
+            for (wallet_id, wallet) in &wallets_by_id {
+                let wallet_model = wallets::ActiveModel {
+                    id: ActiveValue::Set(wallet_id.to_string()),
+                    balance: ActiveValue::Set(wallet.balance),
+                    ..Default::default()
+                };
+                wallet_model.update(db_tx).await?;
+            }
 
-        for (flow_id, flow) in &flows {
-            let flow_model = cash_flows::ActiveModel {
-                id: ActiveValue::Set(flow_id.to_string()),
-                balance: ActiveValue::Set(flow.balance),
-                income_balance: ActiveValue::Set(flow.income_balance),
-                ..Default::default()
-            };
-            flow_model.update(&db_tx).await?;
-        }
+            for (flow_id, flow) in &flows {
+                let flow_model = cash_flows::ActiveModel {
+                    id: ActiveValue::Set(flow_id.to_string()),
+                    balance: ActiveValue::Set(flow.balance),
+                    income_balance: ActiveValue::Set(flow.income_balance),
+                    ..Default::default()
+                };
+                flow_model.update(db_tx).await?;
+            }
 
-        db_tx.commit().await?;
-        Ok(())
+            Ok(())
+        })
+        .await
     }
 
     /// Return a user `Vault`.
@@ -2541,97 +2352,50 @@ impl Engine {
                 "missing vault id or name".to_string(),
             ));
         }
+        self.with_tx(|db_tx| async move {
+            let vault_model = if let Some(id) = vault_id {
+                self.require_vault_by_id(db_tx, id, user_id).await?
+            } else {
+                let name = vault_name.ok_or_else(|| {
+                    EngineError::KeyNotFound("missing vault id or name".to_string())
+                })?;
+                self.require_vault_by_name(db_tx, &name, user_id)
+                    .await?
+            };
+            let vault_currency =
+                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
-        let db_tx = self.database.begin().await?;
-        let vault_model = if let Some(id) = vault_id {
-            self.require_vault_by_id(&db_tx, id, user_id).await?
-        } else {
-            let name = vault_name
-                .ok_or_else(|| EngineError::KeyNotFound("missing vault id or name".to_string()))?;
-            self.require_vault_by_name(&db_tx, &name, user_id).await?
-        };
-        let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
+                .filter(cash_flows::Column::VaultId.eq(vault_model.id.clone()))
+                .all(db_tx)
+                .await?;
+            let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
+                .filter(wallets::Column::VaultId.eq(vault_model.id.clone()))
+                .all(db_tx)
+                .await?;
 
-        let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
-            .filter(cash_flows::Column::VaultId.eq(vault_model.id.clone()))
-            .all(&db_tx)
-            .await?;
-        let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
-            .filter(wallets::Column::VaultId.eq(vault_model.id.clone()))
-            .all(&db_tx)
-            .await?;
-
-        let mut flows = HashMap::new();
-        for flow_model in flow_models {
-            let id = Uuid::parse_str(&flow_model.id)
-                .map_err(|_| EngineError::InvalidAmount("invalid cash_flow id".to_string()))?;
-            let system_kind = flow_model
-                .system_kind
-                .as_deref()
-                .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-            let currency =
-                Currency::try_from(flow_model.currency.as_str()).unwrap_or(vault_currency);
-            if currency != vault_currency {
-                return Err(EngineError::CurrencyMismatch(format!(
-                    "vault currency is {}, got {}",
-                    vault_currency.code(),
-                    currency.code()
-                )));
+            let mut flows = HashMap::new();
+            for flow_model in flow_models {
+                let flow = CashFlow::try_from((flow_model, vault_currency))?;
+                flows.insert(flow.id, flow);
             }
-            validate_flow_mode_fields(
-                &flow_model.name,
-                flow_model.max_balance,
-                flow_model.income_balance,
-            )?;
-            flows.insert(
-                id,
-                CashFlow {
-                    id,
-                    name: flow_model.name,
-                    system_kind,
-                    balance: flow_model.balance,
-                    max_balance: flow_model.max_balance,
-                    income_balance: flow_model.income_balance,
-                    currency,
-                    archived: flow_model.archived,
-                },
-            );
-        }
 
-        let mut wallets_map = HashMap::new();
-        for wallet_model in wallet_models {
-            let id = Uuid::parse_str(&wallet_model.id)
-                .map_err(|_| EngineError::InvalidAmount("invalid wallet id".to_string()))?;
-            let currency =
-                Currency::try_from(wallet_model.currency.as_str()).unwrap_or(vault_currency);
-            if currency != vault_currency {
-                return Err(EngineError::CurrencyMismatch(format!(
-                    "vault currency is {}, got {}",
-                    vault_currency.code(),
-                    currency.code()
-                )));
+            let mut wallets_map = HashMap::new();
+            for wallet_model in wallet_models {
+                let wallet = Wallet::try_from((wallet_model, vault_currency))?;
+                wallets_map.insert(wallet.id, wallet);
             }
-            wallets_map.insert(
-                id,
-                Wallet {
-                    id,
-                    name: wallet_model.name,
-                    balance: wallet_model.balance,
-                    currency,
-                    archived: wallet_model.archived,
-                },
-            );
-        }
 
-        db_tx.commit().await?;
-        Ok(Vault {
-            id: vault_model.id,
-            name: vault_model.name,
-            cash_flow: flows,
-            wallet: wallets_map,
-            user_id: vault_model.user_id,
-            currency: vault_currency,
+            Ok(Vault {
+                id: vault_model.id,
+                name: vault_model.name,
+                cash_flow: flows,
+                wallet: wallets_map,
+                user_id: vault_model.user_id,
+                currency: vault_currency,
+            })
         })
+        .await
     }
 
     /// Return a wallet snapshot from DB.
@@ -2641,32 +2405,20 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<Wallet> {
-        let db_tx = self.database.begin().await?;
-        let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
-        let vault_currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+        self.with_tx(|db_tx| async move {
+            let vault_model = self.require_vault_by_id(db_tx, vault_id, user_id).await?;
+            let vault_currency =
+                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
 
-        let model = wallets::Entity::find_by_id(wallet_id.to_string())
-            .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
-            .one(&db_tx)
-            .await?
-            .ok_or_else(|| EngineError::KeyNotFound("wallet not exists".to_string()))?;
+            let model = wallets::Entity::find_by_id(wallet_id.to_string())
+                .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+                .one(db_tx)
+                .await?
+                .ok_or_else(|| EngineError::KeyNotFound("wallet not exists".to_string()))?;
 
-        let currency = Currency::try_from(model.currency.as_str()).unwrap_or(vault_currency);
-        if currency != vault_currency {
-            return Err(EngineError::CurrencyMismatch(format!(
-                "vault currency is {}, got {}",
-                vault_currency.code(),
-                currency.code()
-            )));
-        }
-        db_tx.commit().await?;
-        Ok(Wallet {
-            id: wallet_id,
-            name: model.name,
-            balance: model.balance,
-            currency,
-            archived: model.archived,
+            Wallet::try_from((model, vault_currency))
         })
+        .await
     }
 
     /// Returns vault totals: `(currency, balance_minor, total_income_minor,
