@@ -37,6 +37,45 @@ impl TryFrom<&str> for MembershipRole {
 }
 
 impl Engine {
+    async fn find_vault_by_id(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+    ) -> ResultEngine<Option<vault::Model>> {
+        vault::Entity::find_by_id(vault_id.to_string())
+            .one(db)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn flow_exists_in_vault(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+        flow_id: Uuid,
+    ) -> ResultEngine<bool> {
+        cash_flows::Entity::find_by_id(flow_id.to_string())
+            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+            .one(db)
+            .await
+            .map(|model| model.is_some())
+            .map_err(Into::into)
+    }
+
+    async fn wallet_exists_in_vault(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+        wallet_id: Uuid,
+    ) -> ResultEngine<bool> {
+        wallets::Entity::find_by_id(wallet_id.to_string())
+            .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+            .one(db)
+            .await
+            .map(|model| model.is_some())
+            .map_err(Into::into)
+    }
+
     pub(super) async fn vault_membership_role(
         &self,
         db: &DatabaseTransaction,
@@ -78,8 +117,8 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<vault::Model> {
-        let model = vault::Entity::find_by_id(vault_id.to_string())
-            .one(db)
+        let model = self
+            .find_vault_by_id(db, vault_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         if model.user_id != user_id {
@@ -123,9 +162,7 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<bool> {
-        let Some(vault) = vault::Entity::find_by_id(vault_id.to_string())
-            .one(db)
-            .await?
+        let Some(vault) = self.find_vault_by_id(db, vault_id).await?
         else {
             return Ok(false);
         };
@@ -144,9 +181,7 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<bool> {
-        let Some(vault) = vault::Entity::find_by_id(vault_id.to_string())
-            .one(db)
-            .await?
+        let Some(vault) = self.find_vault_by_id(db, vault_id).await?
         else {
             return Ok(false);
         };
@@ -212,8 +247,8 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<vault::Model> {
-        let model = vault::Entity::find_by_id(vault_id.to_string())
-            .one(db)
+        let model = self
+            .find_vault_by_id(db, vault_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         if model.user_id != user_id
@@ -287,14 +322,7 @@ impl Engine {
     ) -> ResultEngine<Uuid> {
         if let Some(id) = flow_id {
             // Ensure it exists and belongs to the vault.
-            let exists = cash_flows::Entity::find_by_id(id.to_string())
-                .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
-                .one(db)
-                .await?
-                .is_some();
-            if !exists {
-                return Err(EngineError::KeyNotFound("cash_flow not exists".to_string()));
-            }
+            self.require_flow_in_vault(db, vault_id, id).await?;
             return Ok(id);
         }
         self.unallocated_flow_id(db, vault_id).await
@@ -307,14 +335,7 @@ impl Engine {
         wallet_id: Option<Uuid>,
     ) -> ResultEngine<Uuid> {
         if let Some(id) = wallet_id {
-            let exists = wallets::Entity::find_by_id(id.to_string())
-                .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
-                .one(db)
-                .await?
-                .is_some();
-            if !exists {
-                return Err(EngineError::KeyNotFound("wallet not exists".to_string()));
-            }
+            self.require_wallet_in_vault(db, vault_id, id).await?;
             return Ok(id);
         }
 
@@ -343,11 +364,9 @@ impl Engine {
         vault_id: &str,
         wallet_id: Uuid,
     ) -> ResultEngine<()> {
-        let exists = wallets::Entity::find_by_id(wallet_id.to_string())
-            .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
-            .one(db)
-            .await?
-            .is_some();
+        let exists = self
+            .wallet_exists_in_vault(db, vault_id, wallet_id)
+            .await?;
         if !exists {
             return Err(EngineError::KeyNotFound("wallet not exists".to_string()));
         }
@@ -360,11 +379,7 @@ impl Engine {
         vault_id: &str,
         flow_id: Uuid,
     ) -> ResultEngine<()> {
-        let exists = cash_flows::Entity::find_by_id(flow_id.to_string())
-            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
-            .one(db)
-            .await?
-            .is_some();
+        let exists = self.flow_exists_in_vault(db, vault_id, flow_id).await?;
         if !exists {
             return Err(EngineError::KeyNotFound("cash_flow not exists".to_string()));
         }

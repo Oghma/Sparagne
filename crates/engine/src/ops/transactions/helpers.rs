@@ -159,6 +159,20 @@ where
     })
 }
 
+pub(super) fn resolve_transfer_targets<T: Copy + Eq>(
+    info: &TransferLegInfo<T>,
+    from_override: Option<T>,
+    to_override: Option<T>,
+    error_message: &str,
+) -> ResultEngine<(T, T)> {
+    let new_from = from_override.unwrap_or(info.from_target);
+    let new_to = to_override.unwrap_or(info.to_target);
+    if new_from == new_to {
+        return Err(EngineError::InvalidAmount(error_message.to_string()));
+    }
+    Ok((new_from, new_to))
+}
+
 pub(super) fn apply_transfer_leg_updates<T, F>(
     leg_pairs: &[(crate::legs::Model, Leg)],
     kind_label: &str,
