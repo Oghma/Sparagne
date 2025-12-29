@@ -537,6 +537,66 @@ impl Engine {
         Ok(())
     }
 
+    async fn create_flow_wallet_transaction(
+        &self,
+        db_tx: &DatabaseTransaction,
+        vault_id: &str,
+        user_id: &str,
+        flow_id: Option<Uuid>,
+        wallet_id: Option<Uuid>,
+        amount_minor: i64,
+        kind: TransactionKind,
+        meta: TxMeta,
+        leg_amount_minor: i64,
+    ) -> ResultEngine<Uuid> {
+        let category = normalize_optional_text(meta.category.as_deref());
+        let note = normalize_optional_text(meta.note.as_deref());
+        let vault_model = self
+            .require_vault_by_id_write(db_tx, vault_id, user_id)
+            .await?;
+        let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+        let resolved_flow_id = self
+            .resolve_flow_id(db_tx, vault_id, flow_id)
+            .await?;
+        let resolved_wallet_id = self
+            .resolve_wallet_id(db_tx, vault_id, wallet_id)
+            .await?;
+
+        let tx = Transaction::new(TransactionNew {
+            vault_id: vault_id.to_string(),
+            kind,
+            occurred_at: meta.occurred_at,
+            amount_minor,
+            currency,
+            category,
+            note,
+            created_by: user_id.to_string(),
+            idempotency_key: meta.idempotency_key,
+            refunded_transaction_id: None,
+        })?;
+        let legs = vec![
+            Leg::new(
+                tx.id,
+                LegTarget::Wallet {
+                    wallet_id: resolved_wallet_id,
+                },
+                leg_amount_minor,
+                currency,
+            ),
+            Leg::new(
+                tx.id,
+                LegTarget::Flow {
+                    flow_id: resolved_flow_id,
+                },
+                leg_amount_minor,
+                currency,
+            ),
+        ];
+
+        self.create_transaction_with_legs(db_tx, vault_id, currency, &tx, &legs)
+            .await
+    }
+
     async fn create_transaction_with_legs(
         &self,
         db_tx: &DatabaseTransaction,
