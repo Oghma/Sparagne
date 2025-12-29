@@ -14,11 +14,11 @@ use crate::{
     ExpenseCmd, IncomeCmd, Leg, LegTarget, RefundCmd, ResultEngine, Transaction, TransactionKind,
     TransferFlowCmd, TransferWalletCmd, TxMeta, UpdateTransactionCmd,
 };
-use crate::util::validate_flow_mode_fields;
+use crate::util::{ensure_vault_currency, model_currency, validate_flow_mode_fields};
 
 use super::{
     build_transaction, flow_wallet_legs, flow_wallet_signed_amount, normalize_optional_text,
-    transfer_flow_legs, transfer_wallet_legs, with_tx, Engine,
+    parse_vault_currency, transfer_flow_legs, transfer_wallet_legs, with_tx, Engine,
 };
 
 /// Filters for listing transactions.
@@ -469,7 +469,7 @@ impl Engine {
         let vault_model = self
             .require_vault_by_id_write(db_tx, vault_id, user_id)
             .await?;
-        let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+        let currency = parse_vault_currency(vault_model.currency.as_str())?;
         let resolved_flow_id = self.resolve_flow_id(db_tx, vault_id, flow_id).await?;
         let resolved_wallet_id = self.resolve_wallet_id(db_tx, vault_id, wallet_id).await?;
         let leg_amount_minor = flow_wallet_signed_amount(kind, amount_minor)?;
@@ -512,15 +512,8 @@ impl Engine {
             .one(db_tx)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("wallet not exists".to_string()))?;
-        let wallet_currency = Currency::try_from(wallet_model.currency.as_str())
-            .unwrap_or(vault_currency);
-        if wallet_currency != vault_currency {
-            return Err(EngineError::CurrencyMismatch(format!(
-                "vault currency is {}, got {}",
-                vault_currency.code(),
-                wallet_currency.code()
-            )));
-        }
+        let wallet_currency = model_currency(wallet_model.currency.as_str())?;
+        ensure_vault_currency(vault_currency, wallet_currency)?;
 
         let entry = wallet_new_balances
             .entry(wallet_id)
@@ -549,15 +542,8 @@ impl Engine {
             flow_model.max_balance,
             flow_model.income_balance,
         )?;
-        let flow_currency =
-            Currency::try_from(flow_model.currency.as_str()).unwrap_or(vault_currency);
-        if flow_currency != vault_currency {
-            return Err(EngineError::CurrencyMismatch(format!(
-                "vault currency is {}, got {}",
-                vault_currency.code(),
-                flow_currency.code()
-            )));
-        }
+        let flow_currency = model_currency(flow_model.currency.as_str())?;
+        ensure_vault_currency(vault_currency, flow_currency)?;
         let system_kind = flow_model
             .system_kind
             .as_deref()
@@ -898,7 +884,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, &vault_id, &user_id)
                 .await?;
-            let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let currency = parse_vault_currency(vault_model.currency.as_str())?;
             // Ensure wallets belong to the vault.
             self.resolve_wallet_id(&db_tx, &vault_id, Some(from_wallet_id))
                 .await?;
@@ -954,7 +940,7 @@ impl Engine {
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-            let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let currency = parse_vault_currency(vault_model.currency.as_str())?;
             // AuthZ:
             // - Vault owner/editor can transfer between any flows in the vault.
             // - Otherwise, user must be editor/owner on both flows (via flow_memberships).
@@ -1012,8 +998,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let vault_currency =
-                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             let tx_model = transactions::Entity::find_by_id(transaction_id.to_string())
                 .one(&db_tx)
@@ -1086,8 +1071,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let vault_currency =
-                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             let tx_model = transactions::Entity::find_by_id(transaction_id.to_string())
                 .one(&db_tx)

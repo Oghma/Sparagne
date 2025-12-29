@@ -7,12 +7,12 @@ use sea_orm::{
 };
 
 use crate::{
-    cash_flows, legs, transactions, wallets, CashFlow, Currency, EngineError, Leg, LegTarget,
-    ResultEngine, Wallet,
+    cash_flows, legs, transactions, wallets, CashFlow, EngineError, Leg, LegTarget, ResultEngine,
+    Wallet,
 };
 use crate::util::ensure_vault_currency;
 
-use super::{with_tx, Engine};
+use super::{parse_vault_currency, with_tx, Engine};
 
 impl Engine {
     /// Recomputes denormalized balances for wallets and flows from the ledger
@@ -26,7 +26,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             // Load all wallets/flows from DB (including archived) to avoid stale RAM
             // issues.

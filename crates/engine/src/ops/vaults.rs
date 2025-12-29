@@ -7,7 +7,7 @@ use crate::{
     TransactionKind, Vault, Wallet,
 };
 
-use super::{normalize_required_name, with_tx, Engine};
+use super::{normalize_required_name, parse_vault_currency, with_tx, Engine};
 
 impl Engine {
     /// Delete or archive a vault
@@ -162,8 +162,7 @@ impl Engine {
                 self.require_vault_by_name(&db_tx, &name, user_id)
                     .await?
             };
-            let vault_currency =
-                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
                 .filter(cash_flows::Column::VaultId.eq(vault_model.id.clone()))
@@ -210,7 +209,7 @@ impl Engine {
     ) -> ResultEngine<(Currency, i64, i64, i64)> {
         with_tx!(self, |db_tx| {
             let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
-            let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             let backend = self.database.get_database_backend();
             let void_cond = if include_voided {

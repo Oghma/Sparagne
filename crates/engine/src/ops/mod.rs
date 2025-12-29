@@ -6,6 +6,7 @@ use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind,
     TransactionNew,
 };
+use crate::util::model_currency;
 
 mod access;
 mod balances;
@@ -85,6 +86,10 @@ fn flow_wallet_signed_amount(
             "invalid transaction: unexpected kind".to_string(),
         )),
     }
+}
+
+fn parse_vault_currency(value: &str) -> ResultEngine<Currency> {
+    model_currency(value)
 }
 
 fn build_transaction(

@@ -5,13 +5,12 @@ use sea_orm::{
     ActiveValue, QueryFilter, Statement, TransactionTrait, prelude::*, sea_query::Expr,
 };
 
-use crate::{
-    cash_flows, vault, CashFlow, Currency, EngineError, ResultEngine, TransactionKind,
-};
+use crate::{cash_flows, vault, CashFlow, EngineError, ResultEngine, TransactionKind};
 use crate::util::validate_flow_mode_fields;
 
 use super::{
-    build_transaction, normalize_required_flow_name, transfer_flow_legs, with_tx, Engine,
+    build_transaction, normalize_required_flow_name, parse_vault_currency, transfer_flow_legs,
+    with_tx, Engine,
 };
 
 impl Engine {
@@ -30,8 +29,7 @@ impl Engine {
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-            let vault_currency =
-                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
             let flow = CashFlow::try_from((model, vault_currency))?;
             Ok(flow)
         })
@@ -50,8 +48,7 @@ impl Engine {
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-            let vault_currency =
-                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             let model = cash_flows::Entity::find()
                 .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
@@ -153,8 +150,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let vault_currency =
-                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             if name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
                 return Err(EngineError::InvalidFlow(
@@ -187,20 +183,25 @@ impl Engine {
 
             if balance > 0 {
                 let unallocated_flow_id = self.unallocated_flow_id(&db_tx, vault_id).await?;
-            let tx = build_transaction(
-                vault_id,
-                TransactionKind::TransferFlow,
-                occurred_at,
-                balance,
-                vault_currency,
-                None,
-                Some(format!("opening allocation for flow '{name}'")),
-                user_id,
-                None,
-                None,
-            )?;
-            let legs =
-                transfer_flow_legs(tx.id, unallocated_flow_id, flow_id, balance, vault_currency);
+                let tx = build_transaction(
+                    vault_id,
+                    TransactionKind::TransferFlow,
+                    occurred_at,
+                    balance,
+                    vault_currency,
+                    None,
+                    Some(format!("opening allocation for flow '{name}'")),
+                    user_id,
+                    None,
+                    None,
+                )?;
+                let legs = transfer_flow_legs(
+                    tx.id,
+                    unallocated_flow_id,
+                    flow_id,
+                    balance,
+                    vault_currency,
+                );
                 self.create_transaction_with_legs(&db_tx, vault_id, vault_currency, &tx, &legs)
                     .await?;
             }

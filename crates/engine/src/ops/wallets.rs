@@ -3,13 +3,11 @@ use uuid::Uuid;
 
 use sea_orm::{ActiveValue, QueryFilter, TransactionTrait, prelude::*, sea_query::Expr};
 
-use crate::{
-    wallets, Currency, EngineError, ResultEngine, TransactionKind, Wallet,
-};
+use crate::{wallets, EngineError, ResultEngine, TransactionKind, Wallet};
 
 use super::{
     build_transaction, flow_wallet_legs, flow_wallet_signed_amount, normalize_required_name,
-    with_tx, Engine,
+    parse_vault_currency, with_tx, Engine,
 };
 
 impl Engine {
@@ -22,8 +20,7 @@ impl Engine {
     ) -> ResultEngine<Wallet> {
         with_tx!(self, |db_tx| {
             let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
-            let vault_currency =
-                Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             let model = wallets::Entity::find_by_id(wallet_id.to_string())
                 .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
@@ -57,7 +54,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let currency = Currency::try_from(vault_model.currency.as_str()).unwrap_or_default();
+            let currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             let exists = wallets::Entity::find()
                 .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
