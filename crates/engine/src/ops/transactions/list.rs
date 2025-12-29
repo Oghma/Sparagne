@@ -83,17 +83,18 @@ struct TransactionsCursor {
 
 impl TransactionsCursor {
     fn encode(&self) -> ResultEngine<String> {
-        let bytes = serde_json::to_vec(self)
-            .map_err(|_| EngineError::InvalidAmount("invalid transactions cursor".to_string()))?;
+        let bytes = serde_json::to_vec(self).map_err(|_| {
+            EngineError::InvalidCursor("invalid transactions cursor".to_string())
+        })?;
         Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
     }
 
     fn decode(input: &str) -> ResultEngine<Self> {
         let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(input.as_bytes())
-            .map_err(|_| EngineError::InvalidAmount("invalid transactions cursor".to_string()))?;
+            .map_err(|_| EngineError::InvalidCursor("invalid transactions cursor".to_string()))?;
         serde_json::from_slice::<Self>(&bytes)
-            .map_err(|_| EngineError::InvalidAmount("invalid transactions cursor".to_string()))
+            .map_err(|_| EngineError::InvalidCursor("invalid transactions cursor".to_string()))
     }
 }
 

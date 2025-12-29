@@ -29,7 +29,7 @@ impl TryFrom<&str> for MembershipRole {
             "owner" => Ok(Self::Owner),
             "editor" => Ok(Self::Editor),
             "viewer" => Ok(Self::Viewer),
-            other => Err(EngineError::InvalidAmount(format!(
+            other => Err(EngineError::InvalidRole(format!(
                 "invalid membership role: {other}"
             ))),
         }

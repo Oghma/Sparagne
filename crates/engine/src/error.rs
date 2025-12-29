@@ -24,8 +24,12 @@ pub enum EngineError {
     ExistingKey(String),
     #[error("Invalid amount: {0}")]
     InvalidAmount(String),
+    #[error("Invalid cursor: {0}")]
+    InvalidCursor(String),
     #[error("Invalid flow: {0}")]
     InvalidFlow(String),
+    #[error("Invalid role: {0}")]
+    InvalidRole(String),
     #[error("Currency mismatch: {0}")]
     CurrencyMismatch(String),
     #[error("Forbidden: {0}")]
@@ -42,7 +46,9 @@ impl PartialEq for EngineError {
             (Self::KeyNotFound(a), Self::KeyNotFound(b)) => a == b,
             (Self::ExistingKey(a), Self::ExistingKey(b)) => a == b,
             (Self::InvalidAmount(a), Self::InvalidAmount(b)) => a == b,
+            (Self::InvalidCursor(a), Self::InvalidCursor(b)) => a == b,
             (Self::InvalidFlow(a), Self::InvalidFlow(b)) => a == b,
+            (Self::InvalidRole(a), Self::InvalidRole(b)) => a == b,
             (Self::CurrencyMismatch(a), Self::CurrencyMismatch(b)) => a == b,
             (Self::Forbidden(a), Self::Forbidden(b)) => a == b,
             (Self::Database(a), Self::Database(b)) => a.to_string() == b.to_string(),
