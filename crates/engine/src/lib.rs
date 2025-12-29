@@ -18,6 +18,9 @@ use sea_orm::{
     Statement, TransactionTrait, prelude::*, sea_query::Expr,
 };
 pub use transactions::{Transaction, TransactionKind, TransactionNew};
+use util::{
+    cash_flow_from_model, ensure_vault_currency, validate_flow_mode_fields, wallet_from_model,
+};
 pub use vault::Vault;
 pub use wallets::Wallet;
 
@@ -30,6 +33,7 @@ mod legs;
 mod money;
 mod transactions;
 mod users;
+mod util;
 mod vault;
 mod vault_memberships;
 mod wallets;
