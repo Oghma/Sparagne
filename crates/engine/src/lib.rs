@@ -2,6 +2,7 @@ use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::future::Future;
 use uuid::Uuid;
 
 pub use cash_flows::CashFlow;
@@ -189,6 +190,17 @@ impl Engine {
     /// Return a builder for `Engine`. Help to build the struct.
     pub fn builder() -> EngineBuilder {
         EngineBuilder::default()
+    }
+
+    async fn with_tx<T, F, Fut>(&self, f: F) -> ResultEngine<T>
+    where
+        F: for<'a> FnOnce(&'a DatabaseTransaction) -> Fut,
+        Fut: Future<Output = ResultEngine<T>>,
+    {
+        let db_tx = self.database.begin().await?;
+        let result = f(&db_tx).await?;
+        db_tx.commit().await?;
+        Ok(result)
     }
 
     async fn vault_membership_role(
