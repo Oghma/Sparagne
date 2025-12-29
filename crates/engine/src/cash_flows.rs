@@ -4,8 +4,10 @@ use sea_orm::entity::{ActiveValue, prelude::*};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{ResultEngine, error::EngineError};
-use crate::Currency;
+use crate::{
+    Currency, EngineError, ResultEngine,
+    util::{ensure_vault_currency, model_currency, parse_uuid, validate_flow_mode_fields},
+};
 
 pub(crate) const UNALLOCATED_INTERNAL_NAME: &str = "unallocated";
 
@@ -137,12 +139,6 @@ impl CashFlow {
                 "flow balance must be >= 0 (except Unallocated)".to_string(),
             ));
         }
-        if let Some(cap_minor) = max_balance
-            && cap_minor <= 0
-        {
-            return Err(EngineError::InvalidFlow("cap must be > 0".to_string()));
-        }
-
         let income_balance = match income_bounded {
             Some(true) => {
                 if max_balance.is_none() {
@@ -154,52 +150,10 @@ impl CashFlow {
             }
             _ => None,
         };
+        validate_flow_mode_fields(&name, max_balance, income_balance)?;
 
         Ok(Self {
             id: Uuid::new_v4(),
-            name,
-            system_kind: None,
-            balance,
-            max_balance,
-            income_balance,
-            currency,
-            archived: false,
-        })
-    }
-
-    pub fn with_id(
-        id: Uuid,
-        name: String,
-        balance: i64,
-        max_balance: Option<i64>,
-        income_bounded: Option<bool>,
-        currency: Currency,
-    ) -> ResultEngine<Self> {
-        if balance < 0 && !name.eq_ignore_ascii_case(UNALLOCATED_INTERNAL_NAME) {
-            return Err(EngineError::InvalidFlow(
-                "flow balance must be >= 0 (except Unallocated)".to_string(),
-            ));
-        }
-        if let Some(cap_minor) = max_balance
-            && cap_minor <= 0
-        {
-            return Err(EngineError::InvalidFlow("cap must be > 0".to_string()));
-        }
-
-        let income_balance = match income_bounded {
-            Some(true) => {
-                if max_balance.is_none() {
-                    return Err(EngineError::InvalidFlow(
-                        "income-capped flow requires a cap".to_string(),
-                    ));
-                }
-                Some(0)
-            }
-            _ => None,
-        };
-
-        Ok(Self {
-            id,
             name,
             system_kind: None,
             balance,
@@ -255,10 +209,6 @@ impl CashFlow {
         self.balance = new_balance;
         Ok(())
     }
-
-    pub fn archive(&mut self) {
-        self.archived = true;
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -296,24 +246,34 @@ impl Related<super::vault::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-impl From<&CashFlow> for ActiveModel {
-    fn from(flow: &CashFlow) -> Self {
-        Self {
-            id: ActiveValue::Set(flow.id.to_string()),
-            name: ActiveValue::Set(flow.name.clone()),
-            system_kind: ActiveValue::Set(flow.system_kind.map(|k| k.as_str().to_string())),
-            balance: ActiveValue::Set(flow.balance),
-            max_balance: ActiveValue::Set(flow.max_balance),
-            income_balance: ActiveValue::Set(flow.income_balance),
-            currency: ActiveValue::Set(flow.currency.code().to_string()),
-            archived: ActiveValue::Set(flow.archived),
-            vault_id: ActiveValue::NotSet,
-        }
+/// Convert a storage model into a domain `CashFlow`, validating invariants.
+impl TryFrom<(Model, Currency)> for CashFlow {
+    type Error = EngineError;
+
+    fn try_from((model, vault_currency): (Model, Currency)) -> ResultEngine<Self> {
+        let id = parse_uuid(&model.id, "cash_flow")?;
+        let currency = model_currency(&model.currency)?;
+        ensure_vault_currency(vault_currency, currency)?;
+        validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
+        let system_kind = model
+            .system_kind
+            .as_deref()
+            .and_then(|k| SystemFlowKind::try_from(k).ok());
+        Ok(Self {
+            id,
+            name: model.name,
+            system_kind,
+            balance: model.balance,
+            max_balance: model.max_balance,
+            income_balance: model.income_balance,
+            currency,
+            archived: model.archived,
+        })
     }
 }
 
-impl From<&mut CashFlow> for ActiveModel {
-    fn from(flow: &mut CashFlow) -> Self {
+impl From<&CashFlow> for ActiveModel {
+    fn from(flow: &CashFlow) -> Self {
         Self {
             id: ActiveValue::Set(flow.id.to_string()),
             name: ActiveValue::Set(flow.name.clone()),

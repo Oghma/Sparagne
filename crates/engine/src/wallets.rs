@@ -3,7 +3,10 @@
 use sea_orm::entity::{ActiveValue, prelude::*};
 use uuid::Uuid;
 
-use crate::Currency;
+use crate::{
+    Currency, EngineError, ResultEngine,
+    util::{ensure_vault_currency, model_currency, parse_uuid},
+};
 
 /// A wallet.
 ///
@@ -31,24 +34,6 @@ impl Wallet {
             currency,
             archived: false,
         }
-    }
-
-    pub fn with_id(id: Uuid, name: String, balance: i64, currency: Currency) -> Self {
-        Self {
-            id,
-            name,
-            balance,
-            currency,
-            archived: false,
-        }
-    }
-
-    pub fn archive(&mut self) {
-        self.archived = true;
-    }
-
-    pub fn apply_leg_change(&mut self, old_amount_minor: i64, new_amount_minor: i64) {
-        self.balance = self.balance - old_amount_minor + new_amount_minor;
     }
 }
 
@@ -84,6 +69,24 @@ impl Related<super::vault::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
+/// Convert a storage model into a domain `Wallet`, validating currency + UUID.
+impl TryFrom<(Model, Currency)> for Wallet {
+    type Error = EngineError;
+
+    fn try_from((model, vault_currency): (Model, Currency)) -> ResultEngine<Self> {
+        let id = parse_uuid(&model.id, "wallet")?;
+        let currency = model_currency(&model.currency)?;
+        ensure_vault_currency(vault_currency, currency)?;
+        Ok(Self {
+            id,
+            name: model.name,
+            balance: model.balance,
+            currency,
+            archived: model.archived,
+        })
+    }
+}
+
 impl From<&Wallet> for ActiveModel {
     fn from(value: &Wallet) -> Self {
         Self {
@@ -94,29 +97,5 @@ impl From<&Wallet> for ActiveModel {
             archived: ActiveValue::Set(value.archived),
             vault_id: ActiveValue::NotSet,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn wallet() -> Wallet {
-        Wallet::new(String::from("Cash"), 0, Currency::Eur)
-    }
-
-    #[test]
-    fn apply_leg_change() {
-        let mut wallet = wallet();
-        wallet.apply_leg_change(0, 1040);
-        assert_eq!(wallet.balance, 1040);
-    }
-
-    #[test]
-    fn apply_leg_change_update() {
-        let mut wallet = wallet();
-        wallet.apply_leg_change(0, 1040);
-        wallet.apply_leg_change(1040, 1000);
-        assert_eq!(wallet.balance, 1000);
     }
 }
