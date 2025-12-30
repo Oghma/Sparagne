@@ -21,7 +21,7 @@ use api_types::{
     vault::{Vault, VaultNew, VaultSnapshot},
     wallet::{WalletNew, WalletUpdate},
 };
-use chrono::{DateTime, Datelike, FixedOffset, Offset, TimeZone, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, Offset, TimeZone, Utc, Duration as ChronoDuration};
 use chrono_tz::Tz;
 use engine::Money;
 use std::str::FromStr;
@@ -178,6 +178,11 @@ impl App {
                     self.open_palette();
                 }
             }
+            crate::ui::keymap::AppAction::Search => {
+                if self.state.screen == Screen::Home {
+                    self.start_search();
+                }
+            }
             crate::ui::keymap::AppAction::Quit => {
                 if self.state.screen == Screen::Login {
                     self.should_quit = true;
@@ -188,6 +193,8 @@ impl App {
             crate::ui::keymap::AppAction::Cancel => {
                 if self.state.screen == Screen::Login {
                     self.should_quit = true;
+                } else if self.stop_search_if_active().await? {
+                    return Ok(());
                 } else if self.state.section == Section::Transactions {
                     match self.state.transactions.mode {
                         TransactionsMode::Edit => {
@@ -288,6 +295,8 @@ impl App {
                 if self.state.screen == Screen::Login {
                     let field = self.active_field_mut();
                     field.pop();
+                } else if self.handle_search_backspace().await? {
+                    return Ok(());
                 } else if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::Edit
                 {
@@ -344,7 +353,7 @@ impl App {
                         TransactionsMode::List | TransactionsMode::Detail
                     )
                 {
-                    self.state.transactions.select_prev();
+                    self.transactions_select_prev();
                     if self.state.transactions.mode == TransactionsMode::Detail {
                         self.open_transaction_detail().await?;
                     }
@@ -398,7 +407,7 @@ impl App {
                         TransactionsMode::List | TransactionsMode::Detail
                     )
                 {
-                    self.state.transactions.select_next();
+                    self.transactions_select_next();
                     if self.state.transactions.mode == TransactionsMode::Detail {
                         self.open_transaction_detail().await?;
                     }
@@ -449,7 +458,9 @@ impl App {
                     let field = self.active_field_mut();
                     field.push(ch);
                 } else {
-                    if self.state.section == Section::Transactions
+                    if self.handle_search_input(ch).await? {
+                        return Ok(());
+                    } else if self.state.section == Section::Transactions
                         && self.state.transactions.mode == TransactionsMode::Edit
                     {
                         self.state.transactions.edit_input.push(ch);
@@ -836,13 +847,13 @@ impl App {
             }
             'j' | 'J' => {
                 if self.state.section == Section::Transactions {
-                    self.state.transactions.select_next();
+                    self.transactions_select_next();
                 }
                 return Ok(());
             }
             'k' | 'K' => {
                 if self.state.section == Section::Transactions {
-                    self.state.transactions.select_prev();
+                    self.transactions_select_prev();
                 }
                 return Ok(());
             }
@@ -1021,6 +1032,132 @@ impl App {
         }
     }
 
+    fn start_search(&mut self) {
+        match self.state.section {
+            Section::Transactions => {
+                self.state.transactions.search_active = true;
+            }
+            Section::Wallets => {
+                self.state.wallets.search_active = true;
+            }
+            Section::Flows => {
+                self.state.flows.search_active = true;
+            }
+            _ => {}
+        }
+    }
+
+    async fn stop_search_if_active(&mut self) -> Result<bool> {
+        if self.state.transactions.search_active {
+            self.state.transactions.search_active = false;
+            self.refresh_transactions_search().await?;
+            return Ok(true);
+        }
+        if self.state.wallets.search_active {
+            self.state.wallets.search_active = false;
+            self.refresh_wallets_search().await?;
+            return Ok(true);
+        }
+        if self.state.flows.search_active {
+            self.state.flows.search_active = false;
+            self.refresh_flows_search().await?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    async fn handle_search_input(&mut self, ch: char) -> Result<bool> {
+        match self.state.section {
+            Section::Transactions if self.state.transactions.search_active => {
+                self.state.transactions.search_query.push(ch);
+                self.refresh_transactions_search().await?;
+                return Ok(true);
+            }
+            Section::Wallets if self.state.wallets.search_active => {
+                self.state.wallets.search_query.push(ch);
+                self.refresh_wallets_search().await?;
+                return Ok(true);
+            }
+            Section::Flows if self.state.flows.search_active => {
+                self.state.flows.search_query.push(ch);
+                self.refresh_flows_search().await?;
+                return Ok(true);
+            }
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    async fn handle_search_backspace(&mut self) -> Result<bool> {
+        match self.state.section {
+            Section::Transactions if self.state.transactions.search_active => {
+                self.state.transactions.search_query.pop();
+                self.refresh_transactions_search().await?;
+                return Ok(true);
+            }
+            Section::Wallets if self.state.wallets.search_active => {
+                self.state.wallets.search_query.pop();
+                self.refresh_wallets_search().await?;
+                return Ok(true);
+            }
+            Section::Flows if self.state.flows.search_active => {
+                self.state.flows.search_query.pop();
+                self.refresh_flows_search().await?;
+                return Ok(true);
+            }
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    async fn refresh_transactions_search(&mut self) -> Result<()> {
+        let visible_len = transactions_visible_indices(&self.state).len();
+        if visible_len == 0 {
+            self.state.transactions.selected = 0;
+            self.state.transactions.detail = None;
+            return Ok(());
+        }
+        if self.state.transactions.selected >= visible_len {
+            self.state.transactions.selected = 0;
+        }
+        if self.state.transactions.mode == TransactionsMode::Detail {
+            self.open_transaction_detail().await?;
+        }
+        Ok(())
+    }
+
+    async fn refresh_wallets_search(&mut self) -> Result<()> {
+        let visible_len = wallets_visible_indices(&self.state).len();
+        if visible_len == 0 {
+            self.state.wallets.selected = 0;
+            self.state.wallets.detail = WalletDetailState::default();
+            return Ok(());
+        }
+        if self.state.wallets.selected >= visible_len {
+            self.state.wallets.selected = 0;
+        }
+        if self.state.wallets.mode == WalletsMode::Detail {
+            self.open_wallet_detail().await?;
+        }
+        Ok(())
+    }
+
+    async fn refresh_flows_search(&mut self) -> Result<()> {
+        let visible_len = flows_visible_indices(&self.state).len();
+        if visible_len == 0 {
+            self.state.flows.selected = 0;
+            self.state.flows.detail = FlowDetailState::default();
+            return Ok(());
+        }
+        if self.state.flows.selected >= visible_len {
+            self.state.flows.selected = 0;
+        }
+        if self.state.flows.mode == FlowsMode::Detail {
+            self.open_flow_detail().await?;
+        }
+        Ok(())
+    }
+
     fn advance_filter_focus(&mut self) {
         let filter = &mut self.state.transactions.filter;
         filter.focus = match filter.focus {
@@ -1091,7 +1228,7 @@ impl App {
         false
     }
 
-    fn update_recents(&mut self) {
+    fn update_recent_categories_from_items(&mut self) {
         let mut seen = std::collections::HashSet::new();
         let mut categories = Vec::new();
         for tx in &self.state.transactions.items {
@@ -1106,6 +1243,104 @@ impl App {
             }
         }
         self.state.transactions.recent_categories = categories;
+    }
+
+    async fn refresh_recent_targets(&mut self) -> Result<()> {
+        const RECENTS_LIMIT: usize = 5;
+        const RECENTS_FETCH_LIMIT: u64 = 50;
+        const RECENTS_WINDOW_DAYS: i64 = 90;
+
+        let vault_id = match self.current_vault_id() {
+            Ok(id) => id,
+            Err(_) => return Ok(()),
+        };
+        let to = self.now_in_timezone();
+        let from = to - ChronoDuration::days(RECENTS_WINDOW_DAYS);
+
+        let payload = TransactionList {
+            vault_id: vault_id.clone(),
+            flow_id: self.state.transactions.scope_flow_id,
+            wallet_id: self.state.transactions.scope_wallet_id,
+            limit: Some(RECENTS_FETCH_LIMIT),
+            cursor: None,
+            from: Some(from),
+            to: Some(to),
+            kinds: Some(vec![
+                TransactionKind::Income,
+                TransactionKind::Expense,
+                TransactionKind::Refund,
+            ]),
+            include_voided: Some(false),
+            include_transfers: Some(false),
+        };
+
+        let res = self
+            .client
+            .transactions_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                payload,
+            )
+            .await;
+
+        let Ok(list) = res else {
+            return Ok(());
+        };
+
+        let mut categories = Vec::new();
+        let mut seen_categories = std::collections::HashSet::new();
+        for tx in &list.transactions {
+            if let Some(category) = tx.category.as_ref() {
+                let key = category.to_lowercase();
+                if seen_categories.insert(key) {
+                    categories.push(category.clone());
+                }
+            }
+            if categories.len() >= RECENTS_LIMIT {
+                break;
+            }
+        }
+        if !categories.is_empty() {
+            self.state.transactions.recent_categories = categories;
+        }
+
+        let mut recent_wallets = Vec::new();
+        let mut recent_flows = Vec::new();
+        for tx in &list.transactions {
+            if recent_wallets.len() >= RECENTS_LIMIT && recent_flows.len() >= RECENTS_LIMIT {
+                break;
+            }
+            let detail = self
+                .client
+                .transaction_detail(
+                    self.state.login.username.as_str(),
+                    self.state.login.password.as_str(),
+                    TransactionGet {
+                        vault_id: vault_id.clone(),
+                        id: tx.id,
+                    },
+                )
+                .await;
+            let Ok(detail) = detail else {
+                continue;
+            };
+            let (wallet_id, flow_id) = extract_wallet_flow(&detail);
+            if let Some(wallet_id) = wallet_id {
+                push_recent_id(&mut recent_wallets, wallet_id, RECENTS_LIMIT);
+            }
+            if let Some(flow_id) = flow_id {
+                push_recent_id(&mut recent_flows, flow_id, RECENTS_LIMIT);
+            }
+        }
+
+        if !recent_wallets.is_empty() {
+            self.state.transactions.recent_wallet_ids = recent_wallets;
+        }
+        if !recent_flows.is_empty() {
+            self.state.transactions.recent_flow_ids = recent_flows;
+        }
+
+        Ok(())
     }
 
     fn backspace_wallet_form(&mut self) {
@@ -1166,7 +1401,7 @@ impl App {
     }
 
     fn wallets_select_next(&mut self) {
-        let len = self.wallets_len();
+        let len = wallets_visible_indices(&self.state).len();
         if len == 0 {
             return;
         }
@@ -1174,14 +1409,14 @@ impl App {
     }
 
     fn wallets_select_prev(&mut self) {
-        if self.wallets_len() == 0 {
+        if wallets_visible_indices(&self.state).is_empty() {
             return;
         }
         self.state.wallets.selected = self.state.wallets.selected.saturating_sub(1);
     }
 
     fn flows_select_next(&mut self) {
-        let len = self.flows_len();
+        let len = flows_visible_indices(&self.state).len();
         if len == 0 {
             return;
         }
@@ -1189,10 +1424,26 @@ impl App {
     }
 
     fn flows_select_prev(&mut self) {
-        if self.flows_len() == 0 {
+        if flows_visible_indices(&self.state).is_empty() {
             return;
         }
         self.state.flows.selected = self.state.flows.selected.saturating_sub(1);
+    }
+
+    fn transactions_select_next(&mut self) {
+        let len = transactions_visible_indices(&self.state).len();
+        if len == 0 {
+            return;
+        }
+        self.state.transactions.selected =
+            (self.state.transactions.selected + 1).min(len - 1);
+    }
+
+    fn transactions_select_prev(&mut self) {
+        if transactions_visible_indices(&self.state).is_empty() {
+            return;
+        }
+        self.state.transactions.selected = self.state.transactions.selected.saturating_sub(1);
     }
 
     fn transactions_picker_next(&mut self) {
@@ -1413,15 +1664,39 @@ impl App {
     }
 
     fn default_transaction_form_indices(&self) -> std::result::Result<(usize, usize), String> {
-        let (wallet_id, flow_id, _wallet_name, _flow_name) = default_wallet_flow(&self.state)?;
-        let wallet_ids = self.active_wallet_ids();
-        let flow_ids = self.active_flow_ids();
+        let (default_wallet_id, default_flow_id, _wallet_name, _flow_name) =
+            default_wallet_flow(&self.state)?;
+        let wallet_ids = self.ordered_wallet_ids();
+        let flow_ids = self.ordered_flow_ids();
         if wallet_ids.is_empty() {
             return Err("Nessun wallet disponibile.".to_string());
         }
         if flow_ids.is_empty() {
             return Err("Nessun flow disponibile.".to_string());
         }
+        let wallet_id = if self.state.transactions.scope_wallet_id.is_some() {
+            default_wallet_id
+        } else {
+            self.state
+                .transactions
+                .recent_wallet_ids
+                .iter()
+                .find(|id| wallet_ids.contains(id))
+                .copied()
+                .unwrap_or(default_wallet_id)
+        };
+        let flow_id = if self.state.transactions.scope_flow_id.is_some() {
+            default_flow_id
+        } else {
+            self.state
+                .transactions
+                .recent_flow_ids
+                .iter()
+                .find(|id| flow_ids.contains(id))
+                .copied()
+                .unwrap_or(default_flow_id)
+        };
+
         let wallet_index = wallet_ids
             .iter()
             .position(|id| *id == wallet_id)
@@ -1591,7 +1866,7 @@ impl App {
             return Ok(());
         }
 
-        let wallet_ids = self.active_wallet_ids();
+        let wallet_ids = self.ordered_wallet_ids();
         if wallet_ids.is_empty() {
             self.set_transaction_form_error("Nessun wallet disponibile.");
             return Ok(());
@@ -1604,7 +1879,7 @@ impl App {
             }
         };
 
-        let flow_ids = self.active_flow_ids();
+        let flow_ids = self.ordered_flow_ids();
         if flow_ids.is_empty() {
             self.set_transaction_form_error("Nessun flow disponibile.");
             return Ok(());
@@ -1769,6 +2044,14 @@ impl App {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    fn ordered_wallet_ids(&self) -> Vec<uuid::Uuid> {
+        ordered_ids(self.active_wallet_ids(), &self.state.transactions.recent_wallet_ids)
+    }
+
+    fn ordered_flow_ids(&self) -> Vec<uuid::Uuid> {
+        ordered_ids(self.active_flow_ids(), &self.state.transactions.recent_flow_ids)
     }
 
     async fn submit_transfer_wallet(&mut self) -> Result<()> {
@@ -2093,22 +2376,6 @@ impl App {
         Ok(dt.with_timezone(&offset))
     }
 
-    fn wallets_len(&self) -> usize {
-        self.state
-            .snapshot
-            .as_ref()
-            .map(|snap| snap.wallets.len())
-            .unwrap_or(0)
-    }
-
-    fn flows_len(&self) -> usize {
-        self.state
-            .snapshot
-            .as_ref()
-            .map(|snap| snap.flows.len())
-            .unwrap_or(0)
-    }
-
     fn start_wallet_create(&mut self) {
         self.reset_wallet_form();
         self.state.wallets.mode = WalletsMode::Create;
@@ -2176,19 +2443,8 @@ impl App {
             Ok(snapshot) => {
                 self.state.snapshot = Some(snapshot);
                 self.ensure_last_flow();
-                let wallets_len = self.wallets_len();
-                if wallets_len == 0 {
-                    self.state.wallets.selected = 0;
-                } else if self.state.wallets.selected >= wallets_len {
-                    self.state.wallets.selected = wallets_len - 1;
-                }
-
-                let flows_len = self.flows_len();
-                if flows_len == 0 {
-                    self.state.flows.selected = 0;
-                } else if self.state.flows.selected >= flows_len {
-                    self.state.flows.selected = flows_len - 1;
-                }
+                self.refresh_wallets_search().await?;
+                self.refresh_flows_search().await?;
                 self.connection_ok(None);
             }
             Err(err) => {
@@ -2235,32 +2491,52 @@ impl App {
     }
 
     fn selected_wallet(&self) -> Option<&api_types::vault::WalletView> {
+        let indices = wallets_visible_indices(&self.state);
+        let index = indices.get(self.state.wallets.selected).copied()?;
         self.state
             .snapshot
             .as_ref()
-            .and_then(|snap| snap.wallets.get(self.state.wallets.selected))
+            .and_then(|snap| snap.wallets.get(index))
     }
 
     fn selected_flow(&self) -> Option<&api_types::vault::FlowView> {
+        let indices = flows_visible_indices(&self.state);
+        let index = indices.get(self.state.flows.selected).copied()?;
         self.state
             .snapshot
             .as_ref()
-            .and_then(|snap| snap.flows.get(self.state.flows.selected))
+            .and_then(|snap| snap.flows.get(index))
     }
 
     fn select_wallet_by_id(&mut self, wallet_id: uuid::Uuid) {
-        if let Some(snapshot) = &self.state.snapshot {
-            if let Some(index) = snapshot.wallets.iter().position(|w| w.id == wallet_id) {
-                self.state.wallets.selected = index;
-            }
+        let Some(snapshot) = &self.state.snapshot else {
+            return;
+        };
+        let indices = wallets_visible_indices(&self.state);
+        if let Some(pos) = indices.iter().position(|idx| {
+            snapshot
+                .wallets
+                .get(*idx)
+                .map(|wallet| wallet.id == wallet_id)
+                .unwrap_or(false)
+        }) {
+            self.state.wallets.selected = pos;
         }
     }
 
     fn select_flow_by_id(&mut self, flow_id: uuid::Uuid) {
-        if let Some(snapshot) = &self.state.snapshot {
-            if let Some(index) = snapshot.flows.iter().position(|f| f.id == flow_id) {
-                self.state.flows.selected = index;
-            }
+        let Some(snapshot) = &self.state.snapshot else {
+            return;
+        };
+        let indices = flows_visible_indices(&self.state);
+        if let Some(pos) = indices.iter().position(|idx| {
+            snapshot
+                .flows
+                .get(*idx)
+                .map(|flow| flow.id == flow_id)
+                .unwrap_or(false)
+        }) {
+            self.state.flows.selected = pos;
         }
     }
 
@@ -2307,8 +2583,12 @@ impl App {
                 self.state.transactions.next_cursor = next_cursor;
                 self.state.transactions.error = None;
                 self.state.transactions.selected = 0;
-                self.update_recents();
+                self.update_recent_categories_from_items();
+                if reset {
+                    self.refresh_recent_targets().await?;
+                }
                 self.connection_ok(None);
+                self.refresh_transactions_search().await?;
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
@@ -2348,12 +2628,11 @@ impl App {
             .as_ref()
             .and_then(|v| v.id.as_deref())
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
-        let Some(selected) = self
-            .state
-            .transactions
-            .items
-            .get(self.state.transactions.selected)
-        else {
+        let indices = transactions_visible_indices(&self.state);
+        let Some(item_index) = indices.get(self.state.transactions.selected).copied() else {
+            return Ok(());
+        };
+        let Some(selected) = self.state.transactions.items.get(item_index) else {
             return Ok(());
         };
 
@@ -3640,6 +3919,10 @@ pub struct TransactionsState {
     pub filter: TransactionsFilterState,
     pub last_created_id: Option<uuid::Uuid>,
     pub recent_categories: Vec<String>,
+    pub recent_wallet_ids: Vec<uuid::Uuid>,
+    pub recent_flow_ids: Vec<uuid::Uuid>,
+    pub search_query: String,
+    pub search_active: bool,
 }
 
 impl Default for TransactionsState {
@@ -3671,6 +3954,10 @@ impl Default for TransactionsState {
             filter: TransactionsFilterState::default(),
             last_created_id: None,
             recent_categories: Vec::new(),
+            recent_wallet_ids: Vec::new(),
+            recent_flow_ids: Vec::new(),
+            search_query: String::new(),
+            search_active: false,
         }
     }
 }
@@ -3694,6 +3981,8 @@ impl TransactionsState {
         self.filter = TransactionsFilterState::default();
         self.last_created_id = None;
         self.recent_categories.clear();
+        self.recent_wallet_ids.clear();
+        self.recent_flow_ids.clear();
     }
 
     fn push_cursor(&mut self, cursor: Option<String>) {
@@ -3889,6 +4178,8 @@ pub struct WalletsState {
     pub error: Option<String>,
     pub detail: WalletDetailState,
     pub form: WalletFormState,
+    pub search_query: String,
+    pub search_active: bool,
 }
 
 impl Default for WalletsState {
@@ -3899,6 +4190,8 @@ impl Default for WalletsState {
             error: None,
             detail: WalletDetailState::default(),
             form: WalletFormState::default(),
+            search_query: String::new(),
+            search_active: false,
         }
     }
 }
@@ -3950,6 +4243,8 @@ pub struct FlowsState {
     pub error: Option<String>,
     pub detail: FlowDetailState,
     pub form: FlowFormState,
+    pub search_query: String,
+    pub search_active: bool,
 }
 
 impl Default for FlowsState {
@@ -3960,6 +4255,8 @@ impl Default for FlowsState {
             error: None,
             detail: FlowDetailState::default(),
             form: FlowFormState::default(),
+            search_query: String::new(),
+            search_active: false,
         }
     }
 }
@@ -4308,6 +4605,18 @@ fn default_wallet_flow(
                 .iter()
                 .find(|wallet| wallet.id == wallet_id && !wallet.archived)
         })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_wallet_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .wallets
+                        .iter()
+                        .find(|wallet| wallet.id == *recent_id && !wallet.archived)
+                })
+        })
         .or_else(|| snapshot.wallets.iter().find(|wallet| !wallet.archived))
         .ok_or_else(|| "Nessun wallet disponibile.".to_string())?;
     let flow = state
@@ -4318,6 +4627,18 @@ fn default_wallet_flow(
                 .flows
                 .iter()
                 .find(|flow| flow.id == flow_id && !flow.archived)
+        })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_flow_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .flows
+                        .iter()
+                        .find(|flow| flow.id == *recent_id && !flow.archived)
+                })
         })
         .or_else(|| {
             state.last_flow_id.and_then(|last_id| {
@@ -4331,4 +4652,172 @@ fn default_wallet_flow(
         .ok_or_else(|| "Flow Unallocated mancante.".to_string())?;
 
     Ok((wallet.id, flow.id, wallet.name.clone(), flow.name.clone()))
+}
+
+pub(crate) fn transactions_visible_indices(state: &AppState) -> Vec<usize> {
+    let query = normalize_query(state.transactions.search_query.as_str());
+    if query.is_empty() {
+        return (0..state.transactions.items.len()).collect();
+    }
+
+    state
+        .transactions
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, tx)| {
+            if transaction_matches_query(tx, query.as_str()) {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn wallets_visible_indices(state: &AppState) -> Vec<usize> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    let query = normalize_query(state.wallets.search_query.as_str());
+    if query.is_empty() {
+        return (0..snapshot.wallets.len()).collect();
+    }
+
+    snapshot
+        .wallets
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, wallet)| {
+            if wallet.name.to_lowercase().contains(query.as_str()) {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn flows_visible_indices(state: &AppState) -> Vec<usize> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    let query = normalize_query(state.flows.search_query.as_str());
+    if query.is_empty() {
+        return (0..snapshot.flows.len()).collect();
+    }
+
+    snapshot
+        .flows
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, flow)| {
+            if flow.name.to_lowercase().contains(query.as_str()) {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn ordered_wallet_ids_from_state(state: &AppState) -> Vec<uuid::Uuid> {
+    let active_ids = state
+        .snapshot
+        .as_ref()
+        .map(|snap| {
+            snap.wallets
+                .iter()
+                .filter(|wallet| !wallet.archived)
+                .map(|wallet| wallet.id)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    ordered_ids(active_ids, &state.transactions.recent_wallet_ids)
+}
+
+pub(crate) fn ordered_flow_ids_from_state(state: &AppState) -> Vec<uuid::Uuid> {
+    let active_ids = state
+        .snapshot
+        .as_ref()
+        .map(|snap| {
+            snap.flows
+                .iter()
+                .filter(|flow| !flow.archived)
+                .map(|flow| flow.id)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    ordered_ids(active_ids, &state.transactions.recent_flow_ids)
+}
+
+fn transaction_matches_query(tx: &TransactionView, query: &str) -> bool {
+    if query.is_empty() {
+        return true;
+    }
+    let kind = transaction_kind_label(tx.kind);
+    if kind.contains(query) {
+        return true;
+    }
+    if tx
+        .note
+        .as_ref()
+        .map(|note| note.to_lowercase().contains(query))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    if tx
+        .category
+        .as_ref()
+        .map(|category| category.to_lowercase().contains(query))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    let amount = tx.amount_minor.abs().to_string();
+    if amount.contains(query) {
+        return true;
+    }
+    let when = tx.occurred_at.format("%Y-%m-%d %H:%M").to_string();
+    when.contains(query)
+}
+
+fn transaction_kind_label(kind: TransactionKind) -> &'static str {
+    match kind {
+        TransactionKind::Income => "income",
+        TransactionKind::Expense => "expense",
+        TransactionKind::Refund => "refund",
+        TransactionKind::TransferWallet => "transfer wallet",
+        TransactionKind::TransferFlow => "transfer flow",
+    }
+}
+
+fn normalize_query(query: &str) -> String {
+    query.trim().to_lowercase()
+}
+
+fn ordered_ids(active: Vec<uuid::Uuid>, recents: &[uuid::Uuid]) -> Vec<uuid::Uuid> {
+    let mut ordered = Vec::with_capacity(active.len());
+    for recent in recents {
+        if active.contains(recent) && !ordered.contains(recent) {
+            ordered.push(*recent);
+        }
+    }
+    for id in active {
+        if !ordered.contains(&id) {
+            ordered.push(id);
+        }
+    }
+    ordered
+}
+
+fn push_recent_id(target: &mut Vec<uuid::Uuid>, value: uuid::Uuid, limit: usize) {
+    if target.contains(&value) {
+        return;
+    }
+    if target.len() >= limit {
+        return;
+    }
+    target.push(value);
 }

@@ -10,7 +10,7 @@ use api_types::transaction::TransactionKind;
 use engine::{Currency, Money};
 
 use crate::{
-    app::{AppState, FlowFormField, FlowModeChoice, FlowsMode},
+    app::{AppState, FlowFormField, FlowModeChoice, FlowsMode, flows_visible_indices},
     ui::theme::Theme,
 };
 
@@ -49,6 +49,27 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         Span::styled("Mode", Style::default().fg(theme.dim)),
         Span::raw(format!(": {mode}")),
     ];
+    let search_query = state.flows.search_query.trim();
+    if !search_query.is_empty() || state.flows.search_active {
+        line.push(Span::raw("   "));
+        line.push(Span::styled("Search", Style::default().fg(theme.dim)));
+        line.push(Span::raw(": "));
+        let shown = if search_query.is_empty() {
+            "…"
+        } else {
+            search_query
+        };
+        let mut style = Style::default().fg(theme.text);
+        if state.flows.search_active {
+            style = style.fg(theme.accent).add_modifier(Modifier::BOLD);
+        }
+        line.push(Span::styled(shown.to_string(), style));
+    }
+    line.push(Span::raw("   "));
+    line.push(Span::styled(
+        "Ctrl+F: search",
+        Style::default().fg(theme.dim),
+    ));
     if let Some(err) = state.flows.error.as_ref() {
         line.push(Span::raw("   "));
         line.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
@@ -78,6 +99,19 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         render_form(frame, form_area, state, theme);
     }
 
+    let list_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border));
+
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        let empty_msg = Paragraph::new(Line::from("Snapshot non disponibile."))
+            .alignment(Alignment::Center)
+            .block(list_block);
+        frame.render_widget(empty_msg, list_area);
+        return;
+    };
+
     let currency = state
         .vault
         .as_ref()
@@ -85,40 +119,49 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .map(map_currency)
         .unwrap_or(Currency::Eur);
 
-    let items = state
-        .snapshot
-        .as_ref()
-        .map(|snap| {
-            snap.flows
-                .iter()
-                .map(|flow| {
-                    let balance = Money::new(flow.balance_minor).format(currency);
-                    let archived = if flow.archived { " archived" } else { "" };
-                    let marker = if flow.is_unallocated {
-                        " [Unallocated]"
-                    } else {
-                        ""
-                    };
-                    let text = format!("{}{}  {balance}{archived}", flow.name, marker);
-                    ListItem::new(Line::from(text))
-                })
-                .collect::<Vec<_>>()
+    let visible = flows_visible_indices(state);
+    let items = visible
+        .iter()
+        .filter_map(|idx| snapshot.flows.get(*idx))
+        .map(|flow| {
+            let balance = Money::new(flow.balance_minor).format(currency);
+            let archived = if flow.archived { " archived" } else { "" };
+            let marker = if flow.is_unallocated {
+                " [Unallocated]"
+            } else {
+                ""
+            };
+            let text = format!("{}{}  {balance}{archived}", flow.name, marker);
+            ListItem::new(Line::from(text))
         })
-        .unwrap_or_else(Vec::new);
-
-    let list_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
+        .collect::<Vec<_>>();
 
     if items.is_empty() {
-        let empty_msg = Paragraph::new(Line::from(vec![
-            Span::raw("No flows. Press "),
-            Span::styled("c", Style::default().fg(theme.accent)),
-            Span::raw(" to create one."),
-        ]))
-        .alignment(Alignment::Center)
-        .block(list_block);
+        let query = state.flows.search_query.trim();
+        let mut lines = Vec::new();
+        if !query.is_empty() {
+            lines.push(Line::from(vec![
+                Span::raw("No results for "),
+                Span::styled(
+                    format!("\"{query}\""),
+                    Style::default().fg(theme.accent),
+                ),
+                Span::raw("."),
+            ]));
+            lines.push(Line::from(Span::styled(
+                "Ctrl+F to edit • Esc to clear",
+                Style::default().fg(theme.dim),
+            )));
+        } else if snapshot.flows.is_empty() {
+            lines.push(Line::from(vec![
+                Span::raw("No flows. Press "),
+                Span::styled("c", Style::default().fg(theme.accent)),
+                Span::raw(" to create one."),
+            ]));
+        }
+        let empty_msg = Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .block(list_block);
         frame.render_widget(empty_msg, list_area);
         return;
     }
