@@ -146,12 +146,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Vaults::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Vaults::Id)
-                            .string()
-                            .not_null()
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Vaults::Id).string().not_null().primary_key())
                     .col(ColumnDef::new(Vaults::Name).string().not_null())
                     .col(ColumnDef::new(Vaults::UserId).string().not_null())
                     .col(
@@ -413,16 +408,8 @@ impl MigrationTrait for Migration {
                             .string()
                             .not_null(),
                     )
-                    .col(
-                        ColumnDef::new(VaultMemberships::UserId)
-                            .string()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(VaultMemberships::Role)
-                            .string()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(VaultMemberships::UserId).string().not_null())
+                    .col(ColumnDef::new(VaultMemberships::Role).string().not_null())
                     .primary_key(
                         Index::create()
                             .col(VaultMemberships::VaultId)
@@ -532,4 +519,3 @@ impl MigrationTrait for Migration {
         Ok(())
     }
 }
-

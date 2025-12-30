@@ -26,17 +26,26 @@ pub struct TransactionNew {
     pub refunded_transaction_id: Option<Uuid>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The type of a financial transaction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum)]
+#[sea_orm(rs_type = "String", db_type = "Text")]
 #[serde(rename_all = "snake_case")]
 pub enum TransactionKind {
+    #[sea_orm(string_value = "income")]
     Income,
+    #[sea_orm(string_value = "expense")]
     Expense,
+    #[sea_orm(string_value = "transfer_wallet")]
     TransferWallet,
+    #[sea_orm(string_value = "transfer_flow")]
     TransferFlow,
+    #[sea_orm(string_value = "refund")]
     Refund,
 }
 
 impl TransactionKind {
+    /// Returns the string representation used in the database.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Income => "income",
@@ -49,7 +58,7 @@ impl TransactionKind {
 }
 
 impl TryFrom<&str> for TransactionKind {
-    type Error = EngineError;
+    type Error = ();
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
@@ -58,9 +67,7 @@ impl TryFrom<&str> for TransactionKind {
             "transfer_wallet" => Ok(Self::TransferWallet),
             "transfer_flow" => Ok(Self::TransferFlow),
             "refund" => Ok(Self::Refund),
-            other => Err(EngineError::InvalidAmount(format!(
-                "invalid transaction kind: {other}"
-            ))),
+            _ => Err(()),
         }
     }
 }
@@ -175,11 +182,13 @@ impl TryFrom<Model> for Transaction {
     type Error = EngineError;
 
     fn try_from(model: Model) -> Result<Self, Self::Error> {
+        let kind = TransactionKind::try_from(model.kind.as_str())
+            .map_err(|_| EngineError::InvalidAmount("invalid transaction kind".to_string()))?;
         Ok(Self {
             id: Uuid::parse_str(&model.id)
                 .map_err(|_| EngineError::KeyNotFound("transaction not exists".to_string()))?,
             vault_id: model.vault_id,
-            kind: TransactionKind::try_from(model.kind.as_str())?,
+            kind,
             occurred_at: model.occurred_at,
             amount_minor: model.amount_minor,
             idempotency_key: model.idempotency_key,

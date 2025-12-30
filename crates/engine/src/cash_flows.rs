@@ -11,12 +11,17 @@ use crate::{
 
 pub(crate) const UNALLOCATED_INTERNAL_NAME: &str = "unallocated";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Identifies special system-managed flows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
+#[sea_orm(rs_type = "String", db_type = "Text")]
 pub enum SystemFlowKind {
+    #[sea_orm(string_value = "unallocated")]
     Unallocated,
 }
 
 impl SystemFlowKind {
+    /// Returns the string representation used in the database.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Unallocated => UNALLOCATED_INTERNAL_NAME,
@@ -311,7 +316,6 @@ mod tests {
         )
         .unwrap()
     }
-
 
     #[test]
     fn apply_leg_change() {

@@ -15,14 +15,20 @@ use uuid::Uuid;
 
 use crate::{Currency, EngineError};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The type of target a leg affects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum)]
+#[sea_orm(rs_type = "String", db_type = "Text")]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum LegTargetKind {
+pub enum LegTargetKind {
+    #[sea_orm(string_value = "wallet")]
     Wallet,
+    #[sea_orm(string_value = "flow")]
     Flow,
 }
 
 impl LegTargetKind {
+    /// Returns the string representation used in the database.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Wallet => "wallet",
@@ -32,15 +38,13 @@ impl LegTargetKind {
 }
 
 impl TryFrom<&str> for LegTargetKind {
-    type Error = EngineError;
+    type Error = ();
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "wallet" => Ok(Self::Wallet),
             "flow" => Ok(Self::Flow),
-            other => Err(EngineError::InvalidAmount(format!(
-                "invalid leg target kind: {other}"
-            ))),
+            _ => Err(()),
         }
     }
 }
@@ -147,9 +151,10 @@ impl TryFrom<Model> for Leg {
     fn try_from(model: Model) -> Result<Self, Self::Error> {
         let transaction_id = Uuid::parse_str(&model.transaction_id)
             .map_err(|_| EngineError::KeyNotFound("transaction not exists".to_string()))?;
-        let target_kind = LegTargetKind::try_from(model.target_kind.as_str())?;
         let target_id = Uuid::parse_str(&model.target_id)
             .map_err(|_| EngineError::InvalidId("invalid leg target id".to_string()))?;
+        let target_kind = LegTargetKind::try_from(model.target_kind.as_str())
+            .map_err(|_| EngineError::InvalidId("invalid leg target kind".to_string()))?;
 
         let target = match target_kind {
             LegTargetKind::Wallet => LegTarget::Wallet {
