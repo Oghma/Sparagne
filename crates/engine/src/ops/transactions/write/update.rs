@@ -86,9 +86,6 @@ impl Engine {
             let mut balance_updates: Vec<(LegTarget, i64, i64)> = Vec::new();
             let mut leg_updates: Vec<(String, LegTarget, i64)> = Vec::new();
 
-            let kind = TransactionKind::try_from(kind.as_str())
-                .map_err(|()| EngineError::InvalidAmount("invalid transaction kind".to_string()))?;
-
             match kind {
                 TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
                     let (existing_wallet_id, existing_flow_id) =
@@ -180,15 +177,13 @@ impl Engine {
             for (leg_id, new_target, new_amount_minor) in leg_updates {
                 let (target_kind, target_id) = match new_target {
                     LegTarget::Wallet { wallet_id } => {
-                        (legs::LegTargetKind::Wallet.as_str(), wallet_id.to_string())
+                        (legs::LegTargetKind::Wallet, wallet_id.to_string())
                     }
-                    LegTarget::Flow { flow_id } => {
-                        (legs::LegTargetKind::Flow.as_str(), flow_id.to_string())
-                    }
+                    LegTarget::Flow { flow_id } => (legs::LegTargetKind::Flow, flow_id.to_string()),
                 };
                 let leg_active = legs::ActiveModel {
                     id: ActiveValue::Set(leg_id),
-                    target_kind: ActiveValue::Set(target_kind.to_string()),
+                    target_kind: ActiveValue::Set(target_kind),
                     target_id: ActiveValue::Set(target_id),
                     amount_minor: ActiveValue::Set(new_amount_minor),
                     ..Default::default()

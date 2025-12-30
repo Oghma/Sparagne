@@ -129,7 +129,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
     pub vault_id: String,
-    pub kind: String,
+    pub kind: TransactionKind,
     pub occurred_at: DateTimeUtc,
     pub amount_minor: i64,
     pub idempotency_key: Option<String>,
@@ -161,7 +161,7 @@ impl From<&Transaction> for ActiveModel {
         Self {
             id: ActiveValue::Set(tx.id.to_string()),
             vault_id: ActiveValue::Set(tx.vault_id.clone()),
-            kind: ActiveValue::Set(tx.kind.as_str().to_string()),
+            kind: ActiveValue::Set(tx.kind),
             occurred_at: ActiveValue::Set(tx.occurred_at),
             amount_minor: ActiveValue::Set(tx.amount_minor),
             idempotency_key: ActiveValue::Set(tx.idempotency_key.clone()),
@@ -182,13 +182,11 @@ impl TryFrom<Model> for Transaction {
     type Error = EngineError;
 
     fn try_from(model: Model) -> Result<Self, Self::Error> {
-        let kind = TransactionKind::try_from(model.kind.as_str())
-            .map_err(|_| EngineError::InvalidAmount("invalid transaction kind".to_string()))?;
         Ok(Self {
             id: Uuid::parse_str(&model.id)
                 .map_err(|_| EngineError::KeyNotFound("transaction not exists".to_string()))?,
             vault_id: model.vault_id,
-            kind,
+            kind: model.kind,
             occurred_at: model.occurred_at,
             amount_minor: model.amount_minor,
             idempotency_key: model.idempotency_key,

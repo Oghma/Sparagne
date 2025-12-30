@@ -104,7 +104,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
     pub transaction_id: String,
-    pub target_kind: String,
+    pub target_kind: LegTargetKind,
     pub target_id: String,
     pub amount_minor: i64,
     pub currency: String,
@@ -136,7 +136,7 @@ impl From<&Leg> for ActiveModel {
         Self {
             id: ActiveValue::Set(leg.id.to_string()),
             transaction_id: ActiveValue::Set(leg.transaction_id.to_string()),
-            target_kind: ActiveValue::Set(leg.target_kind().as_str().to_string()),
+            target_kind: ActiveValue::Set(leg.target_kind()),
             target_id: ActiveValue::Set(leg.target_id().to_string()),
             amount_minor: ActiveValue::Set(leg.amount_minor),
             currency: ActiveValue::Set(leg.currency.code().to_string()),
@@ -153,10 +153,8 @@ impl TryFrom<Model> for Leg {
             .map_err(|_| EngineError::KeyNotFound("transaction not exists".to_string()))?;
         let target_id = Uuid::parse_str(&model.target_id)
             .map_err(|_| EngineError::InvalidId("invalid leg target id".to_string()))?;
-        let target_kind = LegTargetKind::try_from(model.target_kind.as_str())
-            .map_err(|_| EngineError::InvalidId("invalid leg target kind".to_string()))?;
 
-        let target = match target_kind {
+        let target = match model.target_kind {
             LegTargetKind::Wallet => LegTarget::Wallet {
                 wallet_id: target_id,
             },

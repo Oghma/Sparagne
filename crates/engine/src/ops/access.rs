@@ -322,9 +322,9 @@ impl Engine {
     ) -> ResultEngine<Uuid> {
         let model = cash_flows::Entity::find()
             .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
-            .filter(cash_flows::Column::SystemKind.eq(Some(
-                cash_flows::SystemFlowKind::Unallocated.as_str().to_string(),
-            )))
+            .filter(
+                cash_flows::Column::SystemKind.eq(Some(cash_flows::SystemFlowKind::Unallocated)),
+            )
             .one(db)
             .await?
             .ok_or_else(|| EngineError::InvalidFlow("missing Unallocated flow".to_string()))?;

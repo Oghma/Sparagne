@@ -248,17 +248,13 @@ impl Engine {
         )?;
         let flow_currency = model_currency(flow_model.currency.as_str())?;
         ensure_vault_currency(input.vault_currency, flow_currency)?;
-        let system_kind = flow_model
-            .system_kind
-            .as_deref()
-            .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
         let entry = input
             .flow_previews
             .entry(input.flow_id)
             .or_insert_with(|| crate::CashFlow {
                 id: input.flow_id,
                 name: flow_model.name.clone(),
-                system_kind,
+                system_kind: flow_model.system_kind,
                 balance: flow_model.balance,
                 max_balance: flow_model.max_balance,
                 income_balance: flow_model.income_balance,

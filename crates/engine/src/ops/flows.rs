@@ -91,10 +91,7 @@ impl Engine {
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
 
-            if flow_model
-                .system_kind
-                .as_deref()
-                .is_some_and(|k| k == cash_flows::SystemFlowKind::Unallocated.as_str())
+            if flow_model.system_kind == Some(cash_flows::SystemFlowKind::Unallocated)
                 || flow_model
                     .name
                     .eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME)
@@ -230,11 +227,7 @@ impl Engine {
             let flow_model = self
                 .require_flow_write(&db_tx, vault_id, flow_id, user_id)
                 .await?;
-            let system_kind = flow_model
-                .system_kind
-                .as_deref()
-                .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-            if system_kind.is_some() {
+            if flow_model.system_kind.is_some() {
                 return Err(EngineError::InvalidFlow(
                     "cannot rename system flow".to_string(),
                 ));
@@ -275,11 +268,7 @@ impl Engine {
             let flow_model = self
                 .require_flow_write(&db_tx, vault_id, flow_id, user_id)
                 .await?;
-            let system_kind = flow_model
-                .system_kind
-                .as_deref()
-                .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-            if system_kind.is_some() {
+            if flow_model.system_kind.is_some() {
                 return Err(EngineError::InvalidFlow(
                     "cannot archive system flow".to_string(),
                 ));
@@ -329,11 +318,7 @@ impl Engine {
                 .require_flow_write(&db_tx, vault_id, flow_id, user_id)
                 .await?;
             let flow_name = flow_model.name.clone();
-            let system_kind = flow_model
-                .system_kind
-                .as_deref()
-                .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-            if system_kind.is_some() {
+            if flow_model.system_kind.is_some() {
                 return Err(EngineError::InvalidFlow(
                     "cannot change mode for system flow".to_string(),
                 ));

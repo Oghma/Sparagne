@@ -109,11 +109,7 @@ impl Engine {
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
-            if flow
-                .system_kind
-                .as_deref()
-                .is_some_and(|k| k == cash_flows::SystemFlowKind::Unallocated.as_str())
-            {
+            if flow.system_kind == Some(cash_flows::SystemFlowKind::Unallocated) {
                 return Err(EngineError::InvalidFlow(
                     "cannot share Unallocated".to_string(),
                 ));

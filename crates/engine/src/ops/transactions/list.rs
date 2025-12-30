@@ -135,7 +135,7 @@ impl Engine {
 
             let limit_plus_one = limit.saturating_add(1);
             let mut query = legs::Entity::find()
-                .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Flow.as_str()))
+                .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Flow))
                 .filter(legs::Column::TargetId.eq(flow_id.to_string()))
                 .find_also_related(transactions::Entity)
                 .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
@@ -282,7 +282,7 @@ impl Engine {
 
             let limit_plus_one = limit.saturating_add(1);
             let mut query = legs::Entity::find()
-                .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Wallet.as_str()))
+                .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Wallet))
                 .filter(legs::Column::TargetId.eq(wallet_id.to_string()))
                 .find_also_related(transactions::Entity)
                 .filter(transactions::Column::VaultId.eq(vault_id.to_string()))

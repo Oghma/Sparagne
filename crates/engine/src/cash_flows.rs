@@ -210,7 +210,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
     pub name: String,
-    pub system_kind: Option<String>,
+    pub system_kind: Option<SystemFlowKind>,
     pub balance: i64,
     pub max_balance: Option<i64>,
     pub income_balance: Option<i64>,
@@ -248,14 +248,10 @@ impl TryFrom<(Model, Currency)> for CashFlow {
         let currency = model_currency(&model.currency)?;
         ensure_vault_currency(vault_currency, currency)?;
         validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
-        let system_kind = model
-            .system_kind
-            .as_deref()
-            .and_then(|k| SystemFlowKind::try_from(k).ok());
         Ok(Self {
             id,
             name: model.name,
-            system_kind,
+            system_kind: model.system_kind,
             balance: model.balance,
             max_balance: model.max_balance,
             income_balance: model.income_balance,
@@ -270,7 +266,7 @@ impl From<&CashFlow> for ActiveModel {
         Self {
             id: ActiveValue::Set(flow.id.to_string()),
             name: ActiveValue::Set(flow.name.clone()),
-            system_kind: ActiveValue::Set(flow.system_kind.map(|k| k.as_str().to_string())),
+            system_kind: ActiveValue::Set(flow.system_kind),
             balance: ActiveValue::Set(flow.balance),
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
