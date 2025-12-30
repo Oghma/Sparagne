@@ -4,11 +4,11 @@ use crate::{
     legs, transactions, EngineError, Leg, LegTarget, ResultEngine, TransactionKind,
     UpdateTransactionCmd,
 };
+use crate::util::{apply_optional_datetime_patch, apply_optional_text_patch};
 
 use super::common::{TransferTargetKind, TransferUpdateInput, TransferUpdateOutput};
 use super::super::helpers::{
-    apply_flow_wallet_leg_updates, apply_optional_datetime_patch, apply_optional_text_patch,
-    extract_flow_wallet_targets, validate_update_fields,
+    apply_flow_wallet_leg_updates, extract_flow_wallet_targets, validate_update_fields,
 };
 use super::super::super::{flow_wallet_signed_amount, parse_vault_currency, with_tx, Engine};
 

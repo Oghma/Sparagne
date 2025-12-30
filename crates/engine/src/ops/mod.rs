@@ -6,7 +6,7 @@ use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind,
     TransactionNew,
 };
-use crate::util::model_currency;
+use crate::util::{model_currency, normalize_optional_text, normalize_required_name};
 
 mod access;
 mod balances;
@@ -45,24 +45,6 @@ impl Engine {
     pub fn builder() -> EngineBuilder {
         EngineBuilder::default()
     }
-
-}
-
-fn normalize_required_name(value: &str, label: &str) -> ResultEngine<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(EngineError::InvalidName(format!(
-            "{label} name must not be empty"
-        )));
-    }
-    Ok(trimmed.to_string())
-}
-
-fn normalize_optional_text(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string)
 }
 
 fn flow_wallet_signed_amount(

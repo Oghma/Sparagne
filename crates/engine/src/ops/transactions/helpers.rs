@@ -1,34 +1,17 @@
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, TransactionKind, TxMeta,
 };
+use crate::util::normalize_optional_text;
 
-use super::super::{flow_wallet_signed_amount, normalize_optional_text};
+use super::super::flow_wallet_signed_amount;
 
 pub(super) fn normalize_tx_meta(meta: &TxMeta) -> (Option<String>, Option<String>) {
     (
         normalize_optional_text(meta.category.as_deref()),
         normalize_optional_text(meta.note.as_deref()),
     )
-}
-
-pub(super) fn apply_optional_text_patch(
-    existing: Option<String>,
-    patch: Option<&str>,
-) -> Option<String> {
-    match patch {
-        None => existing,
-        Some(value) => normalize_optional_text(Some(value)),
-    }
-}
-
-pub(super) fn apply_optional_datetime_patch(
-    existing: DateTime<Utc>,
-    patch: Option<DateTime<Utc>>,
-) -> DateTime<Utc> {
-    patch.unwrap_or(existing)
 }
 
 pub(super) fn parse_leg_id(raw: &str) -> ResultEngine<Uuid> {
