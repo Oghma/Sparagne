@@ -127,15 +127,16 @@ fn render_stat_card(
 
     let mut lines = vec![Line::from(Span::styled(
         value,
-        Style::default()
-            .fg(theme.text)
-            .add_modifier(Modifier::BOLD),
+        Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
     ))];
 
     if let Some((current, max)) = ratio {
         let bar_width = (inner.width as usize).saturating_sub(8);
         let bar = inline_progress_bar(current, Some(max), bar_width.min(20));
-        lines.push(Line::from(Span::styled(bar, Style::default().fg(theme.dim))));
+        lines.push(Line::from(Span::styled(
+            bar,
+            Style::default().fg(theme.dim),
+        )));
     }
 
     frame.render_widget(Paragraph::new(lines), inner);
@@ -155,10 +156,7 @@ fn render_wallets_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let currency = get_currency(state);
 
     let block = Block::default()
-        .title(Span::styled(
-            " Wallets ",
-            Style::default().fg(theme.accent),
-        ))
+        .title(Span::styled(" Wallets ", Style::default().fg(theme.accent)))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border));
@@ -178,11 +176,7 @@ fn render_wallets_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                     let balance = styled_amount(wallet.balance_minor, currency, theme);
                     let name = Span::styled(&wallet.name, Style::default().fg(theme.text));
 
-                    ListItem::new(Line::from(vec![
-                        name,
-                        Span::raw("  "),
-                        balance,
-                    ]))
+                    ListItem::new(Line::from(vec![name, Span::raw("  "), balance]))
                 })
                 .collect()
         })

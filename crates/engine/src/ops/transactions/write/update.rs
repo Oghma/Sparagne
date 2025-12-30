@@ -1,16 +1,20 @@
 use sea_orm::{ActiveValue, QueryFilter, TransactionTrait, prelude::*};
 
 use crate::{
-    legs, transactions, EngineError, Leg, LegTarget, ResultEngine, TransactionKind,
-    UpdateTransactionCmd,
+    EngineError, Leg, LegTarget, ResultEngine, TransactionKind, UpdateTransactionCmd, legs,
+    transactions,
+    util::{apply_optional_datetime_patch, apply_optional_text_patch},
 };
-use crate::util::{apply_optional_datetime_patch, apply_optional_text_patch};
 
-use super::common::{TransferTargetKind, TransferUpdateInput, TransferUpdateOutput};
-use super::super::helpers::{
-    apply_flow_wallet_leg_updates, extract_flow_wallet_targets, validate_update_fields,
+use super::{
+    super::{
+        super::{Engine, flow_wallet_signed_amount, parse_vault_currency, with_tx},
+        helpers::{
+            apply_flow_wallet_leg_updates, extract_flow_wallet_targets, validate_update_fields,
+        },
+    },
+    common::{TransferTargetKind, TransferUpdateInput, TransferUpdateOutput},
 };
-use super::super::super::{flow_wallet_signed_amount, parse_vault_currency, with_tx, Engine};
 
 impl Engine {
     /// Updates an existing transaction (amount, metadata, and/or targets).
@@ -56,7 +60,7 @@ impl Engine {
                 ));
             }
 
-            let kind = TransactionKind::try_from(tx_model.kind.as_str())?;
+            let kind = tx_model.kind;
             let new_amount_minor = amount_minor.unwrap_or(tx_model.amount_minor);
             if new_amount_minor <= 0 {
                 return Err(EngineError::InvalidAmount(
@@ -81,6 +85,9 @@ impl Engine {
 
             let mut balance_updates: Vec<(LegTarget, i64, i64)> = Vec::new();
             let mut leg_updates: Vec<(String, LegTarget, i64)> = Vec::new();
+
+            let kind = TransactionKind::try_from(kind.as_str())
+                .map_err(|()| EngineError::InvalidAmount("invalid transaction kind".to_string()))?;
 
             match kind {
                 TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
@@ -172,12 +179,16 @@ impl Engine {
 
             for (leg_id, new_target, new_amount_minor) in leg_updates {
                 let (target_kind, target_id) = match new_target {
-                    LegTarget::Wallet { wallet_id } => ("wallet".to_string(), wallet_id.to_string()),
-                    LegTarget::Flow { flow_id } => ("flow".to_string(), flow_id.to_string()),
+                    LegTarget::Wallet { wallet_id } => {
+                        (legs::LegTargetKind::Wallet.as_str(), wallet_id.to_string())
+                    }
+                    LegTarget::Flow { flow_id } => {
+                        (legs::LegTargetKind::Flow.as_str(), flow_id.to_string())
+                    }
                 };
                 let leg_active = legs::ActiveModel {
                     id: ActiveValue::Set(leg_id),
-                    target_kind: ActiveValue::Set(target_kind),
+                    target_kind: ActiveValue::Set(target_kind.to_string()),
                     target_id: ActiveValue::Set(target_id),
                     amount_minor: ActiveValue::Set(new_amount_minor),
                     ..Default::default()

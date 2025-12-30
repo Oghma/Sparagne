@@ -94,7 +94,11 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
                 .map(|flow| {
                     let balance = Money::new(flow.balance_minor).format(currency);
                     let archived = if flow.archived { " archived" } else { "" };
-                    let marker = if flow.is_unallocated { " [Unallocated]" } else { "" };
+                    let marker = if flow.is_unallocated {
+                        " [Unallocated]"
+                    } else {
+                        ""
+                    };
                     let text = format!("{}{}  {balance}{archived}", flow.name, marker);
                     ListItem::new(Line::from(text))
                 })

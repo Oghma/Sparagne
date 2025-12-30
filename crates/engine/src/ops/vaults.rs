@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use sea_orm::{ActiveValue, QueryFilter, Statement, TransactionTrait, prelude::*, sea_query::Expr};
 
 use crate::{
-    cash_flows, vault, vault_memberships, wallets, CashFlow, Currency, EngineError, ResultEngine,
-    TransactionKind, Vault, Wallet,
+    CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, Wallet, cash_flows,
+    vault, vault_memberships, wallets,
 };
 
-use super::{normalize_required_name, parse_vault_currency, with_tx, Engine};
+use super::{Engine, normalize_required_name, parse_vault_currency, with_tx};
 
 impl Engine {
     /// Delete or archive a vault
@@ -158,8 +158,7 @@ impl Engine {
                 let name = vault_name.ok_or_else(|| {
                     EngineError::KeyNotFound("missing vault id or name".to_string())
                 })?;
-                self.require_vault_by_name(&db_tx, &name, user_id)
-                    .await?
+                self.require_vault_by_name(&db_tx, &name, user_id).await?
             };
             let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 

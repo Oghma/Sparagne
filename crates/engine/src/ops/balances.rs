@@ -7,12 +7,11 @@ use sea_orm::{
 };
 
 use crate::{
-    cash_flows, legs, transactions, wallets, CashFlow, EngineError, Leg, LegTarget, ResultEngine,
-    Wallet,
+    CashFlow, EngineError, Leg, LegTarget, ResultEngine, Wallet, cash_flows, legs, transactions,
+    util::ensure_vault_currency, wallets,
 };
-use crate::util::ensure_vault_currency;
 
-use super::{parse_vault_currency, with_tx, Engine};
+use super::{Engine, parse_vault_currency, with_tx};
 
 impl Engine {
     /// Recomputes denormalized balances for wallets and flows from the ledger

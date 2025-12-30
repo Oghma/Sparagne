@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, TransactionKind, TxMeta,
+    util::normalize_optional_text,
 };
-use crate::util::normalize_optional_text;
 
 use super::super::flow_wallet_signed_amount;
 
@@ -15,8 +15,7 @@ pub(super) fn normalize_tx_meta(meta: &TxMeta) -> (Option<String>, Option<String
 }
 
 pub(super) fn parse_leg_id(raw: &str) -> ResultEngine<Uuid> {
-    Uuid::parse_str(raw)
-        .map_err(|_| EngineError::InvalidId("invalid leg id".to_string()))
+    Uuid::parse_str(raw).map_err(|_| EngineError::InvalidId("invalid leg id".to_string()))
 }
 
 pub(super) fn validate_transfer_legs<T, F>(
@@ -118,14 +117,10 @@ where
     }
 
     let from_target = from_target.ok_or_else(|| {
-        EngineError::InvalidAmount(format!(
-            "invalid {kind_label}: missing negative leg"
-        ))
+        EngineError::InvalidAmount(format!("invalid {kind_label}: missing negative leg"))
     })?;
     let to_target = to_target.ok_or_else(|| {
-        EngineError::InvalidAmount(format!(
-            "invalid {kind_label}: missing positive leg"
-        ))
+        EngineError::InvalidAmount(format!("invalid {kind_label}: missing positive leg"))
     })?;
     let from_leg_id = from_leg_id.ok_or_else(|| {
         EngineError::InvalidAmount(format!("invalid {kind_label}: missing leg id"))
@@ -205,8 +200,7 @@ where
             sink.balance_updates
                 .push((leg.target, leg.amount_minor, new_amount));
         } else {
-            sink.balance_updates
-                .push((leg.target, leg.amount_minor, 0));
+            sink.balance_updates.push((leg.target, leg.amount_minor, 0));
             sink.balance_updates.push((new_target, 0, new_amount));
         }
         sink.leg_updates
@@ -238,7 +232,10 @@ pub(super) fn validate_update_fields(
             }
         }
         TransactionKind::TransferWallet => {
-            if wallet_id.is_some() || flow_id.is_some() || from_flow_id.is_some() || to_flow_id.is_some()
+            if wallet_id.is_some()
+                || flow_id.is_some()
+                || from_flow_id.is_some()
+                || to_flow_id.is_some()
             {
                 return Err(EngineError::InvalidAmount(
                     "invalid update: unexpected wallet/flow fields".to_string(),
@@ -345,7 +342,9 @@ pub(super) fn apply_flow_wallet_leg_updates(
                 new_signed_amount,
             ),
             LegTarget::Flow { .. } => (
-                LegTarget::Flow { flow_id: new_flow_id },
+                LegTarget::Flow {
+                    flow_id: new_flow_id,
+                },
                 new_signed_amount,
             ),
         };

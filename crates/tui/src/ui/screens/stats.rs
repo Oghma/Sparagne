@@ -125,9 +125,7 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let nav_line = Line::from(vec![
         Span::styled(
             format!("{month_name} {year}"),
-            Style::default()
-                .fg(theme.text)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
         Span::styled("[Current]", Style::default().fg(theme.dim)),
@@ -197,9 +195,7 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         Span::styled("Balance     ", Style::default().fg(theme.dim)),
         Span::styled(
             Money::new(balance).format(currency),
-            Style::default()
-                .fg(theme.text)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ),
     ]);
     frame.render_widget(Paragraph::new(balance_line), stats_layout[4]);

@@ -70,11 +70,25 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     // Username field (no label)
     let username_focused = login.focus == LoginField::Username;
-    render_input(frame, rows[0], &login.username, false, username_focused, &theme);
+    render_input(
+        frame,
+        rows[0],
+        &login.username,
+        false,
+        username_focused,
+        &theme,
+    );
 
     // Password field (no label)
     let password_focused = login.focus == LoginField::Password;
-    render_input(frame, rows[2], &login.password, true, password_focused, &theme);
+    render_input(
+        frame,
+        rows[2],
+        &login.password,
+        true,
+        password_focused,
+        &theme,
+    );
 
     // Error message below the box (only shown when there's an error)
     if let Some(message) = &login.message {

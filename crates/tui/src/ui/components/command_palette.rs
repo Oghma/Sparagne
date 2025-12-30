@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{filter_commands, AppState},
+    app::{AppState, filter_commands},
     ui::{components::centered_rect, theme::Theme},
 };
 

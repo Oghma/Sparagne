@@ -205,7 +205,11 @@ fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, them
             let mut list = vec![ListItem::new(Line::from("All flows"))];
             for flow in &snapshot.flows {
                 let archived = if flow.archived { " (archived)" } else { "" };
-                let marker = if flow.is_unallocated { " [Unallocated]" } else { "" };
+                let marker = if flow.is_unallocated {
+                    " [Unallocated]"
+                } else {
+                    ""
+                };
                 list.push(ListItem::new(Line::from(format!(
                     "{}{marker}{archived}",
                     flow.name
@@ -724,7 +728,9 @@ fn kind_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> {
 fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let (wallet_name, flow_name) = default_wallet_flow_names(state);
     let focus = if state.transactions.quick_active {
-        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(theme.dim)
     };
@@ -922,7 +928,10 @@ fn kind_label(kind: TransactionKind) -> &'static str {
 
 fn badge_label(kind: TransactionKind, voided: bool) -> String {
     let mut badge = String::new();
-    if matches!(kind, TransactionKind::TransferWallet | TransactionKind::TransferFlow) {
+    if matches!(
+        kind,
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow
+    ) {
         badge.push_str("[TR]");
     }
     if voided {

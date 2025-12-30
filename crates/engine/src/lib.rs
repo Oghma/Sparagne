@@ -12,14 +12,14 @@ pub use commands::{
 };
 /// Currency codes and helpers.
 pub use currency::Currency;
-/// Engine facade, builder, and transaction listing filters.
-pub use ops::{Engine, EngineBuilder, TransactionListFilter};
 /// Engine error type.
 pub use error::EngineError;
 /// Transaction leg primitives.
 pub use legs::{Leg, LegTarget};
 /// Money parsing and formatting helper.
 pub use money::Money;
+/// Engine facade, builder, and transaction listing filters.
+pub use ops::{Engine, EngineBuilder, TransactionListFilter};
 /// Transaction models and kinds.
 pub use transactions::{Transaction, TransactionKind, TransactionNew};
 /// Vault aggregate model.
@@ -30,11 +30,11 @@ pub use wallets::Wallet;
 mod cash_flows;
 mod commands;
 mod currency;
-mod ops;
 mod error;
 mod flow_memberships;
 mod legs;
 mod money;
+mod ops;
 mod transactions;
 mod users;
 mod util;

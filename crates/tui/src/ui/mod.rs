@@ -85,7 +85,10 @@ fn render_status_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         Span::raw(format!(": {user}")),
     ]);
 
-    frame.render_widget(Paragraph::new(line).alignment(ratatui::layout::Alignment::Right), area);
+    frame.render_widget(
+        Paragraph::new(line).alignment(ratatui::layout::Alignment::Right),
+        area,
+    );
 }
 
 fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {

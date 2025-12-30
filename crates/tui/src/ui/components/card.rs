@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::Rect,
     style::Style,
     text::Span,
     widgets::{Block, BorderType, Borders, Paragraph, Widget},
-    Frame,
 };
 
 use crate::ui::theme::Theme;
@@ -115,4 +115,3 @@ impl<'a> StatCard<'a> {
         frame.render_widget(Paragraph::new(lines), inner);
     }
 }
-

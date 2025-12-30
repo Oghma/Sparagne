@@ -63,7 +63,10 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let show_form = matches!(state.wallets.mode, WalletsMode::Create | WalletsMode::Rename);
+    let show_form = matches!(
+        state.wallets.mode,
+        WalletsMode::Create | WalletsMode::Rename
+    );
     let (form_area, list_area) = if show_form {
         let layout = Layout::default()
             .direction(Direction::Vertical)
@@ -168,7 +171,11 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     }
 
     let block = Block::default()
-        .title(if is_rename { "Rename Wallet" } else { "New Wallet" })
+        .title(if is_rename {
+            "Rename Wallet"
+        } else {
+            "New Wallet"
+        })
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
@@ -184,7 +191,11 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         render_empty(frame, area, theme, "Nessun wallet selezionato.");
         return;
     };
-    let Some(wallet) = snapshot.wallets.iter().find(|wallet| wallet.id == detail_id) else {
+    let Some(wallet) = snapshot
+        .wallets
+        .iter()
+        .find(|wallet| wallet.id == detail_id)
+    else {
         render_empty(frame, area, theme, "Wallet non trovato.");
         return;
     };

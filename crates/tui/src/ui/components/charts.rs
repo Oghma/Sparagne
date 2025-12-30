@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::Rect,
     style::{Modifier, Style},
     symbols,
     widgets::{BarChart, Block, BorderType, Borders, Sparkline},
-    Frame,
 };
 
 use crate::ui::theme::Theme;
@@ -30,11 +30,7 @@ pub fn render_bar_chart(
         .bar_width(3)
         .bar_gap(1)
         .bar_style(Style::default().fg(theme.accent))
-        .value_style(
-            Style::default()
-                .fg(theme.text)
-                .add_modifier(Modifier::BOLD),
-        )
+        .value_style(Style::default().fg(theme.text).add_modifier(Modifier::BOLD))
         .label_style(Style::default().fg(theme.dim));
 
     frame.render_widget(chart, area);
@@ -64,7 +60,8 @@ pub fn render_sparkline(
     frame.render_widget(sparkline, area);
 }
 
-/// Renders an inline sparkline without borders (for embedding in other widgets).
+/// Renders an inline sparkline without borders (for embedding in other
+/// widgets).
 pub fn render_inline_sparkline(frame: &mut Frame<'_>, area: Rect, data: &[u64], theme: &Theme) {
     let sparkline = Sparkline::default()
         .data(data)
@@ -167,7 +164,12 @@ pub fn mini_bar_chart(values: &[u64]) -> String {
 pub fn percentage_bar(percentage: u16, width: usize) -> String {
     let filled = ((percentage as usize * width) / 100).min(width);
     let empty = width.saturating_sub(filled);
-    format!("{}{} {:>3}%", "█".repeat(filled), "░".repeat(empty), percentage)
+    format!(
+        "{}{} {:>3}%",
+        "█".repeat(filled),
+        "░".repeat(empty),
+        percentage
+    )
 }
 
 /// Computes the percentage of value relative to max.
@@ -178,4 +180,3 @@ pub fn compute_percentage(value: i64, max: i64) -> u16 {
     }
     ((value.abs() as f64 / max.abs() as f64) * 100.0).min(100.0) as u16
 }
-

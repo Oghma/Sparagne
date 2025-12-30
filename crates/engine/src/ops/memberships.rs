@@ -2,9 +2,9 @@ use uuid::Uuid;
 
 use sea_orm::{ActiveValue, QueryFilter, TransactionTrait, prelude::*};
 
-use crate::{cash_flows, flow_memberships, vault_memberships, EngineError, ResultEngine};
+use crate::{EngineError, ResultEngine, cash_flows, flow_memberships, vault_memberships};
 
-use super::{access::MembershipRole, with_tx, Engine};
+use super::{Engine, access::MembershipRole, with_tx};
 
 impl Engine {
     /// Adds or updates a vault member (owner-only).
@@ -119,14 +119,15 @@ impl Engine {
                 ));
             }
 
+            let flow_id_str = flow_id.to_string();
             let active = flow_memberships::ActiveModel {
-                flow_id: ActiveValue::Set(flow_id.to_string()),
+                flow_id: ActiveValue::Set(flow_id_str.clone()),
                 user_id: ActiveValue::Set(member_username.to_string()),
                 role: ActiveValue::Set(role.to_string()),
             };
 
             match flow_memberships::Entity::find_by_id((
-                flow_id.to_string(),
+                flow_id_str.clone(),
                 member_username.to_string(),
             ))
             .one(&db_tx)

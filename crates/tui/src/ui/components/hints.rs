@@ -1,7 +1,4 @@
-use ratatui::{
-    style::Style,
-    text::Span,
-};
+use ratatui::{style::Style, text::Span};
 
 use crate::ui::theme::Theme;
 
@@ -81,10 +78,7 @@ pub mod common {
 
     /// Global application shortcuts.
     pub fn global_shortcuts() -> Vec<KeyHint> {
-        vec![
-            KeyHint::new("Ctrl+P", "cmd"),
-            KeyHint::new("q", "quit"),
-        ]
+        vec![KeyHint::new("Ctrl+P", "cmd"), KeyHint::new("q", "quit")]
     }
 
     /// Section navigation shortcuts.
@@ -105,4 +99,3 @@ pub trait HintProvider {
     /// Returns the keyboard hints for the current context.
     fn hints(&self) -> Vec<KeyHint>;
 }
-

@@ -1,6 +1,7 @@
 use ratatui::style::Color;
 
-/// Modern theme for Sparagne TUI combining dashboard aesthetics with power-user density.
+/// Modern theme for Sparagne TUI combining dashboard aesthetics with power-user
+/// density.
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
     // Base colors

@@ -2,8 +2,7 @@ use uuid::Uuid;
 
 use crate::{ExpenseCmd, IncomeCmd, RefundCmd, ResultEngine, TransactionKind};
 
-use super::common::FlowWalletCmd;
-use super::super::super::Engine;
+use super::{super::super::Engine, common::FlowWalletCmd};
 
 /// Generates a flow+wallet transaction method (income, expense, refund).
 macro_rules! impl_flow_wallet_tx {

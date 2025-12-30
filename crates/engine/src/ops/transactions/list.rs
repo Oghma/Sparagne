@@ -5,11 +5,9 @@ use uuid::Uuid;
 
 use sea_orm::{Condition, QueryFilter, QueryOrder, QuerySelect, TransactionTrait, prelude::*};
 
-use crate::{
-    legs, transactions, EngineError, ResultEngine, Transaction, TransactionKind,
-};
+use crate::{EngineError, ResultEngine, Transaction, TransactionKind, legs, transactions};
 
-use super::super::{with_tx, Engine};
+use super::super::{Engine, with_tx};
 
 /// Filters for listing transactions.
 ///
@@ -83,9 +81,8 @@ struct TransactionsCursor {
 
 impl TransactionsCursor {
     fn encode(&self) -> ResultEngine<String> {
-        let bytes = serde_json::to_vec(self).map_err(|_| {
-            EngineError::InvalidCursor("invalid transactions cursor".to_string())
-        })?;
+        let bytes = serde_json::to_vec(self)
+            .map_err(|_| EngineError::InvalidCursor("invalid transactions cursor".to_string()))?;
         Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
     }
 

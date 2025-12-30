@@ -105,7 +105,11 @@ pub fn flow_cap_gauge(
 ///
 /// Returns `None` if the flow has no cap (unlimited).
 #[must_use]
-pub fn flow_cap_line_gauge(current: i64, cap: Option<i64>, theme: &Theme) -> Option<LineGauge<'static>> {
+pub fn flow_cap_line_gauge(
+    current: i64,
+    cap: Option<i64>,
+    theme: &Theme,
+) -> Option<LineGauge<'static>> {
     let cap_value = cap?;
     if cap_value <= 0 {
         return None;
@@ -197,4 +201,3 @@ pub fn styled_percentage_change(change: f64, theme: &Theme) -> Span<'static> {
         Style::default().fg(color),
     )
 }
-

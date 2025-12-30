@@ -2,9 +2,11 @@ use uuid::Uuid;
 
 use sea_orm::{QueryFilter, QueryOrder, TransactionTrait, prelude::*};
 
-use crate::{legs, transactions, vault, vault_memberships, EngineError, Leg, ResultEngine, Transaction};
+use crate::{
+    EngineError, Leg, ResultEngine, Transaction, legs, transactions, vault, vault_memberships,
+};
 
-use super::super::super::{with_tx, Engine};
+use super::super::super::{Engine, with_tx};
 
 impl Engine {
     /// Returns a single transaction with all its legs (detail view).
@@ -22,10 +24,12 @@ impl Engine {
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
             if vault_model.user_id != user_id {
-                let member =
-                    vault_memberships::Entity::find_by_id((vault_id.to_string(), user_id.to_string()))
-                        .one(&db_tx)
-                        .await?;
+                let member = vault_memberships::Entity::find_by_id((
+                    vault_id.to_string(),
+                    user_id.to_string(),
+                ))
+                .one(&db_tx)
+                .await?;
                 if member.is_none() {
                     return Err(EngineError::Forbidden("forbidden".to_string()));
                 }

@@ -764,8 +764,7 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
         .unwrap();
 
     // Corrupt denormalized balances directly in DB.
-    let values: Vec<sea_orm::Value> =
-        vec![999i64.into(), wallet_cash.to_string().into()];
+    let values: Vec<sea_orm::Value> = vec![999i64.into(), wallet_cash.to_string().into()];
     db.execute(Statement::from_sql_and_values(
         backend,
         "UPDATE wallets SET balance = ? WHERE id = ?;",
@@ -775,11 +774,8 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
     .unwrap();
     for flow_id in [unallocated_flow, capped_flow, vacanze_flow] {
         if flow_id == capped_flow {
-            let values: Vec<sea_orm::Value> = vec![
-                999i64.into(),
-                0i64.into(),
-                flow_id.to_string().into(),
-            ];
+            let values: Vec<sea_orm::Value> =
+                vec![999i64.into(), 0i64.into(), flow_id.to_string().into()];
             db.execute(Statement::from_sql_and_values(
                 backend,
                 "UPDATE cash_flows SET balance = ?, income_balance = ? WHERE id = ?;",
@@ -788,8 +784,7 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
             .await
             .unwrap();
         } else {
-            let values: Vec<sea_orm::Value> =
-                vec![999i64.into(), flow_id.to_string().into()];
+            let values: Vec<sea_orm::Value> = vec![999i64.into(), flow_id.to_string().into()];
             db.execute(Statement::from_sql_and_values(
                 backend,
                 "UPDATE cash_flows SET balance = ?, income_balance = NULL WHERE id = ?;",

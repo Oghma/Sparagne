@@ -1,16 +1,16 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use sea_orm::{
-    ActiveValue, QueryFilter, Statement, TransactionTrait, prelude::*, sea_query::Expr,
+use sea_orm::{ActiveValue, QueryFilter, Statement, TransactionTrait, prelude::*, sea_query::Expr};
+
+use crate::{
+    CashFlow, EngineError, ResultEngine, TransactionKind, cash_flows,
+    util::validate_flow_mode_fields, vault,
 };
 
-use crate::{cash_flows, vault, CashFlow, EngineError, ResultEngine, TransactionKind};
-use crate::util::validate_flow_mode_fields;
-
 use super::{
-    build_transaction, normalize_required_name, parse_vault_currency, transfer_flow_legs, with_tx,
-    Engine,
+    Engine, build_transaction, normalize_required_name, parse_vault_currency, transfer_flow_legs,
+    with_tx,
 };
 
 impl Engine {

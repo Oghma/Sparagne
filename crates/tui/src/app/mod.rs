@@ -6,9 +6,9 @@ use crate::{
     client::{Client, ClientError},
     config::AppConfig,
     error::{AppError, Result},
+    quick_add::QuickAddKind,
     ui,
 };
-use crate::quick_add::QuickAddKind;
 
 use api_types::{
     flow::{FlowMode, FlowNew, FlowUpdate},
@@ -16,8 +16,7 @@ use api_types::{
     transaction::{
         ExpenseNew, IncomeNew, Refund, TransactionDetailResponse, TransactionGet, TransactionKind,
         TransactionList, TransactionListResponse, TransactionUpdate, TransactionView,
-        TransactionVoid,
-        TransferFlowNew, TransferWalletNew,
+        TransactionVoid, TransferFlowNew, TransferWalletNew,
     },
     vault::{Vault, VaultNew, VaultSnapshot},
     wallet::{WalletNew, WalletUpdate},
@@ -372,7 +371,10 @@ impl App {
                     self.transaction_form_select_prev();
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Wallets
-                    && matches!(self.state.wallets.mode, WalletsMode::List | WalletsMode::Detail)
+                    && matches!(
+                        self.state.wallets.mode,
+                        WalletsMode::List | WalletsMode::Detail
+                    )
                 {
                     self.wallets_select_prev();
                     if self.state.wallets.mode == WalletsMode::Detail {
@@ -423,7 +425,10 @@ impl App {
                     self.transaction_form_select_next();
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Wallets
-                    && matches!(self.state.wallets.mode, WalletsMode::List | WalletsMode::Detail)
+                    && matches!(
+                        self.state.wallets.mode,
+                        WalletsMode::List | WalletsMode::Detail
+                    )
                 {
                     self.wallets_select_next();
                     if self.state.wallets.mode == WalletsMode::Detail {
@@ -562,10 +567,7 @@ impl App {
     }
 
     fn advance_flow_focus(&mut self) {
-        if !matches!(
-            self.state.flows.mode,
-            FlowsMode::Create | FlowsMode::Rename
-        ) {
+        if !matches!(self.state.flows.mode, FlowsMode::Create | FlowsMode::Rename) {
             return;
         }
 
@@ -809,7 +811,8 @@ impl App {
                     }
                 } else if self.state.section == Section::Stats {
                     self.load_stats().await?;
-                } else if self.state.section == Section::Wallets || self.state.section == Section::Flows
+                } else if self.state.section == Section::Wallets
+                    || self.state.section == Section::Flows
                 {
                     self.refresh_snapshot().await?;
                 }
@@ -872,7 +875,8 @@ impl App {
                 if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::List
                 {
-                    self.start_transaction_form(TransactionKind::Expense).await?;
+                    self.start_transaction_form(TransactionKind::Expense)
+                        .await?;
                 } else if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::Detail
                 {
@@ -979,10 +983,7 @@ impl App {
                 }
             }
             Section::Flows => {
-                if matches!(
-                    self.state.flows.mode,
-                    FlowsMode::Create | FlowsMode::Rename
-                ) {
+                if matches!(self.state.flows.mode, FlowsMode::Create | FlowsMode::Rename) {
                     match self.state.flows.form.focus {
                         FlowFormField::Name => self.state.flows.form.name.push(ch),
                         FlowFormField::Cap => self.state.flows.form.cap.push(ch),
@@ -1038,16 +1039,14 @@ impl App {
             FilterField::To => {
                 filter.to_input.push(ch);
             }
-            FilterField::Kinds => {
-                match ch {
-                    'i' | 'I' => filter.kind_income = !filter.kind_income,
-                    'e' | 'E' => filter.kind_expense = !filter.kind_expense,
-                    'r' | 'R' => filter.kind_refund = !filter.kind_refund,
-                    'w' | 'W' => filter.kind_transfer_wallet = !filter.kind_transfer_wallet,
-                    'f' | 'F' => filter.kind_transfer_flow = !filter.kind_transfer_flow,
-                    _ => {}
-                }
-            }
+            FilterField::Kinds => match ch {
+                'i' | 'I' => filter.kind_income = !filter.kind_income,
+                'e' | 'E' => filter.kind_expense = !filter.kind_expense,
+                'r' | 'R' => filter.kind_refund = !filter.kind_refund,
+                'w' | 'W' => filter.kind_transfer_wallet = !filter.kind_transfer_wallet,
+                'f' | 'F' => filter.kind_transfer_flow = !filter.kind_transfer_flow,
+                _ => {}
+            },
         }
     }
 
@@ -1082,8 +1081,7 @@ impl App {
         if matches!(err, ClientError::Unauthorized | ClientError::Forbidden) {
             self.state.screen = Screen::Login;
             self.state.login.password.clear();
-            self.state.login.message =
-                Some("Credenziali errate o pairing mancante.".to_string());
+            self.state.login.message = Some("Credenziali errate o pairing mancante.".to_string());
             self.state.vault = None;
             self.state.snapshot = None;
             self.state.section = Section::Home;
@@ -1128,10 +1126,7 @@ impl App {
     }
 
     fn backspace_flow_form(&mut self) {
-        if !matches!(
-            self.state.flows.mode,
-            FlowsMode::Create | FlowsMode::Rename
-        ) {
+        if !matches!(self.state.flows.mode, FlowsMode::Create | FlowsMode::Rename) {
             return;
         }
         match self.state.flows.form.focus {
@@ -1254,9 +1249,10 @@ impl App {
             .transactions
             .scope_flow_id
             .and_then(|flow_id| {
-                self.state.snapshot.as_ref().and_then(|snap| {
-                    snap.flows.iter().position(|flow| flow.id == flow_id)
-                })
+                self.state
+                    .snapshot
+                    .as_ref()
+                    .and_then(|snap| snap.flows.iter().position(|flow| flow.id == flow_id))
             })
             .map(|idx| idx + 1)
             .unwrap_or(0);
@@ -1430,10 +1426,7 @@ impl App {
             .iter()
             .position(|id| *id == wallet_id)
             .unwrap_or(0);
-        let flow_index = flow_ids
-            .iter()
-            .position(|id| *id == flow_id)
-            .unwrap_or(0);
+        let flow_index = flow_ids.iter().position(|id| *id == flow_id).unwrap_or(0);
         Ok((wallet_index, flow_index))
     }
 
@@ -1782,33 +1775,28 @@ impl App {
         let vault_id = self.current_vault_id()?;
         let ids = self.active_wallet_ids();
         if ids.len() < 2 {
-            self.state.transactions.transfer.error =
-                Some("Servono almeno 2 wallet.".to_string());
+            self.state.transactions.transfer.error = Some("Servono almeno 2 wallet.".to_string());
             return Ok(());
         }
         let from_id = ids[self.state.transactions.transfer.from_index];
         let to_id = ids[self.state.transactions.transfer.to_index];
         if from_id == to_id {
-            self.state.transactions.transfer.error =
-                Some("Scegli due wallet diversi.".to_string());
+            self.state.transactions.transfer.error = Some("Scegli due wallet diversi.".to_string());
             return Ok(());
         }
 
         let currency = self.current_currency();
-        let amount = match Money::parse_major(
-            self.state.transactions.transfer.amount.trim(),
-            currency,
-        ) {
-            Ok(money) => money.minor().abs(),
-            Err(_) => {
-                self.state.transactions.transfer.error =
-                    Some("Importo non valido.".to_string());
-                return Ok(());
-            }
-        };
+        let amount =
+            match Money::parse_major(self.state.transactions.transfer.amount.trim(), currency) {
+                Ok(money) => money.minor().abs(),
+                Err(_) => {
+                    self.state.transactions.transfer.error =
+                        Some("Importo non valido.".to_string());
+                    return Ok(());
+                }
+            };
         if amount <= 0 {
-            self.state.transactions.transfer.error =
-                Some("Importo deve essere > 0.".to_string());
+            self.state.transactions.transfer.error = Some("Importo deve essere > 0.".to_string());
             return Ok(());
         }
 
@@ -1858,33 +1846,28 @@ impl App {
         let vault_id = self.current_vault_id()?;
         let ids = self.active_flow_ids();
         if ids.len() < 2 {
-            self.state.transactions.transfer.error =
-                Some("Servono almeno 2 flow.".to_string());
+            self.state.transactions.transfer.error = Some("Servono almeno 2 flow.".to_string());
             return Ok(());
         }
         let from_id = ids[self.state.transactions.transfer.from_index];
         let to_id = ids[self.state.transactions.transfer.to_index];
         if from_id == to_id {
-            self.state.transactions.transfer.error =
-                Some("Scegli due flow diversi.".to_string());
+            self.state.transactions.transfer.error = Some("Scegli due flow diversi.".to_string());
             return Ok(());
         }
 
         let currency = self.current_currency();
-        let amount = match Money::parse_major(
-            self.state.transactions.transfer.amount.trim(),
-            currency,
-        ) {
-            Ok(money) => money.minor().abs(),
-            Err(_) => {
-                self.state.transactions.transfer.error =
-                    Some("Importo non valido.".to_string());
-                return Ok(());
-            }
-        };
+        let amount =
+            match Money::parse_major(self.state.transactions.transfer.amount.trim(), currency) {
+                Ok(money) => money.minor().abs(),
+                Err(_) => {
+                    self.state.transactions.transfer.error =
+                        Some("Importo non valido.".to_string());
+                    return Ok(());
+                }
+            };
         if amount <= 0 {
-            self.state.transactions.transfer.error =
-                Some("Importo deve essere > 0.".to_string());
+            self.state.transactions.transfer.error = Some("Importo deve essere > 0.".to_string());
             return Ok(());
         }
 
@@ -2022,11 +2005,7 @@ impl App {
 
         self.state.transactions.filter_from = from;
         self.state.transactions.filter_to = to;
-        self.state.transactions.filter_kinds = if kinds.is_empty() {
-            None
-        } else {
-            Some(kinds)
-        };
+        self.state.transactions.filter_kinds = if kinds.is_empty() { None } else { Some(kinds) };
 
         self.state.transactions.filter.error = None;
         self.state.transactions.mode = TransactionsMode::List;
@@ -2114,7 +2093,6 @@ impl App {
         Ok(dt.with_timezone(&offset))
     }
 
-
     fn wallets_len(&self) -> usize {
         self.state
             .snapshot
@@ -2137,10 +2115,7 @@ impl App {
     }
 
     fn start_wallet_rename(&mut self) {
-        let Some(name) = self
-            .selected_wallet()
-            .map(|wallet| wallet.name.clone())
-        else {
+        let Some(name) = self.selected_wallet().map(|wallet| wallet.name.clone()) else {
             self.state.wallets.error = Some("Nessun wallet selezionato.".to_string());
             return;
         };
@@ -2684,14 +2659,14 @@ impl App {
             .and_then(|v| v.id.as_deref())
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
 
-        let (wallet_id, flow_id, _wallet_name, _flow_name) =
-            match default_wallet_flow(&self.state) {
-                Ok(res) => res,
-                Err(message) => {
-                    self.state.transactions.quick_error = Some(message);
-                    return Ok(());
-                }
-            };
+        let (wallet_id, flow_id, _wallet_name, _flow_name) = match default_wallet_flow(&self.state)
+        {
+            Ok(res) => res,
+            Err(message) => {
+                self.state.transactions.quick_error = Some(message);
+                return Ok(());
+            }
+        };
 
         let currency = self
             .state
@@ -2701,8 +2676,7 @@ impl App {
             .map(map_currency)
             .unwrap_or(engine::Currency::Eur);
 
-        let parsed = match crate::quick_add::parse(&self.state.transactions.quick_input, currency)
-        {
+        let parsed = match crate::quick_add::parse(&self.state.transactions.quick_input, currency) {
             Ok(parsed) => parsed,
             Err(message) => {
                 self.state.transactions.quick_error = Some(message);
@@ -2851,7 +2825,11 @@ impl App {
 
         let currency = self.current_currency();
         let opening_raw = self.state.wallets.form.opening.trim();
-        let opening_raw = if opening_raw.is_empty() { "0" } else { opening_raw };
+        let opening_raw = if opening_raw.is_empty() {
+            "0"
+        } else {
+            opening_raw
+        };
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
@@ -3069,7 +3047,11 @@ impl App {
 
         let currency = self.current_currency();
         let opening_raw = self.state.flows.form.opening.trim();
-        let opening_raw = if opening_raw.is_empty() { "0" } else { opening_raw };
+        let opening_raw = if opening_raw.is_empty() {
+            "0"
+        } else {
+            opening_raw
+        };
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
@@ -3078,8 +3060,7 @@ impl App {
             }
         };
         if opening < 0 {
-            self.state.flows.form.error =
-                Some("Saldo iniziale deve essere >= 0.".to_string());
+            self.state.flows.form.error = Some("Saldo iniziale deve essere >= 0.".to_string());
             return Ok(());
         }
 
@@ -3402,12 +3383,8 @@ impl App {
                     entry.0 += tx.amount_minor.abs();
 
                     if year == current_year && month == current_month {
-                        let category = tx
-                            .category
-                            .clone()
-                            .unwrap_or_else(|| "Other".to_string());
-                        *category_breakdown.entry(category).or_insert(0) +=
-                            tx.amount_minor.abs();
+                        let category = tx.category.clone().unwrap_or_else(|| "Other".to_string());
+                        *category_breakdown.entry(category).or_insert(0) += tx.amount_minor.abs();
                     }
                 }
                 TransactionKind::Refund => {
@@ -3445,7 +3422,10 @@ impl App {
         let mut monthly_income_vec = Vec::new();
         for (year, month, label) in months {
             let income = monthly_income.get(&(year, month)).copied().unwrap_or(0);
-            let (expense, refund) = monthly_expense.get(&(year, month)).copied().unwrap_or((0, 0));
+            let (expense, refund) = monthly_expense
+                .get(&(year, month))
+                .copied()
+                .unwrap_or((0, 0));
             let net_expense = (expense - refund).max(0);
             monthly_income_vec.push((label.clone(), income));
             monthly_expenses_vec.push((label, net_expense));
@@ -3478,9 +3458,7 @@ impl App {
 
     fn format_local_datetime(&self, dt: DateTime<FixedOffset>) -> String {
         let tz = Tz::from_str(self.config.timezone.as_str()).unwrap_or(Tz::UTC);
-        dt.with_timezone(&tz)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
+        dt.with_timezone(&tz).format("%Y-%m-%d %H:%M").to_string()
     }
 
     /// Navigate to next month in stats view
@@ -3518,10 +3496,7 @@ impl App {
         self.state.palette.selected = 0;
     }
 
-    async fn handle_palette_action(
-        &mut self,
-        action: crate::ui::keymap::AppAction,
-    ) -> Result<()> {
+    async fn handle_palette_action(&mut self, action: crate::ui::keymap::AppAction) -> Result<()> {
         match action {
             crate::ui::keymap::AppAction::Cancel => {
                 self.state.palette.active = false;
@@ -3538,8 +3513,7 @@ impl App {
             crate::ui::keymap::AppAction::Down => {
                 let max = self.filtered_commands().len();
                 if max > 0 {
-                    self.state.palette.selected =
-                        (self.state.palette.selected + 1).min(max - 1);
+                    self.state.palette.selected = (self.state.palette.selected + 1).min(max - 1);
                 }
             }
             crate::ui::keymap::AppAction::Input(ch) => {
@@ -3568,7 +3542,8 @@ impl App {
     async fn execute_command(&mut self, command: PaletteCommand) -> Result<()> {
         match command {
             PaletteCommand::NewExpense => {
-                self.start_transaction_form(TransactionKind::Expense).await?;
+                self.start_transaction_form(TransactionKind::Expense)
+                    .await?;
             }
             PaletteCommand::NewIncome => {
                 self.start_transaction_form(TransactionKind::Income).await?;
@@ -3608,8 +3583,7 @@ impl App {
                 if self.state.section != Section::Transactions {
                     self.state.section = Section::Transactions;
                 }
-                self.state.transactions.include_voided =
-                    !self.state.transactions.include_voided;
+                self.state.transactions.include_voided = !self.state.transactions.include_voided;
                 self.load_transactions(true).await?;
             }
         }

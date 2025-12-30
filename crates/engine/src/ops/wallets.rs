@@ -3,11 +3,11 @@ use uuid::Uuid;
 
 use sea_orm::{ActiveValue, QueryFilter, TransactionTrait, prelude::*, sea_query::Expr};
 
-use crate::{wallets, EngineError, ResultEngine, TransactionKind, Wallet};
+use crate::{EngineError, ResultEngine, TransactionKind, Wallet, wallets};
 
 use super::{
-    build_transaction, flow_wallet_legs, flow_wallet_signed_amount, normalize_required_name,
-    parse_vault_currency, with_tx, Engine,
+    Engine, build_transaction, flow_wallet_legs, flow_wallet_signed_amount,
+    normalize_required_name, parse_vault_currency, with_tx,
 };
 
 impl Engine {
@@ -22,7 +22,8 @@ impl Engine {
             let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
             let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
-            let model = wallets::Entity::find_by_id(wallet_id.to_string())
+            let wallet_id_str = wallet_id.to_string();
+            let model = wallets::Entity::find_by_id(wallet_id_str.clone())
                 .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
                 .one(&db_tx)
                 .await?

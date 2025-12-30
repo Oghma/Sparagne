@@ -5,18 +5,21 @@ use uuid::Uuid;
 use sea_orm::{ActiveValue, DatabaseTransaction, QueryFilter, TransactionTrait, prelude::*};
 
 use crate::{
-    cash_flows, legs, transactions, wallets, Currency, EngineError, Leg, LegTarget, ResultEngine,
-    Transaction, TransactionKind, TxMeta,
+    Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind, TxMeta,
+    cash_flows, legs, transactions,
+    util::{ensure_vault_currency, model_currency, validate_flow_mode_fields},
+    wallets,
 };
-use crate::util::{ensure_vault_currency, model_currency, validate_flow_mode_fields};
 
-use super::super::helpers::{
-    apply_transfer_leg_updates, normalize_tx_meta, parse_transfer_leg_pairs,
-    resolve_transfer_targets, validate_flow_wallet_legs, validate_transfer_legs,
-};
-use super::super::super::{
-    build_transaction, flow_wallet_legs, flow_wallet_signed_amount, parse_vault_currency,
-    TransactionBuildInput, with_tx, Engine,
+use super::super::{
+    super::{
+        Engine, TransactionBuildInput, build_transaction, flow_wallet_legs,
+        flow_wallet_signed_amount, parse_vault_currency, with_tx,
+    },
+    helpers::{
+        apply_transfer_leg_updates, normalize_tx_meta, parse_transfer_leg_pairs,
+        resolve_transfer_targets, validate_flow_wallet_legs, validate_transfer_legs,
+    },
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -169,12 +172,8 @@ impl Engine {
                 },
             }
         })?;
-        let (new_from, new_to) = resolve_transfer_targets(
-            &info,
-            input.from_override,
-            input.to_override,
-            diff_error,
-        )?;
+        let (new_from, new_to) =
+            resolve_transfer_targets(&info, input.from_override, input.to_override, diff_error)?;
 
         match input.kind {
             TransferTargetKind::Wallet => {
@@ -253,16 +252,19 @@ impl Engine {
             .system_kind
             .as_deref()
             .and_then(|k| cash_flows::SystemFlowKind::try_from(k).ok());
-        let entry = input.flow_previews.entry(input.flow_id).or_insert_with(|| crate::CashFlow {
-            id: input.flow_id,
-            name: flow_model.name.clone(),
-            system_kind,
-            balance: flow_model.balance,
-            max_balance: flow_model.max_balance,
-            income_balance: flow_model.income_balance,
-            currency: flow_currency,
-            archived: flow_model.archived,
-        });
+        let entry = input
+            .flow_previews
+            .entry(input.flow_id)
+            .or_insert_with(|| crate::CashFlow {
+                id: input.flow_id,
+                name: flow_model.name.clone(),
+                system_kind,
+                balance: flow_model.balance,
+                max_balance: flow_model.max_balance,
+                income_balance: flow_model.income_balance,
+                currency: flow_currency,
+                archived: flow_model.archived,
+            });
         entry.apply_leg_change(input.old_amount_minor, input.new_amount_minor)?;
         Ok(())
     }
@@ -374,9 +376,8 @@ impl Engine {
                     .one(db_tx)
                     .await?;
                 if let Some(existing) = existing {
-                    return Uuid::parse_str(&existing.id).map_err(|_| {
-                        EngineError::InvalidId("invalid transaction id".to_string())
-                    });
+                    return Uuid::parse_str(&existing.id)
+                        .map_err(|_| EngineError::InvalidId("invalid transaction id".to_string()));
                 }
             }
             return Err(err.into());

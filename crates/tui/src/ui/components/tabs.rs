@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
-    Frame,
 };
 
 use crate::{app::Section, ui::theme::Theme};
@@ -39,10 +39,7 @@ pub fn render_tabs(frame: &mut Frame<'_>, area: Rect, active: Section, theme: &T
             ));
             spans.push(Span::styled("]", Style::default().fg(theme.accent)));
         } else {
-            spans.push(Span::styled(
-                label,
-                Style::default().fg(theme.text_muted),
-            ));
+            spans.push(Span::styled(label, Style::default().fg(theme.text_muted)));
         }
     }
 

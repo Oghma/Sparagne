@@ -5,8 +5,8 @@ use uuid::Uuid;
 use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind,
     TransactionNew,
+    util::{model_currency, normalize_optional_text, normalize_required_name},
 };
-use crate::util::{model_currency, normalize_optional_text, normalize_required_name};
 
 mod access;
 mod balances;
@@ -18,7 +18,8 @@ mod wallets;
 
 pub use transactions::TransactionListFilter;
 
-/// Run a block inside a DB transaction, committing on success and rolling back on error.
+/// Run a block inside a DB transaction, committing on success and rolling back
+/// on error.
 macro_rules! with_tx {
     ($self:expr, |$tx:ident| $body:expr) => {{
         let $tx = $self.database.begin().await?;
@@ -47,10 +48,7 @@ impl Engine {
     }
 }
 
-fn flow_wallet_signed_amount(
-    kind: TransactionKind,
-    amount_minor: i64,
-) -> ResultEngine<i64> {
+fn flow_wallet_signed_amount(kind: TransactionKind, amount_minor: i64) -> ResultEngine<i64> {
     match kind {
         TransactionKind::Income | TransactionKind::Refund => Ok(amount_minor),
         TransactionKind::Expense => Ok(-amount_minor),
@@ -160,7 +158,9 @@ fn transfer_flow_legs(
         ),
         Leg::new(
             tx_id,
-            LegTarget::Flow { flow_id: to_flow_id },
+            LegTarget::Flow {
+                flow_id: to_flow_id,
+            },
             amount_minor,
             currency,
         ),

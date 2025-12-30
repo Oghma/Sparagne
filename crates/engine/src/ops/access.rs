@@ -2,11 +2,11 @@ use sea_orm::{DatabaseTransaction, QueryFilter, prelude::*, sea_query::Expr};
 use uuid::Uuid;
 
 use crate::{
-    cash_flows, flow_memberships, users, vault, vault_memberships, wallets, EngineError,
-    ResultEngine,
+    EngineError, ResultEngine, cash_flows, flow_memberships, users, vault, vault_memberships,
+    wallets,
 };
 
-use super::{normalize_required_name, Engine};
+use super::{Engine, normalize_required_name};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum MembershipRole {
@@ -36,7 +36,8 @@ impl TryFrom<&str> for MembershipRole {
     }
 }
 
-/// Generates `_exists_in_vault` and `require_in_vault` methods for a target entity.
+/// Generates `_exists_in_vault` and `require_in_vault` methods for a target
+/// entity.
 macro_rules! impl_target_in_vault {
     ($exists_fn:ident, $require_fn:ident, $entity:path, $vault_col:expr, $err_msg:literal) => {
         async fn $exists_fn(
@@ -181,8 +182,7 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<bool> {
-        let Some(vault) = self.find_vault_by_id(db, vault_id).await?
-        else {
+        let Some(vault) = self.find_vault_by_id(db, vault_id).await? else {
             return Ok(false);
         };
         if vault.user_id == user_id {
@@ -200,8 +200,7 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<bool> {
-        let Some(vault) = self.find_vault_by_id(db, vault_id).await?
-        else {
+        let Some(vault) = self.find_vault_by_id(db, vault_id).await? else {
             return Ok(false);
         };
         if vault.user_id == user_id {

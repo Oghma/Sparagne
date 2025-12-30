@@ -1,5 +1,5 @@
-pub mod home;
 pub mod flows;
+pub mod home;
 pub mod login;
 pub mod stats;
 pub mod transactions;
