@@ -36,7 +36,54 @@ impl TryFrom<&str> for MembershipRole {
     }
 }
 
+/// Generates `_exists_in_vault` and `require_in_vault` methods for a target entity.
+macro_rules! impl_target_in_vault {
+    ($exists_fn:ident, $require_fn:ident, $entity:path, $vault_col:expr, $err_msg:literal) => {
+        async fn $exists_fn(
+            &self,
+            db: &DatabaseTransaction,
+            vault_id: &str,
+            target_id: Uuid,
+        ) -> ResultEngine<bool> {
+            <$entity>::find_by_id(target_id.to_string())
+                .filter($vault_col.eq(vault_id.to_string()))
+                .one(db)
+                .await
+                .map(|model| model.is_some())
+                .map_err(Into::into)
+        }
+
+        pub(super) async fn $require_fn(
+            &self,
+            db: &DatabaseTransaction,
+            vault_id: &str,
+            target_id: Uuid,
+        ) -> ResultEngine<()> {
+            if !self.$exists_fn(db, vault_id, target_id).await? {
+                return Err(EngineError::KeyNotFound($err_msg.to_string()));
+            }
+            Ok(())
+        }
+    };
+}
+
 impl Engine {
+    impl_target_in_vault!(
+        flow_exists_in_vault,
+        require_flow_in_vault,
+        cash_flows::Entity,
+        cash_flows::Column::VaultId,
+        "cash_flow not exists"
+    );
+
+    impl_target_in_vault!(
+        wallet_exists_in_vault,
+        require_wallet_in_vault,
+        wallets::Entity,
+        wallets::Column::VaultId,
+        "wallet not exists"
+    );
+
     async fn find_vault_by_id(
         &self,
         db: &DatabaseTransaction,
@@ -45,34 +92,6 @@ impl Engine {
         vault::Entity::find_by_id(vault_id.to_string())
             .one(db)
             .await
-            .map_err(Into::into)
-    }
-
-    async fn flow_exists_in_vault(
-        &self,
-        db: &DatabaseTransaction,
-        vault_id: &str,
-        flow_id: Uuid,
-    ) -> ResultEngine<bool> {
-        cash_flows::Entity::find_by_id(flow_id.to_string())
-            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
-            .one(db)
-            .await
-            .map(|model| model.is_some())
-            .map_err(Into::into)
-    }
-
-    async fn wallet_exists_in_vault(
-        &self,
-        db: &DatabaseTransaction,
-        vault_id: &str,
-        wallet_id: Uuid,
-    ) -> ResultEngine<bool> {
-        wallets::Entity::find_by_id(wallet_id.to_string())
-            .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
-            .one(db)
-            .await
-            .map(|model| model.is_some())
             .map_err(Into::into)
     }
 
@@ -356,33 +375,5 @@ impl Engine {
         }
         Uuid::parse_str(&first.id)
             .map_err(|_| EngineError::InvalidId("invalid wallet id".to_string()))
-    }
-
-    pub(super) async fn require_wallet_in_vault(
-        &self,
-        db: &DatabaseTransaction,
-        vault_id: &str,
-        wallet_id: Uuid,
-    ) -> ResultEngine<()> {
-        let exists = self
-            .wallet_exists_in_vault(db, vault_id, wallet_id)
-            .await?;
-        if !exists {
-            return Err(EngineError::KeyNotFound("wallet not exists".to_string()));
-        }
-        Ok(())
-    }
-
-    pub(super) async fn require_flow_in_vault(
-        &self,
-        db: &DatabaseTransaction,
-        vault_id: &str,
-        flow_id: Uuid,
-    ) -> ResultEngine<()> {
-        let exists = self.flow_exists_in_vault(db, vault_id, flow_id).await?;
-        if !exists {
-            return Err(EngineError::KeyNotFound("cash_flow not exists".to_string()));
-        }
-        Ok(())
     }
 }
