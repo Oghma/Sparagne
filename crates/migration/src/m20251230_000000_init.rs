@@ -146,7 +146,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Vaults::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(Vaults::Id).string().not_null().primary_key())
+                    .col(ColumnDef::new(Vaults::Id).blob().not_null().primary_key())
                     .col(ColumnDef::new(Vaults::Name).string().not_null())
                     .col(ColumnDef::new(Vaults::UserId).string().not_null())
                     .col(
@@ -175,7 +175,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(Wallets::Id)
-                            .string()
+                            .blob()
                             .not_null()
                             .primary_key(),
                     )
@@ -188,7 +188,7 @@ impl MigrationTrait for Migration {
                             .default("EUR"),
                     )
                     .col(ColumnDef::new(Wallets::Archived).boolean().not_null())
-                    .col(ColumnDef::new(Wallets::VaultId).string().not_null())
+                    .col(ColumnDef::new(Wallets::VaultId).blob().not_null())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-wallets-vault_id")
@@ -221,7 +221,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(CashFlows::Id)
-                            .string()
+                            .blob()
                             .not_null()
                             .primary_key(),
                     )
@@ -237,7 +237,7 @@ impl MigrationTrait for Migration {
                             .default("EUR"),
                     )
                     .col(ColumnDef::new(CashFlows::Archived).boolean().not_null())
-                    .col(ColumnDef::new(CashFlows::VaultId).string().not_null())
+                    .col(ColumnDef::new(CashFlows::VaultId).blob().not_null())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-cash_flows-vault_id")
@@ -270,11 +270,11 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(Transactions::Id)
-                            .string()
+                            .blob()
                             .not_null()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(Transactions::VaultId).string().not_null())
+                    .col(ColumnDef::new(Transactions::VaultId).blob().not_null())
                     .col(ColumnDef::new(Transactions::Kind).string().not_null())
                     .col(
                         ColumnDef::new(Transactions::OccurredAt)
@@ -292,7 +292,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Transactions::CreatedBy).string().not_null())
                     .col(ColumnDef::new(Transactions::VoidedAt).timestamp())
                     .col(ColumnDef::new(Transactions::VoidedBy).string())
-                    .col(ColumnDef::new(Transactions::RefundedTransactionId).string())
+                    .col(ColumnDef::new(Transactions::RefundedTransactionId).blob())
                     .col(ColumnDef::new(Transactions::IdempotencyKey).string())
                     .foreign_key(
                         ForeignKey::create()
@@ -346,10 +346,10 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Legs::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(Legs::Id).string().not_null().primary_key())
-                    .col(ColumnDef::new(Legs::TransactionId).string().not_null())
+                    .col(ColumnDef::new(Legs::Id).blob().not_null().primary_key())
+                    .col(ColumnDef::new(Legs::TransactionId).blob().not_null())
                     .col(ColumnDef::new(Legs::TargetKind).string().not_null())
-                    .col(ColumnDef::new(Legs::TargetId).string().not_null())
+                    .col(ColumnDef::new(Legs::TargetId).blob().not_null())
                     .col(ColumnDef::new(Legs::AmountMinor).big_integer().not_null())
                     .col(ColumnDef::new(Legs::Currency).string().not_null())
                     .col(ColumnDef::new(Legs::AttributedUserId).string())
@@ -405,7 +405,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(VaultMemberships::VaultId)
-                            .string()
+                            .blob()
                             .not_null(),
                     )
                     .col(ColumnDef::new(VaultMemberships::UserId).string().not_null())
@@ -451,7 +451,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(FlowMemberships::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(FlowMemberships::FlowId).string().not_null())
+                    .col(ColumnDef::new(FlowMemberships::FlowId).blob().not_null())
                     .col(ColumnDef::new(FlowMemberships::UserId).string().not_null())
                     .col(ColumnDef::new(FlowMemberships::Role).string().not_null())
                     .primary_key(

@@ -11,7 +11,7 @@ use crate::{
     util::ensure_vault_currency, wallets,
 };
 
-use super::{Engine, parse_vault_currency, with_tx};
+use super::{Engine, parse_vault_currency, parse_vault_uuid, with_tx};
 
 impl Engine {
     /// Recomputes denormalized balances for wallets and flows from the ledger
@@ -26,15 +26,16 @@ impl Engine {
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
             let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_uuid = parse_vault_uuid(vault_id)?;
 
             // Load all wallets/flows from DB (including archived) to avoid stale RAM
             // issues.
             let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
-                .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+                .filter(wallets::Column::VaultId.eq(vault_uuid))
                 .all(&db_tx)
                 .await?;
             let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
-                .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+                .filter(cash_flows::Column::VaultId.eq(vault_uuid))
                 .all(&db_tx)
                 .await?;
 
@@ -58,7 +59,7 @@ impl Engine {
             // Replay all non-voided legs in chronological order to validate invariants.
             let leg_models: Vec<legs::Model> = legs::Entity::find()
                 .join(JoinType::InnerJoin, legs::Relation::Transactions.def())
-                .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+                .filter(transactions::Column::VaultId.eq(vault_uuid))
                 .filter(transactions::Column::VoidedAt.is_null())
                 .order_by_asc(transactions::Column::OccurredAt)
                 .order_by_asc(legs::Column::Id)
@@ -88,7 +89,7 @@ impl Engine {
             // Persist denormalized balances.
             for (wallet_id, wallet) in &wallets_by_id {
                 let wallet_model = wallets::ActiveModel {
-                    id: ActiveValue::Set(wallet_id.to_string()),
+                    id: ActiveValue::Set(*wallet_id),
                     balance: ActiveValue::Set(wallet.balance),
                     ..Default::default()
                 };
@@ -97,7 +98,7 @@ impl Engine {
 
             for (flow_id, flow) in &flows {
                 let flow_model = cash_flows::ActiveModel {
-                    id: ActiveValue::Set(flow_id.to_string()),
+                    id: ActiveValue::Set(*flow_id),
                     balance: ActiveValue::Set(flow.balance),
                     income_balance: ActiveValue::Set(flow.income_balance),
                     ..Default::default()

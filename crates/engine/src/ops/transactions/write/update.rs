@@ -6,9 +6,11 @@ use crate::{
     util::{apply_optional_datetime_patch, apply_optional_text_patch},
 };
 
+use uuid::Uuid;
+
 use super::{
     super::{
-        super::{Engine, flow_wallet_signed_amount, parse_vault_currency, with_tx},
+        super::{Engine, flow_wallet_signed_amount, parse_vault_currency, parse_vault_uuid, with_tx},
         helpers::{
             apply_flow_wallet_leg_updates, extract_flow_wallet_targets, validate_update_fields,
         },
@@ -45,11 +47,12 @@ impl Engine {
                 .await?;
             let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
-            let tx_model = transactions::Entity::find_by_id(transaction_id.to_string())
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+            let tx_model = transactions::Entity::find_by_id(transaction_id)
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("transaction not exists".to_string()))?;
-            if tx_model.vault_id != vault_id {
+            if tx_model.vault_id != vault_uuid {
                 return Err(EngineError::KeyNotFound(
                     "transaction not exists".to_string(),
                 ));
@@ -73,7 +76,7 @@ impl Engine {
             let new_note = apply_optional_text_patch(tx_model.note.clone(), note);
 
             let leg_models = legs::Entity::find()
-                .filter(legs::Column::TransactionId.eq(transaction_id.to_string()))
+                .filter(legs::Column::TransactionId.eq(transaction_id))
                 .all(&db_tx)
                 .await?;
 
@@ -84,7 +87,7 @@ impl Engine {
             }
 
             let mut balance_updates: Vec<(LegTarget, i64, i64)> = Vec::new();
-            let mut leg_updates: Vec<(String, LegTarget, i64)> = Vec::new();
+            let mut leg_updates: Vec<(Uuid, LegTarget, i64)> = Vec::new();
 
             match kind {
                 TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
@@ -165,7 +168,7 @@ impl Engine {
                 .await?;
 
             let tx_active = transactions::ActiveModel {
-                id: ActiveValue::Set(transaction_id.to_string()),
+                id: ActiveValue::Set(transaction_id),
                 amount_minor: ActiveValue::Set(new_amount_minor),
                 category: ActiveValue::Set(new_category),
                 note: ActiveValue::Set(new_note),
@@ -176,10 +179,8 @@ impl Engine {
 
             for (leg_id, new_target, new_amount_minor) in leg_updates {
                 let (target_kind, target_id) = match new_target {
-                    LegTarget::Wallet { wallet_id } => {
-                        (legs::LegTargetKind::Wallet, wallet_id.to_string())
-                    }
-                    LegTarget::Flow { flow_id } => (legs::LegTargetKind::Flow, flow_id.to_string()),
+                    LegTarget::Wallet { wallet_id } => (legs::LegTargetKind::Wallet, wallet_id),
+                    LegTarget::Flow { flow_id } => (legs::LegTargetKind::Flow, flow_id),
                 };
                 let leg_active = legs::ActiveModel {
                     id: ActiveValue::Set(leg_id),

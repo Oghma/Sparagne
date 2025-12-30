@@ -14,7 +14,7 @@ use crate::{
 use super::super::{
     super::{
         Engine, TransactionBuildInput, build_transaction, flow_wallet_legs,
-        flow_wallet_signed_amount, parse_vault_currency, with_tx,
+        flow_wallet_signed_amount, parse_vault_currency, parse_vault_uuid, with_tx,
     },
     helpers::{
         apply_transfer_leg_updates, normalize_tx_meta, parse_transfer_leg_pairs,
@@ -62,7 +62,7 @@ pub(super) struct TransferUpdateInput<'a> {
 
 pub(super) struct TransferUpdateOutput<'a> {
     pub(super) balance_updates: &'a mut Vec<(LegTarget, i64, i64)>,
-    pub(super) leg_updates: &'a mut Vec<(String, LegTarget, i64)>,
+    pub(super) leg_updates: &'a mut Vec<(Uuid, LegTarget, i64)>,
 }
 
 struct FlowChangeInput<'a> {
@@ -220,8 +220,9 @@ impl Engine {
         wallet_id: Uuid,
         delta_minor: i64,
     ) -> ResultEngine<()> {
-        let wallet_model = wallets::Entity::find_by_id(wallet_id.to_string())
-            .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+        let vault_uuid = parse_vault_uuid(vault_id)?;
+        let wallet_model = wallets::Entity::find_by_id(wallet_id)
+            .filter(wallets::Column::VaultId.eq(vault_uuid))
             .one(db_tx)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("wallet not exists".to_string()))?;
@@ -236,8 +237,9 @@ impl Engine {
     }
 
     async fn apply_flow_change(&self, input: FlowChangeInput<'_>) -> ResultEngine<()> {
-        let flow_model = cash_flows::Entity::find_by_id(input.flow_id.to_string())
-            .filter(cash_flows::Column::VaultId.eq(input.vault_id.to_string()))
+        let vault_uuid = parse_vault_uuid(input.vault_id)?;
+        let flow_model = cash_flows::Entity::find_by_id(input.flow_id)
+            .filter(cash_flows::Column::VaultId.eq(vault_uuid))
             .one(input.db_tx)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
@@ -332,16 +334,16 @@ impl Engine {
             )));
         }
 
+        let vault_uuid_early = parse_vault_uuid(vault_id)?;
         if let Some(key) = tx.idempotency_key.as_deref() {
             let existing = transactions::Entity::find()
-                .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+                .filter(transactions::Column::VaultId.eq(vault_uuid_early))
                 .filter(transactions::Column::CreatedBy.eq(tx.created_by.clone()))
                 .filter(transactions::Column::IdempotencyKey.eq(key.to_string()))
                 .one(db_tx)
                 .await?;
             if let Some(existing) = existing {
-                return Uuid::parse_str(&existing.id)
-                    .map_err(|_| EngineError::InvalidId("invalid transaction id".to_string()));
+                return Ok(existing.id);
             }
         }
 
@@ -362,18 +364,18 @@ impl Engine {
             .preview_apply_leg_updates(db_tx, vault_id, vault_currency, &updates)
             .await?;
 
+        let vault_uuid = parse_vault_uuid(vault_id)?;
         if let Err(err) = transactions::ActiveModel::from(tx).insert(db_tx).await {
             if tx.idempotency_key.is_some() {
                 let key = tx.idempotency_key.as_deref().unwrap_or_default();
                 let existing = transactions::Entity::find()
-                    .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+                    .filter(transactions::Column::VaultId.eq(vault_uuid))
                     .filter(transactions::Column::CreatedBy.eq(tx.created_by.clone()))
                     .filter(transactions::Column::IdempotencyKey.eq(key.to_string()))
                     .one(db_tx)
                     .await?;
                 if let Some(existing) = existing {
-                    return Uuid::parse_str(&existing.id)
-                        .map_err(|_| EngineError::InvalidId("invalid transaction id".to_string()));
+                    return Ok(existing.id);
                 }
             }
             return Err(err.into());
@@ -438,7 +440,7 @@ impl Engine {
     ) -> ResultEngine<()> {
         for (wallet_id, new_balance) in wallet_new_balances {
             let wallet_model = wallets::ActiveModel {
-                id: ActiveValue::Set(wallet_id.to_string()),
+                id: ActiveValue::Set(wallet_id),
                 balance: ActiveValue::Set(new_balance),
                 ..Default::default()
             };
@@ -447,7 +449,7 @@ impl Engine {
 
         for (flow_id, flow) in flow_previews {
             let flow_model = cash_flows::ActiveModel {
-                id: ActiveValue::Set(flow_id.to_string()),
+                id: ActiveValue::Set(flow_id),
                 balance: ActiveValue::Set(flow.balance),
                 income_balance: ActiveValue::Set(flow.income_balance),
                 ..Default::default()

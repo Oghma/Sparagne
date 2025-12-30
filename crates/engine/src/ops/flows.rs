@@ -9,8 +9,8 @@ use crate::{
 };
 
 use super::{
-    Engine, build_transaction, normalize_required_name, parse_vault_currency, transfer_flow_legs,
-    with_tx,
+    Engine, build_transaction, normalize_required_name, parse_vault_currency, parse_vault_uuid,
+    transfer_flow_legs, with_tx,
 };
 
 impl Engine {
@@ -25,7 +25,8 @@ impl Engine {
             let model = self
                 .require_flow_read(&db_tx, vault_id, cash_flow_id, user_id)
                 .await?;
-            let vault_model = vault::Entity::find_by_id(vault_id.to_string())
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+            let vault_model = vault::Entity::find_by_id(vault_uuid)
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
@@ -44,14 +45,15 @@ impl Engine {
         let name = normalize_required_name(name, "flow")?;
         let name_lower = name.to_lowercase();
         with_tx!(self, |db_tx| {
-            let vault_model = vault::Entity::find_by_id(vault_id.to_string())
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+            let vault_model = vault::Entity::find_by_id(vault_uuid)
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
             let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
             let model = cash_flows::Entity::find()
-                .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+                .filter(cash_flows::Column::VaultId.eq(vault_uuid))
                 .filter(Expr::cust("LOWER(name)").eq(name_lower))
                 .one(&db_tx)
                 .await?
@@ -62,7 +64,7 @@ impl Engine {
                 .await?
             {
                 let role = self
-                    .flow_membership_role(&db_tx, &model.id, user_id)
+                    .flow_membership_role(&db_tx, model.id, user_id)
                     .await?
                     .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
                 let _ = role;
@@ -85,8 +87,9 @@ impl Engine {
             self.require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
 
-            let flow_model = cash_flows::Entity::find_by_id(cash_flow_id.to_string())
-                .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+            let flow_model = cash_flows::Entity::find_by_id(cash_flow_id)
+                .filter(cash_flows::Column::VaultId.eq(vault_uuid))
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
@@ -105,15 +108,13 @@ impl Engine {
 
             if archive {
                 let flow_model = cash_flows::ActiveModel {
-                    id: ActiveValue::Set(cash_flow_id.to_string()),
+                    id: ActiveValue::Set(cash_flow_id),
                     archived: ActiveValue::Set(true),
                     ..Default::default()
                 };
                 flow_model.update(&db_tx).await?;
             } else {
-                cash_flows::Entity::delete_by_id(cash_flow_id.to_string())
-                    .exec(&db_tx)
-                    .await?;
+                cash_flows::Entity::delete_by_id(cash_flow_id).exec(&db_tx).await?;
             }
 
             Ok(())
@@ -148,6 +149,7 @@ impl Engine {
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
             let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_uuid = vault_model.id;
 
             if name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {
                 return Err(EngineError::InvalidFlow(
@@ -155,7 +157,7 @@ impl Engine {
                 ));
             }
             let exists = cash_flows::Entity::find()
-                .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+                .filter(cash_flows::Column::VaultId.eq(vault_uuid))
                 .filter(Expr::cust("LOWER(name)").eq(name.to_lowercase()))
                 .one(&db_tx)
                 .await?
@@ -175,7 +177,7 @@ impl Engine {
             )?;
             let flow_id = flow.id;
             let mut flow_model: cash_flows::ActiveModel = (&flow).into();
-            flow_model.vault_id = ActiveValue::Set(vault_model.id);
+            flow_model.vault_id = ActiveValue::Set(vault_uuid);
             flow_model.insert(&db_tx).await?;
 
             if balance > 0 {
@@ -232,11 +234,12 @@ impl Engine {
                     "cannot rename system flow".to_string(),
                 ));
             }
+            let vault_uuid = parse_vault_uuid(vault_id)?;
 
             let exists = cash_flows::Entity::find()
-                .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+                .filter(cash_flows::Column::VaultId.eq(vault_uuid))
                 .filter(Expr::cust("LOWER(name)").eq(new_name.to_lowercase()))
-                .filter(cash_flows::Column::Id.ne(flow_id.to_string()))
+                .filter(cash_flows::Column::Id.ne(flow_id))
                 .one(&db_tx)
                 .await?
                 .is_some();
@@ -245,7 +248,7 @@ impl Engine {
             }
 
             let active = cash_flows::ActiveModel {
-                id: ActiveValue::Set(flow_id.to_string()),
+                id: ActiveValue::Set(flow_id),
                 name: ActiveValue::Set(new_name),
                 ..Default::default()
             };
@@ -275,7 +278,7 @@ impl Engine {
             }
 
             let active = cash_flows::ActiveModel {
-                id: ActiveValue::Set(flow_id.to_string()),
+                id: ActiveValue::Set(flow_id),
                 archived: ActiveValue::Set(archived),
                 ..Default::default()
             };
@@ -333,6 +336,9 @@ impl Engine {
                     (Some(cap_minor), None)
                 }
                 Some(cap_minor) => {
+                    let vault_uuid = parse_vault_uuid(vault_id)?;
+                    let vault_bytes: Vec<u8> = vault_uuid.as_bytes().to_vec();
+                    let flow_bytes: Vec<u8> = flow_id.as_bytes().to_vec();
                     let stmt = Statement::from_sql_and_values(
                         db_tx.get_database_backend(),
                         "SELECT COALESCE(SUM(l.amount_minor), 0) AS sum \
@@ -344,9 +350,9 @@ impl Engine {
                            AND l.target_id = ? \
                            AND l.amount_minor > 0",
                         vec![
-                            vault_id.into(),
+                            vault_bytes.into(),
                             crate::legs::LegTargetKind::Flow.as_str().into(),
-                            flow_id.to_string().into(),
+                            flow_bytes.into(),
                         ],
                     );
                     let row = db_tx.query_one(stmt).await?;
@@ -362,7 +368,7 @@ impl Engine {
             validate_flow_mode_fields(&flow_name, max_balance, income_balance)?;
 
             let active = cash_flows::ActiveModel {
-                id: ActiveValue::Set(flow_id.to_string()),
+                id: ActiveValue::Set(flow_id),
                 max_balance: ActiveValue::Set(max_balance),
                 income_balance: ActiveValue::Set(income_balance),
                 ..Default::default()

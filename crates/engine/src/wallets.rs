@@ -3,10 +3,7 @@
 use sea_orm::entity::{ActiveValue, prelude::*};
 use uuid::Uuid;
 
-use crate::{
-    Currency, EngineError, ResultEngine,
-    util::{ensure_vault_currency, model_currency, parse_uuid},
-};
+use crate::{Currency, EngineError, ResultEngine, util::{ensure_vault_currency, model_currency}};
 
 /// A wallet.
 ///
@@ -41,12 +38,12 @@ impl Wallet {
 #[sea_orm(table_name = "wallets")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: String,
+    pub id: Uuid,
     pub name: String,
     pub balance: i64,
     pub currency: String,
     pub archived: bool,
-    pub vault_id: String,
+    pub vault_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -69,16 +66,15 @@ impl Related<super::vault::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-/// Convert a storage model into a domain `Wallet`, validating currency + UUID.
+/// Convert a storage model into a domain `Wallet`, validating currency.
 impl TryFrom<(Model, Currency)> for Wallet {
     type Error = EngineError;
 
     fn try_from((model, vault_currency): (Model, Currency)) -> ResultEngine<Self> {
-        let id = parse_uuid(&model.id, "wallet")?;
         let currency = model_currency(&model.currency)?;
         ensure_vault_currency(vault_currency, currency)?;
         Ok(Self {
-            id,
+            id: model.id,
             name: model.name,
             balance: model.balance,
             currency,
@@ -90,7 +86,7 @@ impl TryFrom<(Model, Currency)> for Wallet {
 impl From<&Wallet> for ActiveModel {
     fn from(value: &Wallet) -> Self {
         Self {
-            id: ActiveValue::Set(value.id.to_string()),
+            id: ActiveValue::Set(value.id),
             name: ActiveValue::Set(value.name.clone()),
             balance: ActiveValue::Set(value.balance),
             currency: ActiveValue::Set(value.currency.code().to_string()),

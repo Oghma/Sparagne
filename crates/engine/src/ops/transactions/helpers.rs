@@ -14,9 +14,7 @@ pub(super) fn normalize_tx_meta(meta: &TxMeta) -> (Option<String>, Option<String
     )
 }
 
-pub(super) fn parse_leg_id(raw: &str) -> ResultEngine<Uuid> {
-    Uuid::parse_str(raw).map_err(|_| EngineError::InvalidId("invalid leg id".to_string()))
-}
+// parse_leg_id is no longer needed since model.id is now Uuid
 
 pub(super) fn validate_transfer_legs<T, F>(
     legs: &[Leg],
@@ -109,10 +107,10 @@ where
         })?;
         if leg.amount_minor < 0 {
             from_target = Some(target);
-            from_leg_id = Some(parse_leg_id(&model.id)?);
+            from_leg_id = Some(model.id);
         } else if leg.amount_minor > 0 {
             to_target = Some(target);
-            to_leg_id = Some(parse_leg_id(&model.id)?);
+            to_leg_id = Some(model.id);
         }
     }
 
@@ -163,7 +161,7 @@ pub(super) struct TransferLegUpdateContext<'a, T> {
 
 pub(super) struct TransferLegUpdateSink<'a> {
     pub(super) balance_updates: &'a mut Vec<(LegTarget, i64, i64)>,
-    pub(super) leg_updates: &'a mut Vec<(String, LegTarget, i64)>,
+    pub(super) leg_updates: &'a mut Vec<(Uuid, LegTarget, i64)>,
 }
 
 pub(super) fn apply_transfer_leg_updates<T, F>(
@@ -184,7 +182,7 @@ where
                 leg.currency.code()
             )));
         }
-        let id = parse_leg_id(&model.id)?;
+        let id = model.id;
         let (new_target, new_amount) = if id == ctx.from_leg_id {
             (make_target(ctx.new_from), -ctx.new_amount_minor)
         } else if id == ctx.to_leg_id {
@@ -203,8 +201,7 @@ where
             sink.balance_updates.push((leg.target, leg.amount_minor, 0));
             sink.balance_updates.push((new_target, 0, new_amount));
         }
-        sink.leg_updates
-            .push((model.id.clone(), new_target, new_amount));
+        sink.leg_updates.push((model.id, new_target, new_amount));
     }
 
     Ok(())
@@ -323,7 +320,7 @@ pub(super) fn apply_flow_wallet_leg_updates(
     new_flow_id: Uuid,
     new_signed_amount: i64,
     balance_updates: &mut Vec<(LegTarget, i64, i64)>,
-    leg_updates: &mut Vec<(String, LegTarget, i64)>,
+    leg_updates: &mut Vec<(Uuid, LegTarget, i64)>,
 ) -> ResultEngine<()> {
     for (model, leg) in leg_pairs {
         if leg.currency != vault_currency {
@@ -355,7 +352,7 @@ pub(super) fn apply_flow_wallet_leg_updates(
             balance_updates.push((leg.target, leg.amount_minor, 0));
             balance_updates.push((new_target, 0, new_amount));
         }
-        leg_updates.push((model.id.clone(), new_target, new_amount));
+        leg_updates.push((model.id, new_target, new_amount));
     }
 
     Ok(())

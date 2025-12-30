@@ -4,7 +4,7 @@ use sea_orm::{ActiveValue, QueryFilter, TransactionTrait, prelude::*};
 
 use crate::{EngineError, ResultEngine, cash_flows, flow_memberships, vault_memberships};
 
-use super::{Engine, access::MembershipRole, with_tx};
+use super::{Engine, access::MembershipRole, parse_vault_uuid, with_tx};
 
 impl Engine {
     /// Adds or updates a vault member (owner-only).
@@ -20,20 +20,18 @@ impl Engine {
             self.require_user_exists(&db_tx, member_username).await?;
 
             let _role = MembershipRole::try_from(role)?;
+            let vault_uuid = parse_vault_uuid(vault_id)?;
 
             let active = vault_memberships::ActiveModel {
-                vault_id: ActiveValue::Set(vault_id.to_string()),
+                vault_id: ActiveValue::Set(vault_uuid),
                 user_id: ActiveValue::Set(member_username.to_string()),
                 role: ActiveValue::Set(role.to_string()),
             };
 
             // Upsert: insert if missing, otherwise update role.
-            match vault_memberships::Entity::find_by_id((
-                vault_id.to_string(),
-                member_username.to_string(),
-            ))
-            .one(&db_tx)
-            .await?
+            match vault_memberships::Entity::find_by_id((vault_uuid, member_username.to_string()))
+                .one(&db_tx)
+                .await?
             {
                 Some(_) => {
                     active.update(&db_tx).await?;
@@ -62,12 +60,10 @@ impl Engine {
                 ));
             }
 
-            vault_memberships::Entity::delete_by_id((
-                vault_id.to_string(),
-                member_username.to_string(),
-            ))
-            .exec(&db_tx)
-            .await?;
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+            vault_memberships::Entity::delete_by_id((vault_uuid, member_username.to_string()))
+                .exec(&db_tx)
+                .await?;
 
             Ok(())
         })
@@ -82,8 +78,9 @@ impl Engine {
         with_tx!(self, |db_tx| {
             self.require_vault_owner(&db_tx, vault_id, user_id).await?;
 
+            let vault_uuid = parse_vault_uuid(vault_id)?;
             let rows = vault_memberships::Entity::find()
-                .filter(vault_memberships::Column::VaultId.eq(vault_id.to_string()))
+                .filter(vault_memberships::Column::VaultId.eq(vault_uuid))
                 .all(&db_tx)
                 .await?;
             Ok(rows.into_iter().map(|m| (m.user_id, m.role)).collect())
@@ -104,8 +101,9 @@ impl Engine {
             self.require_user_exists(&db_tx, member_username).await?;
             let _role = MembershipRole::try_from(role)?;
 
-            let flow = cash_flows::Entity::find_by_id(flow_id.to_string())
-                .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+            let flow = cash_flows::Entity::find_by_id(flow_id)
+                .filter(cash_flows::Column::VaultId.eq(vault_uuid))
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
@@ -115,19 +113,15 @@ impl Engine {
                 ));
             }
 
-            let flow_id_str = flow_id.to_string();
             let active = flow_memberships::ActiveModel {
-                flow_id: ActiveValue::Set(flow_id_str.clone()),
+                flow_id: ActiveValue::Set(flow_id),
                 user_id: ActiveValue::Set(member_username.to_string()),
                 role: ActiveValue::Set(role.to_string()),
             };
 
-            match flow_memberships::Entity::find_by_id((
-                flow_id_str.clone(),
-                member_username.to_string(),
-            ))
-            .one(&db_tx)
-            .await?
+            match flow_memberships::Entity::find_by_id((flow_id, member_username.to_string()))
+                .one(&db_tx)
+                .await?
             {
                 Some(_) => {
                     active.update(&db_tx).await?;
@@ -156,12 +150,9 @@ impl Engine {
             self.require_flow_read(&db_tx, vault_id, flow_id, user_id)
                 .await?;
 
-            flow_memberships::Entity::delete_by_id((
-                flow_id.to_string(),
-                member_username.to_string(),
-            ))
-            .exec(&db_tx)
-            .await?;
+            flow_memberships::Entity::delete_by_id((flow_id, member_username.to_string()))
+                .exec(&db_tx)
+                .await?;
             Ok(())
         })
     }
@@ -179,7 +170,7 @@ impl Engine {
                 .await?;
 
             let rows = flow_memberships::Entity::find()
-                .filter(flow_memberships::Column::FlowId.eq(flow_id.to_string()))
+                .filter(flow_memberships::Column::FlowId.eq(flow_id))
                 .all(&db_tx)
                 .await?;
             Ok(rows.into_iter().map(|m| (m.user_id, m.role)).collect())

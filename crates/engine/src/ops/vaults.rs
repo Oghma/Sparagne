@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use sea_orm::{ActiveValue, QueryFilter, Statement, TransactionTrait, prelude::*, sea_query::Expr};
+use uuid::Uuid;
 
 use crate::{
     CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, Wallet, cash_flows,
     vault, vault_memberships, wallets,
 };
 
-use super::{Engine, normalize_required_name, parse_vault_currency, with_tx};
+use super::{Engine, normalize_required_name, parse_vault_currency, parse_vault_uuid, with_tx};
 
 impl Engine {
     /// Delete or archive a vault
@@ -23,12 +24,14 @@ impl Engine {
             // relationships are not FK-backed, so we do it explicitly.)
             let backend = self.database.get_database_backend();
 
+            let vault_db_id_bytes: Vec<u8> = vault_db_id.as_bytes().to_vec();
+
             // 1) legs for transactions in this vault
             db_tx
                 .execute(Statement::from_sql_and_values(
                     backend,
                     "DELETE FROM legs WHERE transaction_id IN (SELECT id FROM transactions WHERE vault_id = ?);",
-                    vec![vault_db_id.clone().into()],
+                    vec![vault_db_id_bytes.clone().into()],
                 ))
                 .await?;
 
@@ -37,32 +40,23 @@ impl Engine {
                 .execute(Statement::from_sql_and_values(
                     backend,
                     "DELETE FROM transactions WHERE vault_id = ?;",
-                    vec![vault_db_id.clone().into()],
+                    vec![vault_db_id_bytes.clone().into()],
                 ))
                 .await?;
 
-            // 3) flows and wallets
-            // (Legacy) entries table (kept for now) references wallets/flows via FK.
-            db_tx
-                .execute(Statement::from_sql_and_values(
-                    backend,
-                    "DELETE FROM entries WHERE vault_id = ?;",
-                    vec![vault_db_id.clone().into()],
-                ))
-                .await?;
-
+            // 3) flows and wallets (no more entries table)
             db_tx
                 .execute(Statement::from_sql_and_values(
                     backend,
                     "DELETE FROM cash_flows WHERE vault_id = ?;",
-                    vec![vault_db_id.clone().into()],
+                    vec![vault_db_id_bytes.clone().into()],
                 ))
                 .await?;
             db_tx
                 .execute(Statement::from_sql_and_values(
                     backend,
                     "DELETE FROM wallets WHERE vault_id = ?;",
-                    vec![vault_db_id.clone().into()],
+                    vec![vault_db_id_bytes.clone().into()],
                 ))
                 .await?;
 
@@ -71,7 +65,7 @@ impl Engine {
                 .execute(Statement::from_sql_and_values(
                     backend,
                     "DELETE FROM vaults WHERE id = ?;",
-                    vec![vault_db_id.clone().into()],
+                    vec![vault_db_id_bytes.clone().into()],
                 ))
                 .await?;
 
@@ -116,19 +110,21 @@ impl Engine {
                 new_vault.currency,
             )?;
             unallocated.system_kind = Some(cash_flows::SystemFlowKind::Unallocated);
+            let new_vault_uuid = Uuid::parse_str(&new_vault_id)
+                .map_err(|_| EngineError::InvalidId("invalid vault id".to_string()))?;
             let mut unallocated_model: cash_flows::ActiveModel = (&unallocated).into();
-            unallocated_model.vault_id = ActiveValue::Set(new_vault_id.clone());
+            unallocated_model.vault_id = ActiveValue::Set(new_vault_uuid);
             unallocated_model.insert(&db_tx).await?;
 
             // Create a default wallet ("Cash") so clients can start immediately.
             let default_wallet = Wallet::new("Cash".to_string(), 0, new_vault.currency);
             let mut default_wallet_model: wallets::ActiveModel = (&default_wallet).into();
-            default_wallet_model.vault_id = ActiveValue::Set(new_vault_id.clone());
+            default_wallet_model.vault_id = ActiveValue::Set(new_vault_uuid);
             default_wallet_model.insert(&db_tx).await?;
 
             // Scaffolding for future sharing: create the owner membership row.
             let membership = vault_memberships::ActiveModel {
-                vault_id: ActiveValue::Set(new_vault_id.clone()),
+                vault_id: ActiveValue::Set(new_vault_uuid),
                 user_id: ActiveValue::Set(user_id.to_string()),
                 role: ActiveValue::Set("owner".to_string()),
             };
@@ -184,7 +180,7 @@ impl Engine {
             }
 
             let snapshot = Vault {
-                id: vault_model.id,
+                id: vault_model.id.to_string(),
                 name: vault_model.name,
                 cash_flow: flows,
                 wallet: wallets_map,
@@ -208,6 +204,8 @@ impl Engine {
         with_tx!(self, |db_tx| {
             let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
             let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+            let vault_bytes: Vec<u8> = vault_uuid.as_bytes().to_vec();
 
             let backend = self.database.get_database_backend();
             let void_cond = if include_voided {
@@ -221,7 +219,7 @@ impl Engine {
                     backend,
                     "SELECT COALESCE(SUM(balance), 0) AS sum FROM wallets WHERE vault_id = ? AND archived = 0;"
                         .to_string(),
-                    vec![vault_id.into()],
+                    vec![vault_bytes.clone().into()],
                 );
                 let row = db_tx.query_one(stmt).await?;
                 row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)
@@ -235,7 +233,7 @@ impl Engine {
                          FROM transactions \
                          WHERE vault_id = ? AND kind = ?{void_cond}"
                     ),
-                    vec![vault_id.into(), TransactionKind::Income.as_str().into()],
+                    vec![vault_bytes.clone().into(), TransactionKind::Income.as_str().into()],
                 );
                 let row = db_tx.query_one(stmt).await?;
                 row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)
@@ -249,7 +247,7 @@ impl Engine {
                          FROM transactions \
                          WHERE vault_id = ? AND kind = ?{void_cond}"
                     ),
-                    vec![vault_id.into(), TransactionKind::Expense.as_str().into()],
+                    vec![vault_bytes.clone().into(), TransactionKind::Expense.as_str().into()],
                 );
                 let row = db_tx.query_one(stmt).await?;
                 row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)
@@ -263,7 +261,7 @@ impl Engine {
                          FROM transactions \
                          WHERE vault_id = ? AND kind = ?{void_cond}"
                     ),
-                    vec![vault_id.into(), TransactionKind::Refund.as_str().into()],
+                    vec![vault_bytes.clone().into(), TransactionKind::Refund.as_str().into()],
                 );
                 let row = db_tx.query_one(stmt).await?;
                 row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)

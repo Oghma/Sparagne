@@ -1,12 +1,13 @@
 //! Flow memberships scaffolding for future sharing.
 
 use sea_orm::entity::prelude::*;
+use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "flow_memberships")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub flow_id: String,
+    pub flow_id: Uuid,
     #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: String,
     pub role: String,

@@ -36,6 +36,12 @@ macro_rules! with_tx {
 
 pub(crate) use with_tx;
 
+/// Parse a vault_id string into Uuid for DB queries.
+pub(crate) fn parse_vault_uuid(vault_id: &str) -> ResultEngine<Uuid> {
+    Uuid::parse_str(vault_id)
+        .map_err(|_| EngineError::KeyNotFound("vault not found".to_string()))
+}
+
 #[derive(Debug)]
 pub struct Engine {
     database: DatabaseConnection,

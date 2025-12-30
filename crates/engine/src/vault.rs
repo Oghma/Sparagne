@@ -35,7 +35,7 @@ impl Vault {
 #[sea_orm(table_name = "vaults")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: String,
+    pub id: Uuid,
     pub name: String,
     pub user_id: String,
     pub currency: String,
@@ -66,7 +66,9 @@ impl ActiveModelBehavior for ActiveModel {}
 impl From<&Vault> for ActiveModel {
     fn from(value: &Vault) -> Self {
         Self {
-            id: sea_orm::ActiveValue::Set(value.id.clone()),
+            id: sea_orm::ActiveValue::Set(
+                Uuid::parse_str(&value.id).expect("Vault.id must be a valid UUID"),
+            ),
             name: ActiveValue::Set(value.name.clone()),
             user_id: ActiveValue::Set(value.user_id.clone()),
             currency: ActiveValue::Set(value.currency.code().to_string()),

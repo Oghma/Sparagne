@@ -764,7 +764,7 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
         .unwrap();
 
     // Corrupt denormalized balances directly in DB.
-    let values: Vec<sea_orm::Value> = vec![999i64.into(), wallet_cash.to_string().into()];
+    let values: Vec<sea_orm::Value> = vec![999i64.into(), wallet_cash.as_bytes().to_vec().into()];
     db.execute(Statement::from_sql_and_values(
         backend,
         "UPDATE wallets SET balance = ? WHERE id = ?;",
@@ -775,7 +775,7 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
     for flow_id in [unallocated_flow, capped_flow, vacanze_flow] {
         if flow_id == capped_flow {
             let values: Vec<sea_orm::Value> =
-                vec![999i64.into(), 0i64.into(), flow_id.to_string().into()];
+                vec![999i64.into(), 0i64.into(), flow_id.as_bytes().to_vec().into()];
             db.execute(Statement::from_sql_and_values(
                 backend,
                 "UPDATE cash_flows SET balance = ?, income_balance = ? WHERE id = ?;",
@@ -784,7 +784,7 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
             .await
             .unwrap();
         } else {
-            let values: Vec<sea_orm::Value> = vec![999i64.into(), flow_id.to_string().into()];
+            let values: Vec<sea_orm::Value> = vec![999i64.into(), flow_id.as_bytes().to_vec().into()];
             db.execute(Statement::from_sql_and_values(
                 backend,
                 "UPDATE cash_flows SET balance = ?, income_balance = NULL WHERE id = ?;",
@@ -832,7 +832,7 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
         .query_one(Statement::from_sql_and_values(
             backend,
             "SELECT balance FROM wallets WHERE id = ?;",
-            vec![wallet_cash.to_string().into()],
+            vec![wallet_cash.as_bytes().to_vec().into()],
         ))
         .await
         .unwrap()
@@ -1191,7 +1191,7 @@ async fn names_are_trimmed_and_unique_case_insensitive() {
     db.execute(Statement::from_sql_and_values(
         backend,
         "UPDATE cash_flows SET income_balance = 0, max_balance = NULL WHERE id = ?;",
-        vec![unallocated_id.to_string().into()],
+        vec![unallocated_id.as_bytes().to_vec().into()],
     ))
     .await
     .unwrap();
@@ -1443,7 +1443,7 @@ async fn flow_membership_allows_reading_flow_without_vault_access() {
     db.execute(Statement::from_sql_and_values(
         backend,
         "INSERT INTO flow_memberships (flow_id, user_id, role) VALUES (?, ?, ?);",
-        vec![flow_id.to_string().into(), "bob".into(), "viewer".into()],
+        vec![flow_id.as_bytes().to_vec().into(), "bob".into(), "viewer".into()],
     ))
     .await
     .unwrap();
@@ -1497,7 +1497,7 @@ async fn flow_member_cannot_access_transaction_detail() {
     db.execute(Statement::from_sql_and_values(
         backend,
         "INSERT INTO flow_memberships (flow_id, user_id, role) VALUES (?, ?, ?);",
-        vec![flow_id.to_string().into(), "bob".into(), "viewer".into()],
+        vec![flow_id.as_bytes().to_vec().into(), "bob".into(), "viewer".into()],
     ))
     .await
     .unwrap();
@@ -1532,24 +1532,25 @@ async fn flow_membership_editor_can_transfer_between_shared_flows_without_vault_
         db.execute(Statement::from_sql_and_values(
             backend,
             "INSERT INTO flow_memberships (flow_id, user_id, role) VALUES (?, ?, ?);",
-            vec![fid.to_string().into(), "bob".into(), "editor".into()],
+            vec![fid.as_bytes().to_vec().into(), "bob".into(), "editor".into()],
         ))
         .await
         .unwrap();
     }
 
     // Allocate funds via owner first (Unallocated -> F1).
+    let vault_uuid = Uuid::parse_str(&vault_id).unwrap();
     let unallocated_row = db
         .query_one(Statement::from_sql_and_values(
             backend,
             "SELECT id FROM cash_flows WHERE vault_id = ? AND system_kind = 'unallocated';",
-            vec![vault_id.clone().into()],
+            vec![vault_uuid.as_bytes().to_vec().into()],
         ))
         .await
         .unwrap()
         .unwrap();
-    let unallocated_id: String = unallocated_row.try_get("", "id").unwrap();
-    let unallocated_id = Uuid::parse_str(&unallocated_id).unwrap();
+    let unallocated_id_bytes: Vec<u8> = unallocated_row.try_get("", "id").unwrap();
+    let unallocated_id = Uuid::from_slice(&unallocated_id_bytes).unwrap();
 
     engine
         .transfer_flow(

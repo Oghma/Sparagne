@@ -102,10 +102,10 @@ impl Leg {
 #[sea_orm(table_name = "legs")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: String,
-    pub transaction_id: String,
+    pub id: Uuid,
+    pub transaction_id: Uuid,
     pub target_kind: LegTargetKind,
-    pub target_id: String,
+    pub target_id: Uuid,
     pub amount_minor: i64,
     pub currency: String,
     pub attributed_user_id: Option<String>,
@@ -134,10 +134,10 @@ impl ActiveModelBehavior for ActiveModel {}
 impl From<&Leg> for ActiveModel {
     fn from(leg: &Leg) -> Self {
         Self {
-            id: ActiveValue::Set(leg.id.to_string()),
-            transaction_id: ActiveValue::Set(leg.transaction_id.to_string()),
+            id: ActiveValue::Set(leg.id),
+            transaction_id: ActiveValue::Set(leg.transaction_id),
             target_kind: ActiveValue::Set(leg.target_kind()),
-            target_id: ActiveValue::Set(leg.target_id().to_string()),
+            target_id: ActiveValue::Set(leg.target_id()),
             amount_minor: ActiveValue::Set(leg.amount_minor),
             currency: ActiveValue::Set(leg.currency.code().to_string()),
             attributed_user_id: ActiveValue::Set(leg.attributed_user_id.clone()),
@@ -149,22 +149,18 @@ impl TryFrom<Model> for Leg {
     type Error = EngineError;
 
     fn try_from(model: Model) -> Result<Self, Self::Error> {
-        let transaction_id = Uuid::parse_str(&model.transaction_id)
-            .map_err(|_| EngineError::KeyNotFound("transaction not exists".to_string()))?;
-        let target_id = Uuid::parse_str(&model.target_id)
-            .map_err(|_| EngineError::InvalidId("invalid leg target id".to_string()))?;
-
         let target = match model.target_kind {
             LegTargetKind::Wallet => LegTarget::Wallet {
-                wallet_id: target_id,
+                wallet_id: model.target_id,
             },
-            LegTargetKind::Flow => LegTarget::Flow { flow_id: target_id },
+            LegTargetKind::Flow => LegTarget::Flow {
+                flow_id: model.target_id,
+            },
         };
 
         Ok(Self {
-            id: Uuid::parse_str(&model.id)
-                .map_err(|_| EngineError::InvalidId("invalid leg id".to_string()))?,
-            transaction_id,
+            id: model.id,
+            transaction_id: model.transaction_id,
             target,
             amount_minor: model.amount_minor,
             currency: Currency::try_from(model.currency.as_str()).unwrap_or_default(),

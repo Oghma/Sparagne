@@ -7,7 +7,7 @@ use crate::{EngineError, ResultEngine, TransactionKind, Wallet, wallets};
 
 use super::{
     Engine, build_transaction, flow_wallet_legs, flow_wallet_signed_amount,
-    normalize_required_name, parse_vault_currency, with_tx,
+    normalize_required_name, parse_vault_currency, parse_vault_uuid, with_tx,
 };
 
 impl Engine {
@@ -21,10 +21,10 @@ impl Engine {
         with_tx!(self, |db_tx| {
             let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
             let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_uuid = parse_vault_uuid(vault_id)?;
 
-            let wallet_id_str = wallet_id.to_string();
-            let model = wallets::Entity::find_by_id(wallet_id_str.clone())
-                .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+            let model = wallets::Entity::find_by_id(wallet_id)
+                .filter(wallets::Column::VaultId.eq(vault_uuid))
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("wallet not exists".to_string()))?;
@@ -56,9 +56,10 @@ impl Engine {
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
             let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_uuid = vault_model.id;
 
             let exists = wallets::Entity::find()
-                .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+                .filter(wallets::Column::VaultId.eq(vault_uuid))
                 .filter(Expr::cust("LOWER(name)").eq(name.to_lowercase()))
                 .one(&db_tx)
                 .await?
@@ -73,7 +74,7 @@ impl Engine {
             let wallet = Wallet::new(name.to_string(), 0, currency);
             let wallet_id = wallet.id;
             let mut wallet_model: wallets::ActiveModel = (&wallet).into();
-            wallet_model.vault_id = ActiveValue::Set(vault_model.id);
+            wallet_model.vault_id = ActiveValue::Set(vault_uuid);
             wallet_model.insert(&db_tx).await?;
 
             if balance_minor != 0 {
@@ -130,11 +131,12 @@ impl Engine {
                 .await?;
             self.require_wallet_in_vault(&db_tx, vault_id, wallet_id)
                 .await?;
+            let vault_uuid = parse_vault_uuid(vault_id)?;
 
             let exists = wallets::Entity::find()
-                .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+                .filter(wallets::Column::VaultId.eq(vault_uuid))
                 .filter(Expr::cust("LOWER(name)").eq(new_name.to_lowercase()))
-                .filter(wallets::Column::Id.ne(wallet_id.to_string()))
+                .filter(wallets::Column::Id.ne(wallet_id))
                 .one(&db_tx)
                 .await?
                 .is_some();
@@ -143,7 +145,7 @@ impl Engine {
             }
 
             let active = wallets::ActiveModel {
-                id: ActiveValue::Set(wallet_id.to_string()),
+                id: ActiveValue::Set(wallet_id),
                 name: ActiveValue::Set(new_name),
                 ..Default::default()
             };
@@ -169,7 +171,7 @@ impl Engine {
                 .await?;
 
             let active = wallets::ActiveModel {
-                id: ActiveValue::Set(wallet_id.to_string()),
+                id: ActiveValue::Set(wallet_id),
                 archived: ActiveValue::Set(archived),
                 ..Default::default()
             };

@@ -5,7 +5,7 @@ use sea_orm::{ActiveValue, QueryFilter, TransactionTrait, prelude::*};
 
 use crate::{EngineError, Leg, LegTarget, ResultEngine, legs, transactions};
 
-use super::super::super::{Engine, parse_vault_currency, with_tx};
+use super::super::super::{Engine, parse_vault_currency, parse_vault_uuid, with_tx};
 
 impl Engine {
     /// Voids a transaction (soft delete).
@@ -28,12 +28,12 @@ impl Engine {
                 .await?;
             let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
 
-            let tx_id_str = transaction_id.to_string();
-            let tx_model = transactions::Entity::find_by_id(tx_id_str.clone())
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+            let tx_model = transactions::Entity::find_by_id(transaction_id)
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("transaction not exists".to_string()))?;
-            if tx_model.vault_id != vault_id {
+            if tx_model.vault_id != vault_uuid {
                 return Err(EngineError::KeyNotFound(
                     "transaction not exists".to_string(),
                 ));
@@ -45,7 +45,7 @@ impl Engine {
             }
 
             let leg_models = legs::Entity::find()
-                .filter(legs::Column::TransactionId.eq(tx_id_str.clone()))
+                .filter(legs::Column::TransactionId.eq(transaction_id))
                 .all(&db_tx)
                 .await?;
 
@@ -60,7 +60,7 @@ impl Engine {
                 .await?;
 
             let tx_active = transactions::ActiveModel {
-                id: ActiveValue::Set(tx_id_str),
+                id: ActiveValue::Set(transaction_id),
                 voided_at: ActiveValue::Set(Some(voided_at)),
                 voided_by: ActiveValue::Set(Some(user_id.to_string())),
                 ..Default::default()

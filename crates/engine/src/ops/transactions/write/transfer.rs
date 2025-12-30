@@ -8,8 +8,8 @@ use crate::{
 
 use super::{
     super::super::{
-        Engine, normalize_optional_text, parse_vault_currency, transfer_flow_legs,
-        transfer_wallet_legs, with_tx,
+        Engine, normalize_optional_text, parse_vault_currency, parse_vault_uuid,
+        transfer_flow_legs, transfer_wallet_legs, with_tx,
     },
     common::TransferTransactionInput,
 };
@@ -89,7 +89,8 @@ impl Engine {
         } = cmd;
         let note = normalize_optional_text(note.as_deref());
         with_tx!(self, |db_tx| {
-            let vault_model = vault::Entity::find_by_id(vault_id.to_string())
+            let vault_uuid = parse_vault_uuid(&vault_id)?;
+            let vault_model = vault::Entity::find_by_id(vault_uuid)
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;

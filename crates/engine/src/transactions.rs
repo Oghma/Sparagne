@@ -127,8 +127,8 @@ impl Transaction {
 #[sea_orm(table_name = "transactions")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: String,
-    pub vault_id: String,
+    pub id: Uuid,
+    pub vault_id: Uuid,
     pub kind: TransactionKind,
     pub occurred_at: DateTimeUtc,
     pub amount_minor: i64,
@@ -139,7 +139,7 @@ pub struct Model {
     pub created_by: String,
     pub voided_at: Option<DateTimeUtc>,
     pub voided_by: Option<String>,
-    pub refunded_transaction_id: Option<String>,
+    pub refunded_transaction_id: Option<Uuid>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -159,8 +159,10 @@ impl ActiveModelBehavior for ActiveModel {}
 impl From<&Transaction> for ActiveModel {
     fn from(tx: &Transaction) -> Self {
         Self {
-            id: ActiveValue::Set(tx.id.to_string()),
-            vault_id: ActiveValue::Set(tx.vault_id.clone()),
+            id: ActiveValue::Set(tx.id),
+            vault_id: ActiveValue::Set(
+                Uuid::parse_str(&tx.vault_id).expect("Transaction.vault_id must be a valid UUID"),
+            ),
             kind: ActiveValue::Set(tx.kind),
             occurred_at: ActiveValue::Set(tx.occurred_at),
             amount_minor: ActiveValue::Set(tx.amount_minor),
@@ -171,9 +173,7 @@ impl From<&Transaction> for ActiveModel {
             created_by: ActiveValue::Set(tx.created_by.clone()),
             voided_at: ActiveValue::Set(tx.voided_at),
             voided_by: ActiveValue::Set(tx.voided_by.clone()),
-            refunded_transaction_id: ActiveValue::Set(
-                tx.refunded_transaction_id.map(|id| id.to_string()),
-            ),
+            refunded_transaction_id: ActiveValue::Set(tx.refunded_transaction_id),
         }
     }
 }
@@ -183,9 +183,8 @@ impl TryFrom<Model> for Transaction {
 
     fn try_from(model: Model) -> Result<Self, Self::Error> {
         Ok(Self {
-            id: Uuid::parse_str(&model.id)
-                .map_err(|_| EngineError::KeyNotFound("transaction not exists".to_string()))?,
-            vault_id: model.vault_id,
+            id: model.id,
+            vault_id: model.vault_id.to_string(),
             kind: model.kind,
             occurred_at: model.occurred_at,
             amount_minor: model.amount_minor,
@@ -196,9 +195,7 @@ impl TryFrom<Model> for Transaction {
             created_by: model.created_by,
             voided_at: model.voided_at,
             voided_by: model.voided_by,
-            refunded_transaction_id: model
-                .refunded_transaction_id
-                .and_then(|s| Uuid::parse_str(&s).ok()),
+            refunded_transaction_id: model.refunded_transaction_id,
             legs: Vec::new(),
         })
     }

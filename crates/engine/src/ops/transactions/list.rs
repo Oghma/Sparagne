@@ -7,7 +7,7 @@ use sea_orm::{Condition, QueryFilter, QueryOrder, QuerySelect, TransactionTrait,
 
 use crate::{EngineError, ResultEngine, Transaction, TransactionKind, legs, transactions};
 
-use super::super::{Engine, with_tx};
+use super::super::{Engine, parse_vault_uuid, with_tx};
 
 /// Filters for listing transactions.
 ///
@@ -132,13 +132,14 @@ impl Engine {
             self.require_flow_read(&db_tx, vault_id, flow_id, user_id)
                 .await?;
             validate_list_filter(filter)?;
+            let vault_uuid = parse_vault_uuid(vault_id)?;
 
             let limit_plus_one = limit.saturating_add(1);
             let mut query = legs::Entity::find()
                 .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Flow))
-                .filter(legs::Column::TargetId.eq(flow_id.to_string()))
+                .filter(legs::Column::TargetId.eq(flow_id))
                 .find_also_related(transactions::Entity)
-                .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+                .filter(transactions::Column::VaultId.eq(vault_uuid))
                 .order_by_desc(transactions::Column::OccurredAt)
                 .order_by_desc(transactions::Column::Id)
                 .limit(limit_plus_one);
@@ -200,10 +201,11 @@ impl Engine {
         with_tx!(self, |db_tx| {
             self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
             validate_list_filter(filter)?;
+            let vault_uuid = parse_vault_uuid(vault_id)?;
 
             let limit_plus_one = limit.saturating_add(1);
             let mut query = transactions::Entity::find()
-                .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+                .filter(transactions::Column::VaultId.eq(vault_uuid))
                 .order_by_desc(transactions::Column::OccurredAt)
                 .order_by_desc(transactions::Column::Id)
                 .limit(limit_plus_one);
@@ -279,13 +281,14 @@ impl Engine {
         with_tx!(self, |db_tx| {
             self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
             validate_list_filter(filter)?;
+            let vault_uuid = parse_vault_uuid(vault_id)?;
 
             let limit_plus_one = limit.saturating_add(1);
             let mut query = legs::Entity::find()
                 .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Wallet))
-                .filter(legs::Column::TargetId.eq(wallet_id.to_string()))
+                .filter(legs::Column::TargetId.eq(wallet_id))
                 .find_also_related(transactions::Entity)
-                .filter(transactions::Column::VaultId.eq(vault_id.to_string()))
+                .filter(transactions::Column::VaultId.eq(vault_uuid))
                 .order_by_desc(transactions::Column::OccurredAt)
                 .order_by_desc(transactions::Column::Id)
                 .limit(limit_plus_one);

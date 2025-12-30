@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     Currency, EngineError, ResultEngine,
-    util::{ensure_vault_currency, model_currency, parse_uuid, validate_flow_mode_fields},
+    util::{ensure_vault_currency, model_currency, validate_flow_mode_fields},
 };
 
 pub(crate) const UNALLOCATED_INTERNAL_NAME: &str = "unallocated";
@@ -208,7 +208,7 @@ impl CashFlow {
 #[sea_orm(table_name = "cash_flows")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: String,
+    pub id: Uuid,
     pub name: String,
     pub system_kind: Option<SystemFlowKind>,
     pub balance: i64,
@@ -216,7 +216,7 @@ pub struct Model {
     pub income_balance: Option<i64>,
     pub currency: String,
     pub archived: bool,
-    pub vault_id: String,
+    pub vault_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -244,12 +244,11 @@ impl TryFrom<(Model, Currency)> for CashFlow {
     type Error = EngineError;
 
     fn try_from((model, vault_currency): (Model, Currency)) -> ResultEngine<Self> {
-        let id = parse_uuid(&model.id, "cash_flow")?;
         let currency = model_currency(&model.currency)?;
         ensure_vault_currency(vault_currency, currency)?;
         validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
         Ok(Self {
-            id,
+            id: model.id,
             name: model.name,
             system_kind: model.system_kind,
             balance: model.balance,
@@ -264,7 +263,7 @@ impl TryFrom<(Model, Currency)> for CashFlow {
 impl From<&CashFlow> for ActiveModel {
     fn from(flow: &CashFlow) -> Self {
         Self {
-            id: ActiveValue::Set(flow.id.to_string()),
+            id: ActiveValue::Set(flow.id),
             name: ActiveValue::Set(flow.name.clone()),
             system_kind: ActiveValue::Set(flow.system_kind),
             balance: ActiveValue::Set(flow.balance),

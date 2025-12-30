@@ -6,7 +6,7 @@ use crate::{
     wallets,
 };
 
-use super::{Engine, normalize_required_name};
+use super::{Engine, normalize_required_name, parse_vault_uuid};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum MembershipRole {
@@ -46,8 +46,9 @@ macro_rules! impl_target_in_vault {
             vault_id: &str,
             target_id: Uuid,
         ) -> ResultEngine<bool> {
-            <$entity>::find_by_id(target_id.to_string())
-                .filter($vault_col.eq(vault_id.to_string()))
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+            <$entity>::find_by_id(target_id)
+                .filter($vault_col.eq(vault_uuid))
                 .one(db)
                 .await
                 .map(|model| model.is_some())
@@ -90,7 +91,8 @@ impl Engine {
         db: &DatabaseTransaction,
         vault_id: &str,
     ) -> ResultEngine<Option<vault::Model>> {
-        vault::Entity::find_by_id(vault_id.to_string())
+        let vault_uuid = parse_vault_uuid(vault_id)?;
+        vault::Entity::find_by_id(vault_uuid)
             .one(db)
             .await
             .map_err(Into::into)
@@ -99,13 +101,12 @@ impl Engine {
     pub(super) async fn vault_membership_role(
         &self,
         db: &DatabaseTransaction,
-        vault_id: &str,
+        vault_id: Uuid,
         user_id: &str,
     ) -> ResultEngine<Option<MembershipRole>> {
-        let row =
-            vault_memberships::Entity::find_by_id((vault_id.to_string(), user_id.to_string()))
-                .one(db)
-                .await?;
+        let row = vault_memberships::Entity::find_by_id((vault_id, user_id.to_string()))
+            .one(db)
+            .await?;
         row.as_ref()
             .map(|m| MembershipRole::try_from(m.role.as_str()))
             .transpose()
@@ -121,8 +122,9 @@ impl Engine {
         if model.user_id == user_id {
             return Ok(model);
         }
+        let vault_uuid = parse_vault_uuid(vault_id)?;
         let role = self
-            .vault_membership_role(db, vault_id, user_id)
+            .vault_membership_role(db, vault_uuid, user_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         if !role.can_write() {
@@ -165,10 +167,10 @@ impl Engine {
     pub(super) async fn flow_membership_role(
         &self,
         db: &DatabaseTransaction,
-        flow_id: &str,
+        flow_id: Uuid,
         user_id: &str,
     ) -> ResultEngine<Option<MembershipRole>> {
-        let row = flow_memberships::Entity::find_by_id((flow_id.to_string(), user_id.to_string()))
+        let row = flow_memberships::Entity::find_by_id((flow_id, user_id.to_string()))
             .one(db)
             .await?;
         row.as_ref()
@@ -189,7 +191,7 @@ impl Engine {
             return Ok(true);
         }
         Ok(self
-            .vault_membership_role(db, vault_id, user_id)
+            .vault_membership_role(db, vault.id, user_id)
             .await?
             .is_some())
     }
@@ -206,7 +208,7 @@ impl Engine {
         if vault.user_id == user_id {
             return Ok(true);
         }
-        let role = self.vault_membership_role(db, vault_id, user_id).await?;
+        let role = self.vault_membership_role(db, vault.id, user_id).await?;
         Ok(role.is_some_and(|r| r.can_write()))
     }
 
@@ -217,8 +219,9 @@ impl Engine {
         flow_id: Uuid,
         user_id: &str,
     ) -> ResultEngine<cash_flows::Model> {
-        let Some(model) = cash_flows::Entity::find_by_id(flow_id.to_string())
-            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+        let vault_uuid = parse_vault_uuid(vault_id)?;
+        let Some(model) = cash_flows::Entity::find_by_id(flow_id)
+            .filter(cash_flows::Column::VaultId.eq(vault_uuid))
             .one(db)
             .await?
         else {
@@ -229,7 +232,7 @@ impl Engine {
             return Ok(model);
         }
         let role = self
-            .flow_membership_role(db, &model.id, user_id)
+            .flow_membership_role(db, model.id, user_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
         let _ = role;
@@ -250,7 +253,7 @@ impl Engine {
             return Ok(model);
         }
         let role = self
-            .flow_membership_role(db, &model.id, user_id)
+            .flow_membership_role(db, model.id, user_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
         if !role.can_write() {
@@ -271,7 +274,7 @@ impl Engine {
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         if model.user_id != user_id
             && self
-                .vault_membership_role(db, vault_id, user_id)
+                .vault_membership_role(db, model.id, user_id)
                 .await?
                 .is_none()
         {
@@ -298,7 +301,7 @@ impl Engine {
             let allowed = if model.user_id == user_id {
                 true
             } else {
-                self.vault_membership_role(db, &model.id, user_id)
+                self.vault_membership_role(db, model.id, user_id)
                     .await?
                     .is_some()
             };
@@ -320,16 +323,16 @@ impl Engine {
         db: &DatabaseTransaction,
         vault_id: &str,
     ) -> ResultEngine<Uuid> {
+        let vault_uuid = parse_vault_uuid(vault_id)?;
         let model = cash_flows::Entity::find()
-            .filter(cash_flows::Column::VaultId.eq(vault_id.to_string()))
+            .filter(cash_flows::Column::VaultId.eq(vault_uuid))
             .filter(
                 cash_flows::Column::SystemKind.eq(Some(cash_flows::SystemFlowKind::Unallocated)),
             )
             .one(db)
             .await?
             .ok_or_else(|| EngineError::InvalidFlow("missing Unallocated flow".to_string()))?;
-        Uuid::parse_str(&model.id)
-            .map_err(|_| EngineError::InvalidId("invalid cash_flow id".to_string()))
+        Ok(model.id)
     }
 
     pub(super) async fn resolve_flow_id(
@@ -357,8 +360,9 @@ impl Engine {
             return Ok(id);
         }
 
+        let vault_uuid = parse_vault_uuid(vault_id)?;
         let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
-            .filter(wallets::Column::VaultId.eq(vault_id.to_string()))
+            .filter(wallets::Column::VaultId.eq(vault_uuid))
             .filter(wallets::Column::Archived.eq(false))
             .all(db)
             .await?;
@@ -372,7 +376,6 @@ impl Engine {
                 "wallet_id is required when more than one wallet exists".to_string(),
             ));
         }
-        Uuid::parse_str(&first.id)
-            .map_err(|_| EngineError::InvalidId("invalid wallet id".to_string()))
+        Ok(first.id)
     }
 }
