@@ -1,5 +1,3 @@
-use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
-
 use crate::{Currency, EngineError};
 
 /// Signed money amount represented as **integer minor units**
@@ -43,8 +41,6 @@ use crate::{Currency, EngineError};
 pub struct Money(i64);
 
 impl Money {
-    pub const ZERO: Money = Money(0);
-
     /// Creates a new amount from integer minor units.
     #[must_use]
     pub const fn new(cents: i64) -> Self {
@@ -55,36 +51,6 @@ impl Money {
     #[must_use]
     pub const fn minor(self) -> i64 {
         self.0
-    }
-
-    /// Returns `true` if the amount is 0.
-    #[must_use]
-    pub const fn is_zero(self) -> bool {
-        self.0 == 0
-    }
-
-    /// Returns `true` if the amount is positive.
-    #[must_use]
-    pub const fn is_positive(self) -> bool {
-        self.0 > 0
-    }
-
-    /// Returns `true` if the amount is negative.
-    #[must_use]
-    pub const fn is_negative(self) -> bool {
-        self.0 < 0
-    }
-
-    /// Checked addition (returns `None` on overflow).
-    #[must_use]
-    pub fn checked_add(self, rhs: Money) -> Option<Money> {
-        self.0.checked_add(rhs.0).map(Money)
-    }
-
-    /// Checked subtraction (returns `None` on overflow).
-    #[must_use]
-    pub fn checked_sub(self, rhs: Money) -> Option<Money> {
-        self.0.checked_sub(rhs.0).map(Money)
     }
 
     /// Formats the amount according to `currency.minor_units()`.
@@ -187,54 +153,6 @@ impl Money {
         };
 
         Ok(Money(signed))
-    }
-}
-
-impl From<i64> for Money {
-    fn from(value: i64) -> Self {
-        Self(value)
-    }
-}
-
-impl From<Money> for i64 {
-    fn from(value: Money) -> Self {
-        value.0
-    }
-}
-
-impl Add for Money {
-    type Output = Money;
-
-    fn add(self, rhs: Money) -> Self::Output {
-        Money(self.0 + rhs.0)
-    }
-}
-
-impl AddAssign for Money {
-    fn add_assign(&mut self, rhs: Money) {
-        self.0 += rhs.0;
-    }
-}
-
-impl Sub for Money {
-    type Output = Money;
-
-    fn sub(self, rhs: Money) -> Self::Output {
-        Money(self.0 - rhs.0)
-    }
-}
-
-impl SubAssign for Money {
-    fn sub_assign(&mut self, rhs: Money) {
-        self.0 -= rhs.0;
-    }
-}
-
-impl Neg for Money {
-    type Output = Money;
-
-    fn neg(self) -> Self::Output {
-        Money(-self.0)
     }
 }
 
