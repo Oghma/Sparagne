@@ -11,7 +11,6 @@ use super::{normalize_required_name, parse_vault_currency, with_tx, Engine};
 
 impl Engine {
     /// Delete or archive a vault
-    /// TODO: Add `archive`
     pub async fn delete_vault(&self, vault_id: &str, user_id: &str) -> ResultEngine<()> {
         with_tx!(self, |db_tx| {
             let vault_model = self

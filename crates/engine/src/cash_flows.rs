@@ -75,10 +75,6 @@ fn income_contribution_minor(amount_minor: i64) -> i64 {
 /// special “Unallocated” flow, identified by internal name `unallocated`, which
 /// is allowed to go negative.
 ///
-/// If a non-Unallocated flow is already negative due to legacy data, the engine
-/// enters a recovery mode: only operations that increase the balance are
-/// allowed until it reaches `>= 0`.
-///
 /// ** Examples
 ///
 /// Amounts are stored as integer minor units (`i64`), and formatted using the
@@ -173,16 +169,8 @@ impl CashFlow {
         let is_unallocated = self.is_unallocated();
         let new_balance = self.balance - old_amount_minor + new_amount_minor;
 
-        if !is_unallocated {
-            if self.balance >= 0 {
-                if new_balance < 0 {
-                    return Err(EngineError::InsufficientFunds(self.name.clone()));
-                }
-            } else if new_balance < self.balance {
-                // Legacy recovery mode: allow only operations that move the balance towards >=
-                // 0.
-                return Err(EngineError::InsufficientFunds(self.name.clone()));
-            }
+        if !is_unallocated && new_balance < 0 {
+            return Err(EngineError::InsufficientFunds(self.name.clone()));
         }
 
         match mode {
@@ -324,18 +312,6 @@ mod tests {
         .unwrap()
     }
 
-    fn legacy_negative_flow() -> CashFlow {
-        CashFlow {
-            id: Uuid::new_v4(),
-            name: "Cash".to_string(),
-            system_kind: None,
-            balance: -10,
-            max_balance: None,
-            income_balance: None,
-            currency: Currency::Eur,
-            archived: false,
-        }
-    }
 
     #[test]
     fn apply_leg_change() {
@@ -387,15 +363,6 @@ mod tests {
         let mut flow = unallocated();
         flow.apply_leg_change(0, -1).unwrap();
         assert_eq!(flow.balance, -1);
-    }
-
-    #[test]
-    fn legacy_negative_flow_allows_recovery_incomes_only() {
-        let mut flow = legacy_negative_flow();
-        flow.apply_leg_change(0, 5).unwrap();
-        assert_eq!(flow.balance, -5);
-
-        flow.apply_leg_change(0, -1).unwrap_err();
     }
 
     #[test]
