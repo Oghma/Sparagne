@@ -35,16 +35,6 @@ pub(super) struct FlowWalletCmd {
     pub(super) kind: TransactionKind,
 }
 
-struct FlowWalletTxInput<'a> {
-    vault_id: &'a str,
-    user_id: &'a str,
-    flow_id: Option<Uuid>,
-    wallet_id: Option<Uuid>,
-    amount_minor: i64,
-    kind: TransactionKind,
-    meta: &'a TxMeta,
-}
-
 pub(super) struct TransferTransactionInput<'a> {
     pub(super) vault_id: &'a str,
     pub(super) user_id: &'a str,
@@ -83,66 +73,46 @@ struct FlowChangeInput<'a> {
 }
 
 impl Engine {
-    async fn create_flow_wallet_transaction(
-        &self,
-        db_tx: &DatabaseTransaction,
-        input: FlowWalletTxInput<'_>,
-    ) -> ResultEngine<Uuid> {
-        let (category, note) = normalize_tx_meta(input.meta);
-        let vault_model = self
-            .require_vault_by_id_write(db_tx, input.vault_id, input.user_id)
-            .await?;
-        let currency = parse_vault_currency(vault_model.currency.as_str())?;
-        let resolved_flow_id = self
-            .resolve_flow_id(db_tx, input.vault_id, input.flow_id)
-            .await?;
-        let resolved_wallet_id = self
-            .resolve_wallet_id(db_tx, input.vault_id, input.wallet_id)
-            .await?;
-        let leg_amount_minor = flow_wallet_signed_amount(input.kind, input.amount_minor)?;
-
-        let tx = build_transaction(TransactionBuildInput {
-            vault_id: input.vault_id,
-            kind: input.kind,
-            occurred_at: input.meta.occurred_at,
-            amount_minor: input.amount_minor,
-            currency,
-            category,
-            note,
-            created_by: input.user_id,
-            idempotency_key: input.meta.idempotency_key.clone(),
-            refunded_transaction_id: None,
-        })?;
-        let legs = flow_wallet_legs(
-            tx.id,
-            resolved_wallet_id,
-            resolved_flow_id,
-            leg_amount_minor,
-            currency,
-        );
-
-        self.create_transaction_with_legs(db_tx, input.vault_id, currency, &tx, &legs)
-            .await
-    }
-
     pub(super) async fn create_flow_wallet_transaction_cmd(
         &self,
         cmd: FlowWalletCmd,
     ) -> ResultEngine<Uuid> {
         with_tx!(self, |db_tx| {
-            let input = FlowWalletTxInput {
-                vault_id: &cmd.vault_id,
-                user_id: &cmd.user_id,
-                flow_id: cmd.flow_id,
-                wallet_id: cmd.wallet_id,
-                amount_minor: cmd.amount_minor,
-                kind: cmd.kind,
-                meta: &cmd.meta,
-            };
-            let id = self
-                .create_flow_wallet_transaction(&db_tx, input)
+            let (category, note) = normalize_tx_meta(&cmd.meta);
+            let vault_model = self
+                .require_vault_by_id_write(&db_tx, &cmd.vault_id, &cmd.user_id)
                 .await?;
-            Ok(id)
+            let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let resolved_flow_id = self
+                .resolve_flow_id(&db_tx, &cmd.vault_id, cmd.flow_id)
+                .await?;
+            let resolved_wallet_id = self
+                .resolve_wallet_id(&db_tx, &cmd.vault_id, cmd.wallet_id)
+                .await?;
+            let leg_amount_minor = flow_wallet_signed_amount(cmd.kind, cmd.amount_minor)?;
+
+            let tx = build_transaction(TransactionBuildInput {
+                vault_id: &cmd.vault_id,
+                kind: cmd.kind,
+                occurred_at: cmd.meta.occurred_at,
+                amount_minor: cmd.amount_minor,
+                currency,
+                category,
+                note,
+                created_by: &cmd.user_id,
+                idempotency_key: cmd.meta.idempotency_key.clone(),
+                refunded_transaction_id: None,
+            })?;
+            let legs = flow_wallet_legs(
+                tx.id,
+                resolved_wallet_id,
+                resolved_flow_id,
+                leg_amount_minor,
+                currency,
+            );
+
+            self.create_transaction_with_legs(&db_tx, &cmd.vault_id, currency, &tx, &legs)
+                .await
         })
     }
 
