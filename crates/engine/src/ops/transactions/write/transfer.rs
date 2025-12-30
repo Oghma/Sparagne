@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     super::super::{
-        Engine, normalize_optional_text, parse_vault_currency, parse_vault_uuid,
+        Engine, normalize_optional_text, parse_vault_uuid,
         transfer_flow_legs, transfer_wallet_legs, with_tx,
     },
     common::TransferTransactionInput,
@@ -36,7 +36,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, &vault_id, &user_id)
                 .await?;
-            let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let currency = vault_model.currency;
             // Ensure wallets belong to the vault.
             self.resolve_wallet_id(&db_tx, &vault_id, Some(from_wallet_id))
                 .await?;
@@ -94,7 +94,7 @@ impl Engine {
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-            let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let currency = vault_model.currency;
             // AuthZ:
             // - Vault owner/editor can transfer between any flows in the vault.
             // - Otherwise, user must be editor/owner on both flows (via flow_memberships).

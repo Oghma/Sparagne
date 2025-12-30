@@ -107,7 +107,7 @@ pub struct Model {
     pub target_kind: LegTargetKind,
     pub target_id: Uuid,
     pub amount_minor: i64,
-    pub currency: String,
+    pub currency: Currency,
     pub attributed_user_id: Option<String>,
 }
 
@@ -139,7 +139,7 @@ impl From<&Leg> for ActiveModel {
             target_kind: ActiveValue::Set(leg.target_kind()),
             target_id: ActiveValue::Set(leg.target_id()),
             amount_minor: ActiveValue::Set(leg.amount_minor),
-            currency: ActiveValue::Set(leg.currency.code().to_string()),
+            currency: ActiveValue::Set(leg.currency),
             attributed_user_id: ActiveValue::Set(leg.attributed_user_id.clone()),
         }
     }
@@ -163,7 +163,7 @@ impl TryFrom<Model> for Leg {
             transaction_id: model.transaction_id,
             target,
             amount_minor: model.amount_minor,
-            currency: Currency::try_from(model.currency.as_str()).unwrap_or_default(),
+            currency: model.currency,
             attributed_user_id: model.attributed_user_id,
         })
     }

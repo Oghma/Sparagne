@@ -11,7 +11,7 @@ use crate::{
     util::ensure_vault_currency, wallets,
 };
 
-use super::{Engine, parse_vault_currency, parse_vault_uuid, with_tx};
+use super::{Engine, parse_vault_uuid, with_tx};
 
 impl Engine {
     /// Recomputes denormalized balances for wallets and flows from the ledger
@@ -25,7 +25,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let currency = vault_model.currency;
             let vault_uuid = parse_vault_uuid(vault_id)?;
 
             // Load all wallets/flows from DB (including archived) to avoid stale RAM

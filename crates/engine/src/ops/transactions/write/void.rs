@@ -5,7 +5,7 @@ use sea_orm::{ActiveValue, QueryFilter, TransactionTrait, prelude::*};
 
 use crate::{EngineError, Leg, LegTarget, ResultEngine, legs, transactions};
 
-use super::super::super::{Engine, parse_vault_currency, parse_vault_uuid, with_tx};
+use super::super::super::{Engine, parse_vault_uuid, with_tx};
 
 impl Engine {
     /// Voids a transaction (soft delete).
@@ -26,7 +26,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_currency = vault_model.currency;
 
             let vault_uuid = parse_vault_uuid(vault_id)?;
             let tx_model = transactions::Entity::find_by_id(transaction_id)

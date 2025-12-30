@@ -8,7 +8,7 @@ use crate::{
     vault, vault_memberships, wallets,
 };
 
-use super::{Engine, normalize_required_name, parse_vault_currency, parse_vault_uuid, with_tx};
+use super::{Engine, normalize_required_name, parse_vault_uuid, with_tx};
 
 impl Engine {
     /// Delete or archive a vault
@@ -156,7 +156,7 @@ impl Engine {
                 })?;
                 self.require_vault_by_name(&db_tx, &name, user_id).await?
             };
-            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_currency = vault_model.currency;
 
             let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
                 .filter(cash_flows::Column::VaultId.eq(vault_model.id.clone()))
@@ -203,7 +203,7 @@ impl Engine {
     ) -> ResultEngine<(Currency, i64, i64, i64)> {
         with_tx!(self, |db_tx| {
             let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
-            let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let currency = vault_model.currency;
             let vault_uuid = parse_vault_uuid(vault_id)?;
             let vault_bytes: Vec<u8> = vault_uuid.as_bytes().to_vec();
 

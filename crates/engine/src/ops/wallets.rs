@@ -7,7 +7,7 @@ use crate::{EngineError, ResultEngine, TransactionKind, Wallet, wallets};
 
 use super::{
     Engine, build_transaction, flow_wallet_legs, flow_wallet_signed_amount,
-    normalize_required_name, parse_vault_currency, parse_vault_uuid, with_tx,
+    normalize_required_name, parse_vault_uuid, with_tx,
 };
 
 impl Engine {
@@ -20,7 +20,7 @@ impl Engine {
     ) -> ResultEngine<Wallet> {
         with_tx!(self, |db_tx| {
             let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
-            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_currency = vault_model.currency;
             let vault_uuid = parse_vault_uuid(vault_id)?;
 
             let model = wallets::Entity::find_by_id(wallet_id)
@@ -55,7 +55,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let currency = vault_model.currency;
             let vault_uuid = vault_model.id;
 
             let exists = wallets::Entity::find()

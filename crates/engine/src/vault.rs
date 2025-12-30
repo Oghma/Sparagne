@@ -38,7 +38,7 @@ pub struct Model {
     pub id: Uuid,
     pub name: String,
     pub user_id: String,
-    pub currency: String,
+    pub currency: Currency,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -71,7 +71,7 @@ impl From<&Vault> for ActiveModel {
             ),
             name: ActiveValue::Set(value.name.clone()),
             user_id: ActiveValue::Set(value.user_id.clone()),
-            currency: ActiveValue::Set(value.currency.code().to_string()),
+            currency: ActiveValue::Set(value.currency),
         }
     }
 }

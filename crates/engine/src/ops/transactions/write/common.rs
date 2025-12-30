@@ -7,14 +7,14 @@ use sea_orm::{ActiveValue, DatabaseTransaction, QueryFilter, TransactionTrait, p
 use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind, TxMeta,
     cash_flows, legs, transactions,
-    util::{ensure_vault_currency, model_currency, validate_flow_mode_fields},
+    util::{ensure_vault_currency, validate_flow_mode_fields},
     wallets,
 };
 
 use super::super::{
     super::{
         Engine, TransactionBuildInput, build_transaction, flow_wallet_legs,
-        flow_wallet_signed_amount, parse_vault_currency, parse_vault_uuid, with_tx,
+        flow_wallet_signed_amount, parse_vault_uuid, with_tx,
     },
     helpers::{
         apply_transfer_leg_updates, normalize_tx_meta, parse_transfer_leg_pairs,
@@ -85,7 +85,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, &cmd.vault_id, &cmd.user_id)
                 .await?;
-            let currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let currency = vault_model.currency;
             let resolved_flow_id = self
                 .resolve_flow_id(&db_tx, &cmd.vault_id, cmd.flow_id)
                 .await?;
@@ -226,8 +226,7 @@ impl Engine {
             .one(db_tx)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("wallet not exists".to_string()))?;
-        let wallet_currency = model_currency(wallet_model.currency.as_str())?;
-        ensure_vault_currency(vault_currency, wallet_currency)?;
+        ensure_vault_currency(vault_currency, wallet_model.currency)?;
 
         let entry = wallet_new_balances
             .entry(wallet_id)
@@ -248,8 +247,7 @@ impl Engine {
             flow_model.max_balance,
             flow_model.income_balance,
         )?;
-        let flow_currency = model_currency(flow_model.currency.as_str())?;
-        ensure_vault_currency(input.vault_currency, flow_currency)?;
+        ensure_vault_currency(input.vault_currency, flow_model.currency)?;
         let entry = input
             .flow_previews
             .entry(input.flow_id)
@@ -260,7 +258,7 @@ impl Engine {
                 balance: flow_model.balance,
                 max_balance: flow_model.max_balance,
                 income_balance: flow_model.income_balance,
-                currency: flow_currency,
+                currency: flow_model.currency,
                 archived: flow_model.archived,
             });
         entry.apply_leg_change(input.old_amount_minor, input.new_amount_minor)?;

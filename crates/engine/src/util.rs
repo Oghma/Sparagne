@@ -80,12 +80,6 @@ pub(crate) fn validate_flow_mode_fields(
     Ok(())
 }
 
-/// Parse a currency code stored in the DB into a strongly typed `Currency`.
-pub(crate) fn model_currency(value: &str) -> ResultEngine<Currency> {
-    Currency::try_from(value)
-        .map_err(|_| EngineError::InvalidAmount(format!("invalid currency: {value}")))
-}
-
 /// Ensure a stored currency matches the vault currency.
 pub(crate) fn ensure_vault_currency(
     vault_currency: Currency,

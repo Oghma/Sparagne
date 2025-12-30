@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind,
     TransactionNew,
-    util::{model_currency, normalize_optional_text, normalize_required_name},
+    util::{normalize_optional_text, normalize_required_name},
 };
 
 mod access;
@@ -64,9 +64,6 @@ fn flow_wallet_signed_amount(kind: TransactionKind, amount_minor: i64) -> Result
     }
 }
 
-fn parse_vault_currency(value: &str) -> ResultEngine<Currency> {
-    model_currency(value)
-}
 
 pub(super) struct TransactionBuildInput<'a> {
     pub(super) vault_id: &'a str,

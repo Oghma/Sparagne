@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     Currency, EngineError, ResultEngine,
-    util::{ensure_vault_currency, model_currency, validate_flow_mode_fields},
+    util::{ensure_vault_currency, validate_flow_mode_fields},
 };
 
 pub(crate) const UNALLOCATED_INTERNAL_NAME: &str = "unallocated";
@@ -214,7 +214,7 @@ pub struct Model {
     pub balance: i64,
     pub max_balance: Option<i64>,
     pub income_balance: Option<i64>,
-    pub currency: String,
+    pub currency: Currency,
     pub archived: bool,
     pub vault_id: Uuid,
 }
@@ -244,8 +244,7 @@ impl TryFrom<(Model, Currency)> for CashFlow {
     type Error = EngineError;
 
     fn try_from((model, vault_currency): (Model, Currency)) -> ResultEngine<Self> {
-        let currency = model_currency(&model.currency)?;
-        ensure_vault_currency(vault_currency, currency)?;
+        ensure_vault_currency(vault_currency, model.currency)?;
         validate_flow_mode_fields(&model.name, model.max_balance, model.income_balance)?;
         Ok(Self {
             id: model.id,
@@ -254,7 +253,7 @@ impl TryFrom<(Model, Currency)> for CashFlow {
             balance: model.balance,
             max_balance: model.max_balance,
             income_balance: model.income_balance,
-            currency,
+            currency: model.currency,
             archived: model.archived,
         })
     }
@@ -269,7 +268,7 @@ impl From<&CashFlow> for ActiveModel {
             balance: ActiveValue::Set(flow.balance),
             max_balance: ActiveValue::Set(flow.max_balance),
             income_balance: ActiveValue::Set(flow.income_balance),
-            currency: ActiveValue::Set(flow.currency.code().to_string()),
+            currency: ActiveValue::Set(flow.currency),
             archived: ActiveValue::Set(flow.archived),
             vault_id: ActiveValue::NotSet,
         }

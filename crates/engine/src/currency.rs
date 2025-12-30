@@ -1,3 +1,4 @@
+use sea_orm::{DeriveActiveEnum, EnumIter};
 use serde::{Deserialize, Serialize};
 
 use crate::EngineError;
@@ -16,10 +17,15 @@ use crate::EngineError;
 /// - minor units (stored integers, e.g. `1050`)
 ///
 /// Example: EUR has 2 minor units, so `10.50 EUR` ⇄ `1050`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter,
+    DeriveActiveEnum,
+)]
+#[sea_orm(rs_type = "String", db_type = "Text")]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Currency {
     #[default]
+    #[sea_orm(string_value = "EUR")]
     Eur,
 }
 

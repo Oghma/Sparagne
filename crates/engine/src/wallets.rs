@@ -3,7 +3,7 @@
 use sea_orm::entity::{ActiveValue, prelude::*};
 use uuid::Uuid;
 
-use crate::{Currency, EngineError, ResultEngine, util::{ensure_vault_currency, model_currency}};
+use crate::{Currency, EngineError, ResultEngine, util::ensure_vault_currency};
 
 /// A wallet.
 ///
@@ -41,7 +41,7 @@ pub struct Model {
     pub id: Uuid,
     pub name: String,
     pub balance: i64,
-    pub currency: String,
+    pub currency: Currency,
     pub archived: bool,
     pub vault_id: Uuid,
 }
@@ -71,13 +71,12 @@ impl TryFrom<(Model, Currency)> for Wallet {
     type Error = EngineError;
 
     fn try_from((model, vault_currency): (Model, Currency)) -> ResultEngine<Self> {
-        let currency = model_currency(&model.currency)?;
-        ensure_vault_currency(vault_currency, currency)?;
+        ensure_vault_currency(vault_currency, model.currency)?;
         Ok(Self {
             id: model.id,
             name: model.name,
             balance: model.balance,
-            currency,
+            currency: model.currency,
             archived: model.archived,
         })
     }
@@ -89,7 +88,7 @@ impl From<&Wallet> for ActiveModel {
             id: ActiveValue::Set(value.id),
             name: ActiveValue::Set(value.name.clone()),
             balance: ActiveValue::Set(value.balance),
-            currency: ActiveValue::Set(value.currency.code().to_string()),
+            currency: ActiveValue::Set(value.currency),
             archived: ActiveValue::Set(value.archived),
             vault_id: ActiveValue::NotSet,
         }

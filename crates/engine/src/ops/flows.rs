@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    Engine, build_transaction, normalize_required_name, parse_vault_currency, parse_vault_uuid,
+    Engine, build_transaction, normalize_required_name, parse_vault_uuid,
     transfer_flow_legs, with_tx,
 };
 
@@ -30,7 +30,7 @@ impl Engine {
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_currency = vault_model.currency;
             let flow = CashFlow::try_from((model, vault_currency))?;
             Ok(flow)
         })
@@ -50,7 +50,7 @@ impl Engine {
                 .one(&db_tx)
                 .await?
                 .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_currency = vault_model.currency;
 
             let model = cash_flows::Entity::find()
                 .filter(cash_flows::Column::VaultId.eq(vault_uuid))
@@ -148,7 +148,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_currency = vault_model.currency;
             let vault_uuid = vault_model.id;
 
             if name.eq_ignore_ascii_case(cash_flows::UNALLOCATED_INTERNAL_NAME) {

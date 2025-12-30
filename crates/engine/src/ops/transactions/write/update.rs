@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use super::{
     super::{
-        super::{Engine, flow_wallet_signed_amount, parse_vault_currency, parse_vault_uuid, with_tx},
+        super::{Engine, flow_wallet_signed_amount, parse_vault_uuid, with_tx},
         helpers::{
             apply_flow_wallet_leg_updates, extract_flow_wallet_targets, validate_update_fields,
         },
@@ -45,7 +45,7 @@ impl Engine {
             let vault_model = self
                 .require_vault_by_id_write(&db_tx, vault_id, user_id)
                 .await?;
-            let vault_currency = parse_vault_currency(vault_model.currency.as_str())?;
+            let vault_currency = vault_model.currency;
 
             let vault_uuid = parse_vault_uuid(vault_id)?;
             let tx_model = transactions::Entity::find_by_id(transaction_id)
