@@ -115,7 +115,7 @@ fn help_lines(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
                         Span::raw(" save"),
                     ]));
                 }
-                TransactionsMode::Form => {
+                TransactionsMode::Form | TransactionsMode::Edit => {
                     lines.push(Line::from(vec![
                         Span::styled("Tab", Style::default().fg(theme.accent)),
                         Span::raw(" next field  "),

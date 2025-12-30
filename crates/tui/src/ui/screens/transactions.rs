@@ -33,7 +33,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         | TransactionsMode::TransferWallet
         | TransactionsMode::TransferFlow
         | TransactionsMode::Filter
-        | TransactionsMode::Form => {
+        | TransactionsMode::Form
+        | TransactionsMode::Edit => {
             render_list(frame, layout[1], state, &theme);
             if matches!(
                 state.transactions.mode,
@@ -45,13 +46,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
                 TransactionsMode::TransferWallet | TransactionsMode::TransferFlow
             ) {
                 render_transfer_form(frame, layout[1], state, &theme);
-            } else if state.transactions.mode == TransactionsMode::Form {
+            } else if matches!(
+                state.transactions.mode,
+                TransactionsMode::Form | TransactionsMode::Edit
+            ) {
                 render_transaction_form(frame, layout[1], state, &theme);
             } else if state.transactions.mode == TransactionsMode::Filter {
                 render_filter_form(frame, layout[1], state, &theme);
             }
         }
-        TransactionsMode::Detail | TransactionsMode::Edit => {
+        TransactionsMode::Detail => {
             let columns = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
@@ -159,10 +163,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         if !query.is_empty() {
             lines.push(Line::from(vec![
                 Span::raw("No results for "),
-                Span::styled(
-                    format!("\"{query}\""),
-                    Style::default().fg(theme.accent),
-                ),
+                Span::styled(format!("\"{query}\""), Style::default().fg(theme.accent)),
                 Span::raw("."),
             ]));
             lines.push(Line::from(Span::styled(
@@ -301,7 +302,11 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 .filter(|wallet| !wallet.archived)
                 .map(|wallet| wallet.name.clone())
                 .collect::<Vec<_>>();
-            ("Transfer Wallet", list)
+            if state.transactions.transfer.editing_id.is_some() {
+                ("Edit Transfer Wallet", list)
+            } else {
+                ("Transfer Wallet", list)
+            }
         }
         TransactionsMode::TransferFlow => {
             let list = snapshot
@@ -310,7 +315,11 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 .filter(|flow| !flow.archived)
                 .map(|flow| flow.name.clone())
                 .collect::<Vec<_>>();
-            ("Transfer Flow", list)
+            if state.transactions.transfer.editing_id.is_some() {
+                ("Edit Transfer Flow", list)
+            } else {
+                ("Transfer Flow", list)
+            }
         }
         _ => return,
     };
@@ -328,7 +337,7 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let popup = centered_rect(70, 60, area);
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(7), Constraint::Min(0)])
+        .constraints([Constraint::Length(9), Constraint::Min(0)])
         .split(popup);
 
     let mut lines = vec![
@@ -344,6 +353,16 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             "Note",
             transfer.note.as_str(),
             transfer.focus == TransferField::Note,
+            theme,
+        ),
+        render_transfer_field(
+            "When",
+            if transfer.occurred_at.trim().is_empty() {
+                "-"
+            } else {
+                transfer.occurred_at.as_str()
+            },
+            transfer.focus == TransferField::OccurredAt,
             theme,
         ),
         Line::from(Span::styled(
@@ -453,11 +472,36 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
         form.occurred_at.trim().to_string()
     };
 
+    let is_edit = form.editing_id.is_some();
     let title = match form.kind {
-        TransactionKind::Income => "New Income",
-        TransactionKind::Expense => "New Expense",
-        TransactionKind::Refund => "New Refund",
-        TransactionKind::TransferWallet | TransactionKind::TransferFlow => "New Transaction",
+        TransactionKind::Income => {
+            if is_edit {
+                "Edit Income"
+            } else {
+                "New Income"
+            }
+        }
+        TransactionKind::Expense => {
+            if is_edit {
+                "Edit Expense"
+            } else {
+                "New Expense"
+            }
+        }
+        TransactionKind::Refund => {
+            if is_edit {
+                "Edit Refund"
+            } else {
+                "New Refund"
+            }
+        }
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
+            if is_edit {
+                "Edit Transaction"
+            } else {
+                "New Transaction"
+            }
+        }
     };
 
     let popup = centered_rect(70, 70, area);
@@ -924,26 +968,6 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
             Span::raw(format!(": {note}")),
         ]),
     ];
-
-    if state.transactions.mode == TransactionsMode::Edit {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("Edit", Style::default().fg(theme.accent)),
-            Span::raw(": "),
-            Span::raw(state.transactions.edit_input.as_str()),
-        ]));
-        if let Some(err) = &state.transactions.edit_error {
-            lines.push(Line::from(Span::styled(
-                err.as_str(),
-                Style::default().fg(theme.error),
-            )));
-        } else {
-            lines.push(Line::from(Span::styled(
-                "Formato: importo [nota]",
-                Style::default().fg(theme.dim),
-            )));
-        }
-    }
 
     let header_block = Block::default()
         .title("Transaction Detail")

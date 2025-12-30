@@ -194,9 +194,7 @@ fn get_transactions_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>>
             Span::styled("r", Style::default().fg(theme.accent)),
             Span::raw(" repeat"),
         ],
-        crate::app::TransactionsMode::Edit
-        | crate::app::TransactionsMode::PickWallet
-        | crate::app::TransactionsMode::PickFlow => vec![
+        crate::app::TransactionsMode::PickWallet | crate::app::TransactionsMode::PickFlow => vec![
             Span::styled("Enter", Style::default().fg(theme.accent)),
             Span::raw(" save  "),
             Span::styled("Esc", Style::default().fg(theme.accent)),
@@ -212,7 +210,7 @@ fn get_transactions_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>>
             Span::styled("Esc", Style::default().fg(theme.accent)),
             Span::raw(" cancel"),
         ],
-        crate::app::TransactionsMode::Form => vec![
+        crate::app::TransactionsMode::Form | crate::app::TransactionsMode::Edit => vec![
             Span::styled("Tab", Style::default().fg(theme.accent)),
             Span::raw(" next  "),
             Span::styled("Enter", Style::default().fg(theme.accent)),

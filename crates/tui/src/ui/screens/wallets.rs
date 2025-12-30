@@ -139,10 +139,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         if !query.is_empty() {
             lines.push(Line::from(vec![
                 Span::raw("No results for "),
-                Span::styled(
-                    format!("\"{query}\""),
-                    Style::default().fg(theme.accent),
-                ),
+                Span::styled(format!("\"{query}\""), Style::default().fg(theme.accent)),
                 Span::raw("."),
             ]));
             lines.push(Line::from(Span::styled(
