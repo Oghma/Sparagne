@@ -1,28 +1,30 @@
 use std::collections::HashMap;
 
-use sea_orm::{ActiveValue, QueryFilter, Statement, TransactionTrait, prelude::*, sea_query::Expr};
+use sea_orm::{ActiveValue, QueryFilter, Statement, prelude::*, sea_query::Expr};
 use uuid::Uuid;
 
 use crate::{
     CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, Wallet, cash_flows,
-    vault, vault_memberships, wallets,
+    util::normalize_required_name, vault, vault_memberships, wallets,
 };
 
-use super::{Engine, normalize_required_name, parse_vault_uuid, with_tx};
+use super::{Engine, parse_vault_uuid};
 
 impl Engine {
     /// Delete or archive a vault
     pub async fn delete_vault(&self, vault_id: &str, user_id: &str) -> ResultEngine<()> {
-        with_tx!(self, |db_tx| {
-            let vault_model = self
-                .require_vault_by_id_write(&db_tx, vault_id, user_id)
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| Box::pin(async move {
+            let vault_model = engine
+                .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
                 .await?;
             let vault_db_id = vault_model.id;
 
             // Best-effort cascade delete within one DB transaction.
             // (FKs currently don't declare ON DELETE CASCADE everywhere, and some
             // relationships are not FK-backed, so we do it explicitly.)
-            let backend = self.database.get_database_backend();
+            let backend = engine.database.get_database_backend();
 
             let vault_db_id_bytes: Vec<u8> = vault_db_id.as_bytes().to_vec();
 
@@ -70,7 +72,8 @@ impl Engine {
                 .await?;
 
             Ok(())
-        })
+        }))
+        .await
     }
 
     /// Add a new vault
@@ -81,57 +84,61 @@ impl Engine {
         currency: Option<Currency>,
     ) -> ResultEngine<String> {
         let name = normalize_required_name(name, "vault")?;
+        let user_id = user_id.to_string();
 
-        let mut new_vault = Vault::new(name.clone(), user_id);
+        let mut new_vault = Vault::new(name.clone(), user_id.as_str());
         new_vault.currency = currency.unwrap_or_default();
         let new_vault_id = new_vault.id.clone();
         let vault_entry: vault::ActiveModel = (&new_vault).into();
-        with_tx!(self, |db_tx| {
-            // Enforce unique vault names per owner (case-insensitive) to avoid
-            // ambiguous name lookups.
-            let exists = vault::Entity::find()
-                .filter(vault::Column::UserId.eq(user_id.to_string()))
-                .filter(Expr::cust("LOWER(name)").eq(name.to_lowercase()))
-                .one(&db_tx)
-                .await?
-                .is_some();
-            if exists {
-                return Err(EngineError::ExistingKey(name));
-            }
+        self.with_tx(|_engine, db_tx| {
+            Box::pin(async move {
+                // Enforce unique vault names per owner (case-insensitive) to avoid
+                // ambiguous name lookups.
+                let exists = vault::Entity::find()
+                    .filter(vault::Column::UserId.eq(user_id.clone()))
+                    .filter(Expr::cust("LOWER(name)").eq(name.to_lowercase()))
+                    .one(db_tx)
+                    .await?
+                    .is_some();
+                if exists {
+                    return Err(EngineError::ExistingKey(name));
+                }
 
-            vault_entry.insert(&db_tx).await?;
+                vault_entry.insert(db_tx).await?;
 
-            // Create the system flow "Unallocated".
-            let mut unallocated = CashFlow::new(
-                cash_flows::UNALLOCATED_INTERNAL_NAME.to_string(),
-                0,
-                None,
-                None,
-                new_vault.currency,
-            )?;
-            unallocated.system_kind = Some(cash_flows::SystemFlowKind::Unallocated);
-            let new_vault_uuid = Uuid::parse_str(&new_vault_id)
-                .map_err(|_| EngineError::InvalidId("invalid vault id".to_string()))?;
-            let mut unallocated_model: cash_flows::ActiveModel = (&unallocated).into();
-            unallocated_model.vault_id = ActiveValue::Set(new_vault_uuid);
-            unallocated_model.insert(&db_tx).await?;
+                // Create the system flow "Unallocated".
+                let mut unallocated = CashFlow::new(
+                    cash_flows::UNALLOCATED_INTERNAL_NAME.to_string(),
+                    0,
+                    None,
+                    None,
+                    new_vault.currency,
+                )?;
+                unallocated.system_kind = Some(cash_flows::SystemFlowKind::Unallocated);
+                let new_vault_uuid = Uuid::parse_str(&new_vault_id)
+                    .map_err(|_| EngineError::InvalidId("invalid vault id".to_string()))?;
+                let mut unallocated_model: cash_flows::ActiveModel = (&unallocated).into();
+                unallocated_model.vault_id = ActiveValue::Set(new_vault_uuid);
+                unallocated_model.insert(db_tx).await?;
 
-            // Create a default wallet ("Cash") so clients can start immediately.
-            let default_wallet = Wallet::new("Cash".to_string(), 0, new_vault.currency);
-            let mut default_wallet_model: wallets::ActiveModel = (&default_wallet).into();
-            default_wallet_model.vault_id = ActiveValue::Set(new_vault_uuid);
-            default_wallet_model.insert(&db_tx).await?;
+                // Create a default wallet ("Cash") so clients can start immediately.
+                let default_wallet = Wallet::new("Cash".to_string(), 0, new_vault.currency);
+                let mut default_wallet_model: wallets::ActiveModel = (&default_wallet).into();
+                default_wallet_model.vault_id = ActiveValue::Set(new_vault_uuid);
+                default_wallet_model.insert(db_tx).await?;
 
-            // Scaffolding for future sharing: create the owner membership row.
-            let membership = vault_memberships::ActiveModel {
-                vault_id: ActiveValue::Set(new_vault_uuid),
-                user_id: ActiveValue::Set(user_id.to_string()),
-                role: ActiveValue::Set("owner".to_string()),
-            };
-            membership.insert(&db_tx).await?;
+                // Scaffolding for future sharing: create the owner membership row.
+                let membership = vault_memberships::ActiveModel {
+                    vault_id: ActiveValue::Set(new_vault_uuid),
+                    user_id: ActiveValue::Set(user_id.clone()),
+                    role: ActiveValue::Set("owner".to_string()),
+                };
+                membership.insert(db_tx).await?;
 
-            Ok(new_vault_id)
+                Ok(new_vault_id)
+            })
         })
+        .await
     }
 
     /// Return a user `Vault`.
@@ -147,48 +154,57 @@ impl Engine {
                 "missing vault id or name".to_string(),
             ));
         }
-        with_tx!(self, |db_tx| {
-            let vault_model = if let Some(id) = vault_id {
-                self.require_vault_by_id(&db_tx, id, user_id).await?
-            } else {
-                let name = vault_name.ok_or_else(|| {
-                    EngineError::KeyNotFound("missing vault id or name".to_string())
-                })?;
-                self.require_vault_by_name(&db_tx, &name, user_id).await?
-            };
-            let vault_currency = vault_model.currency;
+        let vault_id = vault_id.map(str::to_string);
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                let vault_model = if let Some(id) = vault_id.as_deref() {
+                    engine
+                        .require_vault_by_id(db_tx, id, user_id.as_str())
+                        .await?
+                } else {
+                    let name = vault_name.ok_or_else(|| {
+                        EngineError::KeyNotFound("missing vault id or name".to_string())
+                    })?;
+                    engine
+                        .require_vault_by_name(db_tx, &name, user_id.as_str())
+                        .await?
+                };
+                let vault_currency = vault_model.currency;
 
-            let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
-                .filter(cash_flows::Column::VaultId.eq(vault_model.id.clone()))
-                .all(&db_tx)
-                .await?;
-            let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
-                .filter(wallets::Column::VaultId.eq(vault_model.id.clone()))
-                .all(&db_tx)
-                .await?;
+                let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
+                    .filter(cash_flows::Column::VaultId.eq(vault_model.id))
+                    .all(db_tx)
+                    .await?;
+                let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
+                    .filter(wallets::Column::VaultId.eq(vault_model.id))
+                    .all(db_tx)
+                    .await?;
 
-            let mut flows = HashMap::new();
-            for flow_model in flow_models {
-                let flow = CashFlow::try_from((flow_model, vault_currency))?;
-                flows.insert(flow.id, flow);
-            }
+                let mut flows = HashMap::new();
+                for flow_model in flow_models {
+                    let flow = CashFlow::try_from((flow_model, vault_currency))?;
+                    flows.insert(flow.id, flow);
+                }
 
-            let mut wallets_map = HashMap::new();
-            for wallet_model in wallet_models {
-                let wallet = Wallet::try_from((wallet_model, vault_currency))?;
-                wallets_map.insert(wallet.id, wallet);
-            }
+                let mut wallets_map = HashMap::new();
+                for wallet_model in wallet_models {
+                    let wallet = Wallet::try_from((wallet_model, vault_currency))?;
+                    wallets_map.insert(wallet.id, wallet);
+                }
 
-            let snapshot = Vault {
-                id: vault_model.id.to_string(),
-                name: vault_model.name,
-                cash_flow: flows,
-                wallet: wallets_map,
-                user_id: vault_model.user_id,
-                currency: vault_currency,
-            };
-            Ok(snapshot)
+                let snapshot = Vault {
+                    id: vault_model.id.to_string(),
+                    name: vault_model.name,
+                    cash_flow: flows,
+                    wallet: wallets_map,
+                    user_id: vault_model.user_id,
+                    currency: vault_currency,
+                };
+                Ok(snapshot)
+            })
         })
+        .await
     }
 
     /// Returns vault totals: `(currency, balance_minor, total_income_minor,
@@ -201,13 +217,17 @@ impl Engine {
         user_id: &str,
         include_voided: bool,
     ) -> ResultEngine<(Currency, i64, i64, i64)> {
-        with_tx!(self, |db_tx| {
-            let vault_model = self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| Box::pin(async move {
+            let vault_model = engine
+                .require_vault_by_id(db_tx, vault_id.as_str(), user_id.as_str())
+                .await?;
             let currency = vault_model.currency;
-            let vault_uuid = parse_vault_uuid(vault_id)?;
+            let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
             let vault_bytes: Vec<u8> = vault_uuid.as_bytes().to_vec();
 
-            let backend = self.database.get_database_backend();
+            let backend = engine.database.get_database_backend();
             let void_cond = if include_voided {
                 ""
             } else {
@@ -273,6 +293,7 @@ impl Engine {
                 total_income_minor,
                 total_expenses_minor - total_refunds_minor,
             ))
-        })
+        }))
+        .await
     }
 }

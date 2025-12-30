@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use sea_orm::{ActiveValue, DatabaseTransaction, QueryFilter, TransactionTrait, prelude::*};
+use sea_orm::{ActiveValue, DatabaseTransaction, QueryFilter, prelude::*};
 
 use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind, TxMeta,
@@ -14,7 +14,7 @@ use crate::{
 use super::super::{
     super::{
         Engine, TransactionBuildInput, build_transaction, flow_wallet_legs,
-        flow_wallet_signed_amount, parse_vault_uuid, with_tx,
+        flow_wallet_signed_amount, parse_vault_uuid,
     },
     helpers::{
         apply_transfer_leg_updates, normalize_tx_meta, parse_transfer_leg_pairs,
@@ -80,43 +80,47 @@ impl Engine {
         &self,
         cmd: FlowWalletCmd,
     ) -> ResultEngine<Uuid> {
-        with_tx!(self, |db_tx| {
-            let (category, note) = normalize_tx_meta(&cmd.meta);
-            let vault_model = self
-                .require_vault_by_id_write(&db_tx, &cmd.vault_id, &cmd.user_id)
-                .await?;
-            let currency = vault_model.currency;
-            let resolved_flow_id = self
-                .resolve_flow_id(&db_tx, &cmd.vault_id, cmd.flow_id)
-                .await?;
-            let resolved_wallet_id = self
-                .resolve_wallet_id(&db_tx, &cmd.vault_id, cmd.wallet_id)
-                .await?;
-            let leg_amount_minor = flow_wallet_signed_amount(cmd.kind, cmd.amount_minor)?;
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                let (category, note) = normalize_tx_meta(&cmd.meta);
+                let vault_model = engine
+                    .require_vault_by_id_write(db_tx, &cmd.vault_id, &cmd.user_id)
+                    .await?;
+                let currency = vault_model.currency;
+                let resolved_flow_id = engine
+                    .resolve_flow_id(db_tx, &cmd.vault_id, cmd.flow_id)
+                    .await?;
+                let resolved_wallet_id = engine
+                    .resolve_wallet_id(db_tx, &cmd.vault_id, cmd.wallet_id)
+                    .await?;
+                let leg_amount_minor = flow_wallet_signed_amount(cmd.kind, cmd.amount_minor)?;
 
-            let tx = build_transaction(TransactionBuildInput {
-                vault_id: &cmd.vault_id,
-                kind: cmd.kind,
-                occurred_at: cmd.meta.occurred_at,
-                amount_minor: cmd.amount_minor,
-                currency,
-                category,
-                note,
-                created_by: &cmd.user_id,
-                idempotency_key: cmd.meta.idempotency_key.clone(),
-                refunded_transaction_id: None,
-            })?;
-            let legs = flow_wallet_legs(
-                tx.id,
-                resolved_wallet_id,
-                resolved_flow_id,
-                leg_amount_minor,
-                currency,
-            );
+                let tx = build_transaction(TransactionBuildInput {
+                    vault_id: &cmd.vault_id,
+                    kind: cmd.kind,
+                    occurred_at: cmd.meta.occurred_at,
+                    amount_minor: cmd.amount_minor,
+                    currency,
+                    category,
+                    note,
+                    created_by: &cmd.user_id,
+                    idempotency_key: cmd.meta.idempotency_key.clone(),
+                    refunded_transaction_id: None,
+                })?;
+                let legs = flow_wallet_legs(
+                    tx.id,
+                    resolved_wallet_id,
+                    resolved_flow_id,
+                    leg_amount_minor,
+                    currency,
+                );
 
-            self.create_transaction_with_legs(&db_tx, &cmd.vault_id, currency, &tx, &legs)
-                .await
+                engine
+                    .create_transaction_with_legs(db_tx, &cmd.vault_id, currency, &tx, &legs)
+                    .await
+            })
         })
+        .await
     }
 
     pub(super) async fn create_transfer_transaction(

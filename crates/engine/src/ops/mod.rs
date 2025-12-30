@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, DatabaseTransaction, TransactionError, TransactionTrait};
+use std::{future::Future, pin::Pin};
 use uuid::Uuid;
 
 use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind,
     TransactionNew,
-    util::{normalize_optional_text, normalize_required_name},
 };
 
 mod access;
@@ -18,31 +18,12 @@ mod wallets;
 
 pub use transactions::TransactionListFilter;
 
-/// Run a block inside a DB transaction, committing on success and rolling back
-/// on error.
-macro_rules! with_tx {
-    ($self:expr, |$tx:ident| $body:expr) => {{
-        let $tx = $self.database.begin().await?;
-        let result = $body;
-        match result {
-            Ok(value) => {
-                $tx.commit().await?;
-                Ok(value)
-            }
-            Err(err) => Err(err),
-        }
-    }};
-}
-
-pub(crate) use with_tx;
-
 /// Parse a vault_id string into Uuid for DB queries.
 pub(crate) fn parse_vault_uuid(vault_id: &str) -> ResultEngine<Uuid> {
-    Uuid::parse_str(vault_id)
-        .map_err(|_| EngineError::KeyNotFound("vault not found".to_string()))
+    Uuid::parse_str(vault_id).map_err(|_| EngineError::KeyNotFound("vault not found".to_string()))
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Engine {
     database: DatabaseConnection,
 }
@@ -51,6 +32,26 @@ impl Engine {
     /// Return a builder for `Engine`. Help to build the struct.
     pub fn builder() -> EngineBuilder {
         EngineBuilder::default()
+    }
+
+    pub async fn with_tx<T, F>(&self, f: F) -> ResultEngine<T>
+    where
+        F: for<'a> FnOnce(
+                Engine,
+                &'a DatabaseTransaction,
+            )
+                -> Pin<Box<dyn Future<Output = ResultEngine<T>> + Send + 'a>>
+            + Send,
+        T: Send,
+    {
+        let engine = self.clone();
+        self.database
+            .transaction(|tx| f(engine.clone(), tx))
+            .await
+            .map_err(|err| match err {
+                TransactionError::Connection(db_err) => EngineError::Database(db_err),
+                TransactionError::Transaction(inner) => inner,
+            })
     }
 }
 
@@ -63,7 +64,6 @@ fn flow_wallet_signed_amount(kind: TransactionKind, amount_minor: i64) -> Result
         )),
     }
 }
-
 
 pub(super) struct TransactionBuildInput<'a> {
     pub(super) vault_id: &'a str,

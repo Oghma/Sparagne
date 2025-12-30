@@ -18,7 +18,16 @@ use crate::EngineError;
 ///
 /// Example: EUR has 2 minor units, so `10.50 EUR` ⇄ `1050`.
 #[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumIter,
     DeriveActiveEnum,
 )]
 #[sea_orm(rs_type = "String", db_type = "Text")]

@@ -2,11 +2,11 @@ use sea_orm::{DatabaseTransaction, QueryFilter, prelude::*, sea_query::Expr};
 use uuid::Uuid;
 
 use crate::{
-    EngineError, ResultEngine, cash_flows, flow_memberships, users, vault, vault_memberships,
-    wallets,
+    EngineError, ResultEngine, cash_flows, flow_memberships, users, util::normalize_required_name,
+    vault, vault_memberships, wallets,
 };
 
-use super::{Engine, normalize_required_name, parse_vault_uuid};
+use super::{Engine, parse_vault_uuid};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum MembershipRole {

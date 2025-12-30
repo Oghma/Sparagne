@@ -3,11 +3,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use sea_orm::{Condition, QueryFilter, QueryOrder, QuerySelect, TransactionTrait, prelude::*};
+use sea_orm::{Condition, QueryFilter, QueryOrder, QuerySelect, prelude::*};
 
 use crate::{EngineError, ResultEngine, Transaction, TransactionKind, legs, transactions};
 
-use super::super::{Engine, parse_vault_uuid, with_tx};
+use super::super::{Engine, parse_vault_uuid};
 
 /// Filters for listing transactions.
 ///
@@ -128,61 +128,70 @@ impl Engine {
         cursor: Option<&str>,
         filter: &TransactionListFilter,
     ) -> ResultEngine<(Vec<(Transaction, i64)>, Option<String>)> {
-        with_tx!(self, |db_tx| {
-            self.require_flow_read(&db_tx, vault_id, flow_id, user_id)
-                .await?;
-            validate_list_filter(filter)?;
-            let vault_uuid = parse_vault_uuid(vault_id)?;
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        let cursor = cursor.map(str::to_string);
+        let filter = filter.clone();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_flow_read(db_tx, vault_id.as_str(), flow_id, user_id.as_str())
+                    .await?;
+                validate_list_filter(&filter)?;
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
 
-            let limit_plus_one = limit.saturating_add(1);
-            let mut query = legs::Entity::find()
-                .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Flow))
-                .filter(legs::Column::TargetId.eq(flow_id))
-                .find_also_related(transactions::Entity)
-                .filter(transactions::Column::VaultId.eq(vault_uuid))
-                .order_by_desc(transactions::Column::OccurredAt)
-                .order_by_desc(transactions::Column::Id)
-                .limit(limit_plus_one);
+                let limit_plus_one = limit.saturating_add(1);
+                let mut query = legs::Entity::find()
+                    .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Flow))
+                    .filter(legs::Column::TargetId.eq(flow_id))
+                    .find_also_related(transactions::Entity)
+                    .filter(transactions::Column::VaultId.eq(vault_uuid))
+                    .order_by_desc(transactions::Column::OccurredAt)
+                    .order_by_desc(transactions::Column::Id)
+                    .limit(limit_plus_one);
 
-            if let Some(cursor) = cursor {
-                let cursor = TransactionsCursor::decode(cursor)?;
-                query = query.filter(
-                    Condition::any()
-                        .add(transactions::Column::OccurredAt.lt(cursor.occurred_at))
-                        .add(
-                            Condition::all()
-                                .add(transactions::Column::OccurredAt.eq(cursor.occurred_at))
-                                .add(transactions::Column::Id.lt(cursor.transaction_id)),
-                        ),
-                );
-            }
-            query = query.apply_tx_filters(filter);
+                if let Some(cursor) = cursor.as_deref() {
+                    let cursor = TransactionsCursor::decode(cursor)?;
+                    query = query.filter(
+                        Condition::any()
+                            .add(transactions::Column::OccurredAt.lt(cursor.occurred_at))
+                            .add(
+                                Condition::all()
+                                    .add(transactions::Column::OccurredAt.eq(cursor.occurred_at))
+                                    .add(transactions::Column::Id.lt(cursor.transaction_id)),
+                            ),
+                    );
+                }
+                query = query.apply_tx_filters(&filter);
 
-            let rows: Vec<(legs::Model, Option<transactions::Model>)> = query.all(&db_tx).await?;
-            let has_more = rows.len() > limit as usize;
+                let rows: Vec<(legs::Model, Option<transactions::Model>)> =
+                    query.all(db_tx).await?;
+                let has_more = rows.len() > limit as usize;
 
-            let mut out: Vec<(Transaction, i64)> =
-                Vec::with_capacity(rows.len().min(limit as usize));
-            for (leg_model, tx_model) in rows.into_iter().take(limit as usize) {
-                let Some(tx_model) = tx_model else {
-                    continue;
+                let mut out: Vec<(Transaction, i64)> =
+                    Vec::with_capacity(rows.len().min(limit as usize));
+                for (leg_model, tx_model) in rows.into_iter().take(limit as usize) {
+                    let Some(tx_model) = tx_model else {
+                        continue;
+                    };
+                    let tx = Transaction::try_from(tx_model)?;
+                    out.push((tx, leg_model.amount_minor));
+                }
+
+                let next_cursor = out.last().map(|(tx, _)| TransactionsCursor {
+                    occurred_at: tx.occurred_at,
+                    transaction_id: tx.id.to_string(),
+                });
+                let next_cursor = if has_more {
+                    next_cursor.map(|c| c.encode()).transpose()?
+                } else {
+                    None
                 };
-                let tx = Transaction::try_from(tx_model)?;
-                out.push((tx, leg_model.amount_minor));
-            }
 
-            let next_cursor = out.last().map(|(tx, _)| TransactionsCursor {
-                occurred_at: tx.occurred_at,
-                transaction_id: tx.id.to_string(),
-            });
-            let next_cursor = if has_more {
-                next_cursor.map(|c| c.encode()).transpose()?
-            } else {
-                None
-            };
-
-            Ok((out, next_cursor))
+                Ok((out, next_cursor))
+            })
         })
+        .await
     }
 
     /// Lists recent transactions affecting the whole vault, with cursor-based
@@ -198,52 +207,61 @@ impl Engine {
         cursor: Option<&str>,
         filter: &TransactionListFilter,
     ) -> ResultEngine<(Vec<Transaction>, Option<String>)> {
-        with_tx!(self, |db_tx| {
-            self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
-            validate_list_filter(filter)?;
-            let vault_uuid = parse_vault_uuid(vault_id)?;
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        let cursor = cursor.map(str::to_string);
+        let filter = filter.clone();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+                validate_list_filter(&filter)?;
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
 
-            let limit_plus_one = limit.saturating_add(1);
-            let mut query = transactions::Entity::find()
-                .filter(transactions::Column::VaultId.eq(vault_uuid))
-                .order_by_desc(transactions::Column::OccurredAt)
-                .order_by_desc(transactions::Column::Id)
-                .limit(limit_plus_one);
+                let limit_plus_one = limit.saturating_add(1);
+                let mut query = transactions::Entity::find()
+                    .filter(transactions::Column::VaultId.eq(vault_uuid))
+                    .order_by_desc(transactions::Column::OccurredAt)
+                    .order_by_desc(transactions::Column::Id)
+                    .limit(limit_plus_one);
 
-            if let Some(cursor) = cursor {
-                let cursor = TransactionsCursor::decode(cursor)?;
-                query = query.filter(
-                    Condition::any()
-                        .add(transactions::Column::OccurredAt.lt(cursor.occurred_at))
-                        .add(
-                            Condition::all()
-                                .add(transactions::Column::OccurredAt.eq(cursor.occurred_at))
-                                .add(transactions::Column::Id.lt(cursor.transaction_id)),
-                        ),
-                );
-            }
-            query = query.apply_tx_filters(filter);
+                if let Some(cursor) = cursor.as_deref() {
+                    let cursor = TransactionsCursor::decode(cursor)?;
+                    query = query.filter(
+                        Condition::any()
+                            .add(transactions::Column::OccurredAt.lt(cursor.occurred_at))
+                            .add(
+                                Condition::all()
+                                    .add(transactions::Column::OccurredAt.eq(cursor.occurred_at))
+                                    .add(transactions::Column::Id.lt(cursor.transaction_id)),
+                            ),
+                    );
+                }
+                query = query.apply_tx_filters(&filter);
 
-            let rows: Vec<transactions::Model> = query.all(&db_tx).await?;
-            let has_more = rows.len() > limit as usize;
+                let rows: Vec<transactions::Model> = query.all(db_tx).await?;
+                let has_more = rows.len() > limit as usize;
 
-            let mut out: Vec<Transaction> = Vec::with_capacity(rows.len().min(limit as usize));
-            for tx_model in rows.into_iter().take(limit as usize) {
-                out.push(Transaction::try_from(tx_model)?);
-            }
+                let mut out: Vec<Transaction> = Vec::with_capacity(rows.len().min(limit as usize));
+                for tx_model in rows.into_iter().take(limit as usize) {
+                    out.push(Transaction::try_from(tx_model)?);
+                }
 
-            let next_cursor = out.last().map(|tx| TransactionsCursor {
-                occurred_at: tx.occurred_at,
-                transaction_id: tx.id.to_string(),
-            });
-            let next_cursor = if has_more {
-                next_cursor.map(|c| c.encode()).transpose()?
-            } else {
-                None
-            };
+                let next_cursor = out.last().map(|tx| TransactionsCursor {
+                    occurred_at: tx.occurred_at,
+                    transaction_id: tx.id.to_string(),
+                });
+                let next_cursor = if has_more {
+                    next_cursor.map(|c| c.encode()).transpose()?
+                } else {
+                    None
+                };
 
-            Ok((out, next_cursor))
+                Ok((out, next_cursor))
+            })
         })
+        .await
     }
 
     /// Lists recent transactions that affect a given wallet.
@@ -278,59 +296,69 @@ impl Engine {
         cursor: Option<&str>,
         filter: &TransactionListFilter,
     ) -> ResultEngine<(Vec<(Transaction, i64)>, Option<String>)> {
-        with_tx!(self, |db_tx| {
-            self.require_vault_by_id(&db_tx, vault_id, user_id).await?;
-            validate_list_filter(filter)?;
-            let vault_uuid = parse_vault_uuid(vault_id)?;
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        let cursor = cursor.map(str::to_string);
+        let filter = filter.clone();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+                validate_list_filter(&filter)?;
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
 
-            let limit_plus_one = limit.saturating_add(1);
-            let mut query = legs::Entity::find()
-                .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Wallet))
-                .filter(legs::Column::TargetId.eq(wallet_id))
-                .find_also_related(transactions::Entity)
-                .filter(transactions::Column::VaultId.eq(vault_uuid))
-                .order_by_desc(transactions::Column::OccurredAt)
-                .order_by_desc(transactions::Column::Id)
-                .limit(limit_plus_one);
+                let limit_plus_one = limit.saturating_add(1);
+                let mut query = legs::Entity::find()
+                    .filter(legs::Column::TargetKind.eq(crate::legs::LegTargetKind::Wallet))
+                    .filter(legs::Column::TargetId.eq(wallet_id))
+                    .find_also_related(transactions::Entity)
+                    .filter(transactions::Column::VaultId.eq(vault_uuid))
+                    .order_by_desc(transactions::Column::OccurredAt)
+                    .order_by_desc(transactions::Column::Id)
+                    .limit(limit_plus_one);
 
-            if let Some(cursor) = cursor {
-                let cursor = TransactionsCursor::decode(cursor)?;
-                query = query.filter(
-                    Condition::any()
-                        .add(transactions::Column::OccurredAt.lt(cursor.occurred_at))
-                        .add(
-                            Condition::all()
-                                .add(transactions::Column::OccurredAt.eq(cursor.occurred_at))
-                                .add(transactions::Column::Id.lt(cursor.transaction_id)),
-                        ),
-                );
-            }
-            query = query.apply_tx_filters(filter);
+                if let Some(cursor) = cursor.as_deref() {
+                    let cursor = TransactionsCursor::decode(cursor)?;
+                    query = query.filter(
+                        Condition::any()
+                            .add(transactions::Column::OccurredAt.lt(cursor.occurred_at))
+                            .add(
+                                Condition::all()
+                                    .add(transactions::Column::OccurredAt.eq(cursor.occurred_at))
+                                    .add(transactions::Column::Id.lt(cursor.transaction_id)),
+                            ),
+                    );
+                }
+                query = query.apply_tx_filters(&filter);
 
-            let rows: Vec<(legs::Model, Option<transactions::Model>)> = query.all(&db_tx).await?;
-            let has_more = rows.len() > limit as usize;
+                let rows: Vec<(legs::Model, Option<transactions::Model>)> =
+                    query.all(db_tx).await?;
+                let has_more = rows.len() > limit as usize;
 
-            let mut out: Vec<(Transaction, i64)> =
-                Vec::with_capacity(rows.len().min(limit as usize));
-            for (leg_model, tx_model) in rows.into_iter().take(limit as usize) {
-                let Some(tx_model) = tx_model else {
-                    continue;
+                let mut out: Vec<(Transaction, i64)> =
+                    Vec::with_capacity(rows.len().min(limit as usize));
+                for (leg_model, tx_model) in rows.into_iter().take(limit as usize) {
+                    let Some(tx_model) = tx_model else {
+                        continue;
+                    };
+                    let tx = Transaction::try_from(tx_model)?;
+                    out.push((tx, leg_model.amount_minor));
+                }
+
+                let next_cursor = out.last().map(|(tx, _)| TransactionsCursor {
+                    occurred_at: tx.occurred_at,
+                    transaction_id: tx.id.to_string(),
+                });
+                let next_cursor = if has_more {
+                    next_cursor.map(|c| c.encode()).transpose()?
+                } else {
+                    None
                 };
-                let tx = Transaction::try_from(tx_model)?;
-                out.push((tx, leg_model.amount_minor));
-            }
 
-            let next_cursor = out.last().map(|(tx, _)| TransactionsCursor {
-                occurred_at: tx.occurred_at,
-                transaction_id: tx.id.to_string(),
-            });
-            let next_cursor = if has_more {
-                next_cursor.map(|c| c.encode()).transpose()?
-            } else {
-                None
-            };
-
-            Ok((out, next_cursor))
+                Ok((out, next_cursor))
+            })
         })
+        .await
     }
 }

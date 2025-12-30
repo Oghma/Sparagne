@@ -173,12 +173,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Wallets::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Wallets::Id)
-                            .blob()
-                            .not_null()
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Wallets::Id).blob().not_null().primary_key())
                     .col(ColumnDef::new(Wallets::Name).string().not_null())
                     .col(ColumnDef::new(Wallets::Balance).big_integer().not_null())
                     .col(
@@ -403,11 +398,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(VaultMemberships::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(VaultMemberships::VaultId)
-                            .blob()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(VaultMemberships::VaultId).blob().not_null())
                     .col(ColumnDef::new(VaultMemberships::UserId).string().not_null())
                     .col(ColumnDef::new(VaultMemberships::Role).string().not_null())
                     .primary_key(
