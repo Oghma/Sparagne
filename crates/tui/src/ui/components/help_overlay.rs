@@ -169,7 +169,9 @@ fn help_lines(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
                 Span::styled("e", Style::default().fg(theme.accent)),
                 Span::raw(" rename  "),
                 Span::styled("a", Style::default().fg(theme.accent)),
-                Span::raw(" archive"),
+                Span::raw(" archive  "),
+                Span::styled("l", Style::default().fg(theme.accent)),
+                Span::raw(" aliases"),
             ]));
             lines.push(Line::from(vec![
                 Span::styled("m", Style::default().fg(theme.accent)),
@@ -181,7 +183,11 @@ fn help_lines(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
             ]));
             lines.push(Line::from(vec![
                 Span::styled("Enter", Style::default().fg(theme.accent)),
-                Span::raw(" preview/merge  "),
+                Span::raw(" preview/save  "),
+                Span::styled("Tab", Style::default().fg(theme.accent)),
+                Span::raw(" focus  "),
+                Span::styled("x", Style::default().fg(theme.accent)),
+                Span::raw(" delete  "),
                 Span::styled("Esc", Style::default().fg(theme.accent)),
                 Span::raw(" cancel"),
             ]));

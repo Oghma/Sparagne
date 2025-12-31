@@ -253,6 +253,7 @@ fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
                 components::hints::KeyHint::new("c", "create"),
                 components::hints::KeyHint::new("e", "rename"),
                 components::hints::KeyHint::new("a", "archive"),
+                components::hints::KeyHint::new("l", "aliases"),
                 components::hints::KeyHint::new("m", "merge"),
                 components::hints::KeyHint::new("r", "refresh"),
             ]
@@ -264,6 +265,12 @@ fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         crate::app::CategoriesMode::Create | crate::app::CategoriesMode::Rename => vec![
             components::hints::KeyHint::new("Enter", "save"),
             components::hints::KeyHint::new("Esc", "cancel"),
+        ],
+        crate::app::CategoriesMode::Aliases => vec![
+            components::hints::KeyHint::new("Tab", "focus"),
+            components::hints::KeyHint::new("Enter", "save"),
+            components::hints::KeyHint::new("x", "delete"),
+            components::hints::KeyHint::new("Esc", "back"),
         ],
     }
 }

@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, CategoriesMode},
+    app::{AliasFocus, AppState, CategoriesMode},
     ui::theme::Theme,
 };
 
@@ -29,6 +29,14 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
             render_list(frame, body[0], state, &theme);
             render_merge_info(frame, body[1], state, &theme);
         }
+        CategoriesMode::Aliases => {
+            let body = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(0), Constraint::Length(6)])
+                .split(layout[1]);
+            render_alias_list(frame, body[0], state, &theme);
+            render_alias_input(frame, body[1], state, &theme);
+        }
         CategoriesMode::Create | CategoriesMode::Rename => {
             let body = Layout::default()
                 .direction(Direction::Vertical)
@@ -47,6 +55,7 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         CategoriesMode::Merge => "Merge",
         CategoriesMode::Create => "Create",
         CategoriesMode::Rename => "Rename",
+        CategoriesMode::Aliases => "Aliases",
     };
     let mut line = vec![
         Span::styled("Mode", Style::default().fg(theme.dim)),
@@ -59,6 +68,20 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
             line.push(Span::styled("Merge", Style::default().fg(theme.dim)));
             line.push(Span::raw(format!(": {} -> {}", from, into)));
         }
+    }
+    if let CategoriesMode::Aliases = state.categories.mode {
+        if let Some(category) = state.categories.items.get(state.categories.selected) {
+            line.push(Span::raw("   "));
+            line.push(Span::styled("Category", Style::default().fg(theme.dim)));
+            line.push(Span::raw(format!(": {}", category.name)));
+        }
+        line.push(Span::raw("   "));
+        line.push(Span::styled("Focus", Style::default().fg(theme.dim)));
+        let focus = match state.categories.aliases.focus {
+            AliasFocus::List => "list",
+            AliasFocus::Input => "input",
+        };
+        line.push(Span::raw(format!(": {focus}")));
     }
 
     if let Some(err) = state.categories.error.as_ref() {
@@ -136,6 +159,82 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .block(list_block)
         .highlight_style(Style::default().bg(theme.accent).fg(theme.background));
     frame.render_stateful_widget(list, area, &mut list_state);
+}
+
+fn render_alias_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let mut border_style = Style::default().fg(theme.border);
+    if state.categories.aliases.focus == AliasFocus::List {
+        border_style = border_style.fg(theme.accent);
+    }
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(border_style)
+        .title("Aliases");
+
+    let items = state
+        .categories
+        .aliases
+        .items
+        .iter()
+        .map(|alias| ListItem::new(Line::from(alias.alias.clone())))
+        .collect::<Vec<_>>();
+
+    if items.is_empty() {
+        let empty_msg = Paragraph::new(Line::from("Nessun alias."))
+            .alignment(Alignment::Center)
+            .block(block);
+        frame.render_widget(empty_msg, area);
+        return;
+    }
+
+    let mut list_state = ListState::default();
+    let selected = state
+        .categories
+        .aliases
+        .selected
+        .min(items.len().saturating_sub(1));
+    list_state.select(Some(selected));
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(Style::default().bg(theme.accent).fg(theme.background));
+    frame.render_stateful_widget(list, area, &mut list_state);
+}
+
+fn render_alias_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let focus = state.categories.aliases.focus == AliasFocus::Input;
+    let mut border_style = Style::default().fg(theme.border);
+    if focus {
+        border_style = border_style.fg(theme.accent);
+    }
+
+    let mut lines = Vec::new();
+    lines.push(Line::from(vec![
+        Span::styled("Alias", Style::default().fg(theme.dim)),
+        Span::raw(": "),
+        Span::styled(
+            state.categories.aliases.input.as_str(),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    lines.push(Line::from(Span::styled(
+        "Enter: save • Tab: focus • x: delete • Esc: back",
+        Style::default().fg(theme.dim),
+    )));
+    if let Some(err) = state.categories.aliases.error.as_ref() {
+        lines.push(Line::from(Span::styled(
+            err.as_str(),
+            Style::default().fg(theme.error),
+        )));
+    }
+
+    let block = Block::default()
+        .title("Alias input")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(border_style);
+    frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
 fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {

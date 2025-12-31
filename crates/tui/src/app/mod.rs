@@ -12,7 +12,10 @@ use crate::{
 };
 
 use api_types::{
-    category::{CategoryCreate, CategoryMergePreviewResponse, CategoryUpdate, CategoryView},
+    category::{
+        CategoryAliasView, CategoryCreate, CategoryMergePreviewResponse, CategoryUpdate,
+        CategoryView,
+    },
     flow::{FlowMode, FlowNew, FlowUpdate},
     stats::Statistic,
     transaction::{
@@ -305,6 +308,18 @@ impl App {
                             self.reset_category_form();
                             self.state.categories.mode = CategoriesMode::List;
                         }
+                        CategoriesMode::Aliases => {
+                            if self.state.categories.aliases.focus == AliasFocus::Input
+                                && !self.state.categories.aliases.input.is_empty()
+                            {
+                                self.state.categories.aliases.input.clear();
+                                self.state.categories.aliases.error = None;
+                                self.state.categories.aliases.focus = AliasFocus::List;
+                            } else {
+                                self.state.categories.mode = CategoriesMode::List;
+                                self.state.categories.aliases = CategoryAliasState::default();
+                            }
+                        }
                         CategoriesMode::List => {
                             self.state.section = Section::Home;
                         }
@@ -381,6 +396,11 @@ impl App {
                     && self.state.transactions.quick_active
                 {
                     self.state.transactions.quick_input.pop();
+                } else if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::Aliases
+                    && self.state.categories.aliases.focus == AliasFocus::Input
+                {
+                    self.state.categories.aliases.input.pop();
                 } else if self.state.section == Section::Categories
                     && matches!(
                         self.state.categories.mode,
@@ -459,6 +479,11 @@ impl App {
                             self.categories_select_prev();
                         }
                         CategoriesMode::Merge => self.category_merge_select_prev(),
+                        CategoriesMode::Aliases => {
+                            if self.state.categories.aliases.focus == AliasFocus::List {
+                                self.category_alias_select_prev();
+                            }
+                        }
                     }
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Vault
@@ -530,6 +555,11 @@ impl App {
                             self.categories_select_next();
                         }
                         CategoriesMode::Merge => self.category_merge_select_next(),
+                        CategoriesMode::Aliases => {
+                            if self.state.categories.aliases.focus == AliasFocus::List {
+                                self.category_alias_select_next();
+                            }
+                        }
                     }
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Vault
@@ -543,6 +573,13 @@ impl App {
                     let field = self.active_field_mut();
                     field.push(ch);
                 } else {
+                    if self.state.section == Section::Categories
+                        && self.state.categories.mode == CategoriesMode::Aliases
+                        && self.state.categories.aliases.focus == AliasFocus::Input
+                    {
+                        self.state.categories.aliases.input.push(ch);
+                        return Ok(());
+                    }
                     if self.handle_search_input(ch).await? {
                         return Ok(());
                     } else if self.state.section == Section::Transactions
@@ -630,6 +667,12 @@ impl App {
             && self.state.transactions.mode == TransactionsMode::Filter
         {
             self.advance_filter_focus();
+            return;
+        }
+        if self.state.section == Section::Categories
+            && self.state.categories.mode == CategoriesMode::Aliases
+        {
+            self.toggle_alias_focus();
             return;
         }
 
@@ -837,6 +880,7 @@ impl App {
             CategoriesMode::Merge => self.submit_category_merge().await,
             CategoriesMode::Create => self.submit_category_create().await,
             CategoriesMode::Rename => self.submit_category_rename().await,
+            CategoriesMode::Aliases => self.submit_category_alias_create().await,
         }
     }
 
@@ -933,17 +977,6 @@ impl App {
                 }
             }
             // Transaction list context actions (use different keys)
-            'x' | 'X' => {
-                // Toggle transfers visibility in transactions list
-                if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::List
-                {
-                    self.state.transactions.include_transfers =
-                        !self.state.transactions.include_transfers;
-                    self.load_transactions(true).await?;
-                }
-                return Ok(());
-            }
             'z' | 'Z' => {
                 // Toggle voided visibility in transactions list
                 if self.state.section == Section::Transactions
@@ -997,7 +1030,11 @@ impl App {
                 } else if self.state.section == Section::Stats {
                     self.load_stats().await?;
                 } else if self.state.section == Section::Categories {
-                    self.load_categories().await?;
+                    if self.state.categories.mode == CategoriesMode::Aliases {
+                        self.reload_category_aliases().await?;
+                    } else {
+                        self.load_categories().await?;
+                    }
                 } else if self.state.section == Section::Wallets
                     || self.state.section == Section::Flows
                 {
@@ -1168,6 +1205,29 @@ impl App {
                     && self.state.vault_ui.mode == VaultMode::View
                 {
                     self.start_vault_create();
+                }
+                return Ok(());
+            }
+            'l' | 'L' => {
+                if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::List
+                {
+                    self.start_category_aliases().await?;
+                }
+                return Ok(());
+            }
+            'x' | 'X' => {
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.state.transactions.include_transfers =
+                        !self.state.transactions.include_transfers;
+                    self.load_transactions(true).await?;
+                } else if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::Aliases
+                    && self.state.categories.aliases.focus == AliasFocus::List
+                {
+                    self.delete_category_alias().await?;
                 }
                 return Ok(());
             }
@@ -1649,6 +1709,10 @@ impl App {
         self.state.categories.error = None;
     }
 
+    fn reset_category_aliases(&mut self) {
+        self.state.categories.aliases = CategoryAliasState::default();
+    }
+
     fn wallets_select_next(&mut self) {
         let len = wallets_visible_indices(&self.state).len();
         if len == 0 {
@@ -1730,6 +1794,31 @@ impl App {
         self.state.categories.merge.confirming = false;
     }
 
+    fn category_alias_select_next(&mut self) {
+        let len = self.state.categories.aliases.items.len();
+        if len == 0 {
+            return;
+        }
+        self.state.categories.aliases.selected =
+            (self.state.categories.aliases.selected + 1).min(len - 1);
+    }
+
+    fn category_alias_select_prev(&mut self) {
+        if self.state.categories.aliases.items.is_empty() {
+            return;
+        }
+        self.state.categories.aliases.selected =
+            self.state.categories.aliases.selected.saturating_sub(1);
+    }
+
+    fn toggle_alias_focus(&mut self) {
+        let focus = self.state.categories.aliases.focus;
+        self.state.categories.aliases.focus = match focus {
+            AliasFocus::List => AliasFocus::Input,
+            AliasFocus::Input => AliasFocus::List,
+        };
+    }
+
     fn transactions_picker_next(&mut self) {
         let len = self.transactions_picker_len();
         if len == 0 {
@@ -1778,6 +1867,7 @@ impl App {
             preview: None,
             confirming: false,
         };
+        self.reset_category_aliases();
     }
 
     fn open_wallet_picker(&mut self) {
@@ -3051,6 +3141,7 @@ impl App {
     fn start_category_create(&mut self) {
         self.reset_category_form();
         self.state.categories.mode = CategoriesMode::Create;
+        self.reset_category_aliases();
     }
 
     fn start_category_rename(&mut self) {
@@ -3066,6 +3157,7 @@ impl App {
         self.reset_category_form();
         self.state.categories.form.name = category.name.clone();
         self.state.categories.mode = CategoriesMode::Rename;
+        self.reset_category_aliases();
     }
 
     fn start_vault_create(&mut self) {
@@ -3462,9 +3554,13 @@ impl App {
                     self.state.categories.selected =
                         self.state.categories.items.len().saturating_sub(1);
                 }
-                if self.state.categories.mode == CategoriesMode::Merge {
+                if matches!(
+                    self.state.categories.mode,
+                    CategoriesMode::Merge | CategoriesMode::Aliases
+                ) {
                     self.state.categories.mode = CategoriesMode::List;
                     self.state.categories.merge = CategoryMergeState::default();
+                    self.reset_category_aliases();
                 }
                 self.state.categories.error = None;
                 self.connection_ok(None);
@@ -3576,6 +3672,155 @@ impl App {
                 self.connection_error("Errore connessione");
             }
         }
+        Ok(())
+    }
+
+    async fn start_category_aliases(&mut self) -> Result<()> {
+        let Some(category) = self.selected_category() else {
+            self.set_toast("Nessuna categoria selezionata.", ToastLevel::Error);
+            return Ok(());
+        };
+        self.state.categories.mode = CategoriesMode::Aliases;
+        self.reset_category_aliases();
+        self.load_category_aliases(category.id).await?;
+        Ok(())
+    }
+
+    async fn reload_category_aliases(&mut self) -> Result<()> {
+        let Some(category) = self.selected_category() else {
+            return Ok(());
+        };
+        self.load_category_aliases(category.id).await
+    }
+
+    async fn load_category_aliases(&mut self, category_id: uuid::Uuid) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let res = self
+            .client
+            .category_aliases_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                category_id,
+                api_types::category::CategoryAliasList { vault_id },
+            )
+            .await;
+
+        match res {
+            Ok(response) => {
+                self.state.categories.aliases.items = response.aliases;
+                if self.state.categories.aliases.selected
+                    >= self.state.categories.aliases.items.len()
+                {
+                    self.state.categories.aliases.selected =
+                        self.state.categories.aliases.items.len().saturating_sub(1);
+                }
+                self.state.categories.aliases.error = None;
+                self.connection_ok(None);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.aliases.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
+            }
+        }
+        Ok(())
+    }
+
+    async fn submit_category_alias_create(&mut self) -> Result<()> {
+        if self.state.categories.aliases.focus == AliasFocus::List {
+            self.state.categories.aliases.focus = AliasFocus::Input;
+            return Ok(());
+        }
+
+        let Some(category) = self.selected_category() else {
+            self.state.categories.aliases.error =
+                Some("Nessuna categoria selezionata.".to_string());
+            return Ok(());
+        };
+        let alias = self.state.categories.aliases.input.trim();
+        if alias.is_empty() {
+            self.state.categories.aliases.error = Some("Inserisci un alias.".to_string());
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .category_alias_create(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                category.id,
+                api_types::category::CategoryAliasCreate {
+                    vault_id: self.current_vault_id()?,
+                    alias: alias.to_string(),
+                },
+            )
+            .await;
+
+        match res {
+            Ok(_) => {
+                self.state.categories.aliases.input.clear();
+                self.state.categories.aliases.focus = AliasFocus::List;
+                self.load_category_aliases(category.id).await?;
+                self.set_toast("Alias creato.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.aliases.error = Some(login_message_for_error(err));
+                self.set_toast("Errore creazione alias.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn delete_category_alias(&mut self) -> Result<()> {
+        let Some(category) = self.selected_category() else {
+            self.state.categories.aliases.error =
+                Some("Nessuna categoria selezionata.".to_string());
+            return Ok(());
+        };
+        let Some(alias) = self
+            .state
+            .categories
+            .aliases
+            .items
+            .get(self.state.categories.aliases.selected)
+        else {
+            self.state.categories.aliases.error = Some("Nessun alias selezionato.".to_string());
+            return Ok(());
+        };
+
+        let res = self
+            .client
+            .category_alias_delete(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                category.id,
+                alias.id,
+                api_types::category::CategoryAliasDelete {
+                    vault_id: self.current_vault_id()?,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(()) => {
+                self.load_category_aliases(category.id).await?;
+                self.set_toast("Alias eliminato.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.aliases.error = Some(login_message_for_error(err));
+                self.set_toast("Errore eliminazione alias.", ToastLevel::Error);
+            }
+        }
+
         Ok(())
     }
 
@@ -5354,6 +5599,7 @@ pub struct CategoriesState {
     pub items: Vec<CategoryView>,
     pub merge: CategoryMergeState,
     pub form: CategoryFormState,
+    pub aliases: CategoryAliasState,
 }
 
 impl Default for CategoriesState {
@@ -5365,6 +5611,7 @@ impl Default for CategoriesState {
             items: Vec::new(),
             merge: CategoryMergeState::default(),
             form: CategoryFormState::default(),
+            aliases: CategoryAliasState::default(),
         }
     }
 }
@@ -5375,6 +5622,7 @@ pub enum CategoriesMode {
     Merge,
     Create,
     Rename,
+    Aliases,
 }
 
 #[derive(Debug)]
@@ -5409,6 +5657,33 @@ impl Default for CategoryFormState {
             error: None,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct CategoryAliasState {
+    pub items: Vec<CategoryAliasView>,
+    pub selected: usize,
+    pub input: String,
+    pub error: Option<String>,
+    pub focus: AliasFocus,
+}
+
+impl Default for CategoryAliasState {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            selected: 0,
+            input: String::new(),
+            error: None,
+            focus: AliasFocus::List,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AliasFocus {
+    List,
+    Input,
 }
 
 #[derive(Debug)]

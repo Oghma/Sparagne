@@ -1,8 +1,10 @@
 use api_types::{
     cash_flow::CashFlowGet,
     category::{
-        CategoryCreate, CategoryCreated, CategoryList, CategoryListResponse, CategoryMerge,
-        CategoryMergePreview, CategoryMergePreviewResponse, CategoryUpdate, CategoryView,
+        CategoryAliasCreate, CategoryAliasCreated, CategoryAliasDelete, CategoryAliasList,
+        CategoryAliasListResponse, CategoryAliasView, CategoryCreate, CategoryCreated,
+        CategoryList, CategoryListResponse, CategoryMerge, CategoryMergePreview,
+        CategoryMergePreviewResponse, CategoryUpdate, CategoryView,
     },
     flow::{FlowCreated, FlowNew, FlowUpdate},
     stats::Statistic,
@@ -247,6 +249,79 @@ impl Client {
             .map_err(ClientError::Transport)?;
 
         handle_json(res).await
+    }
+
+    pub async fn category_aliases_list(
+        &self,
+        username: &str,
+        password: &str,
+        category_id: uuid::Uuid,
+        payload: CategoryAliasList,
+    ) -> std::result::Result<CategoryAliasListResponse, ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("categories/{category_id}/aliases/list"))
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn category_alias_create(
+        &self,
+        username: &str,
+        password: &str,
+        category_id: uuid::Uuid,
+        payload: CategoryAliasCreate,
+    ) -> std::result::Result<CategoryAliasCreated, ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("categories/{category_id}/aliases"))
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn category_alias_delete(
+        &self,
+        username: &str,
+        password: &str,
+        category_id: uuid::Uuid,
+        alias_id: uuid::Uuid,
+        payload: CategoryAliasDelete,
+    ) -> std::result::Result<(), ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("categories/{category_id}/aliases/{alias_id}"))
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .delete(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_empty(res).await
     }
 
     pub async fn categories_merge_preview(
