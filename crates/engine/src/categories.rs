@@ -3,6 +3,15 @@
 use sea_orm::entity::prelude::*;
 use uuid::Uuid;
 
+/// Canonical category entry exposed to clients.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Category {
+    pub id: Uuid,
+    pub name: String,
+    pub archived: bool,
+    pub is_system: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "categories")]
 pub struct Model {
@@ -42,3 +51,14 @@ impl Related<super::category_aliases::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl From<Model> for Category {
+    fn from(model: Model) -> Self {
+        Self {
+            id: model.id,
+            name: model.name,
+            archived: model.archived,
+            is_system: model.is_system,
+        }
+    }
+}

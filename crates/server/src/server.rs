@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     middleware::{self, Next},
     response::Response,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use axum_extra::{
     TypedHeader,
@@ -14,7 +14,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 use std::sync::Arc;
 
-use crate::{cash_flow, flows, memberships, statistics, transactions, user, vault, wallets};
+use crate::{cash_flow, categories, flows, memberships, statistics, transactions, user, vault, wallets};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
@@ -112,6 +112,22 @@ fn router(state: ServerState) -> Router {
         )
         .route("/flows", post(flows::flow_new))
         .route("/flows/{id}", axum::routing::patch(flows::flow_update))
+        .route("/categories/list", post(categories::list))
+        .route("/categories", post(categories::create))
+        .route(
+            "/categories/{id}",
+            axum::routing::patch(categories::update),
+        )
+        .route(
+            "/categories/{id}/aliases/list",
+            post(categories::list_aliases),
+        )
+        .route("/categories/{id}/aliases", post(categories::create_alias))
+        .route(
+            "/categories/{category_id}/aliases/{alias_id}",
+            delete(categories::delete_alias),
+        )
+        .route("/categories/{id}/merge", post(categories::merge))
         .route("/income", post(transactions::income_new))
         .route("/expense", post(transactions::expense_new))
         .route("/refund", post(transactions::refund_new))
@@ -199,6 +215,7 @@ mod http_tests {
     use super::*;
 
     use api_types::{
+        category,
         flow,
         transaction::{TransactionDetailResponse, TransactionGet, TransactionList},
         wallet,
@@ -289,6 +306,7 @@ mod http_tests {
                 flow_id: Some(flow_id),
                 wallet_id: Some(wallet_id),
                 meta: engine::TxMeta {
+                    category_id: None,
                     category: None,
                     note: None,
                     idempotency_key: None,
@@ -377,6 +395,7 @@ mod http_tests {
                 flow_id: Some(flow_id),
                 wallet_id: Some(wallet_id),
                 meta: engine::TxMeta {
+                    category_id: None,
                     category: None,
                     note: None,
                     idempotency_key: None,
@@ -459,6 +478,7 @@ mod http_tests {
                 flow_id: Some(flow_id),
                 wallet_id: Some(wallet_id),
                 meta: engine::TxMeta {
+                    category_id: None,
                     category: None,
                     note: None,
                     idempotency_key: None,
@@ -501,6 +521,127 @@ mod http_tests {
         let list: api_types::transaction::TransactionListResponse =
             serde_json::from_slice(&body).unwrap();
         assert!(list.transactions.iter().any(|t| t.id == tx_id));
+    }
+
+    #[tokio::test]
+    async fn vault_owner_can_manage_categories_and_aliases() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/categories")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&category::CategoryCreate {
+                    vault_id: vault_id.clone(),
+                    name: "Spese".to_string(),
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::CREATED);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let created: category::CategoryCreated = serde_json::from_slice(&body).unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/categories/list")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&category::CategoryList {
+                    vault_id: vault_id.clone(),
+                    include_archived: None,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let list: category::CategoryListResponse = serde_json::from_slice(&body).unwrap();
+        assert!(list.categories.iter().any(|c| c.id == created.id));
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri(format!("/categories/{}/aliases", created.id))
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&category::CategoryAliasCreate {
+                    vault_id: vault_id.clone(),
+                    alias: "spesa".to_string(),
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::CREATED);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let alias: category::CategoryAliasCreated = serde_json::from_slice(&body).unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri(format!("/categories/{}/aliases/list", created.id))
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&category::CategoryAliasList {
+                    vault_id: vault_id.clone(),
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let list: category::CategoryAliasListResponse = serde_json::from_slice(&body).unwrap();
+        assert!(list.aliases.iter().any(|a| a.id == alias.id));
+
+        let req = axum::http::Request::builder()
+            .method("DELETE")
+            .uri(format!(
+                "/categories/{}/aliases/{}",
+                created.id, alias.id
+            ))
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&category::CategoryAliasDelete {
+                    vault_id: vault_id.clone(),
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
     }
 
     #[tokio::test]

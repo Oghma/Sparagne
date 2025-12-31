@@ -10,6 +10,8 @@ use uuid::Uuid;
 /// Common metadata for transaction creation.
 #[derive(Clone, Debug)]
 pub struct TxMeta {
+    /// Optional canonical category id (takes precedence over `category`).
+    pub category_id: Option<Uuid>,
     pub category: Option<String>,
     pub note: Option<String>,
     pub idempotency_key: Option<String>,
@@ -20,11 +22,19 @@ impl TxMeta {
     #[must_use]
     pub fn new(occurred_at: DateTime<Utc>) -> Self {
         Self {
+            category_id: None,
             category: None,
             note: None,
             idempotency_key: None,
             occurred_at,
         }
+    }
+
+    /// Set a canonical category id (takes precedence over `category`).
+    #[must_use]
+    pub fn category_id(mut self, category_id: Uuid) -> Self {
+        self.category_id = Some(category_id);
+        self
     }
 
     #[must_use]
@@ -100,6 +110,12 @@ impl IncomeCmd {
     }
 
     #[must_use]
+    pub fn category_id(mut self, category_id: Uuid) -> Self {
+        self.meta.category_id = Some(category_id);
+        self
+    }
+
+    #[must_use]
     pub fn note(mut self, note: impl Into<String>) -> Self {
         self.meta.note = Some(note.into());
         self
@@ -166,6 +182,12 @@ impl ExpenseCmd {
     }
 
     #[must_use]
+    pub fn category_id(mut self, category_id: Uuid) -> Self {
+        self.meta.category_id = Some(category_id);
+        self
+    }
+
+    #[must_use]
     pub fn note(mut self, note: impl Into<String>) -> Self {
         self.meta.note = Some(note.into());
         self
@@ -228,6 +250,12 @@ impl RefundCmd {
     #[must_use]
     pub fn category(mut self, category: impl Into<String>) -> Self {
         self.meta.category = Some(category.into());
+        self
+    }
+
+    #[must_use]
+    pub fn category_id(mut self, category_id: Uuid) -> Self {
+        self.meta.category_id = Some(category_id);
         self
     }
 
@@ -361,6 +389,7 @@ pub struct UpdateTransactionCmd {
     pub from_flow_id: Option<Uuid>,
     pub to_flow_id: Option<Uuid>,
 
+    pub category_id: Option<Uuid>,
     pub category: Option<String>,
     pub note: Option<String>,
     pub occurred_at: Option<DateTime<Utc>>,
@@ -384,6 +413,7 @@ impl UpdateTransactionCmd {
             to_wallet_id: None,
             from_flow_id: None,
             to_flow_id: None,
+            category_id: None,
             category: None,
             note: None,
             occurred_at: None,
@@ -435,6 +465,13 @@ impl UpdateTransactionCmd {
     #[must_use]
     pub fn category(mut self, category: impl Into<String>) -> Self {
         self.category = Some(category.into());
+        self
+    }
+
+    /// Set a canonical category id (takes precedence over `category`).
+    #[must_use]
+    pub fn category_id(mut self, category_id: Uuid) -> Self {
+        self.category_id = Some(category_id);
         self
     }
 

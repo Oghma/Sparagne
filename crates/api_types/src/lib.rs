@@ -149,6 +149,98 @@ pub mod vault {
     }
 }
 
+pub mod category {
+    use super::*;
+
+    /// List categories for a vault.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryList {
+        pub vault_id: String,
+        /// If true, includes archived categories (default: false).
+        pub include_archived: Option<bool>,
+    }
+
+    /// A category entry for clients.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryView {
+        pub id: Uuid,
+        pub name: String,
+        pub archived: bool,
+        pub is_system: bool,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryListResponse {
+        pub categories: Vec<CategoryView>,
+    }
+
+    /// Create a new category in a vault.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryCreate {
+        pub vault_id: String,
+        pub name: String,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryCreated {
+        pub id: Uuid,
+        pub name: String,
+    }
+
+    /// Patch a category.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryUpdate {
+        pub vault_id: String,
+        pub name: Option<String>,
+        pub archived: Option<bool>,
+    }
+
+    /// List aliases for a category.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryAliasList {
+        pub vault_id: String,
+    }
+
+    /// Alias entry.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryAliasView {
+        pub id: Uuid,
+        pub alias: String,
+        pub category_id: Uuid,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryAliasListResponse {
+        pub aliases: Vec<CategoryAliasView>,
+    }
+
+    /// Create a category alias.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryAliasCreate {
+        pub vault_id: String,
+        pub alias: String,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryAliasCreated {
+        pub id: Uuid,
+        pub alias: String,
+    }
+
+    /// Delete a category alias.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryAliasDelete {
+        pub vault_id: String,
+    }
+
+    /// Merge a category into another category.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryMerge {
+        pub vault_id: String,
+        pub into_category_id: Uuid,
+    }
+}
+
 pub mod user {
     use super::*;
 
@@ -261,6 +353,7 @@ pub mod transaction {
         pub occurred_at: DateTime<FixedOffset>,
         /// Signed amount for the selected target (wallet/flow).
         pub amount_minor: i64,
+        pub category_id: Uuid,
         pub category: Option<String>,
         pub note: Option<String>,
         pub voided: bool,
@@ -304,6 +397,7 @@ pub mod transaction {
         /// Positive absolute amount of the transaction.
         pub amount_minor: i64,
         pub currency: Currency,
+        pub category_id: Uuid,
         pub category: Option<String>,
         pub note: Option<String>,
         pub voided: bool,
@@ -326,6 +420,8 @@ pub mod transaction {
         pub amount_minor: i64,
         pub flow_id: Option<Uuid>,
         pub wallet_id: Option<Uuid>,
+        /// Optional: use a canonical category id instead of a name.
+        pub category_id: Option<Uuid>,
         pub category: Option<String>,
         pub note: Option<String>,
         /// Optional idempotency key for safely retrying the same create
@@ -341,6 +437,8 @@ pub mod transaction {
         pub amount_minor: i64,
         pub flow_id: Option<Uuid>,
         pub wallet_id: Option<Uuid>,
+        /// Optional: use a canonical category id instead of a name.
+        pub category_id: Option<Uuid>,
         pub category: Option<String>,
         pub note: Option<String>,
         /// Optional idempotency key for safely retrying the same create
@@ -357,6 +455,8 @@ pub mod transaction {
         pub amount_minor: i64,
         pub flow_id: Option<Uuid>,
         pub wallet_id: Option<Uuid>,
+        /// Optional: use a canonical category id instead of a name.
+        pub category_id: Option<Uuid>,
         pub category: Option<String>,
         pub note: Option<String>,
         /// Optional idempotency key for safely retrying the same create
@@ -411,6 +511,8 @@ pub mod transaction {
         pub from_flow_id: Option<Uuid>,
         /// If present, updates the "to" flow (TransferFlow).
         pub to_flow_id: Option<Uuid>,
+        /// Optional: use a canonical category id instead of a name.
+        pub category_id: Option<Uuid>,
         pub category: Option<String>,
         pub note: Option<String>,
         pub occurred_at: Option<DateTime<FixedOffset>>,

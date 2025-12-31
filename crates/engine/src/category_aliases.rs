@@ -3,6 +3,14 @@
 use sea_orm::entity::prelude::*;
 use uuid::Uuid;
 
+/// Alias entry exposed to clients.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CategoryAlias {
+    pub id: Uuid,
+    pub alias: String,
+    pub category_id: Uuid,
+}
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "category_aliases")]
 pub struct Model {
@@ -47,3 +55,13 @@ impl Related<super::vault::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl From<Model> for CategoryAlias {
+    fn from(model: Model) -> Self {
+        Self {
+            id: model.id,
+            alias: model.alias,
+            category_id: model.category_id,
+        }
+    }
+}

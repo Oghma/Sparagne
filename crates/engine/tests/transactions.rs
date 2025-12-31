@@ -1357,6 +1357,180 @@ async fn category_similar_requires_confirmation() {
 }
 
 #[tokio::test]
+async fn list_categories_includes_uncategorized_and_new() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let initial = engine
+        .list_categories(&vault_id, "alice", false)
+        .await
+        .unwrap();
+    assert!(initial.iter().any(|cat| cat.is_system && cat.name == "Uncategorized"));
+
+    engine
+        .create_category(&vault_id, "Spese", "alice")
+        .await
+        .unwrap();
+
+    let categories = engine
+        .list_categories(&vault_id, "alice", false)
+        .await
+        .unwrap();
+    assert!(categories.iter().any(|cat| cat.name == "Spese"));
+}
+
+#[tokio::test]
+async fn alias_resolves_to_category() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    let category = engine
+        .create_category(&vault_id, "Spese", "alice")
+        .await
+        .unwrap();
+    engine
+        .create_category_alias(&vault_id, category.id, "spesa", "alice")
+        .await
+        .unwrap();
+
+    engine
+        .income(
+            engine::IncomeCmd::new(&vault_id, "alice", 50, Utc::now())
+                .wallet_id(wallet_id)
+                .category("spesa"),
+        )
+        .await
+        .unwrap();
+
+    let txs = engine
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            10,
+            &TransactionListFilter {
+                include_voided: false,
+                include_transfers: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(txs.len(), 1);
+    assert_eq!(txs[0].0.category.as_deref(), Some("Spese"));
+}
+
+#[tokio::test]
+async fn rename_category_updates_transactions() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    let category = engine
+        .create_category(&vault_id, "Food", "alice")
+        .await
+        .unwrap();
+
+    engine
+        .expense(
+            engine::ExpenseCmd::new(&vault_id, "alice", 40, Utc::now())
+                .wallet_id(wallet_id)
+                .category("Food"),
+        )
+        .await
+        .unwrap();
+
+    engine
+        .update_category(&vault_id, category.id, Some("Groceries"), None, "alice")
+        .await
+        .unwrap();
+
+    let txs = engine
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            10,
+            &TransactionListFilter {
+                include_voided: false,
+                include_transfers: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(txs.len(), 1);
+    assert_eq!(txs[0].0.category_id, category.id);
+    assert_eq!(txs[0].0.category.as_deref(), Some("Groceries"));
+}
+
+#[tokio::test]
+async fn archived_category_rejected_on_create() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    let category = engine
+        .create_category(&vault_id, "Travel", "alice")
+        .await
+        .unwrap();
+    engine
+        .update_category(&vault_id, category.id, None, Some(true), "alice")
+        .await
+        .unwrap();
+
+    let err = engine
+        .income(
+            engine::IncomeCmd::new(&vault_id, "alice", 10, Utc::now())
+                .wallet_id(wallet_id)
+                .category("Travel"),
+        )
+        .await
+        .unwrap_err();
+
+    match err {
+        EngineError::InvalidName(message) => {
+            assert!(message.contains("archived"));
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn list_transactions_can_filter_by_date_range_and_kinds() {
     let (engine, _db) = engine_with_db().await;
     let vault_id = engine

@@ -5,6 +5,10 @@
 
 /// Cash flow aggregate model.
 pub use cash_flows::CashFlow;
+/// Category entries for transactions.
+pub use categories::Category;
+/// Category aliases for normalized lookups.
+pub use category_aliases::CategoryAlias;
 /// Command inputs for transaction operations.
 pub use commands::{
     ExpenseCmd, IncomeCmd, RefundCmd, TransferFlowCmd, TransferWalletCmd, TxMeta,

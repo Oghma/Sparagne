@@ -88,7 +88,12 @@ impl Engine {
                     .await?;
                 let currency = vault_model.currency;
                 let category = engine
-                    .resolve_category(db_tx, &cmd.vault_id, cmd.meta.category.as_deref())
+                    .resolve_category_input(
+                        db_tx,
+                        &cmd.vault_id,
+                        cmd.meta.category_id,
+                        cmd.meta.category.as_deref(),
+                    )
                     .await?;
                 let resolved_flow_id = engine
                     .resolve_flow_id(db_tx, &cmd.vault_id, cmd.flow_id)

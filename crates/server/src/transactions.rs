@@ -141,6 +141,7 @@ pub async fn list(
             kind: map_kind(tx.kind),
             occurred_at: tx.occurred_at.with_timezone(&utc),
             amount_minor,
+            category_id: tx.category_id,
             category: tx.category,
             note: tx.note,
             voided: tx.voided_at.is_some(),
@@ -172,6 +173,7 @@ pub async fn get_detail(
         occurred_at: tx.occurred_at.with_timezone(&utc),
         amount_minor: tx.amount_minor,
         currency: map_currency(tx.currency),
+        category_id: tx.category_id,
         category: tx.category,
         note: tx.note,
         voided: tx.voided_at.is_some(),
@@ -204,6 +206,7 @@ pub async fn income_new(
             flow_id: payload.flow_id,
             wallet_id: payload.wallet_id,
             meta: engine::TxMeta {
+                category_id: payload.category_id,
                 category: payload.category,
                 note: payload.note,
                 idempotency_key: payload.idempotency_key,
@@ -229,6 +232,7 @@ pub async fn expense_new(
             flow_id: payload.flow_id,
             wallet_id: payload.wallet_id,
             meta: engine::TxMeta {
+                category_id: payload.category_id,
                 category: payload.category,
                 note: payload.note,
                 idempotency_key: payload.idempotency_key,
@@ -254,6 +258,7 @@ pub async fn refund_new(
             flow_id: payload.flow_id,
             wallet_id: payload.wallet_id,
             meta: engine::TxMeta {
+                category_id: payload.category_id,
                 category: payload.category,
                 note: payload.note,
                 idempotency_key: payload.idempotency_key,
@@ -330,6 +335,7 @@ pub async fn update(
             to_wallet_id: payload.to_wallet_id,
             from_flow_id: payload.from_flow_id,
             to_flow_id: payload.to_flow_id,
+            category_id: payload.category_id,
             category: payload.category,
             note: payload.note,
             occurred_at: occurred_at_utc,

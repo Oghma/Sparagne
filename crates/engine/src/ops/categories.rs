@@ -1,8 +1,8 @@
-use sea_orm::{ActiveValue, DatabaseTransaction, QueryFilter, prelude::*};
+use sea_orm::{ActiveValue, DatabaseTransaction, QueryFilter, QueryOrder, prelude::*, sea_query::{Expr, Value}};
 use uuid::Uuid;
 
 use crate::{
-    EngineError, ResultEngine, categories, category_aliases,
+    Category, CategoryAlias, EngineError, ResultEngine, categories, category_aliases, transactions,
     util::{normalize_category_display, normalize_category_key},
 };
 
@@ -17,6 +17,344 @@ pub(super) struct CategorySelection {
 }
 
 impl Engine {
+    pub async fn list_categories(
+        &self,
+        vault_id: &str,
+        user_id: &str,
+        include_archived: bool,
+    ) -> ResultEngine<Vec<Category>> {
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
+
+                let mut query = categories::Entity::find()
+                    .filter(categories::Column::VaultId.eq(vault_uuid))
+                    .order_by_asc(categories::Column::Name);
+                if !include_archived {
+                    query = query.filter(categories::Column::Archived.eq(false));
+                }
+                let items = query
+                    .all(db_tx)
+                    .await?
+                    .into_iter()
+                    .map(Category::from)
+                    .collect();
+                Ok(items)
+            })
+        })
+        .await
+    }
+
+    pub async fn create_category(
+        &self,
+        vault_id: &str,
+        name: &str,
+        user_id: &str,
+    ) -> ResultEngine<Category> {
+        let vault_id = vault_id.to_string();
+        let name = name.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+
+                let display = normalize_category_display(&name)?;
+                let normalized = normalize_category_key(&display)?;
+                if normalized == UNCATEGORIZED_NAME_NORM {
+                    return Err(EngineError::InvalidName(
+                        "category name is reserved".to_string(),
+                    ));
+                }
+
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
+                if categories::Entity::find()
+                    .filter(categories::Column::VaultId.eq(vault_uuid))
+                    .filter(categories::Column::NameNorm.eq(normalized.clone()))
+                    .one(db_tx)
+                    .await?
+                    .is_some()
+                {
+                    return Err(EngineError::ExistingKey(display));
+                }
+                if category_aliases::Entity::find()
+                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+                    .filter(category_aliases::Column::AliasNorm.eq(normalized.clone()))
+                    .one(db_tx)
+                    .await?
+                    .is_some()
+                {
+                    return Err(EngineError::ExistingKey(display));
+                }
+
+                if let Some(suggestion) =
+                    Self::find_similar_category(db_tx, vault_uuid, &normalized).await?
+                {
+                    return Err(EngineError::InvalidName(format!(
+                        "category '{display}' too similar to existing '{}'; use '{}' to confirm",
+                        suggestion.name, suggestion.name
+                    )));
+                }
+
+                let id = Uuid::new_v4();
+                let active = categories::ActiveModel {
+                    id: ActiveValue::Set(id),
+                    vault_id: ActiveValue::Set(vault_uuid),
+                    name: ActiveValue::Set(display.clone()),
+                    name_norm: ActiveValue::Set(normalized),
+                    archived: ActiveValue::Set(false),
+                    is_system: ActiveValue::Set(false),
+                };
+                let model = active.insert(db_tx).await?;
+                Ok(Category::from(model))
+            })
+        })
+        .await
+    }
+
+    pub async fn update_category(
+        &self,
+        vault_id: &str,
+        category_id: Uuid,
+        name: Option<&str>,
+        archived: Option<bool>,
+        user_id: &str,
+    ) -> ResultEngine<Category> {
+        let vault_id = vault_id.to_string();
+        let name = name.map(str::to_string);
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
+                let model = categories::Entity::find_by_id(category_id)
+                    .filter(categories::Column::VaultId.eq(vault_uuid))
+                    .one(db_tx)
+                    .await?
+                    .ok_or_else(|| EngineError::KeyNotFound("category not exists".to_string()))?;
+                if model.is_system {
+                    return Err(EngineError::InvalidName(
+                        "system categories cannot be modified".to_string(),
+                    ));
+                }
+
+                let mut name_norm = model.name_norm.clone();
+                let mut name_display = model.name.clone();
+                if let Some(new_name) = name.as_deref() {
+                    let display = normalize_category_display(new_name)?;
+                    let normalized = normalize_category_key(&display)?;
+                    if normalized == UNCATEGORIZED_NAME_NORM {
+                        return Err(EngineError::InvalidName(
+                            "category name is reserved".to_string(),
+                        ));
+                    }
+
+                    let conflict = categories::Entity::find()
+                        .filter(categories::Column::VaultId.eq(vault_uuid))
+                        .filter(categories::Column::NameNorm.eq(normalized.clone()))
+                        .filter(categories::Column::Id.ne(category_id))
+                        .one(db_tx)
+                        .await?
+                        .is_some();
+                    if conflict {
+                        return Err(EngineError::ExistingKey(display));
+                    }
+                    let alias_conflict = category_aliases::Entity::find()
+                        .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+                        .filter(category_aliases::Column::AliasNorm.eq(normalized.clone()))
+                        .one(db_tx)
+                        .await?
+                        .is_some();
+                    if alias_conflict {
+                        return Err(EngineError::ExistingKey(display));
+                    }
+
+                    name_norm = normalized;
+                    name_display = display;
+                }
+
+                let archived = archived.unwrap_or(model.archived);
+                let active = categories::ActiveModel {
+                    id: ActiveValue::Set(category_id),
+                    name: ActiveValue::Set(name_display.clone()),
+                    name_norm: ActiveValue::Set(name_norm.clone()),
+                    archived: ActiveValue::Set(archived),
+                    ..Default::default()
+                };
+                active.update(db_tx).await?;
+
+                if name_display != model.name {
+                    transactions::Entity::update_many()
+                        .col_expr(
+                            transactions::Column::Category,
+                            Expr::value(name_display.clone()),
+                        )
+                        .filter(transactions::Column::CategoryId.eq(category_id))
+                        .exec(db_tx)
+                        .await?;
+                }
+
+                Ok(Category {
+                    id: category_id,
+                    name: name_display,
+                    archived,
+                    is_system: model.is_system,
+                })
+            })
+        })
+        .await
+    }
+
+    pub async fn list_category_aliases(
+        &self,
+        vault_id: &str,
+        category_id: Uuid,
+        user_id: &str,
+    ) -> ResultEngine<Vec<CategoryAlias>> {
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
+                engine
+                    .require_category_in_vault(db_tx, vault_uuid, category_id)
+                    .await?;
+
+                let aliases = category_aliases::Entity::find()
+                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+                    .filter(category_aliases::Column::CategoryId.eq(category_id))
+                    .order_by_asc(category_aliases::Column::Alias)
+                    .all(db_tx)
+                    .await?
+                    .into_iter()
+                    .map(CategoryAlias::from)
+                    .collect();
+                Ok(aliases)
+            })
+        })
+        .await
+    }
+
+    pub async fn create_category_alias(
+        &self,
+        vault_id: &str,
+        category_id: Uuid,
+        alias: &str,
+        user_id: &str,
+    ) -> ResultEngine<CategoryAlias> {
+        let vault_id = vault_id.to_string();
+        let alias = alias.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
+                let category = engine
+                    .require_category_in_vault(db_tx, vault_uuid, category_id)
+                    .await?;
+                if category.is_system {
+                    return Err(EngineError::InvalidName(
+                        "system categories cannot have aliases".to_string(),
+                    ));
+                }
+                if category.archived {
+                    return Err(EngineError::InvalidName(
+                        "archived categories cannot have aliases".to_string(),
+                    ));
+                }
+
+                let display = normalize_category_display(&alias)?;
+                let normalized = normalize_category_key(&display)?;
+                if normalized == UNCATEGORIZED_NAME_NORM {
+                    return Err(EngineError::InvalidName(
+                        "alias name is reserved".to_string(),
+                    ));
+                }
+                if normalized == category.name_norm {
+                    return Err(EngineError::ExistingKey(display));
+                }
+
+                if categories::Entity::find()
+                    .filter(categories::Column::VaultId.eq(vault_uuid))
+                    .filter(categories::Column::NameNorm.eq(normalized.clone()))
+                    .one(db_tx)
+                    .await?
+                    .is_some()
+                {
+                    return Err(EngineError::ExistingKey(display));
+                }
+                if category_aliases::Entity::find()
+                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+                    .filter(category_aliases::Column::AliasNorm.eq(normalized.clone()))
+                    .one(db_tx)
+                    .await?
+                    .is_some()
+                {
+                    return Err(EngineError::ExistingKey(display));
+                }
+
+                let active = category_aliases::ActiveModel {
+                    id: ActiveValue::Set(Uuid::new_v4()),
+                    vault_id: ActiveValue::Set(vault_uuid),
+                    category_id: ActiveValue::Set(category_id),
+                    alias: ActiveValue::Set(display.clone()),
+                    alias_norm: ActiveValue::Set(normalized),
+                };
+                let model = active.insert(db_tx).await?;
+                Ok(CategoryAlias::from(model))
+            })
+        })
+        .await
+    }
+
+    pub async fn delete_category_alias(
+        &self,
+        vault_id: &str,
+        category_id: Uuid,
+        alias_id: Uuid,
+        user_id: &str,
+    ) -> ResultEngine<()> {
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
+                engine
+                    .require_category_in_vault(db_tx, vault_uuid, category_id)
+                    .await?;
+
+                let result = category_aliases::Entity::delete_many()
+                    .filter(category_aliases::Column::Id.eq(alias_id))
+                    .filter(category_aliases::Column::CategoryId.eq(category_id))
+                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+                    .exec(db_tx)
+                    .await?;
+                if result.rows_affected == 0 {
+                    return Err(EngineError::KeyNotFound("alias not exists".to_string()));
+                }
+                Ok(())
+            })
+        })
+        .await
+    }
+
     pub(super) async fn resolve_category(
         &self,
         db_tx: &DatabaseTransaction,
@@ -41,6 +379,11 @@ impl Engine {
             .one(db_tx)
             .await?
         {
+            if model.archived {
+                return Err(EngineError::InvalidName(
+                    "category is archived".to_string(),
+                ));
+            }
             return Ok(Self::category_selection(&model));
         }
 
@@ -51,6 +394,11 @@ impl Engine {
             .one(db_tx)
             .await?
         {
+            if model.archived {
+                return Err(EngineError::InvalidName(
+                    "category is archived".to_string(),
+                ));
+            }
             return Ok(Self::category_selection(&model));
         }
 
@@ -109,6 +457,52 @@ impl Engine {
         Ok(CategorySelection { id, name: None })
     }
 
+    pub(super) async fn resolve_category_input(
+        &self,
+        db_tx: &DatabaseTransaction,
+        vault_id: &str,
+        category_id: Option<Uuid>,
+        input: Option<&str>,
+    ) -> ResultEngine<CategorySelection> {
+        if let Some(category_id) = category_id {
+            return self
+                .category_by_id(db_tx, vault_id, category_id)
+                .await;
+        }
+        self.resolve_category(db_tx, vault_id, input).await
+    }
+
+    async fn category_by_id(
+        &self,
+        db_tx: &DatabaseTransaction,
+        vault_id: &str,
+        category_id: Uuid,
+    ) -> ResultEngine<CategorySelection> {
+        let vault_uuid = parse_vault_uuid(vault_id)?;
+        let model = categories::Entity::find_by_id(category_id)
+            .filter(categories::Column::VaultId.eq(vault_uuid))
+            .one(db_tx)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("category not exists".to_string()))?;
+        if model.archived {
+            return Err(EngineError::InvalidName("category is archived".to_string()));
+        }
+        Ok(Self::category_selection(&model))
+    }
+
+    async fn require_category_in_vault(
+        &self,
+        db_tx: &DatabaseTransaction,
+        vault_uuid: Uuid,
+        category_id: Uuid,
+    ) -> ResultEngine<categories::Model> {
+        categories::Entity::find_by_id(category_id)
+            .filter(categories::Column::VaultId.eq(vault_uuid))
+            .one(db_tx)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("category not exists".to_string()))
+    }
+
     fn category_selection(model: &categories::Model) -> CategorySelection {
         let name = if model.is_system && model.name_norm == UNCATEGORIZED_NAME_NORM {
             None
@@ -126,6 +520,7 @@ impl Engine {
         let candidates = categories::Entity::find()
             .filter(categories::Column::VaultId.eq(vault_id))
             .filter(categories::Column::IsSystem.eq(false))
+            .filter(categories::Column::Archived.eq(false))
             .all(db_tx)
             .await?;
 

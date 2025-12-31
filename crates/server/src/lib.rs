@@ -5,6 +5,7 @@ use serde::Serialize;
 pub use server::{run, run_with_listener, spawn_with_listener};
 
 mod cash_flow;
+mod categories;
 mod flows;
 mod memberships;
 mod server;
@@ -39,6 +40,14 @@ pub mod types {
 
     pub mod stats {
         pub use api_types::stats::Statistic;
+    }
+
+    pub mod category {
+        pub use api_types::category::{
+            CategoryAliasCreate, CategoryAliasCreated, CategoryAliasDelete, CategoryAliasList,
+            CategoryAliasListResponse, CategoryAliasView, CategoryCreate, CategoryCreated,
+            CategoryList, CategoryListResponse, CategoryMerge, CategoryUpdate, CategoryView,
+        };
     }
 
     pub mod wallet {

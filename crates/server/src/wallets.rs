@@ -46,6 +46,7 @@ pub async fn wallet_new(
                     flow_id: Some(unallocated_flow_id),
                     wallet_id: Some(wallet_id),
                     meta: engine::TxMeta {
+                        category_id: None,
                         category: Some("opening".to_string()),
                         note: Some(format!("opening balance for wallet '{name_trimmed}'")),
                         idempotency_key: None,
@@ -63,6 +64,7 @@ pub async fn wallet_new(
                     flow_id: Some(unallocated_flow_id),
                     wallet_id: Some(wallet_id),
                     meta: engine::TxMeta {
+                        category_id: None,
                         category: Some("opening".to_string()),
                         note: Some(format!("opening balance for wallet '{name_trimmed}'")),
                         idempotency_key: None,
