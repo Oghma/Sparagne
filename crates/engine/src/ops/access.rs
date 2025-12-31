@@ -19,6 +19,18 @@ impl MembershipRole {
     pub(super) fn can_write(self) -> bool {
         matches!(self, Self::Owner | Self::Editor)
     }
+
+    pub(super) fn is_owner(self) -> bool {
+        matches!(self, Self::Owner)
+    }
+
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Owner => "owner",
+            Self::Editor => "editor",
+            Self::Viewer => "viewer",
+        }
+    }
 }
 
 impl TryFrom<&str> for MembershipRole {
@@ -143,7 +155,14 @@ impl Engine {
             .find_vault_by_id(db, vault_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if model.user_id != user_id {
+        if model.user_id == user_id {
+            return Ok(model);
+        }
+        let role = self
+            .vault_membership_role(db, model.id, user_id)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+        if !role.is_owner() {
             return Err(EngineError::KeyNotFound("vault not exists".to_string()));
         }
         Ok(model)

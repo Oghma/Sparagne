@@ -21,20 +21,25 @@ impl Engine {
         let user_id = user_id.to_string();
         self.with_tx(|engine, db_tx| {
             Box::pin(async move {
-                engine
+                let vault = engine
                     .require_vault_owner(db_tx, vault_id.as_str(), user_id.as_str())
                     .await?;
                 engine
                     .require_user_exists(db_tx, member_username.as_str())
                     .await?;
 
-                let _role = MembershipRole::try_from(role.as_str())?;
+                let role = MembershipRole::try_from(role.as_str())?;
+                if member_username == vault.user_id && !role.is_owner() {
+                    return Err(EngineError::Forbidden(
+                        "cannot change vault owner role".to_string(),
+                    ));
+                }
                 let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
 
                 let active = vault_memberships::ActiveModel {
                     vault_id: ActiveValue::Set(vault_uuid),
                     user_id: ActiveValue::Set(member_username.clone()),
-                    role: ActiveValue::Set(role.clone()),
+                    role: ActiveValue::Set(role.as_str().to_string()),
                 };
 
                 // Upsert: insert if missing, otherwise update role.
@@ -72,7 +77,7 @@ impl Engine {
                     .require_vault_owner(db_tx, vault_id.as_str(), user_id.as_str())
                     .await?;
                 if member_username == vault.user_id {
-                    return Err(EngineError::InvalidAmount(
+                    return Err(EngineError::Forbidden(
                         "cannot remove vault owner".to_string(),
                     ));
                 }
@@ -134,7 +139,7 @@ impl Engine {
                 engine
                     .require_user_exists(db_tx, member_username.as_str())
                     .await?;
-                let _role = MembershipRole::try_from(role.as_str())?;
+                let role = MembershipRole::try_from(role.as_str())?;
 
                 let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
                 let flow = cash_flows::Entity::find_by_id(flow_id)
@@ -151,19 +156,30 @@ impl Engine {
                 let active = flow_memberships::ActiveModel {
                     flow_id: ActiveValue::Set(flow_id),
                     user_id: ActiveValue::Set(member_username.clone()),
-                    role: ActiveValue::Set(role.clone()),
+                    role: ActiveValue::Set(role.as_str().to_string()),
                 };
 
-                match flow_memberships::Entity::find_by_id((flow_id, member_username.clone()))
-                    .one(db_tx)
-                    .await?
-                {
-                    Some(_) => {
-                        active.update(db_tx).await?;
+                let existing =
+                    flow_memberships::Entity::find_by_id((flow_id, member_username.clone()))
+                        .one(db_tx)
+                        .await?;
+                if let Some(existing) = &existing {
+                    let existing_role = MembershipRole::try_from(existing.role.as_str())?;
+                    if existing_role.is_owner() && !role.is_owner() {
+                        let owner_count = flow_memberships::Entity::find()
+                            .filter(flow_memberships::Column::FlowId.eq(flow_id))
+                            .filter(flow_memberships::Column::Role.eq("owner"))
+                            .count(db_tx)
+                            .await?;
+                        if owner_count <= 1 {
+                            return Err(EngineError::Forbidden(
+                                "cannot remove last flow owner".to_string(),
+                            ));
+                        }
                     }
-                    None => {
-                        active.insert(db_tx).await?;
-                    }
+                    active.update(db_tx).await?;
+                } else {
+                    active.insert(db_tx).await?;
                 }
 
                 Ok(())
@@ -193,6 +209,26 @@ impl Engine {
                 engine
                     .require_flow_read(db_tx, vault_id.as_str(), flow_id, user_id.as_str())
                     .await?;
+
+                if let Some(existing) =
+                    flow_memberships::Entity::find_by_id((flow_id, member_username.clone()))
+                        .one(db_tx)
+                        .await?
+                {
+                    let existing_role = MembershipRole::try_from(existing.role.as_str())?;
+                    if existing_role.is_owner() {
+                        let owner_count = flow_memberships::Entity::find()
+                            .filter(flow_memberships::Column::FlowId.eq(flow_id))
+                            .filter(flow_memberships::Column::Role.eq("owner"))
+                            .count(db_tx)
+                            .await?;
+                        if owner_count <= 1 {
+                            return Err(EngineError::Forbidden(
+                                "cannot remove last flow owner".to_string(),
+                            ));
+                        }
+                    }
+                }
 
                 flow_memberships::Entity::delete_by_id((flow_id, member_username.clone()))
                     .exec(db_tx)
