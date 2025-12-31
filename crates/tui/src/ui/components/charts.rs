@@ -26,10 +26,14 @@ pub fn render_bar_chart(
         .value_style(Style::default().fg(theme.text).add_modifier(Modifier::BOLD))
         .label_style(Style::default().fg(theme.dim));
 
-    let card = Card::new(title, theme);
-    let inner = card.inner(area);
-    card.render_frame(frame, area);
-    frame.render_widget(chart, inner);
+    if title.is_empty() {
+        frame.render_widget(chart, area);
+    } else {
+        let card = Card::new(title, theme);
+        let inner = card.inner(area);
+        card.render_frame(frame, area);
+        frame.render_widget(chart, inner);
+    }
 }
 
 /// Renders a sparkline (mini line chart) for trend visualization.
@@ -46,10 +50,14 @@ pub fn render_sparkline(
         .data(data)
         .style(Style::default().fg(theme.accent));
 
-    let card = Card::new(title, theme);
-    let inner = card.inner(area);
-    card.render_frame(frame, area);
-    frame.render_widget(sparkline, inner);
+    if title.is_empty() {
+        frame.render_widget(sparkline, area);
+    } else {
+        let card = Card::new(title, theme);
+        let inner = card.inner(area);
+        card.render_frame(frame, area);
+        frame.render_widget(sparkline, inner);
+    }
 }
 
 /// Renders an inline sparkline without borders (for embedding in other

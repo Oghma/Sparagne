@@ -20,6 +20,12 @@ pub use theme::Theme;
 
 pub fn render(frame: &mut Frame<'_>, state: &AppState) {
     let area = frame.area();
+    let theme = Theme::default();
+    frame.render_widget(
+        ratatui::widgets::Block::default()
+            .style(ratatui::style::Style::default().bg(theme.background)),
+        area,
+    );
     match state.screen {
         crate::app::Screen::Login => screens::login::render(frame, area, state),
         crate::app::Screen::Home => render_shell(frame, area, state),
@@ -43,6 +49,11 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     // Content area
     let content_inner = layout[1];
+    frame.render_widget(
+        ratatui::widgets::Block::default()
+            .style(ratatui::style::Style::default().bg(theme.surface)),
+        content_inner,
+    );
 
     match state.section {
         crate::app::Section::Home => screens::home::render(frame, content_inner, state),

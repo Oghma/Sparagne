@@ -86,7 +86,7 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let (year, month) = state.stats.current_month;
     let month_name = month_name(month);
 
-    let card = Card::new("Month Summary", theme);
+    let card = Card::new("Month Summary", theme).focused(true);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
@@ -325,11 +325,18 @@ fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppState
         .take(inner.height as usize)
         .map(|(category, amount)| {
             let pct = compute_percentage(*amount, total);
+            let style = if pct >= 75 {
+                BarStyle::Block
+            } else if pct >= 25 {
+                BarStyle::Line
+            } else {
+                BarStyle::Dot
+            };
             let bar = ascii_bar_styled(
                 amount.saturating_abs() as u64,
                 total.saturating_abs() as u64,
                 20,
-                BarStyle::Line,
+                style,
             );
 
             Line::from(vec![
@@ -379,6 +386,27 @@ fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         .iter()
         .map(|(label, value)| (label.as_str(), (*value).max(0) as u64))
         .collect();
+    let income_color = if income_data.is_empty() {
+        theme.dim
+    } else if income_data.last().map(|(_, v)| *v).unwrap_or(0)
+        >= income_data.first().map(|(_, v)| *v).unwrap_or(0)
+    {
+        theme.positive
+    } else {
+        theme.warning
+    };
+    let income_title = Line::from(vec![
+        Span::styled("Income (6m)", Style::default().fg(theme.text_muted)),
+        Span::raw(" "),
+        Span::styled(
+            if income_color == theme.positive {
+                "●"
+            } else {
+                "○"
+            },
+            Style::default().fg(income_color),
+        ),
+    ]);
     if income_data.is_empty() {
         let card = Card::new("Income (6m)", theme);
         let inner = card.inner(layout[0]);
@@ -392,13 +420,43 @@ fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             inner,
         );
     } else {
-        render_bar_chart(frame, layout[0], "Income (6m)", &income_data, theme);
+        let card = Card::new("Income (6m)", theme).focused(true);
+        let inner = card.inner(layout[0]);
+        card.render_frame(frame, layout[0]);
+        frame.render_widget(Paragraph::new(income_title), Rect { height: 1, ..inner });
+        let chart_area = Rect {
+            y: inner.y + 1,
+            height: inner.height.saturating_sub(1),
+            ..inner
+        };
+        render_bar_chart(frame, chart_area, "", &income_data, theme);
     }
 
     let expense_data: Vec<(&str, u64)> = expense_trend
         .iter()
         .map(|(label, value)| (label.as_str(), (*value).max(0) as u64))
         .collect();
+    let expense_color = if expense_data.is_empty() {
+        theme.dim
+    } else if expense_data.last().map(|(_, v)| *v).unwrap_or(0)
+        >= expense_data.first().map(|(_, v)| *v).unwrap_or(0)
+    {
+        theme.warning
+    } else {
+        theme.positive
+    };
+    let expense_title = Line::from(vec![
+        Span::styled("Expenses (6m)", Style::default().fg(theme.text_muted)),
+        Span::raw(" "),
+        Span::styled(
+            if expense_color == theme.warning {
+                "●"
+            } else {
+                "○"
+            },
+            Style::default().fg(expense_color),
+        ),
+    ]);
     if expense_data.is_empty() {
         let card = Card::new("Expenses (6m)", theme);
         let inner = card.inner(layout[1]);
@@ -412,7 +470,16 @@ fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             inner,
         );
     } else {
-        render_bar_chart(frame, layout[1], "Expenses (6m)", &expense_data, theme);
+        let card = Card::new("Expenses (6m)", theme).focused(true);
+        let inner = card.inner(layout[1]);
+        card.render_frame(frame, layout[1]);
+        frame.render_widget(Paragraph::new(expense_title), Rect { height: 1, ..inner });
+        let chart_area = Rect {
+            y: inner.y + 1,
+            height: inner.height.saturating_sub(1),
+            ..inner
+        };
+        render_bar_chart(frame, chart_area, "", &expense_data, theme);
     }
 }
 

@@ -34,10 +34,10 @@ impl Default for Theme {
         let negative = Color::Rgb(220, 80, 80);
 
         Self {
-            // Base - dark with subtle elevation
-            background: Color::Rgb(8, 12, 16),
-            surface: Color::Rgb(20, 26, 32),
-            surface_bright: Color::Rgb(32, 40, 48),
+            // Base surfaces default to terminal background.
+            background: Color::Reset,
+            surface: Color::Reset,
+            surface_bright: Color::Reset,
 
             // Text hierarchy
             text: Color::Rgb(220, 220, 220),

@@ -122,10 +122,8 @@ fn render_stat_card(
     ratio: Option<(i64, i64)>,
     theme: &Theme,
 ) {
-    let card = Card::new(title, theme);
+    let card = Card::new(title, theme).focused(true);
     let inner = card.inner(area);
-    card.render_frame(frame, area);
-
     let mut lines = vec![Line::from(Span::styled(
         value,
         value_style.add_modifier(Modifier::BOLD),
@@ -140,7 +138,7 @@ fn render_stat_card(
         )));
     }
 
-    frame.render_widget(Paragraph::new(lines), inner);
+    card.render_with(frame, area, Paragraph::new(lines));
 }
 
 fn render_wallets_flows(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
