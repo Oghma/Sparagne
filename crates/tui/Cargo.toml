@@ -17,7 +17,8 @@ engine = { workspace = true }
 ratatui = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tracing = { workspace = true }
-uuid = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }

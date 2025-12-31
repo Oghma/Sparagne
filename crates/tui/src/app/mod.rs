@@ -6,6 +6,7 @@ use crate::{
     client::{Client, ClientError},
     config::AppConfig,
     error::{AppError, Result},
+    local_state::{LocalState, default_state_path},
     quick_add::QuickAddKind,
     ui,
 };
@@ -88,6 +89,8 @@ pub struct AppState {
     pub last_refresh: Option<DateTime<FixedOffset>>,
     pub base_url: String,
     pub last_flow_id: Option<uuid::Uuid>,
+    pub default_wallet_id: Option<uuid::Uuid>,
+    pub default_flow_id: Option<uuid::Uuid>,
 }
 
 pub struct App {
@@ -95,11 +98,15 @@ pub struct App {
     client: Client,
     pub state: AppState,
     should_quit: bool,
+    local_state: LocalState,
+    local_state_path: String,
 }
 
 impl App {
     pub fn new(config: AppConfig) -> Result<Self> {
         let client = Client::new(&config.base_url)?;
+        let local_state_path = default_state_path().to_string();
+        let local_state = LocalState::load(local_state_path.as_str())?;
         let state = AppState {
             screen: Screen::Login,
             login: LoginState {
@@ -123,6 +130,8 @@ impl App {
             last_refresh: None,
             base_url: config.base_url.clone(),
             last_flow_id: None,
+            default_wallet_id: None,
+            default_flow_id: None,
         };
 
         Ok(Self {
@@ -130,6 +139,8 @@ impl App {
             client,
             state,
             should_quit: false,
+            local_state,
+            local_state_path,
         })
     }
 
@@ -268,11 +279,18 @@ impl App {
                         }
                     }
                 } else if self.state.section == Section::Vault {
-                    if self.state.vault_ui.mode == VaultMode::Create {
-                        self.reset_vault_form();
-                        self.state.vault_ui.mode = VaultMode::View;
-                    } else {
-                        self.state.section = Section::Home;
+                    match self.state.vault_ui.mode {
+                        VaultMode::Create => {
+                            self.reset_vault_form();
+                            self.state.vault_ui.mode = VaultMode::View;
+                        }
+                        VaultMode::Defaults => {
+                            self.state.vault_ui.defaults = DefaultsFormState::default();
+                            self.state.vault_ui.mode = VaultMode::View;
+                        }
+                        VaultMode::View => {
+                            self.state.section = Section::Home;
+                        }
                     }
                 } else if self.state.section == Section::Stats {
                     self.state.section = Section::Home;
@@ -407,6 +425,11 @@ impl App {
                     if self.state.flows.mode == FlowsMode::Detail {
                         self.open_flow_detail().await?;
                     }
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::Defaults
+                {
+                    self.defaults_select_prev();
                 }
             }
             crate::ui::keymap::AppAction::Down => {
@@ -464,6 +487,11 @@ impl App {
                     if self.state.flows.mode == FlowsMode::Detail {
                         self.open_flow_detail().await?;
                     }
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::Defaults
+                {
+                    self.defaults_select_next();
                 }
             }
             crate::ui::keymap::AppAction::Input(ch) => {
@@ -614,11 +642,19 @@ impl App {
     }
 
     fn advance_vault_focus(&mut self) {
-        if self.state.vault_ui.mode != VaultMode::Create {
-            return;
+        match self.state.vault_ui.mode {
+            VaultMode::Create => {
+                self.state.vault_ui.form.error = None;
+            }
+            VaultMode::Defaults => {
+                self.state.vault_ui.defaults.error = None;
+                self.state.vault_ui.defaults.focus = match self.state.vault_ui.defaults.focus {
+                    DefaultsField::Wallet => DefaultsField::Flow,
+                    DefaultsField::Flow => DefaultsField::Wallet,
+                };
+            }
+            VaultMode::View => {}
         }
-
-        self.state.vault_ui.form.error = None;
     }
 
     fn advance_transfer_focus(&mut self) {
@@ -653,6 +689,7 @@ impl App {
                     Ok(snapshot) => {
                         self.state.last_flow_id = Some(snapshot.unallocated_flow_id);
                         self.state.snapshot = Some(snapshot);
+                        self.apply_local_defaults();
                         self.state.screen = Screen::Home;
                         self.state.login.message = None;
                         self.load_transactions(true).await?;
@@ -668,6 +705,49 @@ impl App {
         }
 
         Ok(())
+    }
+
+    fn apply_local_defaults(&mut self) {
+        let username = self.state.login.username.trim();
+        let Some(vault_id) = self.state.vault.as_ref().and_then(|v| v.id.as_deref()) else {
+            return;
+        };
+        if username.is_empty() {
+            return;
+        }
+
+        if let Some(defaults) = self.local_state.defaults_for(username, vault_id) {
+            self.state.default_wallet_id = defaults.wallet_id;
+            self.state.default_flow_id = defaults.flow_id;
+        } else {
+            self.state.default_wallet_id = None;
+            self.state.default_flow_id = None;
+        }
+        self.normalize_defaults();
+    }
+
+    fn normalize_defaults(&mut self) {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            return;
+        };
+        if let Some(wallet_id) = self.state.default_wallet_id {
+            let valid = snapshot
+                .wallets
+                .iter()
+                .any(|wallet| wallet.id == wallet_id && !wallet.archived);
+            if !valid {
+                self.state.default_wallet_id = None;
+            }
+        }
+        if let Some(flow_id) = self.state.default_flow_id {
+            let valid = snapshot
+                .flows
+                .iter()
+                .any(|flow| flow.id == flow_id && !flow.archived);
+            if !valid {
+                self.state.default_flow_id = None;
+            }
+        }
     }
 
     async fn handle_transactions_submit(&mut self) -> Result<()> {
@@ -708,8 +788,14 @@ impl App {
     }
 
     async fn handle_vault_submit(&mut self) -> Result<()> {
-        if self.state.vault_ui.mode == VaultMode::Create {
-            self.submit_vault_create().await?;
+        match self.state.vault_ui.mode {
+            VaultMode::Create => {
+                self.submit_vault_create().await?;
+            }
+            VaultMode::Defaults => {
+                self.save_defaults().await?;
+            }
+            VaultMode::View => {}
         }
         Ok(())
     }
@@ -775,6 +861,17 @@ impl App {
                     self.state.transactions.mode = TransactionsMode::List;
                 }
                 return Ok(());
+            }
+            'd' | 'D' => {
+                if self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::View
+                {
+                    if self.state.snapshot.is_none() {
+                        self.refresh_snapshot().await?;
+                    }
+                    self.start_defaults();
+                    return Ok(());
+                }
             }
             // Transaction list context actions (use different keys)
             'x' | 'X' => {
@@ -972,6 +1069,12 @@ impl App {
                     self.state.flows.mode = FlowsMode::List;
                     self.state.flows.detail = FlowDetailState::default();
                     self.reset_flow_form();
+                } else if self.state.section == Section::Vault
+                    && self.state.vault_ui.mode != VaultMode::View
+                {
+                    self.reset_vault_form();
+                    self.state.vault_ui.defaults = DefaultsFormState::default();
+                    self.state.vault_ui.mode = VaultMode::View;
                 }
                 return Ok(());
             }
@@ -2292,17 +2395,21 @@ impl App {
     }
 
     fn ordered_wallet_ids(&self) -> Vec<uuid::Uuid> {
-        ordered_ids(
-            self.active_wallet_ids(),
-            &self.state.transactions.recent_wallet_ids,
-        )
+        let mut priority = Vec::new();
+        if let Some(default_id) = self.state.default_wallet_id {
+            priority.push(default_id);
+        }
+        priority.extend(self.state.transactions.recent_wallet_ids.iter().copied());
+        ordered_ids(self.active_wallet_ids(), &priority)
     }
 
     fn ordered_flow_ids(&self) -> Vec<uuid::Uuid> {
-        ordered_ids(
-            self.active_flow_ids(),
-            &self.state.transactions.recent_flow_ids,
-        )
+        let mut priority = Vec::new();
+        if let Some(default_id) = self.state.default_flow_id {
+            priority.push(default_id);
+        }
+        priority.extend(self.state.transactions.recent_flow_ids.iter().copied());
+        ordered_ids(self.active_flow_ids(), &priority)
     }
 
     async fn submit_transfer_wallet(&mut self) -> Result<()> {
@@ -2781,6 +2888,135 @@ impl App {
         self.state.vault_ui.mode = VaultMode::Create;
     }
 
+    fn start_defaults(&mut self) {
+        let wallet_ids = self.active_wallet_ids();
+        let flow_ids = self.active_flow_ids();
+
+        let wallet_index = match self.state.default_wallet_id {
+            Some(default_id) => wallet_ids
+                .iter()
+                .position(|id| *id == default_id)
+                .map(|idx| idx + 1)
+                .unwrap_or(0),
+            None => 0,
+        };
+        let flow_index = match self.state.default_flow_id {
+            Some(default_id) => flow_ids
+                .iter()
+                .position(|id| *id == default_id)
+                .map(|idx| idx + 1)
+                .unwrap_or(0),
+            None => 0,
+        };
+
+        self.state.vault_ui.defaults = DefaultsFormState {
+            wallet_index,
+            flow_index,
+            focus: DefaultsField::Wallet,
+            error: None,
+        };
+        self.state.vault_ui.mode = VaultMode::Defaults;
+    }
+
+    fn defaults_select_next(&mut self) {
+        let len = match self.state.vault_ui.defaults.focus {
+            DefaultsField::Wallet => self.active_wallets_len() + 1,
+            DefaultsField::Flow => self.active_flows_len() + 1,
+        };
+        if len <= 1 {
+            return;
+        }
+        match self.state.vault_ui.defaults.focus {
+            DefaultsField::Wallet => {
+                self.state.vault_ui.defaults.wallet_index =
+                    (self.state.vault_ui.defaults.wallet_index + 1) % len;
+            }
+            DefaultsField::Flow => {
+                self.state.vault_ui.defaults.flow_index =
+                    (self.state.vault_ui.defaults.flow_index + 1) % len;
+            }
+        }
+    }
+
+    fn defaults_select_prev(&mut self) {
+        let len = match self.state.vault_ui.defaults.focus {
+            DefaultsField::Wallet => self.active_wallets_len() + 1,
+            DefaultsField::Flow => self.active_flows_len() + 1,
+        };
+        if len <= 1 {
+            return;
+        }
+        match self.state.vault_ui.defaults.focus {
+            DefaultsField::Wallet => {
+                let current = self.state.vault_ui.defaults.wallet_index;
+                self.state.vault_ui.defaults.wallet_index = (current + len - 1) % len;
+            }
+            DefaultsField::Flow => {
+                let current = self.state.vault_ui.defaults.flow_index;
+                self.state.vault_ui.defaults.flow_index = (current + len - 1) % len;
+            }
+        }
+    }
+
+    async fn save_defaults(&mut self) -> Result<()> {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            self.state.vault_ui.defaults.error = Some("Snapshot non disponibile.".to_string());
+            return Ok(());
+        };
+        let username = self.state.login.username.trim();
+        let Some(vault_id) = self.state.vault.as_ref().and_then(|v| v.id.as_deref()) else {
+            self.state.vault_ui.defaults.error = Some("Vault non disponibile.".to_string());
+            return Ok(());
+        };
+        if username.is_empty() {
+            self.state.vault_ui.defaults.error = Some("Utente non disponibile.".to_string());
+            return Ok(());
+        }
+
+        let wallet_ids = snapshot
+            .wallets
+            .iter()
+            .filter(|wallet| !wallet.archived)
+            .map(|wallet| wallet.id)
+            .collect::<Vec<_>>();
+        let flow_ids = snapshot
+            .flows
+            .iter()
+            .filter(|flow| !flow.archived)
+            .map(|flow| flow.id)
+            .collect::<Vec<_>>();
+
+        let wallet_id = if self.state.vault_ui.defaults.wallet_index == 0 {
+            None
+        } else {
+            wallet_ids
+                .get(self.state.vault_ui.defaults.wallet_index - 1)
+                .copied()
+        };
+        let flow_id = if self.state.vault_ui.defaults.flow_index == 0 {
+            None
+        } else {
+            flow_ids
+                .get(self.state.vault_ui.defaults.flow_index - 1)
+                .copied()
+        };
+
+        self.state.default_wallet_id = wallet_id;
+        self.state.default_flow_id = flow_id;
+        self.local_state
+            .set_defaults(username, vault_id, wallet_id, flow_id);
+        if let Err(err) = self.local_state.save(self.local_state_path.as_str()) {
+            self.state.vault_ui.defaults.error = Some(err.to_string());
+            self.set_toast("Errore salvataggio default.", ToastLevel::Error);
+            return Ok(());
+        }
+
+        self.state.vault_ui.mode = VaultMode::View;
+        self.state.vault_ui.defaults = DefaultsFormState::default();
+        self.set_toast("Default salvati.", ToastLevel::Success);
+        Ok(())
+    }
+
     fn cycle_flow_mode(&mut self) {
         self.state.flows.form.mode = match self.state.flows.form.mode {
             FlowModeChoice::Unlimited => FlowModeChoice::NetCapped,
@@ -2804,6 +3040,7 @@ impl App {
             Ok(snapshot) => {
                 self.state.snapshot = Some(snapshot);
                 self.ensure_last_flow();
+                self.normalize_defaults();
                 self.refresh_wallets_search().await?;
                 self.refresh_flows_search().await?;
                 self.connection_ok(None);
@@ -4685,6 +4922,7 @@ impl FlowModeChoice {
 pub struct VaultState {
     pub mode: VaultMode,
     pub form: VaultFormState,
+    pub defaults: DefaultsFormState,
     pub error: Option<String>,
 }
 
@@ -4693,6 +4931,7 @@ impl Default for VaultState {
         Self {
             mode: VaultMode::View,
             form: VaultFormState::default(),
+            defaults: DefaultsFormState::default(),
             error: None,
         }
     }
@@ -4702,6 +4941,7 @@ impl Default for VaultState {
 pub enum VaultMode {
     View,
     Create,
+    Defaults,
 }
 
 #[derive(Debug)]
@@ -4717,6 +4957,31 @@ impl Default for VaultFormState {
             error: None,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct DefaultsFormState {
+    pub wallet_index: usize,
+    pub flow_index: usize,
+    pub focus: DefaultsField,
+    pub error: Option<String>,
+}
+
+impl Default for DefaultsFormState {
+    fn default() -> Self {
+        Self {
+            wallet_index: 0,
+            flow_index: 0,
+            focus: DefaultsField::Wallet,
+            error: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultsField {
+    Wallet,
+    Flow,
 }
 
 #[derive(Debug)]
@@ -4951,6 +5216,14 @@ fn default_wallet_flow(
                 .find(|wallet| wallet.id == wallet_id && !wallet.archived)
         })
         .or_else(|| {
+            state.default_wallet_id.and_then(|wallet_id| {
+                snapshot
+                    .wallets
+                    .iter()
+                    .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+            })
+        })
+        .or_else(|| {
             state
                 .transactions
                 .recent_wallet_ids
@@ -4972,6 +5245,14 @@ fn default_wallet_flow(
                 .flows
                 .iter()
                 .find(|flow| flow.id == flow_id && !flow.archived)
+        })
+        .or_else(|| {
+            state.default_flow_id.and_then(|flow_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id && !flow.archived)
+            })
         })
         .or_else(|| {
             state
@@ -5078,7 +5359,12 @@ pub(crate) fn ordered_wallet_ids_from_state(state: &AppState) -> Vec<uuid::Uuid>
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    ordered_ids(active_ids, &state.transactions.recent_wallet_ids)
+    let mut priority = Vec::new();
+    if let Some(default_id) = state.default_wallet_id {
+        priority.push(default_id);
+    }
+    priority.extend(state.transactions.recent_wallet_ids.iter().copied());
+    ordered_ids(active_ids, &priority)
 }
 
 pub(crate) fn ordered_flow_ids_from_state(state: &AppState) -> Vec<uuid::Uuid> {
@@ -5093,7 +5379,12 @@ pub(crate) fn ordered_flow_ids_from_state(state: &AppState) -> Vec<uuid::Uuid> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    ordered_ids(active_ids, &state.transactions.recent_flow_ids)
+    let mut priority = Vec::new();
+    if let Some(default_id) = state.default_flow_id {
+        priority.push(default_id);
+    }
+    priority.extend(state.transactions.recent_flow_ids.iter().copied());
+    ordered_ids(active_ids, &priority)
 }
 
 fn transaction_matches_query(tx: &TransactionView, query: &str) -> bool {

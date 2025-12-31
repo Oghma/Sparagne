@@ -281,9 +281,21 @@ fn get_vault_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
     match state.vault_ui.mode {
         crate::app::VaultMode::View => vec![
             Span::styled("c", Style::default().fg(theme.accent)),
-            Span::raw(" create"),
+            Span::raw(" create  "),
+            Span::styled("d", Style::default().fg(theme.accent)),
+            Span::raw(" defaults"),
         ],
         crate::app::VaultMode::Create => vec![
+            Span::styled("Enter", Style::default().fg(theme.accent)),
+            Span::raw(" save  "),
+            Span::styled("Esc", Style::default().fg(theme.accent)),
+            Span::raw(" cancel"),
+        ],
+        crate::app::VaultMode::Defaults => vec![
+            Span::styled("Tab", Style::default().fg(theme.accent)),
+            Span::raw(" next  "),
+            Span::styled("↑/↓", Style::default().fg(theme.accent)),
+            Span::raw(" change  "),
             Span::styled("Enter", Style::default().fg(theme.accent)),
             Span::raw(" save  "),
             Span::styled("Esc", Style::default().fg(theme.accent)),

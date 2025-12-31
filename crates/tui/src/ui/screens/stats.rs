@@ -3,14 +3,17 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{BarChart, Block, BorderType, Borders, Gauge, Paragraph, Sparkline},
+    widgets::{BarChart, Gauge, Paragraph, Sparkline},
 };
 
 use engine::{Currency, Money};
 
 use crate::{
     app::AppState,
-    ui::{components::money::styled_amount_bold, theme::Theme},
+    ui::{
+        components::{card::Card, money::styled_amount_bold},
+        theme::Theme,
+    },
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
@@ -18,13 +21,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     // Show error state if stats loading failed
     if let Some(error) = &state.stats.error {
-        let block = Block::default()
-            .title(" Stats ")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.border));
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
+        let card = Card::new("Stats", &theme);
+        let inner = card.inner(area);
+        card.render_frame(frame, area);
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
@@ -41,13 +40,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     // Show empty state if no data
     if state.stats.data.is_none() {
-        let block = Block::default()
-            .title(" Stats ")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.border));
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
+        let card = Card::new("Stats", &theme);
+        let inner = card.inner(area);
+        card.render_frame(frame, area);
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
@@ -82,17 +77,9 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let (year, month) = state.stats.current_month;
     let month_name = month_name(month);
 
-    let block = Block::default()
-        .title(Span::styled(
-            " Month Summary ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let card = Card::new("Month Summary", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
 
     let currency = get_currency(state);
 
@@ -270,17 +257,9 @@ fn render_stat_row(
 }
 
 fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let block = Block::default()
-        .title(Span::styled(
-            " Category Breakdown ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let card = Card::new("Category Breakdown", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
 
     let currency = get_currency(state);
 
@@ -335,17 +314,9 @@ fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppState
 }
 
 fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let block = Block::default()
-        .title(Span::styled(
-            " Monthly Trend ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let card = Card::new("Monthly Trend", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
 
     let expense_trend = &state.stats.monthly_trend;
     let income_trend = &state.stats.monthly_income;
@@ -397,18 +368,10 @@ fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 }
 
 fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let block = Block::default()
-        .title(Span::styled(
-            " Balance Trend (30d) ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
+    let card = Card::new("Balance Trend (30d)", theme);
     if state.stats.sparkline.is_empty() {
+        let inner = card.inner(area);
+        card.render_frame(frame, area);
         frame.render_widget(
             Paragraph::new(Span::styled(
                 "No data. Press 'r' to refresh stats.",
@@ -423,7 +386,7 @@ fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
     let sparkline = Sparkline::default()
         .data(&state.stats.sparkline)
         .style(Style::default().fg(theme.accent));
-    frame.render_widget(sparkline, inner);
+    card.render_with(frame, area, sparkline);
 }
 
 fn get_currency(state: &AppState) -> Currency {

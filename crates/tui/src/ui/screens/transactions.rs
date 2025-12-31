@@ -198,19 +198,38 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             selected_row = Some(rows.len());
         }
 
-        let time = tx.occurred_at.format("%H:%M").to_string();
-        let kind = kind_label(tx.kind);
-        let amount = Money::new(tx.amount_minor).format(currency);
         let note = tx.note.as_deref().unwrap_or("");
         let category = tx
             .category
             .as_deref()
-            .map(|c| format!("#{c} "))
+            .map(|c| format!("#{c}"))
             .unwrap_or_default();
-        let badge = badge_label(tx.kind, tx.voided);
 
-        let text = format!("{time}  {badge:<8} {kind:<14} {amount:<14} {category}{note}");
-        rows.push(ListItem::new(Line::from(text)));
+        let mut spans = Vec::new();
+        spans.push(Span::styled(
+            tx.occurred_at.format("%H:%M").to_string(),
+            Style::default().fg(theme.dim),
+        ));
+        spans.push(Span::raw("  "));
+        spans.push(kind_chip(tx.kind, theme));
+        spans.push(Span::raw(" "));
+        if let Some(voided) = void_chip(tx.voided, theme) {
+            spans.push(voided);
+            spans.push(Span::raw(" "));
+        }
+        spans.push(amount_span(tx.kind, tx.amount_minor, currency, theme));
+        spans.push(Span::raw("  "));
+        if !category.is_empty() {
+            spans.push(Span::styled(category, Style::default().fg(theme.accent)));
+            spans.push(Span::raw(" "));
+        }
+        spans.push(Span::raw(note));
+
+        let mut item = ListItem::new(Line::from(spans));
+        if tx.voided {
+            item = item.style(Style::default().fg(theme.dim));
+        }
+        rows.push(item);
     }
 
     let mut list_state = ListState::default();
@@ -753,15 +772,15 @@ fn render_filter_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
                 },
             ),
             Span::raw(": "),
-            kind_chip("Income", filter.kind_income, theme),
+            kind_toggle_chip("Income", filter.kind_income, theme),
             Span::raw(" "),
-            kind_chip("Expense", filter.kind_expense, theme),
+            kind_toggle_chip("Expense", filter.kind_expense, theme),
             Span::raw(" "),
-            kind_chip("Refund", filter.kind_refund, theme),
+            kind_toggle_chip("Refund", filter.kind_refund, theme),
             Span::raw(" "),
-            kind_chip("T.Wallet", filter.kind_transfer_wallet, theme),
+            kind_toggle_chip("T.Wallet", filter.kind_transfer_wallet, theme),
             Span::raw(" "),
-            kind_chip("T.Flow", filter.kind_transfer_flow, theme),
+            kind_toggle_chip("T.Flow", filter.kind_transfer_flow, theme),
         ]),
         Line::from(Span::styled(
             "Tab: next • i/e/r/w/f toggle kinds • Enter: apply • Esc: cancel",
@@ -804,7 +823,7 @@ fn render_filter_field(label: &str, value: &str, focused: bool, theme: &Theme) -
     ])
 }
 
-fn kind_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> {
+fn kind_toggle_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> {
     let style = if enabled {
         Style::default()
             .fg(theme.accent)
@@ -943,13 +962,22 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     let note = header.note.as_deref().unwrap_or("-");
     let voided = if header.voided { "YES" } else { "NO" };
 
-    let mut lines = vec![
+    let lines = vec![
         Line::from(vec![
             Span::styled("Kind", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {}", kind_label(header.kind))),
+            Span::raw(": "),
+            kind_chip(header.kind, theme),
             Span::raw("   "),
             Span::styled("Voided", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {voided}")),
+            Span::raw(": "),
+            Span::styled(
+                voided.to_string(),
+                Style::default().fg(if header.voided {
+                    theme.error
+                } else {
+                    theme.text
+                }),
+            ),
         ]),
         Line::from(vec![
             Span::styled("When", Style::default().fg(theme.dim)),
@@ -984,12 +1012,18 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
                 LegTarget::Wallet { wallet_id } => resolve_wallet_name(state, wallet_id),
                 LegTarget::Flow { flow_id } => resolve_flow_name(state, flow_id),
             };
-            let amount = Money::new(leg.amount_minor).format(currency);
             let label = match leg.target {
                 LegTarget::Wallet { .. } => "Wallet",
                 LegTarget::Flow { .. } => "Flow",
             };
-            ListItem::new(Line::from(format!("{label}: {name}  {amount}")))
+            let amount = leg_amount_span(leg.amount_minor, currency, theme);
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("{label:<6}"), Style::default().fg(theme.dim)),
+                Span::raw(": "),
+                Span::raw(name),
+                Span::raw("  "),
+                amount,
+            ]))
         })
         .collect::<Vec<_>>();
 
@@ -1002,32 +1036,64 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     frame.render_widget(list, layout[1]);
 }
 
-fn kind_label(kind: TransactionKind) -> &'static str {
-    match kind {
-        TransactionKind::Income => "▲ Income",
-        TransactionKind::Expense => "▼ Expense",
-        TransactionKind::Refund => "↩ Refund",
-        TransactionKind::TransferWallet => "⇄ Transfer",
-        TransactionKind::TransferFlow => "⇄ Transfer",
+fn kind_chip(kind: TransactionKind, theme: &Theme) -> Span<'static> {
+    let (label, color) = match kind {
+        TransactionKind::Income => ("INC", theme.positive),
+        TransactionKind::Expense => ("EXP", theme.negative),
+        TransactionKind::Refund => ("REF", theme.accent),
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => ("TR", theme.text),
+    };
+    Span::styled(
+        format!("[{label}]"),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
+}
+
+fn void_chip(voided: bool, theme: &Theme) -> Option<Span<'static>> {
+    if voided {
+        Some(Span::styled(
+            "[VOID]",
+            Style::default()
+                .fg(theme.error)
+                .add_modifier(Modifier::BOLD),
+        ))
+    } else {
+        None
     }
 }
 
-fn badge_label(kind: TransactionKind, voided: bool) -> String {
-    let mut badge = String::new();
-    if matches!(
-        kind,
-        TransactionKind::TransferWallet | TransactionKind::TransferFlow
-    ) {
-        badge.push_str("[TR]");
-    }
-    if voided {
-        badge.push_str("[VOID]");
-    }
-    if badge.is_empty() {
-        "-".to_string()
+fn amount_span(
+    kind: TransactionKind,
+    amount_minor: i64,
+    currency: Currency,
+    theme: &Theme,
+) -> Span<'static> {
+    let signed = match kind {
+        TransactionKind::Expense => -amount_minor,
+        TransactionKind::Income | TransactionKind::Refund => amount_minor,
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => amount_minor,
+    };
+    let color = if signed < 0 {
+        theme.negative
+    } else if signed > 0 {
+        theme.positive
     } else {
-        badge
-    }
+        theme.dim
+    };
+    let amount = Money::new(signed).format(currency);
+    Span::styled(format!("{amount:<14}"), Style::default().fg(color))
+}
+
+fn leg_amount_span(amount_minor: i64, currency: Currency, theme: &Theme) -> Span<'static> {
+    let color = if amount_minor < 0 {
+        theme.negative
+    } else if amount_minor > 0 {
+        theme.positive
+    } else {
+        theme.dim
+    };
+    let amount = Money::new(amount_minor).format(currency);
+    Span::styled(amount, Style::default().fg(color))
 }
 
 fn map_currency(currency: &api_types::Currency) -> Currency {
@@ -1115,6 +1181,15 @@ fn default_wallet_flow_names(state: &AppState) -> (String, String) {
                 .map(|wallet| wallet.name.clone())
         })
         .or_else(|| {
+            state.default_wallet_id.and_then(|wallet_id| {
+                snapshot
+                    .wallets
+                    .iter()
+                    .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+                    .map(|wallet| wallet.name.clone())
+            })
+        })
+        .or_else(|| {
             state
                 .transactions
                 .recent_wallet_ids
@@ -1145,6 +1220,15 @@ fn default_wallet_flow_names(state: &AppState) -> (String, String) {
                 .iter()
                 .find(|flow| flow.id == flow_id && !flow.archived)
                 .map(|flow| flow.name.clone())
+        })
+        .or_else(|| {
+            state.default_flow_id.and_then(|flow_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id && !flow.archived)
+                    .map(|flow| flow.name.clone())
+            })
         })
         .or_else(|| {
             state

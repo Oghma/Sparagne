@@ -10,6 +10,8 @@ pub enum AppError {
     Http(#[from] reqwest::Error),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("json error: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("terminal error: {0}")]
     Terminal(String),
 }

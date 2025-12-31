@@ -124,15 +124,23 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .iter()
         .filter_map(|idx| snapshot.flows.get(*idx))
         .map(|flow| {
-            let balance = Money::new(flow.balance_minor).format(currency);
-            let archived = if flow.archived { " archived" } else { "" };
-            let marker = if flow.is_unallocated {
-                " [Unallocated]"
+            let name_style = if flow.archived {
+                Style::default().fg(theme.dim)
             } else {
-                ""
+                Style::default().fg(theme.text)
             };
-            let text = format!("{}{}  {balance}{archived}", flow.name, marker);
-            ListItem::new(Line::from(text))
+            let mut spans = vec![Span::styled(flow.name.clone(), name_style)];
+            if flow.is_unallocated {
+                spans.push(Span::raw(" "));
+                spans.push(status_chip("UNALLOC", theme.accent));
+            }
+            if flow.archived {
+                spans.push(Span::raw(" "));
+                spans.push(status_chip("ARCHIVED", theme.warning));
+            }
+            spans.push(Span::raw("  "));
+            spans.push(balance_span(flow.balance_minor, currency, theme));
+            ListItem::new(Line::from(spans))
         })
         .collect::<Vec<_>>();
 
@@ -263,9 +271,19 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         .map(map_currency)
         .unwrap_or(Currency::Eur);
 
-    let balance = Money::new(flow.balance_minor).format(currency);
-    let archived = if flow.archived { "YES" } else { "NO" };
-    let unallocated = if flow.is_unallocated { "YES" } else { "NO" };
+    let mut status_spans = vec![
+        Span::styled("Status", Style::default().fg(theme.dim)),
+        Span::raw(": "),
+        if flow.archived {
+            status_chip("ARCHIVED", theme.warning)
+        } else {
+            status_chip("ACTIVE", theme.text_muted)
+        },
+    ];
+    if flow.is_unallocated {
+        status_spans.push(Span::raw(" "));
+        status_spans.push(status_chip("UNALLOC", theme.accent));
+    }
 
     let mut header_lines = vec![
         Line::from(vec![
@@ -274,15 +292,10 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         ]),
         Line::from(vec![
             Span::styled("Balance", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {balance}")),
+            Span::raw(": "),
+            balance_span(flow.balance_minor, currency, theme),
         ]),
-        Line::from(vec![
-            Span::styled("Archived", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {archived}")),
-            Span::raw("   "),
-            Span::styled("Unallocated", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {unallocated}")),
-        ]),
+        Line::from(status_spans),
     ];
 
     if let Some(detail) = state.flows.detail.detail.as_ref() {
@@ -322,11 +335,17 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         .iter()
         .map(|tx| {
             let when = tx.occurred_at.format("%d %b %H:%M").to_string();
-            let amount = Money::new(tx.amount_minor).format(currency);
             let note = tx.note.as_deref().unwrap_or("");
-            let kind = kind_label(tx.kind);
-            let text = format!("{when}  {kind:<12} {amount:<12} {note}");
-            ListItem::new(Line::from(text))
+            let line = Line::from(vec![
+                Span::styled(when, Style::default().fg(theme.dim)),
+                Span::raw(" "),
+                kind_chip(tx.kind, theme),
+                Span::raw(" "),
+                signed_amount_span(tx.amount_minor, currency, theme),
+                Span::raw(" "),
+                Span::raw(note),
+            ]);
+            ListItem::new(line)
         })
         .collect::<Vec<_>>();
 
@@ -374,14 +393,40 @@ fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str)
     );
 }
 
-fn kind_label(kind: TransactionKind) -> &'static str {
-    match kind {
-        TransactionKind::Income => "▲ Income",
-        TransactionKind::Expense => "▼ Expense",
-        TransactionKind::Refund => "↩ Refund",
-        TransactionKind::TransferWallet => "⇄ Transfer",
-        TransactionKind::TransferFlow => "⇄ Transfer",
-    }
+fn status_chip(label: &str, color: ratatui::style::Color) -> Span<'static> {
+    Span::styled(
+        format!("[{label}]"),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
+}
+
+fn balance_span(amount_minor: i64, currency: Currency, theme: &Theme) -> Span<'static> {
+    signed_amount_span(amount_minor, currency, theme)
+}
+
+fn signed_amount_span(amount_minor: i64, currency: Currency, theme: &Theme) -> Span<'static> {
+    let amount = Money::new(amount_minor).format(currency);
+    let color = if amount_minor < 0 {
+        theme.negative
+    } else if amount_minor > 0 {
+        theme.positive
+    } else {
+        theme.dim
+    };
+    Span::styled(amount, Style::default().fg(color))
+}
+
+fn kind_chip(kind: TransactionKind, theme: &Theme) -> Span<'static> {
+    let (label, color) = match kind {
+        TransactionKind::Income => ("INC", theme.positive),
+        TransactionKind::Expense => ("EXP", theme.negative),
+        TransactionKind::Refund => ("REF", theme.accent),
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => ("TR", theme.text),
+    };
+    Span::styled(
+        format!("[{label}]"),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
 }
 
 fn map_currency(currency: &api_types::Currency) -> Currency {
