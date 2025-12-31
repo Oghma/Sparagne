@@ -15,6 +15,7 @@ pub fn render_tabs(frame: &mut Frame<'_>, area: Rect, active: Section, theme: &T
         Section::Transactions,
         Section::Wallets,
         Section::Flows,
+        Section::Categories,
         Section::Vault,
         Section::Stats,
     ];
@@ -56,6 +57,8 @@ pub fn tab_shortcuts(theme: &Theme) -> Vec<Span<'static>> {
         Span::styled("w", Style::default().fg(theme.accent)),
         Span::raw("/"),
         Span::styled("f", Style::default().fg(theme.accent)),
+        Span::raw("/"),
+        Span::styled("g", Style::default().fg(theme.accent)),
         Span::raw("/"),
         Span::styled("v", Style::default().fg(theme.accent)),
         Span::raw("/"),

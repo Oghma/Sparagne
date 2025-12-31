@@ -1,5 +1,9 @@
 use api_types::{
     cash_flow::CashFlowGet,
+    category::{
+        CategoryCreate, CategoryCreated, CategoryList, CategoryListResponse, CategoryMerge,
+        CategoryMergePreview, CategoryMergePreviewResponse, CategoryUpdate, CategoryView,
+    },
     flow::{FlowCreated, FlowNew, FlowUpdate},
     stats::Statistic,
     transaction::{
@@ -161,6 +165,77 @@ impl Client {
         let endpoint = self
             .base_url
             .join("transactions")
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn categories_list(
+        &self,
+        username: &str,
+        password: &str,
+        payload: CategoryList,
+    ) -> std::result::Result<CategoryListResponse, ClientError> {
+        let endpoint = self
+            .base_url
+            .join("categories/list")
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn categories_merge_preview(
+        &self,
+        username: &str,
+        password: &str,
+        category_id: uuid::Uuid,
+        payload: CategoryMergePreview,
+    ) -> std::result::Result<CategoryMergePreviewResponse, ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("categories/{category_id}/merge/preview"))
+            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn categories_merge(
+        &self,
+        username: &str,
+        password: &str,
+        category_id: uuid::Uuid,
+        payload: CategoryMerge,
+    ) -> std::result::Result<CategoryView, ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("categories/{category_id}/merge"))
             .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
 
         let res = self

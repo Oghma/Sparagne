@@ -162,6 +162,30 @@ fn help_lines(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
                 Span::raw(" mode"),
             ]));
         }
+        Section::Categories => {
+            lines.push(Line::from(vec![
+                Span::styled("c", Style::default().fg(theme.accent)),
+                Span::raw(" create  "),
+                Span::styled("e", Style::default().fg(theme.accent)),
+                Span::raw(" rename  "),
+                Span::styled("a", Style::default().fg(theme.accent)),
+                Span::raw(" archive"),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("m", Style::default().fg(theme.accent)),
+                Span::raw(" merge  "),
+                Span::styled("r", Style::default().fg(theme.accent)),
+                Span::raw(" refresh  "),
+                Span::styled("↑/↓", Style::default().fg(theme.accent)),
+                Span::raw(" select"),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("Enter", Style::default().fg(theme.accent)),
+                Span::raw(" preview/merge  "),
+                Span::styled("Esc", Style::default().fg(theme.accent)),
+                Span::raw(" cancel"),
+            ]));
+        }
         Section::Vault => {
             lines.push(Line::from(vec![
                 Span::styled("c", Style::default().fg(theme.accent)),

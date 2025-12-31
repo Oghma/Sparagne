@@ -62,6 +62,7 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         }
         crate::app::Section::Wallets => screens::wallets::render(frame, content_inner, state),
         crate::app::Section::Flows => screens::flows::render(frame, content_inner, state),
+        crate::app::Section::Categories => screens::categories::render(frame, content_inner, state),
         crate::app::Section::Vault => screens::vault::render(frame, content_inner, state),
         crate::app::Section::Stats => screens::stats::render(frame, content_inner, state),
     }
@@ -161,6 +162,7 @@ fn get_context_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         crate::app::Section::Transactions => get_transactions_hints(state),
         crate::app::Section::Wallets => get_wallets_hints(state),
         crate::app::Section::Flows => get_flows_hints(state),
+        crate::app::Section::Categories => get_categories_hints(state),
         crate::app::Section::Vault => get_vault_hints(state),
         crate::app::Section::Stats => vec![
             components::hints::KeyHint::new("r", "refresh"),
@@ -239,6 +241,28 @@ fn get_flows_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
             let mut hints = components::hints::common::form_editing();
             hints.insert(1, components::hints::KeyHint::new("m", "mode"));
             hints
+        }
+    }
+}
+
+fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    match state.categories.mode {
+        crate::app::CategoriesMode::List => {
+            vec![
+                components::hints::KeyHint::new("↑↓", "select"),
+                components::hints::KeyHint::new("c", "create"),
+                components::hints::KeyHint::new("e", "rename"),
+                components::hints::KeyHint::new("a", "archive"),
+                components::hints::KeyHint::new("m", "merge"),
+                components::hints::KeyHint::new("r", "refresh"),
+            ]
+        }
+        crate::app::CategoriesMode::Merge => vec![
+            components::hints::KeyHint::new("Enter", "preview/merge"),
+            components::hints::KeyHint::new("Esc", "cancel"),
+        ],
+        crate::app::CategoriesMode::Create | crate::app::CategoriesMode::Rename => {
+            components::hints::common::form_editing()
         }
     }
 }
