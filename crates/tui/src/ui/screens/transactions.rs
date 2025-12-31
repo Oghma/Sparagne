@@ -133,9 +133,14 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let quick_height = if state.transactions.quick_active {
+        5
+    } else {
+        4
+    };
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(4), Constraint::Min(0)])
+        .constraints([Constraint::Length(quick_height), Constraint::Min(0)])
         .split(area);
 
     render_quick_add(frame, layout[0], state, theme);
@@ -588,7 +593,11 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
 
     let bottom_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(5)])
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(5),
+            Constraint::Length(2),
+        ])
         .split(layout[1]);
 
     let list_layout = Layout::default()
@@ -622,6 +631,7 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
     );
 
     render_category_list(frame, bottom_layout[1], state, theme);
+    render_recents_footer(frame, bottom_layout[2], state, theme);
 }
 
 fn render_picker_list(
@@ -823,6 +833,14 @@ fn render_filter_field(label: &str, value: &str, focused: bool, theme: &Theme) -
     ])
 }
 
+fn render_recents_footer(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let Some(text) = recents_line(state) else {
+        return;
+    };
+    let line = Line::from(Span::styled(text, Style::default().fg(theme.dim)));
+    frame.render_widget(Paragraph::new(line), area);
+}
+
 fn kind_toggle_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> {
     let style = if enabled {
         Style::default()
@@ -883,32 +901,9 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             "Formato: 12.50 bar  |  +1000 stipendio  |  r 5.20 amazon  |  #tag opzionale",
             Style::default().fg(theme.dim),
         )));
-        if !state.transactions.recent_categories.is_empty() {
-            let recents = state
-                .transactions
-                .recent_categories
-                .iter()
-                .map(|cat| format!("#{cat}"))
-                .collect::<Vec<_>>()
-                .join(" ");
+        if let Some(line) = recents_line(state) {
             lines.push(Line::from(Span::styled(
-                format!("Recenti: {recents}"),
-                Style::default().fg(theme.dim),
-            )));
-        }
-        let recent_wallets = recent_wallet_names(state);
-        if !recent_wallets.is_empty() {
-            let list = recent_wallets.join(" • ");
-            lines.push(Line::from(Span::styled(
-                format!("Wallet recenti: {list}"),
-                Style::default().fg(theme.dim),
-            )));
-        }
-        let recent_flows = recent_flow_names(state);
-        if !recent_flows.is_empty() {
-            let list = recent_flows.join(" • ");
-            lines.push(Line::from(Span::styled(
-                format!("Flow recenti: {list}"),
+                line,
                 Style::default().fg(theme.dim),
             )));
         }
@@ -921,6 +916,42 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
         .title("Quick add (a)");
     let widget = Paragraph::new(lines).block(block);
     frame.render_widget(widget, area);
+}
+
+fn recents_line(state: &AppState) -> Option<String> {
+    let mut parts = Vec::new();
+    let categories = state
+        .transactions
+        .recent_categories
+        .iter()
+        .take(3)
+        .map(|cat| format!("#{cat}"))
+        .collect::<Vec<_>>();
+    if !categories.is_empty() {
+        parts.push(format!("Categorie: {}", categories.join(" ")));
+    }
+
+    let wallets = recent_wallet_names(state)
+        .into_iter()
+        .take(3)
+        .collect::<Vec<_>>();
+    if !wallets.is_empty() {
+        parts.push(format!("Wallet: {}", wallets.join(", ")));
+    }
+
+    let flows = recent_flow_names(state)
+        .into_iter()
+        .take(3)
+        .collect::<Vec<_>>();
+    if !flows.is_empty() {
+        parts.push(format!("Flow: {}", flows.join(", ")));
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(format!("Recenti: {}", parts.join(" • ")))
+    }
 }
 
 fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
