@@ -17,7 +17,9 @@ use crate::{
                 BarStyle, ascii_bar_styled, compute_percentage, percentage_bar, render_bar_chart,
                 render_inline_sparkline, render_sparkline as render_sparkline_card,
             },
-            money::styled_amount_bold,
+            money::{
+                flow_cap_gauge, styled_amount_bold, styled_amount_no_sign, styled_percentage_change,
+            },
         },
         theme::Theme,
     },
@@ -110,7 +112,7 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1), // Navigation header
-            Constraint::Length(1), // Inline trend
+            Constraint::Length(1), // Inline trend + MoM
             Constraint::Min(0),    // Stats content
         ])
         .split(inner);
@@ -126,17 +128,41 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     ]);
     frame.render_widget(Paragraph::new(nav_line), inner_layout[0]);
 
+    let change_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(inner_layout[1]);
+
     if !state.stats.sparkline.is_empty() {
-        render_inline_sparkline(frame, inner_layout[1], &state.stats.sparkline, theme);
+        render_inline_sparkline(frame, change_layout[0], &state.stats.sparkline, theme);
     } else {
         frame.render_widget(
             Paragraph::new(Span::styled(
                 "No trend data yet",
                 Style::default().fg(theme.dim),
             )),
-            inner_layout[1],
+            change_layout[0],
         );
     }
+
+    let income_change = percentage_change(&state.stats.monthly_income);
+    let expense_change = percentage_change(&state.stats.monthly_trend);
+    let change_line = Line::from(vec![
+        Span::styled("MoM", Style::default().fg(theme.dim)),
+        Span::raw(" "),
+        Span::styled("Inc", Style::default().fg(theme.text_muted)),
+        Span::raw(" "),
+        income_change
+            .map(|value| styled_percentage_change(value, theme))
+            .unwrap_or_else(|| Span::styled("n/a", Style::default().fg(theme.dim))),
+        Span::raw("  "),
+        Span::styled("Exp", Style::default().fg(theme.text_muted)),
+        Span::raw(" "),
+        expense_change
+            .map(|value| styled_percentage_change(value, theme))
+            .unwrap_or_else(|| Span::styled("n/a", Style::default().fg(theme.dim))),
+    ]);
+    frame.render_widget(Paragraph::new(change_line), change_layout[1]);
 
     // Stats content
     let stats_layout = Layout::default()
@@ -144,6 +170,7 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         .constraints([
             Constraint::Length(1), // Income
             Constraint::Length(1), // Expenses
+            Constraint::Length(1), // Gauge
             Constraint::Length(1), // Divider
             Constraint::Length(1), // Net
             Constraint::Length(1), // Total Balance
@@ -180,11 +207,23 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         theme,
     );
 
+    if let Some(gauge) = flow_cap_gauge(expenses, Some(income), "Expense/Income", theme) {
+        frame.render_widget(gauge, stats_layout[2]);
+    } else {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "No income to compare",
+                Style::default().fg(theme.dim),
+            )),
+            stats_layout[2],
+        );
+    }
+
     // Divider
-    let divider = "─".repeat(stats_layout[2].width as usize);
+    let divider = "─".repeat(stats_layout[3].width as usize);
     frame.render_widget(
         Paragraph::new(Span::styled(divider, Style::default().fg(theme.border))),
-        stats_layout[2],
+        stats_layout[3],
     );
 
     // Net row
@@ -192,7 +231,7 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         Span::styled("Net         ", Style::default().fg(theme.dim)),
         styled_amount_bold(net, currency, theme),
     ]);
-    frame.render_widget(Paragraph::new(net_line), stats_layout[3]);
+    frame.render_widget(Paragraph::new(net_line), stats_layout[4]);
 
     // Total Balance row
     let balance_line = Line::from(vec![
@@ -202,7 +241,7 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ),
     ]);
-    frame.render_widget(Paragraph::new(balance_line), stats_layout[4]);
+    frame.render_widget(Paragraph::new(balance_line), stats_layout[5]);
 
     // Show error if any
     if let Some(err) = state.stats.error.as_ref() {
@@ -245,12 +284,8 @@ fn render_stat_row(
     );
 
     // Amount
-    let sign = if amount > 0 { "+" } else { "" };
     frame.render_widget(
-        Paragraph::new(Span::styled(
-            format!("{sign}{}", Money::new(amount.abs()).format(currency)),
-            Style::default().fg(color),
-        )),
+        Paragraph::new(styled_amount_no_sign(amount, currency, theme)),
         cols[1],
     );
 
@@ -419,6 +454,18 @@ fn map_currency(currency: &api_types::Currency) -> Currency {
     match currency {
         api_types::Currency::Eur => Currency::Eur,
     }
+}
+
+fn percentage_change(series: &[(String, i64)]) -> Option<f64> {
+    if series.len() < 2 {
+        return None;
+    }
+    let (_, prev) = series[series.len() - 2];
+    let (_, current) = series[series.len() - 1];
+    if prev == 0 {
+        return None;
+    }
+    Some(((current - prev) as f64 / prev.abs() as f64) * 100.0)
 }
 
 fn month_name(month: u32) -> &'static str {

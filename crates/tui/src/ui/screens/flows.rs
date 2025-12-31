@@ -11,7 +11,10 @@ use engine::{Currency, Money};
 
 use crate::{
     app::{AppState, FlowFormField, FlowModeChoice, FlowsMode, flows_visible_indices},
-    ui::theme::Theme,
+    ui::{
+        components::money::{flow_cap_line_gauge, styled_amount_no_sign, styled_progress_bar},
+        theme::Theme,
+    },
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
@@ -259,17 +262,35 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         return;
     };
 
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(0)])
-        .split(area);
-
     let currency = state
         .vault
         .as_ref()
         .and_then(|v| v.currency.as_ref())
         .map(map_currency)
         .unwrap_or(Currency::Eur);
+
+    let cap_line = state
+        .flows
+        .detail
+        .detail
+        .as_ref()
+        .and_then(|detail| cap_progress_line(detail, currency, theme));
+    let cap_gauge = state
+        .flows
+        .detail
+        .detail
+        .as_ref()
+        .and_then(|detail| cap_line_gauge(detail, theme));
+    let header_height = if cap_line.is_some() || cap_gauge.is_some() {
+        6
+    } else {
+        5
+    };
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(header_height), Constraint::Min(0)])
+        .split(area);
 
     let mut status_spans = vec![
         Span::styled("Status", Style::default().fg(theme.dim)),
@@ -298,17 +319,26 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         Line::from(status_spans),
     ];
 
-    if let Some(detail) = state.flows.detail.detail.as_ref() {
-        if let Some(line) = cap_progress_line(detail, currency, theme) {
-            header_lines.push(line);
-        }
+    if let Some(line) = cap_line {
+        header_lines.push(line);
     }
     let header_block = Block::default()
         .title("Flow Detail")
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
-    frame.render_widget(Paragraph::new(header_lines).block(header_block), layout[0]);
+    let header_inner = header_block.inner(layout[0]);
+    frame.render_widget(header_block, layout[0]);
+    if let Some(gauge) = cap_gauge {
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(1)])
+            .split(header_inner);
+        frame.render_widget(Paragraph::new(header_lines), split[0]);
+        frame.render_widget(gauge, split[1]);
+    } else {
+        frame.render_widget(Paragraph::new(header_lines), header_inner);
+    }
 
     if let Some(err) = state.flows.detail.error.as_ref() {
         let block = Block::default()
@@ -452,16 +482,33 @@ fn cap_progress_line(
     };
 
     let current = current.max(0);
-    let ratio = (current.min(cap) * 20) / cap;
-    let filled = ratio as usize;
-    let empty = 20usize.saturating_sub(filled);
-    let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
-    let current_fmt = Money::new(current).format(currency);
-    let cap_fmt = Money::new(cap).format(currency);
+    let bar = styled_progress_bar(current, Some(cap), 20, theme);
+    let current_fmt = styled_amount_no_sign(current, currency, theme);
+    let cap_fmt = styled_amount_no_sign(cap, currency, theme);
 
     Some(Line::from(vec![
         Span::styled(label, Style::default().fg(theme.dim)),
-        Span::raw(format!(": {current_fmt} / {cap_fmt}  ")),
-        Span::styled(bar, Style::default().fg(theme.accent)),
+        Span::raw(": "),
+        current_fmt,
+        Span::raw(" / "),
+        cap_fmt,
+        Span::raw(" "),
+        bar,
     ]))
+}
+
+fn cap_line_gauge(
+    detail: &engine::CashFlow,
+    theme: &Theme,
+) -> Option<ratatui::widgets::LineGauge<'static>> {
+    let cap = detail.max_balance?;
+    if cap <= 0 {
+        return None;
+    }
+    let current = if let Some(income_total_minor) = detail.income_balance {
+        income_total_minor
+    } else {
+        detail.balance
+    };
+    flow_cap_line_gauge(current.max(0), Some(cap), theme)
 }
