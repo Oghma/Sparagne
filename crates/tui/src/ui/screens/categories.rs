@@ -56,7 +56,7 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     if let CategoriesMode::Merge = state.categories.mode {
         if let (Some(from), Some(into)) = merge_pair(state) {
             line.push(Span::raw("   "));
-            line.push(Span::styled("From", Style::default().fg(theme.dim)));
+            line.push(Span::styled("Merge", Style::default().fg(theme.dim)));
             line.push(Span::raw(format!(": {} -> {}", from, into)));
         }
     }
@@ -81,7 +81,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .border_style(Style::default().fg(theme.border));
 
     if state.categories.items.is_empty() {
-        let empty_msg = Paragraph::new(Line::from("No categories yet."))
+        let empty_msg = Paragraph::new(Line::from("Nessuna categoria."))
             .alignment(Alignment::Center)
             .block(list_block);
         frame.render_widget(empty_msg, area);
@@ -148,9 +148,7 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         Span::raw(": "),
         Span::styled(
             form.name.as_str(),
-            Style::default()
-                .fg(theme.text)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ),
     ]));
     lines.push(Line::from(Span::styled(
@@ -192,9 +190,9 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     if let Some(preview) = state.categories.merge.preview.as_ref() {
         if preview.ok {
             let hint = if state.categories.merge.confirming {
-                "Preview ok. Press Enter to merge."
+                "Preview ok. Premi Enter per unire."
             } else {
-                "Preview ok. Press Enter to confirm."
+                "Preview ok. Premi Enter per confermare."
             };
             lines.push(Line::from(Span::styled(
                 hint,
@@ -202,7 +200,7 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             )));
         } else {
             lines.push(Line::from(Span::styled(
-                "Conflicts:",
+                "Conflitti:",
                 Style::default().fg(theme.error),
             )));
             for conflict in &preview.conflicts {
@@ -213,7 +211,9 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             }
         }
     } else {
-        lines.push(Line::from("Select a target and press Enter for preview."));
+        lines.push(Line::from(
+            "Seleziona una destinazione e premi Enter per il preview.",
+        ));
     }
 
     let block = Block::default()
@@ -238,12 +238,12 @@ fn merge_pair(state: &AppState) -> Option<(String, String)> {
 
 fn merge_conflict_label(kind: &str, value: &str) -> String {
     match kind {
-        "same_category" => "Same category.".to_string(),
-        "source_system" => format!("Source is system: {value}."),
-        "target_archived" => format!("Target is archived: {value}."),
-        "alias_conflict" => format!("Alias conflict: {value}."),
-        "name_conflict" => format!("Name conflict: {value}."),
-        _ => format!("Conflict: {kind} ({value})."),
+        "same_category" => "Categorie identiche.".to_string(),
+        "source_system" => format!("Categoria di sistema: {value}."),
+        "target_archived" => format!("Categoria archiviata: {value}."),
+        "alias_conflict" => format!("Alias in conflitto: {value}."),
+        "name_conflict" => format!("Nome in conflitto: {value}."),
+        _ => format!("Conflitto: {kind} ({value})."),
     }
 }
 

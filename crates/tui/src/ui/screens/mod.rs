@@ -1,5 +1,5 @@
-pub mod flows;
 pub mod categories;
+pub mod flows;
 pub mod home;
 pub mod login;
 pub mod stats;

@@ -261,9 +261,10 @@ fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
             components::hints::KeyHint::new("Enter", "preview/merge"),
             components::hints::KeyHint::new("Esc", "cancel"),
         ],
-        crate::app::CategoriesMode::Create | crate::app::CategoriesMode::Rename => {
-            components::hints::common::form_editing()
-        }
+        crate::app::CategoriesMode::Create | crate::app::CategoriesMode::Rename => vec![
+            components::hints::KeyHint::new("Enter", "save"),
+            components::hints::KeyHint::new("Esc", "cancel"),
+        ],
     }
 }
 

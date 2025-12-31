@@ -3059,7 +3059,8 @@ impl App {
             return;
         };
         if category.is_system {
-            self.state.categories.error = Some("Le categorie di sistema non si modificano.".to_string());
+            self.state.categories.error =
+                Some("Le categorie di sistema non si modificano.".to_string());
             return;
         }
         self.reset_category_form();
@@ -3291,7 +3292,10 @@ impl App {
     }
 
     fn selected_category(&self) -> Option<&CategoryView> {
-        self.state.categories.items.get(self.state.categories.selected)
+        self.state
+            .categories
+            .items
+            .get(self.state.categories.selected)
     }
 
     fn select_transaction_by_id(&mut self, transaction_id: uuid::Uuid) -> bool {
@@ -3455,7 +3459,8 @@ impl App {
             Ok(response) => {
                 self.state.categories.items = response.categories;
                 if self.state.categories.selected >= self.state.categories.items.len() {
-                    self.state.categories.selected = self.state.categories.items.len().saturating_sub(1);
+                    self.state.categories.selected =
+                        self.state.categories.items.len().saturating_sub(1);
                 }
                 if self.state.categories.mode == CategoriesMode::Merge {
                     self.state.categories.mode = CategoriesMode::List;
@@ -3483,7 +3488,12 @@ impl App {
             return Ok(());
         }
         let from_index = self.state.categories.merge.from_index.min(items.len() - 1);
-        let target_index = self.state.categories.merge.target_index.min(items.len() - 1);
+        let target_index = self
+            .state
+            .categories
+            .merge
+            .target_index
+            .min(items.len() - 1);
         let Some(from) = items.get(from_index) else {
             self.set_toast("Categoria sorgente non valida.", ToastLevel::Error);
             return Ok(());
@@ -4196,7 +4206,8 @@ impl App {
             return Ok(());
         };
         if category.is_system {
-            self.state.categories.form.error = Some("Le categorie di sistema non si modificano.".to_string());
+            self.state.categories.form.error =
+                Some("Le categorie di sistema non si modificano.".to_string());
             return Ok(());
         }
         let name = self.state.categories.form.name.trim();
@@ -4244,7 +4255,8 @@ impl App {
             return Ok(());
         };
         if category.is_system {
-            self.state.categories.error = Some("Le categorie di sistema non si modificano.".to_string());
+            self.state.categories.error =
+                Some("Le categorie di sistema non si modificano.".to_string());
             return Ok(());
         }
 
