@@ -40,12 +40,24 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         CategoriesMode::Create | CategoriesMode::Rename => {
             let body = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Length(5), Constraint::Min(0)])
+                .constraints([
+                    Constraint::Length(5),
+                    Constraint::Min(0),
+                    Constraint::Length(5),
+                ])
                 .split(layout[1]);
             render_form(frame, body[0], state, &theme);
             render_list(frame, body[1], state, &theme);
+            render_alias_preview(frame, body[2], state, &theme);
         }
-        CategoriesMode::List => render_list(frame, layout[1], state, &theme),
+        CategoriesMode::List => {
+            let body = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(0), Constraint::Length(5)])
+                .split(layout[1]);
+            render_list(frame, body[0], state, &theme);
+            render_alias_preview(frame, body[1], state, &theme);
+        }
     }
 }
 
@@ -63,7 +75,7 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     ];
 
     if let CategoriesMode::Merge = state.categories.mode {
-        if let (Some(from), Some(into)) = merge_pair(state) {
+        if let Some((from, into)) = merge_pair(state) {
             line.push(Span::raw("   "));
             line.push(Span::styled("Merge", Style::default().fg(theme.dim)));
             line.push(Span::raw(format!(": {} -> {}", from, into)));
@@ -234,6 +246,54 @@ fn render_alias_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(border_style);
+    frame.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+fn render_alias_preview(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let mut lines = Vec::new();
+    let Some(category) = state.categories.items.get(state.categories.selected) else {
+        lines.push(Line::from("Nessuna categoria selezionata."));
+        let block = Block::default()
+            .title("Aliases")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(theme.border));
+        frame.render_widget(Paragraph::new(lines).block(block), area);
+        return;
+    };
+
+    lines.push(Line::from(vec![
+        Span::styled("Categoria", Style::default().fg(theme.dim)),
+        Span::raw(format!(": {}", category.name)),
+    ]));
+
+    if let Some(err) = state.categories.aliases.error.as_ref() {
+        lines.push(Line::from(Span::styled(
+            err.as_str(),
+            Style::default().fg(theme.error),
+        )));
+    } else if state.categories.aliases.category_id != Some(category.id) {
+        lines.push(Line::from("Alias non caricati. Premi l per aprire."));
+    } else if state.categories.aliases.items.is_empty() {
+        lines.push(Line::from("Nessun alias."));
+    } else {
+        let shown = state.categories.aliases.items.iter().take(3);
+        for alias in shown {
+            lines.push(Line::from(format!("- {}", alias.alias)));
+        }
+        if state.categories.aliases.items.len() > 3 {
+            lines.push(Line::from(format!(
+                "... +{}",
+                state.categories.aliases.items.len() - 3
+            )));
+        }
+    }
+
+    let block = Block::default()
+        .title("Aliases")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border));
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 

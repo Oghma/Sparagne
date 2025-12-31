@@ -1749,6 +1749,9 @@ impl App {
             return;
         }
         self.state.categories.selected = (self.state.categories.selected + 1).min(len - 1);
+        self.state.categories.aliases.category_id = None;
+        self.state.categories.aliases.items.clear();
+        self.state.categories.aliases.selected = 0;
     }
 
     fn categories_select_prev(&mut self) {
@@ -1756,6 +1759,9 @@ impl App {
             return;
         }
         self.state.categories.selected = self.state.categories.selected.saturating_sub(1);
+        self.state.categories.aliases.category_id = None;
+        self.state.categories.aliases.items.clear();
+        self.state.categories.aliases.selected = 0;
     }
 
     fn category_merge_select_next(&mut self) {
@@ -3145,17 +3151,20 @@ impl App {
     }
 
     fn start_category_rename(&mut self) {
-        let Some(category) = self.selected_category() else {
+        let Some((_category_id, name, is_system)) = self
+            .selected_category()
+            .map(|category| (category.id, category.name.clone(), category.is_system))
+        else {
             self.state.categories.error = Some("Nessuna categoria selezionata.".to_string());
             return;
         };
-        if category.is_system {
+        if is_system {
             self.state.categories.error =
                 Some("Le categorie di sistema non si modificano.".to_string());
             return;
         }
         self.reset_category_form();
-        self.state.categories.form.name = category.name.clone();
+        self.state.categories.form.name = name;
         self.state.categories.mode = CategoriesMode::Rename;
         self.reset_category_aliases();
     }
@@ -3564,6 +3573,11 @@ impl App {
                 }
                 self.state.categories.error = None;
                 self.connection_ok(None);
+                if let Some(category) = self.selected_category() {
+                    self.load_category_aliases(category.id).await?;
+                } else {
+                    self.reset_category_aliases();
+                }
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
@@ -3578,26 +3592,23 @@ impl App {
 
     async fn submit_category_merge(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
-        let items = self.state.categories.items.clone();
-        if items.len() < 2 {
+        let items_len = self.state.categories.items.len();
+        if items_len < 2 {
             self.set_toast("Serve almeno 2 categorie per unire.", ToastLevel::Error);
             return Ok(());
         }
-        let from_index = self.state.categories.merge.from_index.min(items.len() - 1);
-        let target_index = self
-            .state
-            .categories
-            .merge
-            .target_index
-            .min(items.len() - 1);
-        let Some(from) = items.get(from_index) else {
+        let from_index = self.state.categories.merge.from_index.min(items_len - 1);
+        let target_index = self.state.categories.merge.target_index.min(items_len - 1);
+        let Some(from) = self.state.categories.items.get(from_index) else {
             self.set_toast("Categoria sorgente non valida.", ToastLevel::Error);
             return Ok(());
         };
-        let Some(target) = items.get(target_index) else {
+        let Some(target) = self.state.categories.items.get(target_index) else {
             self.set_toast("Categoria destinazione non valida.", ToastLevel::Error);
             return Ok(());
         };
+        let from_id = from.id;
+        let target_id = target.id;
 
         if !self.state.categories.merge.confirming {
             let res = self
@@ -3605,10 +3616,10 @@ impl App {
                 .categories_merge_preview(
                     self.state.login.username.as_str(),
                     self.state.login.password.as_str(),
-                    from.id,
+                    from_id,
                     api_types::category::CategoryMergePreview {
                         vault_id,
-                        into_category_id: target.id,
+                        into_category_id: target_id,
                     },
                 )
                 .await;
@@ -3650,10 +3661,10 @@ impl App {
             .categories_merge(
                 self.state.login.username.as_str(),
                 self.state.login.password.as_str(),
-                from.id,
+                from_id,
                 api_types::category::CategoryMerge {
                     vault_id,
-                    into_category_id: target.id,
+                    into_category_id: target_id,
                 },
             )
             .await;
@@ -3676,21 +3687,21 @@ impl App {
     }
 
     async fn start_category_aliases(&mut self) -> Result<()> {
-        let Some(category) = self.selected_category() else {
+        let Some(category_id) = self.selected_category().map(|category| category.id) else {
             self.set_toast("Nessuna categoria selezionata.", ToastLevel::Error);
             return Ok(());
         };
         self.state.categories.mode = CategoriesMode::Aliases;
         self.reset_category_aliases();
-        self.load_category_aliases(category.id).await?;
+        self.load_category_aliases(category_id).await?;
         Ok(())
     }
 
     async fn reload_category_aliases(&mut self) -> Result<()> {
-        let Some(category) = self.selected_category() else {
+        let Some(category_id) = self.selected_category().map(|category| category.id) else {
             return Ok(());
         };
-        self.load_category_aliases(category.id).await
+        self.load_category_aliases(category_id).await
     }
 
     async fn load_category_aliases(&mut self, category_id: uuid::Uuid) -> Result<()> {
@@ -3708,6 +3719,7 @@ impl App {
         match res {
             Ok(response) => {
                 self.state.categories.aliases.items = response.aliases;
+                self.state.categories.aliases.category_id = Some(category_id);
                 if self.state.categories.aliases.selected
                     >= self.state.categories.aliases.items.len()
                 {
@@ -3734,12 +3746,12 @@ impl App {
             return Ok(());
         }
 
-        let Some(category) = self.selected_category() else {
+        let Some(category_id) = self.selected_category().map(|category| category.id) else {
             self.state.categories.aliases.error =
                 Some("Nessuna categoria selezionata.".to_string());
             return Ok(());
         };
-        let alias = self.state.categories.aliases.input.trim();
+        let alias = self.state.categories.aliases.input.trim().to_string();
         if alias.is_empty() {
             self.state.categories.aliases.error = Some("Inserisci un alias.".to_string());
             return Ok(());
@@ -3750,10 +3762,10 @@ impl App {
             .category_alias_create(
                 self.state.login.username.as_str(),
                 self.state.login.password.as_str(),
-                category.id,
+                category_id,
                 api_types::category::CategoryAliasCreate {
                     vault_id: self.current_vault_id()?,
-                    alias: alias.to_string(),
+                    alias,
                 },
             )
             .await;
@@ -3762,7 +3774,7 @@ impl App {
             Ok(_) => {
                 self.state.categories.aliases.input.clear();
                 self.state.categories.aliases.focus = AliasFocus::List;
-                self.load_category_aliases(category.id).await?;
+                self.load_category_aliases(category_id).await?;
                 self.set_toast("Alias creato.", ToastLevel::Success);
             }
             Err(err) => {
@@ -3778,17 +3790,18 @@ impl App {
     }
 
     async fn delete_category_alias(&mut self) -> Result<()> {
-        let Some(category) = self.selected_category() else {
+        let Some(category_id) = self.selected_category().map(|category| category.id) else {
             self.state.categories.aliases.error =
                 Some("Nessuna categoria selezionata.".to_string());
             return Ok(());
         };
-        let Some(alias) = self
+        let Some(alias_id) = self
             .state
             .categories
             .aliases
             .items
             .get(self.state.categories.aliases.selected)
+            .map(|alias| alias.id)
         else {
             self.state.categories.aliases.error = Some("Nessun alias selezionato.".to_string());
             return Ok(());
@@ -3799,8 +3812,8 @@ impl App {
             .category_alias_delete(
                 self.state.login.username.as_str(),
                 self.state.login.password.as_str(),
-                category.id,
-                alias.id,
+                category_id,
+                alias_id,
                 api_types::category::CategoryAliasDelete {
                     vault_id: self.current_vault_id()?,
                 },
@@ -3809,7 +3822,7 @@ impl App {
 
         match res {
             Ok(()) => {
-                self.load_category_aliases(category.id).await?;
+                self.load_category_aliases(category_id).await?;
                 self.set_toast("Alias eliminato.", ToastLevel::Success);
             }
             Err(err) => {
@@ -5143,6 +5156,15 @@ impl App {
                 self.state.section = Section::Transactions;
                 self.start_transfer_flow();
             }
+            PaletteCommand::Categories => {
+                self.state.section = Section::Categories;
+                self.load_categories().await?;
+            }
+            PaletteCommand::CategoryAliases => {
+                self.state.section = Section::Categories;
+                self.load_categories().await?;
+                self.start_category_aliases().await?;
+            }
             PaletteCommand::WalletNew => {
                 self.state.section = Section::Wallets;
                 self.start_wallet_create();
@@ -5666,6 +5688,7 @@ pub struct CategoryAliasState {
     pub input: String,
     pub error: Option<String>,
     pub focus: AliasFocus,
+    pub category_id: Option<uuid::Uuid>,
 }
 
 impl Default for CategoryAliasState {
@@ -5676,6 +5699,7 @@ impl Default for CategoryAliasState {
             input: String::new(),
             error: None,
             focus: AliasFocus::List,
+            category_id: None,
         }
     }
 }
@@ -5861,6 +5885,8 @@ pub enum PaletteCommand {
     NewRefund,
     NewTransferWallet,
     NewTransferFlow,
+    Categories,
+    CategoryAliases,
     WalletNew,
     FlowNew,
     VaultCreate,
@@ -5876,6 +5902,8 @@ impl PaletteCommand {
             Self::NewRefund,
             Self::NewTransferWallet,
             Self::NewTransferFlow,
+            Self::Categories,
+            Self::CategoryAliases,
             Self::WalletNew,
             Self::FlowNew,
             Self::VaultCreate,
@@ -5891,6 +5919,8 @@ impl PaletteCommand {
             Self::NewRefund => "Transactions: New Refund",
             Self::NewTransferWallet => "Transactions: New Transfer Wallet",
             Self::NewTransferFlow => "Transactions: New Transfer Flow",
+            Self::Categories => "Categories: Open",
+            Self::CategoryAliases => "Categories: Aliases",
             Self::WalletNew => "Wallets: New",
             Self::FlowNew => "Flows: New",
             Self::VaultCreate => "Vault: Create",
@@ -5943,6 +5973,26 @@ fn login_message_for_error(err: ClientError) -> String {
         ClientError::Validation(message) => format!("Errore di validazione: {message}"),
         ClientError::Server(message) => format!("Errore server: {message}"),
         ClientError::Transport(err) => format!("Server non raggiungibile: {err}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PaletteCommand, filter_commands};
+
+    #[test]
+    fn palette_includes_category_commands() {
+        let all = PaletteCommand::all();
+        assert!(all.contains(&PaletteCommand::Categories));
+        assert!(all.contains(&PaletteCommand::CategoryAliases));
+    }
+
+    #[test]
+    fn filter_commands_matches_category_queries() {
+        let commands = filter_commands("cat");
+        assert!(commands.contains(&PaletteCommand::Categories));
+        let commands = filter_commands("alias");
+        assert!(commands.contains(&PaletteCommand::CategoryAliases));
     }
 }
 

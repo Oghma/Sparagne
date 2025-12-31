@@ -2,9 +2,9 @@ use api_types::{
     cash_flow::CashFlowGet,
     category::{
         CategoryAliasCreate, CategoryAliasCreated, CategoryAliasDelete, CategoryAliasList,
-        CategoryAliasListResponse, CategoryAliasView, CategoryCreate, CategoryCreated,
-        CategoryList, CategoryListResponse, CategoryMerge, CategoryMergePreview,
-        CategoryMergePreviewResponse, CategoryUpdate, CategoryView,
+        CategoryAliasListResponse, CategoryCreate, CategoryCreated, CategoryList,
+        CategoryListResponse, CategoryMerge, CategoryMergePreview, CategoryMergePreviewResponse,
+        CategoryUpdate, CategoryView,
     },
     flow::{FlowCreated, FlowNew, FlowUpdate},
     stats::Statistic,
