@@ -98,21 +98,22 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .split(area);
 
     // Left: shortcuts + context hints
-    let mut parts = components::tabs::tab_shortcuts(theme);
+    let mut parts = Vec::new();
+    parts.extend(components::hints::hints_to_spans(
+        &components::hints::common::section_shortcuts(),
+        theme,
+    ));
+    parts.push(components::hints::hint_separator(theme));
+    parts.extend(components::hints::hints_to_spans(
+        &components::hints::common::global_shortcuts(),
+        theme,
+    ));
 
-    parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
-    parts.push(Span::styled("Ctrl+P", Style::default().fg(theme.accent)));
-    parts.push(Span::raw(" cmd"));
-
-    let context_hints = get_context_hints(state, theme);
+    let context_hints = get_context_hints(state);
     if !context_hints.is_empty() {
-        parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
-        parts.extend(context_hints);
+        parts.push(components::hints::hint_separator(theme));
+        parts.extend(components::hints::hints_to_spans(&context_hints, theme));
     }
-
-    parts.push(Span::styled("  │  ", Style::default().fg(theme.border)));
-    parts.push(Span::styled("q", Style::default().fg(theme.accent)));
-    parts.push(Span::raw(" quit"));
 
     frame.render_widget(Paragraph::new(Line::from(parts)), layout[0]);
 
@@ -139,157 +140,109 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 }
 
 /// Returns context-specific keyboard hints based on current section and mode.
-fn get_context_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+fn get_context_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.section {
         crate::app::Section::Home => vec![
-            Span::styled("t", Style::default().fg(theme.accent)),
-            Span::raw(" transactions  "),
-            Span::styled("w", Style::default().fg(theme.accent)),
-            Span::raw(" wallets  "),
-            Span::styled("f", Style::default().fg(theme.accent)),
-            Span::raw(" flows"),
+            components::hints::KeyHint::new("a", "add expense"),
+            components::hints::KeyHint::new("i", "add income"),
+            components::hints::KeyHint::new("r", "refresh"),
         ],
-        crate::app::Section::Transactions => get_transactions_hints(state, theme),
-        crate::app::Section::Wallets => get_wallets_hints(state, theme),
-        crate::app::Section::Flows => get_flows_hints(state, theme),
-        crate::app::Section::Vault => get_vault_hints(state, theme),
+        crate::app::Section::Transactions => get_transactions_hints(state),
+        crate::app::Section::Wallets => get_wallets_hints(state),
+        crate::app::Section::Flows => get_flows_hints(state),
+        crate::app::Section::Vault => get_vault_hints(state),
         crate::app::Section::Stats => vec![
-            Span::styled("r", Style::default().fg(theme.accent)),
-            Span::raw(" refresh"),
+            components::hints::KeyHint::new("r", "refresh"),
+            components::hints::KeyHint::new("←/→", "month"),
         ],
     }
 }
 
-fn get_transactions_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+fn get_transactions_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.transactions.mode {
         crate::app::TransactionsMode::List => vec![
-            Span::styled("a", Style::default().fg(theme.accent)),
-            Span::raw(" quick add  "),
-            Span::styled("i", Style::default().fg(theme.accent)),
-            Span::raw(" income  "),
-            Span::styled("e", Style::default().fg(theme.accent)),
-            Span::raw(" expense  "),
-            Span::styled("R", Style::default().fg(theme.accent)),
-            Span::raw(" refund  "),
-            Span::styled("/", Style::default().fg(theme.accent)),
-            Span::raw(" filters  "),
-            Span::styled("w", Style::default().fg(theme.accent)),
-            Span::raw(" wallet scope  "),
-            Span::styled("f", Style::default().fg(theme.accent)),
-            Span::raw(" flow scope  "),
-            Span::styled("c", Style::default().fg(theme.accent)),
-            Span::raw(" clear  "),
-            Span::styled("u", Style::default().fg(theme.accent)),
-            Span::raw(" undo  "),
-            Span::styled("Enter", Style::default().fg(theme.accent)),
-            Span::raw(" detail"),
-        ],
-        crate::app::TransactionsMode::Detail => vec![
-            Span::styled("b", Style::default().fg(theme.accent)),
-            Span::raw(" back  "),
-            Span::styled("e", Style::default().fg(theme.accent)),
-            Span::raw(" edit  "),
-            Span::styled("v", Style::default().fg(theme.accent)),
-            Span::raw(" void  "),
-            Span::styled("r", Style::default().fg(theme.accent)),
-            Span::raw(" repeat"),
-        ],
-        crate::app::TransactionsMode::Edit
-        | crate::app::TransactionsMode::PickWallet
-        | crate::app::TransactionsMode::PickFlow => vec![
-            Span::styled("Enter", Style::default().fg(theme.accent)),
-            Span::raw(" save  "),
-            Span::styled("Esc", Style::default().fg(theme.accent)),
-            Span::raw(" cancel"),
+            components::hints::KeyHint::new("a", "quick add"),
+            components::hints::KeyHint::new("i", "income"),
+            components::hints::KeyHint::new("e", "expense"),
+            components::hints::KeyHint::new("R", "refund"),
+            components::hints::KeyHint::new("/", "filters"),
+            components::hints::KeyHint::new("w", "wallet scope"),
+            components::hints::KeyHint::new("f", "flow scope"),
+            components::hints::KeyHint::new("c", "clear"),
+            components::hints::KeyHint::new("u", "undo"),
+        ]
+        .into_iter()
+        .chain(components::hints::common::list_navigation())
+        .collect(),
+        crate::app::TransactionsMode::Detail => {
+            let mut hints = components::hints::common::detail_view();
+            hints.push(components::hints::KeyHint::new("e", "edit"));
+            hints.push(components::hints::KeyHint::new("v", "void"));
+            hints.push(components::hints::KeyHint::new("r", "repeat"));
+            hints
+        }
+        crate::app::TransactionsMode::PickWallet | crate::app::TransactionsMode::PickFlow => vec![
+            components::hints::KeyHint::new("Enter", "save"),
+            components::hints::KeyHint::new("Esc", "cancel"),
         ],
         crate::app::TransactionsMode::TransferWallet
         | crate::app::TransactionsMode::TransferFlow
         | crate::app::TransactionsMode::Filter => vec![
-            Span::styled("Tab", Style::default().fg(theme.accent)),
-            Span::raw(" next  "),
-            Span::styled("Enter", Style::default().fg(theme.accent)),
-            Span::raw(" apply  "),
-            Span::styled("Esc", Style::default().fg(theme.accent)),
-            Span::raw(" cancel"),
+            components::hints::KeyHint::new("Tab", "next"),
+            components::hints::KeyHint::new("Enter", "apply"),
+            components::hints::KeyHint::new("Esc", "cancel"),
         ],
-        crate::app::TransactionsMode::Form => vec![
-            Span::styled("Tab", Style::default().fg(theme.accent)),
-            Span::raw(" next  "),
-            Span::styled("Enter", Style::default().fg(theme.accent)),
-            Span::raw(" save  "),
-            Span::styled("Esc", Style::default().fg(theme.accent)),
-            Span::raw(" cancel"),
-        ],
+        crate::app::TransactionsMode::Form | crate::app::TransactionsMode::Edit => {
+            components::hints::common::form_editing()
+        }
     }
 }
 
-fn get_wallets_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+fn get_wallets_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.wallets.mode {
-        crate::app::WalletsMode::List => vec![
-            Span::styled("c", Style::default().fg(theme.accent)),
-            Span::raw(" create  "),
-            Span::styled("e", Style::default().fg(theme.accent)),
-            Span::raw(" rename  "),
-            Span::styled("a", Style::default().fg(theme.accent)),
-            Span::raw(" archive  "),
-            Span::styled("Enter", Style::default().fg(theme.accent)),
-            Span::raw(" detail"),
-        ],
-        crate::app::WalletsMode::Detail => vec![
-            Span::styled("b", Style::default().fg(theme.accent)),
-            Span::raw(" back"),
-        ],
-        crate::app::WalletsMode::Create | crate::app::WalletsMode::Rename => vec![
-            Span::styled("Enter", Style::default().fg(theme.accent)),
-            Span::raw(" save  "),
-            Span::styled("Tab", Style::default().fg(theme.accent)),
-            Span::raw(" next  "),
-            Span::styled("Esc", Style::default().fg(theme.accent)),
-            Span::raw(" cancel"),
-        ],
+        crate::app::WalletsMode::List => {
+            let mut hints = components::hints::common::list_navigation();
+            hints.push(components::hints::KeyHint::new("c", "create"));
+            hints.push(components::hints::KeyHint::new("e", "rename"));
+            hints.push(components::hints::KeyHint::new("a", "archive"));
+            hints
+        }
+        crate::app::WalletsMode::Detail => components::hints::common::detail_view(),
+        crate::app::WalletsMode::Create | crate::app::WalletsMode::Rename => {
+            components::hints::common::form_editing()
+        }
     }
 }
 
-fn get_flows_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+fn get_flows_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.flows.mode {
-        crate::app::FlowsMode::List => vec![
-            Span::styled("c", Style::default().fg(theme.accent)),
-            Span::raw(" create  "),
-            Span::styled("e", Style::default().fg(theme.accent)),
-            Span::raw(" rename  "),
-            Span::styled("a", Style::default().fg(theme.accent)),
-            Span::raw(" archive  "),
-            Span::styled("Enter", Style::default().fg(theme.accent)),
-            Span::raw(" detail"),
-        ],
-        crate::app::FlowsMode::Detail => vec![
-            Span::styled("b", Style::default().fg(theme.accent)),
-            Span::raw(" back"),
-        ],
-        crate::app::FlowsMode::Create | crate::app::FlowsMode::Rename => vec![
-            Span::styled("Enter", Style::default().fg(theme.accent)),
-            Span::raw(" save  "),
-            Span::styled("Tab", Style::default().fg(theme.accent)),
-            Span::raw(" next  "),
-            Span::styled("m", Style::default().fg(theme.accent)),
-            Span::raw(" mode  "),
-            Span::styled("Esc", Style::default().fg(theme.accent)),
-            Span::raw(" cancel"),
-        ],
+        crate::app::FlowsMode::List => {
+            let mut hints = components::hints::common::list_navigation();
+            hints.push(components::hints::KeyHint::new("c", "create"));
+            hints.push(components::hints::KeyHint::new("e", "rename"));
+            hints.push(components::hints::KeyHint::new("a", "archive"));
+            hints
+        }
+        crate::app::FlowsMode::Detail => components::hints::common::detail_view(),
+        crate::app::FlowsMode::Create | crate::app::FlowsMode::Rename => {
+            let mut hints = components::hints::common::form_editing();
+            hints.insert(1, components::hints::KeyHint::new("m", "mode"));
+            hints
+        }
     }
 }
 
-fn get_vault_hints(state: &AppState, theme: &Theme) -> Vec<Span<'static>> {
+fn get_vault_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.vault_ui.mode {
         crate::app::VaultMode::View => vec![
-            Span::styled("c", Style::default().fg(theme.accent)),
-            Span::raw(" create"),
+            components::hints::KeyHint::new("c", "create"),
+            components::hints::KeyHint::new("d", "defaults"),
         ],
-        crate::app::VaultMode::Create => vec![
-            Span::styled("Enter", Style::default().fg(theme.accent)),
-            Span::raw(" save  "),
-            Span::styled("Esc", Style::default().fg(theme.accent)),
-            Span::raw(" cancel"),
-        ],
+        crate::app::VaultMode::Create => components::hints::common::form_editing(),
+        crate::app::VaultMode::Defaults => {
+            let mut hints = components::hints::common::form_editing();
+            hints.insert(1, components::hints::KeyHint::new("↑/↓", "change"));
+            hints
+        }
     }
 }

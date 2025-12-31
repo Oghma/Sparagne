@@ -6,6 +6,7 @@ use crate::{
     client::{Client, ClientError},
     config::AppConfig,
     error::{AppError, Result},
+    local_state::{LocalState, default_state_path},
     quick_add::QuickAddKind,
     ui,
 };
@@ -21,7 +22,7 @@ use api_types::{
     vault::{Vault, VaultNew, VaultSnapshot},
     wallet::{WalletNew, WalletUpdate},
 };
-use chrono::{DateTime, Datelike, FixedOffset, Offset, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration as ChronoDuration, FixedOffset, Offset, TimeZone, Utc};
 use chrono_tz::Tz;
 use engine::Money;
 use std::str::FromStr;
@@ -88,6 +89,8 @@ pub struct AppState {
     pub last_refresh: Option<DateTime<FixedOffset>>,
     pub base_url: String,
     pub last_flow_id: Option<uuid::Uuid>,
+    pub default_wallet_id: Option<uuid::Uuid>,
+    pub default_flow_id: Option<uuid::Uuid>,
 }
 
 pub struct App {
@@ -95,11 +98,15 @@ pub struct App {
     client: Client,
     pub state: AppState,
     should_quit: bool,
+    local_state: LocalState,
+    local_state_path: String,
 }
 
 impl App {
     pub fn new(config: AppConfig) -> Result<Self> {
         let client = Client::new(&config.base_url)?;
+        let local_state_path = default_state_path().to_string();
+        let local_state = LocalState::load(local_state_path.as_str())?;
         let state = AppState {
             screen: Screen::Login,
             login: LoginState {
@@ -123,6 +130,8 @@ impl App {
             last_refresh: None,
             base_url: config.base_url.clone(),
             last_flow_id: None,
+            default_wallet_id: None,
+            default_flow_id: None,
         };
 
         Ok(Self {
@@ -130,6 +139,8 @@ impl App {
             client,
             state,
             should_quit: false,
+            local_state,
+            local_state_path,
         })
     }
 
@@ -178,6 +189,11 @@ impl App {
                     self.open_palette();
                 }
             }
+            crate::ui::keymap::AppAction::Search => {
+                if self.state.screen == Screen::Home {
+                    self.start_search();
+                }
+            }
             crate::ui::keymap::AppAction::Quit => {
                 if self.state.screen == Screen::Login {
                     self.should_quit = true;
@@ -188,29 +204,36 @@ impl App {
             crate::ui::keymap::AppAction::Cancel => {
                 if self.state.screen == Screen::Login {
                     self.should_quit = true;
+                } else if self.stop_search_if_active().await? {
+                    return Ok(());
                 } else if self.state.section == Section::Transactions {
                     match self.state.transactions.mode {
                         TransactionsMode::Edit => {
                             self.state.transactions.mode = TransactionsMode::Detail;
-                            self.state.transactions.edit_input.clear();
-                            self.state.transactions.edit_error = None;
+                            self.state.transactions.form = TransactionFormState::default();
                         }
                         TransactionsMode::Detail => {
                             self.state.transactions.mode = TransactionsMode::List;
                             self.state.transactions.detail = None;
-                            self.state.transactions.edit_input.clear();
-                            self.state.transactions.edit_error = None;
                         }
                         TransactionsMode::PickWallet | TransactionsMode::PickFlow => {
                             self.state.transactions.mode = TransactionsMode::List;
                             self.state.transactions.picker_index = 0;
                         }
                         TransactionsMode::TransferWallet | TransactionsMode::TransferFlow => {
-                            self.state.transactions.mode = TransactionsMode::List;
+                            if self.state.transactions.transfer.editing_id.is_some() {
+                                self.state.transactions.mode = TransactionsMode::Detail;
+                            } else {
+                                self.state.transactions.mode = TransactionsMode::List;
+                            }
                             self.state.transactions.transfer = TransferFormState::default();
                         }
                         TransactionsMode::Form => {
-                            self.state.transactions.mode = TransactionsMode::List;
+                            if self.state.transactions.form.editing_id.is_some() {
+                                self.state.transactions.mode = TransactionsMode::Detail;
+                            } else {
+                                self.state.transactions.mode = TransactionsMode::List;
+                            }
                             self.state.transactions.form = TransactionFormState::default();
                         }
                         TransactionsMode::Filter => {
@@ -256,11 +279,18 @@ impl App {
                         }
                     }
                 } else if self.state.section == Section::Vault {
-                    if self.state.vault_ui.mode == VaultMode::Create {
-                        self.reset_vault_form();
-                        self.state.vault_ui.mode = VaultMode::View;
-                    } else {
-                        self.state.section = Section::Home;
+                    match self.state.vault_ui.mode {
+                        VaultMode::Create => {
+                            self.reset_vault_form();
+                            self.state.vault_ui.mode = VaultMode::View;
+                        }
+                        VaultMode::Defaults => {
+                            self.state.vault_ui.defaults = DefaultsFormState::default();
+                            self.state.vault_ui.mode = VaultMode::View;
+                        }
+                        VaultMode::View => {
+                            self.state.section = Section::Home;
+                        }
                     }
                 } else if self.state.section == Section::Stats {
                     self.state.section = Section::Home;
@@ -288,12 +318,13 @@ impl App {
                 if self.state.screen == Screen::Login {
                     let field = self.active_field_mut();
                     field.pop();
+                } else if self.handle_search_backspace().await? {
+                    return Ok(());
                 } else if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::Edit
-                {
-                    self.state.transactions.edit_input.pop();
-                } else if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::Form
+                    && matches!(
+                        self.state.transactions.mode,
+                        TransactionsMode::Form | TransactionsMode::Edit
+                    )
                 {
                     self.backspace_transaction_form();
                 } else if self.state.section == Section::Transactions
@@ -308,6 +339,9 @@ impl App {
                         }
                         TransferField::Note => {
                             self.state.transactions.transfer.note.pop();
+                        }
+                        TransferField::OccurredAt => {
+                            self.state.transactions.transfer.occurred_at.pop();
                         }
                         _ => {}
                     }
@@ -344,7 +378,7 @@ impl App {
                         TransactionsMode::List | TransactionsMode::Detail
                     )
                 {
-                    self.state.transactions.select_prev();
+                    self.transactions_select_prev();
                     if self.state.transactions.mode == TransactionsMode::Detail {
                         self.open_transaction_detail().await?;
                     }
@@ -366,7 +400,10 @@ impl App {
                     self.transfer_select_prev();
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::Form
+                    && matches!(
+                        self.state.transactions.mode,
+                        TransactionsMode::Form | TransactionsMode::Edit
+                    )
                 {
                     self.transaction_form_select_prev();
                 } else if self.state.screen == Screen::Home
@@ -388,6 +425,11 @@ impl App {
                     if self.state.flows.mode == FlowsMode::Detail {
                         self.open_flow_detail().await?;
                     }
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::Defaults
+                {
+                    self.defaults_select_prev();
                 }
             }
             crate::ui::keymap::AppAction::Down => {
@@ -398,7 +440,7 @@ impl App {
                         TransactionsMode::List | TransactionsMode::Detail
                     )
                 {
-                    self.state.transactions.select_next();
+                    self.transactions_select_next();
                     if self.state.transactions.mode == TransactionsMode::Detail {
                         self.open_transaction_detail().await?;
                     }
@@ -420,7 +462,10 @@ impl App {
                     self.transfer_select_next();
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::Form
+                    && matches!(
+                        self.state.transactions.mode,
+                        TransactionsMode::Form | TransactionsMode::Edit
+                    )
                 {
                     self.transaction_form_select_next();
                 } else if self.state.screen == Screen::Home
@@ -442,6 +487,11 @@ impl App {
                     if self.state.flows.mode == FlowsMode::Detail {
                         self.open_flow_detail().await?;
                     }
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::Defaults
+                {
+                    self.defaults_select_next();
                 }
             }
             crate::ui::keymap::AppAction::Input(ch) => {
@@ -449,13 +499,13 @@ impl App {
                     let field = self.active_field_mut();
                     field.push(ch);
                 } else {
-                    if self.state.section == Section::Transactions
-                        && self.state.transactions.mode == TransactionsMode::Edit
-                    {
-                        self.state.transactions.edit_input.push(ch);
+                    if self.handle_search_input(ch).await? {
                         return Ok(());
                     } else if self.state.section == Section::Transactions
-                        && self.state.transactions.mode == TransactionsMode::Form
+                        && matches!(
+                            self.state.transactions.mode,
+                            TransactionsMode::Form | TransactionsMode::Edit
+                        )
                     {
                         self.handle_transaction_form_input(ch);
                         return Ok(());
@@ -472,6 +522,10 @@ impl App {
                             }
                             TransferField::Note => {
                                 self.state.transactions.transfer.note.push(ch);
+                                return Ok(());
+                            }
+                            TransferField::OccurredAt => {
+                                self.state.transactions.transfer.occurred_at.push(ch);
                                 return Ok(());
                             }
                             _ => {}
@@ -510,7 +564,10 @@ impl App {
         }
 
         if self.state.section == Section::Transactions
-            && self.state.transactions.mode == TransactionsMode::Form
+            && matches!(
+                self.state.transactions.mode,
+                TransactionsMode::Form | TransactionsMode::Edit
+            )
         {
             self.advance_transaction_form_focus();
             return;
@@ -585,11 +642,19 @@ impl App {
     }
 
     fn advance_vault_focus(&mut self) {
-        if self.state.vault_ui.mode != VaultMode::Create {
-            return;
+        match self.state.vault_ui.mode {
+            VaultMode::Create => {
+                self.state.vault_ui.form.error = None;
+            }
+            VaultMode::Defaults => {
+                self.state.vault_ui.defaults.error = None;
+                self.state.vault_ui.defaults.focus = match self.state.vault_ui.defaults.focus {
+                    DefaultsField::Wallet => DefaultsField::Flow,
+                    DefaultsField::Flow => DefaultsField::Wallet,
+                };
+            }
+            VaultMode::View => {}
         }
-
-        self.state.vault_ui.form.error = None;
     }
 
     fn advance_transfer_focus(&mut self) {
@@ -598,7 +663,8 @@ impl App {
             TransferField::From => TransferField::To,
             TransferField::To => TransferField::Amount,
             TransferField::Amount => TransferField::Note,
-            TransferField::Note => TransferField::From,
+            TransferField::Note => TransferField::OccurredAt,
+            TransferField::OccurredAt => TransferField::From,
         };
     }
 
@@ -623,6 +689,7 @@ impl App {
                     Ok(snapshot) => {
                         self.state.last_flow_id = Some(snapshot.unallocated_flow_id);
                         self.state.snapshot = Some(snapshot);
+                        self.apply_local_defaults();
                         self.state.screen = Screen::Home;
                         self.state.login.message = None;
                         self.load_transactions(true).await?;
@@ -640,6 +707,49 @@ impl App {
         Ok(())
     }
 
+    fn apply_local_defaults(&mut self) {
+        let username = self.state.login.username.trim();
+        let Some(vault_id) = self.state.vault.as_ref().and_then(|v| v.id.as_deref()) else {
+            return;
+        };
+        if username.is_empty() {
+            return;
+        }
+
+        if let Some(defaults) = self.local_state.defaults_for(username, vault_id) {
+            self.state.default_wallet_id = defaults.wallet_id;
+            self.state.default_flow_id = defaults.flow_id;
+        } else {
+            self.state.default_wallet_id = None;
+            self.state.default_flow_id = None;
+        }
+        self.normalize_defaults();
+    }
+
+    fn normalize_defaults(&mut self) {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            return;
+        };
+        if let Some(wallet_id) = self.state.default_wallet_id {
+            let valid = snapshot
+                .wallets
+                .iter()
+                .any(|wallet| wallet.id == wallet_id && !wallet.archived);
+            if !valid {
+                self.state.default_wallet_id = None;
+            }
+        }
+        if let Some(flow_id) = self.state.default_flow_id {
+            let valid = snapshot
+                .flows
+                .iter()
+                .any(|flow| flow.id == flow_id && !flow.archived);
+            if !valid {
+                self.state.default_flow_id = None;
+            }
+        }
+    }
+
     async fn handle_transactions_submit(&mut self) -> Result<()> {
         match self.state.transactions.mode {
             TransactionsMode::List => {
@@ -650,8 +760,7 @@ impl App {
                 }
             }
             TransactionsMode::Detail => Ok(()),
-            TransactionsMode::Edit => self.apply_transaction_edit().await,
-            TransactionsMode::Form => self.submit_transaction_form().await,
+            TransactionsMode::Edit | TransactionsMode::Form => self.submit_transaction_form().await,
             TransactionsMode::PickWallet => self.apply_wallet_picker().await,
             TransactionsMode::PickFlow => self.apply_flow_picker().await,
             TransactionsMode::TransferWallet => self.submit_transfer_wallet().await,
@@ -679,8 +788,14 @@ impl App {
     }
 
     async fn handle_vault_submit(&mut self) -> Result<()> {
-        if self.state.vault_ui.mode == VaultMode::Create {
-            self.submit_vault_create().await?;
+        match self.state.vault_ui.mode {
+            VaultMode::Create => {
+                self.submit_vault_create().await?;
+            }
+            VaultMode::Defaults => {
+                self.save_defaults().await?;
+            }
+            VaultMode::View => {}
         }
         Ok(())
     }
@@ -746,6 +861,17 @@ impl App {
                     self.state.transactions.mode = TransactionsMode::List;
                 }
                 return Ok(());
+            }
+            'd' | 'D' => {
+                if self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::View
+                {
+                    if self.state.snapshot.is_none() {
+                        self.refresh_snapshot().await?;
+                    }
+                    self.start_defaults();
+                    return Ok(());
+                }
             }
             // Transaction list context actions (use different keys)
             'x' | 'X' => {
@@ -836,13 +962,13 @@ impl App {
             }
             'j' | 'J' => {
                 if self.state.section == Section::Transactions {
-                    self.state.transactions.select_next();
+                    self.transactions_select_next();
                 }
                 return Ok(());
             }
             'k' | 'K' => {
                 if self.state.section == Section::Transactions {
-                    self.state.transactions.select_prev();
+                    self.transactions_select_prev();
                 }
                 return Ok(());
             }
@@ -880,9 +1006,7 @@ impl App {
                 } else if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::Detail
                 {
-                    self.state.transactions.mode = TransactionsMode::Edit;
-                    self.state.transactions.edit_input.clear();
-                    self.state.transactions.edit_error = None;
+                    self.start_transaction_edit().await?;
                 } else if self.state.section == Section::Wallets
                     && self.state.wallets.mode == WalletsMode::List
                 {
@@ -898,13 +1022,41 @@ impl App {
                 if self.state.section == Section::Transactions
                     && self.state.transactions.mode != TransactionsMode::List
                 {
-                    self.state.transactions.mode = TransactionsMode::List;
-                    self.state.transactions.detail = None;
-                    self.state.transactions.edit_input.clear();
-                    self.state.transactions.edit_error = None;
-                    self.state.transactions.transfer = TransferFormState::default();
-                    self.state.transactions.form = TransactionFormState::default();
-                    self.state.transactions.filter.error = None;
+                    match self.state.transactions.mode {
+                        TransactionsMode::Detail => {
+                            self.state.transactions.mode = TransactionsMode::List;
+                            self.state.transactions.detail = None;
+                        }
+                        TransactionsMode::Edit => {
+                            self.state.transactions.mode = TransactionsMode::Detail;
+                            self.state.transactions.form = TransactionFormState::default();
+                        }
+                        TransactionsMode::Form => {
+                            if self.state.transactions.form.editing_id.is_some() {
+                                self.state.transactions.mode = TransactionsMode::Detail;
+                            } else {
+                                self.state.transactions.mode = TransactionsMode::List;
+                            }
+                            self.state.transactions.form = TransactionFormState::default();
+                        }
+                        TransactionsMode::TransferWallet | TransactionsMode::TransferFlow => {
+                            if self.state.transactions.transfer.editing_id.is_some() {
+                                self.state.transactions.mode = TransactionsMode::Detail;
+                            } else {
+                                self.state.transactions.mode = TransactionsMode::List;
+                            }
+                            self.state.transactions.transfer = TransferFormState::default();
+                        }
+                        TransactionsMode::PickWallet | TransactionsMode::PickFlow => {
+                            self.state.transactions.mode = TransactionsMode::List;
+                            self.state.transactions.picker_index = 0;
+                        }
+                        TransactionsMode::Filter => {
+                            self.state.transactions.mode = TransactionsMode::List;
+                            self.state.transactions.filter.error = None;
+                        }
+                        TransactionsMode::List => {}
+                    }
                 } else if self.state.section == Section::Wallets
                     && self.state.wallets.mode != WalletsMode::List
                 {
@@ -917,6 +1069,12 @@ impl App {
                     self.state.flows.mode = FlowsMode::List;
                     self.state.flows.detail = FlowDetailState::default();
                     self.reset_flow_form();
+                } else if self.state.section == Section::Vault
+                    && self.state.vault_ui.mode != VaultMode::View
+                {
+                    self.reset_vault_form();
+                    self.state.vault_ui.defaults = DefaultsFormState::default();
+                    self.state.vault_ui.mode = VaultMode::View;
                 }
                 return Ok(());
             }
@@ -1021,6 +1179,132 @@ impl App {
         }
     }
 
+    fn start_search(&mut self) {
+        match self.state.section {
+            Section::Transactions => {
+                self.state.transactions.search_active = true;
+            }
+            Section::Wallets => {
+                self.state.wallets.search_active = true;
+            }
+            Section::Flows => {
+                self.state.flows.search_active = true;
+            }
+            _ => {}
+        }
+    }
+
+    async fn stop_search_if_active(&mut self) -> Result<bool> {
+        if self.state.transactions.search_active {
+            self.state.transactions.search_active = false;
+            self.refresh_transactions_search().await?;
+            return Ok(true);
+        }
+        if self.state.wallets.search_active {
+            self.state.wallets.search_active = false;
+            self.refresh_wallets_search().await?;
+            return Ok(true);
+        }
+        if self.state.flows.search_active {
+            self.state.flows.search_active = false;
+            self.refresh_flows_search().await?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    async fn handle_search_input(&mut self, ch: char) -> Result<bool> {
+        match self.state.section {
+            Section::Transactions if self.state.transactions.search_active => {
+                self.state.transactions.search_query.push(ch);
+                self.refresh_transactions_search().await?;
+                return Ok(true);
+            }
+            Section::Wallets if self.state.wallets.search_active => {
+                self.state.wallets.search_query.push(ch);
+                self.refresh_wallets_search().await?;
+                return Ok(true);
+            }
+            Section::Flows if self.state.flows.search_active => {
+                self.state.flows.search_query.push(ch);
+                self.refresh_flows_search().await?;
+                return Ok(true);
+            }
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    async fn handle_search_backspace(&mut self) -> Result<bool> {
+        match self.state.section {
+            Section::Transactions if self.state.transactions.search_active => {
+                self.state.transactions.search_query.pop();
+                self.refresh_transactions_search().await?;
+                return Ok(true);
+            }
+            Section::Wallets if self.state.wallets.search_active => {
+                self.state.wallets.search_query.pop();
+                self.refresh_wallets_search().await?;
+                return Ok(true);
+            }
+            Section::Flows if self.state.flows.search_active => {
+                self.state.flows.search_query.pop();
+                self.refresh_flows_search().await?;
+                return Ok(true);
+            }
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    async fn refresh_transactions_search(&mut self) -> Result<()> {
+        let visible_len = transactions_visible_indices(&self.state).len();
+        if visible_len == 0 {
+            self.state.transactions.selected = 0;
+            self.state.transactions.detail = None;
+            return Ok(());
+        }
+        if self.state.transactions.selected >= visible_len {
+            self.state.transactions.selected = 0;
+        }
+        if self.state.transactions.mode == TransactionsMode::Detail {
+            self.open_transaction_detail().await?;
+        }
+        Ok(())
+    }
+
+    async fn refresh_wallets_search(&mut self) -> Result<()> {
+        let visible_len = wallets_visible_indices(&self.state).len();
+        if visible_len == 0 {
+            self.state.wallets.selected = 0;
+            self.state.wallets.detail = WalletDetailState::default();
+            return Ok(());
+        }
+        if self.state.wallets.selected >= visible_len {
+            self.state.wallets.selected = 0;
+        }
+        if self.state.wallets.mode == WalletsMode::Detail {
+            self.open_wallet_detail().await?;
+        }
+        Ok(())
+    }
+
+    async fn refresh_flows_search(&mut self) -> Result<()> {
+        let visible_len = flows_visible_indices(&self.state).len();
+        if visible_len == 0 {
+            self.state.flows.selected = 0;
+            self.state.flows.detail = FlowDetailState::default();
+            return Ok(());
+        }
+        if self.state.flows.selected >= visible_len {
+            self.state.flows.selected = 0;
+        }
+        if self.state.flows.mode == FlowsMode::Detail {
+            self.open_flow_detail().await?;
+        }
+        Ok(())
+    }
+
     fn advance_filter_focus(&mut self) {
         let filter = &mut self.state.transactions.filter;
         filter.focus = match filter.focus {
@@ -1091,7 +1375,7 @@ impl App {
         false
     }
 
-    fn update_recents(&mut self) {
+    fn update_recent_categories_from_items(&mut self) {
         let mut seen = std::collections::HashSet::new();
         let mut categories = Vec::new();
         for tx in &self.state.transactions.items {
@@ -1106,6 +1390,104 @@ impl App {
             }
         }
         self.state.transactions.recent_categories = categories;
+    }
+
+    async fn refresh_recent_targets(&mut self) -> Result<()> {
+        const RECENTS_LIMIT: usize = 5;
+        const RECENTS_FETCH_LIMIT: u64 = 50;
+        const RECENTS_WINDOW_DAYS: i64 = 90;
+
+        let vault_id = match self.current_vault_id() {
+            Ok(id) => id,
+            Err(_) => return Ok(()),
+        };
+        let to = self.now_in_timezone();
+        let from = to - ChronoDuration::days(RECENTS_WINDOW_DAYS);
+
+        let payload = TransactionList {
+            vault_id: vault_id.clone(),
+            flow_id: self.state.transactions.scope_flow_id,
+            wallet_id: self.state.transactions.scope_wallet_id,
+            limit: Some(RECENTS_FETCH_LIMIT),
+            cursor: None,
+            from: Some(from),
+            to: Some(to),
+            kinds: Some(vec![
+                TransactionKind::Income,
+                TransactionKind::Expense,
+                TransactionKind::Refund,
+            ]),
+            include_voided: Some(false),
+            include_transfers: Some(false),
+        };
+
+        let res = self
+            .client
+            .transactions_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                payload,
+            )
+            .await;
+
+        let Ok(list) = res else {
+            return Ok(());
+        };
+
+        let mut categories = Vec::new();
+        let mut seen_categories = std::collections::HashSet::new();
+        for tx in &list.transactions {
+            if let Some(category) = tx.category.as_ref() {
+                let key = category.to_lowercase();
+                if seen_categories.insert(key) {
+                    categories.push(category.clone());
+                }
+            }
+            if categories.len() >= RECENTS_LIMIT {
+                break;
+            }
+        }
+        if !categories.is_empty() {
+            self.state.transactions.recent_categories = categories;
+        }
+
+        let mut recent_wallets = Vec::new();
+        let mut recent_flows = Vec::new();
+        for tx in &list.transactions {
+            if recent_wallets.len() >= RECENTS_LIMIT && recent_flows.len() >= RECENTS_LIMIT {
+                break;
+            }
+            let detail = self
+                .client
+                .transaction_detail(
+                    self.state.login.username.as_str(),
+                    self.state.login.password.as_str(),
+                    TransactionGet {
+                        vault_id: vault_id.clone(),
+                        id: tx.id,
+                    },
+                )
+                .await;
+            let Ok(detail) = detail else {
+                continue;
+            };
+            let (wallet_id, flow_id) = extract_wallet_flow(&detail);
+            if let Some(wallet_id) = wallet_id {
+                push_recent_id(&mut recent_wallets, wallet_id, RECENTS_LIMIT);
+            }
+            if let Some(flow_id) = flow_id {
+                push_recent_id(&mut recent_flows, flow_id, RECENTS_LIMIT);
+            }
+        }
+
+        if !recent_wallets.is_empty() {
+            self.state.transactions.recent_wallet_ids = recent_wallets;
+        }
+        if !recent_flows.is_empty() {
+            self.state.transactions.recent_flow_ids = recent_flows;
+        }
+
+        Ok(())
     }
 
     fn backspace_wallet_form(&mut self) {
@@ -1166,7 +1548,7 @@ impl App {
     }
 
     fn wallets_select_next(&mut self) {
-        let len = self.wallets_len();
+        let len = wallets_visible_indices(&self.state).len();
         if len == 0 {
             return;
         }
@@ -1174,14 +1556,14 @@ impl App {
     }
 
     fn wallets_select_prev(&mut self) {
-        if self.wallets_len() == 0 {
+        if wallets_visible_indices(&self.state).is_empty() {
             return;
         }
         self.state.wallets.selected = self.state.wallets.selected.saturating_sub(1);
     }
 
     fn flows_select_next(&mut self) {
-        let len = self.flows_len();
+        let len = flows_visible_indices(&self.state).len();
         if len == 0 {
             return;
         }
@@ -1189,10 +1571,25 @@ impl App {
     }
 
     fn flows_select_prev(&mut self) {
-        if self.flows_len() == 0 {
+        if flows_visible_indices(&self.state).is_empty() {
             return;
         }
         self.state.flows.selected = self.state.flows.selected.saturating_sub(1);
+    }
+
+    fn transactions_select_next(&mut self) {
+        let len = transactions_visible_indices(&self.state).len();
+        if len == 0 {
+            return;
+        }
+        self.state.transactions.selected = (self.state.transactions.selected + 1).min(len - 1);
+    }
+
+    fn transactions_select_prev(&mut self) {
+        if transactions_visible_indices(&self.state).is_empty() {
+            return;
+        }
+        self.state.transactions.selected = self.state.transactions.selected.saturating_sub(1);
     }
 
     fn transactions_picker_next(&mut self) {
@@ -1307,13 +1704,21 @@ impl App {
     }
 
     fn start_transfer_wallet(&mut self) {
-        self.state.transactions.transfer = TransferFormState::default();
+        let occurred_at = self.format_local_datetime(self.now_in_timezone());
+        self.state.transactions.transfer = TransferFormState {
+            occurred_at,
+            ..TransferFormState::default()
+        };
         self.state.transactions.mode = TransactionsMode::TransferWallet;
         self.init_transfer_indices();
     }
 
     fn start_transfer_flow(&mut self) {
-        self.state.transactions.transfer = TransferFormState::default();
+        let occurred_at = self.format_local_datetime(self.now_in_timezone());
+        self.state.transactions.transfer = TransferFormState {
+            occurred_at,
+            ..TransferFormState::default()
+        };
         self.state.transactions.mode = TransactionsMode::TransferFlow;
         self.init_transfer_indices();
     }
@@ -1404,6 +1809,7 @@ impl App {
             focus: TransactionFormField::Amount,
             error: None,
             category_index: None,
+            editing_id: None,
         };
         self.state.transactions.quick_active = false;
         self.state.transactions.quick_input.clear();
@@ -1412,16 +1818,186 @@ impl App {
         Ok(())
     }
 
+    async fn start_transaction_edit(&mut self) -> Result<()> {
+        if self.state.snapshot.is_none() {
+            self.refresh_snapshot().await?;
+        }
+
+        let Some(detail) = self.state.transactions.detail.as_ref() else {
+            return Ok(());
+        };
+        if detail.transaction.voided {
+            self.set_toast(
+                "Transazione annullata: modifica non disponibile.",
+                ToastLevel::Error,
+            );
+            return Ok(());
+        }
+
+        let currency = self.current_currency();
+        let occurred_at = self.format_local_datetime(detail.transaction.occurred_at);
+        let amount = format_amount_input(detail.transaction.amount_minor, currency);
+
+        match detail.transaction.kind {
+            TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
+                let (wallet_id, flow_id) = extract_wallet_flow(detail);
+                let (Some(wallet_id), Some(flow_id)) = (wallet_id, flow_id) else {
+                    self.set_toast("Transazione non valida.", ToastLevel::Error);
+                    return Ok(());
+                };
+
+                let wallet_ids = self.ordered_wallet_ids();
+                let flow_ids = self.ordered_flow_ids();
+                let Some(wallet_index) = wallet_ids.iter().position(|id| *id == wallet_id) else {
+                    self.set_toast(
+                        "Wallet archiviato: modifica non disponibile.",
+                        ToastLevel::Error,
+                    );
+                    return Ok(());
+                };
+                let Some(flow_index) = flow_ids.iter().position(|id| *id == flow_id) else {
+                    self.set_toast(
+                        "Flow archiviato: modifica non disponibile.",
+                        ToastLevel::Error,
+                    );
+                    return Ok(());
+                };
+
+                self.state.transactions.form = TransactionFormState {
+                    kind: detail.transaction.kind,
+                    amount,
+                    wallet_index,
+                    flow_index,
+                    category: detail.transaction.category.clone().unwrap_or_default(),
+                    note: detail.transaction.note.clone().unwrap_or_default(),
+                    occurred_at,
+                    focus: TransactionFormField::Amount,
+                    error: None,
+                    category_index: None,
+                    editing_id: Some(detail.transaction.id),
+                };
+                self.state.transactions.quick_active = false;
+                self.state.transactions.quick_input.clear();
+                self.state.transactions.quick_error = None;
+                self.state.transactions.mode = TransactionsMode::Edit;
+            }
+            TransactionKind::TransferWallet => {
+                let (from_id, to_id) = match extract_wallet_transfer(detail) {
+                    Ok(values) => values,
+                    Err(_) => {
+                        self.set_toast("Transfer wallet non valido.", ToastLevel::Error);
+                        return Ok(());
+                    }
+                };
+                let ids = self.active_wallet_ids();
+                let Some(from_index) = ids.iter().position(|id| *id == from_id) else {
+                    self.set_toast(
+                        "Wallet archiviato: modifica non disponibile.",
+                        ToastLevel::Error,
+                    );
+                    return Ok(());
+                };
+                let Some(to_index) = ids.iter().position(|id| *id == to_id) else {
+                    self.set_toast(
+                        "Wallet archiviato: modifica non disponibile.",
+                        ToastLevel::Error,
+                    );
+                    return Ok(());
+                };
+
+                self.state.transactions.transfer = TransferFormState {
+                    from_index,
+                    to_index,
+                    amount,
+                    note: detail.transaction.note.clone().unwrap_or_default(),
+                    occurred_at,
+                    focus: TransferField::From,
+                    error: None,
+                    editing_id: Some(detail.transaction.id),
+                };
+                self.state.transactions.quick_active = false;
+                self.state.transactions.quick_input.clear();
+                self.state.transactions.quick_error = None;
+                self.state.transactions.mode = TransactionsMode::TransferWallet;
+            }
+            TransactionKind::TransferFlow => {
+                let (from_id, to_id) = match extract_flow_transfer(detail) {
+                    Ok(values) => values,
+                    Err(_) => {
+                        self.set_toast("Transfer flow non valido.", ToastLevel::Error);
+                        return Ok(());
+                    }
+                };
+                let ids = self.active_flow_ids();
+                let Some(from_index) = ids.iter().position(|id| *id == from_id) else {
+                    self.set_toast(
+                        "Flow archiviato: modifica non disponibile.",
+                        ToastLevel::Error,
+                    );
+                    return Ok(());
+                };
+                let Some(to_index) = ids.iter().position(|id| *id == to_id) else {
+                    self.set_toast(
+                        "Flow archiviato: modifica non disponibile.",
+                        ToastLevel::Error,
+                    );
+                    return Ok(());
+                };
+
+                self.state.transactions.transfer = TransferFormState {
+                    from_index,
+                    to_index,
+                    amount,
+                    note: detail.transaction.note.clone().unwrap_or_default(),
+                    occurred_at,
+                    focus: TransferField::From,
+                    error: None,
+                    editing_id: Some(detail.transaction.id),
+                };
+                self.state.transactions.quick_active = false;
+                self.state.transactions.quick_input.clear();
+                self.state.transactions.quick_error = None;
+                self.state.transactions.mode = TransactionsMode::TransferFlow;
+            }
+        }
+
+        Ok(())
+    }
+
     fn default_transaction_form_indices(&self) -> std::result::Result<(usize, usize), String> {
-        let (wallet_id, flow_id, _wallet_name, _flow_name) = default_wallet_flow(&self.state)?;
-        let wallet_ids = self.active_wallet_ids();
-        let flow_ids = self.active_flow_ids();
+        let (default_wallet_id, default_flow_id, _wallet_name, _flow_name) =
+            default_wallet_flow(&self.state)?;
+        let wallet_ids = self.ordered_wallet_ids();
+        let flow_ids = self.ordered_flow_ids();
         if wallet_ids.is_empty() {
             return Err("Nessun wallet disponibile.".to_string());
         }
         if flow_ids.is_empty() {
             return Err("Nessun flow disponibile.".to_string());
         }
+        let wallet_id = if self.state.transactions.scope_wallet_id.is_some() {
+            default_wallet_id
+        } else {
+            self.state
+                .transactions
+                .recent_wallet_ids
+                .iter()
+                .find(|id| wallet_ids.contains(id))
+                .copied()
+                .unwrap_or(default_wallet_id)
+        };
+        let flow_id = if self.state.transactions.scope_flow_id.is_some() {
+            default_flow_id
+        } else {
+            self.state
+                .transactions
+                .recent_flow_ids
+                .iter()
+                .find(|id| flow_ids.contains(id))
+                .copied()
+                .unwrap_or(default_flow_id)
+        };
+
         let wallet_index = wallet_ids
             .iter()
             .position(|id| *id == wallet_id)
@@ -1573,6 +2149,7 @@ impl App {
                 form.occurred_at.trim().to_string(),
             )
         };
+        let editing_id = self.state.transactions.form.editing_id;
 
         let amount_raw = amount_raw.as_str();
         if amount_raw.is_empty() {
@@ -1591,7 +2168,7 @@ impl App {
             return Ok(());
         }
 
-        let wallet_ids = self.active_wallet_ids();
+        let wallet_ids = self.ordered_wallet_ids();
         if wallet_ids.is_empty() {
             self.set_transaction_form_error("Nessun wallet disponibile.");
             return Ok(());
@@ -1604,7 +2181,7 @@ impl App {
             }
         };
 
-        let flow_ids = self.active_flow_ids();
+        let flow_ids = self.ordered_flow_ids();
         if flow_ids.is_empty() {
             self.set_transaction_form_error("Nessun flow disponibile.");
             return Ok(());
@@ -1618,105 +2195,151 @@ impl App {
         };
 
         let occurred_at = if occurred_raw.is_empty() {
-            self.now_in_timezone()
+            None
         } else {
             match self.parse_local_datetime(occurred_raw.as_str()) {
-                Ok(dt) => dt,
+                Ok(dt) => Some(dt),
                 Err(message) => {
                     self.set_transaction_form_error(&message);
                     return Ok(());
                 }
             }
         };
+        let occurred_at_new = occurred_at.unwrap_or_else(|| self.now_in_timezone());
 
         let category_clean = category_raw.trim_start_matches('#').trim();
-        let category = if category_clean.is_empty() {
+        let category = if editing_id.is_some() {
+            Some(category_clean.to_string())
+        } else if category_clean.is_empty() {
             None
         } else {
             Some(category_clean.to_string())
         };
-        let note = if note_raw.is_empty() {
+        let note = if editing_id.is_some() {
+            Some(note_raw)
+        } else if note_raw.is_empty() {
             None
         } else {
             Some(note_raw)
         };
 
-        let res = match kind {
-            TransactionKind::Income => {
-                self.client
-                    .income_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
-                        IncomeNew {
-                            vault_id: vault_id.to_string(),
-                            amount_minor,
-                            flow_id: Some(flow_id),
-                            wallet_id: Some(wallet_id),
-                            category,
-                            note,
-                            idempotency_key: None,
-                            occurred_at,
-                        },
-                    )
-                    .await
-            }
-            TransactionKind::Expense => {
-                self.client
-                    .expense_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
-                        ExpenseNew {
-                            vault_id: vault_id.to_string(),
-                            amount_minor,
-                            flow_id: Some(flow_id),
-                            wallet_id: Some(wallet_id),
-                            category,
-                            note,
-                            idempotency_key: None,
-                            occurred_at,
-                        },
-                    )
-                    .await
-            }
-            TransactionKind::Refund => {
-                self.client
-                    .refund_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
-                        Refund {
-                            vault_id: vault_id.to_string(),
-                            amount_minor,
-                            flow_id: Some(flow_id),
-                            wallet_id: Some(wallet_id),
-                            category,
-                            note,
-                            idempotency_key: None,
-                            occurred_at,
-                        },
-                    )
-                    .await
-            }
-            TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                self.set_transaction_form_error("Usa il form transfer dedicato.");
-                return Ok(());
-            }
-        };
+        if let Some(transaction_id) = editing_id {
+            let res = self
+                .client
+                .transaction_update(
+                    self.state.login.username.as_str(),
+                    self.state.login.password.as_str(),
+                    transaction_id,
+                    TransactionUpdate {
+                        vault_id: vault_id.to_string(),
+                        amount_minor: Some(amount_minor),
+                        wallet_id: Some(wallet_id),
+                        flow_id: Some(flow_id),
+                        from_wallet_id: None,
+                        to_wallet_id: None,
+                        from_flow_id: None,
+                        to_flow_id: None,
+                        category,
+                        note,
+                        occurred_at,
+                    },
+                )
+                .await;
 
-        match res {
-            Ok(created) => {
-                self.state.last_flow_id = Some(flow_id);
-                self.state.transactions.last_created_id = Some(created.id);
-                self.state.transactions.mode = TransactionsMode::List;
-                self.state.transactions.form = TransactionFormState::default();
-                self.set_toast("Transazione salvata.", ToastLevel::Success);
-                self.load_transactions(true).await?;
+            match res {
+                Ok(()) => {
+                    self.state.last_flow_id = Some(flow_id);
+                    self.state.transactions.form = TransactionFormState::default();
+                    self.set_toast("Transazione aggiornata.", ToastLevel::Success);
+                    self.load_transactions(true).await?;
+                    self.open_transaction_detail_by_id(transaction_id).await?;
+                }
+                Err(err) => {
+                    if self.handle_auth_error(&err) {
+                        return Ok(());
+                    }
+                    self.state.transactions.form.error = Some(login_message_for_error(err));
+                    self.set_toast("Errore aggiornamento.", ToastLevel::Error);
+                }
             }
-            Err(err) => {
-                if self.handle_auth_error(&err) {
+        } else {
+            let res = match kind {
+                TransactionKind::Income => {
+                    self.client
+                        .income_new(
+                            self.state.login.username.as_str(),
+                            self.state.login.password.as_str(),
+                            IncomeNew {
+                                vault_id: vault_id.to_string(),
+                                amount_minor,
+                                flow_id: Some(flow_id),
+                                wallet_id: Some(wallet_id),
+                                category,
+                                note,
+                                idempotency_key: None,
+                                occurred_at: occurred_at_new,
+                            },
+                        )
+                        .await
+                }
+                TransactionKind::Expense => {
+                    self.client
+                        .expense_new(
+                            self.state.login.username.as_str(),
+                            self.state.login.password.as_str(),
+                            ExpenseNew {
+                                vault_id: vault_id.to_string(),
+                                amount_minor,
+                                flow_id: Some(flow_id),
+                                wallet_id: Some(wallet_id),
+                                category,
+                                note,
+                                idempotency_key: None,
+                                occurred_at: occurred_at_new,
+                            },
+                        )
+                        .await
+                }
+                TransactionKind::Refund => {
+                    self.client
+                        .refund_new(
+                            self.state.login.username.as_str(),
+                            self.state.login.password.as_str(),
+                            Refund {
+                                vault_id: vault_id.to_string(),
+                                amount_minor,
+                                flow_id: Some(flow_id),
+                                wallet_id: Some(wallet_id),
+                                category,
+                                note,
+                                idempotency_key: None,
+                                occurred_at: occurred_at_new,
+                            },
+                        )
+                        .await
+                }
+                TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
+                    self.set_transaction_form_error("Usa il form transfer dedicato.");
                     return Ok(());
                 }
-                self.state.transactions.form.error = Some(login_message_for_error(err));
-                self.set_toast("Errore salvataggio.", ToastLevel::Error);
+            };
+
+            match res {
+                Ok(created) => {
+                    self.state.last_flow_id = Some(flow_id);
+                    self.state.transactions.last_created_id = Some(created.id);
+                    self.state.transactions.mode = TransactionsMode::List;
+                    self.state.transactions.form = TransactionFormState::default();
+                    self.set_toast("Transazione salvata.", ToastLevel::Success);
+                    self.load_transactions(true).await?;
+                }
+                Err(err) => {
+                    if self.handle_auth_error(&err) {
+                        return Ok(());
+                    }
+                    self.state.transactions.form.error = Some(login_message_for_error(err));
+                    self.set_toast("Errore salvataggio.", ToastLevel::Error);
+                }
             }
         }
 
@@ -1771,8 +2394,27 @@ impl App {
             .unwrap_or_default()
     }
 
+    fn ordered_wallet_ids(&self) -> Vec<uuid::Uuid> {
+        let mut priority = Vec::new();
+        if let Some(default_id) = self.state.default_wallet_id {
+            priority.push(default_id);
+        }
+        priority.extend(self.state.transactions.recent_wallet_ids.iter().copied());
+        ordered_ids(self.active_wallet_ids(), &priority)
+    }
+
+    fn ordered_flow_ids(&self) -> Vec<uuid::Uuid> {
+        let mut priority = Vec::new();
+        if let Some(default_id) = self.state.default_flow_id {
+            priority.push(default_id);
+        }
+        priority.extend(self.state.transactions.recent_flow_ids.iter().copied());
+        ordered_ids(self.active_flow_ids(), &priority)
+    }
+
     async fn submit_transfer_wallet(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
+        let editing_id = self.state.transactions.transfer.editing_id;
         let ids = self.active_wallet_ids();
         if ids.len() < 2 {
             self.state.transactions.transfer.error = Some("Servono almeno 2 wallet.".to_string());
@@ -1801,41 +2443,95 @@ impl App {
         }
 
         let note = self.state.transactions.transfer.note.trim();
-        let res = self
-            .client
-            .transfer_wallet_new(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-                TransferWalletNew {
-                    vault_id,
-                    amount_minor: amount,
-                    from_wallet_id: from_id,
-                    to_wallet_id: to_id,
-                    note: if note.is_empty() {
-                        None
-                    } else {
-                        Some(note.to_string())
-                    },
-                    idempotency_key: None,
-                    occurred_at: self.now_in_timezone(),
-                },
-            )
-            .await;
-
-        match res {
-            Ok(created) => {
-                self.state.transactions.mode = TransactionsMode::List;
-                self.state.transactions.transfer = TransferFormState::default();
-                self.state.transactions.last_created_id = Some(created.id);
-                self.set_toast("Transfer wallet salvato.", ToastLevel::Success);
-                self.load_transactions(true).await?;
-            }
-            Err(err) => {
-                if self.handle_auth_error(&err) {
+        let occurred_raw = self.state.transactions.transfer.occurred_at.trim();
+        let occurred_at = if occurred_raw.is_empty() {
+            None
+        } else {
+            match self.parse_local_datetime(occurred_raw) {
+                Ok(dt) => Some(dt),
+                Err(message) => {
+                    self.state.transactions.transfer.error = Some(message);
                     return Ok(());
                 }
-                self.state.transactions.transfer.error = Some(login_message_for_error(err));
-                self.set_toast("Errore transfer wallet.", ToastLevel::Error);
+            }
+        };
+        let occurred_at_new = occurred_at.unwrap_or_else(|| self.now_in_timezone());
+
+        if let Some(transaction_id) = editing_id {
+            let res = self
+                .client
+                .transaction_update(
+                    self.state.login.username.as_str(),
+                    self.state.login.password.as_str(),
+                    transaction_id,
+                    TransactionUpdate {
+                        vault_id,
+                        amount_minor: Some(amount),
+                        wallet_id: None,
+                        flow_id: None,
+                        from_wallet_id: Some(from_id),
+                        to_wallet_id: Some(to_id),
+                        from_flow_id: None,
+                        to_flow_id: None,
+                        category: None,
+                        note: Some(note.to_string()),
+                        occurred_at,
+                    },
+                )
+                .await;
+
+            match res {
+                Ok(()) => {
+                    self.state.transactions.transfer = TransferFormState::default();
+                    self.set_toast("Transfer wallet aggiornato.", ToastLevel::Success);
+                    self.load_transactions(true).await?;
+                    self.open_transaction_detail_by_id(transaction_id).await?;
+                }
+                Err(err) => {
+                    if self.handle_auth_error(&err) {
+                        return Ok(());
+                    }
+                    self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                    self.set_toast("Errore transfer wallet.", ToastLevel::Error);
+                }
+            }
+        } else {
+            let res = self
+                .client
+                .transfer_wallet_new(
+                    self.state.login.username.as_str(),
+                    self.state.login.password.as_str(),
+                    TransferWalletNew {
+                        vault_id,
+                        amount_minor: amount,
+                        from_wallet_id: from_id,
+                        to_wallet_id: to_id,
+                        note: if note.is_empty() {
+                            None
+                        } else {
+                            Some(note.to_string())
+                        },
+                        idempotency_key: None,
+                        occurred_at: occurred_at_new,
+                    },
+                )
+                .await;
+
+            match res {
+                Ok(created) => {
+                    self.state.transactions.mode = TransactionsMode::List;
+                    self.state.transactions.transfer = TransferFormState::default();
+                    self.state.transactions.last_created_id = Some(created.id);
+                    self.set_toast("Transfer wallet salvato.", ToastLevel::Success);
+                    self.load_transactions(true).await?;
+                }
+                Err(err) => {
+                    if self.handle_auth_error(&err) {
+                        return Ok(());
+                    }
+                    self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                    self.set_toast("Errore transfer wallet.", ToastLevel::Error);
+                }
             }
         }
 
@@ -1844,6 +2540,7 @@ impl App {
 
     async fn submit_transfer_flow(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
+        let editing_id = self.state.transactions.transfer.editing_id;
         let ids = self.active_flow_ids();
         if ids.len() < 2 {
             self.state.transactions.transfer.error = Some("Servono almeno 2 flow.".to_string());
@@ -1872,41 +2569,95 @@ impl App {
         }
 
         let note = self.state.transactions.transfer.note.trim();
-        let res = self
-            .client
-            .transfer_flow_new(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-                TransferFlowNew {
-                    vault_id,
-                    amount_minor: amount,
-                    from_flow_id: from_id,
-                    to_flow_id: to_id,
-                    note: if note.is_empty() {
-                        None
-                    } else {
-                        Some(note.to_string())
-                    },
-                    idempotency_key: None,
-                    occurred_at: self.now_in_timezone(),
-                },
-            )
-            .await;
-
-        match res {
-            Ok(created) => {
-                self.state.transactions.mode = TransactionsMode::List;
-                self.state.transactions.transfer = TransferFormState::default();
-                self.state.transactions.last_created_id = Some(created.id);
-                self.set_toast("Transfer flow salvato.", ToastLevel::Success);
-                self.load_transactions(true).await?;
-            }
-            Err(err) => {
-                if self.handle_auth_error(&err) {
+        let occurred_raw = self.state.transactions.transfer.occurred_at.trim();
+        let occurred_at = if occurred_raw.is_empty() {
+            None
+        } else {
+            match self.parse_local_datetime(occurred_raw) {
+                Ok(dt) => Some(dt),
+                Err(message) => {
+                    self.state.transactions.transfer.error = Some(message);
                     return Ok(());
                 }
-                self.state.transactions.transfer.error = Some(login_message_for_error(err));
-                self.set_toast("Errore transfer flow.", ToastLevel::Error);
+            }
+        };
+        let occurred_at_new = occurred_at.unwrap_or_else(|| self.now_in_timezone());
+
+        if let Some(transaction_id) = editing_id {
+            let res = self
+                .client
+                .transaction_update(
+                    self.state.login.username.as_str(),
+                    self.state.login.password.as_str(),
+                    transaction_id,
+                    TransactionUpdate {
+                        vault_id,
+                        amount_minor: Some(amount),
+                        wallet_id: None,
+                        flow_id: None,
+                        from_wallet_id: None,
+                        to_wallet_id: None,
+                        from_flow_id: Some(from_id),
+                        to_flow_id: Some(to_id),
+                        category: None,
+                        note: Some(note.to_string()),
+                        occurred_at,
+                    },
+                )
+                .await;
+
+            match res {
+                Ok(()) => {
+                    self.state.transactions.transfer = TransferFormState::default();
+                    self.set_toast("Transfer flow aggiornato.", ToastLevel::Success);
+                    self.load_transactions(true).await?;
+                    self.open_transaction_detail_by_id(transaction_id).await?;
+                }
+                Err(err) => {
+                    if self.handle_auth_error(&err) {
+                        return Ok(());
+                    }
+                    self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                    self.set_toast("Errore transfer flow.", ToastLevel::Error);
+                }
+            }
+        } else {
+            let res = self
+                .client
+                .transfer_flow_new(
+                    self.state.login.username.as_str(),
+                    self.state.login.password.as_str(),
+                    TransferFlowNew {
+                        vault_id,
+                        amount_minor: amount,
+                        from_flow_id: from_id,
+                        to_flow_id: to_id,
+                        note: if note.is_empty() {
+                            None
+                        } else {
+                            Some(note.to_string())
+                        },
+                        idempotency_key: None,
+                        occurred_at: occurred_at_new,
+                    },
+                )
+                .await;
+
+            match res {
+                Ok(created) => {
+                    self.state.transactions.mode = TransactionsMode::List;
+                    self.state.transactions.transfer = TransferFormState::default();
+                    self.state.transactions.last_created_id = Some(created.id);
+                    self.set_toast("Transfer flow salvato.", ToastLevel::Success);
+                    self.load_transactions(true).await?;
+                }
+                Err(err) => {
+                    if self.handle_auth_error(&err) {
+                        return Ok(());
+                    }
+                    self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                    self.set_toast("Errore transfer flow.", ToastLevel::Error);
+                }
             }
         }
 
@@ -2093,22 +2844,6 @@ impl App {
         Ok(dt.with_timezone(&offset))
     }
 
-    fn wallets_len(&self) -> usize {
-        self.state
-            .snapshot
-            .as_ref()
-            .map(|snap| snap.wallets.len())
-            .unwrap_or(0)
-    }
-
-    fn flows_len(&self) -> usize {
-        self.state
-            .snapshot
-            .as_ref()
-            .map(|snap| snap.flows.len())
-            .unwrap_or(0)
-    }
-
     fn start_wallet_create(&mut self) {
         self.reset_wallet_form();
         self.state.wallets.mode = WalletsMode::Create;
@@ -2153,6 +2888,135 @@ impl App {
         self.state.vault_ui.mode = VaultMode::Create;
     }
 
+    fn start_defaults(&mut self) {
+        let wallet_ids = self.active_wallet_ids();
+        let flow_ids = self.active_flow_ids();
+
+        let wallet_index = match self.state.default_wallet_id {
+            Some(default_id) => wallet_ids
+                .iter()
+                .position(|id| *id == default_id)
+                .map(|idx| idx + 1)
+                .unwrap_or(0),
+            None => 0,
+        };
+        let flow_index = match self.state.default_flow_id {
+            Some(default_id) => flow_ids
+                .iter()
+                .position(|id| *id == default_id)
+                .map(|idx| idx + 1)
+                .unwrap_or(0),
+            None => 0,
+        };
+
+        self.state.vault_ui.defaults = DefaultsFormState {
+            wallet_index,
+            flow_index,
+            focus: DefaultsField::Wallet,
+            error: None,
+        };
+        self.state.vault_ui.mode = VaultMode::Defaults;
+    }
+
+    fn defaults_select_next(&mut self) {
+        let len = match self.state.vault_ui.defaults.focus {
+            DefaultsField::Wallet => self.active_wallets_len() + 1,
+            DefaultsField::Flow => self.active_flows_len() + 1,
+        };
+        if len <= 1 {
+            return;
+        }
+        match self.state.vault_ui.defaults.focus {
+            DefaultsField::Wallet => {
+                self.state.vault_ui.defaults.wallet_index =
+                    (self.state.vault_ui.defaults.wallet_index + 1) % len;
+            }
+            DefaultsField::Flow => {
+                self.state.vault_ui.defaults.flow_index =
+                    (self.state.vault_ui.defaults.flow_index + 1) % len;
+            }
+        }
+    }
+
+    fn defaults_select_prev(&mut self) {
+        let len = match self.state.vault_ui.defaults.focus {
+            DefaultsField::Wallet => self.active_wallets_len() + 1,
+            DefaultsField::Flow => self.active_flows_len() + 1,
+        };
+        if len <= 1 {
+            return;
+        }
+        match self.state.vault_ui.defaults.focus {
+            DefaultsField::Wallet => {
+                let current = self.state.vault_ui.defaults.wallet_index;
+                self.state.vault_ui.defaults.wallet_index = (current + len - 1) % len;
+            }
+            DefaultsField::Flow => {
+                let current = self.state.vault_ui.defaults.flow_index;
+                self.state.vault_ui.defaults.flow_index = (current + len - 1) % len;
+            }
+        }
+    }
+
+    async fn save_defaults(&mut self) -> Result<()> {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            self.state.vault_ui.defaults.error = Some("Snapshot non disponibile.".to_string());
+            return Ok(());
+        };
+        let username = self.state.login.username.trim();
+        let Some(vault_id) = self.state.vault.as_ref().and_then(|v| v.id.as_deref()) else {
+            self.state.vault_ui.defaults.error = Some("Vault non disponibile.".to_string());
+            return Ok(());
+        };
+        if username.is_empty() {
+            self.state.vault_ui.defaults.error = Some("Utente non disponibile.".to_string());
+            return Ok(());
+        }
+
+        let wallet_ids = snapshot
+            .wallets
+            .iter()
+            .filter(|wallet| !wallet.archived)
+            .map(|wallet| wallet.id)
+            .collect::<Vec<_>>();
+        let flow_ids = snapshot
+            .flows
+            .iter()
+            .filter(|flow| !flow.archived)
+            .map(|flow| flow.id)
+            .collect::<Vec<_>>();
+
+        let wallet_id = if self.state.vault_ui.defaults.wallet_index == 0 {
+            None
+        } else {
+            wallet_ids
+                .get(self.state.vault_ui.defaults.wallet_index - 1)
+                .copied()
+        };
+        let flow_id = if self.state.vault_ui.defaults.flow_index == 0 {
+            None
+        } else {
+            flow_ids
+                .get(self.state.vault_ui.defaults.flow_index - 1)
+                .copied()
+        };
+
+        self.state.default_wallet_id = wallet_id;
+        self.state.default_flow_id = flow_id;
+        self.local_state
+            .set_defaults(username, vault_id, wallet_id, flow_id);
+        if let Err(err) = self.local_state.save(self.local_state_path.as_str()) {
+            self.state.vault_ui.defaults.error = Some(err.to_string());
+            self.set_toast("Errore salvataggio default.", ToastLevel::Error);
+            return Ok(());
+        }
+
+        self.state.vault_ui.mode = VaultMode::View;
+        self.state.vault_ui.defaults = DefaultsFormState::default();
+        self.set_toast("Default salvati.", ToastLevel::Success);
+        Ok(())
+    }
+
     fn cycle_flow_mode(&mut self) {
         self.state.flows.form.mode = match self.state.flows.form.mode {
             FlowModeChoice::Unlimited => FlowModeChoice::NetCapped,
@@ -2176,19 +3040,9 @@ impl App {
             Ok(snapshot) => {
                 self.state.snapshot = Some(snapshot);
                 self.ensure_last_flow();
-                let wallets_len = self.wallets_len();
-                if wallets_len == 0 {
-                    self.state.wallets.selected = 0;
-                } else if self.state.wallets.selected >= wallets_len {
-                    self.state.wallets.selected = wallets_len - 1;
-                }
-
-                let flows_len = self.flows_len();
-                if flows_len == 0 {
-                    self.state.flows.selected = 0;
-                } else if self.state.flows.selected >= flows_len {
-                    self.state.flows.selected = flows_len - 1;
-                }
+                self.normalize_defaults();
+                self.refresh_wallets_search().await?;
+                self.refresh_flows_search().await?;
                 self.connection_ok(None);
             }
             Err(err) => {
@@ -2235,32 +3089,70 @@ impl App {
     }
 
     fn selected_wallet(&self) -> Option<&api_types::vault::WalletView> {
+        let indices = wallets_visible_indices(&self.state);
+        let index = indices.get(self.state.wallets.selected).copied()?;
         self.state
             .snapshot
             .as_ref()
-            .and_then(|snap| snap.wallets.get(self.state.wallets.selected))
+            .and_then(|snap| snap.wallets.get(index))
     }
 
     fn selected_flow(&self) -> Option<&api_types::vault::FlowView> {
+        let indices = flows_visible_indices(&self.state);
+        let index = indices.get(self.state.flows.selected).copied()?;
         self.state
             .snapshot
             .as_ref()
-            .and_then(|snap| snap.flows.get(self.state.flows.selected))
+            .and_then(|snap| snap.flows.get(index))
+    }
+
+    fn select_transaction_by_id(&mut self, transaction_id: uuid::Uuid) -> bool {
+        let indices = transactions_visible_indices(&self.state);
+        for (visible_idx, idx) in indices.iter().enumerate() {
+            if self
+                .state
+                .transactions
+                .items
+                .get(*idx)
+                .map(|tx| tx.id == transaction_id)
+                .unwrap_or(false)
+            {
+                self.state.transactions.selected = visible_idx;
+                return true;
+            }
+        }
+        false
     }
 
     fn select_wallet_by_id(&mut self, wallet_id: uuid::Uuid) {
-        if let Some(snapshot) = &self.state.snapshot {
-            if let Some(index) = snapshot.wallets.iter().position(|w| w.id == wallet_id) {
-                self.state.wallets.selected = index;
-            }
+        let Some(snapshot) = &self.state.snapshot else {
+            return;
+        };
+        let indices = wallets_visible_indices(&self.state);
+        if let Some(pos) = indices.iter().position(|idx| {
+            snapshot
+                .wallets
+                .get(*idx)
+                .map(|wallet| wallet.id == wallet_id)
+                .unwrap_or(false)
+        }) {
+            self.state.wallets.selected = pos;
         }
     }
 
     fn select_flow_by_id(&mut self, flow_id: uuid::Uuid) {
-        if let Some(snapshot) = &self.state.snapshot {
-            if let Some(index) = snapshot.flows.iter().position(|f| f.id == flow_id) {
-                self.state.flows.selected = index;
-            }
+        let Some(snapshot) = &self.state.snapshot else {
+            return;
+        };
+        let indices = flows_visible_indices(&self.state);
+        if let Some(pos) = indices.iter().position(|idx| {
+            snapshot
+                .flows
+                .get(*idx)
+                .map(|flow| flow.id == flow_id)
+                .unwrap_or(false)
+        }) {
+            self.state.flows.selected = pos;
         }
     }
 
@@ -2307,8 +3199,12 @@ impl App {
                 self.state.transactions.next_cursor = next_cursor;
                 self.state.transactions.error = None;
                 self.state.transactions.selected = 0;
-                self.update_recents();
+                self.update_recent_categories_from_items();
+                if reset {
+                    self.refresh_recent_targets().await?;
+                }
                 self.connection_ok(None);
+                self.refresh_transactions_search().await?;
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
@@ -2348,12 +3244,11 @@ impl App {
             .as_ref()
             .and_then(|v| v.id.as_deref())
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
-        let Some(selected) = self
-            .state
-            .transactions
-            .items
-            .get(self.state.transactions.selected)
-        else {
+        let indices = transactions_visible_indices(&self.state);
+        let Some(item_index) = indices.get(self.state.transactions.selected).copied() else {
+            return Ok(());
+        };
+        let Some(selected) = self.state.transactions.items.get(item_index) else {
             return Ok(());
         };
 
@@ -2373,8 +3268,51 @@ impl App {
             Ok(detail) => {
                 self.state.transactions.detail = Some(detail);
                 self.state.transactions.mode = TransactionsMode::Detail;
-                self.state.transactions.edit_input.clear();
-                self.state.transactions.edit_error = None;
+                self.state.transactions.form = TransactionFormState::default();
+                self.state.transactions.transfer = TransferFormState::default();
+                self.connection_ok(None);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.transactions.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn open_transaction_detail_by_id(&mut self, transaction_id: uuid::Uuid) -> Result<()> {
+        if self.select_transaction_by_id(transaction_id) {
+            return self.open_transaction_detail().await;
+        }
+
+        let vault_id = self
+            .state
+            .vault
+            .as_ref()
+            .and_then(|v| v.id.as_deref())
+            .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
+        let res = self
+            .client
+            .transaction_detail(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                TransactionGet {
+                    vault_id: vault_id.to_string(),
+                    id: transaction_id,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(detail) => {
+                self.state.transactions.detail = Some(detail);
+                self.state.transactions.mode = TransactionsMode::Detail;
+                self.state.transactions.form = TransactionFormState::default();
+                self.state.transactions.transfer = TransferFormState::default();
                 self.connection_ok(None);
             }
             Err(err) => {
@@ -2426,84 +3364,6 @@ impl App {
                 }
                 self.state.transactions.error = Some(login_message_for_error(err));
                 self.set_toast("Errore durante l'annullamento.", ToastLevel::Error);
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn apply_transaction_edit(&mut self) -> Result<()> {
-        let vault_id = self
-            .state
-            .vault
-            .as_ref()
-            .and_then(|v| v.id.as_deref())
-            .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
-        let Some(detail) = self.state.transactions.detail.as_ref() else {
-            return Ok(());
-        };
-
-        let currency = self
-            .state
-            .vault
-            .as_ref()
-            .and_then(|v| v.currency.as_ref())
-            .map(map_currency)
-            .unwrap_or(engine::Currency::Eur);
-
-        let input = self.state.transactions.edit_input.trim();
-        if input.is_empty() {
-            self.state.transactions.edit_error = Some("Inserisci: importo [nota]".to_string());
-            return Ok(());
-        }
-
-        let mut parts = input.splitn(2, ' ');
-        let amount_raw = parts.next().unwrap_or("");
-        let note = parts.next().map(str::trim).filter(|s| !s.is_empty());
-        let amount = match Money::parse_major(amount_raw, currency) {
-            Ok(money) => money.minor().abs(),
-            Err(_) => {
-                self.state.transactions.edit_error = Some("Importo non valido".to_string());
-                return Ok(());
-            }
-        };
-
-        let res = self
-            .client
-            .transaction_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-                detail.transaction.id,
-                TransactionUpdate {
-                    vault_id: vault_id.to_string(),
-                    amount_minor: Some(amount),
-                    wallet_id: None,
-                    flow_id: None,
-                    from_wallet_id: None,
-                    to_wallet_id: None,
-                    from_flow_id: None,
-                    to_flow_id: None,
-                    category: None,
-                    note: note.map(|s| s.to_string()),
-                    occurred_at: None,
-                },
-            )
-            .await;
-
-        match res {
-            Ok(()) => {
-                self.state.transactions.mode = TransactionsMode::Detail;
-                self.state.transactions.edit_input.clear();
-                self.state.transactions.edit_error = None;
-                self.set_toast("Transazione aggiornata.", ToastLevel::Success);
-                self.load_transactions(true).await?;
-            }
-            Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.transactions.edit_error = Some(login_message_for_error(err));
-                self.set_toast("Errore aggiornamento.", ToastLevel::Error);
             }
         }
 
@@ -3627,8 +4487,6 @@ pub struct TransactionsState {
     pub error: Option<String>,
     pub mode: TransactionsMode,
     pub detail: Option<TransactionDetailResponse>,
-    pub edit_input: String,
-    pub edit_error: Option<String>,
     pub quick_input: String,
     pub quick_error: Option<String>,
     pub quick_active: bool,
@@ -3640,6 +4498,10 @@ pub struct TransactionsState {
     pub filter: TransactionsFilterState,
     pub last_created_id: Option<uuid::Uuid>,
     pub recent_categories: Vec<String>,
+    pub recent_wallet_ids: Vec<uuid::Uuid>,
+    pub recent_flow_ids: Vec<uuid::Uuid>,
+    pub search_query: String,
+    pub search_active: bool,
 }
 
 impl Default for TransactionsState {
@@ -3658,8 +4520,6 @@ impl Default for TransactionsState {
             error: None,
             mode: TransactionsMode::List,
             detail: None,
-            edit_input: String::new(),
-            edit_error: None,
             quick_input: String::new(),
             quick_error: None,
             quick_active: false,
@@ -3671,6 +4531,10 @@ impl Default for TransactionsState {
             filter: TransactionsFilterState::default(),
             last_created_id: None,
             recent_categories: Vec::new(),
+            recent_wallet_ids: Vec::new(),
+            recent_flow_ids: Vec::new(),
+            search_query: String::new(),
+            search_active: false,
         }
     }
 }
@@ -3684,8 +4548,6 @@ impl TransactionsState {
         self.selected = 0;
         self.mode = TransactionsMode::List;
         self.detail = None;
-        self.edit_input.clear();
-        self.edit_error = None;
         self.quick_input.clear();
         self.quick_error = None;
         self.quick_active = false;
@@ -3694,6 +4556,8 @@ impl TransactionsState {
         self.filter = TransactionsFilterState::default();
         self.last_created_id = None;
         self.recent_categories.clear();
+        self.recent_wallet_ids.clear();
+        self.recent_flow_ids.clear();
     }
 
     fn push_cursor(&mut self, cursor: Option<String>) {
@@ -3738,8 +4602,10 @@ pub struct TransferFormState {
     pub to_index: usize,
     pub amount: String,
     pub note: String,
+    pub occurred_at: String,
     pub focus: TransferField,
     pub error: Option<String>,
+    pub editing_id: Option<uuid::Uuid>,
 }
 
 impl Default for TransferFormState {
@@ -3749,8 +4615,10 @@ impl Default for TransferFormState {
             to_index: 1,
             amount: String::new(),
             note: String::new(),
+            occurred_at: String::new(),
             focus: TransferField::From,
             error: None,
+            editing_id: None,
         }
     }
 }
@@ -3761,6 +4629,7 @@ pub enum TransferField {
     To,
     Amount,
     Note,
+    OccurredAt,
 }
 
 #[derive(Debug)]
@@ -3775,6 +4644,7 @@ pub struct TransactionFormState {
     pub focus: TransactionFormField,
     pub error: Option<String>,
     pub category_index: Option<usize>,
+    pub editing_id: Option<uuid::Uuid>,
 }
 
 impl Default for TransactionFormState {
@@ -3790,6 +4660,7 @@ impl Default for TransactionFormState {
             focus: TransactionFormField::Amount,
             error: None,
             category_index: None,
+            editing_id: None,
         }
     }
 }
@@ -3889,6 +4760,8 @@ pub struct WalletsState {
     pub error: Option<String>,
     pub detail: WalletDetailState,
     pub form: WalletFormState,
+    pub search_query: String,
+    pub search_active: bool,
 }
 
 impl Default for WalletsState {
@@ -3899,6 +4772,8 @@ impl Default for WalletsState {
             error: None,
             detail: WalletDetailState::default(),
             form: WalletFormState::default(),
+            search_query: String::new(),
+            search_active: false,
         }
     }
 }
@@ -3950,6 +4825,8 @@ pub struct FlowsState {
     pub error: Option<String>,
     pub detail: FlowDetailState,
     pub form: FlowFormState,
+    pub search_query: String,
+    pub search_active: bool,
 }
 
 impl Default for FlowsState {
@@ -3960,6 +4837,8 @@ impl Default for FlowsState {
             error: None,
             detail: FlowDetailState::default(),
             form: FlowFormState::default(),
+            search_query: String::new(),
+            search_active: false,
         }
     }
 }
@@ -4043,6 +4922,7 @@ impl FlowModeChoice {
 pub struct VaultState {
     pub mode: VaultMode,
     pub form: VaultFormState,
+    pub defaults: DefaultsFormState,
     pub error: Option<String>,
 }
 
@@ -4051,6 +4931,7 @@ impl Default for VaultState {
         Self {
             mode: VaultMode::View,
             form: VaultFormState::default(),
+            defaults: DefaultsFormState::default(),
             error: None,
         }
     }
@@ -4060,6 +4941,7 @@ impl Default for VaultState {
 pub enum VaultMode {
     View,
     Create,
+    Defaults,
 }
 
 #[derive(Debug)]
@@ -4075,6 +4957,31 @@ impl Default for VaultFormState {
             error: None,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct DefaultsFormState {
+    pub wallet_index: usize,
+    pub flow_index: usize,
+    pub focus: DefaultsField,
+    pub error: Option<String>,
+}
+
+impl Default for DefaultsFormState {
+    fn default() -> Self {
+        Self {
+            wallet_index: 0,
+            flow_index: 0,
+            focus: DefaultsField::Wallet,
+            error: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultsField {
+    Wallet,
+    Flow,
 }
 
 #[derive(Debug)]
@@ -4308,6 +5215,26 @@ fn default_wallet_flow(
                 .iter()
                 .find(|wallet| wallet.id == wallet_id && !wallet.archived)
         })
+        .or_else(|| {
+            state.default_wallet_id.and_then(|wallet_id| {
+                snapshot
+                    .wallets
+                    .iter()
+                    .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+            })
+        })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_wallet_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .wallets
+                        .iter()
+                        .find(|wallet| wallet.id == *recent_id && !wallet.archived)
+                })
+        })
         .or_else(|| snapshot.wallets.iter().find(|wallet| !wallet.archived))
         .ok_or_else(|| "Nessun wallet disponibile.".to_string())?;
     let flow = state
@@ -4318,6 +5245,26 @@ fn default_wallet_flow(
                 .flows
                 .iter()
                 .find(|flow| flow.id == flow_id && !flow.archived)
+        })
+        .or_else(|| {
+            state.default_flow_id.and_then(|flow_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id && !flow.archived)
+            })
+        })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_flow_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .flows
+                        .iter()
+                        .find(|flow| flow.id == *recent_id && !flow.archived)
+                })
         })
         .or_else(|| {
             state.last_flow_id.and_then(|last_id| {
@@ -4331,4 +5278,197 @@ fn default_wallet_flow(
         .ok_or_else(|| "Flow Unallocated mancante.".to_string())?;
 
     Ok((wallet.id, flow.id, wallet.name.clone(), flow.name.clone()))
+}
+
+pub(crate) fn transactions_visible_indices(state: &AppState) -> Vec<usize> {
+    let query = normalize_query(state.transactions.search_query.as_str());
+    if query.is_empty() {
+        return (0..state.transactions.items.len()).collect();
+    }
+
+    state
+        .transactions
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, tx)| {
+            if transaction_matches_query(tx, query.as_str()) {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn wallets_visible_indices(state: &AppState) -> Vec<usize> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    let query = normalize_query(state.wallets.search_query.as_str());
+    if query.is_empty() {
+        return (0..snapshot.wallets.len()).collect();
+    }
+
+    snapshot
+        .wallets
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, wallet)| {
+            if wallet.name.to_lowercase().contains(query.as_str()) {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn flows_visible_indices(state: &AppState) -> Vec<usize> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    let query = normalize_query(state.flows.search_query.as_str());
+    if query.is_empty() {
+        return (0..snapshot.flows.len()).collect();
+    }
+
+    snapshot
+        .flows
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, flow)| {
+            if flow.name.to_lowercase().contains(query.as_str()) {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn ordered_wallet_ids_from_state(state: &AppState) -> Vec<uuid::Uuid> {
+    let active_ids = state
+        .snapshot
+        .as_ref()
+        .map(|snap| {
+            snap.wallets
+                .iter()
+                .filter(|wallet| !wallet.archived)
+                .map(|wallet| wallet.id)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut priority = Vec::new();
+    if let Some(default_id) = state.default_wallet_id {
+        priority.push(default_id);
+    }
+    priority.extend(state.transactions.recent_wallet_ids.iter().copied());
+    ordered_ids(active_ids, &priority)
+}
+
+pub(crate) fn ordered_flow_ids_from_state(state: &AppState) -> Vec<uuid::Uuid> {
+    let active_ids = state
+        .snapshot
+        .as_ref()
+        .map(|snap| {
+            snap.flows
+                .iter()
+                .filter(|flow| !flow.archived)
+                .map(|flow| flow.id)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut priority = Vec::new();
+    if let Some(default_id) = state.default_flow_id {
+        priority.push(default_id);
+    }
+    priority.extend(state.transactions.recent_flow_ids.iter().copied());
+    ordered_ids(active_ids, &priority)
+}
+
+fn transaction_matches_query(tx: &TransactionView, query: &str) -> bool {
+    if query.is_empty() {
+        return true;
+    }
+    let kind = transaction_kind_label(tx.kind);
+    if kind.contains(query) {
+        return true;
+    }
+    if tx
+        .note
+        .as_ref()
+        .map(|note| note.to_lowercase().contains(query))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    if tx
+        .category
+        .as_ref()
+        .map(|category| category.to_lowercase().contains(query))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    let amount = tx.amount_minor.abs().to_string();
+    if amount.contains(query) {
+        return true;
+    }
+    let when = tx.occurred_at.format("%Y-%m-%d %H:%M").to_string();
+    when.contains(query)
+}
+
+fn transaction_kind_label(kind: TransactionKind) -> &'static str {
+    match kind {
+        TransactionKind::Income => "income",
+        TransactionKind::Expense => "expense",
+        TransactionKind::Refund => "refund",
+        TransactionKind::TransferWallet => "transfer wallet",
+        TransactionKind::TransferFlow => "transfer flow",
+    }
+}
+
+fn normalize_query(query: &str) -> String {
+    query.trim().to_lowercase()
+}
+
+fn format_amount_input(amount_minor: i64, currency: engine::Currency) -> String {
+    let sign = if amount_minor < 0 { "-" } else { "" };
+    let abs = amount_minor.unsigned_abs();
+    let scale = 10u64.pow(currency.minor_units() as u32);
+    if scale == 1 {
+        return format!("{sign}{abs}");
+    }
+    let major = abs / scale;
+    let minor = abs % scale;
+    format!(
+        "{sign}{major}.{minor:0width$}",
+        width = currency.minor_units() as usize
+    )
+}
+
+fn ordered_ids(active: Vec<uuid::Uuid>, recents: &[uuid::Uuid]) -> Vec<uuid::Uuid> {
+    let mut ordered = Vec::with_capacity(active.len());
+    for recent in recents {
+        if active.contains(recent) && !ordered.contains(recent) {
+            ordered.push(*recent);
+        }
+    }
+    for id in active {
+        if !ordered.contains(&id) {
+            ordered.push(id);
+        }
+    }
+    ordered
+}
+
+fn push_recent_id(target: &mut Vec<uuid::Uuid>, value: uuid::Uuid, limit: usize) {
+    if target.contains(&value) {
+        return;
+    }
+    if target.len() >= limit {
+        return;
+    }
+    target.push(value);
 }

@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph},
+    widgets::{List, ListItem, Paragraph},
 };
 
 use api_types::transaction::TransactionKind;
@@ -12,7 +12,11 @@ use engine::{Currency, Money};
 use crate::{
     app::AppState,
     ui::{
-        components::money::{inline_progress_bar, styled_amount},
+        components::{
+            card::{Card, StatCard},
+            charts::{ascii_bar, mini_bar_chart},
+            money::{inline_progress_bar, styled_amount},
+        },
         theme::Theme,
     },
 };
@@ -65,14 +69,16 @@ fn render_quick_stats(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         .split(area);
 
     // Total Balance
-    render_stat_card(
-        frame,
-        cols[0],
+    let trend = mini_bar_chart(&state.stats.sparkline);
+    let mut total_card = StatCard::new(
         "Total Balance",
         Money::new(total_balance).format(currency),
-        None,
         theme,
     );
+    if !trend.is_empty() {
+        total_card = total_card.subtitle(trend);
+    }
+    total_card.render(frame, cols[0]);
 
     // This Month Income
     let income_ratio = if income > 0 {
@@ -85,6 +91,7 @@ fn render_quick_stats(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         cols[1],
         "This Month Income",
         format!("+{}", Money::new(income).format(currency)),
+        Style::default().fg(theme.positive),
         income_ratio,
         theme,
     );
@@ -100,6 +107,7 @@ fn render_quick_stats(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         cols[2],
         "This Month Expenses",
         format!("-{}", Money::new(expenses).format(currency)),
+        Style::default().fg(theme.negative),
         expense_ratio,
         theme,
     );
@@ -110,24 +118,17 @@ fn render_stat_card(
     area: Rect,
     title: &str,
     value: String,
+    value_style: Style,
     ratio: Option<(i64, i64)>,
     theme: &Theme,
 ) {
-    let block = Block::default()
-        .title(Span::styled(
-            format!(" {title} "),
-            Style::default().fg(theme.dim),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let card = Card::new(title, theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
 
     let mut lines = vec![Line::from(Span::styled(
         value,
-        Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+        value_style.add_modifier(Modifier::BOLD),
     ))];
 
     if let Some((current, max)) = ratio {
@@ -155,14 +156,9 @@ fn render_wallets_flows(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 fn render_wallets_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
 
-    let block = Block::default()
-        .title(Span::styled(" Wallets ", Style::default().fg(theme.accent)))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let card = Card::new("Wallets", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
 
     let items: Vec<ListItem> = state
         .snapshot
@@ -195,19 +191,21 @@ fn render_wallets_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 fn render_flows_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
 
-    let block = Block::default()
-        .title(Span::styled(" Flows ", Style::default().fg(theme.accent)))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let card = Card::new("Flows", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
 
     let items: Vec<ListItem> = state
         .snapshot
         .as_ref()
         .map(|snap| {
+            let max_balance = snap
+                .flows
+                .iter()
+                .map(|flow| flow.balance_minor.saturating_abs() as u64)
+                .max()
+                .unwrap_or(0);
+
             snap.flows
                 .iter()
                 .filter(|f| !f.archived)
@@ -223,7 +221,11 @@ fn render_flows_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
                     // For now, show a simple bar (we don't have cap info in FlowView)
                     // TODO: Add cap info to FlowView API to show proper progress
                     let bar_width = 10;
-                    let bar = "━".repeat(bar_width);
+                    let bar = ascii_bar(
+                        flow.balance_minor.saturating_abs() as u64,
+                        max_balance,
+                        bar_width,
+                    );
 
                     let balance_color = if flow.balance_minor >= 0 {
                         theme.positive
@@ -256,17 +258,9 @@ fn render_flows_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
 fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
 
-    let block = Block::default()
-        .title(Span::styled(
-            " Recent Transactions ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let card = Card::new("Recent Transactions", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
 
     let items: Vec<ListItem> = state
         .transactions
@@ -327,17 +321,9 @@ fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppStat
 fn render_quick_actions(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let _ = state; // Unused for now
 
-    let block = Block::default()
-        .title(Span::styled(
-            " Quick Actions ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let card = Card::new("Quick Actions", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
 
     let actions = Line::from(vec![
         Span::styled("[a]", Style::default().fg(theme.accent)),

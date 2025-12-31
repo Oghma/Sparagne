@@ -10,8 +10,11 @@ use api_types::transaction::TransactionKind;
 use engine::{Currency, Money};
 
 use crate::{
-    app::{AppState, FlowFormField, FlowModeChoice, FlowsMode},
-    ui::theme::Theme,
+    app::{AppState, FlowFormField, FlowModeChoice, FlowsMode, flows_visible_indices},
+    ui::{
+        components::money::{flow_cap_line_gauge, styled_amount_no_sign, styled_progress_bar},
+        theme::Theme,
+    },
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
@@ -49,6 +52,27 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         Span::styled("Mode", Style::default().fg(theme.dim)),
         Span::raw(format!(": {mode}")),
     ];
+    let search_query = state.flows.search_query.trim();
+    if !search_query.is_empty() || state.flows.search_active {
+        line.push(Span::raw("   "));
+        line.push(Span::styled("Search", Style::default().fg(theme.dim)));
+        line.push(Span::raw(": "));
+        let shown = if search_query.is_empty() {
+            "…"
+        } else {
+            search_query
+        };
+        let mut style = Style::default().fg(theme.text);
+        if state.flows.search_active {
+            style = style.fg(theme.accent).add_modifier(Modifier::BOLD);
+        }
+        line.push(Span::styled(shown.to_string(), style));
+    }
+    line.push(Span::raw("   "));
+    line.push(Span::styled(
+        "Ctrl+F: search",
+        Style::default().fg(theme.dim),
+    ));
     if let Some(err) = state.flows.error.as_ref() {
         line.push(Span::raw("   "));
         line.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
@@ -78,6 +102,19 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         render_form(frame, form_area, state, theme);
     }
 
+    let list_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border));
+
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        let empty_msg = Paragraph::new(Line::from("Snapshot non disponibile."))
+            .alignment(Alignment::Center)
+            .block(list_block);
+        frame.render_widget(empty_msg, list_area);
+        return;
+    };
+
     let currency = state
         .vault
         .as_ref()
@@ -85,40 +122,54 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .map(map_currency)
         .unwrap_or(Currency::Eur);
 
-    let items = state
-        .snapshot
-        .as_ref()
-        .map(|snap| {
-            snap.flows
-                .iter()
-                .map(|flow| {
-                    let balance = Money::new(flow.balance_minor).format(currency);
-                    let archived = if flow.archived { " archived" } else { "" };
-                    let marker = if flow.is_unallocated {
-                        " [Unallocated]"
-                    } else {
-                        ""
-                    };
-                    let text = format!("{}{}  {balance}{archived}", flow.name, marker);
-                    ListItem::new(Line::from(text))
-                })
-                .collect::<Vec<_>>()
+    let visible = flows_visible_indices(state);
+    let items = visible
+        .iter()
+        .filter_map(|idx| snapshot.flows.get(*idx))
+        .map(|flow| {
+            let name_style = if flow.archived {
+                Style::default().fg(theme.dim)
+            } else {
+                Style::default().fg(theme.text)
+            };
+            let mut spans = vec![Span::styled(flow.name.clone(), name_style)];
+            if flow.is_unallocated {
+                spans.push(Span::raw(" "));
+                spans.push(status_chip("UNALLOC", theme.accent));
+            }
+            if flow.archived {
+                spans.push(Span::raw(" "));
+                spans.push(status_chip("ARCHIVED", theme.warning));
+            }
+            spans.push(Span::raw("  "));
+            spans.push(balance_span(flow.balance_minor, currency, theme));
+            ListItem::new(Line::from(spans))
         })
-        .unwrap_or_else(Vec::new);
-
-    let list_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
+        .collect::<Vec<_>>();
 
     if items.is_empty() {
-        let empty_msg = Paragraph::new(Line::from(vec![
-            Span::raw("No flows. Press "),
-            Span::styled("c", Style::default().fg(theme.accent)),
-            Span::raw(" to create one."),
-        ]))
-        .alignment(Alignment::Center)
-        .block(list_block);
+        let query = state.flows.search_query.trim();
+        let mut lines = Vec::new();
+        if !query.is_empty() {
+            lines.push(Line::from(vec![
+                Span::raw("No results for "),
+                Span::styled(format!("\"{query}\""), Style::default().fg(theme.accent)),
+                Span::raw("."),
+            ]));
+            lines.push(Line::from(Span::styled(
+                "Ctrl+F to edit • Esc to clear",
+                Style::default().fg(theme.dim),
+            )));
+        } else if snapshot.flows.is_empty() {
+            lines.push(Line::from(vec![
+                Span::raw("No flows. Press "),
+                Span::styled("c", Style::default().fg(theme.accent)),
+                Span::raw(" to create one."),
+            ]));
+        }
+        let empty_msg = Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .block(list_block);
         frame.render_widget(empty_msg, list_area);
         return;
     }
@@ -211,11 +262,6 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         return;
     };
 
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(0)])
-        .split(area);
-
     let currency = state
         .vault
         .as_ref()
@@ -223,9 +269,42 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         .map(map_currency)
         .unwrap_or(Currency::Eur);
 
-    let balance = Money::new(flow.balance_minor).format(currency);
-    let archived = if flow.archived { "YES" } else { "NO" };
-    let unallocated = if flow.is_unallocated { "YES" } else { "NO" };
+    let cap_line = state
+        .flows
+        .detail
+        .detail
+        .as_ref()
+        .and_then(|detail| cap_progress_line(detail, currency, theme));
+    let cap_gauge = state
+        .flows
+        .detail
+        .detail
+        .as_ref()
+        .and_then(|detail| cap_line_gauge(detail, theme));
+    let header_height = if cap_line.is_some() || cap_gauge.is_some() {
+        6
+    } else {
+        5
+    };
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(header_height), Constraint::Min(0)])
+        .split(area);
+
+    let mut status_spans = vec![
+        Span::styled("Status", Style::default().fg(theme.dim)),
+        Span::raw(": "),
+        if flow.archived {
+            status_chip("ARCHIVED", theme.warning)
+        } else {
+            status_chip("ACTIVE", theme.text_muted)
+        },
+    ];
+    if flow.is_unallocated {
+        status_spans.push(Span::raw(" "));
+        status_spans.push(status_chip("UNALLOC", theme.accent));
+    }
 
     let mut header_lines = vec![
         Line::from(vec![
@@ -234,28 +313,32 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         ]),
         Line::from(vec![
             Span::styled("Balance", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {balance}")),
+            Span::raw(": "),
+            balance_span(flow.balance_minor, currency, theme),
         ]),
-        Line::from(vec![
-            Span::styled("Archived", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {archived}")),
-            Span::raw("   "),
-            Span::styled("Unallocated", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {unallocated}")),
-        ]),
+        Line::from(status_spans),
     ];
 
-    if let Some(detail) = state.flows.detail.detail.as_ref() {
-        if let Some(line) = cap_progress_line(detail, currency, theme) {
-            header_lines.push(line);
-        }
+    if let Some(line) = cap_line {
+        header_lines.push(line);
     }
     let header_block = Block::default()
         .title("Flow Detail")
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
-    frame.render_widget(Paragraph::new(header_lines).block(header_block), layout[0]);
+    let header_inner = header_block.inner(layout[0]);
+    frame.render_widget(header_block, layout[0]);
+    if let Some(gauge) = cap_gauge {
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(1)])
+            .split(header_inner);
+        frame.render_widget(Paragraph::new(header_lines), split[0]);
+        frame.render_widget(gauge, split[1]);
+    } else {
+        frame.render_widget(Paragraph::new(header_lines), header_inner);
+    }
 
     if let Some(err) = state.flows.detail.error.as_ref() {
         let block = Block::default()
@@ -282,11 +365,17 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         .iter()
         .map(|tx| {
             let when = tx.occurred_at.format("%d %b %H:%M").to_string();
-            let amount = Money::new(tx.amount_minor).format(currency);
             let note = tx.note.as_deref().unwrap_or("");
-            let kind = kind_label(tx.kind);
-            let text = format!("{when}  {kind:<12} {amount:<12} {note}");
-            ListItem::new(Line::from(text))
+            let line = Line::from(vec![
+                Span::styled(when, Style::default().fg(theme.dim)),
+                Span::raw(" "),
+                kind_chip(tx.kind, theme),
+                Span::raw(" "),
+                signed_amount_span(tx.amount_minor, currency, theme),
+                Span::raw(" "),
+                Span::raw(note),
+            ]);
+            ListItem::new(line)
         })
         .collect::<Vec<_>>();
 
@@ -334,14 +423,40 @@ fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str)
     );
 }
 
-fn kind_label(kind: TransactionKind) -> &'static str {
-    match kind {
-        TransactionKind::Income => "▲ Income",
-        TransactionKind::Expense => "▼ Expense",
-        TransactionKind::Refund => "↩ Refund",
-        TransactionKind::TransferWallet => "⇄ Transfer",
-        TransactionKind::TransferFlow => "⇄ Transfer",
-    }
+fn status_chip(label: &str, color: ratatui::style::Color) -> Span<'static> {
+    Span::styled(
+        format!("[{label}]"),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
+}
+
+fn balance_span(amount_minor: i64, currency: Currency, theme: &Theme) -> Span<'static> {
+    signed_amount_span(amount_minor, currency, theme)
+}
+
+fn signed_amount_span(amount_minor: i64, currency: Currency, theme: &Theme) -> Span<'static> {
+    let amount = Money::new(amount_minor).format(currency);
+    let color = if amount_minor < 0 {
+        theme.negative
+    } else if amount_minor > 0 {
+        theme.positive
+    } else {
+        theme.dim
+    };
+    Span::styled(amount, Style::default().fg(color))
+}
+
+fn kind_chip(kind: TransactionKind, theme: &Theme) -> Span<'static> {
+    let (label, color) = match kind {
+        TransactionKind::Income => ("INC", theme.positive),
+        TransactionKind::Expense => ("EXP", theme.negative),
+        TransactionKind::Refund => ("REF", theme.accent),
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => ("TR", theme.text),
+    };
+    Span::styled(
+        format!("[{label}]"),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
 }
 
 fn map_currency(currency: &api_types::Currency) -> Currency {
@@ -367,16 +482,33 @@ fn cap_progress_line(
     };
 
     let current = current.max(0);
-    let ratio = (current.min(cap) * 20) / cap;
-    let filled = ratio as usize;
-    let empty = 20usize.saturating_sub(filled);
-    let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
-    let current_fmt = Money::new(current).format(currency);
-    let cap_fmt = Money::new(cap).format(currency);
+    let bar = styled_progress_bar(current, Some(cap), 20, theme);
+    let current_fmt = styled_amount_no_sign(current, currency, theme);
+    let cap_fmt = styled_amount_no_sign(cap, currency, theme);
 
     Some(Line::from(vec![
         Span::styled(label, Style::default().fg(theme.dim)),
-        Span::raw(format!(": {current_fmt} / {cap_fmt}  ")),
-        Span::styled(bar, Style::default().fg(theme.accent)),
+        Span::raw(": "),
+        current_fmt,
+        Span::raw(" / "),
+        cap_fmt,
+        Span::raw(" "),
+        bar,
     ]))
+}
+
+fn cap_line_gauge(
+    detail: &engine::CashFlow,
+    theme: &Theme,
+) -> Option<ratatui::widgets::LineGauge<'static>> {
+    let cap = detail.max_balance?;
+    if cap <= 0 {
+        return None;
+    }
+    let current = if let Some(income_total_minor) = detail.income_balance {
+        income_total_minor
+    } else {
+        detail.balance
+    };
+    flow_cap_line_gauge(current.max(0), Some(cap), theme)
 }

@@ -11,7 +11,10 @@ use engine::{Currency, Money};
 use uuid::Uuid;
 
 use crate::{
-    app::{AppState, FilterField, TransactionFormField, TransactionsMode, TransferField},
+    app::{
+        AppState, FilterField, TransactionFormField, TransactionsMode, TransferField,
+        ordered_flow_ids_from_state, ordered_wallet_ids_from_state, transactions_visible_indices,
+    },
     ui::{components::centered_rect, theme::Theme},
 };
 
@@ -30,7 +33,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         | TransactionsMode::TransferWallet
         | TransactionsMode::TransferFlow
         | TransactionsMode::Filter
-        | TransactionsMode::Form => {
+        | TransactionsMode::Form
+        | TransactionsMode::Edit => {
             render_list(frame, layout[1], state, &theme);
             if matches!(
                 state.transactions.mode,
@@ -42,13 +46,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
                 TransactionsMode::TransferWallet | TransactionsMode::TransferFlow
             ) {
                 render_transfer_form(frame, layout[1], state, &theme);
-            } else if state.transactions.mode == TransactionsMode::Form {
+            } else if matches!(
+                state.transactions.mode,
+                TransactionsMode::Form | TransactionsMode::Edit
+            ) {
                 render_transaction_form(frame, layout[1], state, &theme);
             } else if state.transactions.mode == TransactionsMode::Filter {
                 render_filter_form(frame, layout[1], state, &theme);
             }
         }
-        TransactionsMode::Detail | TransactionsMode::Edit => {
+        TransactionsMode::Detail => {
             let columns = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
@@ -88,6 +95,29 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         line.push(Span::styled(summary, Style::default().fg(theme.dim)));
     }
 
+    let search_query = state.transactions.search_query.trim();
+    if !search_query.is_empty() || state.transactions.search_active {
+        line.push(Span::raw("   "));
+        line.push(Span::styled("Search", Style::default().fg(theme.dim)));
+        line.push(Span::raw(": "));
+        let shown = if search_query.is_empty() {
+            "…"
+        } else {
+            search_query
+        };
+        let mut style = Style::default().fg(theme.text);
+        if state.transactions.search_active {
+            style = style.fg(theme.accent).add_modifier(Modifier::BOLD);
+        }
+        line.push(Span::styled(shown.to_string(), style));
+    }
+
+    line.push(Span::raw("   "));
+    line.push(Span::styled(
+        "Ctrl+F: search",
+        Style::default().fg(theme.dim),
+    ));
+
     if let Some(err) = &state.transactions.error {
         line.push(Span::raw("   "));
         line.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
@@ -110,6 +140,11 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
 
     render_quick_add(frame, layout[0], state, theme);
 
+    let list_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border));
+
     let currency = state
         .vault
         .as_ref()
@@ -121,7 +156,35 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     let mut selected_row = None;
     let mut last_day = None;
 
-    for (idx, tx) in state.transactions.items.iter().enumerate() {
+    let visible = transactions_visible_indices(state);
+    if visible.is_empty() {
+        let query = state.transactions.search_query.trim();
+        let mut lines = Vec::new();
+        if !query.is_empty() {
+            lines.push(Line::from(vec![
+                Span::raw("No results for "),
+                Span::styled(format!("\"{query}\""), Style::default().fg(theme.accent)),
+                Span::raw("."),
+            ]));
+            lines.push(Line::from(Span::styled(
+                "Ctrl+F to edit • Esc to clear",
+                Style::default().fg(theme.dim),
+            )));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw("No transactions yet. Press "),
+                Span::styled("a", Style::default().fg(theme.accent)),
+                Span::raw(" to add one."),
+            ]));
+        }
+        let empty_msg = Paragraph::new(lines)
+            .alignment(ratatui::layout::Alignment::Center)
+            .block(list_block);
+        frame.render_widget(empty_msg, layout[1]);
+        return;
+    }
+    for (visible_idx, idx) in visible.iter().enumerate() {
+        let tx = &state.transactions.items[*idx];
         let day_label = tx.occurred_at.format("%Y-%m-%d").to_string();
         if last_day.as_ref() != Some(&day_label) {
             last_day = Some(day_label.clone());
@@ -131,40 +194,42 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             ))));
         }
 
-        if idx == state.transactions.selected {
+        if visible_idx == state.transactions.selected {
             selected_row = Some(rows.len());
         }
 
-        let time = tx.occurred_at.format("%H:%M").to_string();
-        let kind = kind_label(tx.kind);
-        let amount = Money::new(tx.amount_minor).format(currency);
         let note = tx.note.as_deref().unwrap_or("");
         let category = tx
             .category
             .as_deref()
-            .map(|c| format!("#{c} "))
+            .map(|c| format!("#{c}"))
             .unwrap_or_default();
-        let badge = badge_label(tx.kind, tx.voided);
 
-        let text = format!("{time}  {badge:<8} {kind:<14} {amount:<14} {category}{note}");
-        rows.push(ListItem::new(Line::from(text)));
-    }
+        let mut spans = Vec::new();
+        spans.push(Span::styled(
+            tx.occurred_at.format("%H:%M").to_string(),
+            Style::default().fg(theme.dim),
+        ));
+        spans.push(Span::raw("  "));
+        spans.push(kind_chip(tx.kind, theme));
+        spans.push(Span::raw(" "));
+        if let Some(voided) = void_chip(tx.voided, theme) {
+            spans.push(voided);
+            spans.push(Span::raw(" "));
+        }
+        spans.push(amount_span(tx.kind, tx.amount_minor, currency, theme));
+        spans.push(Span::raw("  "));
+        if !category.is_empty() {
+            spans.push(Span::styled(category, Style::default().fg(theme.accent)));
+            spans.push(Span::raw(" "));
+        }
+        spans.push(Span::raw(note));
 
-    let list_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
-    if rows.is_empty() {
-        let empty_msg = Paragraph::new(Line::from(vec![
-            Span::raw("No transactions yet. Press "),
-            Span::styled("a", Style::default().fg(theme.accent)),
-            Span::raw(" to add one."),
-        ]))
-        .alignment(ratatui::layout::Alignment::Center)
-        .block(list_block);
-        frame.render_widget(empty_msg, layout[1]);
-        return;
+        let mut item = ListItem::new(Line::from(spans));
+        if tx.voided {
+            item = item.style(Style::default().fg(theme.dim));
+        }
+        rows.push(item);
     }
 
     let mut list_state = ListState::default();
@@ -256,7 +321,11 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 .filter(|wallet| !wallet.archived)
                 .map(|wallet| wallet.name.clone())
                 .collect::<Vec<_>>();
-            ("Transfer Wallet", list)
+            if state.transactions.transfer.editing_id.is_some() {
+                ("Edit Transfer Wallet", list)
+            } else {
+                ("Transfer Wallet", list)
+            }
         }
         TransactionsMode::TransferFlow => {
             let list = snapshot
@@ -265,7 +334,11 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 .filter(|flow| !flow.archived)
                 .map(|flow| flow.name.clone())
                 .collect::<Vec<_>>();
-            ("Transfer Flow", list)
+            if state.transactions.transfer.editing_id.is_some() {
+                ("Edit Transfer Flow", list)
+            } else {
+                ("Transfer Flow", list)
+            }
         }
         _ => return,
     };
@@ -283,7 +356,7 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let popup = centered_rect(70, 60, area);
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(7), Constraint::Min(0)])
+        .constraints([Constraint::Length(9), Constraint::Min(0)])
         .split(popup);
 
     let mut lines = vec![
@@ -299,6 +372,16 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             "Note",
             transfer.note.as_str(),
             transfer.focus == TransferField::Note,
+            theme,
+        ),
+        render_transfer_field(
+            "When",
+            if transfer.occurred_at.trim().is_empty() {
+                "-"
+            } else {
+                transfer.occurred_at.as_str()
+            },
+            transfer.focus == TransferField::OccurredAt,
             theme,
         ),
         Line::from(Span::styled(
@@ -370,15 +453,16 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
         return;
     };
     let form = &state.transactions.form;
-    let wallets = snapshot
-        .wallets
+    let wallet_ids = ordered_wallet_ids_from_state(state);
+    let flow_ids = ordered_flow_ids_from_state(state);
+
+    let wallets = wallet_ids
         .iter()
-        .filter(|wallet| !wallet.archived)
+        .filter_map(|id| snapshot.wallets.iter().find(|wallet| wallet.id == *id))
         .collect::<Vec<_>>();
-    let flows = snapshot
-        .flows
+    let flows = flow_ids
         .iter()
-        .filter(|flow| !flow.archived)
+        .filter_map(|id| snapshot.flows.iter().find(|flow| flow.id == *id))
         .collect::<Vec<_>>();
 
     let wallet_name = wallets
@@ -407,11 +491,36 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
         form.occurred_at.trim().to_string()
     };
 
+    let is_edit = form.editing_id.is_some();
     let title = match form.kind {
-        TransactionKind::Income => "New Income",
-        TransactionKind::Expense => "New Expense",
-        TransactionKind::Refund => "New Refund",
-        TransactionKind::TransferWallet | TransactionKind::TransferFlow => "New Transaction",
+        TransactionKind::Income => {
+            if is_edit {
+                "Edit Income"
+            } else {
+                "New Income"
+            }
+        }
+        TransactionKind::Expense => {
+            if is_edit {
+                "Edit Expense"
+            } else {
+                "New Expense"
+            }
+        }
+        TransactionKind::Refund => {
+            if is_edit {
+                "Edit Refund"
+            } else {
+                "New Refund"
+            }
+        }
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
+            if is_edit {
+                "Edit Transaction"
+            } else {
+                "New Transaction"
+            }
+        }
     };
 
     let popup = centered_rect(70, 70, area);
@@ -663,15 +772,15 @@ fn render_filter_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
                 },
             ),
             Span::raw(": "),
-            kind_chip("Income", filter.kind_income, theme),
+            kind_toggle_chip("Income", filter.kind_income, theme),
             Span::raw(" "),
-            kind_chip("Expense", filter.kind_expense, theme),
+            kind_toggle_chip("Expense", filter.kind_expense, theme),
             Span::raw(" "),
-            kind_chip("Refund", filter.kind_refund, theme),
+            kind_toggle_chip("Refund", filter.kind_refund, theme),
             Span::raw(" "),
-            kind_chip("T.Wallet", filter.kind_transfer_wallet, theme),
+            kind_toggle_chip("T.Wallet", filter.kind_transfer_wallet, theme),
             Span::raw(" "),
-            kind_chip("T.Flow", filter.kind_transfer_flow, theme),
+            kind_toggle_chip("T.Flow", filter.kind_transfer_flow, theme),
         ]),
         Line::from(Span::styled(
             "Tab: next • i/e/r/w/f toggle kinds • Enter: apply • Esc: cancel",
@@ -714,7 +823,7 @@ fn render_filter_field(label: &str, value: &str, focused: bool, theme: &Theme) -
     ])
 }
 
-fn kind_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> {
+fn kind_toggle_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> {
     let style = if enabled {
         Style::default()
             .fg(theme.accent)
@@ -787,6 +896,22 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
                 Style::default().fg(theme.dim),
             )));
         }
+        let recent_wallets = recent_wallet_names(state);
+        if !recent_wallets.is_empty() {
+            let list = recent_wallets.join(" • ");
+            lines.push(Line::from(Span::styled(
+                format!("Wallet recenti: {list}"),
+                Style::default().fg(theme.dim),
+            )));
+        }
+        let recent_flows = recent_flow_names(state);
+        if !recent_flows.is_empty() {
+            let list = recent_flows.join(" • ");
+            lines.push(Line::from(Span::styled(
+                format!("Flow recenti: {list}"),
+                Style::default().fg(theme.dim),
+            )));
+        }
     }
 
     let block = Block::default()
@@ -837,13 +962,22 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     let note = header.note.as_deref().unwrap_or("-");
     let voided = if header.voided { "YES" } else { "NO" };
 
-    let mut lines = vec![
+    let lines = vec![
         Line::from(vec![
             Span::styled("Kind", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {}", kind_label(header.kind))),
+            Span::raw(": "),
+            kind_chip(header.kind, theme),
             Span::raw("   "),
             Span::styled("Voided", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {voided}")),
+            Span::raw(": "),
+            Span::styled(
+                voided.to_string(),
+                Style::default().fg(if header.voided {
+                    theme.error
+                } else {
+                    theme.text
+                }),
+            ),
         ]),
         Line::from(vec![
             Span::styled("When", Style::default().fg(theme.dim)),
@@ -863,26 +997,6 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         ]),
     ];
 
-    if state.transactions.mode == TransactionsMode::Edit {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("Edit", Style::default().fg(theme.accent)),
-            Span::raw(": "),
-            Span::raw(state.transactions.edit_input.as_str()),
-        ]));
-        if let Some(err) = &state.transactions.edit_error {
-            lines.push(Line::from(Span::styled(
-                err.as_str(),
-                Style::default().fg(theme.error),
-            )));
-        } else {
-            lines.push(Line::from(Span::styled(
-                "Formato: importo [nota]",
-                Style::default().fg(theme.dim),
-            )));
-        }
-    }
-
     let header_block = Block::default()
         .title("Transaction Detail")
         .borders(Borders::ALL)
@@ -898,12 +1012,18 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
                 LegTarget::Wallet { wallet_id } => resolve_wallet_name(state, wallet_id),
                 LegTarget::Flow { flow_id } => resolve_flow_name(state, flow_id),
             };
-            let amount = Money::new(leg.amount_minor).format(currency);
             let label = match leg.target {
                 LegTarget::Wallet { .. } => "Wallet",
                 LegTarget::Flow { .. } => "Flow",
             };
-            ListItem::new(Line::from(format!("{label}: {name}  {amount}")))
+            let amount = leg_amount_span(leg.amount_minor, currency, theme);
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("{label:<6}"), Style::default().fg(theme.dim)),
+                Span::raw(": "),
+                Span::raw(name),
+                Span::raw("  "),
+                amount,
+            ]))
         })
         .collect::<Vec<_>>();
 
@@ -916,32 +1036,64 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     frame.render_widget(list, layout[1]);
 }
 
-fn kind_label(kind: TransactionKind) -> &'static str {
-    match kind {
-        TransactionKind::Income => "▲ Income",
-        TransactionKind::Expense => "▼ Expense",
-        TransactionKind::Refund => "↩ Refund",
-        TransactionKind::TransferWallet => "⇄ Transfer",
-        TransactionKind::TransferFlow => "⇄ Transfer",
+fn kind_chip(kind: TransactionKind, theme: &Theme) -> Span<'static> {
+    let (label, color) = match kind {
+        TransactionKind::Income => ("INC", theme.positive),
+        TransactionKind::Expense => ("EXP", theme.negative),
+        TransactionKind::Refund => ("REF", theme.accent),
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => ("TR", theme.text),
+    };
+    Span::styled(
+        format!("[{label}]"),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
+}
+
+fn void_chip(voided: bool, theme: &Theme) -> Option<Span<'static>> {
+    if voided {
+        Some(Span::styled(
+            "[VOID]",
+            Style::default()
+                .fg(theme.error)
+                .add_modifier(Modifier::BOLD),
+        ))
+    } else {
+        None
     }
 }
 
-fn badge_label(kind: TransactionKind, voided: bool) -> String {
-    let mut badge = String::new();
-    if matches!(
-        kind,
-        TransactionKind::TransferWallet | TransactionKind::TransferFlow
-    ) {
-        badge.push_str("[TR]");
-    }
-    if voided {
-        badge.push_str("[VOID]");
-    }
-    if badge.is_empty() {
-        "-".to_string()
+fn amount_span(
+    kind: TransactionKind,
+    amount_minor: i64,
+    currency: Currency,
+    theme: &Theme,
+) -> Span<'static> {
+    let signed = match kind {
+        TransactionKind::Expense => -amount_minor,
+        TransactionKind::Income | TransactionKind::Refund => amount_minor,
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => amount_minor,
+    };
+    let color = if signed < 0 {
+        theme.negative
+    } else if signed > 0 {
+        theme.positive
     } else {
-        badge
-    }
+        theme.dim
+    };
+    let amount = Money::new(signed).format(currency);
+    Span::styled(format!("{amount:<14}"), Style::default().fg(color))
+}
+
+fn leg_amount_span(amount_minor: i64, currency: Currency, theme: &Theme) -> Span<'static> {
+    let color = if amount_minor < 0 {
+        theme.negative
+    } else if amount_minor > 0 {
+        theme.positive
+    } else {
+        theme.dim
+    };
+    let amount = Money::new(amount_minor).format(currency);
+    Span::styled(amount, Style::default().fg(color))
 }
 
 fn map_currency(currency: &api_types::Currency) -> Currency {
@@ -976,6 +1128,42 @@ fn resolve_flow_name(state: &AppState, flow_id: Uuid) -> String {
         .unwrap_or_else(|| flow_id.to_string())
 }
 
+fn recent_wallet_names(state: &AppState) -> Vec<String> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    state
+        .transactions
+        .recent_wallet_ids
+        .iter()
+        .filter_map(|wallet_id| {
+            snapshot
+                .wallets
+                .iter()
+                .find(|wallet| wallet.id == *wallet_id && !wallet.archived)
+                .map(|wallet| wallet.name.clone())
+        })
+        .collect()
+}
+
+fn recent_flow_names(state: &AppState) -> Vec<String> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    state
+        .transactions
+        .recent_flow_ids
+        .iter()
+        .filter_map(|flow_id| {
+            snapshot
+                .flows
+                .iter()
+                .find(|flow| flow.id == *flow_id && !flow.archived)
+                .map(|flow| flow.name.clone())
+        })
+        .collect()
+}
+
 fn default_wallet_flow_names(state: &AppState) -> (String, String) {
     let snapshot = match state.snapshot.as_ref() {
         Some(snapshot) => snapshot,
@@ -991,6 +1179,28 @@ fn default_wallet_flow_names(state: &AppState) -> (String, String) {
                 .iter()
                 .find(|wallet| wallet.id == wallet_id && !wallet.archived)
                 .map(|wallet| wallet.name.clone())
+        })
+        .or_else(|| {
+            state.default_wallet_id.and_then(|wallet_id| {
+                snapshot
+                    .wallets
+                    .iter()
+                    .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+                    .map(|wallet| wallet.name.clone())
+            })
+        })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_wallet_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .wallets
+                        .iter()
+                        .find(|wallet| wallet.id == *recent_id && !wallet.archived)
+                        .map(|wallet| wallet.name.clone())
+                })
         })
         .or_else(|| {
             snapshot
@@ -1010,6 +1220,28 @@ fn default_wallet_flow_names(state: &AppState) -> (String, String) {
                 .iter()
                 .find(|flow| flow.id == flow_id && !flow.archived)
                 .map(|flow| flow.name.clone())
+        })
+        .or_else(|| {
+            state.default_flow_id.and_then(|flow_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id && !flow.archived)
+                    .map(|flow| flow.name.clone())
+            })
+        })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_flow_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .flows
+                        .iter()
+                        .find(|flow| flow.id == *recent_id && !flow.archived)
+                        .map(|flow| flow.name.clone())
+                })
         })
         .or_else(|| {
             state.last_flow_id.and_then(|flow_id| {

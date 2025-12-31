@@ -2,6 +2,7 @@ mod app;
 mod client;
 mod config;
 mod error;
+mod local_state;
 mod quick_add;
 mod ui;
 
