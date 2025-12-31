@@ -14,6 +14,7 @@ use crate::{
     ui::{
         components::{
             card::{Card, StatCard},
+            charts::{ascii_bar, mini_bar_chart},
             money::{inline_progress_bar, styled_amount},
         },
         theme::Theme,
@@ -68,12 +69,16 @@ fn render_quick_stats(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         .split(area);
 
     // Total Balance
-    StatCard::new(
+    let trend = mini_bar_chart(&state.stats.sparkline);
+    let mut total_card = StatCard::new(
         "Total Balance",
         Money::new(total_balance).format(currency),
         theme,
-    )
-    .render(frame, cols[0]);
+    );
+    if !trend.is_empty() {
+        total_card = total_card.subtitle(trend);
+    }
+    total_card.render(frame, cols[0]);
 
     // This Month Income
     let income_ratio = if income > 0 {
@@ -194,6 +199,13 @@ fn render_flows_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         .snapshot
         .as_ref()
         .map(|snap| {
+            let max_balance = snap
+                .flows
+                .iter()
+                .map(|flow| flow.balance_minor.saturating_abs() as u64)
+                .max()
+                .unwrap_or(0);
+
             snap.flows
                 .iter()
                 .filter(|f| !f.archived)
@@ -209,7 +221,11 @@ fn render_flows_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
                     // For now, show a simple bar (we don't have cap info in FlowView)
                     // TODO: Add cap info to FlowView API to show proper progress
                     let bar_width = 10;
-                    let bar = "━".repeat(bar_width);
+                    let bar = ascii_bar(
+                        flow.balance_minor.saturating_abs() as u64,
+                        max_balance,
+                        bar_width,
+                    );
 
                     let balance_color = if flow.balance_minor >= 0 {
                         theme.positive

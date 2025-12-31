@@ -3,10 +3,10 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     symbols,
-    widgets::{BarChart, Block, BorderType, Borders, Sparkline},
+    widgets::{BarChart, Sparkline},
 };
 
-use crate::ui::theme::Theme;
+use crate::ui::{components::card::Card, theme::Theme};
 
 /// Renders a horizontal bar chart with labeled bars.
 ///
@@ -18,14 +18,7 @@ pub fn render_bar_chart(
     data: &[(&str, u64)],
     theme: &Theme,
 ) {
-    let block = Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
     let chart = BarChart::default()
-        .block(block)
         .data(data)
         .bar_width(3)
         .bar_gap(1)
@@ -33,7 +26,10 @@ pub fn render_bar_chart(
         .value_style(Style::default().fg(theme.text).add_modifier(Modifier::BOLD))
         .label_style(Style::default().fg(theme.dim));
 
-    frame.render_widget(chart, area);
+    let card = Card::new(title, theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+    frame.render_widget(chart, inner);
 }
 
 /// Renders a sparkline (mini line chart) for trend visualization.
@@ -46,18 +42,14 @@ pub fn render_sparkline(
     data: &[u64],
     theme: &Theme,
 ) {
-    let block = Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-
     let sparkline = Sparkline::default()
-        .block(block)
         .data(data)
         .style(Style::default().fg(theme.accent));
 
-    frame.render_widget(sparkline, area);
+    let card = Card::new(title, theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+    frame.render_widget(sparkline, inner);
 }
 
 /// Renders an inline sparkline without borders (for embedding in other
