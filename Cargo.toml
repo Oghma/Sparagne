@@ -35,7 +35,7 @@ todo = "warn"
 dbg_macro = "warn"
 
 [workspace.dependencies]
-axum = "0.8.7"
+axum = "0.8.8"
 axum-extra = "0.12.2"
 base64 = "0.22.1"
 clap = { version = "4.5.53", features = ["derive", "env"] }
