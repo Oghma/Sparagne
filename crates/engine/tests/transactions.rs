@@ -3,7 +3,10 @@
 use chrono::{TimeZone, Utc};
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Statement};
 
-use engine::{Currency, Engine, EngineError, TransactionKind, TransactionListFilter};
+use engine::{
+    CategoryMergeConflictKind, Currency, Engine, EngineError, TransactionKind,
+    TransactionListFilter,
+};
 use migration::MigratorTrait;
 use uuid::Uuid;
 
@@ -1618,6 +1621,40 @@ async fn merge_category_moves_transactions_and_aliases() {
         .await
         .unwrap();
     assert!(txs.iter().all(|(tx, _)| tx.category_id == spese.id));
+}
+
+#[tokio::test]
+async fn preview_merge_reports_conflicts() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let food = engine
+        .create_category(&vault_id, "Food", "alice")
+        .await
+        .unwrap();
+    let spese = engine
+        .create_category(&vault_id, "Spese", "alice")
+        .await
+        .unwrap();
+    engine
+        .update_category(&vault_id, spese.id, None, Some(true), "alice")
+        .await
+        .unwrap();
+
+    let preview = engine
+        .preview_category_merge(&vault_id, food.id, spese.id, "alice")
+        .await
+        .unwrap();
+    assert!(!preview.ok);
+    assert!(
+        preview
+            .conflicts
+            .iter()
+            .any(|c| c.kind == CategoryMergeConflictKind::TargetArchived)
+    );
 }
 
 #[tokio::test]

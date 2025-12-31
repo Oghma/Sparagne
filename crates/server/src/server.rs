@@ -126,6 +126,10 @@ fn router(state: ServerState) -> Router {
             "/categories/{category_id}/aliases/{alias_id}",
             delete(categories::delete_alias),
         )
+        .route(
+            "/categories/{id}/merge/preview",
+            post(categories::preview_merge),
+        )
         .route("/categories/{id}/merge", post(categories::merge))
         .route("/income", post(transactions::income_new))
         .route("/expense", post(transactions::expense_new))
@@ -679,6 +683,54 @@ mod http_tests {
         let body = res.into_body().collect().await.unwrap().to_bytes();
         let merged: category::CategoryView = serde_json::from_slice(&body).unwrap();
         assert_eq!(merged.id, spese.id);
+    }
+
+    #[tokio::test]
+    async fn merge_preview_reports_conflicts() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+
+        let food = engine
+            .create_category(&vault_id, "Food", OWNER)
+            .await
+            .unwrap();
+        let spese = engine
+            .create_category(&vault_id, "Spese", OWNER)
+            .await
+            .unwrap();
+        engine
+            .update_category(&vault_id, spese.id, None, Some(true), OWNER)
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri(format!("/categories/{}/merge/preview", food.id))
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&category::CategoryMergePreview {
+                    vault_id: vault_id.clone(),
+                    into_category_id: spese.id,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let preview: category::CategoryMergePreviewResponse =
+            serde_json::from_slice(&body).unwrap();
+        assert!(!preview.ok);
+        assert!(!preview.conflicts.is_empty());
     }
 
     #[tokio::test]

@@ -78,15 +78,16 @@ impl Engine {
 
                 let new_occurred_at =
                     apply_optional_datetime_patch(tx_model.occurred_at, occurred_at);
-                let (new_category_id, new_category) =
-                    if category_id.is_some() || category.as_deref().is_some() {
-                        let resolved = engine
-                            .resolve_category_input(db_tx, vault_id, category_id, category.as_deref())
-                            .await?;
-                        (resolved.id, resolved.name)
-                    } else {
-                        (tx_model.category_id, tx_model.category.clone())
-                    };
+                let (new_category_id, new_category) = if category_id.is_some()
+                    || category.as_deref().is_some()
+                {
+                    let resolved = engine
+                        .resolve_category_input(db_tx, vault_id, category_id, category.as_deref())
+                        .await?;
+                    (resolved.id, resolved.name)
+                } else {
+                    (tx_model.category_id, tx_model.category.clone())
+                };
                 let new_note = apply_optional_text_patch(tx_model.note.clone(), note);
 
                 let leg_models = legs::Entity::find()

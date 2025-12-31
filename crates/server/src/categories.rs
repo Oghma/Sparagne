@@ -3,7 +3,8 @@
 use api_types::category::{
     CategoryAliasCreate, CategoryAliasCreated, CategoryAliasDelete, CategoryAliasList,
     CategoryAliasListResponse, CategoryAliasView, CategoryCreate, CategoryCreated, CategoryList,
-    CategoryListResponse, CategoryMerge, CategoryUpdate, CategoryView,
+    CategoryListResponse, CategoryMerge, CategoryMergeConflict, CategoryMergePreview,
+    CategoryMergePreviewResponse, CategoryUpdate, CategoryView,
 };
 use axum::{
     Extension, Json,
@@ -28,6 +29,13 @@ fn map_alias(alias: engine::CategoryAlias) -> CategoryAliasView {
         id: alias.id,
         alias: alias.alias,
         category_id: alias.category_id,
+    }
+}
+
+fn map_merge_conflict(conflict: engine::CategoryMergeConflict) -> CategoryMergeConflict {
+    CategoryMergeConflict {
+        kind: conflict.kind.as_str().to_string(),
+        value: conflict.value,
     }
 }
 
@@ -160,4 +168,30 @@ pub async fn merge(
         )
         .await?;
     Ok(Json(map_category(category)))
+}
+
+pub async fn preview_merge(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Path(category_id): Path<Uuid>,
+    Json(payload): Json<CategoryMergePreview>,
+) -> Result<Json<CategoryMergePreviewResponse>, ServerError> {
+    let preview = state
+        .engine
+        .preview_category_merge(
+            &payload.vault_id,
+            category_id,
+            payload.into_category_id,
+            &user.username,
+        )
+        .await?;
+    let conflicts = preview
+        .conflicts
+        .into_iter()
+        .map(map_merge_conflict)
+        .collect();
+    Ok(Json(CategoryMergePreviewResponse {
+        ok: preview.ok,
+        conflicts,
+    }))
 }

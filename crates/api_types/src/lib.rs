@@ -239,6 +239,25 @@ pub mod category {
         pub vault_id: String,
         pub into_category_id: Uuid,
     }
+
+    /// Preview merge conflicts for a category merge.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryMergePreview {
+        pub vault_id: String,
+        pub into_category_id: Uuid,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryMergeConflict {
+        pub kind: String,
+        pub value: String,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct CategoryMergePreviewResponse {
+        pub ok: bool,
+        pub conflicts: Vec<CategoryMergeConflict>,
+    }
 }
 
 pub mod user {

@@ -46,7 +46,8 @@ pub mod types {
         pub use api_types::category::{
             CategoryAliasCreate, CategoryAliasCreated, CategoryAliasDelete, CategoryAliasList,
             CategoryAliasListResponse, CategoryAliasView, CategoryCreate, CategoryCreated,
-            CategoryList, CategoryListResponse, CategoryMerge, CategoryUpdate, CategoryView,
+            CategoryList, CategoryListResponse, CategoryMerge, CategoryMergeConflict,
+            CategoryMergePreview, CategoryMergePreviewResponse, CategoryUpdate, CategoryView,
         };
     }
 

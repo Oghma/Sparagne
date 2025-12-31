@@ -22,6 +22,8 @@ pub use error::EngineError;
 pub use legs::{Leg, LegTarget};
 /// Money parsing and formatting helper.
 pub use money::Money;
+/// Merge preview conflicts for category operations.
+pub use ops::{CategoryMergeConflict, CategoryMergeConflictKind, CategoryMergePreview};
 /// Engine facade, builder, and transaction listing filters.
 pub use ops::{Engine, EngineBuilder, TransactionListFilter};
 /// Transaction models and kinds.

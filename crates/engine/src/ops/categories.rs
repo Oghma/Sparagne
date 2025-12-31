@@ -15,6 +15,39 @@ use super::{Engine, parse_vault_uuid};
 const UNCATEGORIZED_NAME: &str = "Uncategorized";
 const UNCATEGORIZED_NAME_NORM: &str = "uncategorized";
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CategoryMergePreview {
+    pub ok: bool,
+    pub conflicts: Vec<CategoryMergeConflict>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CategoryMergeConflict {
+    pub kind: CategoryMergeConflictKind,
+    pub value: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CategoryMergeConflictKind {
+    SameCategory,
+    SourceSystem,
+    TargetArchived,
+    Alias,
+    Name,
+}
+
+impl CategoryMergeConflictKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SameCategory => "same_category",
+            Self::SourceSystem => "source_system",
+            Self::TargetArchived => "target_archived",
+            Self::Alias => "alias_conflict",
+            Self::Name => "name_conflict",
+        }
+    }
+}
+
 pub(super) struct CategorySelection {
     pub(super) id: Uuid,
     pub(super) name: Option<String>,
@@ -359,6 +392,33 @@ impl Engine {
         .await
     }
 
+    pub async fn preview_category_merge(
+        &self,
+        vault_id: &str,
+        from_category_id: Uuid,
+        into_category_id: Uuid,
+        user_id: &str,
+    ) -> ResultEngine<CategoryMergePreview> {
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
+                let context = engine
+                    .merge_context(db_tx, vault_uuid, from_category_id, into_category_id)
+                    .await?;
+                Ok(CategoryMergePreview {
+                    ok: context.conflicts.is_empty(),
+                    conflicts: context.conflicts,
+                })
+            })
+        })
+        .await
+    }
+
     pub async fn merge_category(
         &self,
         vault_id: &str,
@@ -366,11 +426,6 @@ impl Engine {
         into_category_id: Uuid,
         user_id: &str,
     ) -> ResultEngine<Category> {
-        if from_category_id == into_category_id {
-            return Err(EngineError::InvalidName(
-                "cannot merge a category into itself".to_string(),
-            ));
-        }
         let vault_id = vault_id.to_string();
         let user_id = user_id.to_string();
         self.with_tx(|engine, db_tx| {
@@ -380,56 +435,20 @@ impl Engine {
                     .await?;
                 let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
 
-                let from = engine
-                    .require_category_in_vault(db_tx, vault_uuid, from_category_id)
+                let context = engine
+                    .merge_context(db_tx, vault_uuid, from_category_id, into_category_id)
                     .await?;
-                let into = engine
-                    .require_category_in_vault(db_tx, vault_uuid, into_category_id)
-                    .await?;
-                if from.is_system {
-                    return Err(EngineError::InvalidName(
-                        "system categories cannot be merged".to_string(),
-                    ));
-                }
-                if into.archived {
-                    return Err(EngineError::InvalidName(
-                        "target category is archived".to_string(),
-                    ));
+                if let Some(conflict) = context.conflicts.first() {
+                    return Err(Self::merge_conflict_error(conflict));
                 }
 
-                let mut reserved: std::collections::HashSet<String> =
-                    std::collections::HashSet::new();
-                reserved.insert(into.name_norm.clone());
-                let target_aliases = category_aliases::Entity::find()
-                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
-                    .filter(category_aliases::Column::CategoryId.eq(into_category_id))
-                    .all(db_tx)
-                    .await?;
-                for alias in &target_aliases {
-                    reserved.insert(alias.alias_norm.clone());
-                }
-
-                let from_aliases = category_aliases::Entity::find()
-                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
-                    .filter(category_aliases::Column::CategoryId.eq(from_category_id))
-                    .all(db_tx)
-                    .await?;
-
-                for alias in &from_aliases {
-                    if reserved.contains(&alias.alias_norm) {
-                        return Err(EngineError::ExistingKey(alias.alias.clone()));
-                    }
-                }
-                if from.name_norm != into.name_norm && reserved.contains(&from.name_norm) {
-                    return Err(EngineError::ExistingKey(from.name.clone()));
-                }
-
-                let category_display =
-                    if into.is_system && into.name_norm == UNCATEGORIZED_NAME_NORM {
-                        Value::String(None)
-                    } else {
-                        Value::String(Some(Box::new(into.name.clone())))
-                    };
+                let category_display = if context.into.is_system
+                    && context.into.name_norm == UNCATEGORIZED_NAME_NORM
+                {
+                    Value::String(None)
+                } else {
+                    Value::String(Some(Box::new(context.into.name.clone())))
+                };
 
                 transactions::Entity::update_many()
                     .col_expr(
@@ -444,7 +463,7 @@ impl Engine {
                     .exec(db_tx)
                     .await?;
 
-                if !from_aliases.is_empty() {
+                if !context.from_aliases.is_empty() {
                     category_aliases::Entity::update_many()
                         .col_expr(
                             category_aliases::Column::CategoryId,
@@ -455,13 +474,13 @@ impl Engine {
                         .await?;
                 }
 
-                if from.name_norm != into.name_norm {
+                if context.from.name_norm != context.into.name_norm {
                     let alias_active = category_aliases::ActiveModel {
                         id: ActiveValue::Set(Uuid::new_v4()),
                         vault_id: ActiveValue::Set(vault_uuid),
                         category_id: ActiveValue::Set(into_category_id),
-                        alias: ActiveValue::Set(from.name.clone()),
-                        alias_norm: ActiveValue::Set(from.name_norm.clone()),
+                        alias: ActiveValue::Set(context.from.name.clone()),
+                        alias_norm: ActiveValue::Set(context.from.name_norm.clone()),
                     };
                     alias_active.insert(db_tx).await?;
                 }
@@ -474,14 +493,105 @@ impl Engine {
                 active.update(db_tx).await?;
 
                 Ok(Category {
-                    id: into.id,
-                    name: into.name,
-                    archived: into.archived,
-                    is_system: into.is_system,
+                    id: context.into.id,
+                    name: context.into.name,
+                    archived: context.into.archived,
+                    is_system: context.into.is_system,
                 })
             })
         })
         .await
+    }
+
+    async fn merge_context(
+        &self,
+        db_tx: &DatabaseTransaction,
+        vault_uuid: Uuid,
+        from_category_id: Uuid,
+        into_category_id: Uuid,
+    ) -> ResultEngine<MergeContext> {
+        let from = self
+            .require_category_in_vault(db_tx, vault_uuid, from_category_id)
+            .await?;
+        let into = self
+            .require_category_in_vault(db_tx, vault_uuid, into_category_id)
+            .await?;
+
+        let mut conflicts = Vec::new();
+        if from_category_id == into_category_id {
+            conflicts.push(CategoryMergeConflict {
+                kind: CategoryMergeConflictKind::SameCategory,
+                value: from.name.clone(),
+            });
+        }
+        if from.is_system {
+            conflicts.push(CategoryMergeConflict {
+                kind: CategoryMergeConflictKind::SourceSystem,
+                value: from.name.clone(),
+            });
+        }
+        if into.archived {
+            conflicts.push(CategoryMergeConflict {
+                kind: CategoryMergeConflictKind::TargetArchived,
+                value: into.name.clone(),
+            });
+        }
+
+        let mut reserved: std::collections::HashSet<String> = std::collections::HashSet::new();
+        reserved.insert(into.name_norm.clone());
+        let target_aliases = category_aliases::Entity::find()
+            .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+            .filter(category_aliases::Column::CategoryId.eq(into_category_id))
+            .all(db_tx)
+            .await?;
+        for alias in &target_aliases {
+            reserved.insert(alias.alias_norm.clone());
+        }
+
+        let from_aliases = category_aliases::Entity::find()
+            .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+            .filter(category_aliases::Column::CategoryId.eq(from_category_id))
+            .all(db_tx)
+            .await?;
+
+        for alias in &from_aliases {
+            if reserved.contains(&alias.alias_norm) {
+                conflicts.push(CategoryMergeConflict {
+                    kind: CategoryMergeConflictKind::Alias,
+                    value: alias.alias.clone(),
+                });
+            }
+        }
+        if from.name_norm != into.name_norm && reserved.contains(&from.name_norm) {
+            conflicts.push(CategoryMergeConflict {
+                kind: CategoryMergeConflictKind::Name,
+                value: from.name.clone(),
+            });
+        }
+
+        Ok(MergeContext {
+            from,
+            into,
+            from_aliases,
+            conflicts,
+        })
+    }
+
+    fn merge_conflict_error(conflict: &CategoryMergeConflict) -> EngineError {
+        match conflict.kind {
+            CategoryMergeConflictKind::SameCategory => {
+                EngineError::InvalidName("cannot merge a category into itself".to_string())
+            }
+            CategoryMergeConflictKind::SourceSystem => {
+                EngineError::InvalidName("system categories cannot be merged".to_string())
+            }
+            CategoryMergeConflictKind::TargetArchived => {
+                EngineError::InvalidName("target category is archived".to_string())
+            }
+            CategoryMergeConflictKind::Alias | CategoryMergeConflictKind::Name => {
+                EngineError::ExistingKey(conflict.value.clone())
+            }
+        }
     }
 
     pub(super) async fn resolve_category(
@@ -679,6 +789,13 @@ impl Engine {
 
         Ok(best.map(|(_, model)| model))
     }
+}
+
+struct MergeContext {
+    from: categories::Model,
+    into: categories::Model,
+    from_aliases: Vec<category_aliases::Model>,
+    conflicts: Vec<CategoryMergeConflict>,
 }
 
 fn similarity_threshold(input: &str) -> usize {

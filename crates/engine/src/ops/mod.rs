@@ -17,6 +17,7 @@ mod transactions;
 mod vaults;
 mod wallets;
 
+pub use categories::{CategoryMergeConflict, CategoryMergeConflictKind, CategoryMergePreview};
 pub use transactions::TransactionListFilter;
 
 /// Parse a vault_id string into Uuid for DB queries.
