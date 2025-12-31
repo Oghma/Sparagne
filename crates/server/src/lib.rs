@@ -1,7 +1,8 @@
+use api_types::error::{ErrorCode, ErrorDetails, ErrorEnvelope, ErrorPayload};
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use engine::EngineError;
+use std::collections::BTreeMap;
 
-use serde::Serialize;
 pub use server::{run, run_with_listener, spawn_with_listener};
 
 mod cash_flow;
@@ -65,12 +66,6 @@ pub enum ServerError {
     Generic(String),
 }
 
-//TODO: Find a better solution
-#[derive(Serialize)]
-struct Error {
-    error: String,
-}
-
 fn status_for_engine_error(err: &EngineError) -> StatusCode {
     match err {
         EngineError::Forbidden(_) => StatusCode::FORBIDDEN,
@@ -89,6 +84,64 @@ fn status_for_engine_error(err: &EngineError) -> StatusCode {
     }
 }
 
+fn code_for_engine_error(err: &EngineError) -> ErrorCode {
+    match err {
+        EngineError::Forbidden(message) => match message.as_str() {
+            "cannot remove last flow owner" => ErrorCode::MembershipLastOwner,
+            "cannot change vault owner role" => ErrorCode::MembershipOwnerImmutable,
+            "cannot remove vault owner" => ErrorCode::MembershipOwnerRemoveForbidden,
+            _ => ErrorCode::Forbidden,
+        },
+        EngineError::KeyNotFound(_) => ErrorCode::NotFound,
+        EngineError::ExistingKey(_) => ErrorCode::Conflict,
+        EngineError::Database(_) => ErrorCode::DatabaseError,
+        EngineError::MaxBalanceReached(_) => ErrorCode::MaxBalanceReached,
+        EngineError::InsufficientFunds(_) => ErrorCode::InsufficientFunds,
+        EngineError::InvalidAmount(_) => ErrorCode::InvalidAmount,
+        EngineError::InvalidName(_) => ErrorCode::InvalidName,
+        EngineError::InvalidId(_) => ErrorCode::InvalidId,
+        EngineError::InvalidCursor(_) => ErrorCode::InvalidCursor,
+        EngineError::InvalidFlow(_) => ErrorCode::InvalidFlow,
+        EngineError::InvalidRole(_) => ErrorCode::InvalidRole,
+        EngineError::CurrencyMismatch(_) => ErrorCode::CurrencyMismatch,
+    }
+}
+
+fn details_from_pairs(pairs: &[(&str, &str)]) -> ErrorDetails {
+    let mut details = BTreeMap::new();
+    for (key, value) in pairs {
+        details.insert((*key).to_string(), (*value).to_string());
+    }
+    details
+}
+
+fn details_for_engine_error(err: &EngineError) -> Option<ErrorDetails> {
+    match err {
+        EngineError::Forbidden(message) => match message.as_str() {
+            "cannot remove last flow owner" => Some(details_from_pairs(&[
+                ("scope", "flow_membership"),
+                ("reason", "last_owner"),
+            ])),
+            "cannot change vault owner role" => Some(details_from_pairs(&[
+                ("scope", "vault_membership"),
+                ("reason", "owner_immutable"),
+            ])),
+            "cannot remove vault owner" => Some(details_from_pairs(&[
+                ("scope", "vault_membership"),
+                ("reason", "owner_remove_forbidden"),
+            ])),
+            _ => None,
+        },
+        EngineError::InvalidAmount(_) => Some(details_from_pairs(&[("field", "amount_minor")])),
+        EngineError::InvalidName(_) => Some(details_from_pairs(&[("field", "name")])),
+        EngineError::InvalidId(_) => Some(details_from_pairs(&[("field", "id")])),
+        EngineError::InvalidCursor(_) => Some(details_from_pairs(&[("field", "cursor")])),
+        EngineError::InvalidRole(_) => Some(details_from_pairs(&[("field", "role")])),
+        EngineError::CurrencyMismatch(_) => Some(details_from_pairs(&[("field", "currency")])),
+        _ => None,
+    }
+}
+
 fn message_for_engine_error(err: EngineError) -> String {
     match err {
         EngineError::Database(db_err) => {
@@ -101,14 +154,32 @@ fn message_for_engine_error(err: EngineError) -> String {
 
 impl IntoResponse for ServerError {
     fn into_response(self) -> axum::response::Response {
-        let (status, error) = match self {
+        let (status, payload) = match self {
             ServerError::Engine(err) => {
-                (status_for_engine_error(&err), message_for_engine_error(err))
+                let status = status_for_engine_error(&err);
+                let code = code_for_engine_error(&err);
+                let details = details_for_engine_error(&err);
+                let message = message_for_engine_error(err);
+                (
+                    status,
+                    ErrorPayload {
+                        code,
+                        message,
+                        details,
+                    },
+                )
             }
-            ServerError::Generic(err) => (StatusCode::BAD_REQUEST, err),
+            ServerError::Generic(message) => (
+                StatusCode::BAD_REQUEST,
+                ErrorPayload {
+                    code: ErrorCode::BadRequest,
+                    message,
+                    details: None,
+                },
+            ),
         };
 
-        (status, Json(Error { error })).into_response()
+        (status, Json(ErrorEnvelope { error: payload })).into_response()
     }
 }
 
@@ -121,6 +192,7 @@ impl From<EngineError> for ServerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use http_body_util::BodyExt;
 
     #[test]
     fn engine_forbidden_maps_to_403() {
@@ -151,5 +223,18 @@ mod tests {
     fn generic_maps_to_400() {
         let res = ServerError::Generic("bad".to_string()).into_response();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn membership_forbidden_includes_code() {
+        let res = ServerError::from(EngineError::Forbidden(
+            "cannot remove last flow owner".to_string(),
+        ))
+        .into_response();
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let payload: ErrorEnvelope = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload.error.code, ErrorCode::MembershipLastOwner);
+        let details = payload.error.details.unwrap_or_default();
+        assert_eq!(details.get("scope"), Some(&"flow_membership".to_string()));
     }
 }

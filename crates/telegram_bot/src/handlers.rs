@@ -1,3 +1,4 @@
+use api_types::error::ErrorCode;
 use chrono::{DateTime, FixedOffset, Utc};
 use chrono_tz::Europe::Rome;
 use engine::{Currency as EngineCurrency, Money};
@@ -1427,6 +1428,7 @@ async fn resolve_main_vault_id(api: &ApiClient, telegram_user_id: u64) -> Result
     let vault = api.vault_get_main(telegram_user_id).await?;
     vault.id.ok_or(ApiError::Server {
         status: StatusCode::INTERNAL_SERVER_ERROR,
+        code: ErrorCode::Unknown,
         message: "vault id missing".to_string(),
     })
 }
@@ -1744,24 +1746,39 @@ fn user_message_for_api_error(err: ApiError) -> String {
         ApiError::Network(_) => {
             "Problemi di connessione con il server. Riprova più tardi!".to_string()
         }
-        ApiError::Server { status, message } => match status {
-            reqwest::StatusCode::UNAUTHORIZED => {
-                "Non autorizzato. Usa /start per fare il pairing.".to_string()
+        ApiError::Server {
+            status,
+            code,
+            message,
+        } => match code {
+            ErrorCode::MembershipLastOwner => {
+                "Non puoi rimuovere l'ultimo owner del flow.".to_string()
             }
-            reqwest::StatusCode::FORBIDDEN => "Operazione non permessa.".to_string(),
-            reqwest::StatusCode::NOT_FOUND => {
-                "Risorsa non trovata. Prova a reimpostare i default.".to_string()
+            ErrorCode::MembershipOwnerImmutable => {
+                "Non puoi cambiare il ruolo dell'owner del vault.".to_string()
             }
-            reqwest::StatusCode::CONFLICT => "Richiesta duplicata (già salvata).".to_string(),
-            reqwest::StatusCode::BAD_REQUEST => {
-                if message == "user not found" {
-                    "Codice di pairing non valido (o stai usando un database diverso da quello del server).".to_string()
-                } else {
-                    message
+            ErrorCode::MembershipOwnerRemoveForbidden => {
+                "Non puoi rimuovere l'owner del vault.".to_string()
+            }
+            _ => match status {
+                reqwest::StatusCode::UNAUTHORIZED => {
+                    "Non autorizzato. Usa /start per fare il pairing.".to_string()
                 }
-            }
-            reqwest::StatusCode::UNPROCESSABLE_ENTITY => message,
-            _ => "Errore server.".to_string(),
+                reqwest::StatusCode::FORBIDDEN => "Operazione non permessa.".to_string(),
+                reqwest::StatusCode::NOT_FOUND => {
+                    "Risorsa non trovata. Prova a reimpostare i default.".to_string()
+                }
+                reqwest::StatusCode::CONFLICT => "Richiesta duplicata (già salvata).".to_string(),
+                reqwest::StatusCode::BAD_REQUEST => {
+                    if message == "user not found" {
+                        "Codice di pairing non valido (o stai usando un database diverso da quello del server).".to_string()
+                    } else {
+                        message
+                    }
+                }
+                reqwest::StatusCode::UNPROCESSABLE_ENTITY => message,
+                _ => "Errore server.".to_string(),
+            },
         },
     }
 }

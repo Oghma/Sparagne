@@ -16,6 +16,7 @@ use api_types::{
         CategoryAliasView, CategoryCreate, CategoryMergePreviewResponse, CategoryUpdate,
         CategoryView,
     },
+    error::ErrorCode,
     flow::{FlowMode, FlowNew, FlowUpdate},
     stats::Statistic,
     transaction::{
@@ -1510,17 +1511,20 @@ impl App {
     }
 
     fn handle_auth_error(&mut self, err: &ClientError) -> bool {
-        if matches!(err, ClientError::Unauthorized | ClientError::Forbidden) {
-            self.state.screen = Screen::Login;
-            self.state.login.password.clear();
-            self.state.login.message = Some("Credenziali errate o pairing mancante.".to_string());
-            self.state.vault = None;
-            self.state.snapshot = None;
-            self.state.section = Section::Home;
-            self.state.transactions = TransactionsState::default();
-            return true;
+        match err {
+            ClientError::Unauthorized => {}
+            ClientError::Forbidden(payload) if payload.code == ErrorCode::Forbidden => {}
+            _ => return false,
         }
-        false
+
+        self.state.screen = Screen::Login;
+        self.state.login.password.clear();
+        self.state.login.message = Some("Credenziali errate o pairing mancante.".to_string());
+        self.state.vault = None;
+        self.state.snapshot = None;
+        self.state.section = Section::Home;
+        self.state.transactions = TransactionsState::default();
+        true
     }
 
     fn update_recent_categories_from_items(&mut self) {
@@ -5965,13 +5969,30 @@ fn fuzzy_score(label: &str, query: &str) -> Option<usize> {
 
 fn login_message_for_error(err: ClientError) -> String {
     match err {
-        ClientError::Unauthorized | ClientError::Forbidden => {
-            "Credenziali errate o pairing mancante.".to_string()
+        ClientError::Unauthorized => "Credenziali errate o pairing mancante.".to_string(),
+        ClientError::Forbidden(payload) => match payload.code {
+            ErrorCode::MembershipLastOwner => {
+                "Non puoi rimuovere l'ultimo owner del flow.".to_string()
+            }
+            ErrorCode::MembershipOwnerImmutable => {
+                "Non puoi cambiare il ruolo dell'owner del vault.".to_string()
+            }
+            ErrorCode::MembershipOwnerRemoveForbidden => {
+                "Non puoi rimuovere l'owner del vault.".to_string()
+            }
+            _ => "Operazione non permessa.".to_string(),
+        },
+        ClientError::NotFound(payload) => match payload.code {
+            ErrorCode::NotFound => "Risorsa non trovata.".to_string(),
+            _ => payload.message,
+        },
+        ClientError::Conflict(payload) => format!("Conflitto: {}", payload.message),
+        ClientError::Validation(payload) => {
+            format!("Errore di validazione: {}", payload.message)
         }
-        ClientError::NotFound => "Vault non trovato.".to_string(),
-        ClientError::Conflict(message) => format!("Conflitto: {message}"),
-        ClientError::Validation(message) => format!("Errore di validazione: {message}"),
-        ClientError::Server(message) => format!("Errore server: {message}"),
+        ClientError::BadRequest(payload) => format!("Richiesta non valida: {}", payload.message),
+        ClientError::Server(payload) => format!("Errore server: {}", payload.message),
+        ClientError::Client(message) => message,
         ClientError::Transport(err) => format!("Server non raggiungibile: {err}"),
     }
 }

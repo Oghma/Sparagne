@@ -6,6 +6,7 @@ use api_types::{
         CategoryListResponse, CategoryMerge, CategoryMergePreview, CategoryMergePreviewResponse,
         CategoryUpdate, CategoryView,
     },
+    error::{ErrorCode, ErrorEnvelope, ErrorPayload},
     flow::{FlowCreated, FlowNew, FlowUpdate},
     stats::Statistic,
     transaction::{
@@ -18,24 +19,21 @@ use api_types::{
 };
 use reqwest::Url;
 
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
 
 use crate::error::{AppError, Result};
 
 #[derive(Debug)]
 pub enum ClientError {
     Unauthorized,
-    Forbidden,
-    NotFound,
-    Conflict(String),
-    Validation(String),
-    Server(String),
+    Forbidden(ErrorPayload),
+    NotFound(ErrorPayload),
+    Conflict(ErrorPayload),
+    Validation(ErrorPayload),
+    BadRequest(ErrorPayload),
+    Server(ErrorPayload),
+    Client(String),
     Transport(reqwest::Error),
-}
-
-#[derive(Debug, Deserialize)]
-struct ErrorResponse {
-    error: String,
 }
 
 #[derive(Debug, Clone)]
@@ -63,7 +61,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("vault/get")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let payload = Vault {
             id: None,
@@ -92,7 +90,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("vault/snapshot")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let payload = Vault {
             id: None,
@@ -121,7 +119,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("vault/new")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -144,7 +142,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("stats/get")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -167,7 +165,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("transactions")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -190,7 +188,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("categories/list")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -213,7 +211,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("categories")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -237,7 +235,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("categories/{category_id}"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -261,7 +259,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("categories/{category_id}/aliases/list"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -285,7 +283,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("categories/{category_id}/aliases"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -310,7 +308,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("categories/{category_id}/aliases/{alias_id}"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -334,7 +332,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("categories/{category_id}/merge/preview"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -358,7 +356,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("categories/{category_id}/merge"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -381,7 +379,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("transactions/get")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -405,7 +403,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("transactions/{transaction_id}/void"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -429,7 +427,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("transactions/{transaction_id}"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -497,7 +495,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("wallets")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -521,7 +519,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("wallets/{wallet_id}"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -544,7 +542,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("flows")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -568,7 +566,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join(&format!("flows/{flow_id}"))
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -591,7 +589,7 @@ impl Client {
         let endpoint = self
             .base_url
             .join("cashFlow/get")
-            .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
             .http
@@ -616,7 +614,7 @@ async fn post_create<T: serde::Serialize>(
     let endpoint = client
         .base_url
         .join(path)
-        .map_err(|err| ClientError::Server(format!("invalid base_url: {err}")))?;
+        .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
     let res = client
         .http
@@ -638,13 +636,21 @@ async fn handle_json<T: DeserializeOwned>(
     }
 
     let status = res.status();
-    let body = res
-        .json::<ErrorResponse>()
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(ClientError::Unauthorized);
+    }
+
+    let payload = res
+        .json::<ErrorEnvelope>()
         .await
         .map(|err| err.error)
-        .unwrap_or_else(|_| "unknown error".to_string());
+        .unwrap_or_else(|_| ErrorPayload {
+            code: ErrorCode::Unknown,
+            message: "unknown error".to_string(),
+            details: None,
+        });
 
-    Err(map_error(status.as_u16(), body))
+    Err(map_error(status.as_u16(), payload))
 }
 
 async fn handle_empty(res: reqwest::Response) -> std::result::Result<(), ClientError> {
@@ -652,21 +658,28 @@ async fn handle_empty(res: reqwest::Response) -> std::result::Result<(), ClientE
         return Ok(());
     }
     let status = res.status();
-    let body = res
-        .json::<ErrorResponse>()
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(ClientError::Unauthorized);
+    }
+    let payload = res
+        .json::<ErrorEnvelope>()
         .await
         .map(|err| err.error)
-        .unwrap_or_else(|_| "unknown error".to_string());
-    Err(map_error(status.as_u16(), body))
+        .unwrap_or_else(|_| ErrorPayload {
+            code: ErrorCode::Unknown,
+            message: "unknown error".to_string(),
+            details: None,
+        });
+    Err(map_error(status.as_u16(), payload))
 }
 
-fn map_error(status: u16, body: String) -> ClientError {
+fn map_error(status: u16, payload: ErrorPayload) -> ClientError {
     match status {
-        401 => ClientError::Unauthorized,
-        403 => ClientError::Forbidden,
-        404 => ClientError::NotFound,
-        409 => ClientError::Conflict(body),
-        422 => ClientError::Validation(body),
-        _ => ClientError::Server(body),
+        403 => ClientError::Forbidden(payload),
+        404 => ClientError::NotFound(payload),
+        409 => ClientError::Conflict(payload),
+        422 => ClientError::Validation(payload),
+        400 => ClientError::BadRequest(payload),
+        _ => ClientError::Server(payload),
     }
 }

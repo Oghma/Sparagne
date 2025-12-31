@@ -3,6 +3,7 @@ use api_types::{
         CategoryList, CategoryListResponse, CategoryMerge, CategoryMergePreview,
         CategoryMergePreviewResponse, CategoryView,
     },
+    error::{ErrorCode, ErrorEnvelope, ErrorPayload},
     stats::Statistic,
     transaction::{
         ExpenseNew, IncomeNew, Refund, TransactionCreated, TransactionDetailResponse,
@@ -13,7 +14,6 @@ use api_types::{
     vault::{Vault, VaultSnapshot},
 };
 use reqwest::{Client, StatusCode};
-use serde::Deserialize;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ApiClient {
@@ -21,17 +21,16 @@ pub(crate) struct ApiClient {
     base_url: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct ErrorBody {
-    error: String,
-}
-
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ApiError {
     #[error("network error: {0}")]
     Network(#[from] reqwest::Error),
-    #[error("{status}: {message}")]
-    Server { status: StatusCode, message: String },
+    #[error("{status}: {code:?} {message}")]
+    Server {
+        status: StatusCode,
+        code: ErrorCode,
+        message: String,
+    },
 }
 
 impl ApiClient {
@@ -64,11 +63,19 @@ impl ApiClient {
             return Ok(resp.json::<TResp>().await?);
         }
 
-        let message = match resp.json::<ErrorBody>().await {
+        let payload = match resp.json::<ErrorEnvelope>().await {
             Ok(err) => err.error,
-            Err(_) => "server error".to_string(),
+            Err(_) => ErrorPayload {
+                code: ErrorCode::Unknown,
+                message: "server error".to_string(),
+                details: None,
+            },
         };
-        Err(ApiError::Server { status, message })
+        Err(ApiError::Server {
+            status,
+            code: payload.code,
+            message: payload.message,
+        })
     }
 
     async fn post_json_unit<TReq: serde::Serialize + ?Sized>(
@@ -87,11 +94,19 @@ impl ApiClient {
         if status.is_success() {
             return Ok(());
         }
-        let message = match resp.json::<ErrorBody>().await {
+        let payload = match resp.json::<ErrorEnvelope>().await {
             Ok(err) => err.error,
-            Err(_) => "server error".to_string(),
+            Err(_) => ErrorPayload {
+                code: ErrorCode::Unknown,
+                message: "server error".to_string(),
+                details: None,
+            },
         };
-        Err(ApiError::Server { status, message })
+        Err(ApiError::Server {
+            status,
+            code: payload.code,
+            message: payload.message,
+        })
     }
 
     pub(crate) async fn pair_user(
@@ -268,10 +283,18 @@ impl ApiClient {
         if status.is_success() {
             return Ok(());
         }
-        let message = match resp.json::<ErrorBody>().await {
+        let payload = match resp.json::<ErrorEnvelope>().await {
             Ok(err) => err.error,
-            Err(_) => "server error".to_string(),
+            Err(_) => ErrorPayload {
+                code: ErrorCode::Unknown,
+                message: "server error".to_string(),
+                details: None,
+            },
         };
-        Err(ApiError::Server { status, message })
+        Err(ApiError::Server {
+            status,
+            code: payload.code,
+            message: payload.message,
+        })
     }
 }
