@@ -67,15 +67,6 @@ pub mod common {
         vec![KeyHint::new("b", "back"), KeyHint::new("Esc", "back")]
     }
 
-    /// Hints for CRUD operations.
-    pub fn crud_operations() -> Vec<KeyHint> {
-        vec![
-            KeyHint::new("c", "create"),
-            KeyHint::new("e", "edit"),
-            KeyHint::new("d", "delete"),
-        ]
-    }
-
     /// Global application shortcuts.
     pub fn global_shortcuts() -> Vec<KeyHint> {
         vec![KeyHint::new("Ctrl+P", "cmd"), KeyHint::new("q", "quit")]
@@ -92,10 +83,4 @@ pub mod common {
             KeyHint::new("s", "stats"),
         ]
     }
-}
-
-/// Trait for providing context-aware hints.
-pub trait HintProvider {
-    /// Returns the keyboard hints for the current context.
-    fn hints(&self) -> Vec<KeyHint>;
 }
