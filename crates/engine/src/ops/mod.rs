@@ -10,6 +10,7 @@ use crate::{
 
 mod access;
 mod balances;
+mod categories;
 mod flows;
 mod memberships;
 mod transactions;
@@ -71,6 +72,7 @@ pub(super) struct TransactionBuildInput<'a> {
     pub(super) occurred_at: DateTime<Utc>,
     pub(super) amount_minor: i64,
     pub(super) currency: Currency,
+    pub(super) category_id: Uuid,
     pub(super) category: Option<String>,
     pub(super) note: Option<String>,
     pub(super) created_by: &'a str,
@@ -85,6 +87,7 @@ fn build_transaction(input: TransactionBuildInput<'_>) -> ResultEngine<Transacti
         occurred_at: input.occurred_at,
         amount_minor: input.amount_minor,
         currency: input.currency,
+        category_id: input.category_id,
         category: input.category,
         note: input.note,
         created_by: input.created_by.to_string(),

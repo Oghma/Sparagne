@@ -19,6 +19,8 @@ pub struct TransactionNew {
     pub occurred_at: DateTime<Utc>,
     pub amount_minor: i64,
     pub currency: Currency,
+    /// Canonical category identifier (never null in storage).
+    pub category_id: Uuid,
     pub category: Option<String>,
     pub note: Option<String>,
     pub created_by: String,
@@ -81,6 +83,8 @@ pub struct Transaction {
     pub amount_minor: i64,
     pub idempotency_key: Option<String>,
     pub currency: Currency,
+    /// Canonical category identifier (never null in storage).
+    pub category_id: Uuid,
     pub category: Option<String>,
     pub note: Option<String>,
     pub created_by: String,
@@ -112,6 +116,7 @@ impl Transaction {
             amount_minor: input.amount_minor,
             idempotency_key: input.idempotency_key,
             currency: input.currency,
+            category_id: input.category_id,
             category: input.category,
             note: input.note,
             created_by: input.created_by,
@@ -140,6 +145,7 @@ pub struct Model {
     pub voided_at: Option<DateTimeUtc>,
     pub voided_by: Option<String>,
     pub refunded_transaction_id: Option<Uuid>,
+    pub category_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -168,6 +174,7 @@ impl From<&Transaction> for ActiveModel {
             amount_minor: ActiveValue::Set(tx.amount_minor),
             idempotency_key: ActiveValue::Set(tx.idempotency_key.clone()),
             currency: ActiveValue::Set(tx.currency),
+            category_id: ActiveValue::Set(tx.category_id),
             category: ActiveValue::Set(tx.category.clone()),
             note: ActiveValue::Set(tx.note.clone()),
             created_by: ActiveValue::Set(tx.created_by.clone()),
@@ -190,6 +197,7 @@ impl TryFrom<Model> for Transaction {
             amount_minor: model.amount_minor,
             idempotency_key: model.idempotency_key,
             currency: model.currency,
+            category_id: model.category_id,
             category: model.category,
             note: model.note,
             created_by: model.created_by,

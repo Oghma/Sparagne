@@ -96,6 +96,9 @@ impl Engine {
                         TransactionKind::Expense
                     };
                     let signed_amount = flow_wallet_signed_amount(kind, amount_minor)?;
+                    let category = engine
+                        .resolve_category(db_tx, vault_id.as_str(), Some("opening"))
+                        .await?;
 
                     let tx = build_transaction(super::TransactionBuildInput {
                         vault_id: vault_id.as_str(),
@@ -103,7 +106,8 @@ impl Engine {
                         occurred_at,
                         amount_minor,
                         currency,
-                        category: Some("opening".to_string()),
+                        category_id: category.id,
+                        category: category.name,
                         note: Some(format!("opening balance for wallet '{name}'")),
                         created_by: user_id.as_str(),
                         idempotency_key: None,

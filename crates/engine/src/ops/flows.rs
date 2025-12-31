@@ -204,13 +204,17 @@ impl Engine {
                 if balance > 0 {
                     let unallocated_flow_id =
                         engine.unallocated_flow_id(db_tx, vault_id.as_str()).await?;
+                    let category = engine
+                        .resolve_category(db_tx, vault_id.as_str(), None)
+                        .await?;
                     let tx = build_transaction(super::TransactionBuildInput {
                         vault_id: vault_id.as_str(),
                         kind: TransactionKind::TransferFlow,
                         occurred_at,
                         amount_minor: balance,
                         currency: vault_currency,
-                        category: None,
+                        category_id: category.id,
+                        category: category.name,
                         note: Some(format!("opening allocation for flow '{name}'")),
                         created_by: user_id.as_str(),
                         idempotency_key: None,

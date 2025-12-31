@@ -1259,6 +1259,104 @@ async fn category_and_note_are_trimmed_and_empty_becomes_none() {
 }
 
 #[tokio::test]
+async fn category_normalizes_to_existing() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    engine
+        .income(
+            engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now())
+                .wallet_id(wallet_id)
+                .category("Spesa"),
+        )
+        .await
+        .unwrap();
+
+    engine
+        .income(
+            engine::IncomeCmd::new(&vault_id, "alice", 50, Utc::now())
+                .wallet_id(wallet_id)
+                .category("  spesa!!!  "),
+        )
+        .await
+        .unwrap();
+
+    let txs = engine
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            10,
+            &TransactionListFilter {
+                include_voided: false,
+                include_transfers: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(txs.len(), 2);
+    assert!(
+        txs.iter()
+            .all(|(tx, _)| tx.category.as_deref() == Some("Spesa"))
+    );
+}
+
+#[tokio::test]
+async fn category_similar_requires_confirmation() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    engine
+        .income(
+            engine::IncomeCmd::new(&vault_id, "alice", 100, Utc::now())
+                .wallet_id(wallet_id)
+                .category("spesa"),
+        )
+        .await
+        .unwrap();
+
+    let err = engine
+        .income(
+            engine::IncomeCmd::new(&vault_id, "alice", 50, Utc::now())
+                .wallet_id(wallet_id)
+                .category("spese"),
+        )
+        .await
+        .unwrap_err();
+
+    match err {
+        EngineError::InvalidName(message) => {
+            assert!(message.contains("too similar"));
+            assert!(message.contains("spesa"));
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn list_transactions_can_filter_by_date_range_and_kinds() {
     let (engine, _db) = engine_with_db().await;
     let vault_id = engine

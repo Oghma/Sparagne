@@ -17,7 +17,7 @@ use super::super::{
         flow_wallet_signed_amount, parse_vault_uuid,
     },
     helpers::{
-        apply_transfer_leg_updates, normalize_tx_meta, parse_transfer_leg_pairs,
+        apply_transfer_leg_updates, normalize_tx_note, parse_transfer_leg_pairs,
         resolve_transfer_targets, validate_flow_wallet_legs, validate_transfer_legs,
     },
 };
@@ -82,11 +82,14 @@ impl Engine {
     ) -> ResultEngine<Uuid> {
         self.with_tx(|engine, db_tx| {
             Box::pin(async move {
-                let (category, note) = normalize_tx_meta(&cmd.meta);
+                let note = normalize_tx_note(&cmd.meta);
                 let vault_model = engine
                     .require_vault_by_id_write(db_tx, &cmd.vault_id, &cmd.user_id)
                     .await?;
                 let currency = vault_model.currency;
+                let category = engine
+                    .resolve_category(db_tx, &cmd.vault_id, cmd.meta.category.as_deref())
+                    .await?;
                 let resolved_flow_id = engine
                     .resolve_flow_id(db_tx, &cmd.vault_id, cmd.flow_id)
                     .await?;
@@ -101,7 +104,8 @@ impl Engine {
                     occurred_at: cmd.meta.occurred_at,
                     amount_minor: cmd.amount_minor,
                     currency,
-                    category,
+                    category_id: category.id,
+                    category: category.name,
                     note,
                     created_by: &cmd.user_id,
                     idempotency_key: cmd.meta.idempotency_key.clone(),
@@ -129,13 +133,15 @@ impl Engine {
         input: TransferTransactionInput<'_>,
         build_legs: impl FnOnce(Uuid) -> Vec<Leg>,
     ) -> ResultEngine<Uuid> {
+        let category = self.resolve_category(db_tx, input.vault_id, None).await?;
         let tx = build_transaction(TransactionBuildInput {
             vault_id: input.vault_id,
             kind: input.kind,
             occurred_at: input.occurred_at,
             amount_minor: input.amount_minor,
             currency: input.currency,
-            category: None,
+            category_id: category.id,
+            category: category.name,
             note: input.note,
             created_by: input.user_id,
             idempotency_key: input.idempotency_key,

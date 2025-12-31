@@ -28,6 +28,8 @@ pub use vault::Vault;
 pub use wallets::Wallet;
 
 mod cash_flows;
+mod categories;
+mod category_aliases;
 mod commands;
 mod currency;
 mod error;

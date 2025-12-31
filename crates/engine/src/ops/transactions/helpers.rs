@@ -7,11 +7,8 @@ use crate::{
 
 use super::super::flow_wallet_signed_amount;
 
-pub(super) fn normalize_tx_meta(meta: &TxMeta) -> (Option<String>, Option<String>) {
-    (
-        normalize_optional_text(meta.category.as_deref()),
-        normalize_optional_text(meta.note.as_deref()),
-    )
+pub(super) fn normalize_tx_note(meta: &TxMeta) -> Option<String> {
+    normalize_optional_text(meta.note.as_deref())
 }
 
 // parse_leg_id is no longer needed since model.id is now Uuid

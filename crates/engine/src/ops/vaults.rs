@@ -5,7 +5,9 @@ use uuid::Uuid;
 
 use crate::{
     CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, Wallet, cash_flows,
-    util::normalize_required_name, vault, vault_memberships, wallets,
+    categories,
+    util::{normalize_category_key, normalize_required_name},
+    vault, vault_memberships, wallets,
 };
 
 use super::{Engine, parse_vault_uuid};
@@ -46,7 +48,23 @@ impl Engine {
                 ))
                 .await?;
 
-            // 3) flows and wallets (no more entries table)
+            // 3) category aliases and categories
+            db_tx
+                .execute(Statement::from_sql_and_values(
+                    backend,
+                    "DELETE FROM category_aliases WHERE vault_id = ?;",
+                    vec![vault_db_id_bytes.clone().into()],
+                ))
+                .await?;
+            db_tx
+                .execute(Statement::from_sql_and_values(
+                    backend,
+                    "DELETE FROM categories WHERE vault_id = ?;",
+                    vec![vault_db_id_bytes.clone().into()],
+                ))
+                .await?;
+
+            // 4) flows and wallets (no more entries table)
             db_tx
                 .execute(Statement::from_sql_and_values(
                     backend,
@@ -62,7 +80,7 @@ impl Engine {
                 ))
                 .await?;
 
-            // 4) vault
+            // 5) vault
             db_tx
                 .execute(Statement::from_sql_and_values(
                     backend,
@@ -126,6 +144,18 @@ impl Engine {
                 let mut default_wallet_model: wallets::ActiveModel = (&default_wallet).into();
                 default_wallet_model.vault_id = ActiveValue::Set(new_vault_uuid);
                 default_wallet_model.insert(db_tx).await?;
+
+                let category_name = "Uncategorized";
+                let category_norm = normalize_category_key(category_name)?;
+                let category = categories::ActiveModel {
+                    id: ActiveValue::Set(Uuid::new_v4()),
+                    vault_id: ActiveValue::Set(new_vault_uuid),
+                    name: ActiveValue::Set(category_name.to_string()),
+                    name_norm: ActiveValue::Set(category_norm),
+                    archived: ActiveValue::Set(false),
+                    is_system: ActiveValue::Set(true),
+                };
+                category.insert(db_tx).await?;
 
                 // Scaffolding for future sharing: create the owner membership row.
                 let membership = vault_memberships::ActiveModel {

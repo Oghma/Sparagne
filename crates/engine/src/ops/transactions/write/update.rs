@@ -43,7 +43,6 @@ impl Engine {
             Box::pin(async move {
                 let vault_id = vault_id.as_str();
                 let user_id = user_id.as_str();
-                let category = category.as_deref();
                 let note = note.as_deref();
                 let vault_model = engine
                     .require_vault_by_id_write(db_tx, vault_id, user_id)
@@ -78,7 +77,14 @@ impl Engine {
 
                 let new_occurred_at =
                     apply_optional_datetime_patch(tx_model.occurred_at, occurred_at);
-                let new_category = apply_optional_text_patch(tx_model.category.clone(), category);
+                let (new_category_id, new_category) = if let Some(input) = category.as_deref() {
+                    let resolved = engine
+                        .resolve_category(db_tx, vault_id, Some(input))
+                        .await?;
+                    (resolved.id, resolved.name)
+                } else {
+                    (tx_model.category_id, tx_model.category.clone())
+                };
                 let new_note = apply_optional_text_patch(tx_model.note.clone(), note);
 
                 let leg_models = legs::Entity::find()
@@ -182,6 +188,7 @@ impl Engine {
                 let tx_active = transactions::ActiveModel {
                     id: ActiveValue::Set(transaction_id),
                     amount_minor: ActiveValue::Set(new_amount_minor),
+                    category_id: ActiveValue::Set(new_category_id),
                     category: ActiveValue::Set(new_category),
                     note: ActiveValue::Set(new_note),
                     occurred_at: ActiveValue::Set(new_occurred_at),

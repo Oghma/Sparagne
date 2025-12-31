@@ -5,6 +5,8 @@
 
 use chrono::{DateTime, Utc};
 
+use unicode_normalization::{UnicodeNormalization, char::is_combining_mark};
+
 use crate::{Currency, EngineError, ResultEngine};
 
 /// Trims and validates a required name field.
@@ -24,6 +26,69 @@ pub(crate) fn normalize_optional_text(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
+}
+
+/// Normalizes a category display name (trim + collapse spaces).
+pub(crate) fn normalize_category_display(value: &str) -> ResultEngine<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(EngineError::InvalidName(
+            "category name must not be empty".to_string(),
+        ));
+    }
+    let mut out = String::new();
+    for token in trimmed.split_whitespace() {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(token);
+    }
+    if out.is_empty() {
+        return Err(EngineError::InvalidName(
+            "category name must not be empty".to_string(),
+        ));
+    }
+    Ok(out)
+}
+
+/// Normalizes a category key for lookup (trim, lowercase, drop
+/// punctuation/diacritics).
+pub(crate) fn normalize_category_key(value: &str) -> ResultEngine<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(EngineError::InvalidName(
+            "category name must not be empty".to_string(),
+        ));
+    }
+
+    let mut out = String::new();
+    let mut prev_space = false;
+    for ch in trimmed.nfkd() {
+        if is_combining_mark(ch) {
+            continue;
+        }
+        if ch.is_alphanumeric() {
+            for lower in ch.to_lowercase() {
+                out.push(lower);
+            }
+            prev_space = false;
+        } else {
+            // Treat punctuation/symbols as separators.
+            if !out.is_empty() && !prev_space {
+                out.push(' ');
+                prev_space = true;
+            }
+        }
+    }
+
+    let normalized = out.trim();
+    if normalized.is_empty() {
+        return Err(EngineError::InvalidName(
+            "category name must not be empty".to_string(),
+        ));
+    }
+
+    Ok(normalized.to_string())
 }
 
 /// Applies an optional patch to an existing optional text field.
