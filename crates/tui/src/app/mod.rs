@@ -87,7 +87,6 @@ pub struct AppState {
     pub toast: Option<ToastState>,
     pub connection: ConnectionState,
     pub last_refresh: Option<DateTime<FixedOffset>>,
-    pub base_url: String,
     pub last_flow_id: Option<uuid::Uuid>,
     pub default_wallet_id: Option<uuid::Uuid>,
     pub default_flow_id: Option<uuid::Uuid>,
@@ -128,7 +127,6 @@ impl App {
             toast: None,
             connection: ConnectionState::default(),
             last_refresh: None,
-            base_url: config.base_url.clone(),
             last_flow_id: None,
             default_wallet_id: None,
             default_flow_id: None,
@@ -378,7 +376,7 @@ impl App {
                         TransactionsMode::List | TransactionsMode::Detail
                     )
                 {
-                    self.transactions_select_prev();
+                    self.state.transactions.select_prev();
                     if self.state.transactions.mode == TransactionsMode::Detail {
                         self.open_transaction_detail().await?;
                     }
@@ -440,7 +438,7 @@ impl App {
                         TransactionsMode::List | TransactionsMode::Detail
                     )
                 {
-                    self.transactions_select_next();
+                    self.state.transactions.select_next();
                     if self.state.transactions.mode == TransactionsMode::Detail {
                         self.open_transaction_detail().await?;
                     }
@@ -962,13 +960,13 @@ impl App {
             }
             'j' | 'J' => {
                 if self.state.section == Section::Transactions {
-                    self.transactions_select_next();
+                    self.state.transactions.select_next();
                 }
                 return Ok(());
             }
             'k' | 'K' => {
                 if self.state.section == Section::Transactions {
-                    self.transactions_select_prev();
+                    self.state.transactions.select_prev();
                 }
                 return Ok(());
             }
@@ -1575,21 +1573,6 @@ impl App {
             return;
         }
         self.state.flows.selected = self.state.flows.selected.saturating_sub(1);
-    }
-
-    fn transactions_select_next(&mut self) {
-        let len = transactions_visible_indices(&self.state).len();
-        if len == 0 {
-            return;
-        }
-        self.state.transactions.selected = (self.state.transactions.selected + 1).min(len - 1);
-    }
-
-    fn transactions_select_prev(&mut self) {
-        if transactions_visible_indices(&self.state).is_empty() {
-            return;
-        }
-        self.state.transactions.selected = self.state.transactions.selected.saturating_sub(1);
     }
 
     fn transactions_picker_next(&mut self) {
@@ -4581,17 +4564,31 @@ impl TransactionsState {
     }
 
     fn select_next(&mut self) {
-        if self.items.is_empty() {
+        let visible_len = self.visible_len();
+        if visible_len == 0 {
             return;
         }
-        self.selected = (self.selected + 1).min(self.items.len() - 1);
+        self.selected = (self.selected + 1).min(visible_len - 1);
     }
 
     fn select_prev(&mut self) {
-        if self.items.is_empty() {
+        let visible_len = self.visible_len();
+        if visible_len == 0 {
             return;
         }
         self.selected = self.selected.saturating_sub(1);
+    }
+
+    fn visible_len(&self) -> usize {
+        let query = normalize_query(self.search_query.as_str());
+        if query.is_empty() {
+            return self.items.len();
+        }
+
+        self.items
+            .iter()
+            .filter(|tx| transaction_matches_query(tx, query.as_str()))
+            .count()
     }
 }
 

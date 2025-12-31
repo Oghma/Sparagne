@@ -48,6 +48,7 @@ impl<'a> Card<'a> {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color))
+            .style(Style::default().bg(self.theme.surface_bright))
     }
 
     /// Returns the inner area after accounting for borders.

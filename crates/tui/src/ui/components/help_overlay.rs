@@ -8,7 +8,10 @@ use ratatui::{
 
 use crate::{
     app::{AppState, Section, TransactionsMode},
-    ui::{components::centered_rect, theme::Theme},
+    ui::{
+        components::{centered_rect, tabs},
+        theme::Theme,
+    },
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
@@ -54,6 +57,7 @@ fn help_lines(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
         Span::styled("?", Style::default().fg(theme.accent)),
         Span::raw(" help"),
     ])];
+    lines.push(Line::from(tabs::tab_shortcuts(theme)));
 
     match state.section {
         Section::Home => {
