@@ -1,4 +1,8 @@
 use api_types::{
+    category::{
+        CategoryList, CategoryListResponse, CategoryMerge, CategoryMergePreview,
+        CategoryMergePreviewResponse, CategoryView,
+    },
     stats::Statistic,
     transaction::{
         ExpenseNew, IncomeNew, Refund, TransactionCreated, TransactionDetailResponse,
@@ -158,6 +162,43 @@ impl ApiClient {
     ) -> Result<TransactionListResponse, ApiError> {
         self.post_json(Some(telegram_user_id), "/transactions", payload)
             .await
+    }
+
+    pub(crate) async fn categories_list(
+        &self,
+        telegram_user_id: u64,
+        payload: &CategoryList,
+    ) -> Result<CategoryListResponse, ApiError> {
+        self.post_json(Some(telegram_user_id), "/categories/list", payload)
+            .await
+    }
+
+    pub(crate) async fn categories_merge_preview(
+        &self,
+        telegram_user_id: u64,
+        category_id: uuid::Uuid,
+        payload: &CategoryMergePreview,
+    ) -> Result<CategoryMergePreviewResponse, ApiError> {
+        self.post_json(
+            Some(telegram_user_id),
+            &format!("/categories/{category_id}/merge/preview"),
+            payload,
+        )
+        .await
+    }
+
+    pub(crate) async fn categories_merge(
+        &self,
+        telegram_user_id: u64,
+        category_id: uuid::Uuid,
+        payload: &CategoryMerge,
+    ) -> Result<CategoryView, ApiError> {
+        self.post_json(
+            Some(telegram_user_id),
+            &format!("/categories/{category_id}/merge"),
+            payload,
+        )
+        .await
     }
 
     pub(crate) async fn transaction_get_detail(

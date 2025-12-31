@@ -84,6 +84,23 @@ pub(crate) async fn handle_message(
                 bot.send_message(chat_id, help_text()).await?;
                 return Ok(());
             }
+            Command::Categories => {
+                list_categories(&bot, chat_id, user_id, &cfg).await?;
+                return Ok(());
+            }
+            Command::MergeCategory {
+                confirm,
+                from,
+                into,
+            } => {
+                merge_category(&bot, chat_id, user_id, &cfg, confirm, &from, &into).await?;
+                return Ok(());
+            }
+            Command::MergeCategoryHelp => {
+                bot.send_message(chat_id, merge_category_help_text())
+                    .await?;
+                return Ok(());
+            }
         }
     }
 
@@ -1414,6 +1431,165 @@ async fn resolve_main_vault_id(api: &ApiClient, telegram_user_id: u64) -> Result
     })
 }
 
+async fn list_categories(
+    bot: &Bot,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+) -> ResponseResult<()> {
+    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+        Ok(id) => id,
+        Err(err) => {
+            bot.send_message(chat_id, user_message_for_api_error(err))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let response = match cfg
+        .api
+        .categories_list(
+            user_id,
+            &api_types::category::CategoryList {
+                vault_id,
+                include_archived: Some(true),
+            },
+        )
+        .await
+    {
+        Ok(resp) => resp,
+        Err(err) => {
+            bot.send_message(chat_id, user_message_for_api_error(err))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let text = render_category_list(&response.categories);
+    bot.send_message(chat_id, text).await?;
+    Ok(())
+}
+
+async fn merge_category(
+    bot: &Bot,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    confirm: bool,
+    from: &str,
+    into: &str,
+) -> ResponseResult<()> {
+    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+        Ok(id) => id,
+        Err(err) => {
+            bot.send_message(chat_id, user_message_for_api_error(err))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let categories = match cfg
+        .api
+        .categories_list(
+            user_id,
+            &api_types::category::CategoryList {
+                vault_id: vault_id.clone(),
+                include_archived: Some(true),
+            },
+        )
+        .await
+    {
+        Ok(resp) => resp.categories,
+        Err(err) => {
+            bot.send_message(chat_id, user_message_for_api_error(err))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let Some(from_category) = match_category_by_input(&categories, from) else {
+        bot.send_message(chat_id, format!("Categoria sorgente non trovata: {from}"))
+            .await?;
+        bot.send_message(chat_id, "Usa /categories per vedere la lista.")
+            .await?;
+        return Ok(());
+    };
+    let Some(into_category) = match_category_by_input(&categories, into) else {
+        bot.send_message(
+            chat_id,
+            format!("Categoria destinazione non trovata: {into}"),
+        )
+        .await?;
+        bot.send_message(chat_id, "Usa /categories per vedere la lista.")
+            .await?;
+        return Ok(());
+    };
+
+    let preview = match cfg
+        .api
+        .categories_merge_preview(
+            user_id,
+            from_category.id,
+            &api_types::category::CategoryMergePreview {
+                vault_id: vault_id.clone(),
+                into_category_id: into_category.id,
+            },
+        )
+        .await
+    {
+        Ok(resp) => resp,
+        Err(err) => {
+            bot.send_message(chat_id, user_message_for_api_error(err))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    if !preview.ok {
+        let text = render_merge_conflicts(from_category, into_category, &preview);
+        bot.send_message(chat_id, text).await?;
+        return Ok(());
+    }
+
+    if !confirm {
+        let text = format!(
+            "Ok, posso unire \"{}\" -> \"{}\".\nConferma con:\n/merge_category confirm {} -> {}",
+            from_category.name, into_category.name, from_category.name, into_category.name
+        );
+        bot.send_message(chat_id, text).await?;
+        return Ok(());
+    }
+
+    let merged = cfg
+        .api
+        .categories_merge(
+            user_id,
+            from_category.id,
+            &api_types::category::CategoryMerge {
+                vault_id,
+                into_category_id: into_category.id,
+            },
+        )
+        .await;
+    match merged {
+        Ok(_) => {
+            bot.send_message(
+                chat_id,
+                format!(
+                    "Unione completata: \"{}\" -> \"{}\".",
+                    from_category.name, into_category.name
+                ),
+            )
+            .await?;
+        }
+        Err(err) => {
+            bot.send_message(chat_id, user_message_for_api_error(err))
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 fn is_allowed(cfg: &ConfigParameters, from: Option<&User>) -> bool {
     let Some(from) = from else {
         return false;
@@ -1422,6 +1598,81 @@ fn is_allowed(cfg: &ConfigParameters, from: Option<&User>) -> bool {
         None => true,
         Some(ids) => ids.contains(&from.id),
     }
+}
+
+fn render_category_list(categories: &[api_types::category::CategoryView]) -> String {
+    if categories.is_empty() {
+        return "Nessuna categoria. Aggiungi una transazione con #categoria per iniziare."
+            .to_string();
+    }
+
+    let mut lines = Vec::with_capacity(categories.len() + 2);
+    lines.push("Categorie:".to_string());
+    for category in categories {
+        let mut line = format!("- {}", category.name);
+        if category.is_system {
+            line.push_str(" [system]");
+        }
+        if category.archived {
+            line.push_str(" [archived]");
+        }
+        lines.push(line);
+    }
+    lines.join("\n")
+}
+
+fn render_merge_conflicts(
+    from: &api_types::category::CategoryView,
+    into: &api_types::category::CategoryView,
+    preview: &api_types::category::CategoryMergePreviewResponse,
+) -> String {
+    let mut lines = Vec::with_capacity(preview.conflicts.len() + 2);
+    lines.push(format!(
+        "Merge non possibile: \"{}\" -> \"{}\".",
+        from.name, into.name
+    ));
+    lines.push("Conflitti:".to_string());
+    for conflict in &preview.conflicts {
+        lines.push(format!("- {}", merge_conflict_label(conflict)));
+    }
+    lines.join("\n")
+}
+
+fn merge_conflict_label(conflict: &api_types::category::CategoryMergeConflict) -> String {
+    match conflict.kind.as_str() {
+        "same_category" => "Le categorie sono identiche.".to_string(),
+        "source_system" => format!("La categoria \"{}\" e' di sistema.", conflict.value),
+        "target_archived" => format!("La categoria \"{}\" e' archiviata.", conflict.value),
+        "alias_conflict" => format!("Alias in conflitto: {}", conflict.value),
+        "name_conflict" => format!("Nome in conflitto: {}", conflict.value),
+        _ => format!("Conflitto: {} ({})", conflict.kind, conflict.value),
+    }
+}
+
+fn match_category_by_input<'a>(
+    categories: &'a [api_types::category::CategoryView],
+    input: &str,
+) -> Option<&'a api_types::category::CategoryView> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(id) = Uuid::parse_str(trimmed) {
+        return categories.iter().find(|category| category.id == id);
+    }
+
+    let needle = normalize_category_label(trimmed);
+    categories
+        .iter()
+        .find(|category| normalize_category_label(&category.name) == needle)
+}
+
+fn normalize_category_label(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
 }
 
 fn parse_command(text: &str) -> Option<Command> {
@@ -1437,8 +1688,46 @@ fn parse_command(text: &str) -> Option<Command> {
         "/start" => Some(Command::Start { code: arg }),
         "/home" => Some(Command::Home),
         "/help" => Some(Command::Help),
+        "/categories" => Some(Command::Categories),
+        "/merge_category" => parse_merge_category(arg.as_deref()),
         _ => None,
     }
+}
+
+fn parse_merge_category(arg: Option<&str>) -> Option<Command> {
+    let Some(arg) = arg else {
+        return Some(Command::MergeCategoryHelp);
+    };
+    let trimmed = arg.trim();
+    if trimmed.is_empty() {
+        return Some(Command::MergeCategoryHelp);
+    }
+
+    let (confirm, rest) = if let Some(rest) = trimmed.strip_prefix("confirm ") {
+        (true, rest)
+    } else {
+        (false, trimmed)
+    };
+    let rest = rest.trim();
+    if rest.is_empty() {
+        return Some(Command::MergeCategoryHelp);
+    }
+
+    let Some((from, into)) = rest.split_once("->") else {
+        return Some(Command::MergeCategoryHelp);
+    };
+
+    let from = from.trim();
+    let into = into.trim();
+    if from.is_empty() || into.is_empty() {
+        return Some(Command::MergeCategoryHelp);
+    }
+
+    Some(Command::MergeCategory {
+        confirm,
+        from: from.to_string(),
+        into: into.to_string(),
+    })
 }
 
 fn looks_like_quick_add(text: &str) -> bool {
@@ -1494,7 +1783,11 @@ fn welcome_text(display_name: &str) -> String {
 }
 
 fn help_text() -> &'static str {
-    "Esempi:\n\n12.50 bar caffè\n-12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\n#tag opzionale (max 1): 12.50 bar #food caffè"
+    "Esempi:\n\n12.50 bar caffè\n-12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\n#tag opzionale (max 1): 12.50 bar #food caffè\n\nComandi:\n/home\n/categories\n/merge_category <da> -> <a>\n/merge_category confirm <da> -> <a>"
+}
+
+fn merge_category_help_text() -> &'static str {
+    "Uso:\n/merge_category <da> -> <a>\n/merge_category confirm <da> -> <a>"
 }
 
 fn display_name_from_telegram(user: &User) -> String {
@@ -1558,7 +1851,16 @@ fn normalize_wizard_input(kind: QuickKind, raw: &str) -> Result<String, &'static
 
 #[derive(Debug, Clone)]
 enum Command {
-    Start { code: Option<String> },
+    Start {
+        code: Option<String>,
+    },
     Home,
     Help,
+    Categories,
+    MergeCategory {
+        confirm: bool,
+        from: String,
+        into: String,
+    },
+    MergeCategoryHelp,
 }
