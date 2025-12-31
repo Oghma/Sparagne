@@ -14,7 +14,9 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 
 use std::sync::Arc;
 
-use crate::{cash_flow, categories, flows, memberships, statistics, transactions, user, vault, wallets};
+use crate::{
+    cash_flow, categories, flows, memberships, statistics, transactions, user, vault, wallets,
+};
 use engine::Engine;
 
 static TELEGRAM_HEADER: axum::http::HeaderName =
@@ -114,10 +116,7 @@ fn router(state: ServerState) -> Router {
         .route("/flows/{id}", axum::routing::patch(flows::flow_update))
         .route("/categories/list", post(categories::list))
         .route("/categories", post(categories::create))
-        .route(
-            "/categories/{id}",
-            axum::routing::patch(categories::update),
-        )
+        .route("/categories/{id}", axum::routing::patch(categories::update))
         .route(
             "/categories/{id}/aliases/list",
             post(categories::list_aliases),
@@ -215,8 +214,7 @@ mod http_tests {
     use super::*;
 
     use api_types::{
-        category,
-        flow,
+        category, flow,
         transaction::{TransactionDetailResponse, TransactionGet, TransactionList},
         wallet,
     };
@@ -623,10 +621,7 @@ mod http_tests {
 
         let req = axum::http::Request::builder()
             .method("DELETE")
-            .uri(format!(
-                "/categories/{}/aliases/{}",
-                created.id, alias.id
-            ))
+            .uri(format!("/categories/{}/aliases/{}", created.id, alias.id))
             .header(
                 axum::http::header::AUTHORIZATION,
                 basic_auth(OWNER, OWNER_PW),
@@ -642,6 +637,48 @@ mod http_tests {
 
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn vault_owner_can_merge_categories() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+
+        let food = engine
+            .create_category(&vault_id, "Food", OWNER)
+            .await
+            .unwrap();
+        let spese = engine
+            .create_category(&vault_id, "Spese", OWNER)
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri(format!("/categories/{}/merge", food.id))
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&category::CategoryMerge {
+                    vault_id: vault_id.clone(),
+                    into_category_id: spese.id,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let merged: category::CategoryView = serde_json::from_slice(&body).unwrap();
+        assert_eq!(merged.id, spese.id);
     }
 
     #[tokio::test]

@@ -1,4 +1,8 @@
-use sea_orm::{ActiveValue, DatabaseTransaction, QueryFilter, QueryOrder, prelude::*, sea_query::{Expr, Value}};
+use sea_orm::{
+    ActiveValue, DatabaseTransaction, QueryFilter, QueryOrder,
+    prelude::*,
+    sea_query::{Expr, Value},
+};
 use uuid::Uuid;
 
 use crate::{
@@ -355,6 +359,131 @@ impl Engine {
         .await
     }
 
+    pub async fn merge_category(
+        &self,
+        vault_id: &str,
+        from_category_id: Uuid,
+        into_category_id: Uuid,
+        user_id: &str,
+    ) -> ResultEngine<Category> {
+        if from_category_id == into_category_id {
+            return Err(EngineError::InvalidName(
+                "cannot merge a category into itself".to_string(),
+            ));
+        }
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
+
+                let from = engine
+                    .require_category_in_vault(db_tx, vault_uuid, from_category_id)
+                    .await?;
+                let into = engine
+                    .require_category_in_vault(db_tx, vault_uuid, into_category_id)
+                    .await?;
+                if from.is_system {
+                    return Err(EngineError::InvalidName(
+                        "system categories cannot be merged".to_string(),
+                    ));
+                }
+                if into.archived {
+                    return Err(EngineError::InvalidName(
+                        "target category is archived".to_string(),
+                    ));
+                }
+
+                let mut reserved: std::collections::HashSet<String> =
+                    std::collections::HashSet::new();
+                reserved.insert(into.name_norm.clone());
+                let target_aliases = category_aliases::Entity::find()
+                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+                    .filter(category_aliases::Column::CategoryId.eq(into_category_id))
+                    .all(db_tx)
+                    .await?;
+                for alias in &target_aliases {
+                    reserved.insert(alias.alias_norm.clone());
+                }
+
+                let from_aliases = category_aliases::Entity::find()
+                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+                    .filter(category_aliases::Column::CategoryId.eq(from_category_id))
+                    .all(db_tx)
+                    .await?;
+
+                for alias in &from_aliases {
+                    if reserved.contains(&alias.alias_norm) {
+                        return Err(EngineError::ExistingKey(alias.alias.clone()));
+                    }
+                }
+                if from.name_norm != into.name_norm && reserved.contains(&from.name_norm) {
+                    return Err(EngineError::ExistingKey(from.name.clone()));
+                }
+
+                let category_display =
+                    if into.is_system && into.name_norm == UNCATEGORIZED_NAME_NORM {
+                        Value::String(None)
+                    } else {
+                        Value::String(Some(Box::new(into.name.clone())))
+                    };
+
+                transactions::Entity::update_many()
+                    .col_expr(
+                        transactions::Column::CategoryId,
+                        Expr::value(into_category_id),
+                    )
+                    .col_expr(
+                        transactions::Column::Category,
+                        Expr::value(category_display),
+                    )
+                    .filter(transactions::Column::CategoryId.eq(from_category_id))
+                    .exec(db_tx)
+                    .await?;
+
+                if !from_aliases.is_empty() {
+                    category_aliases::Entity::update_many()
+                        .col_expr(
+                            category_aliases::Column::CategoryId,
+                            Expr::value(into_category_id),
+                        )
+                        .filter(category_aliases::Column::CategoryId.eq(from_category_id))
+                        .exec(db_tx)
+                        .await?;
+                }
+
+                if from.name_norm != into.name_norm {
+                    let alias_active = category_aliases::ActiveModel {
+                        id: ActiveValue::Set(Uuid::new_v4()),
+                        vault_id: ActiveValue::Set(vault_uuid),
+                        category_id: ActiveValue::Set(into_category_id),
+                        alias: ActiveValue::Set(from.name.clone()),
+                        alias_norm: ActiveValue::Set(from.name_norm.clone()),
+                    };
+                    alias_active.insert(db_tx).await?;
+                }
+
+                let active = categories::ActiveModel {
+                    id: ActiveValue::Set(from_category_id),
+                    archived: ActiveValue::Set(true),
+                    ..Default::default()
+                };
+                active.update(db_tx).await?;
+
+                Ok(Category {
+                    id: into.id,
+                    name: into.name,
+                    archived: into.archived,
+                    is_system: into.is_system,
+                })
+            })
+        })
+        .await
+    }
+
     pub(super) async fn resolve_category(
         &self,
         db_tx: &DatabaseTransaction,
@@ -376,14 +505,10 @@ impl Engine {
         if let Some(model) = categories::Entity::find()
             .filter(categories::Column::VaultId.eq(vault_uuid))
             .filter(categories::Column::NameNorm.eq(normalized.clone()))
+            .filter(categories::Column::Archived.eq(false))
             .one(db_tx)
             .await?
         {
-            if model.archived {
-                return Err(EngineError::InvalidName(
-                    "category is archived".to_string(),
-                ));
-            }
             return Ok(Self::category_selection(&model));
         }
 
@@ -395,11 +520,20 @@ impl Engine {
             .await?
         {
             if model.archived {
-                return Err(EngineError::InvalidName(
-                    "category is archived".to_string(),
-                ));
+                return Err(EngineError::InvalidName("category is archived".to_string()));
             }
             return Ok(Self::category_selection(&model));
+        }
+
+        if categories::Entity::find()
+            .filter(categories::Column::VaultId.eq(vault_uuid))
+            .filter(categories::Column::NameNorm.eq(normalized.clone()))
+            .filter(categories::Column::Archived.eq(true))
+            .one(db_tx)
+            .await?
+            .is_some()
+        {
+            return Err(EngineError::InvalidName("category is archived".to_string()));
         }
 
         if let Some(suggestion) =
@@ -465,9 +599,7 @@ impl Engine {
         input: Option<&str>,
     ) -> ResultEngine<CategorySelection> {
         if let Some(category_id) = category_id {
-            return self
-                .category_by_id(db_tx, vault_id, category_id)
-                .await;
+            return self.category_by_id(db_tx, vault_id, category_id).await;
         }
         self.resolve_category(db_tx, vault_id, input).await
     }

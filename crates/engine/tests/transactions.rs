@@ -1368,7 +1368,11 @@ async fn list_categories_includes_uncategorized_and_new() {
         .list_categories(&vault_id, "alice", false)
         .await
         .unwrap();
-    assert!(initial.iter().any(|cat| cat.is_system && cat.name == "Uncategorized"));
+    assert!(
+        initial
+            .iter()
+            .any(|cat| cat.is_system && cat.name == "Uncategorized")
+    );
 
     engine
         .create_category(&vault_id, "Spese", "alice")
@@ -1528,6 +1532,92 @@ async fn archived_category_rejected_on_create() {
         }
         other => panic!("unexpected error: {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn merge_category_moves_transactions_and_aliases() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let wallet_id = {
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, "alice")
+            .await
+            .unwrap();
+        default_wallet_id(&vault)
+    };
+
+    let food = engine
+        .create_category(&vault_id, "Food", "alice")
+        .await
+        .unwrap();
+    let spese = engine
+        .create_category(&vault_id, "Spese", "alice")
+        .await
+        .unwrap();
+    engine
+        .create_category_alias(&vault_id, spese.id, "spesa", "alice")
+        .await
+        .unwrap();
+
+    engine
+        .expense(
+            engine::ExpenseCmd::new(&vault_id, "alice", 12, Utc::now())
+                .wallet_id(wallet_id)
+                .category("Food"),
+        )
+        .await
+        .unwrap();
+
+    engine
+        .merge_category(&vault_id, food.id, spese.id, "alice")
+        .await
+        .unwrap();
+
+    let txs = engine
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            10,
+            &TransactionListFilter {
+                include_voided: false,
+                include_transfers: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(txs.len(), 1);
+    assert_eq!(txs[0].0.category_id, spese.id);
+    assert_eq!(txs[0].0.category.as_deref(), Some("Spese"));
+
+    engine
+        .income(
+            engine::IncomeCmd::new(&vault_id, "alice", 20, Utc::now())
+                .wallet_id(wallet_id)
+                .category("Food"),
+        )
+        .await
+        .unwrap();
+    let txs = engine
+        .list_transactions_for_wallet(
+            &vault_id,
+            wallet_id,
+            "alice",
+            10,
+            &TransactionListFilter {
+                include_voided: false,
+                include_transfers: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(txs.iter().all(|(tx, _)| tx.category_id == spese.id));
 }
 
 #[tokio::test]
