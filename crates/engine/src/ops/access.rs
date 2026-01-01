@@ -1,4 +1,7 @@
-use sea_orm::{DatabaseTransaction, QueryFilter, prelude::*, sea_query::Expr};
+use sea_orm::{
+    DatabaseTransaction, JoinType, QueryFilter, QuerySelect, RelationTrait, prelude::*,
+    sea_query::Expr,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -323,6 +326,93 @@ impl Engine {
                 self.vault_membership_role(db, model.id, user_id)
                     .await?
                     .is_some()
+            };
+            if allowed {
+                if out.is_some() {
+                    return Err(EngineError::InvalidAmount(
+                        "ambiguous vault name".to_string(),
+                    ));
+                }
+                out = Some(model);
+            }
+        }
+
+        out.ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))
+    }
+
+    pub(super) async fn has_flow_membership_in_vault(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: Uuid,
+        user_id: &str,
+    ) -> ResultEngine<bool> {
+        let count = flow_memberships::Entity::find()
+            .filter(flow_memberships::Column::UserId.eq(user_id.to_string()))
+            .join(
+                JoinType::InnerJoin,
+                flow_memberships::Relation::CashFlows.def(),
+            )
+            .filter(cash_flows::Column::VaultId.eq(vault_id))
+            .count(db)
+            .await?;
+        Ok(count > 0)
+    }
+
+    pub(super) async fn require_vault_header_by_id(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<vault::Model> {
+        let model = self
+            .find_vault_by_id(db, vault_id)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+        if model.user_id == user_id {
+            return Ok(model);
+        }
+        if self
+            .vault_membership_role(db, model.id, user_id)
+            .await?
+            .is_some()
+        {
+            return Ok(model);
+        }
+        if self
+            .has_flow_membership_in_vault(db, model.id, user_id)
+            .await?
+        {
+            return Ok(model);
+        }
+        Err(EngineError::KeyNotFound("vault not exists".to_string()))
+    }
+
+    pub(super) async fn require_vault_header_by_name(
+        &self,
+        db: &DatabaseTransaction,
+        vault_name: &str,
+        user_id: &str,
+    ) -> ResultEngine<vault::Model> {
+        let vault_name = normalize_required_name(vault_name, "vault")?;
+        let vault_name_lower = vault_name.to_lowercase();
+        let models: Vec<vault::Model> = vault::Entity::find()
+            .filter(Expr::cust("LOWER(name)").eq(vault_name_lower))
+            .all(db)
+            .await?;
+
+        let mut out: Option<vault::Model> = None;
+        for model in models {
+            let allowed = if model.user_id == user_id {
+                true
+            } else if self
+                .vault_membership_role(db, model.id, user_id)
+                .await?
+                .is_some()
+            {
+                true
+            } else {
+                self.has_flow_membership_in_vault(db, model.id, user_id)
+                    .await?
             };
             if allowed {
                 if out.is_some() {

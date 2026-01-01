@@ -4,8 +4,8 @@ use sea_orm::{ActiveValue, QueryFilter, Statement, prelude::*, sea_query::Expr};
 use uuid::Uuid;
 
 use crate::{
-    CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, Wallet, cash_flows,
-    categories,
+    CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, VaultHeader, Wallet,
+    cash_flows, categories,
     util::{normalize_category_key, normalize_required_name},
     vault, vault_memberships, wallets,
 };
@@ -168,6 +168,42 @@ impl Engine {
                 membership.insert(db_tx).await?;
 
                 Ok(new_vault_id)
+            })
+        })
+        .await
+    }
+
+    /// Return vault metadata for a user who can access at least one shared
+    /// flow or the vault itself.
+    pub async fn vault_header(
+        &self,
+        vault_id: Option<&str>,
+        vault_name: Option<String>,
+        user_id: &str,
+    ) -> ResultEngine<VaultHeader> {
+        if vault_id.is_none() && vault_name.is_none() {
+            return Err(EngineError::KeyNotFound(
+                "missing vault id or name".to_string(),
+            ));
+        }
+        let vault_id = vault_id.map(str::to_string);
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                let model = if let Some(id) = vault_id.as_deref() {
+                    engine
+                        .require_vault_header_by_id(db_tx, id, user_id.as_str())
+                        .await?
+                } else {
+                    let name = vault_name.ok_or_else(|| {
+                        EngineError::KeyNotFound("missing vault id or name".to_string())
+                    })?;
+                    engine
+                        .require_vault_header_by_name(db_tx, &name, user_id.as_str())
+                        .await?
+                };
+
+                Ok(VaultHeader::from(model))
             })
         })
         .await

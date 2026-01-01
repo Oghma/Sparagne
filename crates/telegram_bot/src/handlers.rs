@@ -1,6 +1,7 @@
 use api_types::{
     error::ErrorCode,
     membership::{MemberUpsert, MemberView, MembershipRole},
+    vault::FlowView,
 };
 use chrono::{DateTime, FixedOffset, Utc};
 use chrono_tz::Europe::Rome;
@@ -1472,6 +1473,20 @@ async fn resolve_main_vault_id(api: &ApiClient, telegram_user_id: u64) -> Result
     })
 }
 
+async fn resolve_accessible_flows(
+    api: &ApiClient,
+    telegram_user_id: u64,
+) -> Result<Vec<FlowView>, ApiError> {
+    match api.vault_snapshot_main(telegram_user_id).await {
+        Ok(snapshot) => Ok(snapshot.flows),
+        Err(ApiError::Server { status, .. }) if status == StatusCode::NOT_FOUND => {
+            let response = api.flows_shared_main(telegram_user_id).await?;
+            Ok(response.flows)
+        }
+        Err(err) => Err(err),
+    }
+}
+
 async fn list_categories(
     bot: &Bot,
     chat_id: ChatId,
@@ -1630,7 +1645,7 @@ async fn list_flow_members(
         }
     };
 
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
             bot.send_message(chat_id, user_message_for_api_error(err))
@@ -1638,8 +1653,8 @@ async fn list_flow_members(
             return Ok(());
         }
     };
-    let Some(flow) = find_flow_by_name(&snapshot, flow_name) else {
-        bot.send_message(chat_id, flow_not_found_text(flow_name, &snapshot))
+    let Some(flow) = find_flow_by_name(&flows, flow_name) else {
+        bot.send_message(chat_id, flow_not_found_text(flow_name, &flows))
             .await?;
         return Ok(());
     };
@@ -1676,7 +1691,7 @@ async fn add_flow_member(
         }
     };
 
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
             bot.send_message(chat_id, user_message_for_api_error(err))
@@ -1684,8 +1699,8 @@ async fn add_flow_member(
             return Ok(());
         }
     };
-    let Some(flow) = find_flow_by_name(&snapshot, flow_name) else {
-        bot.send_message(chat_id, flow_not_found_text(flow_name, &snapshot))
+    let Some(flow) = find_flow_by_name(&flows, flow_name) else {
+        bot.send_message(chat_id, flow_not_found_text(flow_name, &flows))
             .await?;
         return Ok(());
     };
@@ -1731,7 +1746,7 @@ async fn remove_flow_member(
         }
     };
 
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
             bot.send_message(chat_id, user_message_for_api_error(err))
@@ -1739,8 +1754,8 @@ async fn remove_flow_member(
             return Ok(());
         }
     };
-    let Some(flow) = find_flow_by_name(&snapshot, flow_name) else {
-        bot.send_message(chat_id, flow_not_found_text(flow_name, &snapshot))
+    let Some(flow) = find_flow_by_name(&flows, flow_name) else {
+        bot.send_message(chat_id, flow_not_found_text(flow_name, &flows))
             .await?;
         return Ok(());
     };
@@ -1945,21 +1960,16 @@ fn normalize_flow_label(value: &str) -> String {
         .to_lowercase()
 }
 
-fn find_flow_by_name<'a>(
-    snapshot: &'a api_types::vault::VaultSnapshot,
-    name: &str,
-) -> Option<&'a api_types::vault::FlowView> {
+fn find_flow_by_name<'a>(flows: &'a [FlowView], name: &str) -> Option<&'a FlowView> {
     let needle = normalize_flow_label(name);
-    snapshot
-        .flows
+    flows
         .iter()
         .filter(|flow| !flow.archived && !flow.is_unallocated)
         .find(|flow| normalize_flow_label(&flow.name) == needle)
 }
 
-fn flow_not_found_text(name: &str, snapshot: &api_types::vault::VaultSnapshot) -> String {
-    let flows = snapshot
-        .flows
+fn flow_not_found_text(name: &str, flows: &[FlowView]) -> String {
+    let flows = flows
         .iter()
         .filter(|flow| !flow.archived && !flow.is_unallocated)
         .map(|flow| flow.name.as_str())

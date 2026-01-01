@@ -7,7 +7,7 @@ use api_types::{
         CategoryUpdate, CategoryView,
     },
     error::{ErrorCode, ErrorEnvelope, ErrorPayload},
-    flow::{FlowCreated, FlowNew, FlowUpdate},
+    flow::{FlowCreated, FlowNew, FlowSharedList, FlowSharedListResponse, FlowUpdate},
     membership::{MemberUpsert, MembersResponse},
     stats::Statistic,
     transaction::{
@@ -686,6 +686,29 @@ impl Client {
         let endpoint = self
             .base_url
             .join("flows")
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .http
+            .post(endpoint)
+            .basic_auth(username, Some(password))
+            .json(&payload)
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_json(res).await
+    }
+
+    pub async fn flows_shared_list(
+        &self,
+        username: &str,
+        password: &str,
+        payload: FlowSharedList,
+    ) -> std::result::Result<FlowSharedListResponse, ClientError> {
+        let endpoint = self
+            .base_url
+            .join("flows/shared")
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self

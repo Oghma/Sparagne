@@ -371,6 +371,64 @@ mod http_tests {
     }
 
     #[tokio::test]
+    async fn flow_member_can_get_vault_header_but_not_snapshot() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+        let flow_id = engine
+            .new_cash_flow(&vault_id, "Shared", 0, None, None, OWNER)
+            .await
+            .unwrap();
+        engine
+            .upsert_flow_member(&vault_id, flow_id, FLOW_MEMBER, "viewer", OWNER)
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/vault/get")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&Vault {
+                    id: None,
+                    name: Some("Main".to_string()),
+                    currency: None,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/vault/snapshot")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&Vault {
+                    id: None,
+                    name: Some("Main".to_string()),
+                    currency: None,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
     async fn vault_stats_are_owner_only() {
         let (app, engine, _db) = setup().await;
 

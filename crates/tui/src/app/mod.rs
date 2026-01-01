@@ -17,7 +17,7 @@ use api_types::{
         CategoryView,
     },
     error::ErrorCode,
-    flow::{FlowMode, FlowNew, FlowUpdate},
+    flow::{FlowMode, FlowNew, FlowSharedList, FlowUpdate},
     membership::{MemberUpsert, MemberView, MembershipRole},
     stats::Statistic,
     transaction::{
@@ -25,7 +25,7 @@ use api_types::{
         TransactionList, TransactionListResponse, TransactionUpdate, TransactionView,
         TransactionVoid, TransferFlowNew, TransferWalletNew,
     },
-    vault::{Vault, VaultNew, VaultSnapshot},
+    vault::{FlowView, Vault, VaultNew, VaultSnapshot},
     wallet::{WalletNew, WalletUpdate},
 };
 use chrono::{DateTime, Datelike, Duration as ChronoDuration, FixedOffset, Offset, TimeZone, Utc};
@@ -813,8 +813,17 @@ impl App {
                     .await
                 {
                     Ok(snapshot) => {
-                        self.state.last_flow_id = Some(snapshot.unallocated_flow_id);
-                        self.state.snapshot = Some(snapshot);
+                        self.apply_snapshot(snapshot);
+                        self.apply_local_defaults();
+                        self.state.screen = Screen::Home;
+                        self.state.login.message = None;
+                        self.load_transactions(true).await?;
+                    }
+                    Err(ClientError::NotFound(_)) => {
+                        if let Err(err) = self.refresh_shared_flows_snapshot().await {
+                            self.state.login.message = Some(err.to_string());
+                            return Ok(());
+                        }
                         self.apply_local_defaults();
                         self.state.screen = Screen::Home;
                         self.state.login.message = None;
@@ -3431,15 +3440,20 @@ impl App {
 
         match res {
             Ok(snapshot) => {
-                self.state.snapshot = Some(snapshot);
-                self.ensure_last_flow();
-                self.normalize_defaults();
-                if self.state.members.scope == MembersScope::Flow {
-                    self.ensure_member_flow_index();
-                }
+                self.apply_snapshot(snapshot);
                 self.refresh_wallets_search().await?;
                 self.refresh_flows_search().await?;
                 self.connection_ok(None);
+            }
+            Err(ClientError::NotFound(_)) => {
+                if let Err(err) = self.refresh_shared_flows_snapshot().await {
+                    self.state.wallets.error = Some(err.to_string());
+                    self.state.flows.error = Some(err.to_string());
+                    self.state.stats.error = Some(err.to_string());
+                    self.connection_error("Errore connessione");
+                } else {
+                    self.connection_ok(None);
+                }
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
@@ -3454,6 +3468,91 @@ impl App {
         }
 
         Ok(())
+    }
+
+    fn apply_snapshot(&mut self, snapshot: VaultSnapshot) {
+        self.state.snapshot = Some(snapshot);
+        self.ensure_last_flow();
+        self.normalize_defaults();
+        self.ensure_flow_scope_for_shared();
+        if self.state.members.scope == MembersScope::Flow {
+            self.ensure_member_flow_index();
+        }
+    }
+
+    fn ensure_flow_scope_for_shared(&mut self) {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            return;
+        };
+        if snapshot.wallets.is_empty() {
+            self.state.transactions.scope_wallet_id = None;
+            self.state.transactions.scope_flow_id = snapshot.flows.first().map(|flow| flow.id);
+        }
+    }
+
+    fn build_shared_snapshot(&self, flows: Vec<FlowView>) -> Result<VaultSnapshot> {
+        let vault = self
+            .state
+            .vault
+            .as_ref()
+            .ok_or_else(|| AppError::Terminal("vault metadata missing".to_string()))?;
+        let vault_id = vault
+            .id
+            .as_ref()
+            .ok_or_else(|| AppError::Terminal("vault id missing".to_string()))?;
+        let name = vault.name.clone().unwrap_or_else(|| vault_id.to_string());
+        let currency = vault.currency.unwrap_or(api_types::Currency::Eur);
+        let unallocated_flow_id = flows
+            .iter()
+            .find_map(|flow| flow.is_unallocated.then_some(flow.id))
+            .or_else(|| flows.first().map(|flow| flow.id))
+            .unwrap_or_else(uuid::Uuid::nil);
+
+        Ok(VaultSnapshot {
+            id: vault_id.clone(),
+            name,
+            currency,
+            wallets: Vec::new(),
+            flows,
+            unallocated_flow_id,
+        })
+    }
+
+    async fn refresh_shared_flows_snapshot(&mut self) -> Result<()> {
+        let vault_id = self
+            .state
+            .vault
+            .as_ref()
+            .and_then(|vault| vault.id.as_deref())
+            .ok_or_else(|| AppError::Terminal("vault id missing".to_string()))?;
+
+        let res = self
+            .client
+            .flows_shared_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                FlowSharedList {
+                    vault_id: vault_id.to_string(),
+                    include_archived: Some(true),
+                },
+            )
+            .await;
+
+        match res {
+            Ok(response) => {
+                let snapshot = self.build_shared_snapshot(response.flows)?;
+                self.apply_snapshot(snapshot);
+                self.refresh_wallets_search().await?;
+                self.refresh_flows_search().await?;
+                Ok(())
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                Err(AppError::Terminal(login_message_for_error(err)))
+            }
+        }
     }
 
     fn ensure_last_flow(&mut self) {

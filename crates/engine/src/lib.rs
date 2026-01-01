@@ -29,7 +29,7 @@ pub use ops::{Engine, EngineBuilder, TransactionListFilter};
 /// Transaction models and kinds.
 pub use transactions::{Transaction, TransactionKind, TransactionNew};
 /// Vault aggregate model.
-pub use vault::Vault;
+pub use vault::{Vault, VaultHeader};
 /// Wallet aggregate model.
 pub use wallets::Wallet;
 

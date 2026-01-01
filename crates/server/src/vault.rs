@@ -1,7 +1,11 @@
 //! Vault API endpoints
 
 use api_types::vault::{FlowView, Vault, VaultNew, VaultSnapshot, WalletView};
-use axum::{Extension, Json, extract::State};
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+    http::StatusCode,
+};
 
 use crate::{ServerError, server::ServerState, user};
 
@@ -42,7 +46,7 @@ pub async fn get(
 
     let vault = state
         .engine
-        .vault_snapshot(payload.id.as_deref(), payload.name, &user.username)
+        .vault_header(payload.id.as_deref(), payload.name, &user.username)
         .await?;
 
     Ok(Json(Vault {
@@ -116,4 +120,17 @@ pub async fn snapshot(
         flows,
         unallocated_flow_id,
     }))
+}
+
+/// Delete a vault (owner-only).
+pub async fn delete(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Path(vault_id): Path<String>,
+) -> Result<StatusCode, ServerError> {
+    state
+        .engine
+        .delete_vault(&vault_id, &user.username)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }

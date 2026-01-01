@@ -4,6 +4,7 @@ use api_types::{
         CategoryMergePreviewResponse, CategoryView,
     },
     error::{ErrorCode, ErrorEnvelope, ErrorPayload},
+    flow::{FlowSharedList, FlowSharedListResponse},
     membership::{MemberUpsert, MembersResponse},
     stats::Statistic,
     transaction::{
@@ -207,6 +208,28 @@ impl ApiClient {
                 id: None,
                 name: Some("Main".to_string()),
                 currency: None,
+            },
+        )
+        .await
+    }
+
+    pub(crate) async fn flows_shared_main(
+        &self,
+        telegram_user_id: u64,
+    ) -> Result<FlowSharedListResponse, ApiError> {
+        let vault = self.vault_get_main(telegram_user_id).await?;
+        let vault_id = vault.id.ok_or(ApiError::Server {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            code: ErrorCode::Unknown,
+            message: "vault id missing".to_string(),
+        })?;
+
+        self.post_json(
+            Some(telegram_user_id),
+            "/flows/shared",
+            &FlowSharedList {
+                vault_id,
+                include_archived: Some(true),
             },
         )
         .await
