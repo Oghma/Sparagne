@@ -99,6 +99,19 @@ pub mod flow {
         pub archived: Option<bool>,
         pub mode: Option<FlowMode>,
     }
+
+    /// List flows accessible to the current user within a vault.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowSharedList {
+        pub vault_id: String,
+        pub include_archived: Option<bool>,
+    }
+
+    /// Response body for shared flow listing.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowSharedListResponse {
+        pub flows: Vec<super::vault::FlowView>,
+    }
 }
 
 pub mod vault {

@@ -2062,6 +2062,26 @@ async fn non_owner_cannot_manage_memberships() {
 }
 
 #[tokio::test]
+async fn editor_cannot_delete_vault() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    engine
+        .upsert_vault_member(&vault_id, "bob", "editor", "alice")
+        .await
+        .unwrap();
+
+    let err = engine.delete_vault(&vault_id, "bob").await.unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::KeyNotFound("vault not exists".to_string())
+    );
+}
+
+#[tokio::test]
 async fn vault_owner_can_manage_flow_members_and_unallocated_is_not_shareable() {
     let (engine, _db) = engine_with_db().await;
     let vault_id = engine

@@ -1,6 +1,9 @@
 //! Flows API endpoints.
 
-use api_types::flow::{FlowCreated, FlowMode, FlowNew, FlowUpdate};
+use api_types::{
+    flow::{FlowCreated, FlowMode, FlowNew, FlowSharedList, FlowSharedListResponse, FlowUpdate},
+    vault::FlowView,
+};
 use axum::{
     Extension, Json,
     extract::{Path, State},
@@ -114,4 +117,35 @@ pub async fn flow_update(
     }
 
     Ok(StatusCode::OK)
+}
+
+pub async fn shared_list(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Json(payload): Json<FlowSharedList>,
+) -> Result<Json<FlowSharedListResponse>, ServerError> {
+    let include_archived = payload.include_archived.unwrap_or(false);
+    let flows = state
+        .engine
+        .list_accessible_flows(&payload.vault_id, &user.username, include_archived)
+        .await?;
+
+    let mut views = flows
+        .into_iter()
+        .map(|flow| FlowView {
+            is_unallocated: flow.is_unallocated(),
+            id: flow.id,
+            name: flow.name,
+            balance_minor: flow.balance,
+            archived: flow.archived,
+        })
+        .collect::<Vec<_>>();
+
+    views.sort_by(|a, b| match (a.is_unallocated, b.is_unallocated) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+    });
+
+    Ok(Json(FlowSharedListResponse { flows: views }))
 }

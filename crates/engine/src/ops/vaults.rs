@@ -13,13 +13,15 @@ use crate::{
 use super::{Engine, parse_vault_uuid};
 
 impl Engine {
-    /// Delete or archive a vault
+    /// Delete or archive a vault.
+    ///
+    /// Authorization: vault owner only.
     pub async fn delete_vault(&self, vault_id: &str, user_id: &str) -> ResultEngine<()> {
         let vault_id = vault_id.to_string();
         let user_id = user_id.to_string();
         self.with_tx(|engine, db_tx| Box::pin(async move {
             let vault_model = engine
-                .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
+                .require_vault_owner(db_tx, vault_id.as_str(), user_id.as_str())
                 .await?;
             let vault_db_id = vault_model.id;
 
