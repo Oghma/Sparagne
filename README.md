@@ -1,15 +1,16 @@
 # Sparagne
 
-A budget tracker for personal finance and budget planning. Currently, the
-application is an **early alpha**.
+A budget tracker for personal finance. Still **early alpha**, already opinionated.
 
-Sparagne (in italian "risparmiare") is a furlan word that means "savings".
+Sparagne (in italian "risparmiare") is a furlan word that means "savings". Think of
+it as your tiny, stubborn accountant who lives in the terminal and judges your bar
+coffee at 7:12 AM.
 
 The app consists of:
 - an engine that manages expenses, cash flows, wallets, etc
 - a server that exposes the API
-- a telegram bot
-- in future a TUI interface
+- a Telegram bot for quick entries
+- a TUI as the main “control room”
 
 ## HTTP API (Server)
 
@@ -67,11 +68,32 @@ cd sparagne
 ```
 
 Open `config/config.toml` and change the settings. See [Settings](#Settings).
-Save the settings and run `Sparagne`
+Save the settings and run `Sparagne`:
 
 ``` sh
 cargo run -p sparagne --release
 ```
+
+### TUI
+
+Run the TUI in a separate terminal:
+
+```sh
+cargo run -p sparagne_tui --release
+```
+
+The TUI uses `config/tui.toml` for its settings (server URL, refresh, etc).
+
+### Telegram bot
+
+Run the bot in a separate terminal:
+
+```sh
+cargo run -p sparagne_telegram_bot --release
+```
+
+The bot uses the `[telegram]` section of `config/config.toml` (token, server URL,
+service credentials).
 
 ### Database
 
