@@ -192,6 +192,26 @@ fn help_lines(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
                 Span::raw(" cancel"),
             ]));
         }
+        Section::Members => {
+            lines.push(Line::from(vec![
+                Span::styled("a", Style::default().fg(theme.accent)),
+                Span::raw(" add  "),
+                Span::styled("e", Style::default().fg(theme.accent)),
+                Span::raw(" edit  "),
+                Span::styled("x", Style::default().fg(theme.accent)),
+                Span::raw(" remove  "),
+                Span::styled("v/f", Style::default().fg(theme.accent)),
+                Span::raw(" scope"),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("[/]", Style::default().fg(theme.accent)),
+                Span::raw(" flow  "),
+                Span::styled("Tab", Style::default().fg(theme.accent)),
+                Span::raw(" next field  "),
+                Span::styled("↑/↓", Style::default().fg(theme.accent)),
+                Span::raw(" role"),
+            ]));
+        }
         Section::Vault => {
             lines.push(Line::from(vec![
                 Span::styled("c", Style::default().fg(theme.accent)),

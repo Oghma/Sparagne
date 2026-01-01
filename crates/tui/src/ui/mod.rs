@@ -63,6 +63,7 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         crate::app::Section::Wallets => screens::wallets::render(frame, content_inner, state),
         crate::app::Section::Flows => screens::flows::render(frame, content_inner, state),
         crate::app::Section::Categories => screens::categories::render(frame, content_inner, state),
+        crate::app::Section::Members => screens::members::render(frame, content_inner, state),
         crate::app::Section::Vault => screens::vault::render(frame, content_inner, state),
         crate::app::Section::Stats => screens::stats::render(frame, content_inner, state),
     }
@@ -163,6 +164,7 @@ fn get_context_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         crate::app::Section::Wallets => get_wallets_hints(state),
         crate::app::Section::Flows => get_flows_hints(state),
         crate::app::Section::Categories => get_categories_hints(state),
+        crate::app::Section::Members => get_members_hints(state),
         crate::app::Section::Vault => get_vault_hints(state),
         crate::app::Section::Stats => vec![
             components::hints::KeyHint::new("r", "refresh"),
@@ -224,6 +226,28 @@ fn get_wallets_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         crate::app::WalletsMode::Create | crate::app::WalletsMode::Rename => {
             components::hints::common::form_editing()
         }
+    }
+}
+
+fn get_members_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    match state.members.mode {
+        crate::app::MembersMode::List => {
+            let mut hints = components::hints::common::list_navigation();
+            hints.push(components::hints::KeyHint::new("a", "add"));
+            hints.push(components::hints::KeyHint::new("e", "edit"));
+            hints.push(components::hints::KeyHint::new("x", "remove"));
+            hints.push(components::hints::KeyHint::new("v/f", "scope"));
+            if state.members.scope == crate::app::MembersScope::Flow {
+                hints.push(components::hints::KeyHint::new("[/]", "flow"));
+            }
+            hints
+        }
+        crate::app::MembersMode::Form => vec![
+            components::hints::KeyHint::new("Tab", "next"),
+            components::hints::KeyHint::new("↑/↓", "role"),
+            components::hints::KeyHint::new("Enter", "save"),
+            components::hints::KeyHint::new("Esc", "cancel"),
+        ],
     }
 }
 
