@@ -220,6 +220,7 @@ mod http_tests {
     use api_types::{
         category, flow,
         transaction::{TransactionDetailResponse, TransactionGet, TransactionList},
+        vault::Vault,
         wallet,
     };
     use base64::Engine as _;
@@ -366,6 +367,56 @@ mod http_tests {
             .unwrap();
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn vault_stats_are_owner_only() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+        engine
+            .upsert_vault_member(&vault_id, FLOW_MEMBER, "viewer", OWNER)
+            .await
+            .unwrap();
+
+        let payload = Vault {
+            id: Some(vault_id.clone()),
+            name: None,
+            currency: None,
+        };
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/stats/get")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/stats/get")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
     }
 
     #[tokio::test]

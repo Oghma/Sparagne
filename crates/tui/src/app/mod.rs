@@ -207,11 +207,7 @@ impl App {
                 }
             }
             crate::ui::keymap::AppAction::Quit => {
-                if self.state.screen == Screen::Login {
-                    self.should_quit = true;
-                } else {
-                    self.should_quit = true;
-                }
+                self.should_quit = true;
             }
             crate::ui::keymap::AppAction::Cancel => {
                 if self.state.screen == Screen::Login {
@@ -610,10 +606,10 @@ impl App {
                         self.state.categories.aliases.input.push(ch);
                         return Ok(());
                     }
-                    if self.state.section == Section::Members {
-                        if self.handle_members_input(ch).await? {
-                            return Ok(());
-                        }
+                    if self.state.section == Section::Members
+                        && self.handle_members_input(ch).await?
+                    {
+                        return Ok(());
                     }
                     if self.handle_search_input(ch).await? {
                         return Ok(());
@@ -1554,10 +1550,10 @@ impl App {
     }
 
     fn expire_toast(&mut self) {
-        if let Some(toast) = &self.state.toast {
-            if std::time::Instant::now() >= toast.expires_at {
-                self.state.toast = None;
-            }
+        if let Some(toast) = &self.state.toast
+            && std::time::Instant::now() >= toast.expires_at
+        {
+            self.state.toast = None;
         }
     }
 
@@ -3983,11 +3979,11 @@ impl App {
             self.state.members.flow_index = 0;
             return;
         }
-        if let Some(last_flow_id) = self.state.last_flow_id {
-            if let Some(index) = flows.iter().position(|(id, _)| *id == last_flow_id) {
-                self.state.members.flow_index = index;
-                return;
-            }
+        if let Some(last_flow_id) = self.state.last_flow_id
+            && let Some(index) = flows.iter().position(|(id, _)| *id == last_flow_id)
+        {
+            self.state.members.flow_index = index;
+            return;
         }
         self.state.members.flow_index = self.state.members.flow_index.min(flows.len() - 1);
     }
@@ -5963,21 +5959,11 @@ pub struct ConnectionState {
     pub message: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CommandPaletteState {
     pub active: bool,
     pub query: String,
     pub selected: usize,
-}
-
-impl Default for CommandPaletteState {
-    fn default() -> Self {
-        Self {
-            active: false,
-            query: String::new(),
-            selected: 0,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -6112,7 +6098,7 @@ pub enum CategoriesMode {
     Aliases,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CategoryMergeState {
     pub from_index: usize,
     pub target_index: usize,
@@ -6120,30 +6106,10 @@ pub struct CategoryMergeState {
     pub confirming: bool,
 }
 
-impl Default for CategoryMergeState {
-    fn default() -> Self {
-        Self {
-            from_index: 0,
-            target_index: 0,
-            preview: None,
-            confirming: false,
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CategoryFormState {
     pub name: String,
     pub error: Option<String>,
-}
-
-impl Default for CategoryFormState {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            error: None,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -6239,23 +6205,12 @@ impl Default for MemberFormState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FlowDetailState {
     pub flow_id: Option<uuid::Uuid>,
     pub transactions: Vec<TransactionView>,
     pub detail: Option<engine::CashFlow>,
     pub error: Option<String>,
-}
-
-impl Default for FlowDetailState {
-    fn default() -> Self {
-        Self {
-            flow_id: None,
-            transactions: Vec::new(),
-            detail: None,
-            error: None,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -6332,19 +6287,10 @@ pub enum VaultMode {
     Defaults,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct VaultFormState {
     pub name: String,
     pub error: Option<String>,
-}
-
-impl Default for VaultFormState {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            error: None,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -6522,29 +6468,6 @@ fn login_message_for_error(err: ClientError) -> String {
         ClientError::Server(payload) => format!("Errore server: {}", payload.message),
         ClientError::Client(message) => message,
         ClientError::Transport(err) => format!("Server non raggiungibile: {err}"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{PaletteCommand, filter_commands};
-
-    #[test]
-    fn palette_includes_category_commands() {
-        let all = PaletteCommand::all();
-        assert!(all.contains(&PaletteCommand::Categories));
-        assert!(all.contains(&PaletteCommand::CategoryAliases));
-        assert!(all.contains(&PaletteCommand::Members));
-    }
-
-    #[test]
-    fn filter_commands_matches_category_queries() {
-        let commands = filter_commands("cat");
-        assert!(commands.contains(&PaletteCommand::Categories));
-        let commands = filter_commands("alias");
-        assert!(commands.contains(&PaletteCommand::CategoryAliases));
-        let commands = filter_commands("member");
-        assert!(commands.contains(&PaletteCommand::Members));
     }
 }
 
@@ -6916,4 +6839,27 @@ fn push_recent_id(target: &mut Vec<uuid::Uuid>, value: uuid::Uuid, limit: usize)
         return;
     }
     target.push(value);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PaletteCommand, filter_commands};
+
+    #[test]
+    fn palette_includes_category_commands() {
+        let all = PaletteCommand::all();
+        assert!(all.contains(&PaletteCommand::Categories));
+        assert!(all.contains(&PaletteCommand::CategoryAliases));
+        assert!(all.contains(&PaletteCommand::Members));
+    }
+
+    #[test]
+    fn filter_commands_matches_category_queries() {
+        let commands = filter_commands("cat");
+        assert!(commands.contains(&PaletteCommand::Categories));
+        let commands = filter_commands("alias");
+        assert!(commands.contains(&PaletteCommand::CategoryAliases));
+        let commands = filter_commands("member");
+        assert!(commands.contains(&PaletteCommand::Members));
+    }
 }

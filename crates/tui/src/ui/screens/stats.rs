@@ -182,10 +182,12 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     render_stat_row(
         frame,
         stats_layout[0],
-        "Income",
-        income,
-        income_pct,
-        theme.positive,
+        StatRow {
+            label: "Income",
+            amount: income,
+            percentage: income_pct,
+            color: theme.positive,
+        },
         currency,
         theme,
     );
@@ -199,10 +201,12 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     render_stat_row(
         frame,
         stats_layout[1],
-        "Expenses",
-        -expenses,
-        expense_pct,
-        theme.negative,
+        StatRow {
+            label: "Expenses",
+            amount: -expenses,
+            percentage: expense_pct,
+            color: theme.negative,
+        },
         currency,
         theme,
     );
@@ -257,13 +261,17 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     }
 }
 
-fn render_stat_row(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    label: &str,
+struct StatRow<'a> {
+    label: &'a str,
     amount: i64,
     percentage: u16,
     color: ratatui::style::Color,
+}
+
+fn render_stat_row(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    row: StatRow<'_>,
     currency: Currency,
     theme: &Theme,
 ) {
@@ -279,20 +287,20 @@ fn render_stat_row(
 
     // Label
     frame.render_widget(
-        Paragraph::new(Span::styled(label, Style::default().fg(theme.dim))),
+        Paragraph::new(Span::styled(row.label, Style::default().fg(theme.dim))),
         cols[0],
     );
 
     // Amount
     frame.render_widget(
-        Paragraph::new(styled_amount_no_sign(amount, currency, theme)),
+        Paragraph::new(styled_amount_no_sign(row.amount, currency, theme)),
         cols[1],
     );
 
     let bar_width = cols[2].width.saturating_sub(4).max(1) as usize;
-    let bar = percentage_bar(percentage, bar_width);
+    let bar = percentage_bar(row.percentage, bar_width);
     frame.render_widget(
-        Paragraph::new(Span::styled(bar, Style::default().fg(color))),
+        Paragraph::new(Span::styled(bar, Style::default().fg(row.color))),
         cols[2],
     );
 }

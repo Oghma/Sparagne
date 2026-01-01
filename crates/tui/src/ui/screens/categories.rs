@@ -74,12 +74,12 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         Span::raw(format!(": {mode}")),
     ];
 
-    if let CategoriesMode::Merge = state.categories.mode {
-        if let Some((from, into)) = merge_pair(state) {
-            line.push(Span::raw("   "));
-            line.push(Span::styled("Merge", Style::default().fg(theme.dim)));
-            line.push(Span::raw(format!(": {} -> {}", from, into)));
-        }
+    if let CategoriesMode::Merge = state.categories.mode
+        && let Some((from, into)) = merge_pair(state)
+    {
+        line.push(Span::raw("   "));
+        line.push(Span::styled("Merge", Style::default().fg(theme.dim)));
+        line.push(Span::raw(format!(": {} -> {}", from, into)));
     }
     if let CategoriesMode::Aliases = state.categories.mode {
         if let Some(category) = state.categories.items.get(state.categories.selected) {
@@ -151,15 +151,15 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             if category.archived {
                 spans.push(status_chip("ARCHIVED", theme.warning));
             }
-            if let Some(from_idx) = from_index {
-                if idx == from_idx {
-                    spans.push(status_chip("FROM", theme.text_muted));
-                }
+            if let Some(from_idx) = from_index
+                && idx == from_idx
+            {
+                spans.push(status_chip("FROM", theme.text_muted));
             }
-            if let Some(target_idx) = target_index {
-                if idx == target_idx {
-                    spans.push(status_chip("TO", theme.text_muted));
-                }
+            if let Some(target_idx) = target_index
+                && idx == target_idx
+            {
+                spans.push(status_chip("TO", theme.text_muted));
             }
             ListItem::new(Line::from(spans))
         })

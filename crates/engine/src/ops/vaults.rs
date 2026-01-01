@@ -240,7 +240,8 @@ impl Engine {
     /// Returns vault totals: `(currency, balance_minor, total_income_minor,
     /// total_expenses_minor)`.
     ///
-    /// Transfers are excluded from income/expense totals.
+    /// Authorization: vault owner only. Transfers are excluded from
+    /// income/expense totals.
     pub async fn vault_statistics(
         &self,
         vault_id: &str,
@@ -251,7 +252,7 @@ impl Engine {
         let user_id = user_id.to_string();
         self.with_tx(|engine, db_tx| Box::pin(async move {
             let vault_model = engine
-                .require_vault_by_id(db_tx, vault_id.as_str(), user_id.as_str())
+                .require_vault_owner(db_tx, vault_id.as_str(), user_id.as_str())
                 .await?;
             let currency = vault_model.currency;
             let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
