@@ -18,6 +18,7 @@ use api_types::{
     },
     error::ErrorCode,
     flow::{FlowMode, FlowNew, FlowUpdate},
+    membership::{MemberUpsert, MemberView, MembershipRole},
     stats::Statistic,
     transaction::{
         ExpenseNew, IncomeNew, Refund, TransactionDetailResponse, TransactionGet, TransactionKind,
@@ -45,6 +46,7 @@ pub enum Section {
     Wallets,
     Flows,
     Categories,
+    Members,
     Vault,
     Stats,
 }
@@ -57,6 +59,7 @@ impl Section {
             Self::Wallets => "Wallets",
             Self::Flows => "Flows",
             Self::Categories => "Categories",
+            Self::Members => "Members",
             Self::Vault => "Vault",
             Self::Stats => "Stats",
         }
@@ -89,6 +92,7 @@ pub struct AppState {
     pub flows: FlowsState,
     pub vault_ui: VaultState,
     pub categories: CategoriesState,
+    pub members: MembersState,
     pub stats: StatsState,
     pub palette: CommandPaletteState,
     pub help: HelpState,
@@ -130,6 +134,7 @@ impl App {
             flows: FlowsState::default(),
             vault_ui: VaultState::default(),
             categories: CategoriesState::default(),
+            members: MembersState::default(),
             stats: StatsState::default(),
             palette: CommandPaletteState::default(),
             help: HelpState::default(),
@@ -343,6 +348,8 @@ impl App {
                     self.handle_flows_submit().await?;
                 } else if self.state.section == Section::Categories {
                     self.handle_categories_submit().await?;
+                } else if self.state.section == Section::Members {
+                    self.handle_members_submit().await?;
                 } else if self.state.section == Section::Vault {
                     self.handle_vault_submit().await?;
                 } else if self.state.section == Section::Stats {
@@ -3829,14 +3836,14 @@ impl App {
     }
 
     async fn submit_member_form(&mut self) -> Result<()> {
-        let username = self.state.members.form.username.trim();
+        let username = self.state.members.form.username.trim().to_string();
         if username.is_empty() {
             self.state.members.form.error = Some("Inserisci un username.".to_string());
             return Ok(());
         }
         let vault_id = self.current_vault_id()?;
         let payload = MemberUpsert {
-            username: username.to_string(),
+            username: username.clone(),
             role: self.state.members.form.role,
         };
 
@@ -3873,7 +3880,7 @@ impl App {
                 self.state.members.mode = MembersMode::List;
                 self.reset_member_form();
                 self.load_members().await?;
-                self.select_member_by_username(username);
+                self.select_member_by_username(username.as_str());
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
@@ -6166,6 +6173,70 @@ impl Default for CategoryAliasState {
 pub enum AliasFocus {
     List,
     Input,
+}
+
+#[derive(Debug)]
+pub struct MembersState {
+    pub scope: MembersScope,
+    pub mode: MembersMode,
+    pub items: Vec<MemberView>,
+    pub selected: usize,
+    pub flow_index: usize,
+    pub form: MemberFormState,
+    pub error: Option<String>,
+}
+
+impl Default for MembersState {
+    fn default() -> Self {
+        Self {
+            scope: MembersScope::Vault,
+            mode: MembersMode::List,
+            items: Vec::new(),
+            selected: 0,
+            flow_index: 0,
+            form: MemberFormState::default(),
+            error: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MembersScope {
+    Vault,
+    Flow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MembersMode {
+    List,
+    Form,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberFormField {
+    Username,
+    Role,
+}
+
+#[derive(Debug)]
+pub struct MemberFormState {
+    pub username: String,
+    pub role: MembershipRole,
+    pub focus: MemberFormField,
+    pub editing: bool,
+    pub error: Option<String>,
+}
+
+impl Default for MemberFormState {
+    fn default() -> Self {
+        Self {
+            username: String::new(),
+            role: MembershipRole::Viewer,
+            focus: MemberFormField::Username,
+            editing: false,
+            error: None,
+        }
+    }
 }
 
 #[derive(Debug)]
