@@ -128,9 +128,6 @@ pub async fn delete(
     State(state): State<ServerState>,
     Path(vault_id): Path<String>,
 ) -> Result<StatusCode, ServerError> {
-    state
-        .engine
-        .delete_vault(&vault_id, &user.username)
-        .await?;
+    state.engine.delete_vault(&vault_id, &user.username).await?;
     Ok(StatusCode::NO_CONTENT)
 }

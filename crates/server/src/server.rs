@@ -145,6 +145,7 @@ fn router(state: ServerState) -> Router {
         .route("/vault/new", post(vault::vault_new))
         .route("/vault/get", post(vault::get))
         .route("/vault/snapshot", post(vault::snapshot))
+        .route("/vault/{id}", delete(vault::delete))
         .route(
             "/vault/{vault_id}/members",
             get(memberships::list_vault_members).post(memberships::upsert_vault_member),
@@ -426,6 +427,44 @@ mod http_tests {
             .unwrap();
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn vault_delete_is_owner_only() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+        engine
+            .upsert_vault_member(&vault_id, FLOW_MEMBER, "editor", OWNER)
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("DELETE")
+            .uri(format!("/vault/{vault_id}"))
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        let req = axum::http::Request::builder()
+            .method("DELETE")
+            .uri(format!("/vault/{vault_id}"))
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
     }
 
     #[tokio::test]
