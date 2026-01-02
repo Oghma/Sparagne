@@ -142,6 +142,10 @@ pub(crate) async fn handle_message(
                     .await?;
                 return Ok(());
             }
+            Command::VaultDelete { confirm } => {
+                delete_vault(&bot, chat_id, user_id, &cfg, confirm).await?;
+                return Ok(());
+            }
         }
     }
 
@@ -1629,6 +1633,30 @@ async fn remove_vault_member(
     Ok(())
 }
 
+async fn delete_vault(
+    bot: &Bot,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    confirm: bool,
+) -> ResponseResult<()> {
+    if !confirm {
+        bot.send_message(chat_id, vault_delete_help_text()).await?;
+        return Ok(());
+    }
+
+    match cfg.api.vault_delete_main(user_id).await {
+        Ok(()) => {
+            bot.send_message(chat_id, "✅ Vault eliminato.").await?;
+        }
+        Err(err) => {
+            bot.send_message(chat_id, user_message_for_api_error(err))
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 async fn list_flow_members(
     bot: &Bot,
     chat_id: ChatId,
@@ -2057,8 +2085,22 @@ fn parse_command(text: &str) -> Option<Command> {
         "/members" => parse_members_command(arg.as_deref()),
         "/flow_members" => parse_flow_members_command(arg.as_deref()),
         "/merge_category" => parse_merge_category(arg.as_deref()),
+        "/vault_delete" => parse_vault_delete(arg.as_deref()),
         _ => None,
     }
+}
+
+fn parse_vault_delete(arg: Option<&str>) -> Option<Command> {
+    let Some(arg) = arg else {
+        return Some(Command::VaultDelete { confirm: false });
+    };
+    let trimmed = arg.trim();
+    if trimmed.is_empty() {
+        return Some(Command::VaultDelete { confirm: false });
+    }
+
+    let confirm = trimmed.eq_ignore_ascii_case("confirm");
+    Some(Command::VaultDelete { confirm })
 }
 
 fn parse_merge_category(arg: Option<&str>) -> Option<Command> {
@@ -2279,7 +2321,7 @@ fn welcome_text(display_name: &str) -> String {
 }
 
 fn help_text() -> &'static str {
-    "Esempi:\n\n12.50 bar caffè\n-12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\n#tag opzionale (max 1): 12.50 bar #food caffè\n\nComandi:\n/home\n/categories\n/merge_category <da> -> <a>\n/merge_category confirm <da> -> <a>\n/members\n/members add <username> <owner|editor|viewer>\n/members remove <username>\n/flow_members <flow>\n/flow_members add <flow> <username> <owner|editor|viewer>\n/flow_members remove <flow> <username>"
+    "Esempi:\n\n12.50 bar caffè\n-12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\n#tag opzionale (max 1): 12.50 bar #food caffè\n\nComandi:\n/home\n/categories\n/merge_category <da> -> <a>\n/merge_category confirm <da> -> <a>\n/members\n/members add <username> <owner|editor|viewer>\n/members remove <username>\n/flow_members <flow>\n/flow_members add <flow> <username> <owner|editor|viewer>\n/flow_members remove <flow> <username>\n/vault_delete\n/vault_delete confirm"
 }
 
 fn merge_category_help_text() -> &'static str {
@@ -2292,6 +2334,10 @@ fn members_help_text() -> &'static str {
 
 fn flow_members_help_text() -> &'static str {
     "Uso:\n/flow_members <flow>\n/flow_members add <flow> <username> <owner|editor|viewer>\n/flow_members remove <flow> <username>\n\nNota: il flow può contenere spazi."
+}
+
+fn vault_delete_help_text() -> &'static str {
+    "Uso:\n/vault_delete confirm\n\nAttenzione: elimina il vault Main e tutti i dati."
 }
 
 fn display_name_from_telegram(user: &User) -> String {
@@ -2389,4 +2435,7 @@ enum Command {
         into: String,
     },
     MergeCategoryHelp,
+    VaultDelete {
+        confirm: bool,
+    },
 }

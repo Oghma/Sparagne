@@ -81,7 +81,7 @@ fn render_view(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .map(|id| resolve_flow_name(state, id))
         .unwrap_or_else(|| "None".to_string());
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(vec![
             Span::styled("Vault", Style::default().fg(theme.dim)),
             Span::raw(format!(": {vault_name}")),
@@ -114,9 +114,17 @@ fn render_view(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             Span::styled("c", Style::default().fg(theme.accent)),
             Span::raw(" create vault  "),
             Span::styled("d", Style::default().fg(theme.accent)),
-            Span::raw(" defaults"),
+            Span::raw(" defaults  "),
+            Span::styled("x", Style::default().fg(theme.accent)),
+            Span::raw(" delete vault"),
         ]),
     ];
+    if state.vault_ui.confirm_delete {
+        lines.push(Line::from(vec![Span::styled(
+            "Conferma eliminazione con x.",
+            Style::default().fg(theme.error),
+        )]));
+    }
 
     let block = Block::default()
         .title("Vault Overview")

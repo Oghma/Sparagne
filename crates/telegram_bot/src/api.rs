@@ -235,6 +235,18 @@ impl ApiClient {
         .await
     }
 
+    pub(crate) async fn vault_delete_main(&self, telegram_user_id: u64) -> Result<(), ApiError> {
+        let vault = self.vault_get_main(telegram_user_id).await?;
+        let vault_id = vault.id.ok_or(ApiError::Server {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            code: ErrorCode::Unknown,
+            message: "vault id missing".to_string(),
+        })?;
+
+        self.delete_unit(Some(telegram_user_id), &format!("/vault/{vault_id}"))
+            .await
+    }
+
     pub(crate) async fn stats_get_main(
         &self,
         telegram_user_id: u64,

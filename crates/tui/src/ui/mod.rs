@@ -301,10 +301,18 @@ fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
 
 fn get_vault_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.vault_ui.mode {
-        crate::app::VaultMode::View => vec![
-            components::hints::KeyHint::new("c", "create"),
-            components::hints::KeyHint::new("d", "defaults"),
-        ],
+        crate::app::VaultMode::View => {
+            let delete_label = if state.vault_ui.confirm_delete {
+                "confirm delete"
+            } else {
+                "delete"
+            };
+            vec![
+                components::hints::KeyHint::new("c", "create"),
+                components::hints::KeyHint::new("d", "defaults"),
+                components::hints::KeyHint::new("x", delete_label),
+            ]
+        }
         crate::app::VaultMode::Create => components::hints::common::form_editing(),
         crate::app::VaultMode::Defaults => {
             let mut hints = components::hints::common::form_editing();

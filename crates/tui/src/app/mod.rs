@@ -194,6 +194,13 @@ impl App {
             self.handle_palette_action(action).await?;
             return Ok(());
         }
+        if self.state.section == Section::Vault
+            && self.state.vault_ui.mode == VaultMode::View
+            && self.state.vault_ui.confirm_delete
+            && !matches!(action, crate::ui::keymap::AppAction::Input('x' | 'X'))
+        {
+            self.state.vault_ui.confirm_delete = false;
+        }
 
         match action {
             crate::ui::keymap::AppAction::TogglePalette => {
@@ -297,7 +304,11 @@ impl App {
                             self.state.vault_ui.mode = VaultMode::View;
                         }
                         VaultMode::View => {
-                            self.state.section = Section::Home;
+                            if self.state.vault_ui.confirm_delete {
+                                self.state.vault_ui.confirm_delete = false;
+                            } else {
+                                self.state.section = Section::Home;
+                            }
                         }
                     }
                 } else if self.state.section == Section::Categories {
@@ -1288,6 +1299,15 @@ impl App {
                     && self.state.categories.aliases.focus == AliasFocus::List
                 {
                     self.delete_category_alias().await?;
+                } else if self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::View
+                {
+                    if self.state.vault_ui.confirm_delete {
+                        self.delete_vault().await?;
+                    } else {
+                        self.state.vault_ui.confirm_delete = true;
+                        self.set_toast("Premi x per confermare l'eliminazione.", ToastLevel::Info);
+                    }
                 }
                 return Ok(());
             }
@@ -1602,6 +1622,31 @@ impl App {
         true
     }
 
+    fn reset_after_vault_delete(&mut self) {
+        self.state.screen = Screen::Login;
+        self.state.login.password.clear();
+        self.state.login.focus = LoginField::Username;
+        self.state.login.message = Some("Vault eliminato.".to_string());
+        self.state.vault = None;
+        self.state.snapshot = None;
+        self.state.section = Section::Home;
+        self.state.transactions = TransactionsState::default();
+        self.state.wallets = WalletsState::default();
+        self.state.flows = FlowsState::default();
+        self.state.vault_ui = VaultState::default();
+        self.state.categories = CategoriesState::default();
+        self.state.members = MembersState::default();
+        self.state.stats = StatsState::default();
+        self.state.palette = CommandPaletteState::default();
+        self.state.help = HelpState::default();
+        self.state.toast = None;
+        self.state.connection = ConnectionState::default();
+        self.state.last_refresh = None;
+        self.state.last_flow_id = None;
+        self.state.default_wallet_id = None;
+        self.state.default_flow_id = None;
+    }
+
     fn update_recent_categories_from_items(&mut self) {
         let mut seen = std::collections::HashSet::new();
         let mut categories = Vec::new();
@@ -1781,6 +1826,7 @@ impl App {
     fn reset_vault_form(&mut self) {
         self.state.vault_ui.form = VaultFormState::default();
         self.state.vault_ui.error = None;
+        self.state.vault_ui.confirm_delete = false;
     }
 
     fn reset_category_form(&mut self) {
@@ -3287,6 +3333,7 @@ impl App {
 
     fn start_vault_create(&mut self) {
         self.reset_vault_form();
+        self.state.vault_ui.confirm_delete = false;
         self.state.vault_ui.mode = VaultMode::Create;
     }
 
@@ -3317,6 +3364,7 @@ impl App {
             focus: DefaultsField::Wallet,
             error: None,
         };
+        self.state.vault_ui.confirm_delete = false;
         self.state.vault_ui.mode = VaultMode::Defaults;
     }
 
@@ -3472,6 +3520,7 @@ impl App {
 
     fn apply_snapshot(&mut self, snapshot: VaultSnapshot) {
         self.state.snapshot = Some(snapshot);
+        self.state.vault_ui.confirm_delete = false;
         self.ensure_last_flow();
         self.normalize_defaults();
         self.ensure_flow_scope_for_shared();
@@ -5400,6 +5449,35 @@ impl App {
         Ok(())
     }
 
+    async fn delete_vault(&mut self) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let res = self
+            .client
+            .vault_delete(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                vault_id.as_str(),
+            )
+            .await;
+
+        self.state.vault_ui.confirm_delete = false;
+
+        match res {
+            Ok(()) => {
+                self.reset_after_vault_delete();
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.vault_ui.error = Some(login_message_for_error(err));
+                self.set_toast("Errore eliminazione vault.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
     async fn load_stats(&mut self) -> Result<()> {
         let payload = Vault {
             id: self.state.vault.as_ref().and_then(|v| v.id.clone()),
@@ -6366,6 +6444,7 @@ pub struct VaultState {
     pub form: VaultFormState,
     pub defaults: DefaultsFormState,
     pub error: Option<String>,
+    pub confirm_delete: bool,
 }
 
 impl Default for VaultState {
@@ -6375,6 +6454,7 @@ impl Default for VaultState {
             form: VaultFormState::default(),
             defaults: DefaultsFormState::default(),
             error: None,
+            confirm_delete: false,
         }
     }
 }
