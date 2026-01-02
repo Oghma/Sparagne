@@ -16,6 +16,8 @@ WORKDIR /sparagne
 # Copy our build
 COPY --from=builder /sparagne/target/release/sparagne ./
 
+EXPOSE 3000
+
 CMD [ "/sparagne/sparagne" ]
 
 VOLUME /sparagne/config

@@ -1,6 +1,6 @@
 # Sparagne
 
-A budget tracker for personal finance. Still **early alpha**, already opinionated.
+A budget tracker for personal finance. Feature-freeze in progress for **v1.0**.
 
 Sparagne (in italian "risparmiare") is a furlan word that means "savings". Think of
 it as your tiny, stubborn accountant who lives in the terminal and judges your bar
@@ -22,6 +22,8 @@ The app consists of:
 Core endpoints:
 - `POST /vault/new` (`api_types::vault::VaultNew`) → `api_types::vault::Vault`
 - `POST /vault/get` (`api_types::vault::Vault`) → `api_types::vault::Vault`
+- `POST /vault/snapshot` (`api_types::vault::Vault`) → `api_types::vault::VaultSnapshot`
+- `DELETE /vault/{id}` → `204 No Content`
 - `POST /cashFlow/get` (`api_types::cash_flow::CashFlowGet`) → `engine::CashFlow`
 - `POST /stats/get` (`api_types::vault::Vault`) → `api_types::stats::Statistic`
 
@@ -39,22 +41,35 @@ Transactions:
 Sharing/memberships:
 - `GET /vault/{vault_id}/members` / `POST /vault/{vault_id}/members` / `DELETE /vault/{vault_id}/members/{username}`
 - `GET /vault/{vault_id}/flows/{flow_id}/members` / `POST /vault/{vault_id}/flows/{flow_id}/members` / `DELETE /vault/{vault_id}/flows/{flow_id}/members/{username}`
+- `POST /flows/shared` (`api_types::flow::FlowSharedList`) → `FlowSharedListResponse`
+
+Categories:
+- `POST /categories/list` (`CategoryList`) → `CategoryListResponse`
+- `POST /categories` (`CategoryCreate`) → `CategoryCreated`
+- `PATCH /categories/{category_id}` (`CategoryUpdate`) → `CategoryView`
+- `POST /categories/{category_id}/aliases/list` (`CategoryAliasList`) → `CategoryAliasListResponse`
+- `POST /categories/{category_id}/aliases` (`CategoryAliasCreate`) → `CategoryAliasCreated`
+- `DELETE /categories/{category_id}/aliases/{alias_id}` (`CategoryAliasDelete`) → `204 No Content`
+- `POST /categories/{category_id}/merge/preview` (`CategoryMergePreview`) → `CategoryMergePreviewResponse`
+- `POST /categories/{category_id}/merge` (`CategoryMerge`) → `CategoryCreated`
 
 ## Installation
 
 ### Option 1: From Docker
 
-Pull the image from the docker hub
+Pull the image from Docker Hub:
 
-``` sh
+```sh
 docker pull oghma/sparagne
 ```
 
-Open `settings.toml` and change the settings. See [Settings](#Settings). Save
-the settings and run the docker with
+Prepare `config/config.toml` (see [Settings](#Settings)), then run:
 
-``` sh
-docker run -dit -v ./path to settings folder:/sparagne/config oghma/sparagne
+```sh
+docker run -it --rm \
+  -p 3000:3000 \
+  -v "$(pwd)/config:/sparagne/config" \
+  oghma/sparagne
 ```
 
 
@@ -82,18 +97,21 @@ Run the TUI in a separate terminal:
 cargo run -p sparagne_tui --release
 ```
 
-The TUI uses `config/tui.toml` for its settings (server URL, refresh, etc).
+Config resolution (in order):
+1) `--config <path>` or `SPARAGNE_CONFIG`
+2) `$XDG_CONFIG_HOME/sparagne/config.toml` (or `~/.config/sparagne/config.toml`)
+3) `config/config.toml`
+
+CLI flags override config values. Env overrides:
+- `SPARAGNE_URL_SERVER`
+- `SPARAGNE_USERNAME`
+- `SPARAGNE_VAULT`
+- `SPARAGNE_TIMEZONE`
 
 ### Telegram bot
 
-Run the bot in a separate terminal:
-
-```sh
-cargo run -p sparagne_telegram_bot --release
-```
-
-The bot uses the `[telegram]` section of `config/config.toml` (token, server URL,
-service credentials).
+The bot is started by `sparagne` if `[telegram]` is present in
+`config/config.toml`.
 
 ### Database
 
@@ -115,10 +133,36 @@ cargo run -p sparagne_admin -- vault create --owner alice --name Main --currency
 
 ## Settings
 
-`server.database` is the path to the sqlite3 database
+`config/config.toml` is loaded by `crates/app`. Config lookup order:
+1) `SPARAGNE_CONFIG`
+2) `$XDG_CONFIG_HOME/sparagne/config.toml` (or `~/.config/sparagne/config.toml`)
+3) `config/config.toml`
 
-To use the telegram bot `[telegram]` settings need to have enabled
-- `token`: Telegram token
-- `server`: ip address of the sparagne server. For now is hardcoded to `"http://127.0.0.1:3000"`
-- `username`: username of the telegram database account. See [Database](#Database)
-- `password`: password of the telegram database account
+Minimal structure:
+
+```toml
+[app]
+level = "info"
+
+[server]
+bind = "127.0.0.1"
+port = 3000
+database = { Sqlite = "./sparagne.db" }
+
+[tui]
+base_url = "http://127.0.0.1:3000"
+username = "matteo"
+vault = "Main"
+timezone = "Europe/Rome"
+
+[telegram]
+token = "..."
+server = "http://127.0.0.1:3000"
+username = "service_bot"
+password = "secret"
+```
+
+Notes:
+- `server.database` is a `Database` enum (`Memory` or `{ Sqlite = "path" }`).
+- Telegram bot requires a dedicated service user.
+- `SPARAGNE_SERVER=host:port` overrides `server.bind`/`server.port`.
