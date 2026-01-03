@@ -216,11 +216,11 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             form.focus == FlowFormField::Cap,
             theme,
         ));
-        lines.push(render_field(
-            "Opening",
-            form.opening.as_str(),
-            form.focus == FlowFormField::Opening,
-            theme,
+    lines.push(render_field(
+        "Opening allocation",
+        form.opening.as_str(),
+        form.focus == FlowFormField::Opening,
+        theme,
         ));
     }
 

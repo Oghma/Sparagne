@@ -198,7 +198,7 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     ));
     if !is_rename {
         lines.push(render_field(
-            "Opening",
+            "Opening balance",
             form.opening.as_str(),
             form.focus == WalletFormField::Opening,
             theme,
