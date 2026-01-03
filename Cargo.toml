@@ -34,6 +34,11 @@ expect_used = "warn"
 todo = "warn"
 dbg_macro = "warn"
 
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
 [workspace.dependencies]
 axum = "0.8.7"
 axum-extra = "0.12.2"
