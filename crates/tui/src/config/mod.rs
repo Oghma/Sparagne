@@ -52,14 +52,12 @@ pub fn load() -> Result<AppConfig> {
 
     let mut builder = config::Config::builder();
     if let Some(path) = args.config.or_else(|| env::var("SPARAGNE_CONFIG").ok()) {
-        builder = builder.add_source(
-            config::File::new(&path, config::FileFormat::Toml).required(false),
-        );
+        builder =
+            builder.add_source(config::File::new(&path, config::FileFormat::Toml).required(false));
     } else {
         for path in default_config_paths() {
-            builder = builder.add_source(
-                config::File::new(&path, config::FileFormat::Toml).required(false),
-            );
+            builder = builder
+                .add_source(config::File::new(&path, config::FileFormat::Toml).required(false));
         }
     }
     builder = builder.add_source(config::Environment::with_prefix("SPARAGNE").separator("__"));

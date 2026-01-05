@@ -31,6 +31,7 @@ pub async fn vault_new(
         id: Some(vault_id),
         name: Some(payload.name),
         currency: Some(currency),
+        owner: Some(user.username),
     }))
 }
 
@@ -55,6 +56,7 @@ pub async fn get(
         currency: Some(match vault.currency {
             engine::Currency::Eur => api_types::Currency::Eur,
         }),
+        owner: Some(vault.user_id),
     }))
 }
 
@@ -116,6 +118,7 @@ pub async fn snapshot(
         currency: match vault.currency {
             engine::Currency::Eur => api_types::Currency::Eur,
         },
+        owner: Some(vault.user_id),
         wallets,
         flows,
         unallocated_flow_id,

@@ -57,24 +57,18 @@ impl Client {
         &self,
         username: &str,
         password: &str,
-        vault_name: &str,
+        payload: &Vault,
     ) -> std::result::Result<Vault, ClientError> {
         let endpoint = self
             .base_url
             .join("vault/get")
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
-        let payload = Vault {
-            id: None,
-            name: Some(vault_name.to_string()),
-            currency: None,
-        };
-
         let res = self
             .http
             .post(endpoint)
             .basic_auth(username, Some(password))
-            .json(&payload)
+            .json(payload)
             .send()
             .await
             .map_err(ClientError::Transport)?;
@@ -86,24 +80,18 @@ impl Client {
         &self,
         username: &str,
         password: &str,
-        vault_name: &str,
+        payload: &Vault,
     ) -> std::result::Result<VaultSnapshot, ClientError> {
         let endpoint = self
             .base_url
             .join("vault/snapshot")
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
-        let payload = Vault {
-            id: None,
-            name: Some(vault_name.to_string()),
-            currency: None,
-        };
-
         let res = self
             .http
             .post(endpoint)
             .basic_auth(username, Some(password))
-            .json(&payload)
+            .json(payload)
             .send()
             .await
             .map_err(ClientError::Transport)?;

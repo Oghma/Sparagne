@@ -72,9 +72,9 @@ fn parse_server_override(value: &str) -> Result<(String, u16), ConfigError> {
     let (bind, port) = value
         .rsplit_once(':')
         .ok_or_else(|| ConfigError::Message("SPARAGNE_SERVER must be host:port".to_string()))?;
-    let port = port.parse::<u16>().map_err(|err| {
-        ConfigError::Message(format!("SPARAGNE_SERVER invalid port: {err}"))
-    })?;
+    let port = port
+        .parse::<u16>()
+        .map_err(|err| ConfigError::Message(format!("SPARAGNE_SERVER invalid port: {err}")))?;
     if bind.is_empty() {
         return Err(ConfigError::Message(
             "SPARAGNE_SERVER requires a non-empty host".to_string(),

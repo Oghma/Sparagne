@@ -50,11 +50,7 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
 }
 
 fn render_view(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let vault_name = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.name.as_deref())
-        .unwrap_or("Main");
+    let vault_name = display_vault_name(state).unwrap_or_else(|| "Main".to_string());
     let vault_id = state
         .vault
         .as_ref()
@@ -132,6 +128,18 @@ fn render_view(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
     frame.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+fn display_vault_name(state: &AppState) -> Option<String> {
+    let vault = state.vault.as_ref()?;
+    let name = vault.name.as_deref()?;
+    let owner = vault.owner.as_deref();
+    let username = state.login.username.trim();
+
+    match owner {
+        Some(owner) if !owner.is_empty() && owner != username => Some(format!("{name} ({owner})")),
+        _ => Some(name.to_string()),
+    }
 }
 
 fn render_create(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {

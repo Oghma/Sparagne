@@ -192,6 +192,7 @@ impl ApiClient {
                 id: None,
                 name: Some("Main".to_string()),
                 currency: None,
+                owner: None,
             },
         )
         .await
@@ -208,6 +209,7 @@ impl ApiClient {
                 id: None,
                 name: Some("Main".to_string()),
                 currency: None,
+                owner: None,
             },
         )
         .await
@@ -258,6 +260,7 @@ impl ApiClient {
                 id: None,
                 name: Some("Main".to_string()),
                 currency: None,
+                owner: None,
             },
         )
         .await

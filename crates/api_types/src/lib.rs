@@ -128,6 +128,7 @@ pub mod vault {
         pub id: Option<String>,
         pub name: Option<String>,
         pub currency: Option<Currency>,
+        pub owner: Option<String>,
     }
 
     /// A vault snapshot for UI clients (bot/TUI).
@@ -139,6 +140,7 @@ pub mod vault {
         pub id: String,
         pub name: String,
         pub currency: Currency,
+        pub owner: Option<String>,
         pub wallets: Vec<WalletView>,
         pub flows: Vec<FlowView>,
         pub unallocated_flow_id: Uuid,

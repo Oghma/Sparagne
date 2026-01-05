@@ -401,6 +401,7 @@ mod http_tests {
                     id: None,
                     name: Some("Main".to_string()),
                     currency: None,
+                    owner: None,
                 })
                 .unwrap(),
             ))
@@ -421,6 +422,7 @@ mod http_tests {
                     id: None,
                     name: Some("Main".to_string()),
                     currency: None,
+                    owner: None,
                 })
                 .unwrap(),
             ))
@@ -484,6 +486,7 @@ mod http_tests {
             id: Some(vault_id.clone()),
             name: None,
             currency: None,
+            owner: None,
         };
 
         let req = axum::http::Request::builder()

@@ -83,6 +83,7 @@ Notes:
 - `server.database` is a `Database` enum (`Memory` or `{ Sqlite = "path" }`).
 - `SPARAGNE_SERVER=host:port` overrides `server.bind` and `server.port`.
 - Telegram bot requires a dedicated service user.
+- If multiple vaults share the same name, your own vault is preferred. To access a shared one, use `tui.vault = "Main (owner)"` or `tui.vault = "id:<uuid>"`.
 
 ## Data and storage
 

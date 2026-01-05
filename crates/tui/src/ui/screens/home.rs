@@ -14,7 +14,7 @@ use crate::{
     ui::{
         components::{
             card::{Card, StatCard},
-            charts::{ascii_bar, mini_bar_chart},
+            charts::{PieSlice, ascii_bar, mini_bar_chart, render_pie_chart},
             money::{inline_progress_bar, styled_amount},
         },
         theme::Theme,
@@ -158,31 +158,75 @@ fn render_wallets_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
-    let items: Vec<ListItem> = state
-        .snapshot
-        .as_ref()
-        .map(|snap| {
-            snap.wallets
-                .iter()
-                .filter(|w| !w.archived)
-                .take(inner.height as usize)
-                .map(|wallet| {
-                    let balance = styled_amount(wallet.balance_minor, currency, theme);
-                    let name = Span::styled(&wallet.name, Style::default().fg(theme.text));
-
-                    ListItem::new(Line::from(vec![name, Span::raw("  "), balance]))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    if items.is_empty() {
+    let Some(snapshot) = state.snapshot.as_ref() else {
         frame.render_widget(
             Paragraph::new(Span::styled("No wallets", Style::default().fg(theme.dim))),
             inner,
         );
+        return;
+    };
+
+    let palette = pie_palette(theme);
+    let entries: Vec<(String, i64, ratatui::style::Color)> = snapshot
+        .wallets
+        .iter()
+        .filter(|wallet| !wallet.archived)
+        .enumerate()
+        .map(|(idx, wallet)| {
+            let color = palette[idx % palette.len()];
+            (wallet.name.clone(), wallet.balance_minor, color)
+        })
+        .collect();
+
+    let show_pie = should_show_pie(inner);
+    let (pie_area, list_area) = if show_pie {
+        let pie_width = pie_width(inner.width);
+        let columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(pie_width), Constraint::Min(0)])
+            .split(inner);
+        (Some(columns[0]), columns[1])
     } else {
-        frame.render_widget(List::new(items), inner);
+        (None, inner)
+    };
+
+    if let Some(pie_area) = pie_area {
+        let slices: Vec<PieSlice> = entries
+            .iter()
+            .filter(|(_, balance, _)| *balance != 0)
+            .map(|(_, balance, color)| PieSlice {
+                value: balance.unsigned_abs(),
+                color: *color,
+            })
+            .collect();
+        render_pie_chart(frame, pie_area, "", &slices, theme);
+    }
+
+    let items: Vec<ListItem> = entries
+        .iter()
+        .take(list_area.height as usize)
+        .map(|(name, balance, color)| {
+            let balance = styled_amount(*balance, currency, theme);
+            let marker = Span::styled("●", Style::default().fg(*color));
+            let name = Span::styled(name.as_str(), Style::default().fg(theme.text));
+
+            ListItem::new(Line::from(vec![
+                marker,
+                Span::raw(" "),
+                name,
+                Span::raw("  "),
+                balance,
+            ]))
+        })
+        .collect();
+
+    if items.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled("No wallets", Style::default().fg(theme.dim))),
+            list_area,
+        );
+    } else {
+        frame.render_widget(List::new(items), list_area);
     }
 }
 
@@ -193,63 +237,103 @@ fn render_flows_panel(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
-    let items: Vec<ListItem> = state
-        .snapshot
-        .as_ref()
-        .map(|snap| {
-            let max_balance = snap
-                .flows
-                .iter()
-                .map(|flow| flow.balance_minor.saturating_abs() as u64)
-                .max()
-                .unwrap_or(0);
-
-            snap.flows
-                .iter()
-                .filter(|f| !f.archived)
-                .take(inner.height as usize)
-                .map(|flow| {
-                    let balance_str = Money::new(flow.balance_minor).format(currency);
-                    let name_style = if flow.is_unallocated {
-                        Style::default().fg(theme.dim)
-                    } else {
-                        Style::default().fg(theme.text)
-                    };
-
-                    // For now, show a simple bar (we don't have cap info in FlowView)
-                    // TODO: Add cap info to FlowView API to show proper progress
-                    let bar_width = 10;
-                    let bar = ascii_bar(
-                        flow.balance_minor.saturating_abs() as u64,
-                        max_balance,
-                        bar_width,
-                    );
-
-                    let balance_color = if flow.balance_minor >= 0 {
-                        theme.positive
-                    } else {
-                        theme.negative
-                    };
-
-                    ListItem::new(Line::from(vec![
-                        Span::styled(&flow.name, name_style),
-                        Span::raw("  "),
-                        Span::styled(balance_str, Style::default().fg(balance_color)),
-                        Span::raw(" "),
-                        Span::styled(bar, Style::default().fg(theme.dim)),
-                    ]))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    if items.is_empty() {
+    let Some(snapshot) = state.snapshot.as_ref() else {
         frame.render_widget(
             Paragraph::new(Span::styled("No flows", Style::default().fg(theme.dim))),
             inner,
         );
+        return;
+    };
+
+    let palette = pie_palette(theme);
+    let entries: Vec<(String, i64, bool, ratatui::style::Color)> = snapshot
+        .flows
+        .iter()
+        .filter(|flow| !flow.archived)
+        .enumerate()
+        .map(|(idx, flow)| {
+            let color = palette[idx % palette.len()];
+            (
+                flow.name.clone(),
+                flow.balance_minor,
+                flow.is_unallocated,
+                color,
+            )
+        })
+        .collect();
+
+    let show_pie = should_show_pie(inner);
+    let (pie_area, list_area) = if show_pie {
+        let pie_width = pie_width(inner.width);
+        let columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(pie_width), Constraint::Min(0)])
+            .split(inner);
+        (Some(columns[0]), columns[1])
     } else {
-        frame.render_widget(List::new(items), inner);
+        (None, inner)
+    };
+
+    if let Some(pie_area) = pie_area {
+        let slices: Vec<PieSlice> = entries
+            .iter()
+            .filter(|(_, balance, _, _)| *balance != 0)
+            .map(|(_, balance, _, color)| PieSlice {
+                value: balance.unsigned_abs(),
+                color: *color,
+            })
+            .collect();
+        render_pie_chart(frame, pie_area, "", &slices, theme);
+    }
+
+    let max_balance = entries
+        .iter()
+        .map(|(_, balance, _, _)| balance.unsigned_abs())
+        .max()
+        .unwrap_or(0);
+
+    let items: Vec<ListItem> = entries
+        .iter()
+        .take(list_area.height as usize)
+        .map(|(name, balance, is_unallocated, color)| {
+            let balance_str = Money::new(*balance).format(currency);
+            let name_style = if *is_unallocated {
+                Style::default().fg(theme.dim)
+            } else {
+                Style::default().fg(theme.text)
+            };
+
+            // For now, show a simple bar (we don't have cap info in FlowView)
+            // TODO: Add cap info to FlowView API to show proper progress
+            let bar_width = 10;
+            let bar = ascii_bar(balance.unsigned_abs(), max_balance, bar_width);
+
+            let balance_color = if *balance >= 0 {
+                theme.positive
+            } else {
+                theme.negative
+            };
+            let marker = Span::styled("●", Style::default().fg(*color));
+
+            ListItem::new(Line::from(vec![
+                marker,
+                Span::raw(" "),
+                Span::styled(name.as_str(), name_style),
+                Span::raw("  "),
+                Span::styled(balance_str, Style::default().fg(balance_color)),
+                Span::raw(" "),
+                Span::styled(bar, Style::default().fg(theme.dim)),
+            ]))
+        })
+        .collect();
+
+    if items.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled("No flows", Style::default().fg(theme.dim))),
+            list_area,
+        );
+    } else {
+        frame.render_widget(List::new(items), list_area);
     }
 }
 
@@ -360,4 +444,25 @@ fn kind_label(kind: TransactionKind) -> &'static str {
         TransactionKind::TransferWallet => "⇄ Transfer",
         TransactionKind::TransferFlow => "⇄ Transfer",
     }
+}
+
+fn pie_palette(theme: &Theme) -> [ratatui::style::Color; 6] {
+    [
+        theme.accent,
+        theme.positive,
+        theme.warning,
+        theme.negative,
+        theme.text,
+        theme.text_muted,
+    ]
+}
+
+fn should_show_pie(area: Rect) -> bool {
+    let pie_width = pie_width(area.width);
+    area.height >= 7 && area.width >= pie_width.saturating_add(14)
+}
+
+fn pie_width(total_width: u16) -> u16 {
+    let width = total_width.saturating_mul(2) / 5;
+    width.clamp(10, 18)
 }

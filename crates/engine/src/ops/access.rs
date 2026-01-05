@@ -394,13 +394,14 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<vault::Model> {
         let vault_name = normalize_required_name(vault_name, "vault")?;
+        let owner_hint = parse_vault_name_owner(&vault_name);
         let vault_name_lower = vault_name.to_lowercase();
         let models: Vec<vault::Model> = vault::Entity::find()
             .filter(Expr::cust("LOWER(name)").eq(vault_name_lower))
             .all(db)
             .await?;
 
-        let mut out: Option<vault::Model> = None;
+        let mut allowed = Vec::new();
         for model in models {
             let allowed = if model.user_id == user_id {
                 true
@@ -415,16 +416,78 @@ impl Engine {
                     .await?
             };
             if allowed {
-                if out.is_some() {
-                    return Err(EngineError::InvalidAmount(
-                        "ambiguous vault name".to_string(),
-                    ));
-                }
-                out = Some(model);
+                allowed.push(model);
             }
         }
 
-        out.ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))
+        if allowed.is_empty() {
+            if let Some((base, owner)) = owner_hint {
+                if let Some(model) = self
+                    .resolve_vault_by_name_owner(db, base.as_str(), owner.as_str(), user_id)
+                    .await?
+                {
+                    return Ok(model);
+                }
+            }
+            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+        }
+
+        if allowed.len() > 1 {
+            if let Some(pos) = allowed.iter().position(|model| model.user_id == user_id) {
+                return Ok(allowed.remove(pos));
+            }
+            if let Some((base, owner)) = owner_hint {
+                if let Some(model) = self
+                    .resolve_vault_by_name_owner(db, base.as_str(), owner.as_str(), user_id)
+                    .await?
+                {
+                    return Ok(model);
+                }
+            }
+            return Err(EngineError::InvalidAmount(
+                "ambiguous vault name".to_string(),
+            ));
+        }
+
+        Ok(allowed.remove(0))
+    }
+
+    async fn resolve_vault_by_name_owner(
+        &self,
+        db: &DatabaseTransaction,
+        vault_name: &str,
+        owner: &str,
+        user_id: &str,
+    ) -> ResultEngine<Option<vault::Model>> {
+        if vault_name.is_empty() || owner.is_empty() {
+            return Ok(None);
+        }
+        let vault_name = normalize_required_name(vault_name, "vault")?;
+        let vault_name_lower = vault_name.to_lowercase();
+        let model = vault::Entity::find()
+            .filter(Expr::cust("LOWER(name)").eq(vault_name_lower))
+            .filter(vault::Column::UserId.eq(owner))
+            .one(db)
+            .await?;
+
+        let Some(model) = model else {
+            return Ok(None);
+        };
+
+        let allowed = if model.user_id == user_id {
+            true
+        } else if self
+            .vault_membership_role(db, model.id, user_id)
+            .await?
+            .is_some()
+        {
+            true
+        } else {
+            self.has_flow_membership_in_vault(db, model.id, user_id)
+                .await?
+        };
+
+        if allowed { Ok(Some(model)) } else { Ok(None) }
     }
 
     pub(super) async fn unallocated_flow_id(
@@ -487,4 +550,18 @@ impl Engine {
         }
         Ok(first.id)
     }
+}
+
+fn parse_vault_name_owner(value: &str) -> Option<(String, String)> {
+    let trimmed = value.trim();
+    if !trimmed.ends_with(')') {
+        return None;
+    }
+    let (base, owner) = trimmed.rsplit_once(" (")?;
+    let owner = owner.trim_end_matches(')').trim();
+    let base = base.trim();
+    if base.is_empty() || owner.is_empty() {
+        return None;
+    }
+    Some((base.to_string(), owner.to_string()))
 }

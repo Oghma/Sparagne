@@ -337,6 +337,16 @@ impl App {
                             self.state.section = Section::Home;
                         }
                     }
+                } else if self.state.section == Section::Members {
+                    match self.state.members.mode {
+                        MembersMode::Form => {
+                            self.reset_member_form();
+                            self.state.members.mode = MembersMode::List;
+                        }
+                        MembersMode::List => {
+                            self.state.section = Section::Home;
+                        }
+                    }
                 } else if self.state.section == Section::Stats {
                     self.state.section = Section::Home;
                 }
@@ -427,6 +437,12 @@ impl App {
                     self.backspace_wallet_form();
                 } else if self.state.section == Section::Flows {
                     self.backspace_flow_form();
+                } else if self.state.section == Section::Members
+                    && self.state.members.mode == MembersMode::Form
+                {
+                    if self.state.members.form.focus == MemberFormField::Username {
+                        self.state.members.form.username.pop();
+                    }
                 } else if self.state.section == Section::Vault {
                     self.backspace_vault_form();
                 }
@@ -808,19 +824,33 @@ impl App {
     async fn attempt_login(&mut self) -> Result<()> {
         let username = self.state.login.username.trim();
         let password = self.state.login.password.trim();
-        let vault_name = self.config.vault.trim();
+        let vault_payload = self.vault_payload_from_config();
+        let has_vault = vault_payload
+            .id
+            .as_deref()
+            .map(|id| !id.trim().is_empty())
+            .unwrap_or(false)
+            || vault_payload
+                .name
+                .as_deref()
+                .map(|name| !name.trim().is_empty())
+                .unwrap_or(false);
 
-        if username.is_empty() || password.is_empty() || vault_name.is_empty() {
+        if username.is_empty() || password.is_empty() || !has_vault {
             self.state.login.message = Some("Compila tutti i campi.".to_string());
             return Ok(());
         }
 
-        match self.client.vault_get(username, password, vault_name).await {
+        match self
+            .client
+            .vault_get(username, password, &vault_payload)
+            .await
+        {
             Ok(vault) => {
                 self.state.vault = Some(vault);
                 match self
                     .client
-                    .vault_snapshot(username, password, vault_name)
+                    .vault_snapshot(username, password, &vault_payload)
                     .await
                 {
                     Ok(snapshot) => {
@@ -3476,13 +3506,13 @@ impl App {
     }
 
     async fn refresh_snapshot(&mut self) -> Result<()> {
-        let vault_name = self.current_vault_name();
+        let vault_payload = self.current_vault_payload();
         let res = self
             .client
             .vault_snapshot(
                 self.state.login.username.as_str(),
                 self.state.login.password.as_str(),
-                vault_name.as_str(),
+                &vault_payload,
             )
             .await;
 
@@ -3561,6 +3591,7 @@ impl App {
             id: vault_id.clone(),
             name,
             currency,
+            owner: vault.owner.clone(),
             wallets: Vec::new(),
             flows,
             unallocated_flow_id,
@@ -3616,12 +3647,16 @@ impl App {
         self.state.last_flow_id = last_valid.or(Some(snapshot.unallocated_flow_id));
     }
 
-    fn current_vault_name(&self) -> String {
-        self.state
-            .vault
-            .as_ref()
-            .and_then(|vault| vault.name.clone())
-            .unwrap_or_else(|| self.config.vault.clone())
+    fn current_vault_payload(&self) -> Vault {
+        if let Some(vault) = self.state.vault.as_ref() {
+            return Vault {
+                id: vault.id.clone(),
+                name: vault.name.clone(),
+                currency: None,
+                owner: None,
+            };
+        }
+        self.vault_payload_from_config()
     }
 
     fn current_vault_id(&self) -> Result<String> {
@@ -3630,6 +3665,44 @@ impl App {
             .as_ref()
             .and_then(|vault| vault.id.clone())
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))
+    }
+
+    fn vault_payload_from_config(&self) -> Vault {
+        let raw = self.config.vault.trim();
+        if raw.is_empty() {
+            return Vault {
+                id: None,
+                name: None,
+                currency: None,
+                owner: None,
+            };
+        }
+
+        if let Some(stripped) = raw.strip_prefix("id:") {
+            let id = stripped.trim();
+            return Vault {
+                id: (!id.is_empty()).then_some(id.to_string()),
+                name: None,
+                currency: None,
+                owner: None,
+            };
+        }
+
+        if uuid::Uuid::parse_str(raw).is_ok() {
+            return Vault {
+                id: Some(raw.to_string()),
+                name: None,
+                currency: None,
+                owner: None,
+            };
+        }
+
+        Vault {
+            id: None,
+            name: Some(raw.to_string()),
+            currency: None,
+            owner: None,
+        }
     }
 
     fn selected_wallet(&self) -> Option<&api_types::vault::WalletView> {
@@ -4138,6 +4211,9 @@ impl App {
 
     async fn handle_members_input(&mut self, ch: char) -> Result<bool> {
         if self.state.section != Section::Members {
+            return Ok(false);
+        }
+        if self.state.members.mode == MembersMode::Form {
             return Ok(false);
         }
 
@@ -4891,7 +4967,7 @@ impl App {
         let vault_id = self.current_vault_id()?;
         let name = self.state.wallets.form.name.trim();
         if name.is_empty() {
-            self.state.wallets.form.error = Some("Inserisci un nome.".to_string());
+            self.state.wallets.form.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -4905,7 +4981,7 @@ impl App {
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
-                self.state.wallets.form.error = Some("Saldo iniziale non valido.".to_string());
+                self.state.wallets.form.error = Some("Invalid opening balance.".to_string());
                 return Ok(());
             }
         };
@@ -4930,14 +5006,14 @@ impl App {
                 self.state.wallets.mode = WalletsMode::List;
                 self.refresh_snapshot().await?;
                 self.select_wallet_by_id(created.id);
-                self.set_toast("Wallet creato.", ToastLevel::Success);
+                self.set_toast("Wallet created.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.wallets.form.error = Some(login_message_for_error(err));
-                self.set_toast("Errore creazione wallet.", ToastLevel::Error);
+                self.set_toast("Failed to create wallet.", ToastLevel::Error);
             }
         }
 
@@ -4946,12 +5022,12 @@ impl App {
 
     async fn submit_wallet_rename(&mut self) -> Result<()> {
         let Some(wallet) = self.selected_wallet() else {
-            self.state.wallets.form.error = Some("Nessun wallet selezionato.".to_string());
+            self.state.wallets.form.error = Some("No wallet selected.".to_string());
             return Ok(());
         };
         let name = self.state.wallets.form.name.trim();
         if name.is_empty() {
-            self.state.wallets.form.error = Some("Inserisci un nome.".to_string());
+            self.state.wallets.form.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -4974,14 +5050,14 @@ impl App {
                 self.reset_wallet_form();
                 self.state.wallets.mode = WalletsMode::List;
                 self.refresh_snapshot().await?;
-                self.set_toast("Wallet aggiornato.", ToastLevel::Success);
+                self.set_toast("Wallet updated.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.wallets.form.error = Some(login_message_for_error(err));
-                self.set_toast("Errore aggiornamento wallet.", ToastLevel::Error);
+                self.set_toast("Failed to update wallet.", ToastLevel::Error);
             }
         }
 
@@ -5244,7 +5320,7 @@ impl App {
         let vault_id = self.current_vault_id()?;
         let name = self.state.flows.form.name.trim().to_string();
         if name.is_empty() {
-            self.state.flows.form.error = Some("Inserisci un nome.".to_string());
+            self.state.flows.form.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -5258,12 +5334,12 @@ impl App {
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
-                self.state.flows.form.error = Some("Saldo iniziale non valido.".to_string());
+                self.state.flows.form.error = Some("Invalid opening allocation.".to_string());
                 return Ok(());
             }
         };
         if opening < 0 {
-            self.state.flows.form.error = Some("Saldo iniziale deve essere >= 0.".to_string());
+            self.state.flows.form.error = Some("Opening allocation must be >= 0.".to_string());
             return Ok(());
         }
 
@@ -5306,14 +5382,14 @@ impl App {
                 self.state.flows.mode = FlowsMode::List;
                 self.refresh_snapshot().await?;
                 self.select_flow_by_id(created.id);
-                self.set_toast("Flow creato.", ToastLevel::Success);
+                self.set_toast("Flow created.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.form.error = Some(login_message_for_error(err));
-                self.set_toast("Errore creazione flow.", ToastLevel::Error);
+                self.set_toast("Failed to create flow.", ToastLevel::Error);
             }
         }
 
@@ -5322,16 +5398,16 @@ impl App {
 
     async fn submit_flow_rename(&mut self) -> Result<()> {
         let Some(flow) = self.selected_flow() else {
-            self.state.flows.form.error = Some("Nessun flow selezionato.".to_string());
+            self.state.flows.form.error = Some("No flow selected.".to_string());
             return Ok(());
         };
         if flow.is_unallocated {
-            self.state.flows.form.error = Some("Unallocated non si può rinominare.".to_string());
+            self.state.flows.form.error = Some("Unallocated cannot be renamed.".to_string());
             return Ok(());
         }
         let name = self.state.flows.form.name.trim();
         if name.is_empty() {
-            self.state.flows.form.error = Some("Inserisci un nome.".to_string());
+            self.state.flows.form.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -5355,14 +5431,14 @@ impl App {
                 self.reset_flow_form();
                 self.state.flows.mode = FlowsMode::List;
                 self.refresh_snapshot().await?;
-                self.set_toast("Flow aggiornato.", ToastLevel::Success);
+                self.set_toast("Flow updated.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.form.error = Some(login_message_for_error(err));
-                self.set_toast("Errore aggiornamento flow.", ToastLevel::Error);
+                self.set_toast("Failed to update flow.", ToastLevel::Error);
             }
         }
 
@@ -5371,11 +5447,11 @@ impl App {
 
     async fn toggle_flow_archive(&mut self) -> Result<()> {
         let Some(flow) = self.selected_flow() else {
-            self.state.flows.error = Some("Nessun flow selezionato.".to_string());
+            self.state.flows.error = Some("No flow selected.".to_string());
             return Ok(());
         };
         if flow.is_unallocated {
-            self.state.flows.error = Some("Unallocated non si può archiviare.".to_string());
+            self.state.flows.error = Some("Unallocated cannot be archived.".to_string());
             return Ok(());
         }
         let res = self
@@ -5396,14 +5472,14 @@ impl App {
         match res {
             Ok(()) => {
                 self.refresh_snapshot().await?;
-                self.set_toast("Flow aggiornato.", ToastLevel::Success);
+                self.set_toast("Flow updated.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.error = Some(login_message_for_error(err));
-                self.set_toast("Errore archivio flow.", ToastLevel::Error);
+                self.set_toast("Failed to archive flow.", ToastLevel::Error);
             }
         }
 
@@ -5483,6 +5559,7 @@ impl App {
             id: self.state.vault.as_ref().and_then(|v| v.id.clone()),
             name: self.state.vault.as_ref().and_then(|v| v.name.clone()),
             currency: None,
+            owner: None,
         };
 
         let res = self
@@ -6641,7 +6718,11 @@ fn login_message_for_error(err: ClientError) -> String {
         },
         ClientError::Conflict(payload) => format!("Conflitto: {}", payload.message),
         ClientError::Validation(payload) => {
-            format!("Errore di validazione: {}", payload.message)
+            if payload.message.contains("ambiguous vault name") {
+                "Vault name is ambiguous. Use \"Main (owner)\" or a vault id.".to_string()
+            } else {
+                format!("Errore di validazione: {}", payload.message)
+            }
         }
         ClientError::BadRequest(payload) => format!("Richiesta non valida: {}", payload.message),
         ClientError::Server(payload) => format!("Errore server: {}", payload.message),
