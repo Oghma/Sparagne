@@ -1,12 +1,20 @@
 use ratatui::{
     Frame,
-    layout::Rect,
-    style::{Modifier, Style},
+    layout::{Alignment, Rect},
+    style::{Color, Modifier, Style},
     symbols,
-    widgets::{BarChart, Sparkline},
+    text::{Line, Span},
+    widgets::{BarChart, Paragraph, Sparkline, Wrap},
 };
+use std::f64::consts::{FRAC_PI_2, TAU};
 
 use crate::ui::{components::card::Card, theme::Theme};
+
+#[derive(Debug, Clone, Copy)]
+pub struct PieSlice {
+    pub value: u64,
+    pub color: Color,
+}
 
 /// Renders a horizontal bar chart with labeled bars.
 ///
@@ -58,6 +66,42 @@ pub fn render_sparkline(
         card.render_frame(frame, area);
         frame.render_widget(sparkline, inner);
     }
+}
+
+/// Renders a compact pie chart for proportional data.
+pub fn render_pie_chart(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    title: &str,
+    slices: &[PieSlice],
+    theme: &Theme,
+) {
+    let total: u64 = slices.iter().map(|slice| slice.value).sum();
+
+    let (container, inner) = if title.is_empty() {
+        (None, area)
+    } else {
+        let card = Card::new(title, theme);
+        let inner = card.inner(area);
+        (Some(card), inner)
+    };
+
+    if let Some(card) = container.as_ref() {
+        card.render_frame(frame, area);
+    }
+
+    if total == 0 || inner.width < 4 || inner.height < 3 {
+        let empty = Paragraph::new(Span::styled("No data", Style::default().fg(theme.dim)))
+            .alignment(Alignment::Center);
+        frame.render_widget(empty, inner);
+        return;
+    }
+
+    let lines = pie_lines(inner, slices, total);
+    let pie = Paragraph::new(lines)
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: false });
+    frame.render_widget(pie, inner);
 }
 
 /// Renders an inline sparkline without borders (for embedding in other
@@ -179,4 +223,79 @@ pub fn compute_percentage(value: i64, max: i64) -> u16 {
         return 0;
     }
     ((value.abs() as f64 / max.abs() as f64) * 100.0).min(100.0) as u16
+}
+
+fn pie_lines(area: Rect, slices: &[PieSlice], total: u64) -> Vec<Line<'static>> {
+    let width = area.width as usize;
+    let height = area.height as usize;
+    if width == 0 || height == 0 {
+        return Vec::new();
+    }
+
+    let x_scale = 0.55;
+    let cx = (width as f64 - 1.0) / 2.0;
+    let cy = (height as f64 - 1.0) / 2.0;
+    let max_x = cx * x_scale;
+    let max_y = cy;
+    let radius = max_x.min(max_y);
+
+    let mut lines = Vec::with_capacity(height);
+    for y in 0..height {
+        let mut spans = Vec::new();
+        let mut current_color: Option<Color> = None;
+        let mut buffer = String::new();
+
+        for x in 0..width {
+            let dx = (x as f64 - cx) * x_scale;
+            let dy = y as f64 - cy;
+            let dist = (dx * dx + dy * dy).sqrt();
+            let (ch, color) = if dist <= radius {
+                let mut angle = dy.atan2(dx) + FRAC_PI_2;
+                if angle < 0.0 {
+                    angle += TAU;
+                }
+                ("●", Some(pie_color(angle, slices, total)))
+            } else {
+                (" ", None)
+            };
+
+            if color != current_color {
+                if !buffer.is_empty() {
+                    spans.push(Span::styled(
+                        buffer.clone(),
+                        Style::default().fg(current_color.unwrap_or(Color::Reset)),
+                    ));
+                    buffer.clear();
+                }
+                current_color = color;
+            }
+            buffer.push_str(ch);
+        }
+
+        if !buffer.is_empty() {
+            spans.push(Span::styled(
+                buffer,
+                Style::default().fg(current_color.unwrap_or(Color::Reset)),
+            ));
+        }
+
+        lines.push(Line::from(spans));
+    }
+
+    lines
+}
+
+fn pie_color(angle: f64, slices: &[PieSlice], total: u64) -> Color {
+    let mut acc = 0.0;
+    for slice in slices {
+        let ratio = slice.value as f64 / total as f64;
+        acc += ratio * TAU;
+        if angle <= acc {
+            return slice.color;
+        }
+    }
+    slices
+        .last()
+        .map(|slice| slice.color)
+        .unwrap_or(Color::Reset)
 }

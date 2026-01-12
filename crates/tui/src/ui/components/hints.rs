@@ -79,6 +79,8 @@ pub mod common {
             KeyHint::new("t", "txn"),
             KeyHint::new("w", "wallet"),
             KeyHint::new("f", "flow"),
+            KeyHint::new("g", "categories"),
+            KeyHint::new("m", "members"),
             KeyHint::new("v", "vault"),
             KeyHint::new("s", "stats"),
         ]

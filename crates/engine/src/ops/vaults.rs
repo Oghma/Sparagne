@@ -4,8 +4,8 @@ use sea_orm::{ActiveValue, QueryFilter, Statement, prelude::*, sea_query::Expr};
 use uuid::Uuid;
 
 use crate::{
-    CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, Wallet, cash_flows,
-    categories,
+    CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, VaultHeader, Wallet,
+    cash_flows, categories, flow_memberships,
     util::{normalize_category_key, normalize_required_name},
     vault, vault_memberships, wallets,
 };
@@ -13,13 +13,15 @@ use crate::{
 use super::{Engine, parse_vault_uuid};
 
 impl Engine {
-    /// Delete or archive a vault
+    /// Delete or archive a vault.
+    ///
+    /// Authorization: vault owner only.
     pub async fn delete_vault(&self, vault_id: &str, user_id: &str) -> ResultEngine<()> {
         let vault_id = vault_id.to_string();
         let user_id = user_id.to_string();
         self.with_tx(|engine, db_tx| Box::pin(async move {
             let vault_model = engine
-                .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
+                .require_vault_owner(db_tx, vault_id.as_str(), user_id.as_str())
                 .await?;
             let vault_db_id = vault_model.id;
 
@@ -171,6 +173,120 @@ impl Engine {
         .await
     }
 
+    /// Return vault metadata for a user who can access at least one shared
+    /// flow or the vault itself.
+    pub async fn vault_header(
+        &self,
+        vault_id: Option<&str>,
+        vault_name: Option<String>,
+        user_id: &str,
+    ) -> ResultEngine<VaultHeader> {
+        if vault_id.is_none() && vault_name.is_none() {
+            return Err(EngineError::KeyNotFound(
+                "missing vault id or name".to_string(),
+            ));
+        }
+        let vault_id = vault_id.map(str::to_string);
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                let model = if let Some(id) = vault_id.as_deref() {
+                    engine
+                        .require_vault_header_by_id(db_tx, id, user_id.as_str())
+                        .await?
+                } else {
+                    let name = vault_name.ok_or_else(|| {
+                        EngineError::KeyNotFound("missing vault id or name".to_string())
+                    })?;
+                    engine
+                        .require_vault_header_by_name(db_tx, &name, user_id.as_str())
+                        .await?
+                };
+
+                Ok(VaultHeader::from(model))
+            })
+        })
+        .await
+    }
+
+    /// List vault headers available to a user (owned, shared, or flow-shared).
+    pub async fn vault_list(&self, user_id: &str) -> ResultEngine<Vec<VaultHeader>> {
+        let user_id = user_id.to_string();
+        self.with_tx(|_engine, db_tx| {
+            Box::pin(async move {
+                let mut by_id: HashMap<Uuid, vault::Model> = HashMap::new();
+
+                let owned = vault::Entity::find()
+                    .filter(vault::Column::UserId.eq(user_id.clone()))
+                    .all(db_tx)
+                    .await?;
+                for model in owned {
+                    by_id.insert(model.id, model);
+                }
+
+                let member_vault_ids = vault_memberships::Entity::find()
+                    .filter(vault_memberships::Column::UserId.eq(user_id.clone()))
+                    .all(db_tx)
+                    .await?
+                    .into_iter()
+                    .map(|model| model.vault_id)
+                    .collect::<Vec<_>>();
+                if !member_vault_ids.is_empty() {
+                    let models = vault::Entity::find()
+                        .filter(vault::Column::Id.is_in(member_vault_ids))
+                        .all(db_tx)
+                        .await?;
+                    for model in models {
+                        by_id.entry(model.id).or_insert(model);
+                    }
+                }
+
+                let flow_ids = flow_memberships::Entity::find()
+                    .filter(flow_memberships::Column::UserId.eq(user_id.clone()))
+                    .all(db_tx)
+                    .await?
+                    .into_iter()
+                    .map(|model| model.flow_id)
+                    .collect::<Vec<_>>();
+                if !flow_ids.is_empty() {
+                    let vault_ids = cash_flows::Entity::find()
+                        .filter(cash_flows::Column::Id.is_in(flow_ids))
+                        .all(db_tx)
+                        .await?
+                        .into_iter()
+                        .map(|model| model.vault_id)
+                        .collect::<Vec<_>>();
+                    if !vault_ids.is_empty() {
+                        let models = vault::Entity::find()
+                            .filter(vault::Column::Id.is_in(vault_ids))
+                            .all(db_tx)
+                            .await?;
+                        for model in models {
+                            by_id.entry(model.id).or_insert(model);
+                        }
+                    }
+                }
+
+                let mut headers = by_id
+                    .into_values()
+                    .map(VaultHeader::from)
+                    .collect::<Vec<_>>();
+                let owner_id = user_id.clone();
+                headers.sort_by(|a, b| {
+                    let a_shared = a.owner != owner_id;
+                    let b_shared = b.owner != owner_id;
+                    let a_name = a.name.to_lowercase();
+                    let b_name = b.name.to_lowercase();
+                    let a_owner = a.owner.to_lowercase();
+                    let b_owner = b.owner.to_lowercase();
+                    (a_shared, a_name, a_owner).cmp(&(b_shared, b_name, b_owner))
+                });
+                Ok(headers)
+            })
+        })
+        .await
+    }
+
     /// Return a user `Vault`.
     /// Return a vault snapshot from DB, including all wallets and flows.
     pub async fn vault_snapshot(
@@ -240,7 +356,8 @@ impl Engine {
     /// Returns vault totals: `(currency, balance_minor, total_income_minor,
     /// total_expenses_minor)`.
     ///
-    /// Transfers are excluded from income/expense totals.
+    /// Authorization: vault owner only. Transfers are excluded from
+    /// income/expense totals.
     pub async fn vault_statistics(
         &self,
         vault_id: &str,
@@ -251,7 +368,7 @@ impl Engine {
         let user_id = user_id.to_string();
         self.with_tx(|engine, db_tx| Box::pin(async move {
             let vault_model = engine
-                .require_vault_by_id(db_tx, vault_id.as_str(), user_id.as_str())
+                .require_vault_owner(db_tx, vault_id.as_str(), user_id.as_str())
                 .await?;
             let currency = vault_model.currency;
             let vault_uuid = parse_vault_uuid(vault_id.as_str())?;

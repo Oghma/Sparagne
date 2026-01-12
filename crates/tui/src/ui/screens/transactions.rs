@@ -210,14 +210,15 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             .map(|c| format!("#{c}"))
             .unwrap_or_default();
 
-        let mut spans = Vec::new();
-        spans.push(Span::styled(
-            tx.occurred_at.format("%H:%M").to_string(),
-            Style::default().fg(theme.dim),
-        ));
-        spans.push(Span::raw("  "));
-        spans.push(kind_chip(tx.kind, theme));
-        spans.push(Span::raw(" "));
+        let mut spans = vec![
+            Span::styled(
+                tx.occurred_at.format("%H:%M").to_string(),
+                Style::default().fg(theme.dim),
+            ),
+            Span::raw("  "),
+            kind_chip(tx.kind, theme),
+            Span::raw(" "),
+        ];
         if let Some(voided) = void_chip(tx.voided, theme) {
             spans.push(voided);
             spans.push(Span::raw(" "));
@@ -1333,21 +1334,21 @@ fn filter_summary(state: &AppState) -> Option<String> {
     if let Some(to) = state.transactions.filter_to {
         parts.push(format!("to {}", to.format("%Y-%m-%d")));
     }
-    if let Some(kinds) = state.transactions.filter_kinds.as_ref() {
-        if !kinds.is_empty() {
-            let labels = kinds
-                .iter()
-                .map(|kind| match kind {
-                    TransactionKind::Income => "inc",
-                    TransactionKind::Expense => "exp",
-                    TransactionKind::Refund => "ref",
-                    TransactionKind::TransferWallet => "tw",
-                    TransactionKind::TransferFlow => "tf",
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            parts.push(format!("kinds {labels}"));
-        }
+    if let Some(kinds) = state.transactions.filter_kinds.as_ref()
+        && !kinds.is_empty()
+    {
+        let labels = kinds
+            .iter()
+            .map(|kind| match kind {
+                TransactionKind::Income => "inc",
+                TransactionKind::Expense => "exp",
+                TransactionKind::Refund => "ref",
+                TransactionKind::TransferWallet => "tw",
+                TransactionKind::TransferFlow => "tf",
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        parts.push(format!("kinds {labels}"));
     }
     if parts.is_empty() {
         None

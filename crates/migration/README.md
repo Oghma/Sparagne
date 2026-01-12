@@ -1,9 +1,8 @@
 # Running Migrator CLI
 
-This crate currently exposes a small custom migrator CLI (not the upstream `sea-orm-migration` CLI).
-We introduced it to keep migrations stable under Rust 1.92 and avoid pulling the `sea-orm-cli`
-dependency during the pre‑refactor phase. During the engine refactor we will re‑evaluate whether to
-keep this mini‑CLI or switch back to the official one.
+This crate exposes a small custom migrator CLI (not the upstream
+`sea-orm-migration` CLI). It keeps the workflow simple and stable under
+Rust 1.92; any future switch back to the official CLI is a post‑1.0 decision.
 
 ## Usage
 

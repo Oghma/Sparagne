@@ -84,6 +84,7 @@ struct Vault {
 #[derive(Subcommand, Debug)]
 enum VaultCommand {
     Create(VaultCreateArgs),
+    Delete(VaultDeleteArgs),
 }
 
 #[derive(Args, Debug)]
@@ -94,6 +95,14 @@ struct VaultCreateArgs {
     name: String,
     #[arg(long, default_value = "EUR")]
     currency: String,
+}
+
+#[derive(Args, Debug)]
+struct VaultDeleteArgs {
+    #[arg(long)]
+    owner: String,
+    #[arg(long)]
+    vault_id: String,
 }
 
 fn parse_currency(raw: &str) -> Result<Currency, String> {
@@ -262,6 +271,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .new_vault(&args.name, &args.owner, Some(currency))
                 .await?;
             println!("created vault: {} ({vault_id})", args.name);
+        }
+        Command::Vault(Vault {
+            command: VaultCommand::Delete(args),
+        }) => {
+            if users::Entity::find_by_id(args.owner.clone())
+                .one(&db)
+                .await?
+                .is_none()
+            {
+                eprintln!("user not found: {}", args.owner);
+                std::process::exit(1);
+            }
+
+            let engine = Engine::builder().database(db.clone()).build().await?;
+            engine.delete_vault(&args.vault_id, &args.owner).await?;
+            println!("deleted vault: {}", args.vault_id);
         }
     }
 

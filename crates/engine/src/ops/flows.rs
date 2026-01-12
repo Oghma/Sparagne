@@ -4,7 +4,7 @@ use uuid::Uuid;
 use sea_orm::{ActiveValue, QueryFilter, Statement, prelude::*, sea_query::Expr};
 
 use crate::{
-    CashFlow, EngineError, ResultEngine, TransactionKind, cash_flows,
+    CashFlow, EngineError, ResultEngine, TransactionKind, cash_flows, flow_memberships,
     util::{normalize_required_name, validate_flow_mode_fields},
     vault,
 };
@@ -80,6 +80,81 @@ impl Engine {
 
                 let flow = CashFlow::try_from((model, vault_currency))?;
                 Ok(flow)
+            })
+        })
+        .await
+    }
+
+    /// Lists flows the user can access within a vault.
+    ///
+    /// Authorization:
+    /// - If the user has vault access, returns all flows for the vault.
+    /// - Otherwise, returns only flows explicitly shared via flow memberships.
+    pub async fn list_accessible_flows(
+        &self,
+        vault_id: &str,
+        user_id: &str,
+        include_archived: bool,
+    ) -> ResultEngine<Vec<CashFlow>> {
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
+                let vault_model = vault::Entity::find_by_id(vault_uuid)
+                    .one(db_tx)
+                    .await?
+                    .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+                let vault_currency = vault_model.currency;
+
+                let has_vault_access = if vault_model.user_id == user_id {
+                    true
+                } else {
+                    engine
+                        .vault_membership_role(db_tx, vault_uuid, user_id.as_str())
+                        .await?
+                        .is_some()
+                };
+
+                let flow_models = if has_vault_access {
+                    let mut query = cash_flows::Entity::find()
+                        .filter(cash_flows::Column::VaultId.eq(vault_uuid));
+                    if !include_archived {
+                        query = query.filter(cash_flows::Column::Archived.eq(false));
+                    }
+                    query.all(db_tx).await?
+                } else {
+                    let rows: Vec<(flow_memberships::Model, Option<cash_flows::Model>)> =
+                        flow_memberships::Entity::find()
+                            .filter(flow_memberships::Column::UserId.eq(user_id.clone()))
+                            .find_also_related(cash_flows::Entity)
+                            .all(db_tx)
+                            .await?;
+
+                    let mut models = Vec::new();
+                    for (_membership, flow) in rows {
+                        let Some(flow) = flow else {
+                            continue;
+                        };
+                        if flow.vault_id != vault_uuid {
+                            continue;
+                        }
+                        if !include_archived && flow.archived {
+                            continue;
+                        }
+                        models.push(flow);
+                    }
+                    if models.is_empty() {
+                        return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+                    }
+                    models
+                };
+
+                let mut flows = Vec::with_capacity(flow_models.len());
+                for model in flow_models {
+                    flows.push(CashFlow::try_from((model, vault_currency))?);
+                }
+                Ok(flows)
             })
         })
         .await

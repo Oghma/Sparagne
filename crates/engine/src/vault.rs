@@ -7,6 +7,16 @@ use uuid::Uuid;
 
 use crate::{CashFlow, Currency, Wallet};
 
+/// Lightweight vault metadata used by APIs that don't need a full snapshot.
+#[derive(Debug, Clone)]
+pub struct VaultHeader {
+    pub id: String,
+    pub name: String,
+    pub currency: Currency,
+    /// Owner username for disambiguation in clients.
+    pub owner: String,
+}
+
 /// Holds wallets and cash flows
 #[derive(Debug)]
 pub struct Vault {
@@ -27,6 +37,17 @@ impl Vault {
             wallet: HashMap::new(),
             user_id: user_id.to_string(),
             currency: Currency::Eur,
+        }
+    }
+}
+
+impl From<Model> for VaultHeader {
+    fn from(model: Model) -> Self {
+        Self {
+            id: model.id.to_string(),
+            name: model.name,
+            currency: model.currency,
+            owner: model.user_id,
         }
     }
 }

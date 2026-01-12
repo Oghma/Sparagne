@@ -62,6 +62,8 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         }
         crate::app::Section::Wallets => screens::wallets::render(frame, content_inner, state),
         crate::app::Section::Flows => screens::flows::render(frame, content_inner, state),
+        crate::app::Section::Categories => screens::categories::render(frame, content_inner, state),
+        crate::app::Section::Members => screens::members::render(frame, content_inner, state),
         crate::app::Section::Vault => screens::vault::render(frame, content_inner, state),
         crate::app::Section::Stats => screens::stats::render(frame, content_inner, state),
     }
@@ -161,6 +163,8 @@ fn get_context_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         crate::app::Section::Transactions => get_transactions_hints(state),
         crate::app::Section::Wallets => get_wallets_hints(state),
         crate::app::Section::Flows => get_flows_hints(state),
+        crate::app::Section::Categories => get_categories_hints(state),
+        crate::app::Section::Members => get_members_hints(state),
         crate::app::Section::Vault => get_vault_hints(state),
         crate::app::Section::Stats => vec![
             components::hints::KeyHint::new("r", "refresh"),
@@ -225,6 +229,28 @@ fn get_wallets_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     }
 }
 
+fn get_members_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    match state.members.mode {
+        crate::app::MembersMode::List => {
+            let mut hints = components::hints::common::list_navigation();
+            hints.push(components::hints::KeyHint::new("a", "add"));
+            hints.push(components::hints::KeyHint::new("e", "edit"));
+            hints.push(components::hints::KeyHint::new("x", "remove"));
+            hints.push(components::hints::KeyHint::new("v/f", "scope"));
+            if state.members.scope == crate::app::MembersScope::Flow {
+                hints.push(components::hints::KeyHint::new("[/]", "flow"));
+            }
+            hints
+        }
+        crate::app::MembersMode::Form => vec![
+            components::hints::KeyHint::new("Tab", "next"),
+            components::hints::KeyHint::new("↑/↓", "role"),
+            components::hints::KeyHint::new("Enter", "save"),
+            components::hints::KeyHint::new("Esc", "cancel"),
+        ],
+    }
+}
+
 fn get_flows_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.flows.mode {
         crate::app::FlowsMode::List => {
@@ -243,17 +269,61 @@ fn get_flows_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     }
 }
 
+fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    match state.categories.mode {
+        crate::app::CategoriesMode::List => {
+            vec![
+                components::hints::KeyHint::new("↑↓", "select"),
+                components::hints::KeyHint::new("c", "create"),
+                components::hints::KeyHint::new("e", "rename"),
+                components::hints::KeyHint::new("a", "archive"),
+                components::hints::KeyHint::new("l", "aliases"),
+                components::hints::KeyHint::new("m", "merge"),
+                components::hints::KeyHint::new("r", "refresh"),
+            ]
+        }
+        crate::app::CategoriesMode::Merge => vec![
+            components::hints::KeyHint::new("Enter", "preview/merge"),
+            components::hints::KeyHint::new("Esc", "cancel"),
+        ],
+        crate::app::CategoriesMode::Create | crate::app::CategoriesMode::Rename => vec![
+            components::hints::KeyHint::new("Enter", "save"),
+            components::hints::KeyHint::new("Esc", "cancel"),
+        ],
+        crate::app::CategoriesMode::Aliases => vec![
+            components::hints::KeyHint::new("Tab", "focus"),
+            components::hints::KeyHint::new("Enter", "save"),
+            components::hints::KeyHint::new("x", "delete"),
+            components::hints::KeyHint::new("Esc", "back"),
+        ],
+    }
+}
+
 fn get_vault_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.vault_ui.mode {
-        crate::app::VaultMode::View => vec![
-            components::hints::KeyHint::new("c", "create"),
-            components::hints::KeyHint::new("d", "defaults"),
-        ],
+        crate::app::VaultMode::View => {
+            let delete_label = if state.vault_ui.confirm_delete {
+                "confirm delete"
+            } else {
+                "delete"
+            };
+            vec![
+                components::hints::KeyHint::new("c", "create"),
+                components::hints::KeyHint::new("d", "defaults"),
+                components::hints::KeyHint::new("l", "vaults"),
+                components::hints::KeyHint::new("x", delete_label),
+            ]
+        }
         crate::app::VaultMode::Create => components::hints::common::form_editing(),
         crate::app::VaultMode::Defaults => {
             let mut hints = components::hints::common::form_editing();
             hints.insert(1, components::hints::KeyHint::new("↑/↓", "change"));
             hints
         }
+        crate::app::VaultMode::Select => vec![
+            components::hints::KeyHint::new("↑/↓", "select"),
+            components::hints::KeyHint::new("Enter", "open"),
+            components::hints::KeyHint::new("Esc", "back"),
+        ],
     }
 }

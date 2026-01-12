@@ -162,6 +162,56 @@ fn help_lines(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
                 Span::raw(" mode"),
             ]));
         }
+        Section::Categories => {
+            lines.push(Line::from(vec![
+                Span::styled("c", Style::default().fg(theme.accent)),
+                Span::raw(" create  "),
+                Span::styled("e", Style::default().fg(theme.accent)),
+                Span::raw(" rename  "),
+                Span::styled("a", Style::default().fg(theme.accent)),
+                Span::raw(" archive  "),
+                Span::styled("l", Style::default().fg(theme.accent)),
+                Span::raw(" aliases"),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("m", Style::default().fg(theme.accent)),
+                Span::raw(" merge  "),
+                Span::styled("r", Style::default().fg(theme.accent)),
+                Span::raw(" refresh  "),
+                Span::styled("↑/↓", Style::default().fg(theme.accent)),
+                Span::raw(" select"),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("Enter", Style::default().fg(theme.accent)),
+                Span::raw(" preview/save  "),
+                Span::styled("Tab", Style::default().fg(theme.accent)),
+                Span::raw(" focus  "),
+                Span::styled("x", Style::default().fg(theme.accent)),
+                Span::raw(" delete  "),
+                Span::styled("Esc", Style::default().fg(theme.accent)),
+                Span::raw(" cancel"),
+            ]));
+        }
+        Section::Members => {
+            lines.push(Line::from(vec![
+                Span::styled("a", Style::default().fg(theme.accent)),
+                Span::raw(" add  "),
+                Span::styled("e", Style::default().fg(theme.accent)),
+                Span::raw(" edit  "),
+                Span::styled("x", Style::default().fg(theme.accent)),
+                Span::raw(" remove  "),
+                Span::styled("v/f", Style::default().fg(theme.accent)),
+                Span::raw(" scope"),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("[/]", Style::default().fg(theme.accent)),
+                Span::raw(" flow  "),
+                Span::styled("Tab", Style::default().fg(theme.accent)),
+                Span::raw(" next field  "),
+                Span::styled("↑/↓", Style::default().fg(theme.accent)),
+                Span::raw(" role"),
+            ]));
+        }
         Section::Vault => {
             lines.push(Line::from(vec![
                 Span::styled("c", Style::default().fg(theme.accent)),

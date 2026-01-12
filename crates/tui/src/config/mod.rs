@@ -1,9 +1,11 @@
 use clap::Parser;
 use serde::Deserialize;
+use std::env;
 
 use crate::error::Result;
 
-const DEFAULT_CONFIG_PATH: &str = "config/tui.toml";
+const DEFAULT_CONFIG_PATH: &str = "config/config.toml";
+const DEFAULT_XDG_CONFIG: &str = "sparagne/config.toml";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -48,11 +50,36 @@ struct Args {
 pub fn load() -> Result<AppConfig> {
     let args = Args::parse();
 
-    let config_path = args.config.as_deref().unwrap_or(DEFAULT_CONFIG_PATH);
     let mut builder = config::Config::builder();
-    builder = builder.add_source(config::File::with_name(config_path).required(false));
-    builder = builder.add_source(config::Environment::with_prefix("SPARAGNE_TUI"));
-    let mut settings: AppConfig = builder.build()?.try_deserialize()?;
+    if let Some(path) = args.config.or_else(|| env::var("SPARAGNE_CONFIG").ok()) {
+        builder =
+            builder.add_source(config::File::new(&path, config::FileFormat::Toml).required(false));
+    } else {
+        for path in default_config_paths() {
+            builder = builder
+                .add_source(config::File::new(&path, config::FileFormat::Toml).required(false));
+        }
+    }
+    builder = builder.add_source(config::Environment::with_prefix("SPARAGNE").separator("__"));
+    let settings = builder.build()?;
+    let mut settings = match settings.get::<AppConfig>("tui") {
+        Ok(config) => config,
+        Err(config::ConfigError::NotFound(_)) => AppConfig::default(),
+        Err(err) => return Err(err.into()),
+    };
+
+    if let Ok(base_url) = env::var("SPARAGNE_URL_SERVER") {
+        settings.base_url = base_url;
+    }
+    if let Ok(username) = env::var("SPARAGNE_USERNAME") {
+        settings.username = username;
+    }
+    if let Ok(vault) = env::var("SPARAGNE_VAULT") {
+        settings.vault = vault;
+    }
+    if let Ok(timezone) = env::var("SPARAGNE_TIMEZONE") {
+        settings.timezone = timezone;
+    }
 
     if let Some(base_url) = args.base_url {
         settings.base_url = base_url;
@@ -68,4 +95,16 @@ pub fn load() -> Result<AppConfig> {
     }
 
     Ok(settings)
+}
+
+fn default_config_paths() -> Vec<String> {
+    let mut paths = Vec::new();
+    if let Some(home) = env::var("XDG_CONFIG_HOME")
+        .ok()
+        .or_else(|| env::var("HOME").ok().map(|home| format!("{home}/.config")))
+    {
+        paths.push(format!("{home}/{DEFAULT_XDG_CONFIG}"));
+    }
+    paths.push(DEFAULT_CONFIG_PATH.to_string());
+    paths
 }

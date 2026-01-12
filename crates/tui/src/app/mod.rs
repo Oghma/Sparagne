@@ -12,14 +12,20 @@ use crate::{
 };
 
 use api_types::{
-    flow::{FlowMode, FlowNew, FlowUpdate},
+    category::{
+        CategoryAliasView, CategoryCreate, CategoryMergePreviewResponse, CategoryUpdate,
+        CategoryView,
+    },
+    error::ErrorCode,
+    flow::{FlowMode, FlowNew, FlowSharedList, FlowUpdate},
+    membership::{MemberUpsert, MemberView, MembershipRole},
     stats::Statistic,
     transaction::{
         ExpenseNew, IncomeNew, Refund, TransactionDetailResponse, TransactionGet, TransactionKind,
         TransactionList, TransactionListResponse, TransactionUpdate, TransactionView,
         TransactionVoid, TransferFlowNew, TransferWalletNew,
     },
-    vault::{Vault, VaultNew, VaultSnapshot},
+    vault::{FlowView, Vault, VaultNew, VaultSnapshot},
     wallet::{WalletNew, WalletUpdate},
 };
 use chrono::{DateTime, Datelike, Duration as ChronoDuration, FixedOffset, Offset, TimeZone, Utc};
@@ -39,6 +45,8 @@ pub enum Section {
     Transactions,
     Wallets,
     Flows,
+    Categories,
+    Members,
     Vault,
     Stats,
 }
@@ -50,6 +58,8 @@ impl Section {
             Self::Transactions => "Transactions",
             Self::Wallets => "Wallets",
             Self::Flows => "Flows",
+            Self::Categories => "Categories",
+            Self::Members => "Members",
             Self::Vault => "Vault",
             Self::Stats => "Stats",
         }
@@ -81,6 +91,8 @@ pub struct AppState {
     pub wallets: WalletsState,
     pub flows: FlowsState,
     pub vault_ui: VaultState,
+    pub categories: CategoriesState,
+    pub members: MembersState,
     pub stats: StatsState,
     pub palette: CommandPaletteState,
     pub help: HelpState,
@@ -121,6 +133,8 @@ impl App {
             wallets: WalletsState::default(),
             flows: FlowsState::default(),
             vault_ui: VaultState::default(),
+            categories: CategoriesState::default(),
+            members: MembersState::default(),
             stats: StatsState::default(),
             palette: CommandPaletteState::default(),
             help: HelpState::default(),
@@ -180,6 +194,13 @@ impl App {
             self.handle_palette_action(action).await?;
             return Ok(());
         }
+        if self.state.section == Section::Vault
+            && self.state.vault_ui.mode == VaultMode::View
+            && self.state.vault_ui.confirm_delete
+            && !matches!(action, crate::ui::keymap::AppAction::Input('x' | 'X'))
+        {
+            self.state.vault_ui.confirm_delete = false;
+        }
 
         match action {
             crate::ui::keymap::AppAction::TogglePalette => {
@@ -193,11 +214,7 @@ impl App {
                 }
             }
             crate::ui::keymap::AppAction::Quit => {
-                if self.state.screen == Screen::Login {
-                    self.should_quit = true;
-                } else {
-                    self.should_quit = true;
-                }
+                self.should_quit = true;
             }
             crate::ui::keymap::AppAction::Cancel => {
                 if self.state.screen == Screen::Login {
@@ -286,7 +303,50 @@ impl App {
                             self.state.vault_ui.defaults = DefaultsFormState::default();
                             self.state.vault_ui.mode = VaultMode::View;
                         }
+                        VaultMode::Select => {
+                            self.state.vault_ui.mode = VaultMode::View;
+                        }
                         VaultMode::View => {
+                            if self.state.vault_ui.confirm_delete {
+                                self.state.vault_ui.confirm_delete = false;
+                            } else {
+                                self.state.section = Section::Home;
+                            }
+                        }
+                    }
+                } else if self.state.section == Section::Categories {
+                    match self.state.categories.mode {
+                        CategoriesMode::Merge => {
+                            self.state.categories.mode = CategoriesMode::List;
+                            self.state.categories.merge = CategoryMergeState::default();
+                        }
+                        CategoriesMode::Create | CategoriesMode::Rename => {
+                            self.reset_category_form();
+                            self.state.categories.mode = CategoriesMode::List;
+                        }
+                        CategoriesMode::Aliases => {
+                            if self.state.categories.aliases.focus == AliasFocus::Input
+                                && !self.state.categories.aliases.input.is_empty()
+                            {
+                                self.state.categories.aliases.input.clear();
+                                self.state.categories.aliases.error = None;
+                                self.state.categories.aliases.focus = AliasFocus::List;
+                            } else {
+                                self.state.categories.mode = CategoriesMode::List;
+                                self.state.categories.aliases = CategoryAliasState::default();
+                            }
+                        }
+                        CategoriesMode::List => {
+                            self.state.section = Section::Home;
+                        }
+                    }
+                } else if self.state.section == Section::Members {
+                    match self.state.members.mode {
+                        MembersMode::Form => {
+                            self.reset_member_form();
+                            self.state.members.mode = MembersMode::List;
+                        }
+                        MembersMode::List => {
                             self.state.section = Section::Home;
                         }
                     }
@@ -306,6 +366,10 @@ impl App {
                     self.handle_wallets_submit().await?;
                 } else if self.state.section == Section::Flows {
                     self.handle_flows_submit().await?;
+                } else if self.state.section == Section::Categories {
+                    self.handle_categories_submit().await?;
+                } else if self.state.section == Section::Members {
+                    self.handle_members_submit().await?;
                 } else if self.state.section == Section::Vault {
                     self.handle_vault_submit().await?;
                 } else if self.state.section == Section::Stats {
@@ -360,16 +424,45 @@ impl App {
                     && self.state.transactions.quick_active
                 {
                     self.state.transactions.quick_input.pop();
+                } else if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::Aliases
+                    && self.state.categories.aliases.focus == AliasFocus::Input
+                {
+                    self.state.categories.aliases.input.pop();
+                } else if self.state.section == Section::Categories
+                    && matches!(
+                        self.state.categories.mode,
+                        CategoriesMode::Create | CategoriesMode::Rename
+                    )
+                {
+                    self.backspace_category_form();
                 } else if self.state.section == Section::Wallets {
                     self.backspace_wallet_form();
                 } else if self.state.section == Section::Flows {
                     self.backspace_flow_form();
+                } else if self.state.section == Section::Members
+                    && self.state.members.mode == MembersMode::Form
+                {
+                    if self.state.members.form.focus == MemberFormField::Username {
+                        self.state.members.form.username.pop();
+                    }
                 } else if self.state.section == Section::Vault {
                     self.backspace_vault_form();
                 }
             }
             crate::ui::keymap::AppAction::Up => {
-                if self.state.screen == Screen::Home
+                if self.state.screen == Screen::Home && self.state.section == Section::Members {
+                    match self.state.members.mode {
+                        MembersMode::Form => {
+                            if self.state.members.form.focus == MemberFormField::Role {
+                                self.cycle_member_role(false);
+                            }
+                        }
+                        MembersMode::List => {
+                            self.members_select_prev();
+                        }
+                    }
+                } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
                     && matches!(
                         self.state.transactions.mode,
@@ -424,14 +517,44 @@ impl App {
                         self.open_flow_detail().await?;
                     }
                 } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Categories
+                {
+                    match self.state.categories.mode {
+                        CategoriesMode::List | CategoriesMode::Create | CategoriesMode::Rename => {
+                            self.categories_select_prev();
+                        }
+                        CategoriesMode::Merge => self.category_merge_select_prev(),
+                        CategoriesMode::Aliases => {
+                            if self.state.categories.aliases.focus == AliasFocus::List {
+                                self.category_alias_select_prev();
+                            }
+                        }
+                    }
+                } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Vault
                     && self.state.vault_ui.mode == VaultMode::Defaults
                 {
                     self.defaults_select_prev();
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::Select
+                {
+                    self.vaults_select_prev();
                 }
             }
             crate::ui::keymap::AppAction::Down => {
-                if self.state.screen == Screen::Home
+                if self.state.screen == Screen::Home && self.state.section == Section::Members {
+                    match self.state.members.mode {
+                        MembersMode::Form => {
+                            if self.state.members.form.focus == MemberFormField::Role {
+                                self.cycle_member_role(true);
+                            }
+                        }
+                        MembersMode::List => {
+                            self.members_select_next();
+                        }
+                    }
+                } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
                     && matches!(
                         self.state.transactions.mode,
@@ -486,10 +609,29 @@ impl App {
                         self.open_flow_detail().await?;
                     }
                 } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Categories
+                {
+                    match self.state.categories.mode {
+                        CategoriesMode::List | CategoriesMode::Create | CategoriesMode::Rename => {
+                            self.categories_select_next();
+                        }
+                        CategoriesMode::Merge => self.category_merge_select_next(),
+                        CategoriesMode::Aliases => {
+                            if self.state.categories.aliases.focus == AliasFocus::List {
+                                self.category_alias_select_next();
+                            }
+                        }
+                    }
+                } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Vault
                     && self.state.vault_ui.mode == VaultMode::Defaults
                 {
                     self.defaults_select_next();
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::Select
+                {
+                    self.vaults_select_next();
                 }
             }
             crate::ui::keymap::AppAction::Input(ch) => {
@@ -497,6 +639,18 @@ impl App {
                     let field = self.active_field_mut();
                     field.push(ch);
                 } else {
+                    if self.state.section == Section::Categories
+                        && self.state.categories.mode == CategoriesMode::Aliases
+                        && self.state.categories.aliases.focus == AliasFocus::Input
+                    {
+                        self.state.categories.aliases.input.push(ch);
+                        return Ok(());
+                    }
+                    if self.state.section == Section::Members
+                        && self.handle_members_input(ch).await?
+                    {
+                        return Ok(());
+                    }
                     if self.handle_search_input(ch).await? {
                         return Ok(());
                     } else if self.state.section == Section::Transactions
@@ -586,6 +740,20 @@ impl App {
             self.advance_filter_focus();
             return;
         }
+        if self.state.section == Section::Categories
+            && self.state.categories.mode == CategoriesMode::Aliases
+        {
+            self.toggle_alias_focus();
+            return;
+        }
+        if self.state.section == Section::Members && self.state.members.mode == MembersMode::Form {
+            self.state.members.form.focus = match self.state.members.form.focus {
+                MemberFormField::Username => MemberFormField::Role,
+                MemberFormField::Role => MemberFormField::Username,
+            };
+            self.state.members.form.error = None;
+            return;
+        }
 
         match self.state.section {
             Section::Wallets => self.advance_wallet_focus(),
@@ -651,6 +819,7 @@ impl App {
                     DefaultsField::Flow => DefaultsField::Wallet,
                 };
             }
+            VaultMode::Select => {}
             VaultMode::View => {}
         }
     }
@@ -669,24 +838,47 @@ impl App {
     async fn attempt_login(&mut self) -> Result<()> {
         let username = self.state.login.username.trim();
         let password = self.state.login.password.trim();
-        let vault_name = self.config.vault.trim();
+        let vault_payload = self.vault_payload_from_config();
+        let has_vault = vault_payload
+            .id
+            .as_deref()
+            .map(|id| !id.trim().is_empty())
+            .unwrap_or(false)
+            || vault_payload
+                .name
+                .as_deref()
+                .map(|name| !name.trim().is_empty())
+                .unwrap_or(false);
 
-        if username.is_empty() || password.is_empty() || vault_name.is_empty() {
+        if username.is_empty() || password.is_empty() || !has_vault {
             self.state.login.message = Some("Compila tutti i campi.".to_string());
             return Ok(());
         }
 
-        match self.client.vault_get(username, password, vault_name).await {
+        match self
+            .client
+            .vault_get(username, password, &vault_payload)
+            .await
+        {
             Ok(vault) => {
                 self.state.vault = Some(vault);
                 match self
                     .client
-                    .vault_snapshot(username, password, vault_name)
+                    .vault_snapshot(username, password, &vault_payload)
                     .await
                 {
                     Ok(snapshot) => {
-                        self.state.last_flow_id = Some(snapshot.unallocated_flow_id);
-                        self.state.snapshot = Some(snapshot);
+                        self.apply_snapshot(snapshot);
+                        self.apply_local_defaults();
+                        self.state.screen = Screen::Home;
+                        self.state.login.message = None;
+                        self.load_transactions(true).await?;
+                    }
+                    Err(ClientError::NotFound(_)) => {
+                        if let Err(err) = self.refresh_shared_flows_snapshot().await {
+                            self.state.login.message = Some(err.to_string());
+                            return Ok(());
+                        }
                         self.apply_local_defaults();
                         self.state.screen = Screen::Home;
                         self.state.login.message = None;
@@ -785,6 +977,26 @@ impl App {
         }
     }
 
+    async fn handle_categories_submit(&mut self) -> Result<()> {
+        match self.state.categories.mode {
+            CategoriesMode::List => Ok(()),
+            CategoriesMode::Merge => self.submit_category_merge().await,
+            CategoriesMode::Create => self.submit_category_create().await,
+            CategoriesMode::Rename => self.submit_category_rename().await,
+            CategoriesMode::Aliases => self.submit_category_alias_create().await,
+        }
+    }
+
+    async fn handle_members_submit(&mut self) -> Result<()> {
+        match self.state.members.mode {
+            MembersMode::List => {
+                self.start_member_edit();
+                Ok(())
+            }
+            MembersMode::Form => self.submit_member_form().await,
+        }
+    }
+
     async fn handle_vault_submit(&mut self) -> Result<()> {
         match self.state.vault_ui.mode {
             VaultMode::Create => {
@@ -792,6 +1004,9 @@ impl App {
             }
             VaultMode::Defaults => {
                 self.save_defaults().await?;
+            }
+            VaultMode::Select => {
+                self.submit_vault_select().await?;
             }
             VaultMode::View => {}
         }
@@ -848,6 +1063,12 @@ impl App {
                 }
                 return Ok(());
             }
+            'g' | 'G' => {
+                self.state.section = Section::Categories;
+                self.state.transactions.mode = TransactionsMode::List;
+                self.load_categories().await?;
+                return Ok(());
+            }
             'v' | 'V' => {
                 // In transaction detail, 'v' voids the transaction
                 if self.state.section == Section::Transactions
@@ -872,17 +1093,6 @@ impl App {
                 }
             }
             // Transaction list context actions (use different keys)
-            'x' | 'X' => {
-                // Toggle transfers visibility in transactions list
-                if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::List
-                {
-                    self.state.transactions.include_transfers =
-                        !self.state.transactions.include_transfers;
-                    self.load_transactions(true).await?;
-                }
-                return Ok(());
-            }
             'z' | 'Z' => {
                 // Toggle voided visibility in transactions list
                 if self.state.section == Section::Transactions
@@ -935,6 +1145,14 @@ impl App {
                     }
                 } else if self.state.section == Section::Stats {
                     self.load_stats().await?;
+                } else if self.state.section == Section::Categories {
+                    if self.state.categories.mode == CategoriesMode::Aliases {
+                        self.reload_category_aliases().await?;
+                    } else {
+                        self.load_categories().await?;
+                    }
+                } else if self.state.section == Section::Members {
+                    self.load_members().await?;
                 } else if self.state.section == Section::Wallets
                     || self.state.section == Section::Flows
                 {
@@ -984,6 +1202,10 @@ impl App {
                     && self.state.flows.mode == FlowsMode::List
                 {
                     self.toggle_flow_archive().await?;
+                } else if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::List
+                {
+                    self.toggle_category_archive().await?;
                 }
                 return Ok(());
             }
@@ -1013,6 +1235,10 @@ impl App {
                     && self.state.flows.mode == FlowsMode::List
                 {
                     self.start_flow_rename();
+                } else if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::List
+                {
+                    self.start_category_rename();
                 }
                 return Ok(());
             }
@@ -1089,10 +1315,50 @@ impl App {
                     && self.state.flows.mode == FlowsMode::List
                 {
                     self.start_flow_create();
+                } else if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::List
+                {
+                    self.start_category_create();
                 } else if self.state.section == Section::Vault
                     && self.state.vault_ui.mode == VaultMode::View
                 {
                     self.start_vault_create();
+                }
+                return Ok(());
+            }
+            'l' | 'L' => {
+                if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::List
+                {
+                    self.start_category_aliases().await?;
+                } else if self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::View
+                {
+                    self.start_vault_select().await?;
+                }
+                return Ok(());
+            }
+            'x' | 'X' => {
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.state.transactions.include_transfers =
+                        !self.state.transactions.include_transfers;
+                    self.load_transactions(true).await?;
+                } else if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::Aliases
+                    && self.state.categories.aliases.focus == AliasFocus::List
+                {
+                    self.delete_category_alias().await?;
+                } else if self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::View
+                {
+                    if self.state.vault_ui.confirm_delete {
+                        self.delete_vault().await?;
+                    } else {
+                        self.state.vault_ui.confirm_delete = true;
+                        self.set_toast("Premi x per confermare l'eliminazione.", ToastLevel::Info);
+                    }
                 }
                 return Ok(());
             }
@@ -1104,6 +1370,14 @@ impl App {
                     self.cycle_flow_mode();
                     return Ok(());
                 }
+                if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::List
+                {
+                    self.start_category_merge();
+                    return Ok(());
+                }
+                self.open_members().await?;
+                return Ok(());
             }
             '/' => {
                 if self.state.section == Section::Transactions
@@ -1147,6 +1421,29 @@ impl App {
                         FlowFormField::Mode => {
                             if matches!(ch, 'm' | 'M' | ' ') {
                                 self.cycle_flow_mode();
+                            }
+                            return true;
+                        }
+                    }
+                    return true;
+                }
+            }
+            Section::Categories => {
+                if matches!(
+                    self.state.categories.mode,
+                    CategoriesMode::Create | CategoriesMode::Rename
+                ) {
+                    self.state.categories.form.name.push(ch);
+                    return true;
+                }
+            }
+            Section::Members => {
+                if self.state.members.mode == MembersMode::Form {
+                    match self.state.members.form.focus {
+                        MemberFormField::Username => self.state.members.form.username.push(ch),
+                        MemberFormField::Role => {
+                            if ch == ' ' {
+                                self.cycle_member_role(true);
                             }
                             return true;
                         }
@@ -1333,10 +1630,10 @@ impl App {
     }
 
     fn expire_toast(&mut self) {
-        if let Some(toast) = &self.state.toast {
-            if std::time::Instant::now() >= toast.expires_at {
-                self.state.toast = None;
-            }
+        if let Some(toast) = &self.state.toast
+            && std::time::Instant::now() >= toast.expires_at
+        {
+            self.state.toast = None;
         }
     }
 
@@ -1360,17 +1657,45 @@ impl App {
     }
 
     fn handle_auth_error(&mut self, err: &ClientError) -> bool {
-        if matches!(err, ClientError::Unauthorized | ClientError::Forbidden) {
-            self.state.screen = Screen::Login;
-            self.state.login.password.clear();
-            self.state.login.message = Some("Credenziali errate o pairing mancante.".to_string());
-            self.state.vault = None;
-            self.state.snapshot = None;
-            self.state.section = Section::Home;
-            self.state.transactions = TransactionsState::default();
-            return true;
+        match err {
+            ClientError::Unauthorized => {}
+            ClientError::Forbidden(payload) if payload.code == ErrorCode::Forbidden => {}
+            _ => return false,
         }
-        false
+
+        self.state.screen = Screen::Login;
+        self.state.login.password.clear();
+        self.state.login.message = Some("Credenziali errate o pairing mancante.".to_string());
+        self.state.vault = None;
+        self.state.snapshot = None;
+        self.state.section = Section::Home;
+        self.state.transactions = TransactionsState::default();
+        true
+    }
+
+    fn reset_after_vault_delete(&mut self) {
+        self.state.screen = Screen::Login;
+        self.state.login.password.clear();
+        self.state.login.focus = LoginField::Username;
+        self.state.login.message = Some("Vault eliminato.".to_string());
+        self.state.vault = None;
+        self.state.snapshot = None;
+        self.state.section = Section::Home;
+        self.state.transactions = TransactionsState::default();
+        self.state.wallets = WalletsState::default();
+        self.state.flows = FlowsState::default();
+        self.state.vault_ui = VaultState::default();
+        self.state.categories = CategoriesState::default();
+        self.state.members = MembersState::default();
+        self.state.stats = StatsState::default();
+        self.state.palette = CommandPaletteState::default();
+        self.state.help = HelpState::default();
+        self.state.toast = None;
+        self.state.connection = ConnectionState::default();
+        self.state.last_refresh = None;
+        self.state.last_flow_id = None;
+        self.state.default_wallet_id = None;
+        self.state.default_flow_id = None;
     }
 
     fn update_recent_categories_from_items(&mut self) {
@@ -1530,6 +1855,15 @@ impl App {
         self.state.vault_ui.form.name.pop();
     }
 
+    fn backspace_category_form(&mut self) {
+        if matches!(
+            self.state.categories.mode,
+            CategoriesMode::Create | CategoriesMode::Rename
+        ) {
+            self.state.categories.form.name.pop();
+        }
+    }
+
     fn reset_wallet_form(&mut self) {
         self.state.wallets.form = WalletFormState::default();
         self.state.wallets.error = None;
@@ -1543,6 +1877,21 @@ impl App {
     fn reset_vault_form(&mut self) {
         self.state.vault_ui.form = VaultFormState::default();
         self.state.vault_ui.error = None;
+        self.state.vault_ui.confirm_delete = false;
+    }
+
+    fn reset_category_form(&mut self) {
+        self.state.categories.form = CategoryFormState::default();
+        self.state.categories.error = None;
+    }
+
+    fn reset_member_form(&mut self) {
+        self.state.members.form = MemberFormState::default();
+        self.state.members.error = None;
+    }
+
+    fn reset_category_aliases(&mut self) {
+        self.state.categories.aliases = CategoryAliasState::default();
     }
 
     fn wallets_select_next(&mut self) {
@@ -1575,6 +1924,120 @@ impl App {
         self.state.flows.selected = self.state.flows.selected.saturating_sub(1);
     }
 
+    fn categories_select_next(&mut self) {
+        let len = self.state.categories.items.len();
+        if len == 0 {
+            return;
+        }
+        self.state.categories.selected = (self.state.categories.selected + 1).min(len - 1);
+        self.state.categories.aliases.category_id = None;
+        self.state.categories.aliases.items.clear();
+        self.state.categories.aliases.selected = 0;
+    }
+
+    fn categories_select_prev(&mut self) {
+        if self.state.categories.items.is_empty() {
+            return;
+        }
+        self.state.categories.selected = self.state.categories.selected.saturating_sub(1);
+        self.state.categories.aliases.category_id = None;
+        self.state.categories.aliases.items.clear();
+        self.state.categories.aliases.selected = 0;
+    }
+
+    fn members_select_next(&mut self) {
+        let len = self.state.members.items.len();
+        if len == 0 {
+            return;
+        }
+        self.state.members.selected = (self.state.members.selected + 1).min(len - 1);
+    }
+
+    fn members_select_prev(&mut self) {
+        if self.state.members.items.is_empty() {
+            return;
+        }
+        self.state.members.selected = self.state.members.selected.saturating_sub(1);
+    }
+
+    fn members_flow_next(&mut self) {
+        let len = self.member_flow_options().len();
+        if len == 0 {
+            self.state.members.flow_index = 0;
+            return;
+        }
+        self.state.members.flow_index = (self.state.members.flow_index + 1).min(len - 1);
+    }
+
+    fn members_flow_prev(&mut self) {
+        if self.member_flow_options().is_empty() {
+            self.state.members.flow_index = 0;
+            return;
+        }
+        self.state.members.flow_index = self.state.members.flow_index.saturating_sub(1);
+    }
+
+    fn category_merge_select_next(&mut self) {
+        let len = self.state.categories.items.len();
+        if len < 2 {
+            return;
+        }
+        let from = self.state.categories.merge.from_index;
+        let mut idx = self.state.categories.merge.target_index;
+        loop {
+            idx = (idx + 1) % len;
+            if idx != from {
+                break;
+            }
+        }
+        self.state.categories.merge.target_index = idx;
+        self.state.categories.merge.preview = None;
+        self.state.categories.merge.confirming = false;
+    }
+
+    fn category_merge_select_prev(&mut self) {
+        let len = self.state.categories.items.len();
+        if len < 2 {
+            return;
+        }
+        let from = self.state.categories.merge.from_index;
+        let mut idx = self.state.categories.merge.target_index;
+        loop {
+            idx = (idx + len - 1) % len;
+            if idx != from {
+                break;
+            }
+        }
+        self.state.categories.merge.target_index = idx;
+        self.state.categories.merge.preview = None;
+        self.state.categories.merge.confirming = false;
+    }
+
+    fn category_alias_select_next(&mut self) {
+        let len = self.state.categories.aliases.items.len();
+        if len == 0 {
+            return;
+        }
+        self.state.categories.aliases.selected =
+            (self.state.categories.aliases.selected + 1).min(len - 1);
+    }
+
+    fn category_alias_select_prev(&mut self) {
+        if self.state.categories.aliases.items.is_empty() {
+            return;
+        }
+        self.state.categories.aliases.selected =
+            self.state.categories.aliases.selected.saturating_sub(1);
+    }
+
+    fn toggle_alias_focus(&mut self) {
+        let focus = self.state.categories.aliases.focus;
+        self.state.categories.aliases.focus = match focus {
+            AliasFocus::List => AliasFocus::Input,
+            AliasFocus::Input => AliasFocus::List,
+        };
+    }
+
     fn transactions_picker_next(&mut self) {
         let len = self.transactions_picker_len();
         if len == 0 {
@@ -1602,6 +2065,28 @@ impl App {
             TransactionsMode::PickFlow => snapshot.flows.len() + 1,
             _ => 0,
         }
+    }
+
+    fn start_category_merge(&mut self) {
+        let len = self.state.categories.items.len();
+        if len < 2 {
+            self.set_toast("Serve almeno 2 categorie per unire.", ToastLevel::Error);
+            return;
+        }
+
+        let from_index = self.state.categories.selected.min(len - 1);
+        let mut target_index = (from_index + 1) % len;
+        if target_index == from_index {
+            target_index = 0;
+        }
+        self.state.categories.mode = CategoriesMode::Merge;
+        self.state.categories.merge = CategoryMergeState {
+            from_index,
+            target_index,
+            preview: None,
+            confirming: false,
+        };
+        self.reset_category_aliases();
     }
 
     fn open_wallet_picker(&mut self) {
@@ -2872,9 +3357,132 @@ impl App {
         self.state.flows.form.focus = FlowFormField::Name;
     }
 
+    fn start_category_create(&mut self) {
+        self.reset_category_form();
+        self.state.categories.mode = CategoriesMode::Create;
+        self.reset_category_aliases();
+    }
+
+    fn start_category_rename(&mut self) {
+        let Some((_category_id, name, is_system)) = self
+            .selected_category()
+            .map(|category| (category.id, category.name.clone(), category.is_system))
+        else {
+            self.state.categories.error = Some("Nessuna categoria selezionata.".to_string());
+            return;
+        };
+        if is_system {
+            self.state.categories.error =
+                Some("Le categorie di sistema non si modificano.".to_string());
+            return;
+        }
+        self.reset_category_form();
+        self.state.categories.form.name = name;
+        self.state.categories.mode = CategoriesMode::Rename;
+        self.reset_category_aliases();
+    }
+
     fn start_vault_create(&mut self) {
         self.reset_vault_form();
+        self.state.vault_ui.confirm_delete = false;
         self.state.vault_ui.mode = VaultMode::Create;
+    }
+
+    async fn start_vault_select(&mut self) -> Result<()> {
+        self.state.vault_ui.confirm_delete = false;
+        self.state.vault_ui.error = None;
+        self.state.vault_ui.mode = VaultMode::Select;
+        self.state.vault_ui.list.error = None;
+        self.load_vault_list().await
+    }
+
+    async fn load_vault_list(&mut self) -> Result<()> {
+        let res = self
+            .client
+            .vault_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+            )
+            .await;
+
+        match res {
+            Ok(response) => {
+                let current_id = self
+                    .state
+                    .vault
+                    .as_ref()
+                    .and_then(|vault| vault.id.as_deref());
+                self.state.vault_ui.list.items = response.vaults;
+                self.state.vault_ui.list.selected = current_id
+                    .and_then(|id| {
+                        self.state
+                            .vault_ui
+                            .list
+                            .items
+                            .iter()
+                            .position(|vault| vault.id == id)
+                    })
+                    .unwrap_or(0);
+                self.state.vault_ui.list.error = None;
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.vault_ui.list.error = Some(login_message_for_error(err));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn submit_vault_select(&mut self) -> Result<()> {
+        let Some(selected) = self
+            .state
+            .vault_ui
+            .list
+            .items
+            .get(self.state.vault_ui.list.selected)
+        else {
+            return Ok(());
+        };
+        let selected = selected.clone();
+        let vault = Vault {
+            id: Some(selected.id.clone()),
+            name: Some(selected.name.clone()),
+            currency: Some(selected.currency),
+            owner: Some(selected.owner.clone()),
+        };
+
+        self.state.vault = Some(vault);
+        self.state.vault_ui.mode = VaultMode::View;
+        self.state.vault_ui.list.error = None;
+        self.state.vault_ui.confirm_delete = false;
+        self.state.transactions.scope_wallet_id = None;
+        self.state.transactions.scope_flow_id = None;
+        self.state.transactions.search_query.clear();
+        self.state.transactions.search_active = false;
+
+        self.refresh_snapshot().await?;
+        self.apply_local_defaults();
+        self.load_transactions(true).await?;
+        self.set_toast("Vault selected.", ToastLevel::Success);
+        Ok(())
+    }
+
+    fn vaults_select_next(&mut self) {
+        let len = self.state.vault_ui.list.items.len();
+        if len == 0 {
+            return;
+        }
+        self.state.vault_ui.list.selected = (self.state.vault_ui.list.selected + 1).min(len - 1);
+    }
+
+    fn vaults_select_prev(&mut self) {
+        if self.state.vault_ui.list.items.is_empty() {
+            return;
+        }
+        self.state.vault_ui.list.selected = self.state.vault_ui.list.selected.saturating_sub(1);
     }
 
     fn start_defaults(&mut self) {
@@ -2904,6 +3512,7 @@ impl App {
             focus: DefaultsField::Wallet,
             error: None,
         };
+        self.state.vault_ui.confirm_delete = false;
         self.state.vault_ui.mode = VaultMode::Defaults;
     }
 
@@ -3015,24 +3624,32 @@ impl App {
     }
 
     async fn refresh_snapshot(&mut self) -> Result<()> {
-        let vault_name = self.current_vault_name();
+        let vault_payload = self.current_vault_payload();
         let res = self
             .client
             .vault_snapshot(
                 self.state.login.username.as_str(),
                 self.state.login.password.as_str(),
-                vault_name.as_str(),
+                &vault_payload,
             )
             .await;
 
         match res {
             Ok(snapshot) => {
-                self.state.snapshot = Some(snapshot);
-                self.ensure_last_flow();
-                self.normalize_defaults();
+                self.apply_snapshot(snapshot);
                 self.refresh_wallets_search().await?;
                 self.refresh_flows_search().await?;
                 self.connection_ok(None);
+            }
+            Err(ClientError::NotFound(_)) => {
+                if let Err(err) = self.refresh_shared_flows_snapshot().await {
+                    self.state.wallets.error = Some(err.to_string());
+                    self.state.flows.error = Some(err.to_string());
+                    self.state.stats.error = Some(err.to_string());
+                    self.connection_error("Errore connessione");
+                } else {
+                    self.connection_ok(None);
+                }
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
@@ -3049,6 +3666,93 @@ impl App {
         Ok(())
     }
 
+    fn apply_snapshot(&mut self, snapshot: VaultSnapshot) {
+        self.state.snapshot = Some(snapshot);
+        self.state.vault_ui.confirm_delete = false;
+        self.ensure_last_flow();
+        self.normalize_defaults();
+        self.ensure_flow_scope_for_shared();
+        if self.state.members.scope == MembersScope::Flow {
+            self.ensure_member_flow_index();
+        }
+    }
+
+    fn ensure_flow_scope_for_shared(&mut self) {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            return;
+        };
+        if snapshot.wallets.is_empty() {
+            self.state.transactions.scope_wallet_id = None;
+            self.state.transactions.scope_flow_id = snapshot.flows.first().map(|flow| flow.id);
+        }
+    }
+
+    fn build_shared_snapshot(&self, flows: Vec<FlowView>) -> Result<VaultSnapshot> {
+        let vault = self
+            .state
+            .vault
+            .as_ref()
+            .ok_or_else(|| AppError::Terminal("vault metadata missing".to_string()))?;
+        let vault_id = vault
+            .id
+            .as_ref()
+            .ok_or_else(|| AppError::Terminal("vault id missing".to_string()))?;
+        let name = vault.name.clone().unwrap_or_else(|| vault_id.to_string());
+        let currency = vault.currency.unwrap_or(api_types::Currency::Eur);
+        let unallocated_flow_id = flows
+            .iter()
+            .find_map(|flow| flow.is_unallocated.then_some(flow.id))
+            .or_else(|| flows.first().map(|flow| flow.id))
+            .unwrap_or_else(uuid::Uuid::nil);
+
+        Ok(VaultSnapshot {
+            id: vault_id.clone(),
+            name,
+            currency,
+            owner: vault.owner.clone(),
+            wallets: Vec::new(),
+            flows,
+            unallocated_flow_id,
+        })
+    }
+
+    async fn refresh_shared_flows_snapshot(&mut self) -> Result<()> {
+        let vault_id = self
+            .state
+            .vault
+            .as_ref()
+            .and_then(|vault| vault.id.as_deref())
+            .ok_or_else(|| AppError::Terminal("vault id missing".to_string()))?;
+
+        let res = self
+            .client
+            .flows_shared_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                FlowSharedList {
+                    vault_id: vault_id.to_string(),
+                    include_archived: Some(true),
+                },
+            )
+            .await;
+
+        match res {
+            Ok(response) => {
+                let snapshot = self.build_shared_snapshot(response.flows)?;
+                self.apply_snapshot(snapshot);
+                self.refresh_wallets_search().await?;
+                self.refresh_flows_search().await?;
+                Ok(())
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                Err(AppError::Terminal(login_message_for_error(err)))
+            }
+        }
+    }
+
     fn ensure_last_flow(&mut self) {
         let Some(snapshot) = self.state.snapshot.as_ref() else {
             return;
@@ -3061,12 +3765,16 @@ impl App {
         self.state.last_flow_id = last_valid.or(Some(snapshot.unallocated_flow_id));
     }
 
-    fn current_vault_name(&self) -> String {
-        self.state
-            .vault
-            .as_ref()
-            .and_then(|vault| vault.name.clone())
-            .unwrap_or_else(|| self.config.vault.clone())
+    fn current_vault_payload(&self) -> Vault {
+        if let Some(vault) = self.state.vault.as_ref() {
+            return Vault {
+                id: vault.id.clone(),
+                name: vault.name.clone(),
+                currency: None,
+                owner: None,
+            };
+        }
+        self.vault_payload_from_config()
     }
 
     fn current_vault_id(&self) -> Result<String> {
@@ -3075,6 +3783,44 @@ impl App {
             .as_ref()
             .and_then(|vault| vault.id.clone())
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))
+    }
+
+    fn vault_payload_from_config(&self) -> Vault {
+        let raw = self.config.vault.trim();
+        if raw.is_empty() {
+            return Vault {
+                id: None,
+                name: None,
+                currency: None,
+                owner: None,
+            };
+        }
+
+        if let Some(stripped) = raw.strip_prefix("id:") {
+            let id = stripped.trim();
+            return Vault {
+                id: (!id.is_empty()).then_some(id.to_string()),
+                name: None,
+                currency: None,
+                owner: None,
+            };
+        }
+
+        if uuid::Uuid::parse_str(raw).is_ok() {
+            return Vault {
+                id: Some(raw.to_string()),
+                name: None,
+                currency: None,
+                owner: None,
+            };
+        }
+
+        Vault {
+            id: None,
+            name: Some(raw.to_string()),
+            currency: None,
+            owner: None,
+        }
     }
 
     fn selected_wallet(&self) -> Option<&api_types::vault::WalletView> {
@@ -3093,6 +3839,30 @@ impl App {
             .snapshot
             .as_ref()
             .and_then(|snap| snap.flows.get(index))
+    }
+
+    fn member_flow_options(&self) -> Vec<(uuid::Uuid, String)> {
+        let Some(snapshot) = self.state.snapshot.as_ref() else {
+            return Vec::new();
+        };
+        snapshot
+            .flows
+            .iter()
+            .filter(|flow| !flow.archived && !flow.is_unallocated)
+            .map(|flow| (flow.id, flow.name.clone()))
+            .collect()
+    }
+
+    fn current_member_flow(&self) -> Option<(uuid::Uuid, String)> {
+        let flows = self.member_flow_options();
+        flows.get(self.state.members.flow_index).cloned()
+    }
+
+    fn selected_category(&self) -> Option<&CategoryView> {
+        self.state
+            .categories
+            .items
+            .get(self.state.categories.selected)
     }
 
     fn select_transaction_by_id(&mut self, transaction_id: uuid::Uuid) -> bool {
@@ -3142,6 +3912,18 @@ impl App {
                 .unwrap_or(false)
         }) {
             self.state.flows.selected = pos;
+        }
+    }
+
+    fn select_category_by_id(&mut self, category_id: uuid::Uuid) {
+        if let Some(pos) = self
+            .state
+            .categories
+            .items
+            .iter()
+            .position(|category| category.id == category_id)
+        {
+            self.state.categories.selected = pos;
         }
     }
 
@@ -3223,6 +4005,635 @@ impl App {
             self.state.transactions.cursor = prev;
             self.load_transactions(false).await?;
         }
+        Ok(())
+    }
+
+    async fn load_categories(&mut self) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let res = self
+            .client
+            .categories_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                api_types::category::CategoryList {
+                    vault_id,
+                    include_archived: Some(true),
+                },
+            )
+            .await;
+
+        match res {
+            Ok(response) => {
+                self.state.categories.items = response.categories;
+                if self.state.categories.selected >= self.state.categories.items.len() {
+                    self.state.categories.selected =
+                        self.state.categories.items.len().saturating_sub(1);
+                }
+                if matches!(
+                    self.state.categories.mode,
+                    CategoriesMode::Merge | CategoriesMode::Aliases
+                ) {
+                    self.state.categories.mode = CategoriesMode::List;
+                    self.state.categories.merge = CategoryMergeState::default();
+                    self.reset_category_aliases();
+                }
+                self.state.categories.error = None;
+                self.connection_ok(None);
+                if let Some(category) = self.selected_category() {
+                    self.load_category_aliases(category.id).await?;
+                } else {
+                    self.reset_category_aliases();
+                }
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
+            }
+        }
+        Ok(())
+    }
+
+    async fn open_members(&mut self) -> Result<()> {
+        self.state.section = Section::Members;
+        self.state.members.mode = MembersMode::List;
+        self.reset_member_form();
+        self.load_members().await
+    }
+
+    async fn load_members(&mut self) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let selected = self
+            .state
+            .members
+            .items
+            .get(self.state.members.selected)
+            .map(|member| member.username.clone());
+
+        let res = match self.state.members.scope {
+            MembersScope::Vault => {
+                self.client
+                    .vault_members_list(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                    )
+                    .await
+            }
+            MembersScope::Flow => {
+                self.ensure_member_flow_index();
+                let Some((flow_id, _)) = self.current_member_flow() else {
+                    self.state.members.items.clear();
+                    self.state.members.selected = 0;
+                    self.state.members.error = Some("Nessun flow condivisibile.".to_string());
+                    return Ok(());
+                };
+                self.client
+                    .flow_members_list(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        flow_id,
+                    )
+                    .await
+            }
+        };
+
+        match res {
+            Ok(mut response) => {
+                response.members.sort_by(|a, b| {
+                    member_role_rank(a.role)
+                        .cmp(&member_role_rank(b.role))
+                        .then_with(|| a.username.cmp(&b.username))
+                });
+                self.state.members.items = response.members;
+                if let Some(name) = selected {
+                    if let Some(pos) = self
+                        .state
+                        .members
+                        .items
+                        .iter()
+                        .position(|member| member.username == name)
+                    {
+                        self.state.members.selected = pos;
+                    } else if self.state.members.selected >= self.state.members.items.len() {
+                        self.state.members.selected =
+                            self.state.members.items.len().saturating_sub(1);
+                    }
+                } else if self.state.members.selected >= self.state.members.items.len() {
+                    self.state.members.selected = self.state.members.items.len().saturating_sub(1);
+                }
+                self.state.members.error = None;
+                self.connection_ok(None);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.members.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
+            }
+        }
+        Ok(())
+    }
+
+    async fn set_members_scope(&mut self, scope: MembersScope) -> Result<()> {
+        if self.state.members.scope == scope {
+            return Ok(());
+        }
+        self.state.members.scope = scope;
+        self.state.members.mode = MembersMode::List;
+        self.reset_member_form();
+        if scope == MembersScope::Flow {
+            self.select_default_member_flow();
+        }
+        self.load_members().await
+    }
+
+    fn start_member_create(&mut self) {
+        self.state.members.mode = MembersMode::Form;
+        self.state.members.form = MemberFormState::default();
+    }
+
+    fn start_member_edit(&mut self) {
+        let Some(member) = self.state.members.items.get(self.state.members.selected) else {
+            self.state.members.error = Some("Nessun membro selezionato.".to_string());
+            return;
+        };
+        self.state.members.mode = MembersMode::Form;
+        self.state.members.form.username = member.username.clone();
+        self.state.members.form.role = member.role;
+        self.state.members.form.focus = MemberFormField::Role;
+        self.state.members.form.editing = true;
+        self.state.members.form.error = None;
+    }
+
+    async fn submit_member_form(&mut self) -> Result<()> {
+        let username = self.state.members.form.username.trim().to_string();
+        if username.is_empty() {
+            self.state.members.form.error = Some("Inserisci un username.".to_string());
+            return Ok(());
+        }
+        let vault_id = self.current_vault_id()?;
+        let payload = MemberUpsert {
+            username: username.clone(),
+            role: self.state.members.form.role,
+        };
+
+        let res = match self.state.members.scope {
+            MembersScope::Vault => {
+                self.client
+                    .vault_member_upsert(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        payload,
+                    )
+                    .await
+            }
+            MembersScope::Flow => {
+                let Some((flow_id, _)) = self.current_member_flow() else {
+                    self.state.members.form.error = Some("Nessun flow condivisibile.".to_string());
+                    return Ok(());
+                };
+                self.client
+                    .flow_member_upsert(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        flow_id,
+                        payload,
+                    )
+                    .await
+            }
+        };
+
+        match res {
+            Ok(()) => {
+                self.state.members.mode = MembersMode::List;
+                self.reset_member_form();
+                self.load_members().await?;
+                self.select_member_by_username(username.as_str());
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.members.form.error = Some(login_message_for_error(err));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn remove_member(&mut self) -> Result<()> {
+        let Some(member) = self.state.members.items.get(self.state.members.selected) else {
+            self.state.members.error = Some("Nessun membro selezionato.".to_string());
+            return Ok(());
+        };
+        let vault_id = self.current_vault_id()?;
+
+        let res = match self.state.members.scope {
+            MembersScope::Vault => {
+                self.client
+                    .vault_member_remove(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        member.username.as_str(),
+                    )
+                    .await
+            }
+            MembersScope::Flow => {
+                let Some((flow_id, _)) = self.current_member_flow() else {
+                    self.state.members.error = Some("Nessun flow condivisibile.".to_string());
+                    return Ok(());
+                };
+                self.client
+                    .flow_member_remove(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        flow_id,
+                        member.username.as_str(),
+                    )
+                    .await
+            }
+        };
+
+        match res {
+            Ok(()) => {
+                self.load_members().await?;
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.members.error = Some(login_message_for_error(err));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn cycle_member_role(&mut self, forward: bool) {
+        self.state.members.form.role = match (self.state.members.form.role, forward) {
+            (MembershipRole::Owner, true) => MembershipRole::Editor,
+            (MembershipRole::Editor, true) => MembershipRole::Viewer,
+            (MembershipRole::Viewer, true) => MembershipRole::Owner,
+            (MembershipRole::Owner, false) => MembershipRole::Viewer,
+            (MembershipRole::Editor, false) => MembershipRole::Owner,
+            (MembershipRole::Viewer, false) => MembershipRole::Editor,
+        };
+    }
+
+    fn select_member_by_username(&mut self, username: &str) {
+        if let Some(pos) = self
+            .state
+            .members
+            .items
+            .iter()
+            .position(|member| member.username == username)
+        {
+            self.state.members.selected = pos;
+        }
+    }
+
+    fn ensure_member_flow_index(&mut self) {
+        let len = self.member_flow_options().len();
+        if len == 0 {
+            self.state.members.flow_index = 0;
+            return;
+        }
+        if self.state.members.flow_index >= len {
+            self.state.members.flow_index = len - 1;
+        }
+    }
+
+    fn select_default_member_flow(&mut self) {
+        let flows = self.member_flow_options();
+        if flows.is_empty() {
+            self.state.members.flow_index = 0;
+            return;
+        }
+        if let Some(last_flow_id) = self.state.last_flow_id
+            && let Some(index) = flows.iter().position(|(id, _)| *id == last_flow_id)
+        {
+            self.state.members.flow_index = index;
+            return;
+        }
+        self.state.members.flow_index = self.state.members.flow_index.min(flows.len() - 1);
+    }
+
+    async fn handle_members_input(&mut self, ch: char) -> Result<bool> {
+        if self.state.section != Section::Members {
+            return Ok(false);
+        }
+        if self.state.members.mode == MembersMode::Form {
+            return Ok(false);
+        }
+
+        match ch {
+            'a' | 'A' => {
+                if self.state.members.mode == MembersMode::List {
+                    self.start_member_create();
+                }
+                return Ok(true);
+            }
+            'e' | 'E' => {
+                if self.state.members.mode == MembersMode::List {
+                    self.start_member_edit();
+                }
+                return Ok(true);
+            }
+            'x' | 'X' => {
+                if self.state.members.mode == MembersMode::List {
+                    self.remove_member().await?;
+                }
+                return Ok(true);
+            }
+            '[' => {
+                if self.state.members.mode == MembersMode::List
+                    && self.state.members.scope == MembersScope::Flow
+                {
+                    self.members_flow_prev();
+                    self.load_members().await?;
+                    return Ok(true);
+                }
+            }
+            ']' => {
+                if self.state.members.mode == MembersMode::List
+                    && self.state.members.scope == MembersScope::Flow
+                {
+                    self.members_flow_next();
+                    self.load_members().await?;
+                    return Ok(true);
+                }
+            }
+            'v' | 'V' => {
+                if self.state.members.mode == MembersMode::List {
+                    self.set_members_scope(MembersScope::Vault).await?;
+                    return Ok(true);
+                }
+            }
+            'f' | 'F' => {
+                if self.state.members.mode == MembersMode::List {
+                    self.set_members_scope(MembersScope::Flow).await?;
+                    return Ok(true);
+                }
+            }
+            _ => {}
+        }
+
+        Ok(false)
+    }
+
+    async fn submit_category_merge(&mut self) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let items_len = self.state.categories.items.len();
+        if items_len < 2 {
+            self.set_toast("Serve almeno 2 categorie per unire.", ToastLevel::Error);
+            return Ok(());
+        }
+        let from_index = self.state.categories.merge.from_index.min(items_len - 1);
+        let target_index = self.state.categories.merge.target_index.min(items_len - 1);
+        let Some(from) = self.state.categories.items.get(from_index) else {
+            self.set_toast("Categoria sorgente non valida.", ToastLevel::Error);
+            return Ok(());
+        };
+        let Some(target) = self.state.categories.items.get(target_index) else {
+            self.set_toast("Categoria destinazione non valida.", ToastLevel::Error);
+            return Ok(());
+        };
+        let from_id = from.id;
+        let target_id = target.id;
+
+        if !self.state.categories.merge.confirming {
+            let res = self
+                .client
+                .categories_merge_preview(
+                    self.state.login.username.as_str(),
+                    self.state.login.password.as_str(),
+                    from_id,
+                    api_types::category::CategoryMergePreview {
+                        vault_id,
+                        into_category_id: target_id,
+                    },
+                )
+                .await;
+            match res {
+                Ok(preview) => {
+                    self.state.categories.merge.preview = Some(preview);
+                    if self
+                        .state
+                        .categories
+                        .merge
+                        .preview
+                        .as_ref()
+                        .map(|p| p.ok)
+                        .unwrap_or(false)
+                    {
+                        self.state.categories.merge.confirming = true;
+                        self.set_toast("Preview ok. Premi Enter per confermare.", ToastLevel::Info);
+                    } else {
+                        self.state.categories.merge.confirming = false;
+                        self.set_toast(
+                            "Merge non valido. Controlla i conflitti.",
+                            ToastLevel::Error,
+                        );
+                    }
+                }
+                Err(err) => {
+                    if self.handle_auth_error(&err) {
+                        return Ok(());
+                    }
+                    self.state.categories.error = Some(login_message_for_error(err));
+                    self.connection_error("Errore connessione");
+                }
+            }
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .categories_merge(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                from_id,
+                api_types::category::CategoryMerge {
+                    vault_id,
+                    into_category_id: target_id,
+                },
+            )
+            .await;
+        match res {
+            Ok(_) => {
+                self.state.categories.mode = CategoriesMode::List;
+                self.state.categories.merge = CategoryMergeState::default();
+                self.load_categories().await?;
+                self.set_toast("Merge completato.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
+            }
+        }
+        Ok(())
+    }
+
+    async fn start_category_aliases(&mut self) -> Result<()> {
+        let Some(category_id) = self.selected_category().map(|category| category.id) else {
+            self.set_toast("Nessuna categoria selezionata.", ToastLevel::Error);
+            return Ok(());
+        };
+        self.state.categories.mode = CategoriesMode::Aliases;
+        self.reset_category_aliases();
+        self.load_category_aliases(category_id).await?;
+        Ok(())
+    }
+
+    async fn reload_category_aliases(&mut self) -> Result<()> {
+        let Some(category_id) = self.selected_category().map(|category| category.id) else {
+            return Ok(());
+        };
+        self.load_category_aliases(category_id).await
+    }
+
+    async fn load_category_aliases(&mut self, category_id: uuid::Uuid) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let res = self
+            .client
+            .category_aliases_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                category_id,
+                api_types::category::CategoryAliasList { vault_id },
+            )
+            .await;
+
+        match res {
+            Ok(response) => {
+                self.state.categories.aliases.items = response.aliases;
+                self.state.categories.aliases.category_id = Some(category_id);
+                if self.state.categories.aliases.selected
+                    >= self.state.categories.aliases.items.len()
+                {
+                    self.state.categories.aliases.selected =
+                        self.state.categories.aliases.items.len().saturating_sub(1);
+                }
+                self.state.categories.aliases.error = None;
+                self.connection_ok(None);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.aliases.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
+            }
+        }
+        Ok(())
+    }
+
+    async fn submit_category_alias_create(&mut self) -> Result<()> {
+        if self.state.categories.aliases.focus == AliasFocus::List {
+            self.state.categories.aliases.focus = AliasFocus::Input;
+            return Ok(());
+        }
+
+        let Some(category_id) = self.selected_category().map(|category| category.id) else {
+            self.state.categories.aliases.error =
+                Some("Nessuna categoria selezionata.".to_string());
+            return Ok(());
+        };
+        let alias = self.state.categories.aliases.input.trim().to_string();
+        if alias.is_empty() {
+            self.state.categories.aliases.error = Some("Inserisci un alias.".to_string());
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .category_alias_create(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                category_id,
+                api_types::category::CategoryAliasCreate {
+                    vault_id: self.current_vault_id()?,
+                    alias,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(_) => {
+                self.state.categories.aliases.input.clear();
+                self.state.categories.aliases.focus = AliasFocus::List;
+                self.load_category_aliases(category_id).await?;
+                self.set_toast("Alias creato.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.aliases.error = Some(login_message_for_error(err));
+                self.set_toast("Errore creazione alias.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn delete_category_alias(&mut self) -> Result<()> {
+        let Some(category_id) = self.selected_category().map(|category| category.id) else {
+            self.state.categories.aliases.error =
+                Some("Nessuna categoria selezionata.".to_string());
+            return Ok(());
+        };
+        let Some(alias_id) = self
+            .state
+            .categories
+            .aliases
+            .items
+            .get(self.state.categories.aliases.selected)
+            .map(|alias| alias.id)
+        else {
+            self.state.categories.aliases.error = Some("Nessun alias selezionato.".to_string());
+            return Ok(());
+        };
+
+        let res = self
+            .client
+            .category_alias_delete(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                category_id,
+                alias_id,
+                api_types::category::CategoryAliasDelete {
+                    vault_id: self.current_vault_id()?,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(()) => {
+                self.load_category_aliases(category_id).await?;
+                self.set_toast("Alias eliminato.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.aliases.error = Some(login_message_for_error(err));
+                self.set_toast("Errore eliminazione alias.", ToastLevel::Error);
+            }
+        }
+
         Ok(())
     }
 
@@ -3674,7 +5085,7 @@ impl App {
         let vault_id = self.current_vault_id()?;
         let name = self.state.wallets.form.name.trim();
         if name.is_empty() {
-            self.state.wallets.form.error = Some("Inserisci un nome.".to_string());
+            self.state.wallets.form.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -3688,7 +5099,7 @@ impl App {
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
-                self.state.wallets.form.error = Some("Saldo iniziale non valido.".to_string());
+                self.state.wallets.form.error = Some("Invalid opening balance.".to_string());
                 return Ok(());
             }
         };
@@ -3713,14 +5124,14 @@ impl App {
                 self.state.wallets.mode = WalletsMode::List;
                 self.refresh_snapshot().await?;
                 self.select_wallet_by_id(created.id);
-                self.set_toast("Wallet creato.", ToastLevel::Success);
+                self.set_toast("Wallet created.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.wallets.form.error = Some(login_message_for_error(err));
-                self.set_toast("Errore creazione wallet.", ToastLevel::Error);
+                self.set_toast("Failed to create wallet.", ToastLevel::Error);
             }
         }
 
@@ -3729,12 +5140,12 @@ impl App {
 
     async fn submit_wallet_rename(&mut self) -> Result<()> {
         let Some(wallet) = self.selected_wallet() else {
-            self.state.wallets.form.error = Some("Nessun wallet selezionato.".to_string());
+            self.state.wallets.form.error = Some("No wallet selected.".to_string());
             return Ok(());
         };
         let name = self.state.wallets.form.name.trim();
         if name.is_empty() {
-            self.state.wallets.form.error = Some("Inserisci un nome.".to_string());
+            self.state.wallets.form.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -3757,14 +5168,14 @@ impl App {
                 self.reset_wallet_form();
                 self.state.wallets.mode = WalletsMode::List;
                 self.refresh_snapshot().await?;
-                self.set_toast("Wallet aggiornato.", ToastLevel::Success);
+                self.set_toast("Wallet updated.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.wallets.form.error = Some(login_message_for_error(err));
-                self.set_toast("Errore aggiornamento wallet.", ToastLevel::Error);
+                self.set_toast("Failed to update wallet.", ToastLevel::Error);
             }
         }
 
@@ -3801,6 +5212,137 @@ impl App {
                 }
                 self.state.wallets.error = Some(login_message_for_error(err));
                 self.set_toast("Errore archivio wallet.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn submit_category_create(&mut self) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let name = self.state.categories.form.name.trim();
+        if name.is_empty() {
+            self.state.categories.form.error = Some("Inserisci un nome.".to_string());
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .categories_create(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                CategoryCreate {
+                    vault_id,
+                    name: name.to_string(),
+                },
+            )
+            .await;
+
+        match res {
+            Ok(created) => {
+                self.reset_category_form();
+                self.state.categories.mode = CategoriesMode::List;
+                self.load_categories().await?;
+                self.select_category_by_id(created.id);
+                self.set_toast("Categoria creata.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.form.error = Some(login_message_for_error(err));
+                self.set_toast("Errore creazione categoria.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn submit_category_rename(&mut self) -> Result<()> {
+        let Some(category) = self.selected_category() else {
+            self.state.categories.form.error = Some("Nessuna categoria selezionata.".to_string());
+            return Ok(());
+        };
+        if category.is_system {
+            self.state.categories.form.error =
+                Some("Le categorie di sistema non si modificano.".to_string());
+            return Ok(());
+        }
+        let name = self.state.categories.form.name.trim();
+        if name.is_empty() {
+            self.state.categories.form.error = Some("Inserisci un nome.".to_string());
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .categories_update(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                category.id,
+                CategoryUpdate {
+                    vault_id: self.current_vault_id()?,
+                    name: Some(name.to_string()),
+                    archived: None,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(_) => {
+                self.reset_category_form();
+                self.state.categories.mode = CategoriesMode::List;
+                self.load_categories().await?;
+                self.set_toast("Categoria aggiornata.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.form.error = Some(login_message_for_error(err));
+                self.set_toast("Errore aggiornamento categoria.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn toggle_category_archive(&mut self) -> Result<()> {
+        let Some(category) = self.selected_category() else {
+            self.state.categories.error = Some("Nessuna categoria selezionata.".to_string());
+            return Ok(());
+        };
+        if category.is_system {
+            self.state.categories.error =
+                Some("Le categorie di sistema non si modificano.".to_string());
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .categories_update(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                category.id,
+                CategoryUpdate {
+                    vault_id: self.current_vault_id()?,
+                    name: None,
+                    archived: Some(!category.archived),
+                },
+            )
+            .await;
+
+        match res {
+            Ok(_) => {
+                self.load_categories().await?;
+                self.set_toast("Categoria aggiornata.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.categories.error = Some(login_message_for_error(err));
+                self.set_toast("Errore archivio categoria.", ToastLevel::Error);
             }
         }
 
@@ -3896,7 +5438,7 @@ impl App {
         let vault_id = self.current_vault_id()?;
         let name = self.state.flows.form.name.trim().to_string();
         if name.is_empty() {
-            self.state.flows.form.error = Some("Inserisci un nome.".to_string());
+            self.state.flows.form.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -3910,12 +5452,12 @@ impl App {
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
-                self.state.flows.form.error = Some("Saldo iniziale non valido.".to_string());
+                self.state.flows.form.error = Some("Invalid opening allocation.".to_string());
                 return Ok(());
             }
         };
         if opening < 0 {
-            self.state.flows.form.error = Some("Saldo iniziale deve essere >= 0.".to_string());
+            self.state.flows.form.error = Some("Opening allocation must be >= 0.".to_string());
             return Ok(());
         }
 
@@ -3958,14 +5500,14 @@ impl App {
                 self.state.flows.mode = FlowsMode::List;
                 self.refresh_snapshot().await?;
                 self.select_flow_by_id(created.id);
-                self.set_toast("Flow creato.", ToastLevel::Success);
+                self.set_toast("Flow created.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.form.error = Some(login_message_for_error(err));
-                self.set_toast("Errore creazione flow.", ToastLevel::Error);
+                self.set_toast("Failed to create flow.", ToastLevel::Error);
             }
         }
 
@@ -3974,16 +5516,16 @@ impl App {
 
     async fn submit_flow_rename(&mut self) -> Result<()> {
         let Some(flow) = self.selected_flow() else {
-            self.state.flows.form.error = Some("Nessun flow selezionato.".to_string());
+            self.state.flows.form.error = Some("No flow selected.".to_string());
             return Ok(());
         };
         if flow.is_unallocated {
-            self.state.flows.form.error = Some("Unallocated non si può rinominare.".to_string());
+            self.state.flows.form.error = Some("Unallocated cannot be renamed.".to_string());
             return Ok(());
         }
         let name = self.state.flows.form.name.trim();
         if name.is_empty() {
-            self.state.flows.form.error = Some("Inserisci un nome.".to_string());
+            self.state.flows.form.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -4007,14 +5549,14 @@ impl App {
                 self.reset_flow_form();
                 self.state.flows.mode = FlowsMode::List;
                 self.refresh_snapshot().await?;
-                self.set_toast("Flow aggiornato.", ToastLevel::Success);
+                self.set_toast("Flow updated.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.form.error = Some(login_message_for_error(err));
-                self.set_toast("Errore aggiornamento flow.", ToastLevel::Error);
+                self.set_toast("Failed to update flow.", ToastLevel::Error);
             }
         }
 
@@ -4023,11 +5565,11 @@ impl App {
 
     async fn toggle_flow_archive(&mut self) -> Result<()> {
         let Some(flow) = self.selected_flow() else {
-            self.state.flows.error = Some("Nessun flow selezionato.".to_string());
+            self.state.flows.error = Some("No flow selected.".to_string());
             return Ok(());
         };
         if flow.is_unallocated {
-            self.state.flows.error = Some("Unallocated non si può archiviare.".to_string());
+            self.state.flows.error = Some("Unallocated cannot be archived.".to_string());
             return Ok(());
         }
         let res = self
@@ -4048,14 +5590,14 @@ impl App {
         match res {
             Ok(()) => {
                 self.refresh_snapshot().await?;
-                self.set_toast("Flow aggiornato.", ToastLevel::Success);
+                self.set_toast("Flow updated.", ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.error = Some(login_message_for_error(err));
-                self.set_toast("Errore archivio flow.", ToastLevel::Error);
+                self.set_toast("Failed to archive flow.", ToastLevel::Error);
             }
         }
 
@@ -4101,11 +5643,41 @@ impl App {
         Ok(())
     }
 
+    async fn delete_vault(&mut self) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let res = self
+            .client
+            .vault_delete(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                vault_id.as_str(),
+            )
+            .await;
+
+        self.state.vault_ui.confirm_delete = false;
+
+        match res {
+            Ok(()) => {
+                self.reset_after_vault_delete();
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.vault_ui.error = Some(login_message_for_error(err));
+                self.set_toast("Errore eliminazione vault.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
     async fn load_stats(&mut self) -> Result<()> {
         let payload = Vault {
             id: self.state.vault.as_ref().and_then(|v| v.id.clone()),
             name: self.state.vault.as_ref().and_then(|v| v.name.clone()),
             currency: None,
+            owner: None,
         };
 
         let res = self
@@ -4414,6 +5986,18 @@ impl App {
                 self.state.section = Section::Transactions;
                 self.start_transfer_flow();
             }
+            PaletteCommand::Categories => {
+                self.state.section = Section::Categories;
+                self.load_categories().await?;
+            }
+            PaletteCommand::CategoryAliases => {
+                self.state.section = Section::Categories;
+                self.load_categories().await?;
+                self.start_category_aliases().await?;
+            }
+            PaletteCommand::Members => {
+                self.open_members().await?;
+            }
             PaletteCommand::WalletNew => {
                 self.state.section = Section::Wallets;
                 self.start_wallet_create();
@@ -4430,6 +6014,8 @@ impl App {
                 self.refresh_snapshot().await?;
                 if self.state.section == Section::Transactions {
                     self.load_transactions(true).await?;
+                } else if self.state.section == Section::Categories {
+                    self.load_categories().await?;
                 } else if self.state.section == Section::Stats {
                     self.load_stats().await?;
                 }
@@ -4745,21 +6331,11 @@ pub struct ConnectionState {
     pub message: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CommandPaletteState {
     pub active: bool,
     pub query: String,
     pub selected: usize,
-}
-
-impl Default for CommandPaletteState {
-    fn default() -> Self {
-        Self {
-            active: false,
-            query: String::new(),
-            selected: 0,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -4861,22 +6437,152 @@ pub enum FlowsMode {
 }
 
 #[derive(Debug)]
+pub struct CategoriesState {
+    pub selected: usize,
+    pub mode: CategoriesMode,
+    pub error: Option<String>,
+    pub items: Vec<CategoryView>,
+    pub merge: CategoryMergeState,
+    pub form: CategoryFormState,
+    pub aliases: CategoryAliasState,
+}
+
+impl Default for CategoriesState {
+    fn default() -> Self {
+        Self {
+            selected: 0,
+            mode: CategoriesMode::List,
+            error: None,
+            items: Vec::new(),
+            merge: CategoryMergeState::default(),
+            form: CategoryFormState::default(),
+            aliases: CategoryAliasState::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CategoriesMode {
+    List,
+    Merge,
+    Create,
+    Rename,
+    Aliases,
+}
+
+#[derive(Debug, Default)]
+pub struct CategoryMergeState {
+    pub from_index: usize,
+    pub target_index: usize,
+    pub preview: Option<CategoryMergePreviewResponse>,
+    pub confirming: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct CategoryFormState {
+    pub name: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct CategoryAliasState {
+    pub items: Vec<CategoryAliasView>,
+    pub selected: usize,
+    pub input: String,
+    pub error: Option<String>,
+    pub focus: AliasFocus,
+    pub category_id: Option<uuid::Uuid>,
+}
+
+impl Default for CategoryAliasState {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            selected: 0,
+            input: String::new(),
+            error: None,
+            focus: AliasFocus::List,
+            category_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AliasFocus {
+    List,
+    Input,
+}
+
+#[derive(Debug)]
+pub struct MembersState {
+    pub scope: MembersScope,
+    pub mode: MembersMode,
+    pub items: Vec<MemberView>,
+    pub selected: usize,
+    pub flow_index: usize,
+    pub form: MemberFormState,
+    pub error: Option<String>,
+}
+
+impl Default for MembersState {
+    fn default() -> Self {
+        Self {
+            scope: MembersScope::Vault,
+            mode: MembersMode::List,
+            items: Vec::new(),
+            selected: 0,
+            flow_index: 0,
+            form: MemberFormState::default(),
+            error: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MembersScope {
+    Vault,
+    Flow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MembersMode {
+    List,
+    Form,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberFormField {
+    Username,
+    Role,
+}
+
+#[derive(Debug)]
+pub struct MemberFormState {
+    pub username: String,
+    pub role: MembershipRole,
+    pub focus: MemberFormField,
+    pub editing: bool,
+    pub error: Option<String>,
+}
+
+impl Default for MemberFormState {
+    fn default() -> Self {
+        Self {
+            username: String::new(),
+            role: MembershipRole::Viewer,
+            focus: MemberFormField::Username,
+            editing: false,
+            error: None,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct FlowDetailState {
     pub flow_id: Option<uuid::Uuid>,
     pub transactions: Vec<TransactionView>,
     pub detail: Option<engine::CashFlow>,
     pub error: Option<String>,
-}
-
-impl Default for FlowDetailState {
-    fn default() -> Self {
-        Self {
-            flow_id: None,
-            transactions: Vec::new(),
-            detail: None,
-            error: None,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -4932,7 +6638,9 @@ pub struct VaultState {
     pub mode: VaultMode,
     pub form: VaultFormState,
     pub defaults: DefaultsFormState,
+    pub list: VaultListState,
     pub error: Option<String>,
+    pub confirm_delete: bool,
 }
 
 impl Default for VaultState {
@@ -4941,7 +6649,9 @@ impl Default for VaultState {
             mode: VaultMode::View,
             form: VaultFormState::default(),
             defaults: DefaultsFormState::default(),
+            list: VaultListState::default(),
             error: None,
+            confirm_delete: false,
         }
     }
 }
@@ -4951,21 +6661,13 @@ pub enum VaultMode {
     View,
     Create,
     Defaults,
+    Select,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct VaultFormState {
     pub name: String,
     pub error: Option<String>,
-}
-
-impl Default for VaultFormState {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            error: None,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -4973,6 +6675,13 @@ pub struct DefaultsFormState {
     pub wallet_index: usize,
     pub flow_index: usize,
     pub focus: DefaultsField,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Default)]
+pub struct VaultListState {
+    pub items: Vec<api_types::vault::VaultView>,
+    pub selected: usize,
     pub error: Option<String>,
 }
 
@@ -5035,6 +6744,9 @@ pub enum PaletteCommand {
     NewRefund,
     NewTransferWallet,
     NewTransferFlow,
+    Categories,
+    CategoryAliases,
+    Members,
     WalletNew,
     FlowNew,
     VaultCreate,
@@ -5050,6 +6762,9 @@ impl PaletteCommand {
             Self::NewRefund,
             Self::NewTransferWallet,
             Self::NewTransferFlow,
+            Self::Categories,
+            Self::CategoryAliases,
+            Self::Members,
             Self::WalletNew,
             Self::FlowNew,
             Self::VaultCreate,
@@ -5065,6 +6780,9 @@ impl PaletteCommand {
             Self::NewRefund => "Transactions: New Refund",
             Self::NewTransferWallet => "Transactions: New Transfer Wallet",
             Self::NewTransferFlow => "Transactions: New Transfer Flow",
+            Self::Categories => "Categories: Open",
+            Self::CategoryAliases => "Categories: Aliases",
+            Self::Members => "Members: Open",
             Self::WalletNew => "Wallets: New",
             Self::FlowNew => "Flows: New",
             Self::VaultCreate => "Vault: Create",
@@ -5109,13 +6827,34 @@ fn fuzzy_score(label: &str, query: &str) -> Option<usize> {
 
 fn login_message_for_error(err: ClientError) -> String {
     match err {
-        ClientError::Unauthorized | ClientError::Forbidden => {
-            "Credenziali errate o pairing mancante.".to_string()
+        ClientError::Unauthorized => "Credenziali errate o pairing mancante.".to_string(),
+        ClientError::Forbidden(payload) => match payload.code {
+            ErrorCode::MembershipLastOwner => {
+                "Non puoi rimuovere l'ultimo owner del flow.".to_string()
+            }
+            ErrorCode::MembershipOwnerImmutable => {
+                "Non puoi cambiare il ruolo dell'owner del vault.".to_string()
+            }
+            ErrorCode::MembershipOwnerRemoveForbidden => {
+                "Non puoi rimuovere l'owner del vault.".to_string()
+            }
+            _ => "Operazione non permessa.".to_string(),
+        },
+        ClientError::NotFound(payload) => match payload.code {
+            ErrorCode::NotFound => "Risorsa non trovata.".to_string(),
+            _ => payload.message,
+        },
+        ClientError::Conflict(payload) => format!("Conflitto: {}", payload.message),
+        ClientError::Validation(payload) => {
+            if payload.message.contains("ambiguous vault name") {
+                "Vault name is ambiguous. Use \"Main (owner)\" or a vault id.".to_string()
+            } else {
+                format!("Errore di validazione: {}", payload.message)
+            }
         }
-        ClientError::NotFound => "Vault non trovato.".to_string(),
-        ClientError::Conflict(message) => format!("Conflitto: {message}"),
-        ClientError::Validation(message) => format!("Errore di validazione: {message}"),
-        ClientError::Server(message) => format!("Errore server: {message}"),
+        ClientError::BadRequest(payload) => format!("Richiesta non valida: {}", payload.message),
+        ClientError::Server(payload) => format!("Errore server: {}", payload.message),
+        ClientError::Client(message) => message,
         ClientError::Transport(err) => format!("Server non raggiungibile: {err}"),
     }
 }
@@ -5356,6 +7095,14 @@ pub(crate) fn flows_visible_indices(state: &AppState) -> Vec<usize> {
         .collect()
 }
 
+fn member_role_rank(role: MembershipRole) -> u8 {
+    match role {
+        MembershipRole::Owner => 0,
+        MembershipRole::Editor => 1,
+        MembershipRole::Viewer => 2,
+    }
+}
+
 pub(crate) fn ordered_wallet_ids_from_state(state: &AppState) -> Vec<uuid::Uuid> {
     let active_ids = state
         .snapshot
@@ -5480,4 +7227,27 @@ fn push_recent_id(target: &mut Vec<uuid::Uuid>, value: uuid::Uuid, limit: usize)
         return;
     }
     target.push(value);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PaletteCommand, filter_commands};
+
+    #[test]
+    fn palette_includes_category_commands() {
+        let all = PaletteCommand::all();
+        assert!(all.contains(&PaletteCommand::Categories));
+        assert!(all.contains(&PaletteCommand::CategoryAliases));
+        assert!(all.contains(&PaletteCommand::Members));
+    }
+
+    #[test]
+    fn filter_commands_matches_category_queries() {
+        let commands = filter_commands("cat");
+        assert!(commands.contains(&PaletteCommand::Categories));
+        let commands = filter_commands("alias");
+        assert!(commands.contains(&PaletteCommand::CategoryAliases));
+        let commands = filter_commands("member");
+        assert!(commands.contains(&PaletteCommand::Members));
+    }
 }

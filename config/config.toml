@@ -4,17 +4,22 @@
 level = "info"
 
 [server]
-port = 8844
+port = 3000
 # bind = "127.0.0.1"
-
-[server.database]
+bind = "0.0.0.0"
 # Only sqlite3 is supported as database.
-Sqlite = "config/db.sqlite3"
+database = { Sqlite = "data/sparagne.sqlite3" }
+
+# Optional TUI config (defaults to these values when omitted).
+[tui]
+base_url = "http://127.0.0.1:3000"
+username = ""
+vault = "Main"
+timezone = "Europe/Rome"
 
 # Uncomment to start the telegram bot
 # [telegram]
 # token = ""
 # server = ""
-
-username = ""
-password = ""
+# username = ""
+# password = ""

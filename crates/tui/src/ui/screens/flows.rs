@@ -217,7 +217,7 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             theme,
         ));
         lines.push(render_field(
-            "Opening",
+            "Opening allocation",
             form.opening.as_str(),
             form.focus == FlowFormField::Opening,
             theme,

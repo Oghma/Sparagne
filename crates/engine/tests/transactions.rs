@@ -2062,6 +2062,26 @@ async fn non_owner_cannot_manage_memberships() {
 }
 
 #[tokio::test]
+async fn editor_cannot_delete_vault() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    engine
+        .upsert_vault_member(&vault_id, "bob", "editor", "alice")
+        .await
+        .unwrap();
+
+    let err = engine.delete_vault(&vault_id, "bob").await.unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::KeyNotFound("vault not exists".to_string())
+    );
+}
+
+#[tokio::test]
 async fn vault_owner_can_manage_flow_members_and_unallocated_is_not_shareable() {
     let (engine, _db) = engine_with_db().await;
     let vault_id = engine
@@ -2110,5 +2130,104 @@ async fn vault_owner_can_manage_flow_members_and_unallocated_is_not_shareable() 
     assert_eq!(
         err,
         EngineError::InvalidFlow("cannot share Unallocated".to_string())
+    );
+}
+
+#[tokio::test]
+async fn vault_owner_role_cannot_be_changed_or_removed() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+
+    let err = engine
+        .upsert_vault_member(&vault_id, "alice", "viewer", "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::Forbidden("cannot change vault owner role".to_string())
+    );
+
+    let err = engine
+        .remove_vault_member(&vault_id, "alice", "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::Forbidden("cannot remove vault owner".to_string())
+    );
+}
+
+#[tokio::test]
+async fn flow_last_owner_cannot_be_demoted() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+    let flow_id = engine
+        .new_cash_flow(&vault_id, "SharedFlow", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    engine
+        .upsert_flow_member(&vault_id, flow_id, "bob", "owner", "alice")
+        .await
+        .unwrap();
+    engine
+        .upsert_flow_member(&vault_id, flow_id, "charlie", "owner", "alice")
+        .await
+        .unwrap();
+
+    engine
+        .upsert_flow_member(&vault_id, flow_id, "bob", "editor", "alice")
+        .await
+        .unwrap();
+
+    let err = engine
+        .upsert_flow_member(&vault_id, flow_id, "charlie", "viewer", "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::Forbidden("cannot remove last flow owner".to_string())
+    );
+}
+
+#[tokio::test]
+async fn flow_last_owner_cannot_be_removed() {
+    let (engine, _db) = engine_with_db().await;
+    let vault_id = engine
+        .new_vault("Main", "alice", Some(Currency::Eur))
+        .await
+        .unwrap();
+    let flow_id = engine
+        .new_cash_flow(&vault_id, "SharedFlow", 0, None, None, "alice")
+        .await
+        .unwrap();
+
+    engine
+        .upsert_flow_member(&vault_id, flow_id, "bob", "owner", "alice")
+        .await
+        .unwrap();
+    engine
+        .upsert_flow_member(&vault_id, flow_id, "charlie", "owner", "alice")
+        .await
+        .unwrap();
+
+    engine
+        .remove_flow_member(&vault_id, flow_id, "bob", "alice")
+        .await
+        .unwrap();
+
+    let err = engine
+        .remove_flow_member(&vault_id, flow_id, "charlie", "alice")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        EngineError::Forbidden("cannot remove last flow owner".to_string())
     );
 }

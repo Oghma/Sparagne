@@ -1,0 +1,10 @@
+/.git
+/.gitignore
+/target
+/.idea
+/.vscode
+**/*.swp
+**/*.swo
+**/*.log
+/config/*.sqlite3
+/data

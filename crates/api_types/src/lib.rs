@@ -99,6 +99,19 @@ pub mod flow {
         pub archived: Option<bool>,
         pub mode: Option<FlowMode>,
     }
+
+    /// List flows accessible to the current user within a vault.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowSharedList {
+        pub vault_id: String,
+        pub include_archived: Option<bool>,
+    }
+
+    /// Response body for shared flow listing.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowSharedListResponse {
+        pub flows: Vec<super::vault::FlowView>,
+    }
 }
 
 pub mod vault {
@@ -115,6 +128,30 @@ pub mod vault {
         pub id: Option<String>,
         pub name: Option<String>,
         pub currency: Option<Currency>,
+        /// Owner username for display and disambiguation.
+        pub owner: Option<String>,
+    }
+
+    /// List accessible vaults for the current user.
+    #[derive(Debug, Default, Serialize, Deserialize)]
+    pub struct VaultList {}
+
+    /// Vault entry returned by list APIs.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct VaultView {
+        pub id: String,
+        pub name: String,
+        pub currency: Currency,
+        /// Owner username.
+        pub owner: String,
+        /// True when the vault is shared (owner != current user).
+        pub shared: bool,
+    }
+
+    /// Response body for vault listing.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct VaultListResponse {
+        pub vaults: Vec<VaultView>,
     }
 
     /// A vault snapshot for UI clients (bot/TUI).
@@ -126,6 +163,8 @@ pub mod vault {
         pub id: String,
         pub name: String,
         pub currency: Currency,
+        /// Owner username for display and disambiguation.
+        pub owner: Option<String>,
         pub wallets: Vec<WalletView>,
         pub flows: Vec<FlowView>,
         pub unallocated_flow_id: Uuid,
@@ -257,6 +296,57 @@ pub mod category {
     pub struct CategoryMergePreviewResponse {
         pub ok: bool,
         pub conflicts: Vec<CategoryMergeConflict>,
+    }
+}
+
+pub mod error {
+    use std::collections::BTreeMap;
+
+    use serde::{Deserialize, Serialize};
+
+    /// Machine-readable error codes returned by HTTP APIs.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum ErrorCode {
+        BadRequest,
+        Conflict,
+        CurrencyMismatch,
+        DatabaseError,
+        Forbidden,
+        InsufficientFunds,
+        InvalidAmount,
+        InvalidCursor,
+        InvalidFlow,
+        InvalidId,
+        InvalidName,
+        InvalidRole,
+        MembershipLastOwner,
+        MembershipOwnerImmutable,
+        MembershipOwnerRemoveForbidden,
+        MaxBalanceReached,
+        NotFound,
+        Unknown,
+    }
+
+    /// Additional structured metadata for error responses.
+    pub type ErrorDetails = BTreeMap<String, String>;
+
+    /// Error response returned by HTTP APIs.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct ErrorEnvelope {
+        pub error: ErrorPayload,
+    }
+
+    /// Payload for API error responses.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct ErrorPayload {
+        /// Stable code for programmatic handling.
+        pub code: ErrorCode,
+        /// Human-readable error message.
+        pub message: String,
+        /// Optional metadata such as field names or scopes.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub details: Option<ErrorDetails>,
     }
 }
 

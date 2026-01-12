@@ -107,12 +107,14 @@ fn router(state: ServerState) -> Router {
         .route("/cashFlow/get", post(cash_flow::get))
         .route("/transactions", post(transactions::list))
         .route("/transactions/get", post(transactions::get_detail))
+        .route("/vault/list", post(vault::list))
         .route("/wallets", post(wallets::wallet_new))
         .route(
             "/wallets/{id}",
             axum::routing::patch(wallets::wallet_update),
         )
         .route("/flows", post(flows::flow_new))
+        .route("/flows/shared", post(flows::shared_list))
         .route("/flows/{id}", axum::routing::patch(flows::flow_update))
         .route("/categories/list", post(categories::list))
         .route("/categories", post(categories::create))
@@ -144,6 +146,7 @@ fn router(state: ServerState) -> Router {
         .route("/vault/new", post(vault::vault_new))
         .route("/vault/get", post(vault::get))
         .route("/vault/snapshot", post(vault::snapshot))
+        .route("/vault/{id}", delete(vault::delete))
         .route(
             "/vault/{vault_id}/members",
             get(memberships::list_vault_members).post(memberships::upsert_vault_member),
@@ -219,7 +222,8 @@ mod http_tests {
 
     use api_types::{
         category, flow,
-        transaction::{TransactionDetailResponse, TransactionGet, TransactionList},
+        transaction::{IncomeNew, TransactionDetailResponse, TransactionGet, TransactionList},
+        vault::Vault,
         wallet,
     };
     use base64::Engine as _;
@@ -366,6 +370,355 @@ mod http_tests {
             .unwrap();
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn flow_member_can_get_vault_header_but_not_snapshot() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+        let flow_id = engine
+            .new_cash_flow(&vault_id, "Shared", 0, None, None, OWNER)
+            .await
+            .unwrap();
+        engine
+            .upsert_flow_member(&vault_id, flow_id, FLOW_MEMBER, "viewer", OWNER)
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/vault/get")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&Vault {
+                    id: None,
+                    name: Some("Main".to_string()),
+                    currency: None,
+                    owner: None,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/vault/snapshot")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&Vault {
+                    id: None,
+                    name: Some("Main".to_string()),
+                    currency: None,
+                    owner: None,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn vault_delete_is_owner_only() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+        engine
+            .upsert_vault_member(&vault_id, FLOW_MEMBER, "editor", OWNER)
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("DELETE")
+            .uri(format!("/vault/{vault_id}"))
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        let req = axum::http::Request::builder()
+            .method("DELETE")
+            .uri(format!("/vault/{vault_id}"))
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn vault_stats_are_owner_only() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+        engine
+            .upsert_vault_member(&vault_id, FLOW_MEMBER, "viewer", OWNER)
+            .await
+            .unwrap();
+
+        let payload = Vault {
+            id: Some(vault_id.clone()),
+            name: None,
+            currency: None,
+            owner: None,
+        };
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/stats/get")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/stats/get")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn shared_flow_list_scopes_to_accessible_flows() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+        let flow_a = engine
+            .new_cash_flow(&vault_id, "Shared A", 0, None, None, OWNER)
+            .await
+            .unwrap();
+        let flow_b = engine
+            .new_cash_flow(&vault_id, "Shared B", 0, None, None, OWNER)
+            .await
+            .unwrap();
+        engine
+            .upsert_flow_member(&vault_id, flow_a, FLOW_MEMBER, "viewer", OWNER)
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/flows/shared")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&flow::FlowSharedList {
+                    vault_id: vault_id.clone(),
+                    include_archived: None,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let payload: flow::FlowSharedListResponse = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload.flows.len(), 1);
+        assert_eq!(payload.flows[0].id, flow_a);
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/flows/shared")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(OWNER, OWNER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&flow::FlowSharedList {
+                    vault_id: vault_id.clone(),
+                    include_archived: None,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let payload: flow::FlowSharedListResponse = serde_json::from_slice(&body).unwrap();
+        assert!(payload.flows.iter().any(|f| f.id == flow_a));
+        assert!(payload.flows.iter().any(|f| f.id == flow_b));
+        assert!(payload.flows.iter().any(|f| f.is_unallocated));
+    }
+
+    #[tokio::test]
+    async fn viewer_cannot_write_editor_can_write() {
+        let (app, engine, _db) = setup().await;
+
+        let vault_id = engine
+            .new_vault("Main", OWNER, Some(engine::Currency::Eur))
+            .await
+            .unwrap();
+
+        engine
+            .upsert_vault_member(&vault_id, FLOW_MEMBER, "viewer", OWNER)
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/wallets")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&wallet::WalletNew {
+                    vault_id: vault_id.clone(),
+                    name: "Viewer Wallet".to_string(),
+                    opening_balance_minor: 0,
+                    occurred_at: Utc::now().fixed_offset(),
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        let vault = engine
+            .vault_snapshot(Some(&vault_id), None, OWNER)
+            .await
+            .unwrap();
+        let wallet_id = vault
+            .wallet
+            .values()
+            .find(|w| w.name.eq_ignore_ascii_case("Cash"))
+            .unwrap()
+            .id;
+        let flow_id = vault
+            .cash_flow
+            .values()
+            .find(|f| f.is_unallocated())
+            .unwrap()
+            .id;
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/income")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&IncomeNew {
+                    vault_id: vault_id.clone(),
+                    amount_minor: 1000,
+                    flow_id: Some(flow_id),
+                    wallet_id: Some(wallet_id),
+                    category: None,
+                    category_id: None,
+                    note: None,
+                    idempotency_key: None,
+                    occurred_at: Utc::now().fixed_offset(),
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        engine
+            .upsert_vault_member(&vault_id, FLOW_MEMBER, "editor", OWNER)
+            .await
+            .unwrap();
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/wallets")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&wallet::WalletNew {
+                    vault_id: vault_id.clone(),
+                    name: "Editor Wallet".to_string(),
+                    opening_balance_minor: 0,
+                    occurred_at: Utc::now().fixed_offset(),
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::CREATED);
+
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/income")
+            .header(
+                axum::http::header::AUTHORIZATION,
+                basic_auth(FLOW_MEMBER, FLOW_MEMBER_PW),
+            )
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&IncomeNew {
+                    vault_id: vault_id.clone(),
+                    amount_minor: 1000,
+                    flow_id: Some(flow_id),
+                    wallet_id: Some(wallet_id),
+                    category: None,
+                    category_id: None,
+                    note: None,
+                    idempotency_key: None,
+                    occurred_at: Utc::now().fixed_offset(),
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::CREATED);
     }
 
     #[tokio::test]
