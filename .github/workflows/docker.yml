@@ -2,7 +2,7 @@ name: Docker
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths: &docker_paths
       - Dockerfile
       - Cargo.toml
