@@ -4,11 +4,13 @@ FROM rust:1.92-bookworm AS builder
 WORKDIR /sparagne
 COPY ./ .
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libsqlite3-dev ca-certificates \
+    && apt-get install -y --no-install-recommends libsqlite3-dev libssl-dev pkg-config ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH)" \
     && mkdir -p /sparagne/runtime-libs /sparagne/data \
-    && cp -a "/usr/lib/${multiarch}/libsqlite3.so.0*" /sparagne/runtime-libs/
+    && cp -a /usr/lib/${multiarch}/libsqlite3.so.0* /sparagne/runtime-libs/ \
+    && cp -a /usr/lib/${multiarch}/libssl.so.* /usr/lib/${multiarch}/libcrypto.so.* /sparagne/runtime-libs/ \
+    && cp -a /usr/lib/${multiarch}/libz.so.1 /sparagne/runtime-libs/
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/sparagne/target \
