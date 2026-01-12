@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       artifact: sparagne-${{ matrix.target }}.tar.gz
+      RUST_TOOLCHAIN: 1.92.0
     strategy:
       fail-fast: false
       matrix:
@@ -28,7 +29,7 @@ jobs:
       - name: Install Rust 1.92.0
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.92.0
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2

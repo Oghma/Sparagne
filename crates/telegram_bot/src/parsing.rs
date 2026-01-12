@@ -96,50 +96,59 @@ mod tests {
     use super::*;
 
     #[test]
-    fn expense_default_without_sign() {
-        let parsed = parse_quick_add("12.50 bar", Currency::Eur).unwrap();
+    fn expense_default_without_sign() -> Result<(), ParseError> {
+        let parsed = parse_quick_add("12.50 bar", Currency::Eur)?;
         assert_eq!(parsed.kind, QuickKind::Expense);
         assert_eq!(parsed.amount_minor, 1250);
+        Ok(())
     }
 
     #[test]
-    fn expense_with_minus_sign() {
-        let parsed = parse_quick_add("-12.50 bar", Currency::Eur).unwrap();
+    fn expense_with_minus_sign() -> Result<(), ParseError> {
+        let parsed = parse_quick_add("-12.50 bar", Currency::Eur)?;
         assert_eq!(parsed.kind, QuickKind::Expense);
         assert_eq!(parsed.amount_minor, 1250);
+        Ok(())
     }
 
     #[test]
-    fn income_with_plus_sign() {
-        let parsed = parse_quick_add("+1000 stipendio", Currency::Eur).unwrap();
+    fn income_with_plus_sign() -> Result<(), ParseError> {
+        let parsed = parse_quick_add("+1000 stipendio", Currency::Eur)?;
         assert_eq!(parsed.kind, QuickKind::Income);
         assert_eq!(parsed.amount_minor, 100_000);
+        Ok(())
     }
 
     #[test]
-    fn refund_prefix_r() {
-        let parsed = parse_quick_add("r 5.20 amazon", Currency::Eur).unwrap();
+    fn refund_prefix_r() -> Result<(), ParseError> {
+        let parsed = parse_quick_add("r 5.20 amazon", Currency::Eur)?;
         assert_eq!(parsed.kind, QuickKind::Refund);
         assert_eq!(parsed.amount_minor, 520);
+        Ok(())
     }
 
     #[test]
-    fn tag_sets_category_and_is_removed_from_note() {
-        let parsed = parse_quick_add("12.50 bar #Food caffè", Currency::Eur).unwrap();
+    fn tag_sets_category_and_is_removed_from_note() -> Result<(), ParseError> {
+        let parsed = parse_quick_add("12.50 bar #Food caffè", Currency::Eur)?;
         assert_eq!(parsed.category.as_deref(), Some("food"));
         assert_eq!(parsed.note.as_deref(), Some("bar caffè"));
+        Ok(())
     }
 
     #[test]
-    fn tag_can_be_anywhere() {
-        let parsed = parse_quick_add("12.50 #food bar caffè", Currency::Eur).unwrap();
+    fn tag_can_be_anywhere() -> Result<(), ParseError> {
+        let parsed = parse_quick_add("12.50 #food bar caffè", Currency::Eur)?;
         assert_eq!(parsed.category.as_deref(), Some("food"));
         assert_eq!(parsed.note.as_deref(), Some("bar caffè"));
+        Ok(())
     }
 
     #[test]
     fn rejects_more_than_one_tag() {
-        let err = parse_quick_add("12.50 a #x b #y", Currency::Eur).unwrap_err();
-        assert!(matches!(err, ParseError::TooManyTags));
+        match parse_quick_add("12.50 a #x b #y", Currency::Eur) {
+            Err(ParseError::TooManyTags) => {}
+            Err(err) => panic!("unexpected error: {err:?}"),
+            Ok(_) => panic!("expected too-many-tags error"),
+        }
     }
 }

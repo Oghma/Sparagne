@@ -2,8 +2,13 @@ version: 2
 updates:
   - package-ecosystem: cargo
     directory: /
+    target-branch: master
     schedule:
       interval: daily
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
     commit-message:
       prefix: chore
       prefix-development: chore(dev)

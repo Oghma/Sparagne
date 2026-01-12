@@ -600,12 +600,11 @@ impl Engine {
         vault_id: &str,
         input: Option<&str>,
     ) -> ResultEngine<CategorySelection> {
-        let trimmed = input.map(str::trim).filter(|value| !value.is_empty());
-        if trimmed.is_none() {
+        let Some(trimmed) = input.map(str::trim).filter(|value| !value.is_empty()) else {
             return self.uncategorized_category(db_tx, vault_id).await;
-        }
+        };
 
-        let display = normalize_category_display(trimmed.unwrap())?;
+        let display = normalize_category_display(trimmed)?;
         let normalized = normalize_category_key(&display)?;
         if normalized == UNCATEGORIZED_NAME_NORM {
             return self.uncategorized_category(db_tx, vault_id).await;

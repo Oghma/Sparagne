@@ -6,3 +6,14 @@ extend-ignore-re = [
 
 [default.extend-words]
 sparagne = "sparagne"
+ratatui = "ratatui"
+
+# Italian UI strings.
+categorie = "categorie"
+comando = "comando"
+dedicato = "dedicato"
+determinare = "determinare"
+eliminato = "eliminato"
+impossibile = "impossibile"
+preferenze = "preferenze"
+possibile = "possibile"

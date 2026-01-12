@@ -334,23 +334,22 @@ impl Engine {
         }
 
         if allowed.is_empty() {
-            if let Some((base, owner)) = owner_hint.as_ref() {
-                if let Some(model) = vault::Entity::find()
+            if let Some((base, owner)) = owner_hint.as_ref()
+                && let Some(model) = vault::Entity::find()
                     .filter(Expr::cust("LOWER(name)").eq(base.to_lowercase()))
                     .filter(vault::Column::UserId.eq(owner.as_str()))
                     .one(db)
                     .await?
-                {
-                    let has_access = if model.user_id == user_id {
-                        true
-                    } else {
-                        self.vault_membership_role(db, model.id, user_id)
-                            .await?
-                            .is_some()
-                    };
-                    if has_access {
-                        return Ok(model);
-                    }
+            {
+                let has_access = if model.user_id == user_id {
+                    true
+                } else {
+                    self.vault_membership_role(db, model.id, user_id)
+                        .await?
+                        .is_some()
+                };
+                if has_access {
+                    return Ok(model);
                 }
             }
             return Err(EngineError::KeyNotFound("vault not exists".to_string()));
@@ -360,23 +359,22 @@ impl Engine {
             if let Some(pos) = allowed.iter().position(|model| model.user_id == user_id) {
                 return Ok(allowed.remove(pos));
             }
-            if let Some((base, owner)) = owner_hint {
-                if let Some(model) = vault::Entity::find()
+            if let Some((base, owner)) = owner_hint
+                && let Some(model) = vault::Entity::find()
                     .filter(Expr::cust("LOWER(name)").eq(base.to_lowercase()))
                     .filter(vault::Column::UserId.eq(owner.as_str()))
                     .one(db)
                     .await?
-                {
-                    let has_access = if model.user_id == user_id {
-                        true
-                    } else {
-                        self.vault_membership_role(db, model.id, user_id)
-                            .await?
-                            .is_some()
-                    };
-                    if has_access {
-                        return Ok(model);
-                    }
+            {
+                let has_access = if model.user_id == user_id {
+                    true
+                } else {
+                    self.vault_membership_role(db, model.id, user_id)
+                        .await?
+                        .is_some()
+                };
+                if has_access {
+                    return Ok(model);
                 }
             }
             return Err(EngineError::InvalidAmount(
@@ -450,31 +448,26 @@ impl Engine {
 
         let mut allowed_vaults = Vec::new();
         for model in models {
-            let has_access = if model.user_id == user_id {
-                true
-            } else if self
-                .vault_membership_role(db, model.id, user_id)
-                .await?
-                .is_some()
-            {
-                true
-            } else {
-                self.has_flow_membership_in_vault(db, model.id, user_id)
+            let has_access = model.user_id == user_id
+                || self
+                    .vault_membership_role(db, model.id, user_id)
                     .await?
-            };
+                    .is_some()
+                || self
+                    .has_flow_membership_in_vault(db, model.id, user_id)
+                    .await?;
             if has_access {
                 allowed_vaults.push(model);
             }
         }
 
         if allowed_vaults.is_empty() {
-            if let Some((base, owner)) = owner_hint {
-                if let Some(model) = self
+            if let Some((base, owner)) = owner_hint
+                && let Some(model) = self
                     .resolve_vault_by_name_owner(db, base.as_str(), owner.as_str(), user_id)
                     .await?
-                {
-                    return Ok(model);
-                }
+            {
+                return Ok(model);
             }
             return Err(EngineError::KeyNotFound("vault not exists".to_string()));
         }
@@ -486,13 +479,12 @@ impl Engine {
             {
                 return Ok(allowed_vaults.remove(pos));
             }
-            if let Some((base, owner)) = owner_hint {
-                if let Some(model) = self
+            if let Some((base, owner)) = owner_hint
+                && let Some(model) = self
                     .resolve_vault_by_name_owner(db, base.as_str(), owner.as_str(), user_id)
                     .await?
-                {
-                    return Ok(model);
-                }
+            {
+                return Ok(model);
             }
             return Err(EngineError::InvalidAmount(
                 "ambiguous vault name".to_string(),
@@ -524,20 +516,16 @@ impl Engine {
             return Ok(None);
         };
 
-        let allowed = if model.user_id == user_id {
-            true
-        } else if self
-            .vault_membership_role(db, model.id, user_id)
-            .await?
-            .is_some()
-        {
-            true
-        } else {
-            self.has_flow_membership_in_vault(db, model.id, user_id)
+        let allowed = model.user_id == user_id
+            || self
+                .vault_membership_role(db, model.id, user_id)
                 .await?
-        };
+                .is_some()
+            || self
+                .has_flow_membership_in_vault(db, model.id, user_id)
+                .await?;
 
-        if allowed { Ok(Some(model)) } else { Ok(None) }
+        Ok(if allowed { Some(model) } else { None })
     }
 
     pub(super) async fn unallocated_flow_id(

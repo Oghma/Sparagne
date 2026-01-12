@@ -378,7 +378,8 @@ impl Engine {
             .await?;
 
         let vault_uuid = parse_vault_uuid(vault_id)?;
-        if let Err(err) = transactions::ActiveModel::from(tx).insert(db_tx).await {
+        let tx_active = transactions::ActiveModel::try_from(tx)?;
+        if let Err(err) = tx_active.insert(db_tx).await {
             if tx.idempotency_key.is_some() {
                 let key = tx.idempotency_key.as_deref().unwrap_or_default();
                 let existing = transactions::Entity::find()
