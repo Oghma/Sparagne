@@ -95,7 +95,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         let y = card_area.y.saturating_add(card_area.height + 1);
         if y < area.y + area.height {
             let remaining = area.height.saturating_sub(y.saturating_sub(area.y));
-            let height = remaining.min(3).max(1);
+            let height = remaining.clamp(1, 3);
             let error_area = Rect {
                 x: area.x,
                 y,

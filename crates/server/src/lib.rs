@@ -226,15 +226,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn membership_forbidden_includes_code() {
+    async fn membership_forbidden_includes_code()
+    -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let res = ServerError::from(EngineError::Forbidden(
             "cannot remove last flow owner".to_string(),
         ))
         .into_response();
-        let body = res.into_body().collect().await.unwrap().to_bytes();
-        let payload: ErrorEnvelope = serde_json::from_slice(&body).unwrap();
+        let body = res.into_body().collect().await?.to_bytes();
+        let payload: ErrorEnvelope = serde_json::from_slice(&body)?;
         assert_eq!(payload.error.code, ErrorCode::MembershipLastOwner);
         let details = payload.error.details.unwrap_or_default();
         assert_eq!(details.get("scope"), Some(&"flow_membership".to_string()));
+        Ok(())
     }
 }

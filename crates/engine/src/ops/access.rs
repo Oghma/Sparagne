@@ -448,18 +448,14 @@ impl Engine {
 
         let mut allowed_vaults = Vec::new();
         for model in models {
-            let has_access = if model.user_id == user_id {
-                true
-            } else if self
-                .vault_membership_role(db, model.id, user_id)
-                .await?
-                .is_some()
-            {
-                true
-            } else {
-                self.has_flow_membership_in_vault(db, model.id, user_id)
+            let has_access = model.user_id == user_id
+                || self
+                    .vault_membership_role(db, model.id, user_id)
                     .await?
-            };
+                    .is_some()
+                || self
+                    .has_flow_membership_in_vault(db, model.id, user_id)
+                    .await?;
             if has_access {
                 allowed_vaults.push(model);
             }
