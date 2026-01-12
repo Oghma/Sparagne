@@ -162,13 +162,15 @@ impl Related<super::legs::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-impl From<&Transaction> for ActiveModel {
-    fn from(tx: &Transaction) -> Self {
-        Self {
+impl TryFrom<&Transaction> for ActiveModel {
+    type Error = EngineError;
+
+    fn try_from(tx: &Transaction) -> Result<Self, Self::Error> {
+        let vault_id = Uuid::parse_str(&tx.vault_id)
+            .map_err(|_| EngineError::InvalidId("invalid vault id".to_string()))?;
+        Ok(Self {
             id: ActiveValue::Set(tx.id),
-            vault_id: ActiveValue::Set(
-                Uuid::parse_str(&tx.vault_id).expect("Transaction.vault_id must be a valid UUID"),
-            ),
+            vault_id: ActiveValue::Set(vault_id),
             kind: ActiveValue::Set(tx.kind),
             occurred_at: ActiveValue::Set(tx.occurred_at),
             amount_minor: ActiveValue::Set(tx.amount_minor),
@@ -181,7 +183,7 @@ impl From<&Transaction> for ActiveModel {
             voided_at: ActiveValue::Set(tx.voided_at),
             voided_by: ActiveValue::Set(tx.voided_by.clone()),
             refunded_transaction_id: ActiveValue::Set(tx.refunded_transaction_id),
-        }
+        })
     }
 }
 

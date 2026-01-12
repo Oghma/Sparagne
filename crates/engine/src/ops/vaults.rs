@@ -109,7 +109,7 @@ impl Engine {
         let mut new_vault = Vault::new(name.clone(), user_id.as_str());
         new_vault.currency = currency.unwrap_or_default();
         let new_vault_id = new_vault.id.clone();
-        let vault_entry: vault::ActiveModel = (&new_vault).into();
+        let vault_entry = vault::ActiveModel::try_from(&new_vault)?;
         self.with_tx(|_engine, db_tx| {
             Box::pin(async move {
                 // Enforce unique vault names per owner (case-insensitive) to avoid

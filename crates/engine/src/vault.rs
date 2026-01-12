@@ -5,7 +5,7 @@ use sea_orm::{ActiveValue, prelude::*};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::{CashFlow, Currency, Wallet};
+use crate::{CashFlow, Currency, EngineError, Wallet};
 
 /// Lightweight vault metadata used by APIs that don't need a full snapshot.
 #[derive(Debug, Clone)]
@@ -84,15 +84,17 @@ impl Related<super::wallets::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-impl From<&Vault> for ActiveModel {
-    fn from(value: &Vault) -> Self {
-        Self {
-            id: sea_orm::ActiveValue::Set(
-                Uuid::parse_str(&value.id).expect("Vault.id must be a valid UUID"),
-            ),
+impl TryFrom<&Vault> for ActiveModel {
+    type Error = EngineError;
+
+    fn try_from(value: &Vault) -> Result<Self, Self::Error> {
+        let id = Uuid::parse_str(&value.id)
+            .map_err(|_| EngineError::InvalidId("invalid vault id".to_string()))?;
+        Ok(Self {
+            id: sea_orm::ActiveValue::Set(id),
             name: ActiveValue::Set(value.name.clone()),
             user_id: ActiveValue::Set(value.user_id.clone()),
             currency: ActiveValue::Set(value.currency),
-        }
+        })
     }
 }
