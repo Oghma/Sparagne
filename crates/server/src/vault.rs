@@ -1,6 +1,8 @@
 //! Vault API endpoints
 
-use api_types::vault::{FlowView, Vault, VaultNew, VaultSnapshot, WalletView};
+use api_types::vault::{
+    FlowView, Vault, VaultList, VaultListResponse, VaultNew, VaultSnapshot, VaultView, WalletView,
+};
 use axum::{
     Extension, Json,
     extract::{Path, State},
@@ -35,6 +37,29 @@ pub async fn vault_new(
     }))
 }
 
+/// List vaults accessible to the current user.
+pub async fn list(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Json(_payload): Json<VaultList>,
+) -> Result<Json<VaultListResponse>, ServerError> {
+    let vaults = state.engine.vault_list(&user.username).await?;
+    let items = vaults
+        .into_iter()
+        .map(|vault| VaultView {
+            id: vault.id,
+            name: vault.name,
+            currency: match vault.currency {
+                engine::Currency::Eur => api_types::Currency::Eur,
+            },
+            shared: vault.owner != user.username,
+            owner: vault.owner,
+        })
+        .collect();
+
+    Ok(Json(VaultListResponse { vaults: items }))
+}
+
 /// Handle requests for listing user Vault
 pub async fn get(
     Extension(user): Extension<user::Model>,
@@ -56,7 +81,7 @@ pub async fn get(
         currency: Some(match vault.currency {
             engine::Currency::Eur => api_types::Currency::Eur,
         }),
-        owner: Some(vault.user_id),
+        owner: Some(vault.owner),
     }))
 }
 

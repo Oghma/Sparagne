@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, VaultHeader, Wallet,
-    cash_flows, categories,
+    cash_flows, categories, flow_memberships,
     util::{normalize_category_key, normalize_required_name},
     vault, vault_memberships, wallets,
 };
@@ -204,6 +204,84 @@ impl Engine {
                 };
 
                 Ok(VaultHeader::from(model))
+            })
+        })
+        .await
+    }
+
+    /// List vault headers available to a user (owned, shared, or flow-shared).
+    pub async fn vault_list(&self, user_id: &str) -> ResultEngine<Vec<VaultHeader>> {
+        let user_id = user_id.to_string();
+        self.with_tx(|_engine, db_tx| {
+            Box::pin(async move {
+                let mut by_id: HashMap<Uuid, vault::Model> = HashMap::new();
+
+                let owned = vault::Entity::find()
+                    .filter(vault::Column::UserId.eq(user_id.clone()))
+                    .all(db_tx)
+                    .await?;
+                for model in owned {
+                    by_id.insert(model.id, model);
+                }
+
+                let member_vault_ids = vault_memberships::Entity::find()
+                    .filter(vault_memberships::Column::UserId.eq(user_id.clone()))
+                    .all(db_tx)
+                    .await?
+                    .into_iter()
+                    .map(|model| model.vault_id)
+                    .collect::<Vec<_>>();
+                if !member_vault_ids.is_empty() {
+                    let models = vault::Entity::find()
+                        .filter(vault::Column::Id.is_in(member_vault_ids))
+                        .all(db_tx)
+                        .await?;
+                    for model in models {
+                        by_id.entry(model.id).or_insert(model);
+                    }
+                }
+
+                let flow_ids = flow_memberships::Entity::find()
+                    .filter(flow_memberships::Column::UserId.eq(user_id.clone()))
+                    .all(db_tx)
+                    .await?
+                    .into_iter()
+                    .map(|model| model.flow_id)
+                    .collect::<Vec<_>>();
+                if !flow_ids.is_empty() {
+                    let vault_ids = cash_flows::Entity::find()
+                        .filter(cash_flows::Column::Id.is_in(flow_ids))
+                        .all(db_tx)
+                        .await?
+                        .into_iter()
+                        .map(|model| model.vault_id)
+                        .collect::<Vec<_>>();
+                    if !vault_ids.is_empty() {
+                        let models = vault::Entity::find()
+                            .filter(vault::Column::Id.is_in(vault_ids))
+                            .all(db_tx)
+                            .await?;
+                        for model in models {
+                            by_id.entry(model.id).or_insert(model);
+                        }
+                    }
+                }
+
+                let mut headers = by_id
+                    .into_values()
+                    .map(VaultHeader::from)
+                    .collect::<Vec<_>>();
+                let owner_id = user_id.clone();
+                headers.sort_by(|a, b| {
+                    let a_shared = a.owner != owner_id;
+                    let b_shared = b.owner != owner_id;
+                    let a_name = a.name.to_lowercase();
+                    let b_name = b.name.to_lowercase();
+                    let a_owner = a.owner.to_lowercase();
+                    let b_owner = b.owner.to_lowercase();
+                    (a_shared, a_name, a_owner).cmp(&(b_shared, b_name, b_owner))
+                });
+                Ok(headers)
             })
         })
         .await

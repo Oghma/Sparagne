@@ -128,7 +128,30 @@ pub mod vault {
         pub id: Option<String>,
         pub name: Option<String>,
         pub currency: Option<Currency>,
+        /// Owner username for display and disambiguation.
         pub owner: Option<String>,
+    }
+
+    /// List accessible vaults for the current user.
+    #[derive(Debug, Default, Serialize, Deserialize)]
+    pub struct VaultList {}
+
+    /// Vault entry returned by list APIs.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct VaultView {
+        pub id: String,
+        pub name: String,
+        pub currency: Currency,
+        /// Owner username.
+        pub owner: String,
+        /// True when the vault is shared (owner != current user).
+        pub shared: bool,
+    }
+
+    /// Response body for vault listing.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct VaultListResponse {
+        pub vaults: Vec<VaultView>,
     }
 
     /// A vault snapshot for UI clients (bot/TUI).
@@ -140,6 +163,7 @@ pub mod vault {
         pub id: String,
         pub name: String,
         pub currency: Currency,
+        /// Owner username for display and disambiguation.
         pub owner: Option<String>,
         pub wallets: Vec<WalletView>,
         pub flows: Vec<FlowView>,

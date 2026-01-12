@@ -312,32 +312,79 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<vault::Model> {
         let vault_name = normalize_required_name(vault_name, "vault")?;
+        let owner_hint = parse_vault_name_owner(&vault_name);
         let vault_name_lower = vault_name.to_lowercase();
         let models: Vec<vault::Model> = vault::Entity::find()
             .filter(Expr::cust("LOWER(name)").eq(vault_name_lower))
             .all(db)
             .await?;
 
-        let mut out: Option<vault::Model> = None;
+        let mut allowed = Vec::new();
         for model in models {
-            let allowed = if model.user_id == user_id {
+            let has_access = if model.user_id == user_id {
                 true
             } else {
                 self.vault_membership_role(db, model.id, user_id)
                     .await?
                     .is_some()
             };
-            if allowed {
-                if out.is_some() {
-                    return Err(EngineError::InvalidAmount(
-                        "ambiguous vault name".to_string(),
-                    ));
-                }
-                out = Some(model);
+            if has_access {
+                allowed.push(model);
             }
         }
 
-        out.ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))
+        if allowed.is_empty() {
+            if let Some((base, owner)) = owner_hint.as_ref() {
+                if let Some(model) = vault::Entity::find()
+                    .filter(Expr::cust("LOWER(name)").eq(base.to_lowercase()))
+                    .filter(vault::Column::UserId.eq(owner.as_str()))
+                    .one(db)
+                    .await?
+                {
+                    let has_access = if model.user_id == user_id {
+                        true
+                    } else {
+                        self.vault_membership_role(db, model.id, user_id)
+                            .await?
+                            .is_some()
+                    };
+                    if has_access {
+                        return Ok(model);
+                    }
+                }
+            }
+            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+        }
+
+        if allowed.len() > 1 {
+            if let Some(pos) = allowed.iter().position(|model| model.user_id == user_id) {
+                return Ok(allowed.remove(pos));
+            }
+            if let Some((base, owner)) = owner_hint {
+                if let Some(model) = vault::Entity::find()
+                    .filter(Expr::cust("LOWER(name)").eq(base.to_lowercase()))
+                    .filter(vault::Column::UserId.eq(owner.as_str()))
+                    .one(db)
+                    .await?
+                {
+                    let has_access = if model.user_id == user_id {
+                        true
+                    } else {
+                        self.vault_membership_role(db, model.id, user_id)
+                            .await?
+                            .is_some()
+                    };
+                    if has_access {
+                        return Ok(model);
+                    }
+                }
+            }
+            return Err(EngineError::InvalidAmount(
+                "ambiguous vault name".to_string(),
+            ));
+        }
+
+        Ok(allowed.remove(0))
     }
 
     pub(super) async fn has_flow_membership_in_vault(
@@ -401,9 +448,9 @@ impl Engine {
             .all(db)
             .await?;
 
-        let mut allowed = Vec::new();
+        let mut allowed_vaults = Vec::new();
         for model in models {
-            let allowed = if model.user_id == user_id {
+            let has_access = if model.user_id == user_id {
                 true
             } else if self
                 .vault_membership_role(db, model.id, user_id)
@@ -415,12 +462,12 @@ impl Engine {
                 self.has_flow_membership_in_vault(db, model.id, user_id)
                     .await?
             };
-            if allowed {
-                allowed.push(model);
+            if has_access {
+                allowed_vaults.push(model);
             }
         }
 
-        if allowed.is_empty() {
+        if allowed_vaults.is_empty() {
             if let Some((base, owner)) = owner_hint {
                 if let Some(model) = self
                     .resolve_vault_by_name_owner(db, base.as_str(), owner.as_str(), user_id)
@@ -432,9 +479,12 @@ impl Engine {
             return Err(EngineError::KeyNotFound("vault not exists".to_string()));
         }
 
-        if allowed.len() > 1 {
-            if let Some(pos) = allowed.iter().position(|model| model.user_id == user_id) {
-                return Ok(allowed.remove(pos));
+        if allowed_vaults.len() > 1 {
+            if let Some(pos) = allowed_vaults
+                .iter()
+                .position(|model| model.user_id == user_id)
+            {
+                return Ok(allowed_vaults.remove(pos));
             }
             if let Some((base, owner)) = owner_hint {
                 if let Some(model) = self
@@ -449,7 +499,7 @@ impl Engine {
             ));
         }
 
-        Ok(allowed.remove(0))
+        Ok(allowed_vaults.remove(0))
     }
 
     async fn resolve_vault_by_name_owner(

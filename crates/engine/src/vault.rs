@@ -13,6 +13,8 @@ pub struct VaultHeader {
     pub id: String,
     pub name: String,
     pub currency: Currency,
+    /// Owner username for disambiguation in clients.
+    pub owner: String,
 }
 
 /// Holds wallets and cash flows
@@ -45,6 +47,7 @@ impl From<Model> for VaultHeader {
             id: model.id.to_string(),
             name: model.name,
             currency: model.currency,
+            owner: model.user_id,
         }
     }
 }

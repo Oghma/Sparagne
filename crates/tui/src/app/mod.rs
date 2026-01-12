@@ -303,6 +303,9 @@ impl App {
                             self.state.vault_ui.defaults = DefaultsFormState::default();
                             self.state.vault_ui.mode = VaultMode::View;
                         }
+                        VaultMode::Select => {
+                            self.state.vault_ui.mode = VaultMode::View;
+                        }
                         VaultMode::View => {
                             if self.state.vault_ui.confirm_delete {
                                 self.state.vault_ui.confirm_delete = false;
@@ -532,6 +535,11 @@ impl App {
                     && self.state.vault_ui.mode == VaultMode::Defaults
                 {
                     self.defaults_select_prev();
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::Select
+                {
+                    self.vaults_select_prev();
                 }
             }
             crate::ui::keymap::AppAction::Down => {
@@ -619,6 +627,11 @@ impl App {
                     && self.state.vault_ui.mode == VaultMode::Defaults
                 {
                     self.defaults_select_next();
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::Select
+                {
+                    self.vaults_select_next();
                 }
             }
             crate::ui::keymap::AppAction::Input(ch) => {
@@ -806,6 +819,7 @@ impl App {
                     DefaultsField::Flow => DefaultsField::Wallet,
                 };
             }
+            VaultMode::Select => {}
             VaultMode::View => {}
         }
     }
@@ -990,6 +1004,9 @@ impl App {
             }
             VaultMode::Defaults => {
                 self.save_defaults().await?;
+            }
+            VaultMode::Select => {
+                self.submit_vault_select().await?;
             }
             VaultMode::View => {}
         }
@@ -1314,6 +1331,10 @@ impl App {
                     && self.state.categories.mode == CategoriesMode::List
                 {
                     self.start_category_aliases().await?;
+                } else if self.state.section == Section::Vault
+                    && self.state.vault_ui.mode == VaultMode::View
+                {
+                    self.start_vault_select().await?;
                 }
                 return Ok(());
             }
@@ -3365,6 +3386,103 @@ impl App {
         self.reset_vault_form();
         self.state.vault_ui.confirm_delete = false;
         self.state.vault_ui.mode = VaultMode::Create;
+    }
+
+    async fn start_vault_select(&mut self) -> Result<()> {
+        self.state.vault_ui.confirm_delete = false;
+        self.state.vault_ui.error = None;
+        self.state.vault_ui.mode = VaultMode::Select;
+        self.state.vault_ui.list.error = None;
+        self.load_vault_list().await
+    }
+
+    async fn load_vault_list(&mut self) -> Result<()> {
+        let res = self
+            .client
+            .vault_list(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+            )
+            .await;
+
+        match res {
+            Ok(response) => {
+                let current_id = self
+                    .state
+                    .vault
+                    .as_ref()
+                    .and_then(|vault| vault.id.as_deref());
+                self.state.vault_ui.list.items = response.vaults;
+                self.state.vault_ui.list.selected = current_id
+                    .and_then(|id| {
+                        self.state
+                            .vault_ui
+                            .list
+                            .items
+                            .iter()
+                            .position(|vault| vault.id == id)
+                    })
+                    .unwrap_or(0);
+                self.state.vault_ui.list.error = None;
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.vault_ui.list.error = Some(login_message_for_error(err));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn submit_vault_select(&mut self) -> Result<()> {
+        let Some(selected) = self
+            .state
+            .vault_ui
+            .list
+            .items
+            .get(self.state.vault_ui.list.selected)
+        else {
+            return Ok(());
+        };
+        let selected = selected.clone();
+        let vault = Vault {
+            id: Some(selected.id.clone()),
+            name: Some(selected.name.clone()),
+            currency: Some(selected.currency),
+            owner: Some(selected.owner.clone()),
+        };
+
+        self.state.vault = Some(vault);
+        self.state.vault_ui.mode = VaultMode::View;
+        self.state.vault_ui.list.error = None;
+        self.state.vault_ui.confirm_delete = false;
+        self.state.transactions.scope_wallet_id = None;
+        self.state.transactions.scope_flow_id = None;
+        self.state.transactions.search_query.clear();
+        self.state.transactions.search_active = false;
+
+        self.refresh_snapshot().await?;
+        self.apply_local_defaults();
+        self.load_transactions(true).await?;
+        self.set_toast("Vault selected.", ToastLevel::Success);
+        Ok(())
+    }
+
+    fn vaults_select_next(&mut self) {
+        let len = self.state.vault_ui.list.items.len();
+        if len == 0 {
+            return;
+        }
+        self.state.vault_ui.list.selected = (self.state.vault_ui.list.selected + 1).min(len - 1);
+    }
+
+    fn vaults_select_prev(&mut self) {
+        if self.state.vault_ui.list.items.is_empty() {
+            return;
+        }
+        self.state.vault_ui.list.selected = self.state.vault_ui.list.selected.saturating_sub(1);
     }
 
     fn start_defaults(&mut self) {
@@ -6520,6 +6638,7 @@ pub struct VaultState {
     pub mode: VaultMode,
     pub form: VaultFormState,
     pub defaults: DefaultsFormState,
+    pub list: VaultListState,
     pub error: Option<String>,
     pub confirm_delete: bool,
 }
@@ -6530,6 +6649,7 @@ impl Default for VaultState {
             mode: VaultMode::View,
             form: VaultFormState::default(),
             defaults: DefaultsFormState::default(),
+            list: VaultListState::default(),
             error: None,
             confirm_delete: false,
         }
@@ -6541,6 +6661,7 @@ pub enum VaultMode {
     View,
     Create,
     Defaults,
+    Select,
 }
 
 #[derive(Debug, Default)]
@@ -6554,6 +6675,13 @@ pub struct DefaultsFormState {
     pub wallet_index: usize,
     pub flow_index: usize,
     pub focus: DefaultsField,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Default)]
+pub struct VaultListState {
+    pub items: Vec<api_types::vault::VaultView>,
+    pub selected: usize,
     pub error: Option<String>,
 }
 

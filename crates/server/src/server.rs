@@ -107,6 +107,7 @@ fn router(state: ServerState) -> Router {
         .route("/cashFlow/get", post(cash_flow::get))
         .route("/transactions", post(transactions::list))
         .route("/transactions/get", post(transactions::get_detail))
+        .route("/vault/list", post(vault::list))
         .route("/wallets", post(wallets::wallet_new))
         .route(
             "/wallets/{id}",

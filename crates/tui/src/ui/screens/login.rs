@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
     text::Span,
-    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
 };
 
 use crate::{
@@ -92,20 +92,26 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     // Error message below the box (only shown when there's an error)
     if let Some(message) = &login.message {
-        let error_area = Rect {
-            x: card_area.x,
-            y: card_area.y + card_area.height + 1,
-            width: card_area.width,
-            height: 1,
-        };
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                message.as_str(),
-                Style::default().fg(theme.error),
-            ))
-            .alignment(Alignment::Center),
-            error_area,
-        );
+        let y = card_area.y.saturating_add(card_area.height + 1);
+        if y < area.y + area.height {
+            let remaining = area.height.saturating_sub(y.saturating_sub(area.y));
+            let height = remaining.min(3).max(1);
+            let error_area = Rect {
+                x: area.x,
+                y,
+                width: area.width,
+                height,
+            };
+            frame.render_widget(
+                Paragraph::new(Span::styled(
+                    message.as_str(),
+                    Style::default().fg(theme.error),
+                ))
+                .wrap(Wrap { trim: true })
+                .alignment(Alignment::Center),
+                error_area,
+            );
+        }
     }
 }
 

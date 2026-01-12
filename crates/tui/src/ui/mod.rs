@@ -310,6 +310,7 @@ fn get_vault_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
             vec![
                 components::hints::KeyHint::new("c", "create"),
                 components::hints::KeyHint::new("d", "defaults"),
+                components::hints::KeyHint::new("l", "vaults"),
                 components::hints::KeyHint::new("x", delete_label),
             ]
         }
@@ -319,5 +320,10 @@ fn get_vault_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
             hints.insert(1, components::hints::KeyHint::new("↑/↓", "change"));
             hints
         }
+        crate::app::VaultMode::Select => vec![
+            components::hints::KeyHint::new("↑/↓", "select"),
+            components::hints::KeyHint::new("Enter", "open"),
+            components::hints::KeyHint::new("Esc", "back"),
+        ],
     }
 }
