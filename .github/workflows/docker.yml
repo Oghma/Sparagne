@@ -2,20 +2,15 @@ name: Docker
 
 on:
   push:
-    branches: ["main"]
-    paths:
-      - "Dockerfile"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "crates/**"
-      - "config/**"
+    branches: [main]
+    paths: &docker_paths
+      - Dockerfile
+      - Cargo.toml
+      - Cargo.lock
+      - crates/**
+      - config/**
   pull_request:
-    paths:
-      - "Dockerfile"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "crates/**"
-      - "config/**"
+    paths: *docker_paths
 
 concurrency:
   group: docker-${{ github.ref }}
