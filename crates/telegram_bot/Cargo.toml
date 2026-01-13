@@ -19,7 +19,7 @@ api_types = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-teloxide = { workspace = true, features = ["macros", "rustls"] }
+teloxide = { workspace = true, default-features = false, features = ["macros", "rustls", "ctrlc_handler"] }
 tokio = { workspace = true, features = ["macros"] }
 tracing = { workspace = true }
 thiserror = { workspace = true }
