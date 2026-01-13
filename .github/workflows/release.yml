@@ -38,12 +38,12 @@ jobs:
         run: cargo install cross --locked
 
       - name: Build binaries
-        run: cross build --release -p sparagne -p sparagne_tui --target ${{ matrix.target }}
+        run: cross build --release -p sparagne -p sparagne_admin -p sparagne_tui --target ${{ matrix.target }}
 
       - name: Package artifacts
         run: |
           mkdir -p dist
-          tar -C target/${{ matrix.target }}/release -czf dist/${{ env.artifact }} sparagne sparagne_tui
+          tar -C target/${{ matrix.target }}/release -czf dist/${{ env.artifact }} sparagne sparagne_admin sparagne_tui
 
       - name: Publish release artifacts
         uses: softprops/action-gh-release@v2
