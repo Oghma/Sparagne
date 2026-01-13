@@ -129,7 +129,8 @@ pub fn flow_cap_line_gauge(
     Some(
         LineGauge::default()
             .filled_style(Style::default().fg(gauge_color))
-            .line_set(ratatui::symbols::line::THICK)
+            .filled_symbol(ratatui::symbols::line::THICK_HORIZONTAL)
+            .unfilled_symbol(ratatui::symbols::line::THICK_HORIZONTAL)
             .ratio(ratio),
     )
 }
