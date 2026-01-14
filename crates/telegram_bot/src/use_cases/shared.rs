@@ -7,48 +7,44 @@ use teloxide::{prelude::*, types::InlineKeyboardMarkup};
 use crate::{
     ConfigParameters,
     api::{ApiClient, ApiError},
+    i18n::{self, TextKey},
     state::{PrefsStore, UserPrefs},
 };
 use api_types::error::ErrorCode;
 use uuid::Uuid;
 
 pub(crate) fn user_message_for_api_error(err: ApiError) -> String {
+    let locale = i18n::default_locale();
     match err {
-        ApiError::Network(_) => {
-            "Problemi di connessione con il server. Riprova pi\u{f9} tardi!".to_string()
-        }
+        ApiError::Network(_) => i18n::t(locale, TextKey::ApiNetworkError).to_string(),
         ApiError::Server {
             status,
             code,
             message,
         } => match code {
             ErrorCode::MembershipLastOwner => {
-                "Non puoi rimuovere l'ultimo owner del flow.".to_string()
+                i18n::t(locale, TextKey::ApiMembershipLastOwner).to_string()
             }
             ErrorCode::MembershipOwnerImmutable => {
-                "Non puoi cambiare il ruolo dell'owner del vault.".to_string()
+                i18n::t(locale, TextKey::ApiMembershipOwnerImmutable).to_string()
             }
             ErrorCode::MembershipOwnerRemoveForbidden => {
-                "Non puoi rimuovere l'owner del vault.".to_string()
+                i18n::t(locale, TextKey::ApiMembershipOwnerRemoveForbidden).to_string()
             }
             _ => match status {
-                StatusCode::UNAUTHORIZED => {
-                    "Non autorizzato. Usa /start per fare il pairing.".to_string()
-                }
-                StatusCode::FORBIDDEN => "Operazione non permessa.".to_string(),
-                StatusCode::NOT_FOUND => {
-                    "Risorsa non trovata. Prova a reimpostare i default.".to_string()
-                }
-                StatusCode::CONFLICT => "Richiesta duplicata (gi\u{e0} salvata).".to_string(),
+                StatusCode::UNAUTHORIZED => i18n::t(locale, TextKey::ApiUnauthorized).to_string(),
+                StatusCode::FORBIDDEN => i18n::t(locale, TextKey::ApiForbidden).to_string(),
+                StatusCode::NOT_FOUND => i18n::t(locale, TextKey::ApiNotFound).to_string(),
+                StatusCode::CONFLICT => i18n::t(locale, TextKey::ApiConflict).to_string(),
                 StatusCode::BAD_REQUEST => {
                     if message == "user not found" {
-                        "Codice di pairing non valido (o stai usando un database diverso da quello del server).".to_string()
+                        i18n::t(locale, TextKey::ApiBadRequestUserNotFound).to_string()
                     } else {
                         message
                     }
                 }
                 StatusCode::UNPROCESSABLE_ENTITY => message,
-                _ => "Errore server.".to_string(),
+                _ => i18n::t(locale, TextKey::ApiServerError).to_string(),
             },
         },
     }

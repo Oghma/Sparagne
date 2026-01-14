@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{
     ConfigParameters,
     api::ApiError,
+    i18n::{self, TextKey},
     parsing::{ParseError, QuickKind, parse_quick_add},
     routing::{CallbackAction, Command},
     state::{DraftCreate, PendingAction},
@@ -25,8 +26,9 @@ pub(crate) async fn handle_message(
         return Ok(());
     }
 
+    let locale = i18n::default_locale();
     let Some(from) = msg.from.as_ref() else {
-        bot.send_message(msg.chat.id, "Impossibile identificare l'utente.")
+        bot.send_message(msg.chat.id, i18n::t(locale, TextKey::UnknownUser))
             .await?;
         return Ok(());
     };
@@ -162,6 +164,7 @@ pub(crate) async fn handle_callback(
         return Ok(());
     }
 
+    let locale = i18n::default_locale();
     let Some(message) = q.message.as_ref() else {
         return Ok(());
     };
@@ -198,7 +201,7 @@ pub(crate) async fn handle_callback(
             cfg.sessions
                 .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                 .await;
-            bot.send_message(chat_id, "Inserisci il codice di pairing:")
+            bot.send_message(chat_id, i18n::t(locale, TextKey::PairingPrompt))
                 .await?;
         }
         CallbackAction::HomePickWallet => {
@@ -284,7 +287,7 @@ pub(crate) async fn handle_callback(
                 .update(user_id, |p| p.include_voided = !p.include_voided)
                 .await;
             if updated.is_err() {
-                bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
                     .await?;
             }
             list::show_list(&bot, chat_id, user_id, &cfg).await?;
@@ -318,7 +321,7 @@ pub(crate) async fn handle_callback(
                 .update(user_id, |p| p.default_wallet_id = Some(wallet_id))
                 .await;
             if updated.is_err() {
-                bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
                     .await?;
             }
 
@@ -345,7 +348,7 @@ pub(crate) async fn handle_callback(
                 })
                 .await;
             if updated.is_err() {
-                bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
                     .await?;
             }
             if cfg.sessions.get(chat_id).await.wizard.is_some() {
@@ -384,7 +387,7 @@ pub(crate) async fn handle_callback(
                 return Ok(());
             }
 
-            bot.send_message(chat_id, "✅ Voce annullata (void).")
+            bot.send_message(chat_id, i18n::t(locale, TextKey::TransactionVoided))
                 .await?;
             list::show_list(&bot, chat_id, user_id, &cfg).await?;
         }
@@ -398,7 +401,7 @@ pub(crate) async fn handle_callback(
                     s.pending = Some(PendingAction::EditAmount { tx_id })
                 })
                 .await;
-            bot.send_message(chat_id, "Invia il nuovo importo (es: 10.50):")
+            bot.send_message(chat_id, i18n::t(locale, TextKey::EditAmountPrompt))
                 .await?;
         }
         CallbackAction::TxEditNote(tx_id) => {
@@ -407,7 +410,7 @@ pub(crate) async fn handle_callback(
                     s.pending = Some(PendingAction::EditNote { tx_id })
                 })
                 .await;
-            bot.send_message(chat_id, "Invia la nuova nota (vuoto per rimuovere):")
+            bot.send_message(chat_id, i18n::t(locale, TextKey::EditNotePrompt))
                 .await?;
         }
         CallbackAction::TxRepeat(tx_id) => {
@@ -436,6 +439,7 @@ async fn handle_pending_message(
     user_id: u64,
     pending: PendingAction,
 ) -> ResponseResult<bool> {
+    let locale = i18n::default_locale();
     let chat_id = msg.chat.id;
     match pending {
         PendingAction::PairCode => {
@@ -477,11 +481,12 @@ async fn handle_pending_message(
                 Ok(v) => v,
                 Err(ParseError::Empty) => return Ok(true),
                 Err(ParseError::TooManyTags) => {
-                    bot.send_message(chat_id, "Troppi tag: massimo 1.").await?;
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::TooManyTags))
+                        .await?;
                     return Ok(true);
                 }
                 Err(ParseError::InvalidAmount) => {
-                    bot.send_message(chat_id, "Importo non valido (es: 10 o 10.50).")
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::InvalidAmountExample))
                         .await?;
                     return Ok(true);
                 }
@@ -576,19 +581,25 @@ async fn handle_pending_message(
                         QuickKind::Expense => -parsed.amount_minor,
                         QuickKind::Income | QuickKind::Refund => parsed.amount_minor,
                     };
-                    let saved_msg =
-                        format!("✅ Salvato: {}", Money::new(signed_minor).format(currency));
+                    let saved_msg = i18n::format(
+                        locale,
+                        TextKey::QuickAddSaved,
+                        &[("amount", &Money::new(signed_minor).format(currency))],
+                    );
                     let kb = InlineKeyboardMarkup::new(vec![vec![
                         InlineKeyboardButton::callback(
-                            "↩ Undo",
+                            format!("\u{21a9} {}", i18n::t(locale, TextKey::QuickAddUndo)),
                             format!("tx:void:{id}", id = created.id),
                         ),
                         InlineKeyboardButton::callback(
-                            "✏️ Edit",
+                            format!(
+                                "\u{270f}\u{fe0f} {}",
+                                i18n::t(locale, TextKey::DetailBtnEdit)
+                            ),
                             format!("tx:edit:{id}", id = created.id),
                         ),
                         InlineKeyboardButton::callback(
-                            "📌 Ripeti",
+                            format!("\u{1f4cc} {}", i18n::t(locale, TextKey::DetailBtnRepeat)),
                             format!("tx:repeat:{id}", id = created.id),
                         ),
                     ]]);
@@ -597,7 +608,8 @@ async fn handle_pending_message(
                         .await?;
                 }
                 Err(ApiError::Server { status, .. }) if status == StatusCode::CONFLICT => {
-                    bot.send_message(chat_id, "✅ Già salvato.").await?;
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::AlreadySaved))
+                        .await?;
                 }
                 Err(err) => {
                     bot.send_message(chat_id, shared::user_message_for_api_error(err))
@@ -615,7 +627,7 @@ async fn handle_pending_message(
             let money = match Money::parse_major(text, EngineCurrency::Eur) {
                 Ok(v) => v,
                 Err(_) => {
-                    bot.send_message(chat_id, "Importo non valido (es: 10 o 10.50)")
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::InvalidAmountExampleShort))
                         .await?;
                     return Ok(true);
                 }
@@ -623,12 +635,13 @@ async fn handle_pending_message(
             let amount_minor = match money.minor().checked_abs() {
                 Some(v) => v,
                 None => {
-                    bot.send_message(chat_id, "Importo non valido.").await?;
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::InvalidAmount))
+                        .await?;
                     return Ok(true);
                 }
             };
             if amount_minor == 0 {
-                bot.send_message(chat_id, "Importo non valido (deve essere > 0).")
+                bot.send_message(chat_id, i18n::t(locale, TextKey::InvalidAmountPositive))
                     .await?;
                 return Ok(true);
             }
@@ -669,7 +682,8 @@ async fn handle_pending_message(
             }
 
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
-            bot.send_message(chat_id, "✅ Importo aggiornato.").await?;
+            bot.send_message(chat_id, i18n::t(locale, TextKey::EditAmountUpdated))
+                .await?;
             home::show_home(bot, chat_id, user_id, cfg).await?;
             Ok(true)
         }
@@ -715,7 +729,8 @@ async fn handle_pending_message(
             }
 
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
-            bot.send_message(chat_id, "✅ Nota aggiornata.").await?;
+            bot.send_message(chat_id, i18n::t(locale, TextKey::EditNoteUpdated))
+                .await?;
             home::show_home(bot, chat_id, user_id, cfg).await?;
             Ok(true)
         }
@@ -729,6 +744,7 @@ async fn handle_quick_add(
     cfg: &ConfigParameters,
     user_id: u64,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let Some(text) = msg.text() else {
         return Ok(());
     };
@@ -736,12 +752,12 @@ async fn handle_quick_add(
         Ok(v) => v,
         Err(ParseError::Empty) => return Ok(()),
         Err(ParseError::TooManyTags) => {
-            bot.send_message(msg.chat.id, "Troppi tag: massimo 1.")
+            bot.send_message(msg.chat.id, i18n::t(locale, TextKey::TooManyTags))
                 .await?;
             return Ok(());
         }
         Err(ParseError::InvalidAmount) => {
-            bot.send_message(msg.chat.id, "Importo non valido (es: 10 o 10.50).")
+            bot.send_message(msg.chat.id, i18n::t(locale, TextKey::InvalidAmountExample))
                 .await?;
             return Ok(());
         }
@@ -772,6 +788,7 @@ async fn finalize_quick_add(
     wallet_id: Uuid,
     draft: DraftCreate,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
@@ -865,34 +882,34 @@ async fn finalize_quick_add(
                 QuickKind::Income | QuickKind::Refund => draft.amount_minor,
             };
 
-            let saved_msg = format!(
-                "✅ Salvato: {}{}{}",
-                Money::new(signed_minor).format(currency),
-                draft
-                    .category
-                    .as_deref()
-                    .map(|c| format!(" • {c}"))
-                    .unwrap_or_default(),
-                draft
-                    .note
-                    .as_deref()
-                    .map(|n| format!(" • {n}"))
-                    .unwrap_or_default(),
+            let mut saved_msg = i18n::format(
+                locale,
+                TextKey::QuickAddSaved,
+                &[("amount", &Money::new(signed_minor).format(currency))],
             );
+            if let Some(category) = draft.category.as_deref() {
+                saved_msg.push_str(&format!(" \u{2022} {category}"));
+            }
+            if let Some(note) = draft.note.as_deref() {
+                saved_msg.push_str(&format!(" \u{2022} {note}"));
+            }
 
             let kb = InlineKeyboardMarkup::new(vec![
                 vec![
                     InlineKeyboardButton::callback(
-                        "↩ Undo",
+                        format!("\u{21a9} {}", i18n::t(locale, TextKey::QuickAddUndo)),
                         format!("tx:void:{id}", id = created.id),
                     ),
                     InlineKeyboardButton::callback(
-                        "✏️ Edit",
+                        format!(
+                            "\u{270f}\u{fe0f} {}",
+                            i18n::t(locale, TextKey::DetailBtnEdit)
+                        ),
                         format!("tx:edit:{id}", id = created.id),
                     ),
                 ],
                 vec![InlineKeyboardButton::callback(
-                    "📌 Ripeti",
+                    format!("\u{1f4cc} {}", i18n::t(locale, TextKey::DetailBtnRepeat)),
                     format!("tx:repeat:{id}", id = created.id),
                 )],
             ]);
@@ -902,7 +919,8 @@ async fn finalize_quick_add(
                 .await?;
         }
         Err(ApiError::Server { status, .. }) if status == StatusCode::CONFLICT => {
-            bot.send_message(chat_id, "✅ Già salvato.").await?;
+            bot.send_message(chat_id, i18n::t(locale, TextKey::AlreadySaved))
+                .await?;
         }
         Err(err) => {
             bot.send_message(chat_id, shared::user_message_for_api_error(err))

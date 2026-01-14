@@ -1,7 +1,14 @@
 use reqwest::StatusCode;
 use teloxide::prelude::*;
 
-use crate::{ConfigParameters, api::ApiError, state::PendingAction, ui, use_cases::shared};
+use crate::{
+    ConfigParameters,
+    api::ApiError,
+    i18n::{self, TextKey},
+    state::PendingAction,
+    ui,
+    use_cases::shared,
+};
 
 pub(crate) async fn show_home(
     bot: &Bot,
@@ -9,6 +16,7 @@ pub(crate) async fn show_home(
     user_id: u64,
     cfg: &ConfigParameters,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
@@ -18,7 +26,7 @@ pub(crate) async fn show_home(
                     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
             );
             if needs_pairing {
-                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
                     .await?;
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
@@ -48,6 +56,7 @@ pub(crate) async fn show_wallet_picker(
     user_id: u64,
     cfg: &ConfigParameters,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
         "nav:wizard"
     } else {
@@ -65,7 +74,7 @@ pub(crate) async fn show_wallet_picker(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
                     .await?;
             } else {
                 bot.send_message(chat_id, shared::user_message_for_api_error(err))
@@ -84,6 +93,7 @@ pub(crate) async fn show_flow_picker(
     user_id: u64,
     cfg: &ConfigParameters,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
         "nav:wizard"
     } else {
@@ -101,7 +111,7 @@ pub(crate) async fn show_flow_picker(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
                     .await?;
             } else {
                 bot.send_message(chat_id, shared::user_message_for_api_error(err))

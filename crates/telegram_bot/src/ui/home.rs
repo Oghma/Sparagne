@@ -1,49 +1,82 @@
 use api_types::vault::VaultSnapshot;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::{state::UserPrefs, ui::shared::flow_display_name};
+use crate::{
+    i18n::{self, TextKey},
+    state::UserPrefs,
+    ui::shared::flow_display_name,
+};
 
 pub(crate) fn render_home(
     display_name: &str,
     snapshot: &VaultSnapshot,
     prefs: &UserPrefs,
 ) -> (String, InlineKeyboardMarkup) {
+    let locale = i18n::default_locale();
     let default_wallet = prefs
         .default_wallet_id
         .and_then(|id| snapshot.wallets.iter().find(|w| w.id == id))
         .map(|w| w.name.as_str())
-        .unwrap_or("Non impostato");
+        .unwrap_or(i18n::t(locale, TextKey::UnsetValue));
 
     let default_flow = prefs
         .default_flow_id
         .and_then(|id| snapshot.flows.iter().find(|f| f.id == id))
         .map(|f| flow_display_name(f.is_unallocated, &f.name))
-        .unwrap_or("Non in flow");
+        .unwrap_or(i18n::t(locale, TextKey::UnallocatedFlow));
 
     let last_flow = prefs
         .last_flow_id
         .and_then(|id| snapshot.flows.iter().find(|f| f.id == id))
         .map(|f| flow_display_name(f.is_unallocated, &f.name))
-        .unwrap_or("Non in flow");
+        .unwrap_or(i18n::t(locale, TextKey::UnallocatedFlow));
 
-    let text = format!(
-        "{display_name} • Vault: {}\nWallet default: {}\nFlow default: {}\nUltimo flow: {}",
-        snapshot.name, default_wallet, default_flow, last_flow,
+    let text = i18n::format(
+        locale,
+        TextKey::HomeSummary,
+        &[
+            ("display_name", display_name),
+            ("vault", snapshot.name.as_str()),
+            ("wallet", default_wallet),
+            ("flow_default", default_flow),
+            ("flow_last", last_flow),
+        ],
     );
 
     let kb = InlineKeyboardMarkup::new(vec![
         vec![
-            InlineKeyboardButton::callback("➖ Uscita", "home:expense"),
-            InlineKeyboardButton::callback("➕ Entrata", "home:income"),
-            InlineKeyboardButton::callback("↩ Refund", "home:refund"),
+            InlineKeyboardButton::callback(
+                format!("➖ {}", i18n::t(locale, TextKey::HomeBtnExpense)),
+                "home:expense",
+            ),
+            InlineKeyboardButton::callback(
+                format!("➕ {}", i18n::t(locale, TextKey::HomeBtnIncome)),
+                "home:income",
+            ),
+            InlineKeyboardButton::callback(
+                format!("↩ {}", i18n::t(locale, TextKey::HomeBtnRefund)),
+                "home:refund",
+            ),
         ],
         vec![
-            InlineKeyboardButton::callback("🧾 Ultime", "home:list"),
-            InlineKeyboardButton::callback("📊 Stats", "home:stats"),
+            InlineKeyboardButton::callback(
+                format!("🧾 {}", i18n::t(locale, TextKey::HomeBtnList)),
+                "home:list",
+            ),
+            InlineKeyboardButton::callback(
+                format!("📊 {}", i18n::t(locale, TextKey::HomeBtnStats)),
+                "home:stats",
+            ),
         ],
         vec![
-            InlineKeyboardButton::callback("👛 Wallet default", "home:pick_wallet"),
-            InlineKeyboardButton::callback("🎯 Flow default", "home:pick_flow"),
+            InlineKeyboardButton::callback(
+                format!("👛 {}", i18n::t(locale, TextKey::HomeBtnWalletDefault)),
+                "home:pick_wallet",
+            ),
+            InlineKeyboardButton::callback(
+                format!("🎯 {}", i18n::t(locale, TextKey::HomeBtnFlowDefault)),
+                "home:pick_flow",
+            ),
         ],
     ]);
 
@@ -54,6 +87,7 @@ pub(crate) fn render_wallet_picker(
     snapshot: &VaultSnapshot,
     back_callback: &str,
 ) -> (String, InlineKeyboardMarkup) {
+    let locale = i18n::default_locale();
     let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for wallet in snapshot.wallets.iter().filter(|w| !w.archived) {
         rows.push(vec![InlineKeyboardButton::callback(
@@ -62,12 +96,12 @@ pub(crate) fn render_wallet_picker(
         )]);
     }
     rows.push(vec![InlineKeyboardButton::callback(
-        "⬅️ Indietro",
+        format!("⬅️ {}", i18n::t(locale, TextKey::DetailBtnBack)),
         back_callback,
     )]);
 
     (
-        "Scegli il wallet di default:".to_string(),
+        i18n::t(locale, TextKey::PickerWalletTitle).to_string(),
         InlineKeyboardMarkup::new(rows),
     )
 }
@@ -76,6 +110,7 @@ pub(crate) fn render_flow_picker(
     snapshot: &VaultSnapshot,
     back_callback: &str,
 ) -> (String, InlineKeyboardMarkup) {
+    let locale = i18n::default_locale();
     let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for flow in snapshot.flows.iter().filter(|f| !f.archived) {
         rows.push(vec![InlineKeyboardButton::callback(
@@ -84,12 +119,12 @@ pub(crate) fn render_flow_picker(
         )]);
     }
     rows.push(vec![InlineKeyboardButton::callback(
-        "⬅️ Indietro",
+        format!("⬅️ {}", i18n::t(locale, TextKey::DetailBtnBack)),
         back_callback,
     )]);
 
     (
-        "Scegli il flow (ultimo flow usato):".to_string(),
+        i18n::t(locale, TextKey::PickerFlowTitle).to_string(),
         InlineKeyboardMarkup::new(rows),
     )
 }

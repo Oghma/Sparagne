@@ -3,6 +3,7 @@ use engine::Currency as EngineCurrency;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 use crate::{
+    i18n::{self, TextKey},
     parsing::QuickKind,
     state::{UserPrefs, WizardSession},
     ui::shared::{flow_display_name, tx_button_label},
@@ -15,41 +16,64 @@ pub(crate) fn render_wizard(
     wizard: &WizardSession,
     recents: &[TransactionView],
 ) -> (String, InlineKeyboardMarkup) {
+    let locale = i18n::default_locale();
     let title = match wizard.kind {
-        QuickKind::Expense => "Nuova uscita",
-        QuickKind::Income => "Nuova entrata",
-        QuickKind::Refund => "Nuovo rimborso/storno",
+        QuickKind::Expense => i18n::t(locale, TextKey::WizardTitleExpense),
+        QuickKind::Income => i18n::t(locale, TextKey::WizardTitleIncome),
+        QuickKind::Refund => i18n::t(locale, TextKey::WizardTitleRefund),
     };
 
     let default_wallet = prefs
         .default_wallet_id
         .and_then(|id| snapshot.wallets.iter().find(|w| w.id == id))
         .map(|w| w.name.as_str())
-        .unwrap_or("Non impostato");
+        .unwrap_or(i18n::t(locale, TextKey::UnsetValue));
 
     let last_flow = prefs
         .last_flow_id
         .and_then(|id| snapshot.flows.iter().find(|f| f.id == id))
         .map(|f| flow_display_name(f.is_unallocated, &f.name))
-        .unwrap_or("Non in flow");
+        .unwrap_or(i18n::t(locale, TextKey::UnallocatedFlow));
 
     let category = wizard.category.as_deref().unwrap_or("-");
 
-    let text = format!(
-        "{title}\n\nWallet: {default_wallet}\nFlow: {last_flow}\nCategoria: {category}\n\nTip: puoi anche scrivere direttamente in chat (quick add)."
+    let body = i18n::format(
+        locale,
+        TextKey::WizardBody,
+        &[
+            ("wallet", default_wallet),
+            ("flow", last_flow),
+            ("category", category),
+        ],
     );
+    let text = format!("{title}\n\n{body}");
 
     let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     rows.push(vec![
-        InlineKeyboardButton::callback("✏️ Inserisci", "wiz:input"),
-        InlineKeyboardButton::callback("👛 Wallet", "wiz:pick_wallet"),
-        InlineKeyboardButton::callback("🎯 Flow", "wiz:pick_flow"),
+        InlineKeyboardButton::callback(
+            format!("✏️ {}", i18n::t(locale, TextKey::WizardBtnInput)),
+            "wiz:input",
+        ),
+        InlineKeyboardButton::callback(
+            format!("👛 {}", i18n::t(locale, TextKey::WizardBtnWallet)),
+            "wiz:pick_wallet",
+        ),
+        InlineKeyboardButton::callback(
+            format!("🎯 {}", i18n::t(locale, TextKey::WizardBtnFlow)),
+            "wiz:pick_flow",
+        ),
     ]);
 
     let mut category_buttons: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     category_buttons.push(vec![
-        InlineKeyboardButton::callback("🏷 Nessuna", "wiz:cat:none"),
-        InlineKeyboardButton::callback("🔁 Reset", "wiz:cat:reset"),
+        InlineKeyboardButton::callback(
+            format!("🏷 {}", i18n::t(locale, TextKey::WizardBtnCategoryNone)),
+            "wiz:cat:none",
+        ),
+        InlineKeyboardButton::callback(
+            format!("🔁 {}", i18n::t(locale, TextKey::WizardBtnCategoryReset)),
+            "wiz:cat:reset",
+        ),
     ]);
 
     let mut current_row: Vec<InlineKeyboardButton> = Vec::new();
@@ -69,7 +93,10 @@ pub(crate) fn render_wizard(
     rows.extend(category_buttons);
 
     if !recents.is_empty() {
-        rows.push(vec![InlineKeyboardButton::callback("🕘 Recenti", "noop")]);
+        rows.push(vec![InlineKeyboardButton::callback(
+            format!("🕘 {}", i18n::t(locale, TextKey::WizardBtnRecents)),
+            "noop",
+        )]);
         for tx in recents.iter().take(6) {
             let label = tx_button_label(currency, tx);
             rows.push(vec![InlineKeyboardButton::callback(
@@ -79,7 +106,10 @@ pub(crate) fn render_wizard(
         }
     }
 
-    rows.push(vec![InlineKeyboardButton::callback("⬅️ Home", "wiz:close")]);
+    rows.push(vec![InlineKeyboardButton::callback(
+        format!("⬅️ {}", i18n::t(locale, TextKey::WizardBtnHome)),
+        "wiz:close",
+    )]);
 
     (text, InlineKeyboardMarkup::new(rows))
 }

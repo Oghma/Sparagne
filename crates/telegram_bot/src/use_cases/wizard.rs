@@ -3,6 +3,7 @@ use teloxide::prelude::*;
 
 use crate::{
     ConfigParameters,
+    i18n::{self, TextKey},
     parsing::QuickKind,
     state::WizardSession,
     ui,
@@ -121,39 +122,41 @@ pub(crate) async fn show_wizard(
 }
 
 pub(crate) fn wizard_prompt(kind: QuickKind) -> &'static str {
+    let locale = i18n::default_locale();
     match kind {
-        QuickKind::Expense => {
-            "Invia una uscita, es:\n\n12.50 bar caff\u{e8}\n12.50 bar #food caff\u{e8}\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
-        }
-        QuickKind::Income => {
-            "Invia una entrata, es:\n\n1000 stipendio\n+1000 #salary stipendio\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
-        }
-        QuickKind::Refund => {
-            "Invia un rimborso/storno, es:\n\nr 5.20 amazon\nr 5.20 #shopping amazon\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
-        }
+        QuickKind::Expense => i18n::t(locale, TextKey::WizardPromptExpense),
+        QuickKind::Income => i18n::t(locale, TextKey::WizardPromptIncome),
+        QuickKind::Refund => i18n::t(locale, TextKey::WizardPromptRefund),
     }
 }
 
 pub(crate) fn normalize_wizard_input(kind: QuickKind, raw: &str) -> Result<String, &'static str> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err("Testo vuoto.");
+        return Err(i18n::t(i18n::default_locale(), TextKey::WizardErrorEmpty));
     }
     match kind {
         QuickKind::Expense => {
             if trimmed.starts_with('+') {
-                return Err("Selezionato: uscita. Rimuovi il '+' (es: 12.50 bar).");
+                return Err(i18n::t(
+                    i18n::default_locale(),
+                    TextKey::WizardErrorExpensePlus,
+                ));
             }
             if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                return Err(
-                    "Selezionato: uscita. Per refund usa il bottone \u{201c}Refund\u{201d}.",
-                );
+                return Err(i18n::t(
+                    i18n::default_locale(),
+                    TextKey::WizardErrorExpenseRefund,
+                ));
             }
             Ok(trimmed.to_string())
         }
         QuickKind::Income => {
             if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                return Err("Selezionato: entrata. Rimuovi 'r' (es: 1000 stipendio).");
+                return Err(i18n::t(
+                    i18n::default_locale(),
+                    TextKey::WizardErrorIncomeRefund,
+                ));
             }
             if trimmed.starts_with('+') {
                 Ok(trimmed.to_string())

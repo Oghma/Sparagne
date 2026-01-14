@@ -2,7 +2,10 @@ use api_types::transaction::TransactionListResponse;
 use engine::{Currency as EngineCurrency, Money};
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
-use crate::ui::shared::tx_button_label;
+use crate::{
+    i18n::{self, TextKey},
+    ui::shared::tx_button_label,
+};
 
 pub(crate) fn render_list(
     currency: EngineCurrency,
@@ -11,7 +14,8 @@ pub(crate) fn render_list(
     has_prev: bool,
     has_next: bool,
 ) -> (String, InlineKeyboardMarkup) {
-    let mut text = String::from("Ultime voci:\n");
+    let locale = i18n::default_locale();
+    let mut text = format!("{}\n", i18n::t(locale, TextKey::ListHeader));
     for (idx, tx) in list.transactions.iter().enumerate() {
         text.push_str(&format!(
             "\n{}. {} • {}{}{}{}",
@@ -26,7 +30,11 @@ pub(crate) fn render_list(
                 .as_deref()
                 .map(|n| format!(" • {n}"))
                 .unwrap_or_default(),
-            if tx.voided { " • void" } else { "" }
+            if tx.voided {
+                i18n::t(locale, TextKey::TxVoidedSuffix)
+            } else {
+                ""
+            }
         ));
     }
 
@@ -40,23 +48,40 @@ pub(crate) fn render_list(
 
     let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
     if has_prev {
-        nav_row.push(InlineKeyboardButton::callback("⬅️ Prev", "list:prev"));
+        nav_row.push(InlineKeyboardButton::callback(
+            format!("⬅️ {}", i18n::t(locale, TextKey::ListPrev)),
+            "list:prev",
+        ));
     }
     if has_next {
-        nav_row.push(InlineKeyboardButton::callback("Next ➡️", "list:next"));
+        nav_row.push(InlineKeyboardButton::callback(
+            format!("{} ➡️", i18n::t(locale, TextKey::ListNext)),
+            "list:next",
+        ));
     }
     if !nav_row.is_empty() {
         rows.push(nav_row);
     }
 
     rows.push(vec![InlineKeyboardButton::callback(
-        format!(
-            "Mostra voided: {}",
-            if include_voided { "On" } else { "Off" }
+        i18n::format(
+            locale,
+            TextKey::ListToggleVoided,
+            &[(
+                "state",
+                if include_voided {
+                    i18n::t(locale, TextKey::ListStateOn)
+                } else {
+                    i18n::t(locale, TextKey::ListStateOff)
+                },
+            )],
         ),
         "prefs:toggle_voided",
     )]);
-    rows.push(vec![InlineKeyboardButton::callback("⬅️ Home", "nav:home")]);
+    rows.push(vec![InlineKeyboardButton::callback(
+        format!("⬅️ {}", i18n::t(locale, TextKey::ListBtnHome)),
+        "nav:home",
+    )]);
 
     (text, InlineKeyboardMarkup::new(rows))
 }

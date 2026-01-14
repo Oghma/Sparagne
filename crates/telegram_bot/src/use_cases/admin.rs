@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::{
     ConfigParameters,
     api::{ApiClient, ApiError},
+    i18n::{self, TextKey},
     use_cases::shared,
 };
 
@@ -60,6 +61,7 @@ pub(crate) async fn list_vault_members(
     user_id: u64,
     cfg: &ConfigParameters,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
@@ -78,7 +80,10 @@ pub(crate) async fn list_vault_members(
         }
     };
 
-    let text = render_members_list("Membri vault", &response.members);
+    let text = render_members_list(
+        i18n::t(locale, TextKey::MembersVaultTitle),
+        &response.members,
+    );
     bot.send_message(chat_id, text).await?;
     Ok(())
 }
@@ -91,6 +96,7 @@ pub(crate) async fn add_vault_member(
     username: &str,
     role: MembershipRole,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
@@ -112,7 +118,11 @@ pub(crate) async fn add_vault_member(
         Ok(()) => {
             bot.send_message(
                 chat_id,
-                format!("\u{2705} Membro salvato: {username} ({})", role_label(role)),
+                i18n::format(
+                    locale,
+                    TextKey::MemberSaved,
+                    &[("username", username), ("role", role_label(role))],
+                ),
             )
             .await?;
         }
@@ -131,6 +141,7 @@ pub(crate) async fn remove_vault_member(
     cfg: &ConfigParameters,
     username: &str,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
@@ -146,8 +157,11 @@ pub(crate) async fn remove_vault_member(
         .await
     {
         Ok(()) => {
-            bot.send_message(chat_id, format!("\u{2705} Membro rimosso: {username}"))
-                .await?;
+            bot.send_message(
+                chat_id,
+                i18n::format(locale, TextKey::MemberRemoved, &[("username", username)]),
+            )
+            .await?;
         }
         Err(err) => {
             bot.send_message(chat_id, shared::user_message_for_api_error(err))
@@ -164,6 +178,7 @@ pub(crate) async fn delete_vault(
     cfg: &ConfigParameters,
     confirm: bool,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     if !confirm {
         bot.send_message(chat_id, vault_delete_help_text()).await?;
         return Ok(());
@@ -171,7 +186,7 @@ pub(crate) async fn delete_vault(
 
     match cfg.api.vault_delete_main(user_id).await {
         Ok(()) => {
-            bot.send_message(chat_id, "\u{2705} Vault eliminato.")
+            bot.send_message(chat_id, i18n::t(locale, TextKey::VaultDeleted))
                 .await?;
         }
         Err(err) => {
@@ -189,6 +204,7 @@ pub(crate) async fn list_flow_members(
     cfg: &ConfigParameters,
     flow_name: &str,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
@@ -221,7 +237,8 @@ pub(crate) async fn list_flow_members(
         }
     };
 
-    let text = render_members_list(&format!("Membri flow \"{}\"", flow.name), &response.members);
+    let title = i18n::format(locale, TextKey::MembersFlowTitle, &[("flow", &flow.name)]);
+    let text = render_members_list(&title, &response.members);
     bot.send_message(chat_id, text).await?;
     Ok(())
 }
@@ -235,6 +252,7 @@ pub(crate) async fn add_flow_member(
     username: &str,
     role: MembershipRole,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
@@ -270,7 +288,11 @@ pub(crate) async fn add_flow_member(
         Ok(()) => {
             bot.send_message(
                 chat_id,
-                format!("\u{2705} Membro salvato: {username} ({})", role_label(role)),
+                i18n::format(
+                    locale,
+                    TextKey::MemberSaved,
+                    &[("username", username), ("role", role_label(role))],
+                ),
             )
             .await?;
         }
@@ -290,6 +312,7 @@ pub(crate) async fn remove_flow_member(
     flow_name: &str,
     username: &str,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
@@ -319,8 +342,11 @@ pub(crate) async fn remove_flow_member(
         .await
     {
         Ok(()) => {
-            bot.send_message(chat_id, format!("\u{2705} Membro rimosso: {username}"))
-                .await?;
+            bot.send_message(
+                chat_id,
+                i18n::format(locale, TextKey::MemberRemoved, &[("username", username)]),
+            )
+            .await?;
         }
         Err(err) => {
             bot.send_message(chat_id, shared::user_message_for_api_error(err))
@@ -339,6 +365,7 @@ pub(crate) async fn merge_category(
     from: &str,
     into: &str,
 ) -> ResponseResult<()> {
+    let locale = i18n::default_locale();
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
@@ -368,19 +395,26 @@ pub(crate) async fn merge_category(
     };
 
     let Some(from_category) = match_category_by_input(&categories, from) else {
-        bot.send_message(chat_id, format!("Categoria sorgente non trovata: {from}"))
-            .await?;
-        bot.send_message(chat_id, "Usa /categories per vedere la lista.")
+        bot.send_message(
+            chat_id,
+            i18n::format(locale, TextKey::CategorySourceMissing, &[("name", from)]),
+        )
+        .await?;
+        bot.send_message(chat_id, i18n::t(locale, TextKey::CategoryListHint))
             .await?;
         return Ok(());
     };
     let Some(into_category) = match_category_by_input(&categories, into) else {
         bot.send_message(
             chat_id,
-            format!("Categoria destinazione non trovata: {into}"),
+            i18n::format(
+                locale,
+                TextKey::CategoryDestinationMissing,
+                &[("name", into)],
+            ),
         )
         .await?;
-        bot.send_message(chat_id, "Usa /categories per vedere la lista.")
+        bot.send_message(chat_id, i18n::t(locale, TextKey::CategoryListHint))
             .await?;
         return Ok(());
     };
@@ -412,9 +446,10 @@ pub(crate) async fn merge_category(
     }
 
     if !confirm {
-        let text = format!(
-            "Ok, posso unire \"{}\" -> \"{}\".\nConferma con:\n/merge_category confirm {} -> {}",
-            from_category.name, into_category.name, from_category.name, into_category.name
+        let text = i18n::format(
+            locale,
+            TextKey::MergeConfirmPrompt,
+            &[("from", &from_category.name), ("into", &into_category.name)],
         );
         bot.send_message(chat_id, text).await?;
         return Ok(());
@@ -435,9 +470,10 @@ pub(crate) async fn merge_category(
         Ok(_) => {
             bot.send_message(
                 chat_id,
-                format!(
-                    "Unione completata: \"{}\" -> \"{}\".",
-                    from_category.name, into_category.name
+                i18n::format(
+                    locale,
+                    TextKey::MergeCompleted,
+                    &[("from", &from_category.name), ("into", &into_category.name)],
                 ),
             )
             .await?;
@@ -465,20 +501,20 @@ async fn resolve_accessible_flows(
 }
 
 fn render_category_list(categories: &[CategoryView]) -> String {
+    let locale = i18n::default_locale();
     if categories.is_empty() {
-        return "Nessuna categoria. Aggiungi una transazione con #categoria per iniziare."
-            .to_string();
+        return i18n::t(locale, TextKey::CategoryListEmpty).to_string();
     }
 
     let mut lines = Vec::with_capacity(categories.len() + 2);
-    lines.push("Categorie:".to_string());
+    lines.push(i18n::t(locale, TextKey::CategoryListHeader).to_string());
     for category in categories {
         let mut line = format!("- {}", category.name);
         if category.is_system {
-            line.push_str(" [system]");
+            line.push_str(i18n::t(locale, TextKey::CategoryFlagSystem));
         }
         if category.archived {
-            line.push_str(" [archived]");
+            line.push_str(i18n::t(locale, TextKey::CategoryFlagArchived));
         }
         lines.push(line);
     }
@@ -486,8 +522,9 @@ fn render_category_list(categories: &[CategoryView]) -> String {
 }
 
 fn render_members_list(title: &str, members: &[MemberView]) -> String {
+    let locale = i18n::default_locale();
     if members.is_empty() {
-        return format!("{title}:\n- Nessun membro.");
+        return format!("{title}:\n- {}", i18n::t(locale, TextKey::MembersEmpty));
     }
     let mut lines = Vec::with_capacity(members.len() + 1);
     lines.push(format!("{title}:"));
@@ -502,10 +539,11 @@ fn render_members_list(title: &str, members: &[MemberView]) -> String {
 }
 
 fn role_label(role: MembershipRole) -> &'static str {
+    let locale = i18n::default_locale();
     match role {
-        MembershipRole::Owner => "owner",
-        MembershipRole::Editor => "editor",
-        MembershipRole::Viewer => "viewer",
+        MembershipRole::Owner => i18n::t(locale, TextKey::RoleOwner),
+        MembershipRole::Editor => i18n::t(locale, TextKey::RoleEditor),
+        MembershipRole::Viewer => i18n::t(locale, TextKey::RoleViewer),
     }
 }
 
@@ -526,17 +564,22 @@ fn find_flow_by_name<'a>(flows: &'a [FlowView], name: &str) -> Option<&'a FlowVi
 }
 
 fn flow_not_found_text(name: &str, flows: &[FlowView]) -> String {
+    let locale = i18n::default_locale();
     let flows = flows
         .iter()
         .filter(|flow| !flow.archived && !flow.is_unallocated)
         .map(|flow| flow.name.as_str())
         .collect::<Vec<_>>();
     if flows.is_empty() {
-        return format!("Flow \"{name}\" non trovato. Nessun flow condivisibile.");
+        return i18n::format(locale, TextKey::FlowNotFoundNone, &[("name", name)]);
     }
     let mut lines = Vec::with_capacity(flows.len() + 2);
-    lines.push(format!("Flow \"{name}\" non trovato."));
-    lines.push("Flow disponibili:".to_string());
+    lines.push(i18n::format(
+        locale,
+        TextKey::FlowNotFound,
+        &[("name", name)],
+    ));
+    lines.push(i18n::t(locale, TextKey::FlowAvailableHeader).to_string());
     for flow in flows {
         lines.push(format!("- {flow}"));
     }
@@ -548,12 +591,14 @@ fn render_merge_conflicts(
     into: &CategoryView,
     preview: &api_types::category::CategoryMergePreviewResponse,
 ) -> String {
+    let locale = i18n::default_locale();
     let mut lines = Vec::with_capacity(preview.conflicts.len() + 2);
-    lines.push(format!(
-        "Merge non possibile: \"{}\" -> \"{}\".",
-        from.name, into.name
+    lines.push(i18n::format(
+        locale,
+        TextKey::MergeConflictHeader,
+        &[("from", &from.name), ("into", &into.name)],
     ));
-    lines.push("Conflitti:".to_string());
+    lines.push(i18n::t(locale, TextKey::MergeConflictListHeader).to_string());
     for conflict in &preview.conflicts {
         lines.push(format!("- {}", merge_conflict_label(conflict)));
     }
@@ -561,13 +606,34 @@ fn render_merge_conflicts(
 }
 
 fn merge_conflict_label(conflict: &CategoryMergeConflict) -> String {
+    let locale = i18n::default_locale();
     match conflict.kind.as_str() {
-        "same_category" => "Le categorie sono identiche.".to_string(),
-        "source_system" => format!("La categoria \"{}\" e' di sistema.", conflict.value),
-        "target_archived" => format!("La categoria \"{}\" e' archiviata.", conflict.value),
-        "alias_conflict" => format!("Alias in conflitto: {}", conflict.value),
-        "name_conflict" => format!("Nome in conflitto: {}", conflict.value),
-        _ => format!("Conflitto: {} ({})", conflict.kind, conflict.value),
+        "same_category" => i18n::t(locale, TextKey::MergeConflictSame).to_string(),
+        "source_system" => i18n::format(
+            locale,
+            TextKey::MergeConflictSourceSystem,
+            &[("name", &conflict.value)],
+        ),
+        "target_archived" => i18n::format(
+            locale,
+            TextKey::MergeConflictTargetArchived,
+            &[("name", &conflict.value)],
+        ),
+        "alias_conflict" => i18n::format(
+            locale,
+            TextKey::MergeConflictAlias,
+            &[("value", &conflict.value)],
+        ),
+        "name_conflict" => i18n::format(
+            locale,
+            TextKey::MergeConflictName,
+            &[("value", &conflict.value)],
+        ),
+        _ => i18n::format(
+            locale,
+            TextKey::MergeConflictFallback,
+            &[("kind", &conflict.kind), ("value", &conflict.value)],
+        ),
     }
 }
 
@@ -598,7 +664,7 @@ fn normalize_category_label(value: &str) -> String {
 }
 
 fn vault_delete_help_text() -> &'static str {
-    "Uso:\n/vault_delete confirm\n\nAttenzione: elimina il vault Main e tutti i dati."
+    i18n::t(i18n::default_locale(), TextKey::VaultDeleteHelp)
 }
 
 #[cfg(test)]

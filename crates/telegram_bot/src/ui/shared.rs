@@ -1,8 +1,14 @@
 use api_types::transaction::{TransactionKind, TransactionView};
 use engine::{Currency as EngineCurrency, Money};
 
+use crate::i18n::{self, TextKey};
+
 pub(crate) fn flow_display_name(is_unallocated: bool, name: &str) -> &str {
-    if is_unallocated { "Non in flow" } else { name }
+    if is_unallocated {
+        i18n::t(i18n::default_locale(), TextKey::UnallocatedFlow)
+    } else {
+        name
+    }
 }
 
 pub(crate) fn tx_button_label(currency: EngineCurrency, tx: &TransactionView) -> String {
@@ -11,10 +17,18 @@ pub(crate) fn tx_button_label(currency: EngineCurrency, tx: &TransactionView) ->
         TransactionKind::Income => "+",
         TransactionKind::Expense => "-",
         TransactionKind::Refund => "r",
-        TransactionKind::TransferWallet => "tw",
-        TransactionKind::TransferFlow => "tf",
+        TransactionKind::TransferWallet => {
+            i18n::t(i18n::default_locale(), TextKey::TxKindTransferWallet)
+        }
+        TransactionKind::TransferFlow => {
+            i18n::t(i18n::default_locale(), TextKey::TxKindTransferFlow)
+        }
     };
     let category = tx.category.as_deref().unwrap_or("-");
-    let voided = if tx.voided { " • void" } else { "" };
+    let voided = if tx.voided {
+        i18n::t(i18n::default_locale(), TextKey::TxVoidedSuffix)
+    } else {
+        ""
+    };
     format!("{kind} {amount} • {category}{voided}")
 }
