@@ -6,7 +6,7 @@ use teloxide::{prelude::*, types::InlineKeyboardMarkup};
 
 use crate::{
     ConfigParameters,
-    api::{ApiClient, ApiError},
+    api::{ApiError, ApiGateway},
     i18n::{self, TextKey},
     state::{PrefsStore, UserPrefs},
 };
@@ -108,7 +108,7 @@ pub(crate) async fn edit_or_send(
 }
 
 pub(crate) async fn resolve_main_vault_id(
-    api: &ApiClient,
+    api: &dyn ApiGateway,
     telegram_user_id: u64,
 ) -> Result<String, ApiError> {
     let vault = api.vault_get_main(telegram_user_id).await?;
@@ -117,4 +117,45 @@ pub(crate) async fn resolve_main_vault_id(
         code: ErrorCode::Unknown,
         message: "vault id missing".to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::mock::MockApi;
+    use api_types::{error::ErrorCode, vault::Vault};
+
+    #[tokio::test]
+    async fn resolve_main_vault_id_returns_id() {
+        let api = MockApi::new();
+        *api.vault_get_main.lock().expect("mock lock") = Some(Ok(Vault {
+            id: Some("vault-1".to_string()),
+            name: Some("Main".to_string()),
+            currency: None,
+            owner: None,
+        }));
+
+        let id = resolve_main_vault_id(&api, 42).await.expect("vault id");
+        assert_eq!(id, "vault-1");
+    }
+
+    #[tokio::test]
+    async fn resolve_main_vault_id_fails_when_missing() {
+        let api = MockApi::new();
+        *api.vault_get_main.lock().expect("mock lock") = Some(Ok(Vault {
+            id: None,
+            name: Some("Main".to_string()),
+            currency: None,
+            owner: None,
+        }));
+
+        let err = resolve_main_vault_id(&api, 42).await.expect_err("missing id");
+        match err {
+            ApiError::Server { status, code, .. } => {
+                assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+                assert_eq!(code, ErrorCode::Unknown);
+            }
+            ApiError::Network(_) => panic!("expected server error"),
+        }
+    }
 }

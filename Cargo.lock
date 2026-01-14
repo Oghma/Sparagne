@@ -4179,6 +4179,7 @@ name = "telegram_bot"
 version = "0.90.0"
 dependencies = [
  "api_types",
+ "async-trait",
  "base64",
  "chrono",
  "chrono-tz",

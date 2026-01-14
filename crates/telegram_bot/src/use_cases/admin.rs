@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     ConfigParameters,
-    api::{ApiClient, ApiError},
+    api::{ApiError, ApiGateway},
     i18n::{self, TextKey},
     use_cases::shared,
 };
@@ -489,7 +489,7 @@ pub(crate) async fn merge_category(
 }
 
 async fn resolve_accessible_flows(
-    api: &ApiClient,
+    api: &dyn ApiGateway,
     telegram_user_id: u64,
 ) -> Result<Vec<FlowView>, ApiError> {
     match api.vault_snapshot_main(telegram_user_id).await {
