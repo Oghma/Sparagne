@@ -11,6 +11,7 @@ use teloxide::prelude::*;
 
 mod api;
 mod handlers;
+mod i18n;
 mod parsing;
 mod routing;
 mod state;
