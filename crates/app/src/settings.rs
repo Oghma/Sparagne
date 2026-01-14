@@ -52,6 +52,36 @@ impl Settings {
         let settings = builder.build()?.try_deserialize()?;
         apply_env_overrides(settings)
     }
+
+    pub fn redacted_log_lines(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+
+        lines.push(format!("app.level={}", self.app.level));
+
+        if let Some(server) = &self.server {
+            let db = match &server.database {
+                Database::Memory => "sqlite::memory".to_string(),
+                Database::Sqlite(path) => format!("sqlite:{path}?mode=rwc"),
+            };
+            lines.push(format!(
+                "server.bind={}",
+                server.bind.as_deref().unwrap_or("127.0.0.1")
+            ));
+            lines.push(format!("server.port={}", server.port));
+            lines.push(format!("server.database={}", db));
+        } else {
+            lines.push("server.disabled=true".to_string());
+        }
+
+        if let Some(telegram) = &self.telegram {
+            lines.push(format!("telegram.server={}", telegram.server));
+            lines.push(format!("telegram.username={}", telegram.username));
+        } else {
+            lines.push("telegram.disabled=true".to_string());
+        }
+
+        lines
+    }
 }
 
 fn apply_env_overrides(mut settings: Settings) -> Result<Settings, ConfigError> {

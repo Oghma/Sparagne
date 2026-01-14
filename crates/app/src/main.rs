@@ -19,6 +19,9 @@ async fn main() -> AppResult<()> {
         }
     };
     let _log_guard = init_tracing(&settings.app.level);
+    for line in settings.redacted_log_lines() {
+        tracing::debug!("settings: {line}");
+    }
     let mut tasks = tokio::task::JoinSet::new();
 
     if let Some(server) = settings.server {
