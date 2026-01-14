@@ -15,6 +15,7 @@ mod parsing;
 mod routing;
 mod state;
 mod ui;
+mod use_cases;
 
 const DEFAULT_STATE_PATH: &str = "config/telegram_bot_state.json";
 

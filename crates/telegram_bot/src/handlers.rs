@@ -1,10 +1,7 @@
 use api_types::{
-    error::ErrorCode,
     membership::{MemberUpsert, MemberView, MembershipRole},
     vault::FlowView,
 };
-use chrono::{DateTime, FixedOffset, Utc};
-use chrono_tz::Europe::Rome;
 use engine::{Currency as EngineCurrency, Money};
 use reqwest::StatusCode;
 use teloxide::{
@@ -18,8 +15,9 @@ use crate::{
     api::{ApiClient, ApiError},
     parsing::{ParseError, QuickKind, parse_quick_add},
     routing::{CallbackAction, Command},
-    state::{DraftCreate, PendingAction, WizardSession},
+    state::{DraftCreate, PendingAction},
     ui,
+    use_cases::{home, list, shared, stats, wizard},
 };
 
 pub(crate) async fn handle_message(
@@ -60,7 +58,7 @@ pub(crate) async fn handle_message(
             Command::Start { code } => {
                 if let Some(code) = code.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
                     if let Err(err) = cfg.api.pair_user(user_id, code).await {
-                        bot.send_message(chat_id, user_message_for_api_error(err))
+                        bot.send_message(chat_id, shared::user_message_for_api_error(err))
                             .await?;
                         return Ok(());
                     }
@@ -74,16 +72,16 @@ pub(crate) async fn handle_message(
                         .unwrap_or_else(|| "Sparagne".to_string());
                     bot.send_message(chat_id, welcome_text(&display_name))
                         .await?;
-                    show_home(&bot, chat_id, user_id, &cfg).await?;
+                    home::show_home(&bot, chat_id, user_id, &cfg).await?;
                     return Ok(());
                 }
 
-                show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg).await?;
                 return Ok(());
             }
             Command::Home => {
                 cfg.sessions.update(chat_id, |s| s.wizard = None).await;
-                show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg).await?;
                 return Ok(());
             }
             Command::Help => {
@@ -157,130 +155,6 @@ pub(crate) async fn handle_message(
     Ok(())
 }
 
-async fn start_wizard(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-    kind: QuickKind,
-) -> ResponseResult<()> {
-    cfg.sessions
-        .update(chat_id, |s| {
-            s.wizard = Some(WizardSession {
-                kind,
-                category: None,
-                categories: Vec::new(),
-            });
-        })
-        .await;
-    show_wizard(bot, chat_id, user_id, cfg).await
-}
-
-async fn show_wizard(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-) -> ResponseResult<()> {
-    let session = cfg.sessions.get(chat_id).await;
-    let Some(wizard) = session.wizard else {
-        return show_home(bot, chat_id, user_id, cfg).await;
-    };
-
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
-        Ok(s) => s,
-        Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
-            return Ok(());
-        }
-    };
-    let currency = engine_currency(snapshot.currency);
-
-    let mut prefs = cfg.prefs.get_or_default(user_id).await;
-    if (prefs.last_flow_id.is_none() || prefs.default_flow_id.is_none())
-        && let Ok(updated) = cfg
-            .prefs
-            .update(user_id, |p| {
-                if p.last_flow_id.is_none() {
-                    p.last_flow_id = Some(snapshot.unallocated_flow_id);
-                }
-                if p.default_flow_id.is_none() {
-                    p.default_flow_id = Some(snapshot.unallocated_flow_id);
-                }
-            })
-            .await
-    {
-        prefs = updated;
-    }
-    let Some(wallet_id) = prefs.default_wallet_id else {
-        show_wallet_picker(bot, chat_id, user_id, cfg).await?;
-        return Ok(());
-    };
-
-    let kind_filter = match wizard.kind {
-        QuickKind::Expense => api_types::transaction::TransactionKind::Expense,
-        QuickKind::Income => api_types::transaction::TransactionKind::Income,
-        QuickKind::Refund => api_types::transaction::TransactionKind::Refund,
-    };
-
-    let recents = match cfg
-        .api
-        .transactions_list(
-            user_id,
-            &api_types::transaction::TransactionList {
-                vault_id: snapshot.id.clone(),
-                flow_id: None,
-                wallet_id: Some(wallet_id),
-                limit: Some(6),
-                cursor: None,
-                from: None,
-                to: None,
-                kinds: Some(vec![kind_filter]),
-                include_voided: Some(false),
-                include_transfers: Some(false),
-            },
-        )
-        .await
-    {
-        Ok(v) => v,
-        Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
-            return Ok(());
-        }
-    };
-
-    let mut categories: Vec<String> = Vec::new();
-    for tx in &recents.transactions {
-        let Some(cat) = tx.category.as_deref() else {
-            continue;
-        };
-        if categories.iter().any(|c| c == cat) {
-            continue;
-        }
-        categories.push(cat.to_string());
-        if categories.len() >= 6 {
-            break;
-        }
-    }
-
-    let session = cfg
-        .sessions
-        .update(chat_id, |s| {
-            if let Some(w) = &mut s.wizard {
-                w.categories = categories;
-            }
-        })
-        .await;
-    let Some(wizard) = session.wizard else {
-        return show_home(bot, chat_id, user_id, cfg).await;
-    };
-
-    let (text, kb) = ui::render_wizard(currency, &snapshot, &prefs, &wizard, &recents.transactions);
-    edit_or_send(bot, chat_id, cfg, text, kb).await
-}
-
 pub(crate) async fn handle_callback(
     bot: Bot,
     q: CallbackQuery,
@@ -314,13 +188,13 @@ pub(crate) async fn handle_callback(
     match action {
         CallbackAction::NavHome => {
             cfg.sessions.update(chat_id, |s| s.wizard = None).await;
-            show_home(&bot, chat_id, user_id, &cfg).await?;
+            home::show_home(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::NavWizard => {
-            show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::ShowList => {
-            show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::HomePair => {
             cfg.sessions
@@ -330,32 +204,32 @@ pub(crate) async fn handle_callback(
                 .await?;
         }
         CallbackAction::HomePickWallet => {
-            show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
+            home::show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::HomePickFlow => {
-            show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
+            home::show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::HomeExpense => {
-            start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Expense).await?;
+            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Expense).await?;
         }
         CallbackAction::HomeIncome => {
-            start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Income).await?;
+            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Income).await?;
         }
         CallbackAction::HomeRefund => {
-            start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Refund).await?;
+            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Refund).await?;
         }
         CallbackAction::HomeStats => {
-            show_stats(&bot, chat_id, user_id, &cfg).await?;
+            stats::show_stats(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::WizClose => {
             cfg.sessions.update(chat_id, |s| s.wizard = None).await;
-            show_home(&bot, chat_id, user_id, &cfg).await?;
+            home::show_home(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::WizPickWallet => {
-            show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
+            home::show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::WizPickFlow => {
-            show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
+            home::show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::WizInput => {
             let kind = cfg
@@ -366,7 +240,7 @@ pub(crate) async fn handle_callback(
                 .as_ref()
                 .map(|w| w.kind);
             let Some(kind) = kind else {
-                show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg).await?;
                 return Ok(());
             };
 
@@ -375,7 +249,8 @@ pub(crate) async fn handle_callback(
                     s.pending = Some(PendingAction::WizardDraft { kind })
                 })
                 .await;
-            bot.send_message(chat_id, wizard_prompt(kind)).await?;
+            bot.send_message(chat_id, wizard::wizard_prompt(kind))
+                .await?;
         }
         CallbackAction::WizCatNone | CallbackAction::WizCatReset => {
             cfg.sessions
@@ -385,7 +260,7 @@ pub(crate) async fn handle_callback(
                     }
                 })
                 .await;
-            show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::WizCatIndex(idx) => {
             cfg.sessions
@@ -399,11 +274,11 @@ pub(crate) async fn handle_callback(
                     w.category = Some(cat);
                 })
                 .await;
-            show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::WizRecent(tx_id) => {
-            repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
-            show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            list::repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
+            wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::PrefsToggleVoided => {
             let updated = cfg
@@ -414,7 +289,7 @@ pub(crate) async fn handle_callback(
                 bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
                     .await?;
             }
-            show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::ListNext => {
             cfg.sessions
@@ -427,7 +302,7 @@ pub(crate) async fn handle_callback(
                     }
                 })
                 .await;
-            show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::ListPrev => {
             cfg.sessions
@@ -437,7 +312,7 @@ pub(crate) async fn handle_callback(
                     }
                 })
                 .await;
-            show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::WalletSet(wallet_id) => {
             let updated = cfg
@@ -453,14 +328,14 @@ pub(crate) async fn handle_callback(
             if let Some(PendingAction::WalletForQuickAdd(draft)) = pending {
                 cfg.sessions.update(chat_id, |s| s.pending = None).await;
                 finalize_quick_add(&bot, chat_id, user_id, &cfg, wallet_id, draft).await?;
-                show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg).await?;
                 return Ok(());
             }
 
             if cfg.sessions.get(chat_id).await.wizard.is_some() {
-                show_wizard(&bot, chat_id, user_id, &cfg).await?;
+                wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
             } else {
-                show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg).await?;
             }
         }
         CallbackAction::FlowSet(flow_id) => {
@@ -476,19 +351,19 @@ pub(crate) async fn handle_callback(
                     .await?;
             }
             if cfg.sessions.get(chat_id).await.wizard.is_some() {
-                show_wizard(&bot, chat_id, user_id, &cfg).await?;
+                wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
             } else {
-                show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg).await?;
             }
         }
         CallbackAction::TxDetail(tx_id) => {
-            show_detail(&bot, chat_id, user_id, &cfg, tx_id).await?;
+            list::show_detail(&bot, chat_id, user_id, &cfg, tx_id).await?;
         }
         CallbackAction::TxVoid(tx_id) => {
-            let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+            let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
                 Ok(vault_id) => vault_id,
                 Err(err) => {
-                    bot.send_message(chat_id, user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
                         .await?;
                     return Ok(());
                 }
@@ -506,18 +381,18 @@ pub(crate) async fn handle_callback(
                 )
                 .await;
             if let Err(err) = voided {
-                bot.send_message(chat_id, user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(err))
                     .await?;
                 return Ok(());
             }
 
             bot.send_message(chat_id, "✅ Voce annullata (void).")
                 .await?;
-            show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::TxEdit(tx_id) => {
             let (text, kb) = ui::render_edit_menu(tx_id);
-            edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
+            shared::edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
         }
         CallbackAction::TxEditAmount(tx_id) => {
             cfg.sessions
@@ -538,7 +413,7 @@ pub(crate) async fn handle_callback(
                 .await?;
         }
         CallbackAction::TxRepeat(tx_id) => {
-            repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
+            list::repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
         }
         CallbackAction::Noop => {}
     }
@@ -560,7 +435,7 @@ async fn handle_pending_message(
                 return Ok(true);
             };
             if let Err(err) = cfg.api.pair_user(user_id, code).await {
-                bot.send_message(chat_id, user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(err))
                     .await?;
                 return Ok(true);
             }
@@ -574,7 +449,7 @@ async fn handle_pending_message(
                 .unwrap_or_else(|| "Sparagne".to_string());
             bot.send_message(chat_id, welcome_text(&display_name))
                 .await?;
-            show_home(bot, chat_id, user_id, cfg).await?;
+            home::show_home(bot, chat_id, user_id, cfg).await?;
             Ok(true)
         }
         PendingAction::WizardDraft { kind } => {
@@ -582,7 +457,7 @@ async fn handle_pending_message(
                 return Ok(true);
             };
 
-            let input = match normalize_wizard_input(kind, text) {
+            let input = match wizard::normalize_wizard_input(kind, text) {
                 Ok(v) => v,
                 Err(err) => {
                     bot.send_message(chat_id, err).await?;
@@ -612,14 +487,14 @@ async fn handle_pending_message(
 
             let prefs = cfg.prefs.get_or_default(user_id).await;
             let Some(wallet_id) = prefs.default_wallet_id else {
-                show_wallet_picker(bot, chat_id, user_id, cfg).await?;
+                home::show_wallet_picker(bot, chat_id, user_id, cfg).await?;
                 return Ok(true);
             };
 
             let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
                 Ok(s) => s,
                 Err(err) => {
-                    bot.send_message(chat_id, user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
                         .await?;
                     return Ok(true);
                 }
@@ -627,7 +502,7 @@ async fn handle_pending_message(
 
             let flow_id = prefs.last_flow_id.or(Some(snapshot.unallocated_flow_id));
             let idempotency_key = format!("tg:{}:{}", msg.chat.id.0, msg.id.0);
-            let occurred_at = now_rome();
+            let occurred_at = shared::now_rome();
 
             let created = match kind {
                 QuickKind::Expense => {
@@ -688,7 +563,7 @@ async fn handle_pending_message(
 
             match created {
                 Ok(created) => {
-                    let currency = engine_currency(snapshot.currency);
+                    let currency = shared::engine_currency(snapshot.currency);
                     let signed_minor = match kind {
                         QuickKind::Expense => -parsed.amount_minor,
                         QuickKind::Income | QuickKind::Refund => parsed.amount_minor,
@@ -717,12 +592,12 @@ async fn handle_pending_message(
                     bot.send_message(chat_id, "✅ Già salvato.").await?;
                 }
                 Err(err) => {
-                    bot.send_message(chat_id, user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
                         .await?;
                 }
             }
 
-            show_wizard(bot, chat_id, user_id, cfg).await?;
+            wizard::show_wizard(bot, chat_id, user_id, cfg).await?;
             Ok(true)
         }
         PendingAction::EditAmount { tx_id } => {
@@ -750,10 +625,10 @@ async fn handle_pending_message(
                 return Ok(true);
             }
 
-            let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+            let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
                 Ok(v) => v,
                 Err(err) => {
-                    bot.send_message(chat_id, user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
                         .await?;
                     return Ok(true);
                 }
@@ -780,14 +655,14 @@ async fn handle_pending_message(
                 )
                 .await
             {
-                bot.send_message(chat_id, user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(err))
                     .await?;
                 return Ok(true);
             }
 
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
             bot.send_message(chat_id, "✅ Importo aggiornato.").await?;
-            show_home(bot, chat_id, user_id, cfg).await?;
+            home::show_home(bot, chat_id, user_id, cfg).await?;
             Ok(true)
         }
         PendingAction::EditNote { tx_id } => {
@@ -796,10 +671,10 @@ async fn handle_pending_message(
                 .map(|t| t.trim().to_string())
                 .filter(|t| !t.is_empty());
 
-            let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+            let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
                 Ok(v) => v,
                 Err(err) => {
-                    bot.send_message(chat_id, user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
                         .await?;
                     return Ok(true);
                 }
@@ -826,14 +701,14 @@ async fn handle_pending_message(
                 )
                 .await
             {
-                bot.send_message(chat_id, user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(err))
                     .await?;
                 return Ok(true);
             }
 
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
             bot.send_message(chat_id, "✅ Nota aggiornata.").await?;
-            show_home(bot, chat_id, user_id, cfg).await?;
+            home::show_home(bot, chat_id, user_id, cfg).await?;
             Ok(true)
         }
         PendingAction::WalletForQuickAdd(_) => Ok(false),
@@ -874,7 +749,7 @@ async fn handle_quick_add(
                 s.pending = Some(PendingAction::WalletForQuickAdd(draft.clone()))
             })
             .await;
-        show_wallet_picker(bot, msg.chat.id, user_id, cfg).await?;
+        home::show_wallet_picker(bot, msg.chat.id, user_id, cfg).await?;
         return Ok(());
     };
 
@@ -892,13 +767,13 @@ async fn finalize_quick_add(
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
     };
 
-    let currency = engine_currency(snapshot.currency);
+    let currency = shared::engine_currency(snapshot.currency);
     let prefs = cfg.prefs.get_or_default(user_id).await;
     let flow_id = match prefs.last_flow_id {
         Some(id) => id,
@@ -915,7 +790,7 @@ async fn finalize_quick_add(
         }
     };
 
-    let occurred_at = now_rome();
+    let occurred_at = shared::now_rome();
     let vault_id = snapshot.id.clone();
 
     let created = match draft.kind {
@@ -1022,452 +897,12 @@ async fn finalize_quick_add(
             bot.send_message(chat_id, "✅ Già salvato.").await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
         }
     }
 
     Ok(())
-}
-
-async fn show_home(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-) -> ResponseResult<()> {
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
-        Ok(s) => s,
-        Err(err) => {
-            let needs_pairing = matches!(
-                err,
-                ApiError::Server { status, .. }
-                    if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
-            );
-            if needs_pairing {
-                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
-                    .await?;
-                cfg.sessions
-                    .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
-                    .await;
-            } else {
-                bot.send_message(chat_id, user_message_for_api_error(err))
-                    .await?;
-            }
-            return Ok(());
-        }
-    };
-    let mut prefs = cfg.prefs.get_or_default(user_id).await;
-    if (prefs.last_flow_id.is_none() || prefs.default_flow_id.is_none())
-        && let Ok(updated) = cfg
-            .prefs
-            .update(user_id, |p| {
-                if p.last_flow_id.is_none() {
-                    p.last_flow_id = Some(snapshot.unallocated_flow_id);
-                }
-                if p.default_flow_id.is_none() {
-                    p.default_flow_id = Some(snapshot.unallocated_flow_id);
-                }
-            })
-            .await
-    {
-        prefs = updated;
-    }
-    let display_name = cfg
-        .sessions
-        .get(chat_id)
-        .await
-        .display_name
-        .unwrap_or_else(|| "Sparagne".to_string());
-    let (text, kb) = ui::render_home(&display_name, &snapshot, &prefs);
-    edit_or_send(bot, chat_id, cfg, text, kb).await
-}
-
-async fn show_wallet_picker(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-) -> ResponseResult<()> {
-    let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
-        "nav:wizard"
-    } else {
-        "nav:home"
-    };
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
-        Ok(s) => s,
-        Err(err) => {
-            let needs_pairing = matches!(
-                err,
-                ApiError::Server { status, .. }
-                    if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
-            );
-            if needs_pairing {
-                cfg.sessions
-                    .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
-                    .await;
-                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
-                    .await?;
-            } else {
-                bot.send_message(chat_id, user_message_for_api_error(err))
-                    .await?;
-            }
-            return Ok(());
-        }
-    };
-    let (text, kb) = ui::render_wallet_picker(&snapshot, back_callback);
-    edit_or_send(bot, chat_id, cfg, text, kb).await
-}
-
-async fn show_flow_picker(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-) -> ResponseResult<()> {
-    let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
-        "nav:wizard"
-    } else {
-        "nav:home"
-    };
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
-        Ok(s) => s,
-        Err(err) => {
-            let needs_pairing = matches!(
-                err,
-                ApiError::Server { status, .. }
-                    if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
-            );
-            if needs_pairing {
-                cfg.sessions
-                    .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
-                    .await;
-                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
-                    .await?;
-            } else {
-                bot.send_message(chat_id, user_message_for_api_error(err))
-                    .await?;
-            }
-            return Ok(());
-        }
-    };
-    let (text, kb) = ui::render_flow_picker(&snapshot, back_callback);
-    edit_or_send(bot, chat_id, cfg, text, kb).await
-}
-
-async fn show_list(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-) -> ResponseResult<()> {
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
-        Ok(s) => s,
-        Err(err) => {
-            let needs_pairing = matches!(
-                err,
-                ApiError::Server { status, .. }
-                    if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
-            );
-            if needs_pairing {
-                cfg.sessions
-                    .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
-                    .await;
-                bot.send_message(chat_id, "Per fare pairing: /start <codice>")
-                    .await?;
-            } else {
-                bot.send_message(chat_id, user_message_for_api_error(err))
-                    .await?;
-            }
-            return Ok(());
-        }
-    };
-    let currency = engine_currency(snapshot.currency);
-    let prefs = cfg.prefs.get_or_default(user_id).await;
-    let Some(wallet_id) = prefs.default_wallet_id else {
-        bot.send_message(chat_id, "Imposta prima un wallet di default.")
-            .await?;
-        show_wallet_picker(bot, chat_id, user_id, cfg).await?;
-        return Ok(());
-    };
-
-    let session = cfg.sessions.get(chat_id).await;
-    let (cursor, cursor_stack_len) = match session.list.as_ref() {
-        Some(list) if list.wallet_id == wallet_id => (list.current.clone(), list.cursors.len()),
-        _ => (None, 0),
-    };
-
-    let list = match cfg
-        .api
-        .transactions_list(
-            user_id,
-            &api_types::transaction::TransactionList {
-                vault_id: snapshot.id.clone(),
-                flow_id: None,
-                wallet_id: Some(wallet_id),
-                limit: Some(10),
-                cursor,
-                from: None,
-                to: None,
-                kinds: None,
-                include_voided: Some(prefs.include_voided),
-                include_transfers: Some(false),
-            },
-        )
-        .await
-    {
-        Ok(v) => v,
-        Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
-            return Ok(());
-        }
-    };
-
-    let has_prev = cursor_stack_len > 0;
-    let has_next = list.next_cursor.is_some();
-    cfg.sessions
-        .update(chat_id, |s| {
-            let (cursors, current) = match s.list.as_ref() {
-                Some(prev) if prev.wallet_id == wallet_id => {
-                    (prev.cursors.clone(), prev.current.clone())
-                }
-                _ => (Vec::new(), None),
-            };
-            s.list = Some(crate::state::ListSession {
-                wallet_id,
-                cursors,
-                current,
-                next: list.next_cursor.clone(),
-            });
-        })
-        .await;
-
-    let (text, kb) = ui::render_list(currency, &list, prefs.include_voided, has_prev, has_next);
-    edit_or_send(bot, chat_id, cfg, text, kb).await
-}
-
-async fn show_detail(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-    tx_id: Uuid,
-) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
-        Ok(v) => v,
-        Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
-            return Ok(());
-        }
-    };
-    let detail = match cfg
-        .api
-        .transaction_get_detail(
-            user_id,
-            &api_types::transaction::TransactionGet {
-                vault_id,
-                id: tx_id,
-            },
-        )
-        .await
-    {
-        Ok(v) => v,
-        Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
-            return Ok(());
-        }
-    };
-    cfg.sessions
-        .update(chat_id, |s| s.last_detail_tx = Some(tx_id))
-        .await;
-    let currency = engine_currency(detail.transaction.currency);
-    let (text, kb) = ui::render_detail(currency, &detail);
-    edit_or_send(bot, chat_id, cfg, text, kb).await
-}
-
-async fn show_stats(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-) -> ResponseResult<()> {
-    let stats = match cfg.api.stats_get_main(user_id).await {
-        Ok(s) => s,
-        Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
-            return Ok(());
-        }
-    };
-    let currency = engine_currency(stats.currency);
-    let (text, kb) = ui::render_stats(currency, &stats);
-    edit_or_send(bot, chat_id, cfg, text, kb).await
-}
-
-async fn repeat_transaction(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-    tx_id: Uuid,
-    callback_id: &str,
-) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
-        Ok(v) => v,
-        Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
-            return Ok(());
-        }
-    };
-    let detail = match cfg
-        .api
-        .transaction_get_detail(
-            user_id,
-            &api_types::transaction::TransactionGet {
-                vault_id: vault_id.clone(),
-                id: tx_id,
-            },
-        )
-        .await
-    {
-        Ok(v) => v,
-        Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?;
-            return Ok(());
-        }
-    };
-
-    let wallet_id = detail.legs.iter().find_map(|leg| match leg.target {
-        api_types::transaction::LegTarget::Wallet { wallet_id } => Some(wallet_id),
-        _ => None,
-    });
-    let flow_id = detail.legs.iter().find_map(|leg| match leg.target {
-        api_types::transaction::LegTarget::Flow { flow_id } => Some(flow_id),
-        _ => None,
-    });
-
-    let Some(wallet_id) = wallet_id else {
-        bot.send_message(chat_id, "Transazione senza wallet: non posso ripeterla.")
-            .await?;
-        return Ok(());
-    };
-
-    let occurred_at = now_rome();
-    let idempotency_key = format!("tgcb:{}:{callback_id}", chat_id.0);
-
-    let created = match detail.transaction.kind {
-        api_types::transaction::TransactionKind::Income => {
-            cfg.api
-                .create_income(
-                    user_id,
-                    &api_types::transaction::IncomeNew {
-                        vault_id,
-                        amount_minor: detail.transaction.amount_minor,
-                        flow_id,
-                        wallet_id: Some(wallet_id),
-                        category_id: Some(detail.transaction.category_id),
-                        category: detail.transaction.category.clone(),
-                        note: detail.transaction.note.clone(),
-                        idempotency_key: Some(idempotency_key),
-                        occurred_at,
-                    },
-                )
-                .await
-        }
-        api_types::transaction::TransactionKind::Expense => {
-            cfg.api
-                .create_expense(
-                    user_id,
-                    &api_types::transaction::ExpenseNew {
-                        vault_id,
-                        amount_minor: detail.transaction.amount_minor,
-                        flow_id,
-                        wallet_id: Some(wallet_id),
-                        category_id: Some(detail.transaction.category_id),
-                        category: detail.transaction.category.clone(),
-                        note: detail.transaction.note.clone(),
-                        idempotency_key: Some(idempotency_key),
-                        occurred_at,
-                    },
-                )
-                .await
-        }
-        api_types::transaction::TransactionKind::Refund => {
-            cfg.api
-                .create_refund(
-                    user_id,
-                    &api_types::transaction::Refund {
-                        vault_id,
-                        amount_minor: detail.transaction.amount_minor,
-                        flow_id,
-                        wallet_id: Some(wallet_id),
-                        category_id: Some(detail.transaction.category_id),
-                        category: detail.transaction.category.clone(),
-                        note: detail.transaction.note.clone(),
-                        idempotency_key: Some(idempotency_key),
-                        occurred_at,
-                    },
-                )
-                .await
-        }
-        _ => {
-            bot.send_message(chat_id, "Ripetizione non supportata per questo tipo.")
-                .await?;
-            return Ok(());
-        }
-    };
-
-    match created {
-        Ok(_) => bot.send_message(chat_id, "✅ Ripetuta.").await?,
-        Err(ApiError::Server { status, .. }) if status == StatusCode::CONFLICT => {
-            bot.send_message(chat_id, "✅ Già salvato.").await?
-        }
-        Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
-                .await?
-        }
-    };
-
-    Ok(())
-}
-
-async fn edit_or_send(
-    bot: &Bot,
-    chat_id: ChatId,
-    cfg: &ConfigParameters,
-    text: String,
-    kb: InlineKeyboardMarkup,
-) -> ResponseResult<()> {
-    let session = cfg.sessions.get(chat_id).await;
-    if let Some(message_id) = session.hub_message_id
-        && bot
-            .edit_message_text(chat_id, message_id, text.clone())
-            .reply_markup(kb.clone())
-            .await
-            .is_ok()
-    {
-        return Ok(());
-    }
-
-    let sent = bot.send_message(chat_id, text).reply_markup(kb).await?;
-    cfg.sessions
-        .update(chat_id, |s| s.hub_message_id = Some(sent.id))
-        .await;
-    Ok(())
-}
-
-async fn resolve_main_vault_id(api: &ApiClient, telegram_user_id: u64) -> Result<String, ApiError> {
-    let vault = api.vault_get_main(telegram_user_id).await?;
-    vault.id.ok_or(ApiError::Server {
-        status: StatusCode::INTERNAL_SERVER_ERROR,
-        code: ErrorCode::Unknown,
-        message: "vault id missing".to_string(),
-    })
 }
 
 async fn resolve_accessible_flows(
@@ -1490,10 +925,10 @@ async fn list_categories(
     user_id: u64,
     cfg: &ConfigParameters,
 ) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1512,7 +947,7 @@ async fn list_categories(
     {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1529,10 +964,10 @@ async fn list_vault_members(
     user_id: u64,
     cfg: &ConfigParameters,
 ) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1541,7 +976,7 @@ async fn list_vault_members(
     let response = match cfg.api.vault_members_list(user_id, &vault_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1560,10 +995,10 @@ async fn add_vault_member(
     username: &str,
     role: MembershipRole,
 ) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1586,7 +1021,7 @@ async fn add_vault_member(
             .await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
         }
     }
@@ -1600,10 +1035,10 @@ async fn remove_vault_member(
     cfg: &ConfigParameters,
     username: &str,
 ) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1619,7 +1054,7 @@ async fn remove_vault_member(
                 .await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
         }
     }
@@ -1643,7 +1078,7 @@ async fn delete_vault(
             bot.send_message(chat_id, "✅ Vault eliminato.").await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
         }
     }
@@ -1657,10 +1092,10 @@ async fn list_flow_members(
     cfg: &ConfigParameters,
     flow_name: &str,
 ) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1669,7 +1104,7 @@ async fn list_flow_members(
     let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1683,7 +1118,7 @@ async fn list_flow_members(
     let response = match cfg.api.flow_members_list(user_id, &vault_id, flow.id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1703,10 +1138,10 @@ async fn add_flow_member(
     username: &str,
     role: MembershipRole,
 ) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1715,7 +1150,7 @@ async fn add_flow_member(
     let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1743,7 +1178,7 @@ async fn add_flow_member(
             .await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
         }
     }
@@ -1758,10 +1193,10 @@ async fn remove_flow_member(
     flow_name: &str,
     username: &str,
 ) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1770,7 +1205,7 @@ async fn remove_flow_member(
     let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1791,7 +1226,7 @@ async fn remove_flow_member(
                 .await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
         }
     }
@@ -1807,10 +1242,10 @@ async fn merge_category(
     from: &str,
     into: &str,
 ) -> ResponseResult<()> {
-    let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1829,7 +1264,7 @@ async fn merge_category(
     {
         Ok(resp) => resp.categories,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1867,7 +1302,7 @@ async fn merge_category(
     {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
             return Ok(());
         }
@@ -1911,7 +1346,7 @@ async fn merge_category(
             .await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(err))
                 .await?;
         }
     }
@@ -2061,58 +1496,6 @@ fn normalize_category_label(value: &str) -> String {
         .to_lowercase()
 }
 
-fn user_message_for_api_error(err: ApiError) -> String {
-    match err {
-        ApiError::Network(_) => {
-            "Problemi di connessione con il server. Riprova più tardi!".to_string()
-        }
-        ApiError::Server {
-            status,
-            code,
-            message,
-        } => match code {
-            ErrorCode::MembershipLastOwner => {
-                "Non puoi rimuovere l'ultimo owner del flow.".to_string()
-            }
-            ErrorCode::MembershipOwnerImmutable => {
-                "Non puoi cambiare il ruolo dell'owner del vault.".to_string()
-            }
-            ErrorCode::MembershipOwnerRemoveForbidden => {
-                "Non puoi rimuovere l'owner del vault.".to_string()
-            }
-            _ => match status {
-                reqwest::StatusCode::UNAUTHORIZED => {
-                    "Non autorizzato. Usa /start per fare il pairing.".to_string()
-                }
-                reqwest::StatusCode::FORBIDDEN => "Operazione non permessa.".to_string(),
-                reqwest::StatusCode::NOT_FOUND => {
-                    "Risorsa non trovata. Prova a reimpostare i default.".to_string()
-                }
-                reqwest::StatusCode::CONFLICT => "Richiesta duplicata (già salvata).".to_string(),
-                reqwest::StatusCode::BAD_REQUEST => {
-                    if message == "user not found" {
-                        "Codice di pairing non valido (o stai usando un database diverso da quello del server).".to_string()
-                    } else {
-                        message
-                    }
-                }
-                reqwest::StatusCode::UNPROCESSABLE_ENTITY => message,
-                _ => "Errore server.".to_string(),
-            },
-        },
-    }
-}
-
-fn now_rome() -> DateTime<FixedOffset> {
-    Utc::now().with_timezone(&Rome).fixed_offset()
-}
-
-fn engine_currency(currency: api_types::Currency) -> EngineCurrency {
-    match currency {
-        api_types::Currency::Eur => EngineCurrency::Eur,
-    }
-}
-
 fn welcome_text(display_name: &str) -> String {
     format!(
         "Benvenuto, {display_name}!\n\nOra puoi inserire voci al volo scrivendo ad esempio:\n\n12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\nImposta i default (wallet/flow) usando i bottoni."
@@ -2146,54 +1529,5 @@ fn display_name_from_telegram(user: &User) -> String {
         user.first_name.clone()
     } else {
         "Sparagne".to_string()
-    }
-}
-
-fn wizard_prompt(kind: QuickKind) -> &'static str {
-    match kind {
-        QuickKind::Expense => {
-            "Invia una uscita, es:\n\n12.50 bar caffè\n12.50 bar #food caffè\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
-        }
-        QuickKind::Income => {
-            "Invia una entrata, es:\n\n1000 stipendio\n+1000 #salary stipendio\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
-        }
-        QuickKind::Refund => {
-            "Invia un rimborso/storno, es:\n\nr 5.20 amazon\nr 5.20 #shopping amazon\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
-        }
-    }
-}
-
-fn normalize_wizard_input(kind: QuickKind, raw: &str) -> Result<String, &'static str> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err("Testo vuoto.");
-    }
-    match kind {
-        QuickKind::Expense => {
-            if trimmed.starts_with('+') {
-                return Err("Selezionato: uscita. Rimuovi il '+' (es: 12.50 bar).");
-            }
-            if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                return Err("Selezionato: uscita. Per refund usa il bottone “Refund”.");
-            }
-            Ok(trimmed.to_string())
-        }
-        QuickKind::Income => {
-            if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                return Err("Selezionato: entrata. Rimuovi 'r' (es: 1000 stipendio).");
-            }
-            if trimmed.starts_with('+') {
-                Ok(trimmed.to_string())
-            } else {
-                Ok(format!("+{trimmed}"))
-            }
-        }
-        QuickKind::Refund => {
-            if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                Ok(trimmed.to_string())
-            } else {
-                Ok(format!("r {trimmed}"))
-            }
-        }
     }
 }
