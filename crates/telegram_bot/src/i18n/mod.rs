@@ -331,3 +331,25 @@ pub(crate) fn format(locale: Locale, key: TextKey, pairs: &[(&str, &str)]) -> St
     }
     text
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_locale_defaults_when_missing() {
+        assert_eq!(resolve_locale(None), default_locale());
+    }
+
+    #[test]
+    fn resolve_locale_falls_back_for_unknown() {
+        assert_eq!(resolve_locale(Some("en")), default_locale());
+        assert_eq!(resolve_locale(Some("fr-FR")), default_locale());
+    }
+
+    #[test]
+    fn resolve_locale_accepts_italian_prefix() {
+        assert_eq!(resolve_locale(Some("it")), Locale::It);
+        assert_eq!(resolve_locale(Some("it-IT")), Locale::It);
+    }
+}

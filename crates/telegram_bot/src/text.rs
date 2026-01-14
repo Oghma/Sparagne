@@ -2,29 +2,25 @@ use teloxide::types::User;
 
 use crate::i18n::{self, TextKey};
 
-fn locale() -> i18n::Locale {
-    i18n::resolve_locale(None)
-}
-
-pub(crate) fn welcome_text(display_name: &str) -> String {
-    let template = i18n::t(locale(), TextKey::WelcomeTemplate);
+pub(crate) fn welcome_text(locale: i18n::Locale, display_name: &str) -> String {
+    let template = i18n::t(locale, TextKey::WelcomeTemplate);
     template.replace("{display_name}", display_name)
 }
 
-pub(crate) fn help_text() -> &'static str {
-    i18n::t(locale(), TextKey::HelpText)
+pub(crate) fn help_text(locale: i18n::Locale) -> &'static str {
+    i18n::t(locale, TextKey::HelpText)
 }
 
-pub(crate) fn merge_category_help_text() -> &'static str {
-    i18n::t(locale(), TextKey::MergeCategoryHelp)
+pub(crate) fn merge_category_help_text(locale: i18n::Locale) -> &'static str {
+    i18n::t(locale, TextKey::MergeCategoryHelp)
 }
 
-pub(crate) fn members_help_text() -> &'static str {
-    i18n::t(locale(), TextKey::MembersHelp)
+pub(crate) fn members_help_text(locale: i18n::Locale) -> &'static str {
+    i18n::t(locale, TextKey::MembersHelp)
 }
 
-pub(crate) fn flow_members_help_text() -> &'static str {
-    i18n::t(locale(), TextKey::FlowMembersHelp)
+pub(crate) fn flow_members_help_text(locale: i18n::Locale) -> &'static str {
+    i18n::t(locale, TextKey::FlowMembersHelp)
 }
 
 pub(crate) fn display_name_from_telegram(user: &User) -> String {
@@ -76,7 +72,7 @@ mod tests {
 
     #[test]
     fn help_text_contains_known_commands() {
-        let text = help_text();
+        let text = help_text(i18n::default_locale());
         assert!(text.contains("/home"));
         assert!(text.contains("/members"));
         assert!(text.contains("/flow_members"));
@@ -85,7 +81,7 @@ mod tests {
 
     #[test]
     fn help_text_contains_quick_add_examples() {
-        let text = help_text();
+        let text = help_text(i18n::default_locale());
         assert!(text.contains("12.50"));
         assert!(text.contains("+1000"));
         assert!(text.contains("r 5.20"));

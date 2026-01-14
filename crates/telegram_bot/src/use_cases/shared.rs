@@ -13,8 +13,7 @@ use crate::{
 use api_types::error::ErrorCode;
 use uuid::Uuid;
 
-pub(crate) fn user_message_for_api_error(err: ApiError) -> String {
-    let locale = i18n::default_locale();
+pub(crate) fn user_message_for_api_error(locale: i18n::Locale, err: ApiError) -> String {
     match err {
         ApiError::Network(_) => i18n::t(locale, TextKey::ApiNetworkError).to_string(),
         ApiError::Server {

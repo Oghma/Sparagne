@@ -16,6 +16,7 @@ pub(crate) async fn start_wizard(
     user_id: u64,
     cfg: &ConfigParameters,
     kind: QuickKind,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
     cfg.sessions
         .update(chat_id, |s| {
@@ -26,7 +27,7 @@ pub(crate) async fn start_wizard(
             });
         })
         .await;
-    show_wizard(bot, chat_id, user_id, cfg).await
+    show_wizard(bot, chat_id, user_id, cfg, locale).await
 }
 
 pub(crate) async fn show_wizard(
@@ -34,16 +35,17 @@ pub(crate) async fn show_wizard(
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
     let session = cfg.sessions.get(chat_id).await;
     let Some(wizard) = session.wizard else {
-        return home::show_home(bot, chat_id, user_id, cfg).await;
+        return home::show_home(bot, chat_id, user_id, cfg, locale).await;
     };
 
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                 .await?;
             return Ok(());
         }
@@ -53,7 +55,7 @@ pub(crate) async fn show_wizard(
     let prefs =
         shared::ensure_flow_defaults(&cfg.prefs, user_id, snapshot.unallocated_flow_id).await;
     let Some(wallet_id) = prefs.default_wallet_id else {
-        home::show_wallet_picker(bot, chat_id, user_id, cfg).await?;
+        home::show_wallet_picker(bot, chat_id, user_id, cfg, locale).await?;
         return Ok(());
     };
 
@@ -84,7 +86,7 @@ pub(crate) async fn show_wizard(
     {
         Ok(v) => v,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                 .await?;
             return Ok(());
         }
@@ -113,16 +115,21 @@ pub(crate) async fn show_wizard(
         })
         .await;
     let Some(wizard) = session.wizard else {
-        return home::show_home(bot, chat_id, user_id, cfg).await;
+        return home::show_home(bot, chat_id, user_id, cfg, locale).await;
     };
 
-    let (text, kb) =
-        ui::wizard::render_wizard(currency, &snapshot, &prefs, &wizard, &recents.transactions);
+    let (text, kb) = ui::wizard::render_wizard(
+        locale,
+        currency,
+        &snapshot,
+        &prefs,
+        &wizard,
+        &recents.transactions,
+    );
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
-pub(crate) fn wizard_prompt(kind: QuickKind) -> &'static str {
-    let locale = i18n::default_locale();
+pub(crate) fn wizard_prompt(locale: i18n::Locale, kind: QuickKind) -> &'static str {
     match kind {
         QuickKind::Expense => i18n::t(locale, TextKey::WizardPromptExpense),
         QuickKind::Income => i18n::t(locale, TextKey::WizardPromptIncome),
@@ -130,33 +137,28 @@ pub(crate) fn wizard_prompt(kind: QuickKind) -> &'static str {
     }
 }
 
-pub(crate) fn normalize_wizard_input(kind: QuickKind, raw: &str) -> Result<String, &'static str> {
+pub(crate) fn normalize_wizard_input(
+    locale: i18n::Locale,
+    kind: QuickKind,
+    raw: &str,
+) -> Result<String, &'static str> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err(i18n::t(i18n::default_locale(), TextKey::WizardErrorEmpty));
+        return Err(i18n::t(locale, TextKey::WizardErrorEmpty));
     }
     match kind {
         QuickKind::Expense => {
             if trimmed.starts_with('+') {
-                return Err(i18n::t(
-                    i18n::default_locale(),
-                    TextKey::WizardErrorExpensePlus,
-                ));
+                return Err(i18n::t(locale, TextKey::WizardErrorExpensePlus));
             }
             if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                return Err(i18n::t(
-                    i18n::default_locale(),
-                    TextKey::WizardErrorExpenseRefund,
-                ));
+                return Err(i18n::t(locale, TextKey::WizardErrorExpenseRefund));
             }
             Ok(trimmed.to_string())
         }
         QuickKind::Income => {
             if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                return Err(i18n::t(
-                    i18n::default_locale(),
-                    TextKey::WizardErrorIncomeRefund,
-                ));
+                return Err(i18n::t(locale, TextKey::WizardErrorIncomeRefund));
             }
             if trimmed.starts_with('+') {
                 Ok(trimmed.to_string())

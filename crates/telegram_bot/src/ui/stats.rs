@@ -5,10 +5,10 @@ use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 use crate::i18n::{self, TextKey};
 
 pub(crate) fn render_stats(
+    locale: i18n::Locale,
     currency: EngineCurrency,
     stats: &Statistic,
 ) -> (String, InlineKeyboardMarkup) {
-    let locale = i18n::default_locale();
     let text = i18n::format(
         locale,
         TextKey::StatsSummary,

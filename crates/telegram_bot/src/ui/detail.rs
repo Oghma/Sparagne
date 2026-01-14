@@ -6,11 +6,11 @@ use uuid::Uuid;
 use crate::i18n::{self, TextKey};
 
 pub(crate) fn render_detail(
+    locale: i18n::Locale,
     currency: EngineCurrency,
     detail: &TransactionDetailResponse,
 ) -> (String, InlineKeyboardMarkup) {
     let tx = &detail.transaction;
-    let locale = i18n::default_locale();
     let text = i18n::format(
         locale,
         TextKey::DetailHeader,
@@ -65,8 +65,10 @@ pub(crate) fn render_detail(
     (text, kb)
 }
 
-pub(crate) fn render_edit_menu(tx_id: Uuid) -> (String, InlineKeyboardMarkup) {
-    let locale = i18n::default_locale();
+pub(crate) fn render_edit_menu(
+    locale: i18n::Locale,
+    tx_id: Uuid,
+) -> (String, InlineKeyboardMarkup) {
     (
         i18n::t(locale, TextKey::EditMenuTitle).to_string(),
         InlineKeyboardMarkup::new(vec![

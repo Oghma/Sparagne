@@ -15,8 +15,8 @@ pub(crate) async fn show_home(
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let locale = i18n::default_locale();
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
@@ -32,7 +32,7 @@ pub(crate) async fn show_home(
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
             } else {
-                bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                     .await?;
             }
             return Ok(());
@@ -46,7 +46,7 @@ pub(crate) async fn show_home(
         .await
         .display_name
         .unwrap_or_else(|| "Sparagne".to_string());
-    let (text, kb) = ui::home::render_home(&display_name, &snapshot, &prefs);
+    let (text, kb) = ui::home::render_home(locale, &display_name, &snapshot, &prefs);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -55,8 +55,8 @@ pub(crate) async fn show_wallet_picker(
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let locale = i18n::default_locale();
     let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
         "nav:wizard"
     } else {
@@ -77,13 +77,13 @@ pub(crate) async fn show_wallet_picker(
                 bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
                     .await?;
             } else {
-                bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                     .await?;
             }
             return Ok(());
         }
     };
-    let (text, kb) = ui::home::render_wallet_picker(&snapshot, back_callback);
+    let (text, kb) = ui::home::render_wallet_picker(locale, &snapshot, back_callback);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -92,8 +92,8 @@ pub(crate) async fn show_flow_picker(
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let locale = i18n::default_locale();
     let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
         "nav:wizard"
     } else {
@@ -114,12 +114,12 @@ pub(crate) async fn show_flow_picker(
                 bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
                     .await?;
             } else {
-                bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                     .await?;
             }
             return Ok(());
         }
     };
-    let (text, kb) = ui::home::render_flow_picker(&snapshot, back_callback);
+    let (text, kb) = ui::home::render_flow_picker(locale, &snapshot, back_callback);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }

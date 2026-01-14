@@ -8,13 +8,13 @@ use crate::{
 };
 
 pub(crate) fn render_list(
+    locale: i18n::Locale,
     currency: EngineCurrency,
     list: &TransactionListResponse,
     include_voided: bool,
     has_prev: bool,
     has_next: bool,
 ) -> (String, InlineKeyboardMarkup) {
-    let locale = i18n::default_locale();
     let mut text = format!("{}\n", i18n::t(locale, TextKey::ListHeader));
     for (idx, tx) in list.transactions.iter().enumerate() {
         text.push_str(&format!(
@@ -41,7 +41,7 @@ pub(crate) fn render_list(
     let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
     for tx in &list.transactions {
         rows.push(vec![InlineKeyboardButton::callback(
-            tx_button_label(currency, tx),
+            tx_button_label(locale, currency, tx),
             format!("tx:detail:{id}", id = tx.id),
         )]);
     }

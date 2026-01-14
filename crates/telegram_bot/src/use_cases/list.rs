@@ -16,8 +16,8 @@ pub(crate) async fn show_list(
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let locale = i18n::default_locale();
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
@@ -33,7 +33,7 @@ pub(crate) async fn show_list(
                 bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
                     .await?;
             } else {
-                bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                     .await?;
             }
             return Ok(());
@@ -44,7 +44,7 @@ pub(crate) async fn show_list(
     let Some(wallet_id) = prefs.default_wallet_id else {
         bot.send_message(chat_id, i18n::t(locale, TextKey::DefaultWalletMissing))
             .await?;
-        home::show_wallet_picker(bot, chat_id, user_id, cfg).await?;
+        home::show_wallet_picker(bot, chat_id, user_id, cfg, locale).await?;
         return Ok(());
     };
 
@@ -75,7 +75,7 @@ pub(crate) async fn show_list(
     {
         Ok(v) => v,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                 .await?;
             return Ok(());
         }
@@ -100,8 +100,14 @@ pub(crate) async fn show_list(
         })
         .await;
 
-    let (text, kb) =
-        ui::list::render_list(currency, &list, prefs.include_voided, has_prev, has_next);
+    let (text, kb) = ui::list::render_list(
+        locale,
+        currency,
+        &list,
+        prefs.include_voided,
+        has_prev,
+        has_next,
+    );
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -111,9 +117,10 @@ pub(crate) async fn show_detail(
     user_id: u64,
     cfg: &ConfigParameters,
     tx_id: Uuid,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
     let Some((_vault_id, detail)) =
-        fetch_detail_with_vault(bot, chat_id, user_id, cfg, tx_id).await?
+        fetch_detail_with_vault(bot, chat_id, user_id, cfg, tx_id, locale).await?
     else {
         return Ok(());
     };
@@ -121,7 +128,7 @@ pub(crate) async fn show_detail(
         .update(chat_id, |s| s.last_detail_tx = Some(tx_id))
         .await;
     let currency = shared::engine_currency(detail.transaction.currency);
-    let (text, kb) = ui::detail::render_detail(currency, &detail);
+    let (text, kb) = ui::detail::render_detail(locale, currency, &detail);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -132,10 +139,10 @@ pub(crate) async fn repeat_transaction(
     cfg: &ConfigParameters,
     tx_id: Uuid,
     callback_id: &str,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let locale = i18n::default_locale();
     let Some((vault_id, detail)) =
-        fetch_detail_with_vault(bot, chat_id, user_id, cfg, tx_id).await?
+        fetch_detail_with_vault(bot, chat_id, user_id, cfg, tx_id, locale).await?
     else {
         return Ok(());
     };
@@ -234,7 +241,7 @@ pub(crate) async fn repeat_transaction(
                 .await?
         }
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                 .await?
         }
     };
@@ -248,11 +255,12 @@ async fn fetch_detail_with_vault(
     user_id: u64,
     cfg: &ConfigParameters,
     tx_id: Uuid,
+    locale: i18n::Locale,
 ) -> ResponseResult<Option<(String, api_types::transaction::TransactionDetailResponse)>> {
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(vault_id) => vault_id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                 .await?;
             return Ok(None);
         }
@@ -270,7 +278,7 @@ async fn fetch_detail_with_vault(
     {
         Ok(detail) => detail,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                 .await?;
             return Ok(None);
         }

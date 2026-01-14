@@ -26,7 +26,11 @@ pub(crate) async fn handle_message(
         return Ok(());
     }
 
-    let locale = i18n::default_locale();
+    let locale = msg
+        .from
+        .as_ref()
+        .map(|user| i18n::resolve_locale(user.language_code.as_deref()))
+        .unwrap_or_else(i18n::default_locale);
     let Some(from) = msg.from.as_ref() else {
         bot.send_message(msg.chat.id, i18n::t(locale, TextKey::UnknownUser))
             .await?;
@@ -42,7 +46,7 @@ pub(crate) async fn handle_message(
 
     // If we are waiting for an input (pair/edit), handle it first.
     if let Some(pending) = cfg.sessions.get(chat_id).await.pending
-        && handle_pending_message(&bot, &msg, &cfg, user_id, pending).await?
+        && handle_pending_message(&bot, &msg, &cfg, user_id, pending, locale).await?
     {
         return Ok(());
     }
@@ -56,7 +60,7 @@ pub(crate) async fn handle_message(
             Command::Start { code } => {
                 if let Some(code) = code.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
                     if let Err(err) = cfg.api.pair_user(user_id, code).await {
-                        bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                        bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                             .await?;
                         return Ok(());
                     }
@@ -68,46 +72,48 @@ pub(crate) async fn handle_message(
                         .await
                         .display_name
                         .unwrap_or_else(|| "Sparagne".to_string());
-                    bot.send_message(chat_id, text::welcome_text(&display_name))
+                    bot.send_message(chat_id, text::welcome_text(locale, &display_name))
                         .await?;
-                    home::show_home(&bot, chat_id, user_id, &cfg).await?;
+                    home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
                     return Ok(());
                 }
 
-                home::show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             }
             Command::Home => {
                 cfg.sessions.update(chat_id, |s| s.wizard = None).await;
-                home::show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             }
             Command::Help => {
-                bot.send_message(chat_id, text::help_text()).await?;
+                bot.send_message(chat_id, text::help_text(locale)).await?;
                 return Ok(());
             }
             Command::Categories => {
-                admin::list_categories(&bot, chat_id, user_id, &cfg).await?;
+                admin::list_categories(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             }
             Command::MembersList => {
-                admin::list_vault_members(&bot, chat_id, user_id, &cfg).await?;
+                admin::list_vault_members(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             }
             Command::MembersAdd { username, role } => {
-                admin::add_vault_member(&bot, chat_id, user_id, &cfg, &username, role).await?;
+                admin::add_vault_member(&bot, chat_id, user_id, &cfg, &username, role, locale)
+                    .await?;
                 return Ok(());
             }
             Command::MembersRemove { username } => {
-                admin::remove_vault_member(&bot, chat_id, user_id, &cfg, &username).await?;
+                admin::remove_vault_member(&bot, chat_id, user_id, &cfg, &username, locale).await?;
                 return Ok(());
             }
             Command::MembersHelp => {
-                bot.send_message(chat_id, text::members_help_text()).await?;
+                bot.send_message(chat_id, text::members_help_text(locale))
+                    .await?;
                 return Ok(());
             }
             Command::FlowMembersList { flow } => {
-                admin::list_flow_members(&bot, chat_id, user_id, &cfg, &flow).await?;
+                admin::list_flow_members(&bot, chat_id, user_id, &cfg, &flow, locale).await?;
                 return Ok(());
             }
             Command::FlowMembersAdd {
@@ -115,16 +121,28 @@ pub(crate) async fn handle_message(
                 username,
                 role,
             } => {
-                admin::add_flow_member(&bot, chat_id, user_id, &cfg, &flow, &username, role)
-                    .await?;
+                admin::add_flow_member(
+                    &bot,
+                    chat_id,
+                    user_id,
+                    &cfg,
+                    &flow,
+                    &username,
+                    role,
+                    locale,
+                )
+                .await?;
                 return Ok(());
             }
             Command::FlowMembersRemove { flow, username } => {
-                admin::remove_flow_member(&bot, chat_id, user_id, &cfg, &flow, &username).await?;
+                admin::remove_flow_member(
+                    &bot, chat_id, user_id, &cfg, &flow, &username, locale,
+                )
+                .await?;
                 return Ok(());
             }
             Command::FlowMembersHelp => {
-                bot.send_message(chat_id, text::flow_members_help_text())
+                bot.send_message(chat_id, text::flow_members_help_text(locale))
                     .await?;
                 return Ok(());
             }
@@ -133,23 +151,26 @@ pub(crate) async fn handle_message(
                 from,
                 into,
             } => {
-                admin::merge_category(&bot, chat_id, user_id, &cfg, confirm, &from, &into).await?;
+                admin::merge_category(
+                    &bot, chat_id, user_id, &cfg, confirm, &from, &into, locale,
+                )
+                .await?;
                 return Ok(());
             }
             Command::MergeCategoryHelp => {
-                bot.send_message(chat_id, text::merge_category_help_text())
+                bot.send_message(chat_id, text::merge_category_help_text(locale))
                     .await?;
                 return Ok(());
             }
             Command::VaultDelete { confirm } => {
-                admin::delete_vault(&bot, chat_id, user_id, &cfg, confirm).await?;
+                admin::delete_vault(&bot, chat_id, user_id, &cfg, confirm, locale).await?;
                 return Ok(());
             }
         }
     }
 
     if crate::routing::looks_like_quick_add(text) {
-        handle_quick_add(&bot, &msg, &cfg, user_id).await?;
+        handle_quick_add(&bot, &msg, &cfg, user_id, locale).await?;
     }
 
     Ok(())
@@ -164,7 +185,7 @@ pub(crate) async fn handle_callback(
         return Ok(());
     }
 
-    let locale = i18n::default_locale();
+    let locale = i18n::resolve_locale(q.from.language_code.as_deref());
     let Some(message) = q.message.as_ref() else {
         return Ok(());
     };
@@ -189,13 +210,13 @@ pub(crate) async fn handle_callback(
     match action {
         CallbackAction::NavHome => {
             cfg.sessions.update(chat_id, |s| s.wizard = None).await;
-            home::show_home(&bot, chat_id, user_id, &cfg).await?;
+            home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::NavWizard => {
-            wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::ShowList => {
-            list::show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::HomePair => {
             cfg.sessions
@@ -205,32 +226,32 @@ pub(crate) async fn handle_callback(
                 .await?;
         }
         CallbackAction::HomePickWallet => {
-            home::show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
+            home::show_wallet_picker(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::HomePickFlow => {
-            home::show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
+            home::show_flow_picker(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::HomeExpense => {
-            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Expense).await?;
+            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Expense, locale).await?;
         }
         CallbackAction::HomeIncome => {
-            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Income).await?;
+            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Income, locale).await?;
         }
         CallbackAction::HomeRefund => {
-            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Refund).await?;
+            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Refund, locale).await?;
         }
         CallbackAction::HomeStats => {
-            stats::show_stats(&bot, chat_id, user_id, &cfg).await?;
+            stats::show_stats(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::WizClose => {
             cfg.sessions.update(chat_id, |s| s.wizard = None).await;
-            home::show_home(&bot, chat_id, user_id, &cfg).await?;
+            home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::WizPickWallet => {
-            home::show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
+            home::show_wallet_picker(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::WizPickFlow => {
-            home::show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
+            home::show_flow_picker(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::WizInput => {
             let kind = cfg
@@ -241,7 +262,7 @@ pub(crate) async fn handle_callback(
                 .as_ref()
                 .map(|w| w.kind);
             let Some(kind) = kind else {
-                home::show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             };
 
@@ -250,7 +271,7 @@ pub(crate) async fn handle_callback(
                     s.pending = Some(PendingAction::WizardDraft { kind })
                 })
                 .await;
-            bot.send_message(chat_id, wizard::wizard_prompt(kind))
+            bot.send_message(chat_id, wizard::wizard_prompt(locale, kind))
                 .await?;
         }
         CallbackAction::WizCatNone | CallbackAction::WizCatReset => {
@@ -261,7 +282,7 @@ pub(crate) async fn handle_callback(
                     }
                 })
                 .await;
-            wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::WizCatIndex(idx) => {
             cfg.sessions
@@ -275,11 +296,20 @@ pub(crate) async fn handle_callback(
                     w.category = Some(cat);
                 })
                 .await;
-            wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::WizRecent(tx_id) => {
-            list::repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
-            wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            list::repeat_transaction(
+                &bot,
+                chat_id,
+                user_id,
+                &cfg,
+                tx_id,
+                q.id.0.as_str(),
+                locale,
+            )
+            .await?;
+            wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::PrefsToggleVoided => {
             let updated = cfg
@@ -290,7 +320,7 @@ pub(crate) async fn handle_callback(
                 bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
                     .await?;
             }
-            list::show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::ListNext => {
             cfg.sessions
@@ -303,7 +333,7 @@ pub(crate) async fn handle_callback(
                     }
                 })
                 .await;
-            list::show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::ListPrev => {
             cfg.sessions
@@ -313,7 +343,7 @@ pub(crate) async fn handle_callback(
                     }
                 })
                 .await;
-            list::show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::WalletSet(wallet_id) => {
             let updated = cfg
@@ -328,15 +358,16 @@ pub(crate) async fn handle_callback(
             let pending = cfg.sessions.get(chat_id).await.pending;
             if let Some(PendingAction::WalletForQuickAdd(draft)) = pending {
                 cfg.sessions.update(chat_id, |s| s.pending = None).await;
-                finalize_quick_add(&bot, chat_id, user_id, &cfg, wallet_id, draft).await?;
-                home::show_home(&bot, chat_id, user_id, &cfg).await?;
+                finalize_quick_add(&bot, chat_id, user_id, &cfg, wallet_id, draft, locale)
+                    .await?;
+                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             }
 
             if cfg.sessions.get(chat_id).await.wizard.is_some() {
-                wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
+                wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
             } else {
-                home::show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
             }
         }
         CallbackAction::FlowSet(flow_id) => {
@@ -352,19 +383,19 @@ pub(crate) async fn handle_callback(
                     .await?;
             }
             if cfg.sessions.get(chat_id).await.wizard.is_some() {
-                wizard::show_wizard(&bot, chat_id, user_id, &cfg).await?;
+                wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
             } else {
-                home::show_home(&bot, chat_id, user_id, &cfg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
             }
         }
         CallbackAction::TxDetail(tx_id) => {
-            list::show_detail(&bot, chat_id, user_id, &cfg, tx_id).await?;
+            list::show_detail(&bot, chat_id, user_id, &cfg, tx_id, locale).await?;
         }
         CallbackAction::TxVoid(tx_id) => {
             let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
                 Ok(vault_id) => vault_id,
                 Err(err) => {
-                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                         .await?;
                     return Ok(());
                 }
@@ -382,17 +413,17 @@ pub(crate) async fn handle_callback(
                 )
                 .await;
             if let Err(err) = voided {
-                bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                     .await?;
                 return Ok(());
             }
 
             bot.send_message(chat_id, i18n::t(locale, TextKey::TransactionVoided))
                 .await?;
-            list::show_list(&bot, chat_id, user_id, &cfg).await?;
+            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::TxEdit(tx_id) => {
-            let (text, kb) = ui::detail::render_edit_menu(tx_id);
+            let (text, kb) = ui::detail::render_edit_menu(locale, tx_id);
             shared::edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
         }
         CallbackAction::TxEditAmount(tx_id) => {
@@ -414,7 +445,16 @@ pub(crate) async fn handle_callback(
                 .await?;
         }
         CallbackAction::TxRepeat(tx_id) => {
-            list::repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
+            list::repeat_transaction(
+                &bot,
+                chat_id,
+                user_id,
+                &cfg,
+                tx_id,
+                q.id.0.as_str(),
+                locale,
+            )
+            .await?;
         }
         CallbackAction::Noop => {}
     }
@@ -438,8 +478,8 @@ async fn handle_pending_message(
     cfg: &ConfigParameters,
     user_id: u64,
     pending: PendingAction,
+    locale: i18n::Locale,
 ) -> ResponseResult<bool> {
-    let locale = i18n::default_locale();
     let chat_id = msg.chat.id;
     match pending {
         PendingAction::PairCode => {
@@ -447,7 +487,7 @@ async fn handle_pending_message(
                 return Ok(true);
             };
             if let Err(err) = cfg.api.pair_user(user_id, code).await {
-                bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                     .await?;
                 return Ok(true);
             }
@@ -459,9 +499,9 @@ async fn handle_pending_message(
                 .await
                 .display_name
                 .unwrap_or_else(|| "Sparagne".to_string());
-            bot.send_message(chat_id, text::welcome_text(&display_name))
+            bot.send_message(chat_id, text::welcome_text(locale, &display_name))
                 .await?;
-            home::show_home(bot, chat_id, user_id, cfg).await?;
+            home::show_home(bot, chat_id, user_id, cfg, locale).await?;
             Ok(true)
         }
         PendingAction::WizardDraft { kind } => {
@@ -469,7 +509,7 @@ async fn handle_pending_message(
                 return Ok(true);
             };
 
-            let input = match wizard::normalize_wizard_input(kind, text) {
+            let input = match wizard::normalize_wizard_input(locale, kind, text) {
                 Ok(v) => v,
                 Err(err) => {
                     bot.send_message(chat_id, err).await?;
@@ -500,14 +540,14 @@ async fn handle_pending_message(
 
             let prefs = cfg.prefs.get_or_default(user_id).await;
             let Some(wallet_id) = prefs.default_wallet_id else {
-                home::show_wallet_picker(bot, chat_id, user_id, cfg).await?;
+                home::show_wallet_picker(bot, chat_id, user_id, cfg, locale).await?;
                 return Ok(true);
             };
 
             let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
                 Ok(s) => s,
                 Err(err) => {
-                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                         .await?;
                     return Ok(true);
                 }
@@ -612,12 +652,12 @@ async fn handle_pending_message(
                         .await?;
                 }
                 Err(err) => {
-                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                         .await?;
                 }
             }
 
-            wizard::show_wizard(bot, chat_id, user_id, cfg).await?;
+            wizard::show_wizard(bot, chat_id, user_id, cfg, locale).await?;
             Ok(true)
         }
         PendingAction::EditAmount { tx_id } => {
@@ -649,7 +689,7 @@ async fn handle_pending_message(
             let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
                 Ok(v) => v,
                 Err(err) => {
-                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                         .await?;
                     return Ok(true);
                 }
@@ -676,7 +716,7 @@ async fn handle_pending_message(
                 )
                 .await
             {
-                bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                     .await?;
                 return Ok(true);
             }
@@ -684,7 +724,7 @@ async fn handle_pending_message(
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
             bot.send_message(chat_id, i18n::t(locale, TextKey::EditAmountUpdated))
                 .await?;
-            home::show_home(bot, chat_id, user_id, cfg).await?;
+            home::show_home(bot, chat_id, user_id, cfg, locale).await?;
             Ok(true)
         }
         PendingAction::EditNote { tx_id } => {
@@ -696,7 +736,7 @@ async fn handle_pending_message(
             let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
                 Ok(v) => v,
                 Err(err) => {
-                    bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                         .await?;
                     return Ok(true);
                 }
@@ -723,7 +763,7 @@ async fn handle_pending_message(
                 )
                 .await
             {
-                bot.send_message(chat_id, shared::user_message_for_api_error(err))
+                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                     .await?;
                 return Ok(true);
             }
@@ -731,7 +771,7 @@ async fn handle_pending_message(
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
             bot.send_message(chat_id, i18n::t(locale, TextKey::EditNoteUpdated))
                 .await?;
-            home::show_home(bot, chat_id, user_id, cfg).await?;
+            home::show_home(bot, chat_id, user_id, cfg, locale).await?;
             Ok(true)
         }
         PendingAction::WalletForQuickAdd(_) => Ok(false),
@@ -743,8 +783,8 @@ async fn handle_quick_add(
     msg: &Message,
     cfg: &ConfigParameters,
     user_id: u64,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let locale = i18n::default_locale();
     let Some(text) = msg.text() else {
         return Ok(());
     };
@@ -773,11 +813,11 @@ async fn handle_quick_add(
                 s.pending = Some(PendingAction::WalletForQuickAdd(draft.clone()))
             })
             .await;
-        home::show_wallet_picker(bot, msg.chat.id, user_id, cfg).await?;
+        home::show_wallet_picker(bot, msg.chat.id, user_id, cfg, locale).await?;
         return Ok(());
     };
 
-    finalize_quick_add(bot, msg.chat.id, user_id, cfg, wallet_id, draft).await
+    finalize_quick_add(bot, msg.chat.id, user_id, cfg, wallet_id, draft, locale).await
 }
 
 async fn finalize_quick_add(
@@ -787,12 +827,12 @@ async fn finalize_quick_add(
     cfg: &ConfigParameters,
     wallet_id: Uuid,
     draft: DraftCreate,
+    locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let locale = i18n::default_locale();
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                 .await?;
             return Ok(());
         }
@@ -923,7 +963,7 @@ async fn finalize_quick_add(
                 .await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(err))
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
                 .await?;
         }
     }
