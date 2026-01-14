@@ -1,19 +1,25 @@
+use std::{env, fs::OpenOptions, io::IsTerminal, path::PathBuf};
+
 use migration::{Migrator, MigratorTrait};
-use settings::Database;
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+
+use settings::{Database, Settings};
 
 mod settings;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let settings = settings::Settings::new()?;
-    let mut tasks = tokio::task::JoinSet::new();
+type AppResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-    tracing_subscriber::fmt()
-        .with_env_filter(format!(
-            "sparagne={level},telegram_bot={level},server={level},engine={level}",
-            level = settings.app.level
-        ))
-        .init();
+#[tokio::main]
+async fn main() -> AppResult<()> {
+    let settings = match Settings::new() {
+        Ok(settings) => settings,
+        Err(err) => {
+            eprintln!("failed to load settings: {err}");
+            return Err(err.into());
+        }
+    };
+    let _log_guard = init_tracing(&settings.app.level);
+    let mut tasks = tokio::task::JoinSet::new();
 
     if let Some(server) = settings.server {
         tasks.spawn(async move {
@@ -69,9 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 
-async fn parse_database(
-    config: &settings::Database,
-) -> Result<sea_orm::DatabaseConnection, Box<dyn std::error::Error + Send + Sync>> {
+async fn parse_database(config: &Database) -> AppResult<sea_orm::DatabaseConnection> {
     let url = match config {
         Database::Memory => String::from("sqlite::memory"),
         Database::Sqlite(path) => format!("sqlite:{}?mode=rwc", path),
@@ -80,4 +84,92 @@ async fn parse_database(
     let database = sea_orm::Database::connect(url).await?;
     Migrator::up(&database, None).await?;
     Ok(database)
+}
+
+fn init_tracing(level: &str) -> Option<tracing_appender::non_blocking::WorkerGuard> {
+    let env_filter = build_env_filter(level);
+    let stderr_layer = tracing_subscriber::fmt::layer().with_ansi(std::io::stderr().is_terminal());
+    let registry = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(stderr_layer);
+
+    if let Some(path) = log_file_path() {
+        match OpenOptions::new().create(true).append(true).open(&path) {
+            Ok(file) => {
+                let (non_blocking, guard) = tracing_appender::non_blocking(file);
+                let file_layer = tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking)
+                    .with_ansi(false);
+                registry.with(file_layer).init();
+                return Some(guard);
+            }
+            Err(err) => {
+                eprintln!(
+                    "failed to open log file {}: {err}; falling back to stderr",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    registry.init();
+    None
+}
+
+fn log_file_path() -> Option<PathBuf> {
+    let value = match env::var("SPARAGNE_LOG_FILE") {
+        Ok(value) => value,
+        Err(env::VarError::NotPresent) => return None,
+        Err(err) => {
+            eprintln!("failed to read SPARAGNE_LOG_FILE: {err}");
+            return None;
+        }
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(trimmed))
+}
+
+fn build_env_filter(level: &str) -> EnvFilter {
+    if let Some(filter) =
+        env_filter_from_var("SPARAGNE_LOG").or_else(|| env_filter_from_var("RUST_LOG"))
+    {
+        return filter;
+    }
+
+    let normalized = level.trim();
+    let normalized = if normalized.is_empty() {
+        "info"
+    } else {
+        normalized
+    };
+    let normalized = normalized.to_ascii_lowercase();
+    let default_filter = format!(
+        "sparagne={0},telegram_bot={0},server={0},engine={0}",
+        normalized
+    );
+    EnvFilter::try_new(default_filter).unwrap_or_else(|err| {
+        eprintln!("invalid app.level '{normalized}': {err}; falling back to 'info'");
+        EnvFilter::new("info")
+    })
+}
+
+fn env_filter_from_var(name: &str) -> Option<EnvFilter> {
+    let value = match env::var(name) {
+        Ok(value) => value,
+        Err(env::VarError::NotPresent) => return None,
+        Err(err) => {
+            eprintln!("failed to read {name}: {err}");
+            return None;
+        }
+    };
+    match EnvFilter::try_new(value.clone()) {
+        Ok(filter) => Some(filter),
+        Err(err) => {
+            eprintln!("invalid {name}='{value}': {err}");
+            None
+        }
+    }
 }
