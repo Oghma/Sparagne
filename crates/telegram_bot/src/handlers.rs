@@ -12,7 +12,7 @@ use crate::{
     parsing::{ParseError, QuickKind, parse_quick_add},
     routing::{CallbackAction, Command},
     state::{DraftCreate, PendingAction},
-    ui,
+    text, ui,
     use_cases::{admin, home, list, shared, stats, wizard},
 };
 
@@ -34,7 +34,7 @@ pub(crate) async fn handle_message(
     let chat_id = msg.chat.id;
     cfg.sessions
         .update(chat_id, |s| {
-            s.display_name = Some(display_name_from_telegram(from))
+            s.display_name = Some(text::display_name_from_telegram(from))
         })
         .await;
 
@@ -66,7 +66,7 @@ pub(crate) async fn handle_message(
                         .await
                         .display_name
                         .unwrap_or_else(|| "Sparagne".to_string());
-                    bot.send_message(chat_id, welcome_text(&display_name))
+                    bot.send_message(chat_id, text::welcome_text(&display_name))
                         .await?;
                     home::show_home(&bot, chat_id, user_id, &cfg).await?;
                     return Ok(());
@@ -81,7 +81,7 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::Help => {
-                bot.send_message(chat_id, help_text()).await?;
+                bot.send_message(chat_id, text::help_text()).await?;
                 return Ok(());
             }
             Command::Categories => {
@@ -101,7 +101,7 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::MembersHelp => {
-                bot.send_message(chat_id, members_help_text()).await?;
+                bot.send_message(chat_id, text::members_help_text()).await?;
                 return Ok(());
             }
             Command::FlowMembersList { flow } => {
@@ -122,7 +122,8 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::FlowMembersHelp => {
-                bot.send_message(chat_id, flow_members_help_text()).await?;
+                bot.send_message(chat_id, text::flow_members_help_text())
+                    .await?;
                 return Ok(());
             }
             Command::MergeCategory {
@@ -134,7 +135,7 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::MergeCategoryHelp => {
-                bot.send_message(chat_id, merge_category_help_text())
+                bot.send_message(chat_id, text::merge_category_help_text())
                     .await?;
                 return Ok(());
             }
@@ -168,7 +169,7 @@ pub(crate) async fn handle_callback(
     let user_id = q.from.id.0;
     cfg.sessions
         .update(chat_id, |s| {
-            s.display_name = Some(display_name_from_telegram(&q.from))
+            s.display_name = Some(text::display_name_from_telegram(&q.from))
         })
         .await;
 
@@ -418,6 +419,16 @@ pub(crate) async fn handle_callback(
     Ok(())
 }
 
+fn is_allowed(cfg: &ConfigParameters, user: Option<&User>) -> bool {
+    let Some(allowed) = cfg.allowed_users.as_ref() else {
+        return true;
+    };
+    let Some(user) = user else {
+        return false;
+    };
+    allowed.contains(&user.id)
+}
+
 async fn handle_pending_message(
     bot: &Bot,
     msg: &Message,
@@ -444,7 +455,7 @@ async fn handle_pending_message(
                 .await
                 .display_name
                 .unwrap_or_else(|| "Sparagne".to_string());
-            bot.send_message(chat_id, welcome_text(&display_name))
+            bot.send_message(chat_id, text::welcome_text(&display_name))
                 .await?;
             home::show_home(bot, chat_id, user_id, cfg).await?;
             Ok(true)
@@ -900,36 +911,4 @@ async fn finalize_quick_add(
     }
 
     Ok(())
-}
-
-fn welcome_text(display_name: &str) -> String {
-    format!(
-        "Benvenuto, {display_name}!\n\nOra puoi inserire voci al volo scrivendo ad esempio:\n\n12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\nImposta i default (wallet/flow) usando i bottoni."
-    )
-}
-
-fn help_text() -> &'static str {
-    "Esempi:\n\n12.50 bar caffè\n-12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\n#tag opzionale (max 1): 12.50 bar #food caffè\n\nComandi:\n/home\n/categories\n/merge_category <da> -> <a>\n/merge_category confirm <da> -> <a>\n/members\n/members add <username> <owner|editor|viewer>\n/members remove <username>\n/flow_members <flow>\n/flow_members add <flow> <username> <owner|editor|viewer>\n/flow_members remove <flow> <username>\n/vault_delete\n/vault_delete confirm"
-}
-
-fn merge_category_help_text() -> &'static str {
-    "Uso:\n/merge_category <da> -> <a>\n/merge_category confirm <da> -> <a>"
-}
-
-fn members_help_text() -> &'static str {
-    "Uso:\n/members\n/members add <username> <owner|editor|viewer>\n/members remove <username>"
-}
-
-fn flow_members_help_text() -> &'static str {
-    "Uso:\n/flow_members <flow>\n/flow_members add <flow> <username> <owner|editor|viewer>\n/flow_members remove <flow> <username>\n\nNota: il flow può contenere spazi."
-}
-
-fn display_name_from_telegram(user: &User) -> String {
-    if let Some(username) = user.username.as_deref().filter(|u| !u.is_empty()) {
-        format!("@{username}")
-    } else if !user.first_name.is_empty() {
-        user.first_name.clone()
-    } else {
-        "Sparagne".to_string()
-    }
 }

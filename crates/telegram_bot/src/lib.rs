@@ -14,6 +14,7 @@ mod handlers;
 mod parsing;
 mod routing;
 mod state;
+mod text;
 mod ui;
 mod use_cases;
 
