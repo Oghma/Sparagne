@@ -1,25 +1,30 @@
 use teloxide::types::User;
 
+use crate::i18n::{self, TextKey};
+
+fn locale() -> i18n::Locale {
+    i18n::resolve_locale(None)
+}
+
 pub(crate) fn welcome_text(display_name: &str) -> String {
-    format!(
-        "Benvenuto, {display_name}!\n\nOra puoi inserire voci al volo scrivendo ad esempio:\n\n12.50 bar caff\u{e8}\n+1000 stipendio\nr 5.20 amazon\n\nImposta i default (wallet/flow) usando i bottoni."
-    )
+    let template = i18n::t(locale(), TextKey::WelcomeTemplate);
+    template.replace("{display_name}", display_name)
 }
 
 pub(crate) fn help_text() -> &'static str {
-    "Esempi:\n\n12.50 bar caff\u{e8}\n-12.50 bar caff\u{e8}\n+1000 stipendio\nr 5.20 amazon\n\n#tag opzionale (max 1): 12.50 bar #food caff\u{e8}\n\nComandi:\n/home\n/categories\n/merge_category <da> -> <a>\n/merge_category confirm <da> -> <a>\n/members\n/members add <username> <owner|editor|viewer>\n/members remove <username>\n/flow_members <flow>\n/flow_members add <flow> <username> <owner|editor|viewer>\n/flow_members remove <flow> <username>\n/vault_delete\n/vault_delete confirm"
+    i18n::t(locale(), TextKey::HelpText)
 }
 
 pub(crate) fn merge_category_help_text() -> &'static str {
-    "Uso:\n/merge_category <da> -> <a>\n/merge_category confirm <da> -> <a>"
+    i18n::t(locale(), TextKey::MergeCategoryHelp)
 }
 
 pub(crate) fn members_help_text() -> &'static str {
-    "Uso:\n/members\n/members add <username> <owner|editor|viewer>\n/members remove <username>"
+    i18n::t(locale(), TextKey::MembersHelp)
 }
 
 pub(crate) fn flow_members_help_text() -> &'static str {
-    "Uso:\n/flow_members <flow>\n/flow_members add <flow> <username> <owner|editor|viewer>\n/flow_members remove <flow> <username>\n\nNota: il flow pu\u{f2} contenere spazi."
+    i18n::t(locale(), TextKey::FlowMembersHelp)
 }
 
 pub(crate) fn display_name_from_telegram(user: &User) -> String {
