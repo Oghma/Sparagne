@@ -98,7 +98,8 @@ pub(crate) async fn show_list(
         })
         .await;
 
-    let (text, kb) = ui::render_list(currency, &list, prefs.include_voided, has_prev, has_next);
+    let (text, kb) =
+        ui::list::render_list(currency, &list, prefs.include_voided, has_prev, has_next);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -118,7 +119,7 @@ pub(crate) async fn show_detail(
         .update(chat_id, |s| s.last_detail_tx = Some(tx_id))
         .await;
     let currency = shared::engine_currency(detail.transaction.currency);
-    let (text, kb) = ui::render_detail(currency, &detail);
+    let (text, kb) = ui::detail::render_detail(currency, &detail);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 

@@ -389,7 +389,7 @@ pub(crate) async fn handle_callback(
             list::show_list(&bot, chat_id, user_id, &cfg).await?;
         }
         CallbackAction::TxEdit(tx_id) => {
-            let (text, kb) = ui::render_edit_menu(tx_id);
+            let (text, kb) = ui::detail::render_edit_menu(tx_id);
             shared::edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
         }
         CallbackAction::TxEditAmount(tx_id) => {

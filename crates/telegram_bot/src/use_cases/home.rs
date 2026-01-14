@@ -38,7 +38,7 @@ pub(crate) async fn show_home(
         .await
         .display_name
         .unwrap_or_else(|| "Sparagne".to_string());
-    let (text, kb) = ui::render_home(&display_name, &snapshot, &prefs);
+    let (text, kb) = ui::home::render_home(&display_name, &snapshot, &prefs);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -74,7 +74,7 @@ pub(crate) async fn show_wallet_picker(
             return Ok(());
         }
     };
-    let (text, kb) = ui::render_wallet_picker(&snapshot, back_callback);
+    let (text, kb) = ui::home::render_wallet_picker(&snapshot, back_callback);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -110,6 +110,6 @@ pub(crate) async fn show_flow_picker(
             return Ok(());
         }
     };
-    let (text, kb) = ui::render_flow_picker(&snapshot, back_callback);
+    let (text, kb) = ui::home::render_flow_picker(&snapshot, back_callback);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }

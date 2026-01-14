@@ -115,7 +115,8 @@ pub(crate) async fn show_wizard(
         return home::show_home(bot, chat_id, user_id, cfg).await;
     };
 
-    let (text, kb) = ui::render_wizard(currency, &snapshot, &prefs, &wizard, &recents.transactions);
+    let (text, kb) =
+        ui::wizard::render_wizard(currency, &snapshot, &prefs, &wizard, &recents.transactions);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 

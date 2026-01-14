@@ -17,6 +17,6 @@ pub(crate) async fn show_stats(
         }
     };
     let currency = shared::engine_currency(stats.currency);
-    let (text, kb) = ui::render_stats(currency, &stats);
+    let (text, kb) = ui::stats::render_stats(currency, &stats);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
