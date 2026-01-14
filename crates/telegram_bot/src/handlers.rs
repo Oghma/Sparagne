@@ -17,6 +17,7 @@ use crate::{
     ConfigParameters,
     api::{ApiClient, ApiError},
     parsing::{ParseError, QuickKind, parse_quick_add},
+    routing::{CallbackAction, Command},
     state::{DraftCreate, PendingAction, WizardSession},
     ui,
 };
@@ -54,7 +55,7 @@ pub(crate) async fn handle_message(
         return Ok(());
     };
 
-    if let Some(cmd) = parse_command(text) {
+    if let Some(cmd) = crate::routing::parse_command(text) {
         match cmd {
             Command::Start { code } => {
                 if let Some(code) = code.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
@@ -149,7 +150,7 @@ pub(crate) async fn handle_message(
         }
     }
 
-    if looks_like_quick_add(text) {
+    if crate::routing::looks_like_quick_add(text) {
         handle_quick_add(&bot, &msg, &cfg, user_id).await?;
     }
 
@@ -306,248 +307,240 @@ pub(crate) async fn handle_callback(
         return Ok(());
     };
 
-    if data == "nav:home" {
-        cfg.sessions.update(chat_id, |s| s.wizard = None).await;
-        show_home(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "nav:wizard" {
-        show_wizard(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "home:pair" {
-        cfg.sessions
-            .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
-            .await;
-        bot.send_message(chat_id, "Inserisci il codice di pairing:")
-            .await?;
-    } else if data == "home:pick_wallet" {
-        show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "home:pick_flow" {
-        show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "home:expense" {
-        start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Expense).await?;
-    } else if data == "home:income" {
-        start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Income).await?;
-    } else if data == "home:refund" {
-        start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Refund).await?;
-    } else if data == "home:list" || data == "nav:list" {
-        show_list(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "home:stats" {
-        show_stats(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "wiz:close" {
-        cfg.sessions.update(chat_id, |s| s.wizard = None).await;
-        show_home(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "wiz:pick_wallet" {
-        show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "wiz:pick_flow" {
-        show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "wiz:input" {
-        let kind = cfg
-            .sessions
-            .get(chat_id)
-            .await
-            .wizard
-            .as_ref()
-            .map(|w| w.kind);
-        let Some(kind) = kind else {
+    let Some(action) = crate::routing::parse_callback_action(data) else {
+        return Ok(());
+    };
+
+    match action {
+        CallbackAction::NavHome => {
+            cfg.sessions.update(chat_id, |s| s.wizard = None).await;
             show_home(&bot, chat_id, user_id, &cfg).await?;
-            return Ok(());
-        };
-
-        cfg.sessions
-            .update(chat_id, |s| {
-                s.pending = Some(PendingAction::WizardDraft { kind })
-            })
-            .await;
-        bot.send_message(chat_id, wizard_prompt(kind)).await?;
-    } else if data == "wiz:cat:none" || data == "wiz:cat:reset" {
-        cfg.sessions
-            .update(chat_id, |s| {
-                if let Some(w) = &mut s.wizard {
-                    w.category = None;
-                }
-            })
-            .await;
-        show_wizard(&bot, chat_id, user_id, &cfg).await?;
-    } else if let Some(idx) = data.strip_prefix("wiz:cat:") {
-        let Ok(idx) = idx.parse::<usize>() else {
-            return Ok(());
-        };
-        cfg.sessions
-            .update(chat_id, |s| {
-                let Some(w) = &mut s.wizard else {
-                    return;
-                };
-                let Some(cat) = w.categories.get(idx).cloned() else {
-                    return;
-                };
-                w.category = Some(cat);
-            })
-            .await;
-        show_wizard(&bot, chat_id, user_id, &cfg).await?;
-    } else if let Some(tx_id) = data.strip_prefix("wiz:recent:") {
-        let Ok(tx_id) = Uuid::parse_str(tx_id) else {
-            bot.send_message(chat_id, "Transazione non valida.").await?;
-            return Ok(());
-        };
-        repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
-        show_wizard(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "prefs:toggle_voided" {
-        let updated = cfg
-            .prefs
-            .update(user_id, |p| p.include_voided = !p.include_voided)
-            .await;
-        if updated.is_err() {
-            bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
-                .await?;
         }
-        show_list(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "list:next" {
-        cfg.sessions
-            .update(chat_id, |s| {
-                if let Some(list) = &mut s.list
-                    && list.next.is_some()
-                {
-                    list.cursors.push(list.current.clone());
-                    list.current = list.next.clone();
-                }
-            })
-            .await;
-        show_list(&bot, chat_id, user_id, &cfg).await?;
-    } else if data == "list:prev" {
-        cfg.sessions
-            .update(chat_id, |s| {
-                if let Some(list) = &mut s.list {
-                    list.current = list.cursors.pop().unwrap_or(None);
-                }
-            })
-            .await;
-        show_list(&bot, chat_id, user_id, &cfg).await?;
-    } else if let Some(wallet_id) = data.strip_prefix("wallet:set:") {
-        let Ok(wallet_id) = Uuid::parse_str(wallet_id) else {
-            bot.send_message(chat_id, "Wallet non valido.").await?;
-            return Ok(());
-        };
-
-        let updated = cfg
-            .prefs
-            .update(user_id, |p| p.default_wallet_id = Some(wallet_id))
-            .await;
-        if updated.is_err() {
-            bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
-                .await?;
-        }
-
-        let pending = cfg.sessions.get(chat_id).await.pending;
-        if let Some(PendingAction::WalletForQuickAdd(draft)) = pending {
-            cfg.sessions.update(chat_id, |s| s.pending = None).await;
-            finalize_quick_add(&bot, chat_id, user_id, &cfg, wallet_id, draft).await?;
-            show_home(&bot, chat_id, user_id, &cfg).await?;
-            return Ok(());
-        }
-
-        if cfg.sessions.get(chat_id).await.wizard.is_some() {
+        CallbackAction::NavWizard => {
             show_wizard(&bot, chat_id, user_id, &cfg).await?;
-        } else {
-            show_home(&bot, chat_id, user_id, &cfg).await?;
         }
-    } else if let Some(flow_id) = data.strip_prefix("flow:set:") {
-        let Ok(flow_id) = Uuid::parse_str(flow_id) else {
-            bot.send_message(chat_id, "Flow non valido.").await?;
-            return Ok(());
-        };
-
-        let updated = cfg
-            .prefs
-            .update(user_id, |p| {
-                p.last_flow_id = Some(flow_id);
-                p.default_flow_id = Some(flow_id);
-            })
-            .await;
-        if updated.is_err() {
-            bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
+        CallbackAction::ShowList => {
+            show_list(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::HomePair => {
+            cfg.sessions
+                .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
+                .await;
+            bot.send_message(chat_id, "Inserisci il codice di pairing:")
                 .await?;
         }
-        if cfg.sessions.get(chat_id).await.wizard.is_some() {
-            show_wizard(&bot, chat_id, user_id, &cfg).await?;
-        } else {
+        CallbackAction::HomePickWallet => {
+            show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::HomePickFlow => {
+            show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::HomeExpense => {
+            start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Expense).await?;
+        }
+        CallbackAction::HomeIncome => {
+            start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Income).await?;
+        }
+        CallbackAction::HomeRefund => {
+            start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Refund).await?;
+        }
+        CallbackAction::HomeStats => {
+            show_stats(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::WizClose => {
+            cfg.sessions.update(chat_id, |s| s.wizard = None).await;
             show_home(&bot, chat_id, user_id, &cfg).await?;
         }
-    } else if let Some(tx_id) = data.strip_prefix("tx:detail:") {
-        let Ok(tx_id) = Uuid::parse_str(tx_id) else {
-            bot.send_message(chat_id, "Transazione non valida.").await?;
-            return Ok(());
-        };
-        show_detail(&bot, chat_id, user_id, &cfg, tx_id).await?;
-    } else if let Some(tx_id) = data.strip_prefix("tx:void:") {
-        let Ok(tx_id) = Uuid::parse_str(tx_id) else {
-            bot.send_message(chat_id, "Transazione non valida.").await?;
-            return Ok(());
-        };
+        CallbackAction::WizPickWallet => {
+            show_wallet_picker(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::WizPickFlow => {
+            show_flow_picker(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::WizInput => {
+            let kind = cfg
+                .sessions
+                .get(chat_id)
+                .await
+                .wizard
+                .as_ref()
+                .map(|w| w.kind);
+            let Some(kind) = kind else {
+                show_home(&bot, chat_id, user_id, &cfg).await?;
+                return Ok(());
+            };
 
-        let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
-            Ok(vault_id) => vault_id,
-            Err(err) => {
+            cfg.sessions
+                .update(chat_id, |s| {
+                    s.pending = Some(PendingAction::WizardDraft { kind })
+                })
+                .await;
+            bot.send_message(chat_id, wizard_prompt(kind)).await?;
+        }
+        CallbackAction::WizCatNone | CallbackAction::WizCatReset => {
+            cfg.sessions
+                .update(chat_id, |s| {
+                    if let Some(w) = &mut s.wizard {
+                        w.category = None;
+                    }
+                })
+                .await;
+            show_wizard(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::WizCatIndex(idx) => {
+            cfg.sessions
+                .update(chat_id, |s| {
+                    let Some(w) = &mut s.wizard else {
+                        return;
+                    };
+                    let Some(cat) = w.categories.get(idx).cloned() else {
+                        return;
+                    };
+                    w.category = Some(cat);
+                })
+                .await;
+            show_wizard(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::WizRecent(tx_id) => {
+            repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
+            show_wizard(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::PrefsToggleVoided => {
+            let updated = cfg
+                .prefs
+                .update(user_id, |p| p.include_voided = !p.include_voided)
+                .await;
+            if updated.is_err() {
+                bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
+                    .await?;
+            }
+            show_list(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::ListNext => {
+            cfg.sessions
+                .update(chat_id, |s| {
+                    if let Some(list) = &mut s.list
+                        && list.next.is_some()
+                    {
+                        list.cursors.push(list.current.clone());
+                        list.current = list.next.clone();
+                    }
+                })
+                .await;
+            show_list(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::ListPrev => {
+            cfg.sessions
+                .update(chat_id, |s| {
+                    if let Some(list) = &mut s.list {
+                        list.current = list.cursors.pop().unwrap_or(None);
+                    }
+                })
+                .await;
+            show_list(&bot, chat_id, user_id, &cfg).await?;
+        }
+        CallbackAction::WalletSet(wallet_id) => {
+            let updated = cfg
+                .prefs
+                .update(user_id, |p| p.default_wallet_id = Some(wallet_id))
+                .await;
+            if updated.is_err() {
+                bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
+                    .await?;
+            }
+
+            let pending = cfg.sessions.get(chat_id).await.pending;
+            if let Some(PendingAction::WalletForQuickAdd(draft)) = pending {
+                cfg.sessions.update(chat_id, |s| s.pending = None).await;
+                finalize_quick_add(&bot, chat_id, user_id, &cfg, wallet_id, draft).await?;
+                show_home(&bot, chat_id, user_id, &cfg).await?;
+                return Ok(());
+            }
+
+            if cfg.sessions.get(chat_id).await.wizard.is_some() {
+                show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            } else {
+                show_home(&bot, chat_id, user_id, &cfg).await?;
+            }
+        }
+        CallbackAction::FlowSet(flow_id) => {
+            let updated = cfg
+                .prefs
+                .update(user_id, |p| {
+                    p.last_flow_id = Some(flow_id);
+                    p.default_flow_id = Some(flow_id);
+                })
+                .await;
+            if updated.is_err() {
+                bot.send_message(chat_id, "Errore nel salvataggio delle preferenze.")
+                    .await?;
+            }
+            if cfg.sessions.get(chat_id).await.wizard.is_some() {
+                show_wizard(&bot, chat_id, user_id, &cfg).await?;
+            } else {
+                show_home(&bot, chat_id, user_id, &cfg).await?;
+            }
+        }
+        CallbackAction::TxDetail(tx_id) => {
+            show_detail(&bot, chat_id, user_id, &cfg, tx_id).await?;
+        }
+        CallbackAction::TxVoid(tx_id) => {
+            let vault_id = match resolve_main_vault_id(&cfg.api, user_id).await {
+                Ok(vault_id) => vault_id,
+                Err(err) => {
+                    bot.send_message(chat_id, user_message_for_api_error(err))
+                        .await?;
+                    return Ok(());
+                }
+            };
+
+            let voided = cfg
+                .api
+                .void_transaction(
+                    user_id,
+                    tx_id,
+                    &api_types::transaction::TransactionVoid {
+                        vault_id,
+                        voided_at: None,
+                    },
+                )
+                .await;
+            if let Err(err) = voided {
                 bot.send_message(chat_id, user_message_for_api_error(err))
                     .await?;
                 return Ok(());
             }
-        };
 
-        let voided = cfg
-            .api
-            .void_transaction(
-                user_id,
-                tx_id,
-                &api_types::transaction::TransactionVoid {
-                    vault_id,
-                    voided_at: None,
-                },
-            )
-            .await;
-        if let Err(err) = voided {
-            bot.send_message(chat_id, user_message_for_api_error(err))
+            bot.send_message(chat_id, "✅ Voce annullata (void).")
                 .await?;
-            return Ok(());
+            show_list(&bot, chat_id, user_id, &cfg).await?;
         }
-
-        bot.send_message(chat_id, "✅ Voce annullata (void).")
-            .await?;
-        show_list(&bot, chat_id, user_id, &cfg).await?;
-    } else if let Some(tx_id) = data.strip_prefix("tx:edit:") {
-        let Ok(tx_id) = Uuid::parse_str(tx_id) else {
-            bot.send_message(chat_id, "Transazione non valida.").await?;
-            return Ok(());
-        };
-        let (text, kb) = ui::render_edit_menu(tx_id);
-        edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
-    } else if let Some(tx_id) = data.strip_prefix("tx:edit_amount:") {
-        let Ok(tx_id) = Uuid::parse_str(tx_id) else {
-            bot.send_message(chat_id, "Transazione non valida.").await?;
-            return Ok(());
-        };
-        cfg.sessions
-            .update(chat_id, |s| {
-                s.pending = Some(PendingAction::EditAmount { tx_id })
-            })
-            .await;
-        bot.send_message(chat_id, "Invia il nuovo importo (es: 10.50):")
-            .await?;
-    } else if let Some(tx_id) = data.strip_prefix("tx:edit_note:") {
-        let Ok(tx_id) = Uuid::parse_str(tx_id) else {
-            bot.send_message(chat_id, "Transazione non valida.").await?;
-            return Ok(());
-        };
-        cfg.sessions
-            .update(chat_id, |s| {
-                s.pending = Some(PendingAction::EditNote { tx_id })
-            })
-            .await;
-        bot.send_message(chat_id, "Invia la nuova nota (vuoto per rimuovere):")
-            .await?;
-    } else if let Some(tx_id) = data.strip_prefix("tx:repeat:") {
-        let Ok(tx_id) = Uuid::parse_str(tx_id) else {
-            bot.send_message(chat_id, "Transazione non valida.").await?;
-            return Ok(());
-        };
-        repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
+        CallbackAction::TxEdit(tx_id) => {
+            let (text, kb) = ui::render_edit_menu(tx_id);
+            edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
+        }
+        CallbackAction::TxEditAmount(tx_id) => {
+            cfg.sessions
+                .update(chat_id, |s| {
+                    s.pending = Some(PendingAction::EditAmount { tx_id })
+                })
+                .await;
+            bot.send_message(chat_id, "Invia il nuovo importo (es: 10.50):")
+                .await?;
+        }
+        CallbackAction::TxEditNote(tx_id) => {
+            cfg.sessions
+                .update(chat_id, |s| {
+                    s.pending = Some(PendingAction::EditNote { tx_id })
+                })
+                .await;
+            bot.send_message(chat_id, "Invia la nuova nota (vuoto per rimuovere):")
+                .await?;
+        }
+        CallbackAction::TxRepeat(tx_id) => {
+            repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str()).await?;
+        }
+        CallbackAction::Noop => {}
     }
 
     Ok(())
@@ -2068,200 +2061,6 @@ fn normalize_category_label(value: &str) -> String {
         .to_lowercase()
 }
 
-fn parse_command(text: &str) -> Option<Command> {
-    let trimmed = text.trim();
-    if !trimmed.starts_with('/') {
-        return None;
-    }
-    let mut parts = trimmed.splitn(2, ' ');
-    let cmd = parts.next().unwrap_or("");
-    let arg = parts.next().map(|s| s.to_string());
-
-    match cmd {
-        "/start" => Some(Command::Start { code: arg }),
-        "/home" => Some(Command::Home),
-        "/help" => Some(Command::Help),
-        "/categories" => Some(Command::Categories),
-        "/members" => parse_members_command(arg.as_deref()),
-        "/flow_members" => parse_flow_members_command(arg.as_deref()),
-        "/merge_category" => parse_merge_category(arg.as_deref()),
-        "/vault_delete" => parse_vault_delete(arg.as_deref()),
-        _ => None,
-    }
-}
-
-fn parse_vault_delete(arg: Option<&str>) -> Option<Command> {
-    let Some(arg) = arg else {
-        return Some(Command::VaultDelete { confirm: false });
-    };
-    let trimmed = arg.trim();
-    if trimmed.is_empty() {
-        return Some(Command::VaultDelete { confirm: false });
-    }
-
-    let confirm = trimmed.eq_ignore_ascii_case("confirm");
-    Some(Command::VaultDelete { confirm })
-}
-
-fn parse_merge_category(arg: Option<&str>) -> Option<Command> {
-    let Some(arg) = arg else {
-        return Some(Command::MergeCategoryHelp);
-    };
-    let trimmed = arg.trim();
-    if trimmed.is_empty() {
-        return Some(Command::MergeCategoryHelp);
-    }
-
-    let (confirm, rest) = if let Some(rest) = trimmed.strip_prefix("confirm ") {
-        (true, rest)
-    } else {
-        (false, trimmed)
-    };
-    let rest = rest.trim();
-    if rest.is_empty() {
-        return Some(Command::MergeCategoryHelp);
-    }
-
-    let Some((from, into)) = rest.split_once("->") else {
-        return Some(Command::MergeCategoryHelp);
-    };
-
-    let from = from.trim();
-    let into = into.trim();
-    if from.is_empty() || into.is_empty() {
-        return Some(Command::MergeCategoryHelp);
-    }
-
-    Some(Command::MergeCategory {
-        confirm,
-        from: from.to_string(),
-        into: into.to_string(),
-    })
-}
-
-fn parse_members_command(arg: Option<&str>) -> Option<Command> {
-    let Some(arg) = arg else {
-        return Some(Command::MembersList);
-    };
-    let trimmed = arg.trim();
-    if trimmed.is_empty() {
-        return Some(Command::MembersList);
-    }
-
-    let mut parts = trimmed.split_whitespace();
-    let action = parts.next().unwrap_or("");
-    match action {
-        "list" => Some(Command::MembersList),
-        "add" => {
-            let Some(username) = parts.next() else {
-                return Some(Command::MembersHelp);
-            };
-            let Some(role_raw) = parts.next() else {
-                return Some(Command::MembersHelp);
-            };
-            if parts.next().is_some() {
-                return Some(Command::MembersHelp);
-            }
-            let Some(role) = parse_membership_role(role_raw) else {
-                return Some(Command::MembersHelp);
-            };
-            Some(Command::MembersAdd {
-                username: username.to_string(),
-                role,
-            })
-        }
-        "remove" | "rm" => {
-            let Some(username) = parts.next() else {
-                return Some(Command::MembersHelp);
-            };
-            if parts.next().is_some() {
-                return Some(Command::MembersHelp);
-            }
-            Some(Command::MembersRemove {
-                username: username.to_string(),
-            })
-        }
-        _ => Some(Command::MembersHelp),
-    }
-}
-
-fn parse_flow_members_command(arg: Option<&str>) -> Option<Command> {
-    let Some(arg) = arg else {
-        return Some(Command::FlowMembersHelp);
-    };
-    let trimmed = arg.trim();
-    if trimmed.is_empty() {
-        return Some(Command::FlowMembersHelp);
-    }
-
-    let parts: Vec<&str> = trimmed.split_whitespace().collect();
-    let action = parts.first().copied().unwrap_or("");
-
-    match action {
-        "list" => {
-            if parts.len() < 2 {
-                return Some(Command::FlowMembersHelp);
-            }
-            let flow = parts[1..].join(" ");
-            Some(Command::FlowMembersList { flow })
-        }
-        "add" => {
-            if parts.len() < 4 {
-                return Some(Command::FlowMembersHelp);
-            }
-            let role_raw = parts[parts.len() - 1];
-            let username = parts[parts.len() - 2];
-            let flow = parts[1..parts.len() - 2].join(" ");
-            if flow.trim().is_empty() {
-                return Some(Command::FlowMembersHelp);
-            }
-            let Some(role) = parse_membership_role(role_raw) else {
-                return Some(Command::FlowMembersHelp);
-            };
-            Some(Command::FlowMembersAdd {
-                flow,
-                username: username.to_string(),
-                role,
-            })
-        }
-        "remove" | "rm" => {
-            if parts.len() < 3 {
-                return Some(Command::FlowMembersHelp);
-            }
-            let username = parts[parts.len() - 1];
-            let flow = parts[1..parts.len() - 1].join(" ");
-            if flow.trim().is_empty() {
-                return Some(Command::FlowMembersHelp);
-            }
-            Some(Command::FlowMembersRemove {
-                flow,
-                username: username.to_string(),
-            })
-        }
-        _ => Some(Command::FlowMembersList {
-            flow: trimmed.to_string(),
-        }),
-    }
-}
-
-fn parse_membership_role(value: &str) -> Option<MembershipRole> {
-    match value.to_lowercase().as_str() {
-        "owner" => Some(MembershipRole::Owner),
-        "editor" => Some(MembershipRole::Editor),
-        "viewer" | "view" => Some(MembershipRole::Viewer),
-        _ => None,
-    }
-}
-
-fn looks_like_quick_add(text: &str) -> bool {
-    let trimmed = text.trim_start();
-    trimmed.starts_with('r')
-        || trimmed.starts_with('R')
-        || trimmed.starts_with('+')
-        || trimmed.starts_with('-')
-        || trimmed.chars().next().is_some_and(|c| c.is_ascii_digit())
-}
-
 fn user_message_for_api_error(err: ApiError) -> String {
     match err {
         ApiError::Network(_) => {
@@ -2397,45 +2196,4 @@ fn normalize_wizard_input(kind: QuickKind, raw: &str) -> Result<String, &'static
             }
         }
     }
-}
-
-#[derive(Debug, Clone)]
-enum Command {
-    Start {
-        code: Option<String>,
-    },
-    Home,
-    Help,
-    Categories,
-    MembersList,
-    MembersAdd {
-        username: String,
-        role: MembershipRole,
-    },
-    MembersRemove {
-        username: String,
-    },
-    MembersHelp,
-    FlowMembersList {
-        flow: String,
-    },
-    FlowMembersAdd {
-        flow: String,
-        username: String,
-        role: MembershipRole,
-    },
-    FlowMembersRemove {
-        flow: String,
-        username: String,
-    },
-    FlowMembersHelp,
-    MergeCategory {
-        confirm: bool,
-        from: String,
-        into: String,
-    },
-    MergeCategoryHelp,
-    VaultDelete {
-        confirm: bool,
-    },
 }
