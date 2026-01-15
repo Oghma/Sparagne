@@ -19,33 +19,22 @@ pub(crate) fn user_message_for_api_error(locale: i18n::Locale, err: ApiError) ->
         ApiError::Network(_) => i18n::t(locale, TextKey::ApiNetworkError).to_string(),
         ApiError::Server {
             status,
-            code,
+            code: _,
             message,
-        } => match code {
-            ErrorCode::MembershipLastOwner => {
-                i18n::t(locale, TextKey::ApiMembershipLastOwner).to_string()
-            }
-            ErrorCode::MembershipOwnerImmutable => {
-                i18n::t(locale, TextKey::ApiMembershipOwnerImmutable).to_string()
-            }
-            ErrorCode::MembershipOwnerRemoveForbidden => {
-                i18n::t(locale, TextKey::ApiMembershipOwnerRemoveForbidden).to_string()
-            }
-            _ => match status {
-                StatusCode::UNAUTHORIZED => i18n::t(locale, TextKey::ApiUnauthorized).to_string(),
-                StatusCode::FORBIDDEN => i18n::t(locale, TextKey::ApiForbidden).to_string(),
-                StatusCode::NOT_FOUND => i18n::t(locale, TextKey::ApiNotFound).to_string(),
-                StatusCode::CONFLICT => i18n::t(locale, TextKey::ApiConflict).to_string(),
-                StatusCode::BAD_REQUEST => {
-                    if message == "user not found" {
-                        i18n::t(locale, TextKey::ApiBadRequestUserNotFound).to_string()
-                    } else {
-                        message
-                    }
+        } => match status {
+            StatusCode::UNAUTHORIZED => i18n::t(locale, TextKey::ApiUnauthorized).to_string(),
+            StatusCode::FORBIDDEN => i18n::t(locale, TextKey::ApiForbidden).to_string(),
+            StatusCode::NOT_FOUND => i18n::t(locale, TextKey::ApiNotFound).to_string(),
+            StatusCode::CONFLICT => i18n::t(locale, TextKey::ApiConflict).to_string(),
+            StatusCode::BAD_REQUEST => {
+                if message == "user not found" {
+                    i18n::t(locale, TextKey::ApiBadRequestUserNotFound).to_string()
+                } else {
+                    message
                 }
-                StatusCode::UNPROCESSABLE_ENTITY => message,
-                _ => i18n::t(locale, TextKey::ApiServerError).to_string(),
-            },
+            }
+            StatusCode::UNPROCESSABLE_ENTITY => message,
+            _ => i18n::t(locale, TextKey::ApiServerError).to_string(),
         },
     }
 }
@@ -128,6 +117,23 @@ pub(crate) async fn resolve_main_vault_id(
         code: ErrorCode::Unknown,
         message: "vault id missing".to_string(),
     })
+}
+
+pub(crate) async fn list_categories(
+    api: &dyn ApiGateway,
+    telegram_user_id: u64,
+) -> Result<Vec<api_types::category::CategoryView>, ApiError> {
+    let vault_id = resolve_main_vault_id(api, telegram_user_id).await?;
+    let resp = api
+        .categories_list(
+            telegram_user_id,
+            &api_types::category::CategoryList {
+                vault_id,
+                include_archived: None,
+            },
+        )
+        .await?;
+    Ok(resp.categories)
 }
 
 #[cfg(test)]

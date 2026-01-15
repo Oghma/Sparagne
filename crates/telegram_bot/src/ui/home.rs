@@ -24,9 +24,10 @@ pub(crate) fn render_home(
         .unwrap_or(i18n::t(locale, TextKey::UnsetValue));
 
     // Calculate balance from default wallet
+    let currency = super::shared::api_currency_to_engine(snapshot.currency);
     let balance = default_wallet
-        .map(|w| Money::from_minor(w.balance, snapshot.currency).to_string())
-        .unwrap_or_else(|| "0.00".to_string());
+        .map(|w| Money::new(w.balance_minor).format(currency))
+        .unwrap_or_else(|| Money::new(0).format(currency));
 
     // Use last_flow if set, otherwise fall back to default_flow
     let current_flow = prefs

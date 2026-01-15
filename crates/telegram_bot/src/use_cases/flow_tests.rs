@@ -204,9 +204,9 @@ async fn wizard_flow_renders_title_and_body() {
     let sent = expect_some(bot.last_sent(), "sent message");
     assert_eq!(sent.chat_id, chat_id);
     assert!(sent.has_kb);
-    assert!(sent.text.contains("Nuova uscita"));
-    // Simplified wizard body shows Portafoglio/Budget with emojis
-    assert!(sent.text.contains("Portafoglio:"));
+    assert!(sent.text.contains("Nuova Spesa"));
+    // Simplified wizard body shows Wallet/Budget with emojis
+    assert!(sent.text.contains("Wallet:"));
     assert!(sent.text.contains("Budget:"));
 }
 
@@ -248,7 +248,7 @@ async fn list_flow_renders_transactions() {
     let sent = expect_some(bot.last_sent(), "sent message");
     assert_eq!(sent.chat_id, chat_id);
     assert!(sent.has_kb);
-    assert!(sent.text.contains("Ultime voci:"));
+    assert!(sent.text.contains("Ultime transazioni:"));
     assert!(sent.text.contains("Food"));
     assert!(sent.text.contains("Lunch"));
 }

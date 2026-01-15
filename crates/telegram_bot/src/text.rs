@@ -11,18 +11,6 @@ pub(crate) fn help_text(locale: i18n::Locale) -> &'static str {
     i18n::t(locale, TextKey::HelpText)
 }
 
-pub(crate) fn merge_category_help_text(locale: i18n::Locale) -> &'static str {
-    i18n::t(locale, TextKey::MergeCategoryHelp)
-}
-
-pub(crate) fn members_help_text(locale: i18n::Locale) -> &'static str {
-    i18n::t(locale, TextKey::MembersHelp)
-}
-
-pub(crate) fn flow_members_help_text(locale: i18n::Locale) -> &'static str {
-    i18n::t(locale, TextKey::FlowMembersHelp)
-}
-
 pub(crate) fn display_name_from_telegram(user: &User) -> String {
     if let Some(username) = user.username.as_deref().filter(|u| !u.is_empty()) {
         format!("@{username}")
@@ -74,9 +62,6 @@ mod tests {
     fn help_text_contains_known_commands() {
         let text = help_text(i18n::default_locale());
         assert!(text.contains("/home"));
-        assert!(text.contains("/members"));
-        assert!(text.contains("/flow_members"));
-        assert!(text.contains("/vault_delete"));
     }
 
     #[test]
@@ -84,6 +69,5 @@ mod tests {
         let text = help_text(i18n::default_locale());
         assert!(text.contains("12.50"));
         assert!(text.contains("+1000"));
-        assert!(text.contains("r 5.20"));
     }
 }

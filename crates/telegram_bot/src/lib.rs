@@ -126,7 +126,6 @@ impl Bot {
             BotCommand::new("home", "Torna alla home"),
             BotCommand::new("help", "Mostra aiuto e sintassi"),
             BotCommand::new("categories", "Lista categorie"),
-            BotCommand::new("members", "Gestisci membri vault"),
         ];
 
         // English commands
@@ -135,7 +134,6 @@ impl Bot {
             BotCommand::new("home", "Go to home"),
             BotCommand::new("help", "Show help and syntax"),
             BotCommand::new("categories", "List categories"),
-            BotCommand::new("members", "Manage vault members"),
         ];
 
         // Set default commands (Italian)

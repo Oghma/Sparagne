@@ -14,7 +14,7 @@ use crate::{
     routing::{CallbackAction, Command},
     state::{DraftCreate, PendingAction},
     text, ui,
-    use_cases::{admin, home, list, shared, stats, wizard},
+    use_cases::{home, list, shared, stats, wizard},
 };
 
 pub(crate) async fn handle_message(
@@ -91,71 +91,15 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::Categories => {
-                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
-                admin::list_categories(ctx).await?;
-                return Ok(());
-            }
-            Command::MembersList => {
-                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
-                admin::list_vault_members(ctx).await?;
-                return Ok(());
-            }
-            Command::MembersAdd { username, role } => {
-                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
-                admin::add_vault_member(ctx, &username, role).await?;
-                return Ok(());
-            }
-            Command::MembersRemove { username } => {
-                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
-                admin::remove_vault_member(ctx, &username).await?;
-                return Ok(());
-            }
-            Command::MembersHelp => {
-                bot.send_message(chat_id, text::members_help_text(locale))
-                    .await?;
-                return Ok(());
-            }
-            Command::FlowMembersList { flow } => {
-                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
-                admin::list_flow_members(ctx, &flow).await?;
-                return Ok(());
-            }
-            Command::FlowMembersAdd {
-                flow,
-                username,
-                role,
-            } => {
-                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
-                admin::add_flow_member(ctx, &flow, &username, role).await?;
-                return Ok(());
-            }
-            Command::FlowMembersRemove { flow, username } => {
-                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
-                admin::remove_flow_member(ctx, &flow, &username).await?;
-                return Ok(());
-            }
-            Command::FlowMembersHelp => {
-                bot.send_message(chat_id, text::flow_members_help_text(locale))
-                    .await?;
-                return Ok(());
-            }
-            Command::MergeCategory {
-                confirm,
-                from,
-                into,
-            } => {
-                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
-                admin::merge_category(ctx, confirm, &from, &into).await?;
-                return Ok(());
-            }
-            Command::MergeCategoryHelp => {
-                bot.send_message(chat_id, text::merge_category_help_text(locale))
-                    .await?;
-                return Ok(());
-            }
-            Command::VaultDelete { confirm } => {
-                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
-                admin::delete_vault(ctx, confirm).await?;
+                let cats = match shared::list_categories(&cfg.api, user_id).await {
+                    Ok(c) => c,
+                    Err(err) => {
+                        shared::send_api_error(&bot, chat_id, locale, err).await?;
+                        return Ok(());
+                    }
+                };
+                let (text, kb) = ui::categories::render_categories(locale, &cats);
+                shared::edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
                 return Ok(());
             }
         }
@@ -204,136 +148,23 @@ pub(crate) async fn handle_callback(
             cfg.sessions.update(chat_id, |s| s.wizard = None).await;
             home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
         }
-        CallbackAction::NavWizard => {
-            wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::NavSettings => {
-            home::show_settings(&bot, chat_id, &cfg, locale).await?;
-        }
-        CallbackAction::NavCommands => {
-            home::show_commands(&bot, chat_id, &cfg, locale).await?;
-        }
-        CallbackAction::ShowList => {
-            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::HomePair => {
-            cfg.sessions
-                .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
-                .await;
-            bot.send_message(chat_id, i18n::t(locale, TextKey::PairingPrompt))
-                .await?;
-        }
-        CallbackAction::HomePickWallet => {
-            home::show_wallet_picker(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::HomePickFlow => {
-            home::show_flow_picker(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::HomeExpense => {
+        CallbackAction::StartExpense => {
             wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Expense, locale).await?;
         }
-        CallbackAction::HomeIncome => {
+        CallbackAction::StartIncome => {
             wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Income, locale).await?;
         }
-        CallbackAction::HomeRefund => {
-            wizard::start_wizard(&bot, chat_id, user_id, &cfg, QuickKind::Refund, locale).await?;
+        CallbackAction::ShowHistory => {
+            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
         }
-        CallbackAction::HomeStats => {
+        CallbackAction::ShowStats => {
             stats::show_stats(&bot, chat_id, user_id, &cfg, locale).await?;
         }
-        CallbackAction::WizClose => {
-            cfg.sessions.update(chat_id, |s| s.wizard = None).await;
-            home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
+        CallbackAction::PickWallet => {
+            home::show_wallet_picker(&bot, chat_id, user_id, &cfg, locale, "nav:home").await?;
         }
-        CallbackAction::WizPickWallet => {
-            home::show_wallet_picker(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::WizPickFlow => {
-            home::show_flow_picker(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::WizInput => {
-            let kind = cfg
-                .sessions
-                .get(chat_id)
-                .await
-                .wizard
-                .as_ref()
-                .map(|w| w.kind);
-            let Some(kind) = kind else {
-                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
-                return Ok(());
-            };
-
-            cfg.sessions
-                .update(chat_id, |s| {
-                    s.pending = Some(PendingAction::WizardDraft { kind })
-                })
-                .await;
-            bot.send_message(chat_id, wizard::wizard_prompt(locale, kind))
-                .await?;
-        }
-        CallbackAction::WizCatNone | CallbackAction::WizCatReset => {
-            cfg.sessions
-                .update(chat_id, |s| {
-                    if let Some(w) = &mut s.wizard {
-                        w.category = None;
-                    }
-                })
-                .await;
-            wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::WizCatIndex(idx) => {
-            cfg.sessions
-                .update(chat_id, |s| {
-                    let Some(w) = &mut s.wizard else {
-                        return;
-                    };
-                    let Some(cat) = w.categories.get(idx).cloned() else {
-                        return;
-                    };
-                    w.category = Some(cat);
-                })
-                .await;
-            wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::WizRecent(tx_id) => {
-            list::repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str(), locale)
-                .await?;
-            wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::PrefsToggleVoided => {
-            let updated = cfg
-                .prefs
-                .update(user_id, |p| p.include_voided = !p.include_voided)
-                .await;
-            if updated.is_err() {
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
-                    .await?;
-            }
-            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::ListNext => {
-            cfg.sessions
-                .update(chat_id, |s| {
-                    if let Some(list) = &mut s.list
-                        && list.next.is_some()
-                    {
-                        list.cursors.push(list.current.clone());
-                        list.current = list.next.clone();
-                    }
-                })
-                .await;
-            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
-        }
-        CallbackAction::ListPrev => {
-            cfg.sessions
-                .update(chat_id, |s| {
-                    if let Some(list) = &mut s.list {
-                        list.current = list.cursors.pop().unwrap_or(None);
-                    }
-                })
-                .await;
-            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
+        CallbackAction::PickFlow => {
+            home::show_flow_picker(&bot, chat_id, user_id, &cfg, locale, "nav:home").await?;
         }
         CallbackAction::WalletSet(wallet_id) => {
             let updated = cfg
@@ -377,8 +208,42 @@ pub(crate) async fn handle_callback(
                 home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
             }
         }
-        CallbackAction::TxDetail(tx_id) => {
-            list::show_detail(&bot, chat_id, user_id, &cfg, tx_id, locale).await?;
+        CallbackAction::ListNext => {
+            cfg.sessions
+                .update(chat_id, |s| {
+                    if let Some(list) = &mut s.list
+                        && list.next.is_some()
+                    {
+                        list.cursors.push(list.current.clone());
+                        list.current = list.next.clone();
+                    }
+                })
+                .await;
+            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
+        }
+        CallbackAction::ListPrev => {
+            cfg.sessions
+                .update(chat_id, |s| {
+                    if let Some(list) = &mut s.list {
+                        list.current = list.cursors.pop().unwrap_or(None);
+                    }
+                })
+                .await;
+            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
+        }
+        CallbackAction::ToggleVoided => {
+            let updated = cfg
+                .prefs
+                .update(user_id, |p| p.include_voided = !p.include_voided)
+                .await;
+            if updated.is_err() {
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
+                    .await?;
+            }
+            list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
+        }
+        CallbackAction::TxDetail(index) => {
+            list::show_detail_by_index(&bot, chat_id, user_id, &cfg, index, locale).await?;
         }
         CallbackAction::TxVoid(tx_id) => {
             let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
@@ -433,9 +298,36 @@ pub(crate) async fn handle_callback(
             bot.send_message(chat_id, i18n::t(locale, TextKey::EditNotePrompt))
                 .await?;
         }
-        CallbackAction::TxRepeat(tx_id) => {
-            list::repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str(), locale)
+        CallbackAction::WizardInput => {
+            let kind = cfg
+                .sessions
+                .get(chat_id)
+                .await
+                .wizard
+                .as_ref()
+                .map(|w| w.kind);
+            let Some(kind) = kind else {
+                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
+                return Ok(());
+            };
+
+            cfg.sessions
+                .update(chat_id, |s| {
+                    s.pending = Some(PendingAction::WizardDraft { kind })
+                })
+                .await;
+            bot.send_message(chat_id, wizard::wizard_prompt(locale, kind))
                 .await?;
+        }
+        CallbackAction::WizardCancel => {
+            cfg.sessions.update(chat_id, |s| s.wizard = None).await;
+            home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
+        }
+        CallbackAction::WizardPickWallet => {
+            home::show_wallet_picker(&bot, chat_id, user_id, &cfg, locale, "wiz:cancel").await?;
+        }
+        CallbackAction::WizardPickFlow => {
+            home::show_flow_picker(&bot, chat_id, user_id, &cfg, locale, "wiz:cancel").await?;
         }
         CallbackAction::Noop => {}
     }
@@ -513,15 +405,13 @@ async fn handle_pending_message(
                 }
             };
 
-            let session = cfg.sessions.get(chat_id).await;
-            let selected_category = session.wizard.as_ref().and_then(|w| w.category.clone());
-            let category = parsed.category.or(selected_category);
+            let category = parsed.category;
 
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
 
             let prefs = cfg.prefs.get_or_default(user_id).await;
             let Some(wallet_id) = prefs.default_wallet_id else {
-                home::show_wallet_picker(bot, chat_id, user_id, cfg, locale).await?;
+                home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "wiz:cancel").await?;
                 return Ok(true);
             };
 
@@ -575,24 +465,6 @@ async fn handle_pending_message(
                         )
                         .await
                 }
-                QuickKind::Refund => {
-                    cfg.api
-                        .create_refund(
-                            user_id,
-                            &api_types::transaction::Refund {
-                                vault_id: snapshot.id.clone(),
-                                amount_minor: parsed.amount_minor,
-                                flow_id,
-                                wallet_id: Some(wallet_id),
-                                category_id: None,
-                                category,
-                                note: parsed.note,
-                                idempotency_key: Some(idempotency_key),
-                                occurred_at,
-                            },
-                        )
-                        .await
-                }
             };
 
             match created {
@@ -600,7 +472,7 @@ async fn handle_pending_message(
                     let currency = shared::engine_currency(snapshot.currency);
                     let signed_minor = match kind {
                         QuickKind::Expense => -parsed.amount_minor,
-                        QuickKind::Income | QuickKind::Refund => parsed.amount_minor,
+                        QuickKind::Income => parsed.amount_minor,
                     };
                     let saved_msg = i18n::format(
                         locale,
@@ -618,10 +490,6 @@ async fn handle_pending_message(
                                 i18n::t(locale, TextKey::DetailBtnEdit)
                             ),
                             format!("tx:edit:{id}", id = created.id),
-                        ),
-                        InlineKeyboardButton::callback(
-                            format!("\u{1f4cc} {}", i18n::t(locale, TextKey::DetailBtnRepeat)),
-                            format!("tx:repeat:{id}", id = created.id),
                         ),
                     ]]);
                     bot.send_message(chat_id, saved_msg)
@@ -794,7 +662,7 @@ async fn handle_quick_add(
                 s.pending = Some(PendingAction::WalletForQuickAdd(draft.clone()))
             })
             .await;
-        home::show_wallet_picker(bot, msg.chat.id, user_id, cfg, locale).await?;
+        home::show_wallet_picker(bot, msg.chat.id, user_id, cfg, locale, "nav:home").await?;
         return Ok(());
     };
 
@@ -876,31 +744,13 @@ async fn finalize_quick_add(
                 )
                 .await
         }
-        QuickKind::Refund => {
-            cfg.api
-                .create_refund(
-                    user_id,
-                    &api_types::transaction::Refund {
-                        vault_id,
-                        amount_minor: draft.amount_minor,
-                        flow_id: Some(flow_id),
-                        wallet_id: Some(wallet_id),
-                        category_id: None,
-                        category: draft.category.clone(),
-                        note: draft.note.clone(),
-                        idempotency_key: Some(draft.idempotency_key.clone()),
-                        occurred_at,
-                    },
-                )
-                .await
-        }
     };
 
     match created {
         Ok(created) => {
             let signed_minor = match draft.kind {
                 QuickKind::Expense => -draft.amount_minor,
-                QuickKind::Income | QuickKind::Refund => draft.amount_minor,
+                QuickKind::Income => draft.amount_minor,
             };
 
             let mut saved_msg = i18n::format(
@@ -915,25 +765,19 @@ async fn finalize_quick_add(
                 saved_msg.push_str(&format!(" \u{2022} {note}"));
             }
 
-            let kb = InlineKeyboardMarkup::new(vec![
-                vec![
-                    InlineKeyboardButton::callback(
-                        format!("\u{21a9} {}", i18n::t(locale, TextKey::QuickAddUndo)),
-                        format!("tx:void:{id}", id = created.id),
+            let kb = InlineKeyboardMarkup::new(vec![vec![
+                InlineKeyboardButton::callback(
+                    format!("\u{21a9} {}", i18n::t(locale, TextKey::QuickAddUndo)),
+                    format!("tx:void:{id}", id = created.id),
+                ),
+                InlineKeyboardButton::callback(
+                    format!(
+                        "\u{270f}\u{fe0f} {}",
+                        i18n::t(locale, TextKey::DetailBtnEdit)
                     ),
-                    InlineKeyboardButton::callback(
-                        format!(
-                            "\u{270f}\u{fe0f} {}",
-                            i18n::t(locale, TextKey::DetailBtnEdit)
-                        ),
-                        format!("tx:edit:{id}", id = created.id),
-                    ),
-                ],
-                vec![InlineKeyboardButton::callback(
-                    format!("\u{1f4cc} {}", i18n::t(locale, TextKey::DetailBtnRepeat)),
-                    format!("tx:repeat:{id}", id = created.id),
-                )],
-            ]);
+                    format!("tx:edit:{id}", id = created.id),
+                ),
+            ]]);
 
             bot.send_message(chat_id, saved_msg)
                 .reply_markup(kb)

@@ -1,3 +1,4 @@
+pub(crate) mod categories;
 pub(crate) mod detail;
 pub(crate) mod home;
 pub(crate) mod list;
