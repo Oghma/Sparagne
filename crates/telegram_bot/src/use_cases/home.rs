@@ -56,12 +56,8 @@ pub(crate) async fn show_wallet_picker(
     user_id: u64,
     cfg: &ConfigParameters,
     locale: i18n::Locale,
+    back_callback: &str,
 ) -> ResponseResult<()> {
-    let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
-        "nav:wizard"
-    } else {
-        "nav:home"
-    };
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
@@ -92,12 +88,8 @@ pub(crate) async fn show_flow_picker(
     user_id: u64,
     cfg: &ConfigParameters,
     locale: i18n::Locale,
+    back_callback: &str,
 ) -> ResponseResult<()> {
-    let back_callback = if cfg.sessions.get(chat_id).await.wizard.is_some() {
-        "nav:wizard"
-    } else {
-        "nav:home"
-    };
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
@@ -119,25 +111,5 @@ pub(crate) async fn show_flow_picker(
         }
     };
     let (text, kb) = ui::home::render_flow_picker(locale, &snapshot, back_callback);
-    shared::edit_or_send(bot, chat_id, cfg, text, kb).await
-}
-
-pub(crate) async fn show_settings(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    cfg: &ConfigParameters,
-    locale: i18n::Locale,
-) -> ResponseResult<()> {
-    let (text, kb) = ui::home::render_settings(locale);
-    shared::edit_or_send(bot, chat_id, cfg, text, kb).await
-}
-
-pub(crate) async fn show_commands(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    cfg: &ConfigParameters,
-    locale: i18n::Locale,
-) -> ResponseResult<()> {
-    let (text, kb) = ui::home::render_commands(locale);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }

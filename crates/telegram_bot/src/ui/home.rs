@@ -1,4 +1,5 @@
 use api_types::vault::VaultSnapshot;
+use engine::Money;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 use crate::{
@@ -13,17 +14,27 @@ pub(crate) fn render_home(
     snapshot: &VaultSnapshot,
     prefs: &UserPrefs,
 ) -> (String, InlineKeyboardMarkup) {
+    // Find default wallet
     let default_wallet = prefs
         .default_wallet_id
-        .and_then(|id| snapshot.wallets.iter().find(|w| w.id == id))
+        .and_then(|id| snapshot.wallets.iter().find(|w| w.id == id));
+
+    let wallet_name = default_wallet
         .map(|w| w.name.as_str())
         .unwrap_or(i18n::t(locale, TextKey::UnsetValue));
+
+    // Calculate balance from default wallet
+    let balance = default_wallet
+        .map(|w| Money::from_minor(w.balance, snapshot.currency).to_string())
+        .unwrap_or_else(|| "0.00".to_string());
 
     // Use last_flow if set, otherwise fall back to default_flow
     let current_flow = prefs
         .last_flow_id
         .or(prefs.default_flow_id)
-        .and_then(|id| snapshot.flows.iter().find(|f| f.id == id))
+        .and_then(|id| snapshot.flows.iter().find(|f| f.id == id));
+
+    let flow_name = current_flow
         .map(|f| flow_display_name(locale, f.is_unallocated, &f.name))
         .unwrap_or(i18n::t(locale, TextKey::UnallocatedFlow));
 
@@ -33,13 +44,14 @@ pub(crate) fn render_home(
         &[
             ("display_name", display_name),
             ("vault", snapshot.name.as_str()),
-            ("wallet", default_wallet),
-            ("flow", current_flow),
+            ("wallet", wallet_name),
+            ("flow", flow_name),
+            ("balance", &balance),
         ],
     );
 
     let kb = InlineKeyboardMarkup::new(vec![
-        // Primary actions: expense and income
+        // Row 1: Expense and Income
         vec![
             InlineKeyboardButton::callback(
                 format!("➖ {}", i18n::t(locale, TextKey::HomeBtnExpense)),
@@ -50,63 +62,23 @@ pub(crate) fn render_home(
                 "home:income",
             ),
         ],
-        // Secondary actions: history and stats
+        // Row 2: History and Stats
         vec![
             InlineKeyboardButton::callback(
-                format!("🧾 {}", i18n::t(locale, TextKey::HomeBtnList)),
-                "home:list",
+                format!("📜 {}", i18n::t(locale, TextKey::HomeBtnHistory)),
+                "home:history",
             ),
             InlineKeyboardButton::callback(
                 format!("📊 {}", i18n::t(locale, TextKey::HomeBtnStats)),
                 "home:stats",
             ),
         ],
-        // Utility: settings and commands
+        // Row 3: Wallet and Flow pickers (inline)
         vec![
-            InlineKeyboardButton::callback(
-                format!("⚙️ {}", i18n::t(locale, TextKey::HomeBtnSettings)),
-                "nav:settings",
-            ),
-            InlineKeyboardButton::callback(
-                format!("📋 {}", i18n::t(locale, TextKey::HomeBtnCommands)),
-                "nav:commands",
-            ),
+            InlineKeyboardButton::callback(format!("👛 {wallet_name}"), "home:wallet"),
+            InlineKeyboardButton::callback(format!("🎯 {flow_name}"), "home:flow"),
         ],
     ]);
-
-    (text, kb)
-}
-
-pub(crate) fn render_settings(locale: i18n::Locale) -> (String, InlineKeyboardMarkup) {
-    let text = i18n::t(locale, TextKey::SettingsTitle).to_string();
-
-    let kb = InlineKeyboardMarkup::new(vec![
-        vec![InlineKeyboardButton::callback(
-            format!("👛 {}", i18n::t(locale, TextKey::SettingsBtnWallet)),
-            "home:pick_wallet",
-        )],
-        vec![InlineKeyboardButton::callback(
-            format!("🎯 {}", i18n::t(locale, TextKey::SettingsBtnFlow)),
-            "home:pick_flow",
-        )],
-        vec![InlineKeyboardButton::callback(
-            format!("⬅️ {}", i18n::t(locale, TextKey::DetailBtnBack)),
-            "nav:home",
-        )],
-    ]);
-
-    (text, kb)
-}
-
-pub(crate) fn render_commands(locale: i18n::Locale) -> (String, InlineKeyboardMarkup) {
-    let title = i18n::t(locale, TextKey::CommandsTitle);
-    let body = i18n::t(locale, TextKey::CommandsBody);
-    let text = format!("{title}\n\n{body}");
-
-    let kb = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
-        format!("⬅️ {}", i18n::t(locale, TextKey::DetailBtnBack)),
-        "nav:home",
-    )]]);
 
     (text, kb)
 }
