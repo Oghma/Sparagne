@@ -12,12 +12,13 @@ use uuid::Uuid;
 use crate::{
     ConfigParameters,
     api::{ApiError, ApiGateway},
+    bot_client::BotClient,
     i18n::{self, TextKey},
     use_cases::shared,
 };
 
 pub(crate) async fn list_categories(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -26,8 +27,8 @@ pub(crate) async fn list_categories(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -45,19 +46,19 @@ pub(crate) async fn list_categories(
     {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
 
     let text = render_category_list(locale, &response.categories);
-    bot.send_message(chat_id, text).await?;
+    bot.send_message(chat_id, &text, None).await?;
     Ok(())
 }
 
 pub(crate) async fn list_vault_members(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -66,8 +67,8 @@ pub(crate) async fn list_vault_members(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -75,8 +76,8 @@ pub(crate) async fn list_vault_members(
     let response = match cfg.api.vault_members_list(user_id, &vault_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -86,12 +87,12 @@ pub(crate) async fn list_vault_members(
         i18n::t(locale, TextKey::MembersVaultTitle),
         &response.members,
     );
-    bot.send_message(chat_id, text).await?;
+    bot.send_message(chat_id, &text, None).await?;
     Ok(())
 }
 
 pub(crate) async fn add_vault_member(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -102,8 +103,8 @@ pub(crate) async fn add_vault_member(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -118,26 +119,23 @@ pub(crate) async fn add_vault_member(
         .await
     {
         Ok(()) => {
-            bot.send_message(
-                chat_id,
-                i18n::format(
-                    locale,
-                    TextKey::MemberSaved,
-                    &[("username", username), ("role", role_label(locale, role))],
-                ),
-            )
-            .await?;
+            let text = i18n::format(
+                locale,
+                TextKey::MemberSaved,
+                &[("username", username), ("role", role_label(locale, role))],
+            );
+            bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
         }
     }
     Ok(())
 }
 
 pub(crate) async fn remove_vault_member(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -147,8 +145,8 @@ pub(crate) async fn remove_vault_member(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -159,22 +157,19 @@ pub(crate) async fn remove_vault_member(
         .await
     {
         Ok(()) => {
-            bot.send_message(
-                chat_id,
-                i18n::format(locale, TextKey::MemberRemoved, &[("username", username)]),
-            )
-            .await?;
+            let text = i18n::format(locale, TextKey::MemberRemoved, &[("username", username)]);
+            bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
         }
     }
     Ok(())
 }
 
 pub(crate) async fn delete_vault(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -182,25 +177,26 @@ pub(crate) async fn delete_vault(
     locale: i18n::Locale,
 ) -> ResponseResult<()> {
     if !confirm {
-        bot.send_message(chat_id, vault_delete_help_text(locale)).await?;
+        bot.send_message(chat_id, vault_delete_help_text(locale), None)
+            .await?;
         return Ok(());
     }
 
     match cfg.api.vault_delete_main(user_id).await {
         Ok(()) => {
-            bot.send_message(chat_id, i18n::t(locale, TextKey::VaultDeleted))
+            bot.send_message(chat_id, i18n::t(locale, TextKey::VaultDeleted), None)
                 .await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
         }
     }
     Ok(())
 }
 
 pub(crate) async fn list_flow_members(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -210,8 +206,8 @@ pub(crate) async fn list_flow_members(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -219,34 +215,34 @@ pub(crate) async fn list_flow_members(
     let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
     let Some(flow) = find_flow_by_name(&flows, flow_name) else {
-        bot.send_message(chat_id, flow_not_found_text(locale, flow_name, &flows))
-            .await?;
+        let text = flow_not_found_text(locale, flow_name, &flows);
+        bot.send_message(chat_id, &text, None).await?;
         return Ok(());
     };
 
     let response = match cfg.api.flow_members_list(user_id, &vault_id, flow.id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
 
     let title = i18n::format(locale, TextKey::MembersFlowTitle, &[("flow", &flow.name)]);
     let text = render_members_list(locale, &title, &response.members);
-    bot.send_message(chat_id, text).await?;
+    bot.send_message(chat_id, &text, None).await?;
     Ok(())
 }
 
 pub(crate) async fn add_flow_member(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -258,8 +254,8 @@ pub(crate) async fn add_flow_member(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -267,14 +263,14 @@ pub(crate) async fn add_flow_member(
     let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
     let Some(flow) = find_flow_by_name(&flows, flow_name) else {
-        bot.send_message(chat_id, flow_not_found_text(locale, flow_name, &flows))
-            .await?;
+        let text = flow_not_found_text(locale, flow_name, &flows);
+        bot.send_message(chat_id, &text, None).await?;
         return Ok(());
     };
 
@@ -288,26 +284,23 @@ pub(crate) async fn add_flow_member(
         .await
     {
         Ok(()) => {
-            bot.send_message(
-                chat_id,
-                i18n::format(
-                    locale,
-                    TextKey::MemberSaved,
-                    &[("username", username), ("role", role_label(locale, role))],
-                ),
-            )
-            .await?;
+            let text = i18n::format(
+                locale,
+                TextKey::MemberSaved,
+                &[("username", username), ("role", role_label(locale, role))],
+            );
+            bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
         }
     }
     Ok(())
 }
 
 pub(crate) async fn remove_flow_member(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -318,8 +311,8 @@ pub(crate) async fn remove_flow_member(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -327,14 +320,14 @@ pub(crate) async fn remove_flow_member(
     let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
     let Some(flow) = find_flow_by_name(&flows, flow_name) else {
-        bot.send_message(chat_id, flow_not_found_text(locale, flow_name, &flows))
-            .await?;
+        let text = flow_not_found_text(locale, flow_name, &flows);
+        bot.send_message(chat_id, &text, None).await?;
         return Ok(());
     };
 
@@ -344,22 +337,19 @@ pub(crate) async fn remove_flow_member(
         .await
     {
         Ok(()) => {
-            bot.send_message(
-                chat_id,
-                i18n::format(locale, TextKey::MemberRemoved, &[("username", username)]),
-            )
-            .await?;
+            let text = i18n::format(locale, TextKey::MemberRemoved, &[("username", username)]);
+            bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
         }
     }
     Ok(())
 }
 
 pub(crate) async fn merge_category(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -371,8 +361,8 @@ pub(crate) async fn merge_category(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -390,33 +380,28 @@ pub(crate) async fn merge_category(
     {
         Ok(resp) => resp.categories,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
 
     let Some(from_category) = match_category_by_input(&categories, from) else {
-        bot.send_message(
-            chat_id,
-            i18n::format(locale, TextKey::CategorySourceMissing, &[("name", from)]),
-        )
-        .await?;
-        bot.send_message(chat_id, i18n::t(locale, TextKey::CategoryListHint))
+        let text =
+            i18n::format(locale, TextKey::CategorySourceMissing, &[("name", from)]);
+        bot.send_message(chat_id, &text, None).await?;
+        bot.send_message(chat_id, i18n::t(locale, TextKey::CategoryListHint), None)
             .await?;
         return Ok(());
     };
     let Some(into_category) = match_category_by_input(&categories, into) else {
-        bot.send_message(
-            chat_id,
-            i18n::format(
-                locale,
-                TextKey::CategoryDestinationMissing,
-                &[("name", into)],
-            ),
-        )
-        .await?;
-        bot.send_message(chat_id, i18n::t(locale, TextKey::CategoryListHint))
+        let text = i18n::format(
+            locale,
+            TextKey::CategoryDestinationMissing,
+            &[("name", into)],
+        );
+        bot.send_message(chat_id, &text, None).await?;
+        bot.send_message(chat_id, i18n::t(locale, TextKey::CategoryListHint), None)
             .await?;
         return Ok(());
     };
@@ -435,15 +420,15 @@ pub(crate) async fn merge_category(
     {
         Ok(resp) => resp,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
 
     if !preview.ok {
         let text = render_merge_conflicts(locale, from_category, into_category, &preview);
-        bot.send_message(chat_id, text).await?;
+        bot.send_message(chat_id, &text, None).await?;
         return Ok(());
     }
 
@@ -453,7 +438,7 @@ pub(crate) async fn merge_category(
             TextKey::MergeConfirmPrompt,
             &[("from", &from_category.name), ("into", &into_category.name)],
         );
-        bot.send_message(chat_id, text).await?;
+        bot.send_message(chat_id, &text, None).await?;
         return Ok(());
     }
 
@@ -470,19 +455,16 @@ pub(crate) async fn merge_category(
         .await;
     match merged {
         Ok(_) => {
-            bot.send_message(
-                chat_id,
-                i18n::format(
-                    locale,
-                    TextKey::MergeCompleted,
-                    &[("from", &from_category.name), ("into", &into_category.name)],
-                ),
-            )
-            .await?;
+            let text = i18n::format(
+                locale,
+                TextKey::MergeCompleted,
+                &[("from", &from_category.name), ("into", &into_category.name)],
+            );
+            bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
         }
     }
     Ok(())

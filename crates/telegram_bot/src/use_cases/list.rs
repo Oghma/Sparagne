@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::{
     ConfigParameters,
     api::ApiError,
+    bot_client::BotClient,
     i18n::{self, TextKey},
     state::{ListSession, PendingAction},
     ui,
@@ -12,7 +13,7 @@ use crate::{
 };
 
 pub(crate) async fn show_list(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -30,11 +31,11 @@ pub(crate) async fn show_list(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
                     .await?;
             } else {
-                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                    .await?;
+                let text = shared::user_message_for_api_error(locale, err);
+                bot.send_message(chat_id, &text, None).await?;
             }
             return Ok(());
         }
@@ -42,8 +43,12 @@ pub(crate) async fn show_list(
     let currency = shared::engine_currency(snapshot.currency);
     let prefs = cfg.prefs.get_or_default(user_id).await;
     let Some(wallet_id) = prefs.default_wallet_id else {
-        bot.send_message(chat_id, i18n::t(locale, TextKey::DefaultWalletMissing))
-            .await?;
+        bot.send_message(
+            chat_id,
+            i18n::t(locale, TextKey::DefaultWalletMissing),
+            None,
+        )
+        .await?;
         home::show_wallet_picker(bot, chat_id, user_id, cfg, locale).await?;
         return Ok(());
     };
@@ -75,8 +80,8 @@ pub(crate) async fn show_list(
     {
         Ok(v) => v,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -112,7 +117,7 @@ pub(crate) async fn show_list(
 }
 
 pub(crate) async fn show_detail(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -133,7 +138,7 @@ pub(crate) async fn show_detail(
 }
 
 pub(crate) async fn repeat_transaction(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -157,7 +162,7 @@ pub(crate) async fn repeat_transaction(
     });
 
     let Some(wallet_id) = wallet_id else {
-        bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatNoWallet))
+        bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatNoWallet), None)
             .await?;
         return Ok(());
     };
@@ -225,7 +230,7 @@ pub(crate) async fn repeat_transaction(
                 .await
         }
         _ => {
-            bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatUnsupported))
+            bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatUnsupported), None)
                 .await?;
             return Ok(());
         }
@@ -233,16 +238,16 @@ pub(crate) async fn repeat_transaction(
 
     match created {
         Ok(_) => {
-            bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatSuccess))
+            bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatSuccess), None)
                 .await?
         }
         Err(ApiError::Server { status, .. }) if status == StatusCode::CONFLICT => {
-            bot.send_message(chat_id, i18n::t(locale, TextKey::AlreadySaved))
+            bot.send_message(chat_id, i18n::t(locale, TextKey::AlreadySaved), None)
                 .await?
         }
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?
         }
     };
 
@@ -250,7 +255,7 @@ pub(crate) async fn repeat_transaction(
 }
 
 async fn fetch_detail_with_vault(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -260,8 +265,8 @@ async fn fetch_detail_with_vault(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(vault_id) => vault_id,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(None);
         }
     };
@@ -278,8 +283,8 @@ async fn fetch_detail_with_vault(
     {
         Ok(detail) => detail,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(None);
         }
     };

@@ -4,6 +4,7 @@ use teloxide::prelude::*;
 use crate::{
     ConfigParameters,
     api::ApiError,
+    bot_client::BotClient,
     i18n::{self, TextKey},
     state::PendingAction,
     ui,
@@ -11,7 +12,7 @@ use crate::{
 };
 
 pub(crate) async fn show_home(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -26,14 +27,14 @@ pub(crate) async fn show_home(
                     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
             );
             if needs_pairing {
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
                     .await?;
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
             } else {
-                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                    .await?;
+                let text = shared::user_message_for_api_error(locale, err);
+                bot.send_message(chat_id, &text, None).await?;
             }
             return Ok(());
         }
@@ -51,7 +52,7 @@ pub(crate) async fn show_home(
 }
 
 pub(crate) async fn show_wallet_picker(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -74,11 +75,11 @@ pub(crate) async fn show_wallet_picker(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
                     .await?;
             } else {
-                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                    .await?;
+                let text = shared::user_message_for_api_error(locale, err);
+                bot.send_message(chat_id, &text, None).await?;
             }
             return Ok(());
         }
@@ -88,7 +89,7 @@ pub(crate) async fn show_wallet_picker(
 }
 
 pub(crate) async fn show_flow_picker(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -111,11 +112,11 @@ pub(crate) async fn show_flow_picker(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired))
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
                     .await?;
             } else {
-                bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                    .await?;
+                let text = shared::user_message_for_api_error(locale, err);
+                bot.send_message(chat_id, &text, None).await?;
             }
             return Ok(());
         }

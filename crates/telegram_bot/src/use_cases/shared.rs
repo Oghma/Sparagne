@@ -7,6 +7,7 @@ use teloxide::{prelude::*, types::InlineKeyboardMarkup};
 use crate::{
     ConfigParameters,
     api::{ApiError, ApiGateway},
+    bot_client::BotClient,
     i18n::{self, TextKey},
     state::{PrefsStore, UserPrefs},
 };
@@ -83,7 +84,7 @@ pub(crate) async fn ensure_flow_defaults(
 }
 
 pub(crate) async fn edit_or_send(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     cfg: &ConfigParameters,
     text: String,
@@ -92,17 +93,16 @@ pub(crate) async fn edit_or_send(
     let session = cfg.sessions.get(chat_id).await;
     if let Some(message_id) = session.hub_message_id
         && bot
-            .edit_message_text(chat_id, message_id, text.clone())
-            .reply_markup(kb.clone())
+            .edit_message_text(chat_id, message_id, &text, kb.clone())
             .await
             .is_ok()
     {
         return Ok(());
     }
 
-    let sent = bot.send_message(chat_id, text).reply_markup(kb).await?;
+    let sent = bot.send_message(chat_id, &text, Some(kb)).await?;
     cfg.sessions
-        .update(chat_id, |s| s.hub_message_id = Some(sent.id))
+        .update(chat_id, |s| s.hub_message_id = Some(sent))
         .await;
     Ok(())
 }

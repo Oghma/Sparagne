@@ -10,6 +10,7 @@ use reqwest::{Client, header};
 use teloxide::prelude::*;
 
 mod api;
+mod bot_client;
 mod handlers;
 mod i18n;
 mod parsing;

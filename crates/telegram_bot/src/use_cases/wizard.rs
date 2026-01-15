@@ -3,6 +3,7 @@ use teloxide::prelude::*;
 
 use crate::{
     ConfigParameters,
+    bot_client::BotClient,
     i18n::{self, TextKey},
     parsing::QuickKind,
     state::WizardSession,
@@ -11,7 +12,7 @@ use crate::{
 };
 
 pub(crate) async fn start_wizard(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -31,7 +32,7 @@ pub(crate) async fn start_wizard(
 }
 
 pub(crate) async fn show_wizard(
-    bot: &Bot,
+    bot: &dyn BotClient,
     chat_id: ChatId,
     user_id: u64,
     cfg: &ConfigParameters,
@@ -45,8 +46,8 @@ pub(crate) async fn show_wizard(
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
@@ -86,8 +87,8 @@ pub(crate) async fn show_wizard(
     {
         Ok(v) => v,
         Err(err) => {
-            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                .await?;
+            let text = shared::user_message_for_api_error(locale, err);
+            bot.send_message(chat_id, &text, None).await?;
             return Ok(());
         }
     };
