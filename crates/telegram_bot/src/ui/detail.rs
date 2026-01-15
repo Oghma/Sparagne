@@ -10,7 +10,7 @@ fn localized_kind(locale: i18n::Locale, kind: TransactionKind) -> &'static str {
     match kind {
         TransactionKind::Expense => i18n::t(locale, TextKey::TxKindExpense),
         TransactionKind::Income => i18n::t(locale, TextKey::TxKindIncome),
-        TransactionKind::Refund => i18n::t(locale, TextKey::TxKindRefund),
+        TransactionKind::Refund => i18n::t(locale, TextKey::TxKindIncome), // Treat refund as income
         TransactionKind::TransferWallet => i18n::t(locale, TextKey::TxKindTransferWallet),
         TransactionKind::TransferFlow => i18n::t(locale, TextKey::TxKindTransferFlow),
     }
@@ -28,7 +28,6 @@ pub(crate) fn render_detail(
 ) -> (String, InlineKeyboardMarkup) {
     let tx = &detail.transaction;
 
-    // Localize kind and format date nicely
     let kind_str = localized_kind(locale, tx.kind);
     let date_str = format_date(&tx.occurred_at);
 
@@ -41,37 +40,24 @@ pub(crate) fn render_detail(
             ("amount", &Money::new(tx.amount_minor).format(currency)),
             ("category", tx.category.as_deref().unwrap_or("-")),
             ("note", tx.note.as_deref().unwrap_or("-")),
-            (
-                "voided",
-                if tx.voided {
-                    i18n::t(locale, TextKey::DetailYes)
-                } else {
-                    i18n::t(locale, TextKey::DetailNo)
-                },
-            ),
         ],
     );
 
-    // Note: Legs section removed as it's technical detail not useful for users
-
+    // Buttons: Void and Edit only (no Repeat)
     let kb = InlineKeyboardMarkup::new(vec![
         vec![
             InlineKeyboardButton::callback(
-                format!("↩ {}", i18n::t(locale, TextKey::DetailBtnVoid)),
+                format!("↩️ {}", i18n::t(locale, TextKey::DetailBtnVoid)),
                 format!("tx:void:{id}", id = tx.id),
             ),
             InlineKeyboardButton::callback(
                 format!("✏️ {}", i18n::t(locale, TextKey::DetailBtnEdit)),
                 format!("tx:edit:{id}", id = tx.id),
             ),
-            InlineKeyboardButton::callback(
-                format!("📌 {}", i18n::t(locale, TextKey::DetailBtnRepeat)),
-                format!("tx:repeat:{id}", id = tx.id),
-            ),
         ],
         vec![InlineKeyboardButton::callback(
             format!("⬅️ {}", i18n::t(locale, TextKey::DetailBtnBack)),
-            "nav:list",
+            "home:history",
         )],
     ]);
 
