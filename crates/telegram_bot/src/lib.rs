@@ -3,24 +3,29 @@
 //! The bot is a thin client: it talks only to the HTTP server API and never
 //! accesses the database directly.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use base64::Engine;
 use reqwest::{Client, header};
 use teloxide::prelude::*;
 
 mod api;
+mod bot_client;
 mod handlers;
+mod i18n;
 mod parsing;
+mod routing;
 mod state;
+mod text;
 mod ui;
+mod use_cases;
 
 const DEFAULT_STATE_PATH: &str = "config/telegram_bot_state.json";
 
 #[derive(Clone)]
 pub struct ConfigParameters {
     allowed_users: Option<Vec<UserId>>,
-    api: api::ApiClient,
+    api: Arc<dyn api::ApiGateway>,
     prefs: state::PrefsStore,
     sessions: state::SessionStore,
 }
@@ -80,7 +85,10 @@ impl Bot {
 
         let parameters = ConfigParameters {
             allowed_users: self.allowed_users.clone(),
-            api: api::ApiClient::new(self.client.clone(), self.server.clone()),
+            api: Arc::new(api::ApiClient::new(
+                self.client.clone(),
+                self.server.clone(),
+            )),
             prefs,
             sessions: state::SessionStore::default(),
         };
