@@ -40,10 +40,7 @@ pub(crate) enum ApiError {
 pub(crate) trait ApiGateway: Send + Sync {
     async fn pair_user(&self, telegram_user_id: u64, code: &str) -> Result<(), ApiError>;
     async fn vault_get_main(&self, telegram_user_id: u64) -> Result<Vault, ApiError>;
-    async fn vault_snapshot_main(
-        &self,
-        telegram_user_id: u64,
-    ) -> Result<VaultSnapshot, ApiError>;
+    async fn vault_snapshot_main(&self, telegram_user_id: u64) -> Result<VaultSnapshot, ApiError>;
     async fn flows_shared_main(
         &self,
         telegram_user_id: u64,
@@ -156,10 +153,7 @@ where
         self.as_ref().vault_get_main(telegram_user_id).await
     }
 
-    async fn vault_snapshot_main(
-        &self,
-        telegram_user_id: u64,
-    ) -> Result<VaultSnapshot, ApiError> {
+    async fn vault_snapshot_main(&self, telegram_user_id: u64) -> Result<VaultSnapshot, ApiError> {
         self.as_ref().vault_snapshot_main(telegram_user_id).await
     }
 
@@ -310,7 +304,9 @@ where
         telegram_user_id: u64,
         payload: &ExpenseNew,
     ) -> Result<TransactionCreated, ApiError> {
-        self.as_ref().create_expense(telegram_user_id, payload).await
+        self.as_ref()
+            .create_expense(telegram_user_id, payload)
+            .await
     }
 
     async fn create_refund(
@@ -795,10 +791,7 @@ impl ApiGateway for ApiClient {
         self.vault_get_main(telegram_user_id).await
     }
 
-    async fn vault_snapshot_main(
-        &self,
-        telegram_user_id: u64,
-    ) -> Result<VaultSnapshot, ApiError> {
+    async fn vault_snapshot_main(&self, telegram_user_id: u64) -> Result<VaultSnapshot, ApiError> {
         self.vault_snapshot_main(telegram_user_id).await
     }
 
@@ -918,8 +911,7 @@ impl ApiGateway for ApiClient {
         telegram_user_id: u64,
         payload: &TransactionGet,
     ) -> Result<TransactionDetailResponse, ApiError> {
-        self.transaction_get_detail(telegram_user_id, payload)
-            .await
+        self.transaction_get_detail(telegram_user_id, payload).await
     }
 
     async fn create_income(

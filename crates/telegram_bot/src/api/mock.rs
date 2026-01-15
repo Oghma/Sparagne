@@ -37,7 +37,8 @@ pub(crate) struct MockApi {
     pub(crate) flow_member_remove: Mutex<Option<Result<(), ApiError>>>,
     pub(crate) transactions_list: Mutex<Option<Result<TransactionListResponse, ApiError>>>,
     pub(crate) categories_list: Mutex<Option<Result<CategoryListResponse, ApiError>>>,
-    pub(crate) categories_merge_preview: Mutex<Option<Result<CategoryMergePreviewResponse, ApiError>>>,
+    pub(crate) categories_merge_preview:
+        Mutex<Option<Result<CategoryMergePreviewResponse, ApiError>>>,
     pub(crate) categories_merge: Mutex<Option<Result<CategoryView, ApiError>>>,
     pub(crate) transaction_get_detail: Mutex<Option<Result<TransactionDetailResponse, ApiError>>>,
     pub(crate) create_income: Mutex<Option<Result<TransactionCreated, ApiError>>>,
@@ -81,10 +82,7 @@ impl ApiGateway for MockApi {
         Self::take_or_error(&self.vault_get_main, "vault_get_main")
     }
 
-    async fn vault_snapshot_main(
-        &self,
-        _telegram_user_id: u64,
-    ) -> Result<VaultSnapshot, ApiError> {
+    async fn vault_snapshot_main(&self, _telegram_user_id: u64) -> Result<VaultSnapshot, ApiError> {
         Self::take_or_error(&self.vault_snapshot_main, "vault_snapshot_main")
     }
 

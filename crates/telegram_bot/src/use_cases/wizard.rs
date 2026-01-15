@@ -46,8 +46,7 @@ pub(crate) async fn show_wizard(
     let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -87,8 +86,7 @@ pub(crate) async fn show_wizard(
     {
         Ok(v) => v,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };

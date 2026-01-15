@@ -12,8 +12,7 @@ pub(crate) async fn show_stats(
     let stats = match cfg.api.stats_get_main(user_id).await {
         Ok(s) => s,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };

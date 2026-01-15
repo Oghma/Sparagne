@@ -34,8 +34,7 @@ pub(crate) async fn show_list(
                 bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
                     .await?;
             } else {
-                let text = shared::user_message_for_api_error(locale, err);
-                bot.send_message(chat_id, &text, None).await?;
+                shared::send_api_error(bot, chat_id, locale, err).await?;
             }
             return Ok(());
         }
@@ -80,8 +79,7 @@ pub(crate) async fn show_list(
     {
         Ok(v) => v,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -239,15 +237,14 @@ pub(crate) async fn repeat_transaction(
     match created {
         Ok(_) => {
             bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatSuccess), None)
-                .await?
+                .await?;
         }
         Err(ApiError::Server { status, .. }) if status == StatusCode::CONFLICT => {
             bot.send_message(chat_id, i18n::t(locale, TextKey::AlreadySaved), None)
-                .await?
+                .await?;
         }
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?
+            shared::send_api_error(bot, chat_id, locale, err).await?;
         }
     };
 
@@ -265,8 +262,7 @@ async fn fetch_detail_with_vault(
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(vault_id) => vault_id,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(None);
         }
     };
@@ -283,8 +279,7 @@ async fn fetch_detail_with_vault(
     {
         Ok(detail) => detail,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(None);
         }
     };

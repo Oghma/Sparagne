@@ -33,8 +33,7 @@ pub(crate) async fn show_home(
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
             } else {
-                let text = shared::user_message_for_api_error(locale, err);
-                bot.send_message(chat_id, &text, None).await?;
+                shared::send_api_error(bot, chat_id, locale, err).await?;
             }
             return Ok(());
         }
@@ -78,8 +77,7 @@ pub(crate) async fn show_wallet_picker(
                 bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
                     .await?;
             } else {
-                let text = shared::user_message_for_api_error(locale, err);
-                bot.send_message(chat_id, &text, None).await?;
+                shared::send_api_error(bot, chat_id, locale, err).await?;
             }
             return Ok(());
         }
@@ -115,8 +113,7 @@ pub(crate) async fn show_flow_picker(
                 bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
                     .await?;
             } else {
-                let text = shared::user_message_for_api_error(locale, err);
-                bot.send_message(chat_id, &text, None).await?;
+                shared::send_api_error(bot, chat_id, locale, err).await?;
             }
             return Ok(());
         }

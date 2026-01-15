@@ -50,6 +50,17 @@ pub(crate) fn user_message_for_api_error(locale: i18n::Locale, err: ApiError) ->
     }
 }
 
+pub(crate) async fn send_api_error(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    locale: i18n::Locale,
+    err: ApiError,
+) -> ResponseResult<()> {
+    let text = user_message_for_api_error(locale, err);
+    bot.send_message(chat_id, &text, None).await?;
+    Ok(())
+}
+
 pub(crate) fn now_rome() -> DateTime<FixedOffset> {
     Utc::now().with_timezone(&Rome).fixed_offset()
 }
@@ -149,7 +160,9 @@ mod tests {
             owner: None,
         }));
 
-        let err = resolve_main_vault_id(&api, 42).await.expect_err("missing id");
+        let err = resolve_main_vault_id(&api, 42)
+            .await
+            .expect_err("missing id");
         match err {
             ApiError::Server { status, code, .. } => {
                 assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);

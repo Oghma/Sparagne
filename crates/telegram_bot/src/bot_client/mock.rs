@@ -40,12 +40,12 @@ impl MockBot {
         }
     }
 
-    pub(crate) fn last_sent_text(&self) -> Option<String> {
-        self.sent
-            .lock()
-            .expect("mock bot lock")
-            .last()
-            .map(|message| message.text.clone())
+    pub(crate) fn last_sent(&self) -> Option<SentMessage> {
+        self.sent.lock().expect("mock bot lock").last().cloned()
+    }
+
+    pub(crate) fn last_edited(&self) -> Option<EditedMessage> {
+        self.edited.lock().expect("mock bot lock").last().cloned()
     }
 }
 
@@ -78,12 +78,15 @@ impl BotClient for MockBot {
         text: &str,
         kb: InlineKeyboardMarkup,
     ) -> ResponseResult<()> {
-        self.edited.lock().expect("mock bot lock").push(EditedMessage {
-            chat_id,
-            message_id,
-            text: text.to_string(),
-            has_kb: !kb.inline_keyboard.is_empty(),
-        });
+        self.edited
+            .lock()
+            .expect("mock bot lock")
+            .push(EditedMessage {
+                chat_id,
+                message_id,
+                text: text.to_string(),
+                has_kb: !kb.inline_keyboard.is_empty(),
+            });
         Ok(())
     }
 }

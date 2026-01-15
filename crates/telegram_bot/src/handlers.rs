@@ -91,20 +91,23 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::Categories => {
-                admin::list_categories(&bot, chat_id, user_id, &cfg, locale).await?;
+                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
+                admin::list_categories(ctx).await?;
                 return Ok(());
             }
             Command::MembersList => {
-                admin::list_vault_members(&bot, chat_id, user_id, &cfg, locale).await?;
+                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
+                admin::list_vault_members(ctx).await?;
                 return Ok(());
             }
             Command::MembersAdd { username, role } => {
-                admin::add_vault_member(&bot, chat_id, user_id, &cfg, &username, role, locale)
-                    .await?;
+                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
+                admin::add_vault_member(ctx, &username, role).await?;
                 return Ok(());
             }
             Command::MembersRemove { username } => {
-                admin::remove_vault_member(&bot, chat_id, user_id, &cfg, &username, locale).await?;
+                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
+                admin::remove_vault_member(ctx, &username).await?;
                 return Ok(());
             }
             Command::MembersHelp => {
@@ -113,7 +116,8 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::FlowMembersList { flow } => {
-                admin::list_flow_members(&bot, chat_id, user_id, &cfg, &flow, locale).await?;
+                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
+                admin::list_flow_members(ctx, &flow).await?;
                 return Ok(());
             }
             Command::FlowMembersAdd {
@@ -121,24 +125,13 @@ pub(crate) async fn handle_message(
                 username,
                 role,
             } => {
-                admin::add_flow_member(
-                    &bot,
-                    chat_id,
-                    user_id,
-                    &cfg,
-                    &flow,
-                    &username,
-                    role,
-                    locale,
-                )
-                .await?;
+                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
+                admin::add_flow_member(ctx, &flow, &username, role).await?;
                 return Ok(());
             }
             Command::FlowMembersRemove { flow, username } => {
-                admin::remove_flow_member(
-                    &bot, chat_id, user_id, &cfg, &flow, &username, locale,
-                )
-                .await?;
+                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
+                admin::remove_flow_member(ctx, &flow, &username).await?;
                 return Ok(());
             }
             Command::FlowMembersHelp => {
@@ -151,10 +144,8 @@ pub(crate) async fn handle_message(
                 from,
                 into,
             } => {
-                admin::merge_category(
-                    &bot, chat_id, user_id, &cfg, confirm, &from, &into, locale,
-                )
-                .await?;
+                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
+                admin::merge_category(ctx, confirm, &from, &into).await?;
                 return Ok(());
             }
             Command::MergeCategoryHelp => {
@@ -163,7 +154,8 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::VaultDelete { confirm } => {
-                admin::delete_vault(&bot, chat_id, user_id, &cfg, confirm, locale).await?;
+                let ctx = admin::AdminContext::new(&bot, chat_id, user_id, &cfg, locale);
+                admin::delete_vault(ctx, confirm).await?;
                 return Ok(());
             }
         }
@@ -299,16 +291,8 @@ pub(crate) async fn handle_callback(
             wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::WizRecent(tx_id) => {
-            list::repeat_transaction(
-                &bot,
-                chat_id,
-                user_id,
-                &cfg,
-                tx_id,
-                q.id.0.as_str(),
-                locale,
-            )
-            .await?;
+            list::repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str(), locale)
+                .await?;
             wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::PrefsToggleVoided => {
@@ -358,8 +342,7 @@ pub(crate) async fn handle_callback(
             let pending = cfg.sessions.get(chat_id).await.pending;
             if let Some(PendingAction::WalletForQuickAdd(draft)) = pending {
                 cfg.sessions.update(chat_id, |s| s.pending = None).await;
-                finalize_quick_add(&bot, chat_id, user_id, &cfg, wallet_id, draft, locale)
-                    .await?;
+                finalize_quick_add(&bot, chat_id, user_id, &cfg, wallet_id, draft, locale).await?;
                 home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             }
@@ -445,16 +428,8 @@ pub(crate) async fn handle_callback(
                 .await?;
         }
         CallbackAction::TxRepeat(tx_id) => {
-            list::repeat_transaction(
-                &bot,
-                chat_id,
-                user_id,
-                &cfg,
-                tx_id,
-                q.id.0.as_str(),
-                locale,
-            )
-            .await?;
+            list::repeat_transaction(&bot, chat_id, user_id, &cfg, tx_id, q.id.0.as_str(), locale)
+                .await?;
         }
         CallbackAction::Noop => {}
     }

@@ -17,18 +17,44 @@ use crate::{
     use_cases::shared,
 };
 
-pub(crate) async fn list_categories(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-    locale: i18n::Locale,
-) -> ResponseResult<()> {
+pub(crate) struct AdminContext<'a> {
+    pub(crate) bot: &'a dyn BotClient,
+    pub(crate) chat_id: ChatId,
+    pub(crate) user_id: u64,
+    pub(crate) cfg: &'a ConfigParameters,
+    pub(crate) locale: i18n::Locale,
+}
+
+impl<'a> AdminContext<'a> {
+    pub(crate) fn new(
+        bot: &'a dyn BotClient,
+        chat_id: ChatId,
+        user_id: u64,
+        cfg: &'a ConfigParameters,
+        locale: i18n::Locale,
+    ) -> Self {
+        Self {
+            bot,
+            chat_id,
+            user_id,
+            cfg,
+            locale,
+        }
+    }
+}
+
+pub(crate) async fn list_categories(ctx: AdminContext<'_>) -> ResponseResult<()> {
+    let AdminContext {
+        bot,
+        chat_id,
+        user_id,
+        cfg,
+        locale,
+    } = ctx;
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -46,8 +72,7 @@ pub(crate) async fn list_categories(
     {
         Ok(resp) => resp,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -57,18 +82,18 @@ pub(crate) async fn list_categories(
     Ok(())
 }
 
-pub(crate) async fn list_vault_members(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-    locale: i18n::Locale,
-) -> ResponseResult<()> {
+pub(crate) async fn list_vault_members(ctx: AdminContext<'_>) -> ResponseResult<()> {
+    let AdminContext {
+        bot,
+        chat_id,
+        user_id,
+        cfg,
+        locale,
+    } = ctx;
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -76,8 +101,7 @@ pub(crate) async fn list_vault_members(
     let response = match cfg.api.vault_members_list(user_id, &vault_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -92,19 +116,21 @@ pub(crate) async fn list_vault_members(
 }
 
 pub(crate) async fn add_vault_member(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
+    ctx: AdminContext<'_>,
     username: &str,
     role: MembershipRole,
-    locale: i18n::Locale,
 ) -> ResponseResult<()> {
+    let AdminContext {
+        bot,
+        chat_id,
+        user_id,
+        cfg,
+        locale,
+    } = ctx;
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -127,26 +153,27 @@ pub(crate) async fn add_vault_member(
             bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
         }
     }
     Ok(())
 }
 
 pub(crate) async fn remove_vault_member(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
+    ctx: AdminContext<'_>,
     username: &str,
-    locale: i18n::Locale,
 ) -> ResponseResult<()> {
+    let AdminContext {
+        bot,
+        chat_id,
+        user_id,
+        cfg,
+        locale,
+    } = ctx;
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -161,21 +188,20 @@ pub(crate) async fn remove_vault_member(
             bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
         }
     }
     Ok(())
 }
 
-pub(crate) async fn delete_vault(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-    confirm: bool,
-    locale: i18n::Locale,
-) -> ResponseResult<()> {
+pub(crate) async fn delete_vault(ctx: AdminContext<'_>, confirm: bool) -> ResponseResult<()> {
+    let AdminContext {
+        bot,
+        chat_id,
+        user_id,
+        cfg,
+        locale,
+    } = ctx;
     if !confirm {
         bot.send_message(chat_id, vault_delete_help_text(locale), None)
             .await?;
@@ -188,26 +214,27 @@ pub(crate) async fn delete_vault(
                 .await?;
         }
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
         }
     }
     Ok(())
 }
 
 pub(crate) async fn list_flow_members(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
+    ctx: AdminContext<'_>,
     flow_name: &str,
-    locale: i18n::Locale,
 ) -> ResponseResult<()> {
+    let AdminContext {
+        bot,
+        chat_id,
+        user_id,
+        cfg,
+        locale,
+    } = ctx;
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -215,8 +242,7 @@ pub(crate) async fn list_flow_members(
     let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -229,8 +255,7 @@ pub(crate) async fn list_flow_members(
     let response = match cfg.api.flow_members_list(user_id, &vault_id, flow.id).await {
         Ok(resp) => resp,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -242,20 +267,22 @@ pub(crate) async fn list_flow_members(
 }
 
 pub(crate) async fn add_flow_member(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
+    ctx: AdminContext<'_>,
     flow_name: &str,
     username: &str,
     role: MembershipRole,
-    locale: i18n::Locale,
 ) -> ResponseResult<()> {
+    let AdminContext {
+        bot,
+        chat_id,
+        user_id,
+        cfg,
+        locale,
+    } = ctx;
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -263,8 +290,7 @@ pub(crate) async fn add_flow_member(
     let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -292,27 +318,28 @@ pub(crate) async fn add_flow_member(
             bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
         }
     }
     Ok(())
 }
 
 pub(crate) async fn remove_flow_member(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
+    ctx: AdminContext<'_>,
     flow_name: &str,
     username: &str,
-    locale: i18n::Locale,
 ) -> ResponseResult<()> {
+    let AdminContext {
+        bot,
+        chat_id,
+        user_id,
+        cfg,
+        locale,
+    } = ctx;
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -320,8 +347,7 @@ pub(crate) async fn remove_flow_member(
     let flows = match resolve_accessible_flows(&cfg.api, user_id).await {
         Ok(resp) => resp,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -341,28 +367,29 @@ pub(crate) async fn remove_flow_member(
             bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
         }
     }
     Ok(())
 }
 
 pub(crate) async fn merge_category(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
+    ctx: AdminContext<'_>,
     confirm: bool,
     from: &str,
     into: &str,
-    locale: i18n::Locale,
 ) -> ResponseResult<()> {
+    let AdminContext {
+        bot,
+        chat_id,
+        user_id,
+        cfg,
+        locale,
+    } = ctx;
     let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
         Ok(id) => id,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -380,15 +407,13 @@ pub(crate) async fn merge_category(
     {
         Ok(resp) => resp.categories,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
 
     let Some(from_category) = match_category_by_input(&categories, from) else {
-        let text =
-            i18n::format(locale, TextKey::CategorySourceMissing, &[("name", from)]);
+        let text = i18n::format(locale, TextKey::CategorySourceMissing, &[("name", from)]);
         bot.send_message(chat_id, &text, None).await?;
         bot.send_message(chat_id, i18n::t(locale, TextKey::CategoryListHint), None)
             .await?;
@@ -420,8 +445,7 @@ pub(crate) async fn merge_category(
     {
         Ok(resp) => resp,
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
@@ -463,8 +487,7 @@ pub(crate) async fn merge_category(
             bot.send_message(chat_id, &text, None).await?;
         }
         Err(err) => {
-            let text = shared::user_message_for_api_error(locale, err);
-            bot.send_message(chat_id, &text, None).await?;
+            shared::send_api_error(bot, chat_id, locale, err).await?;
         }
     }
     Ok(())

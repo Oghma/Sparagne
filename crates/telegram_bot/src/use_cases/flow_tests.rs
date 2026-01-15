@@ -90,10 +90,46 @@ async fn home_flow_sends_summary_and_sets_hub_message() {
         .await
         .expect("home flow");
 
-    let text = bot.last_sent_text().expect("sent text");
-    assert!(text.contains("Vault: Main"));
+    let sent = bot.last_sent().expect("sent message");
+    assert_eq!(sent.chat_id, chat_id);
+    assert!(sent.has_kb);
+    assert!(sent.text.contains("Vault: Main"));
     let session = cfg.sessions.get(chat_id).await;
     assert!(session.hub_message_id.is_some());
+
+    *api.vault_snapshot_main.lock().expect("mock api lock") =
+        Some(Ok(sample_snapshot(wallet_id, flow_id)));
+    home::show_home(&bot, chat_id, user_id, &cfg, locale)
+        .await
+        .expect("home flow edit");
+
+    let edited = bot.last_edited().expect("edited message");
+    assert_eq!(edited.chat_id, chat_id);
+    assert_eq!(edited.message_id, sent.message_id);
+    assert!(edited.has_kb);
+    assert!(edited.text.contains("Vault: Main"));
+}
+
+#[tokio::test]
+async fn home_flow_falls_back_to_default_locale() {
+    let api = Arc::new(MockApi::new());
+    let wallet_id = Uuid::new_v4();
+    let flow_id = Uuid::new_v4();
+    let snapshot = sample_snapshot(wallet_id, flow_id);
+    *api.vault_snapshot_main.lock().expect("mock api lock") = Some(Ok(snapshot));
+
+    let cfg = test_config(api.clone());
+    let bot = MockBot::new();
+    let chat_id = ChatId(13);
+    let user_id = 42;
+    let locale = i18n::resolve_locale(Some("en-US"));
+
+    home::show_home(&bot, chat_id, user_id, &cfg, locale)
+        .await
+        .expect("home flow");
+
+    let sent = bot.last_sent().expect("sent message");
+    assert!(sent.text.contains("Ultimo flow"));
 }
 
 #[tokio::test]
@@ -127,10 +163,12 @@ async fn wizard_flow_renders_title_and_body() {
         .await
         .expect("wizard flow");
 
-    let text = bot.last_sent_text().expect("sent text");
-    assert!(text.contains("Nuova uscita"));
-    assert!(text.contains("Wallet:"));
-    assert!(text.contains("Flow:"));
+    let sent = bot.last_sent().expect("sent message");
+    assert_eq!(sent.chat_id, chat_id);
+    assert!(sent.has_kb);
+    assert!(sent.text.contains("Nuova uscita"));
+    assert!(sent.text.contains("Wallet:"));
+    assert!(sent.text.contains("Flow:"));
 }
 
 #[tokio::test]
@@ -162,8 +200,10 @@ async fn list_flow_renders_transactions() {
         .await
         .expect("list flow");
 
-    let text = bot.last_sent_text().expect("sent text");
-    assert!(text.contains("Ultime voci:"));
-    assert!(text.contains("Food"));
-    assert!(text.contains("Lunch"));
+    let sent = bot.last_sent().expect("sent message");
+    assert_eq!(sent.chat_id, chat_id);
+    assert!(sent.has_kb);
+    assert!(sent.text.contains("Ultime voci:"));
+    assert!(sent.text.contains("Food"));
+    assert!(sent.text.contains("Lunch"));
 }
