@@ -7,7 +7,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use base64::Engine;
 use reqwest::{Client, header};
-use teloxide::prelude::*;
+use teloxide::{prelude::*, types::BotCommand};
 
 mod api;
 mod bot_client;
@@ -81,6 +81,12 @@ impl Bot {
         tracing::info!("Starting telegram bot...");
 
         let bot = teloxide::Bot::new(&self.token);
+
+        // Register bot commands with Telegram (shows in "/" menu)
+        if let Err(err) = Self::register_commands(&bot).await {
+            tracing::warn!("Failed to register bot commands: {err}");
+        }
+
         let prefs = state::PrefsStore::load_or_empty(self.state_path.clone());
 
         let parameters = ConfigParameters {
@@ -109,6 +115,37 @@ impl Bot {
             .build()
             .dispatch()
             .await;
+    }
+
+    /// Registers bot commands with Telegram for the "/" menu.
+    /// Registers both Italian (default) and English localized commands.
+    async fn register_commands(bot: &teloxide::Bot) -> Result<(), teloxide::RequestError> {
+        // Italian commands (default)
+        let commands_it = vec![
+            BotCommand::new("start", "Avvia il bot"),
+            BotCommand::new("home", "Torna alla home"),
+            BotCommand::new("help", "Mostra aiuto e sintassi"),
+            BotCommand::new("categories", "Lista categorie"),
+            BotCommand::new("members", "Gestisci membri vault"),
+        ];
+
+        // English commands
+        let commands_en = vec![
+            BotCommand::new("start", "Start the bot"),
+            BotCommand::new("home", "Go to home"),
+            BotCommand::new("help", "Show help and syntax"),
+            BotCommand::new("categories", "List categories"),
+            BotCommand::new("members", "Manage vault members"),
+        ];
+
+        // Set default commands (Italian)
+        bot.set_my_commands(commands_it).await?;
+
+        // Set English commands for users with English language
+        bot.set_my_commands(commands_en).language_code("en").await?;
+
+        tracing::info!("Bot commands registered successfully");
+        Ok(())
     }
 }
 

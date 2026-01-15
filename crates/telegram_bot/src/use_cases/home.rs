@@ -121,3 +121,23 @@ pub(crate) async fn show_flow_picker(
     let (text, kb) = ui::home::render_flow_picker(locale, &snapshot, back_callback);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
+
+pub(crate) async fn show_settings(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    cfg: &ConfigParameters,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    let (text, kb) = ui::home::render_settings(locale);
+    shared::edit_or_send(bot, chat_id, cfg, text, kb).await
+}
+
+pub(crate) async fn show_commands(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    cfg: &ConfigParameters,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    let (text, kb) = ui::home::render_commands(locale);
+    shared::edit_or_send(bot, chat_id, cfg, text, kb).await
+}

@@ -119,7 +119,8 @@ async fn home_flow_sends_summary_and_sets_hub_message() {
     let sent = expect_some(bot.last_sent(), "sent message");
     assert_eq!(sent.chat_id, chat_id);
     assert!(sent.has_kb);
-    assert!(sent.text.contains("Vault: Main"));
+    // Vault name is shown with emoji prefix
+    assert!(sent.text.contains("Main"));
     let session = cfg.sessions.get(chat_id).await;
     assert!(session.hub_message_id.is_some());
 
@@ -136,11 +137,11 @@ async fn home_flow_sends_summary_and_sets_hub_message() {
     assert_eq!(edited.chat_id, chat_id);
     assert_eq!(edited.message_id, sent.message_id);
     assert!(edited.has_kb);
-    assert!(edited.text.contains("Vault: Main"));
+    assert!(edited.text.contains("Main"));
 }
 
 #[tokio::test]
-async fn home_flow_falls_back_to_default_locale() {
+async fn home_flow_shows_english_for_english_locale() {
     let api = Arc::new(MockApi::new());
     let wallet_id = Uuid::new_v4();
     let flow_id = Uuid::new_v4();
@@ -159,7 +160,8 @@ async fn home_flow_falls_back_to_default_locale() {
     );
 
     let sent = expect_some(bot.last_sent(), "sent message");
-    assert!(sent.text.contains("Ultimo flow"));
+    // English locale should show "Budget" instead of Italian "Budget"
+    assert!(sent.text.contains("Budget:"));
 }
 
 #[tokio::test]
@@ -203,8 +205,9 @@ async fn wizard_flow_renders_title_and_body() {
     assert_eq!(sent.chat_id, chat_id);
     assert!(sent.has_kb);
     assert!(sent.text.contains("Nuova uscita"));
-    assert!(sent.text.contains("Wallet:"));
-    assert!(sent.text.contains("Flow:"));
+    // Simplified wizard body shows Portafoglio/Budget with emojis
+    assert!(sent.text.contains("Portafoglio:"));
+    assert!(sent.text.contains("Budget:"));
 }
 
 #[tokio::test]

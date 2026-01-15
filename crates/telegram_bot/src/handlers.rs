@@ -207,6 +207,12 @@ pub(crate) async fn handle_callback(
         CallbackAction::NavWizard => {
             wizard::show_wizard(&bot, chat_id, user_id, &cfg, locale).await?;
         }
+        CallbackAction::NavSettings => {
+            home::show_settings(&bot, chat_id, &cfg, locale).await?;
+        }
+        CallbackAction::NavCommands => {
+            home::show_commands(&bot, chat_id, &cfg, locale).await?;
+        }
         CallbackAction::ShowList => {
             list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
         }

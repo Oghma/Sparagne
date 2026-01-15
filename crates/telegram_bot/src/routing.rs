@@ -46,6 +46,8 @@ pub(crate) enum Command {
 pub(crate) enum CallbackAction {
     NavHome,
     NavWizard,
+    NavSettings,
+    NavCommands,
     ShowList,
     HomePair,
     HomePickWallet,
@@ -102,6 +104,8 @@ pub(crate) fn parse_callback_action(data: &str) -> Option<CallbackAction> {
     let action = match data {
         "nav:home" => CallbackAction::NavHome,
         "nav:wizard" => CallbackAction::NavWizard,
+        "nav:settings" => CallbackAction::NavSettings,
+        "nav:commands" => CallbackAction::NavCommands,
         "nav:list" | "home:list" => CallbackAction::ShowList,
         "home:pair" => CallbackAction::HomePair,
         "home:pick_wallet" => CallbackAction::HomePickWallet,
