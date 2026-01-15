@@ -1,6 +1,7 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Locale {
     It,
+    En,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,23 +16,24 @@ pub(crate) enum TextKey {
     HomeSummary,
     HomeBtnExpense,
     HomeBtnIncome,
-    HomeBtnRefund,
     HomeBtnList,
     HomeBtnStats,
-    HomeBtnWalletDefault,
-    HomeBtnFlowDefault,
+    HomeBtnSettings,
+    HomeBtnCommands,
+    SettingsTitle,
+    SettingsBtnWallet,
+    SettingsBtnFlow,
+    CommandsTitle,
+    CommandsBody,
     PickerWalletTitle,
     PickerFlowTitle,
     WizardTitleExpense,
     WizardTitleIncome,
     WizardTitleRefund,
-    WizardBody,
+    WizardBodySimple,
     WizardBtnInput,
     WizardBtnWallet,
     WizardBtnFlow,
-    WizardBtnCategoryNone,
-    WizardBtnCategoryReset,
-    WizardBtnRecents,
     WizardBtnHome,
     ListHeader,
     ListPrev,
@@ -43,7 +45,6 @@ pub(crate) enum TextKey {
     DetailHeader,
     DetailYes,
     DetailNo,
-    DetailLegs,
     DetailBtnVoid,
     DetailBtnEdit,
     DetailBtnRepeat,
@@ -54,6 +55,9 @@ pub(crate) enum TextKey {
     StatsSummary,
     StatsBtnHome,
     TxVoidedSuffix,
+    TxKindExpense,
+    TxKindIncome,
+    TxKindRefund,
     TxKindTransferWallet,
     TxKindTransferFlow,
     WizardPromptExpense,
@@ -136,6 +140,8 @@ pub(crate) fn resolve_locale(telegram_language: Option<&str>) -> Locale {
     };
     if code.starts_with("it") {
         Locale::It
+    } else if code.starts_with("en") {
+        Locale::En
     } else {
         default_locale()
     }
@@ -161,29 +167,32 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::It, TextKey::UnsetValue) => "Non impostato",
         (Locale::It, TextKey::UnallocatedFlow) => "Non in flow",
         (Locale::It, TextKey::HomeSummary) => {
-            "{display_name} \u{2022} Vault: {vault}\nWallet default: {wallet}\nFlow default: {flow_default}\nUltimo flow: {flow_last}"
+            "👋 {display_name}\n\n🏦 {vault}\n👛 Portafoglio: {wallet}\n🎯 Budget: {flow}"
         }
         (Locale::It, TextKey::HomeBtnExpense) => "Uscita",
         (Locale::It, TextKey::HomeBtnIncome) => "Entrata",
-        (Locale::It, TextKey::HomeBtnRefund) => "Refund",
         (Locale::It, TextKey::HomeBtnList) => "Ultime",
         (Locale::It, TextKey::HomeBtnStats) => "Stats",
-        (Locale::It, TextKey::HomeBtnWalletDefault) => "Wallet default",
-        (Locale::It, TextKey::HomeBtnFlowDefault) => "Flow default",
-        (Locale::It, TextKey::PickerWalletTitle) => "Scegli il wallet di default:",
-        (Locale::It, TextKey::PickerFlowTitle) => "Scegli il flow (ultimo flow usato):",
+        (Locale::It, TextKey::HomeBtnSettings) => "Impostazioni",
+        (Locale::It, TextKey::HomeBtnCommands) => "Comandi",
+        (Locale::It, TextKey::SettingsTitle) => "⚙️ Impostazioni",
+        (Locale::It, TextKey::SettingsBtnWallet) => "Cambia Portafoglio",
+        (Locale::It, TextKey::SettingsBtnFlow) => "Cambia Budget",
+        (Locale::It, TextKey::CommandsTitle) => "📋 Comandi disponibili",
+        (Locale::It, TextKey::CommandsBody) => {
+            "/home - Torna alla home\n/help - Mostra aiuto\n/categories - Lista categorie\n/members - Gestisci membri vault\n\n📝 Quick add (scrivi direttamente):\n12.50 bar caffè\n+1000 stipendio\nr 5.20 amazon\n\n#tag opzionale: 12.50 #food caffè"
+        }
+        (Locale::It, TextKey::PickerWalletTitle) => "Scegli il portafoglio:",
+        (Locale::It, TextKey::PickerFlowTitle) => "Scegli il budget:",
         (Locale::It, TextKey::WizardTitleExpense) => "Nuova uscita",
         (Locale::It, TextKey::WizardTitleIncome) => "Nuova entrata",
         (Locale::It, TextKey::WizardTitleRefund) => "Nuovo rimborso/storno",
-        (Locale::It, TextKey::WizardBody) => {
-            "Wallet: {wallet}\nFlow: {flow}\nCategoria: {category}\n\nTip: puoi anche scrivere direttamente in chat (quick add)."
+        (Locale::It, TextKey::WizardBodySimple) => {
+            "👛 Portafoglio: {wallet}\n🎯 Budget: {flow}\n\n💡 Scrivi: importo [#categoria] [nota]\nEs: 12.50 #food caffè"
         }
         (Locale::It, TextKey::WizardBtnInput) => "Inserisci",
         (Locale::It, TextKey::WizardBtnWallet) => "Wallet",
         (Locale::It, TextKey::WizardBtnFlow) => "Flow",
-        (Locale::It, TextKey::WizardBtnCategoryNone) => "Nessuna",
-        (Locale::It, TextKey::WizardBtnCategoryReset) => "Reset",
-        (Locale::It, TextKey::WizardBtnRecents) => "Recenti",
         (Locale::It, TextKey::WizardBtnHome) => "Home",
         (Locale::It, TextKey::ListHeader) => "Ultime voci:",
         (Locale::It, TextKey::ListPrev) => "Prev",
@@ -193,12 +202,11 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::It, TextKey::ListStateOff) => "Off",
         (Locale::It, TextKey::ListBtnHome) => "Home",
         (Locale::It, TextKey::DetailHeader) => {
-            "Dettaglio\n\nKind: {kind}\nQuando: {when}\nImporto: {amount}\nCategoria: {category}\nNota: {note}\nVoided: {voided}"
+            "📋 Dettaglio\n\n📌 Tipo: {kind}\n📅 Data: {when}\n💶 Importo: {amount}\n🏷 Categoria: {category}\n📝 Nota: {note}\n❌ Annullato: {voided}"
         }
         (Locale::It, TextKey::DetailYes) => "si",
         (Locale::It, TextKey::DetailNo) => "no",
-        (Locale::It, TextKey::DetailLegs) => "Legs",
-        (Locale::It, TextKey::DetailBtnVoid) => "Void",
+        (Locale::It, TextKey::DetailBtnVoid) => "Annulla",
         (Locale::It, TextKey::DetailBtnEdit) => "Edit",
         (Locale::It, TextKey::DetailBtnRepeat) => "Ripeti",
         (Locale::It, TextKey::DetailBtnBack) => "Indietro",
@@ -210,8 +218,11 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         }
         (Locale::It, TextKey::StatsBtnHome) => "Home",
         (Locale::It, TextKey::TxVoidedSuffix) => " \u{2022} void",
-        (Locale::It, TextKey::TxKindTransferWallet) => "tw",
-        (Locale::It, TextKey::TxKindTransferFlow) => "tf",
+        (Locale::It, TextKey::TxKindExpense) => "Uscita",
+        (Locale::It, TextKey::TxKindIncome) => "Entrata",
+        (Locale::It, TextKey::TxKindRefund) => "Rimborso",
+        (Locale::It, TextKey::TxKindTransferWallet) => "Trasf. portafoglio",
+        (Locale::It, TextKey::TxKindTransferFlow) => "Trasf. budget",
         (Locale::It, TextKey::WizardPromptExpense) => {
             "Invia una uscita, es:\n\n12.50 bar caff\u{e8}\n12.50 bar #food caff\u{e8}\n\n(oppure scrivi direttamente nella chat senza usare il wizard)"
         }
@@ -320,6 +331,186 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::It, TextKey::RoleOwner) => "owner",
         (Locale::It, TextKey::RoleEditor) => "editor",
         (Locale::It, TextKey::RoleViewer) => "viewer",
+
+        // English translations
+        (Locale::En, TextKey::WelcomeTemplate) => {
+            "Welcome, {display_name}!\n\nYou can now add entries on the fly by writing:\n\n12.50 coffee shop\n+1000 salary\nr 5.20 amazon\n\nSet defaults (wallet/budget) using the buttons."
+        }
+        (Locale::En, TextKey::HelpText) => {
+            "Examples:\n\n12.50 coffee shop\n-12.50 coffee shop\n+1000 salary\nr 5.20 amazon\n\nOptional #tag (max 1): 12.50 coffee #food\n\nCommands:\n/home\n/categories\n/merge_category <from> -> <to>\n/merge_category confirm <from> -> <to>\n/members\n/members add <username> <owner|editor|viewer>\n/members remove <username>\n/flow_members <budget>\n/flow_members add <budget> <username> <owner|editor|viewer>\n/flow_members remove <budget> <username>\n/vault_delete\n/vault_delete confirm"
+        }
+        (Locale::En, TextKey::MergeCategoryHelp) => {
+            "Usage:\n/merge_category <from> -> <to>\n/merge_category confirm <from> -> <to>"
+        }
+        (Locale::En, TextKey::MembersHelp) => {
+            "Usage:\n/members\n/members add <username> <owner|editor|viewer>\n/members remove <username>"
+        }
+        (Locale::En, TextKey::FlowMembersHelp) => {
+            "Usage:\n/flow_members <budget>\n/flow_members add <budget> <username> <owner|editor|viewer>\n/flow_members remove <budget> <username>\n\nNote: budget name can contain spaces."
+        }
+        (Locale::En, TextKey::UnsetValue) => "Not set",
+        (Locale::En, TextKey::UnallocatedFlow) => "Unallocated",
+        (Locale::En, TextKey::HomeSummary) => {
+            "👋 {display_name}\n\n🏦 {vault}\n👛 Wallet: {wallet}\n🎯 Budget: {flow}"
+        }
+        (Locale::En, TextKey::HomeBtnExpense) => "Expense",
+        (Locale::En, TextKey::HomeBtnIncome) => "Income",
+        (Locale::En, TextKey::HomeBtnList) => "History",
+        (Locale::En, TextKey::HomeBtnStats) => "Stats",
+        (Locale::En, TextKey::HomeBtnSettings) => "Settings",
+        (Locale::En, TextKey::HomeBtnCommands) => "Commands",
+        (Locale::En, TextKey::SettingsTitle) => "⚙️ Settings",
+        (Locale::En, TextKey::SettingsBtnWallet) => "Change Wallet",
+        (Locale::En, TextKey::SettingsBtnFlow) => "Change Budget",
+        (Locale::En, TextKey::CommandsTitle) => "📋 Available commands",
+        (Locale::En, TextKey::CommandsBody) => {
+            "/home - Go to home\n/help - Show help\n/categories - List categories\n/members - Manage vault members\n\n📝 Quick add (type directly):\n12.50 coffee shop\n+1000 salary\nr 5.20 amazon\n\nOptional #tag: 12.50 #food coffee"
+        }
+        (Locale::En, TextKey::PickerWalletTitle) => "Choose wallet:",
+        (Locale::En, TextKey::PickerFlowTitle) => "Choose budget:",
+        (Locale::En, TextKey::WizardTitleExpense) => "New expense",
+        (Locale::En, TextKey::WizardTitleIncome) => "New income",
+        (Locale::En, TextKey::WizardTitleRefund) => "New refund",
+        (Locale::En, TextKey::WizardBodySimple) => {
+            "👛 Wallet: {wallet}\n🎯 Budget: {flow}\n\n💡 Type: amount [#category] [note]\nEx: 12.50 #food coffee"
+        }
+        (Locale::En, TextKey::WizardBtnInput) => "Enter",
+        (Locale::En, TextKey::WizardBtnWallet) => "Wallet",
+        (Locale::En, TextKey::WizardBtnFlow) => "Budget",
+        (Locale::En, TextKey::WizardBtnHome) => "Home",
+        (Locale::En, TextKey::ListHeader) => "Recent entries:",
+        (Locale::En, TextKey::ListPrev) => "Prev",
+        (Locale::En, TextKey::ListNext) => "Next",
+        (Locale::En, TextKey::ListToggleVoided) => "Show voided: {state}",
+        (Locale::En, TextKey::ListStateOn) => "On",
+        (Locale::En, TextKey::ListStateOff) => "Off",
+        (Locale::En, TextKey::ListBtnHome) => "Home",
+        (Locale::En, TextKey::DetailHeader) => {
+            "📋 Detail\n\n📌 Type: {kind}\n📅 Date: {when}\n💶 Amount: {amount}\n🏷 Category: {category}\n📝 Note: {note}\n❌ Voided: {voided}"
+        }
+        (Locale::En, TextKey::DetailYes) => "yes",
+        (Locale::En, TextKey::DetailNo) => "no",
+        (Locale::En, TextKey::DetailBtnVoid) => "Void",
+        (Locale::En, TextKey::DetailBtnEdit) => "Edit",
+        (Locale::En, TextKey::DetailBtnRepeat) => "Repeat",
+        (Locale::En, TextKey::DetailBtnBack) => "Back",
+        (Locale::En, TextKey::EditMenuTitle) => "What do you want to edit?",
+        (Locale::En, TextKey::EditMenuAmount) => "Amount",
+        (Locale::En, TextKey::EditMenuNote) => "Note",
+        (Locale::En, TextKey::StatsSummary) => {
+            "Stats\n\nBalance: {balance}\nTotal income: {income}\nTotal expenses: {expenses}"
+        }
+        (Locale::En, TextKey::StatsBtnHome) => "Home",
+        (Locale::En, TextKey::TxVoidedSuffix) => " • void",
+        (Locale::En, TextKey::TxKindExpense) => "Expense",
+        (Locale::En, TextKey::TxKindIncome) => "Income",
+        (Locale::En, TextKey::TxKindRefund) => "Refund",
+        (Locale::En, TextKey::TxKindTransferWallet) => "Wallet transfer",
+        (Locale::En, TextKey::TxKindTransferFlow) => "Budget transfer",
+        (Locale::En, TextKey::WizardPromptExpense) => {
+            "Send an expense, e.g.:\n\n12.50 coffee shop\n12.50 coffee #food\n\n(or type directly in chat without using the wizard)"
+        }
+        (Locale::En, TextKey::WizardPromptIncome) => {
+            "Send an income, e.g.:\n\n1000 salary\n+1000 #salary paycheck\n\n(or type directly in chat without using the wizard)"
+        }
+        (Locale::En, TextKey::WizardPromptRefund) => {
+            "Send a refund, e.g.:\n\nr 5.20 amazon\nr 5.20 #shopping amazon\n\n(or type directly in chat without using the wizard)"
+        }
+        (Locale::En, TextKey::WizardErrorEmpty) => "Empty text.",
+        (Locale::En, TextKey::WizardErrorExpensePlus) => {
+            "Selected: expense. Remove the '+' (e.g.: 12.50 coffee)."
+        }
+        (Locale::En, TextKey::WizardErrorExpenseRefund) => {
+            "Selected: expense. For refund use the \"Refund\" button."
+        }
+        (Locale::En, TextKey::WizardErrorIncomeRefund) => {
+            "Selected: income. Remove 'r' (e.g.: 1000 salary)."
+        }
+        (Locale::En, TextKey::UnknownUser) => "Cannot identify user.",
+        (Locale::En, TextKey::PairingRequired) => "To pair: /start <code>",
+        (Locale::En, TextKey::PairingPrompt) => "Enter the pairing code:",
+        (Locale::En, TextKey::PreferencesSaveError) => "Error saving preferences.",
+        (Locale::En, TextKey::DefaultWalletMissing) => "Please set a default wallet first.",
+        (Locale::En, TextKey::TooManyTags) => "Too many tags: max 1.",
+        (Locale::En, TextKey::InvalidAmountExample) => "Invalid amount (e.g.: 10 or 10.50).",
+        (Locale::En, TextKey::InvalidAmountExampleShort) => "Invalid amount (e.g.: 10 or 10.50)",
+        (Locale::En, TextKey::InvalidAmount) => "Invalid amount.",
+        (Locale::En, TextKey::InvalidAmountPositive) => "Invalid amount (must be > 0).",
+        (Locale::En, TextKey::TransactionVoided) => "✅ Entry voided.",
+        (Locale::En, TextKey::EditAmountPrompt) => "Send the new amount (e.g.: 10.50):",
+        (Locale::En, TextKey::EditNotePrompt) => "Send the new note (empty to remove):",
+        (Locale::En, TextKey::EditAmountUpdated) => "✅ Amount updated.",
+        (Locale::En, TextKey::EditNoteUpdated) => "✅ Note updated.",
+        (Locale::En, TextKey::QuickAddSaved) => "✅ Saved: {amount}",
+        (Locale::En, TextKey::AlreadySaved) => "✅ Already saved.",
+        (Locale::En, TextKey::RepeatSuccess) => "✅ Repeated.",
+        (Locale::En, TextKey::RepeatUnsupported) => "Repeat not supported for this type.",
+        (Locale::En, TextKey::RepeatNoWallet) => "Transaction without wallet: cannot repeat.",
+        (Locale::En, TextKey::QuickAddUndo) => "Undo",
+        (Locale::En, TextKey::ApiNetworkError) => {
+            "Connection problems with the server. Try again later!"
+        }
+        (Locale::En, TextKey::ApiMembershipLastOwner) => {
+            "You cannot remove the last owner of the budget."
+        }
+        (Locale::En, TextKey::ApiMembershipOwnerImmutable) => {
+            "You cannot change the vault owner's role."
+        }
+        (Locale::En, TextKey::ApiMembershipOwnerRemoveForbidden) => {
+            "You cannot remove the vault owner."
+        }
+        (Locale::En, TextKey::ApiUnauthorized) => "Unauthorized. Use /start for pairing.",
+        (Locale::En, TextKey::ApiForbidden) => "Operation not allowed.",
+        (Locale::En, TextKey::ApiNotFound) => "Resource not found. Try resetting defaults.",
+        (Locale::En, TextKey::ApiConflict) => "Duplicate request (already saved).",
+        (Locale::En, TextKey::ApiBadRequestUserNotFound) => {
+            "Invalid pairing code (or you're using a different database)."
+        }
+        (Locale::En, TextKey::ApiServerError) => "Server error.",
+        (Locale::En, TextKey::MembersVaultTitle) => "Vault members",
+        (Locale::En, TextKey::MembersFlowTitle) => "Budget \"{flow}\" members",
+        (Locale::En, TextKey::MemberSaved) => "✅ Member saved: {username} ({role})",
+        (Locale::En, TextKey::MemberRemoved) => "✅ Member removed: {username}",
+        (Locale::En, TextKey::VaultDeleted) => "✅ Vault deleted.",
+        (Locale::En, TextKey::CategorySourceMissing) => "Source category not found: {name}",
+        (Locale::En, TextKey::CategoryDestinationMissing) => {
+            "Destination category not found: {name}"
+        }
+        (Locale::En, TextKey::CategoryListHint) => "Use /categories to see the list.",
+        (Locale::En, TextKey::MergeConfirmPrompt) => {
+            "Ok, I can merge \"{from}\" -> \"{into}\".\nConfirm with:\n/merge_category confirm {from} -> {into}"
+        }
+        (Locale::En, TextKey::MergeCompleted) => "Merge completed: \"{from}\" -> \"{into}\".",
+        (Locale::En, TextKey::CategoryListEmpty) => {
+            "No categories. Add a transaction with #category to start."
+        }
+        (Locale::En, TextKey::CategoryListHeader) => "Categories:",
+        (Locale::En, TextKey::CategoryFlagSystem) => " [system]",
+        (Locale::En, TextKey::CategoryFlagArchived) => " [archived]",
+        (Locale::En, TextKey::MembersEmpty) => "No members.",
+        (Locale::En, TextKey::FlowNotFoundNone) => {
+            "Budget \"{name}\" not found. No shareable budgets."
+        }
+        (Locale::En, TextKey::FlowNotFound) => "Budget \"{name}\" not found.",
+        (Locale::En, TextKey::FlowAvailableHeader) => "Available budgets:",
+        (Locale::En, TextKey::MergeConflictHeader) => {
+            "Merge not possible: \"{from}\" -> \"{into}\"."
+        }
+        (Locale::En, TextKey::MergeConflictListHeader) => "Conflicts:",
+        (Locale::En, TextKey::MergeConflictSame) => "Categories are identical.",
+        (Locale::En, TextKey::MergeConflictSourceSystem) => {
+            "Category \"{name}\" is a system category."
+        }
+        (Locale::En, TextKey::MergeConflictTargetArchived) => "Category \"{name}\" is archived.",
+        (Locale::En, TextKey::MergeConflictAlias) => "Conflicting alias: {value}",
+        (Locale::En, TextKey::MergeConflictName) => "Conflicting name: {value}",
+        (Locale::En, TextKey::MergeConflictFallback) => "Conflict: {kind} ({value})",
+        (Locale::En, TextKey::VaultDeleteHelp) => {
+            "Usage:\n/vault_delete confirm\n\nWarning: deletes the Main vault and all data."
+        }
+        (Locale::En, TextKey::RoleOwner) => "owner",
+        (Locale::En, TextKey::RoleEditor) => "editor",
+        (Locale::En, TextKey::RoleViewer) => "viewer",
     }
 }
 
@@ -343,8 +534,15 @@ mod tests {
 
     #[test]
     fn resolve_locale_falls_back_for_unknown() {
-        assert_eq!(resolve_locale(Some("en")), default_locale());
         assert_eq!(resolve_locale(Some("fr-FR")), default_locale());
+        assert_eq!(resolve_locale(Some("de")), default_locale());
+    }
+
+    #[test]
+    fn resolve_locale_accepts_english_prefix() {
+        assert_eq!(resolve_locale(Some("en")), Locale::En);
+        assert_eq!(resolve_locale(Some("en-US")), Locale::En);
+        assert_eq!(resolve_locale(Some("en-GB")), Locale::En);
     }
 
     #[test]
