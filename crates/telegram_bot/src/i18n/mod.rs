@@ -200,18 +200,14 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::It, TextKey::QuickAddSaved) => "✅ Salvato: {amount}",
         (Locale::It, TextKey::AlreadySaved) => "✅ Già salvato.",
         (Locale::It, TextKey::QuickAddUndo) => "Annulla",
-        (Locale::It, TextKey::ApiNetworkError) => {
-            "Problemi di connessione. Riprova più tardi!"
-        }
+        (Locale::It, TextKey::ApiNetworkError) => "Problemi di connessione. Riprova più tardi!",
         (Locale::It, TextKey::ApiUnauthorized) => {
             "Non autorizzato. Usa /start per fare il pairing."
         }
         (Locale::It, TextKey::ApiForbidden) => "Operazione non permessa.",
         (Locale::It, TextKey::ApiNotFound) => "Risorsa non trovata. Prova a reimpostare i default.",
         (Locale::It, TextKey::ApiConflict) => "Richiesta duplicata (già salvata).",
-        (Locale::It, TextKey::ApiBadRequestUserNotFound) => {
-            "Codice di pairing non valido."
-        }
+        (Locale::It, TextKey::ApiBadRequestUserNotFound) => "Codice di pairing non valido.",
         (Locale::It, TextKey::ApiServerError) => "Errore server.",
         (Locale::It, TextKey::CategoryListEmpty) => {
             "Nessuna categoria. Aggiungi una transazione con #categoria per iniziare."
@@ -297,16 +293,12 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::En, TextKey::QuickAddSaved) => "✅ Saved: {amount}",
         (Locale::En, TextKey::AlreadySaved) => "✅ Already saved.",
         (Locale::En, TextKey::QuickAddUndo) => "Undo",
-        (Locale::En, TextKey::ApiNetworkError) => {
-            "Connection problems. Try again later!"
-        }
+        (Locale::En, TextKey::ApiNetworkError) => "Connection problems. Try again later!",
         (Locale::En, TextKey::ApiUnauthorized) => "Unauthorized. Use /start for pairing.",
         (Locale::En, TextKey::ApiForbidden) => "Operation not allowed.",
         (Locale::En, TextKey::ApiNotFound) => "Resource not found. Try resetting defaults.",
         (Locale::En, TextKey::ApiConflict) => "Duplicate request (already saved).",
-        (Locale::En, TextKey::ApiBadRequestUserNotFound) => {
-            "Invalid pairing code."
-        }
+        (Locale::En, TextKey::ApiBadRequestUserNotFound) => "Invalid pairing code.",
         (Locale::En, TextKey::ApiServerError) => "Server error.",
         (Locale::En, TextKey::CategoryListEmpty) => {
             "No categories. Add a transaction with #category to start."

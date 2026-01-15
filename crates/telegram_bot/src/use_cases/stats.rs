@@ -29,7 +29,8 @@ pub(crate) async fn show_stats(
     // In future: fetch transactions and aggregate by category
     let category_breakdown: Vec<(String, i64)> = Vec::new();
 
-    let (text, kb) = ui::stats::render_stats(locale, currency, &stats, &month_year, &category_breakdown);
+    let (text, kb) =
+        ui::stats::render_stats(locale, currency, &stats, &month_year, &category_breakdown);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
