@@ -1,5 +1,4 @@
-use api_types::{transaction::TransactionView, vault::VaultSnapshot};
-use engine::Currency as EngineCurrency;
+use api_types::vault::VaultSnapshot;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
 use crate::{
@@ -9,21 +8,16 @@ use crate::{
     ui::shared::flow_display_name,
 };
 
-/// Renders a simplified wizard focused on quick input.
-/// Categories should be added via hashtag inline (e.g., "12.50 #food caffè").
-/// Recents are shown only if explicitly requested via `show_recents` flag.
+/// Renders the wizard screen for guided transaction entry.
 pub(crate) fn render_wizard(
     locale: i18n::Locale,
-    _currency: EngineCurrency,
     snapshot: &VaultSnapshot,
     prefs: &UserPrefs,
     wizard: &WizardSession,
-    _recents: &[TransactionView],
 ) -> (String, InlineKeyboardMarkup) {
     let title = match wizard.kind {
         QuickKind::Expense => i18n::t(locale, TextKey::WizardTitleExpense),
         QuickKind::Income => i18n::t(locale, TextKey::WizardTitleIncome),
-        QuickKind::Refund => i18n::t(locale, TextKey::WizardTitleRefund),
     };
 
     let default_wallet = prefs
@@ -38,7 +32,6 @@ pub(crate) fn render_wizard(
         .map(|f| flow_display_name(locale, f.is_unallocated, &f.name))
         .unwrap_or(i18n::t(locale, TextKey::UnallocatedFlow));
 
-    // Simplified body without category (use hashtags inline)
     let body = i18n::format(
         locale,
         TextKey::WizardBodySimple,
@@ -46,28 +39,27 @@ pub(crate) fn render_wizard(
     );
     let text = format!("{title}\n\n{body}");
 
-    // Simplified button layout:
-    // Row 1: Main input action (prominent)
-    // Row 2: Wallet and Flow settings
-    // Row 3: Back to home
     let rows = vec![
+        // Row 1: Main input action
         vec![InlineKeyboardButton::callback(
             format!("✏️ {}", i18n::t(locale, TextKey::WizardBtnInput)),
             "wiz:input",
         )],
+        // Row 2: Wallet and Budget pickers
         vec![
             InlineKeyboardButton::callback(
                 format!("👛 {}", i18n::t(locale, TextKey::WizardBtnWallet)),
-                "wiz:pick_wallet",
+                "wiz:wallet",
             ),
             InlineKeyboardButton::callback(
                 format!("🎯 {}", i18n::t(locale, TextKey::WizardBtnFlow)),
-                "wiz:pick_flow",
+                "wiz:flow",
             ),
         ],
+        // Row 3: Back to home
         vec![InlineKeyboardButton::callback(
-            format!("⬅️ {}", i18n::t(locale, TextKey::WizardBtnHome)),
-            "wiz:close",
+            format!("🏠 {}", i18n::t(locale, TextKey::WizardBtnHome)),
+            "wiz:cancel",
         )],
     ];
 
