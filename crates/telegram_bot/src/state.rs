@@ -111,13 +111,13 @@ pub(crate) struct ListSession {
     pub cursors: Vec<Option<String>>,
     pub current: Option<String>,
     pub next: Option<String>,
+    /// Transaction UUIDs in the current page (for mapping button index -> UUID)
+    pub tx_ids: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct WizardSession {
     pub kind: QuickKind,
-    pub category: Option<String>,
-    pub categories: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]

@@ -1,80 +1,48 @@
-use api_types::membership::MembershipRole;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Command {
-    Start {
-        code: Option<String>,
-    },
+    Start { code: Option<String> },
     Home,
     Help,
     Categories,
-    MembersList,
-    MembersAdd {
-        username: String,
-        role: MembershipRole,
-    },
-    MembersRemove {
-        username: String,
-    },
-    MembersHelp,
-    FlowMembersList {
-        flow: String,
-    },
-    FlowMembersAdd {
-        flow: String,
-        username: String,
-        role: MembershipRole,
-    },
-    FlowMembersRemove {
-        flow: String,
-        username: String,
-    },
-    FlowMembersHelp,
-    MergeCategory {
-        confirm: bool,
-        from: String,
-        into: String,
-    },
-    MergeCategoryHelp,
-    VaultDelete {
-        confirm: bool,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CallbackAction {
+    // Navigation
     NavHome,
-    NavWizard,
-    NavSettings,
-    NavCommands,
-    ShowList,
-    HomePair,
-    HomePickWallet,
-    HomePickFlow,
-    HomeExpense,
-    HomeIncome,
-    HomeRefund,
-    HomeStats,
-    WizClose,
-    WizPickWallet,
-    WizPickFlow,
-    WizInput,
-    WizCatNone,
-    WizCatReset,
-    WizCatIndex(usize),
-    WizRecent(Uuid),
-    PrefsToggleVoided,
-    ListNext,
-    ListPrev,
+
+    // Home actions
+    StartExpense,
+    StartIncome,
+    ShowHistory,
+    ShowStats,
+    PickWallet,
+    PickFlow,
+
+    // Wallet/Flow selection
     WalletSet(Uuid),
     FlowSet(Uuid),
-    TxDetail(Uuid),
+
+    // List
+    ListNext,
+    ListPrev,
+    ToggleVoided,
+
+    // Transaction actions
+    TxDetail(usize), // 1-based index in list
     TxVoid(Uuid),
     TxEdit(Uuid),
     TxEditAmount(Uuid),
     TxEditNote(Uuid),
-    TxRepeat(Uuid),
+
+    // Wizard
+    WizardInput,
+    WizardCancel,
+    WizardPickWallet,
+    WizardPickFlow,
+
     Noop,
 }
 
@@ -92,54 +60,51 @@ pub(crate) fn parse_command(text: &str) -> Option<Command> {
         "/home" => Some(Command::Home),
         "/help" => Some(Command::Help),
         "/categories" => Some(Command::Categories),
-        "/members" => parse_members_command(arg.as_deref()),
-        "/flow_members" => parse_flow_members_command(arg.as_deref()),
-        "/merge_category" => parse_merge_category(arg.as_deref()),
-        "/vault_delete" => parse_vault_delete(arg.as_deref()),
         _ => None,
     }
 }
 
 pub(crate) fn parse_callback_action(data: &str) -> Option<CallbackAction> {
     let action = match data {
+        // Navigation
         "nav:home" => CallbackAction::NavHome,
-        "nav:wizard" => CallbackAction::NavWizard,
-        "nav:settings" => CallbackAction::NavSettings,
-        "nav:commands" => CallbackAction::NavCommands,
-        "nav:list" | "home:list" => CallbackAction::ShowList,
-        "home:pair" => CallbackAction::HomePair,
-        "home:pick_wallet" => CallbackAction::HomePickWallet,
-        "home:pick_flow" => CallbackAction::HomePickFlow,
-        "home:expense" => CallbackAction::HomeExpense,
-        "home:income" => CallbackAction::HomeIncome,
-        "home:refund" => CallbackAction::HomeRefund,
-        "home:stats" => CallbackAction::HomeStats,
-        "wiz:close" => CallbackAction::WizClose,
-        "wiz:pick_wallet" => CallbackAction::WizPickWallet,
-        "wiz:pick_flow" => CallbackAction::WizPickFlow,
-        "wiz:input" => CallbackAction::WizInput,
-        "wiz:cat:none" => CallbackAction::WizCatNone,
-        "wiz:cat:reset" => CallbackAction::WizCatReset,
-        "prefs:toggle_voided" => CallbackAction::PrefsToggleVoided,
+
+        // Home actions
+        "home:expense" => CallbackAction::StartExpense,
+        "home:income" => CallbackAction::StartIncome,
+        "home:history" | "nav:list" | "home:list" => CallbackAction::ShowHistory,
+        "home:stats" => CallbackAction::ShowStats,
+        "home:wallet" => CallbackAction::PickWallet,
+        "home:flow" => CallbackAction::PickFlow,
+
+        // List
         "list:next" => CallbackAction::ListNext,
         "list:prev" => CallbackAction::ListPrev,
+        "list:toggle_voided" | "prefs:toggle_voided" => CallbackAction::ToggleVoided,
+
+        // Wizard
+        "wiz:input" => CallbackAction::WizardInput,
+        "wiz:cancel" => CallbackAction::WizardCancel,
+        "wiz:wallet" => CallbackAction::WizardPickWallet,
+        "wiz:flow" => CallbackAction::WizardPickFlow,
+
         "noop" => CallbackAction::Noop,
+
         _ => {
-            if let Some(idx) = parse_usize_suffix(data, "wiz:cat:") {
-                return Some(CallbackAction::WizCatIndex(idx));
-            }
-            if let Some(tx_id) = parse_uuid_suffix(data, "wiz:recent:") {
-                return Some(CallbackAction::WizRecent(tx_id));
-            }
+            // Wallet/Flow selection
             if let Some(wallet_id) = parse_uuid_suffix(data, "wallet:set:") {
                 return Some(CallbackAction::WalletSet(wallet_id));
             }
             if let Some(flow_id) = parse_uuid_suffix(data, "flow:set:") {
                 return Some(CallbackAction::FlowSet(flow_id));
             }
-            if let Some(tx_id) = parse_uuid_suffix(data, "tx:detail:") {
-                return Some(CallbackAction::TxDetail(tx_id));
+
+            // Transaction detail by index (1-based)
+            if let Some(idx) = parse_usize_suffix(data, "tx:detail:") {
+                return Some(CallbackAction::TxDetail(idx));
             }
+
+            // Transaction actions by UUID
             if let Some(tx_id) = parse_uuid_suffix(data, "tx:void:") {
                 return Some(CallbackAction::TxVoid(tx_id));
             }
@@ -152,62 +117,20 @@ pub(crate) fn parse_callback_action(data: &str) -> Option<CallbackAction> {
             if let Some(tx_id) = parse_uuid_suffix(data, "tx:edit_note:") {
                 return Some(CallbackAction::TxEditNote(tx_id));
             }
-            if let Some(tx_id) = parse_uuid_suffix(data, "tx:repeat:") {
-                return Some(CallbackAction::TxRepeat(tx_id));
-            }
+
             return None;
         }
     };
     Some(action)
 }
 
+/// Checks if the text looks like a quick-add message.
+/// Patterns: `12.50 ...`, `-12.50 ...`, `+12.50 ...`
 pub(crate) fn looks_like_quick_add(text: &str) -> bool {
     let trimmed = text.trim_start();
-    trimmed.starts_with('r')
-        || trimmed.starts_with('R')
-        || trimmed.starts_with('+')
+    trimmed.starts_with('+')
         || trimmed.starts_with('-')
         || trimmed.chars().next().is_some_and(|c| c.is_ascii_digit())
-}
-
-fn parse_vault_delete(arg: Option<&str>) -> Option<Command> {
-    let confirm = arg
-        .map(str::trim)
-        .filter(|trimmed| !trimmed.is_empty())
-        .is_some_and(|trimmed| trimmed.eq_ignore_ascii_case("confirm"));
-    Some(Command::VaultDelete { confirm })
-}
-
-fn parse_merge_category(arg: Option<&str>) -> Option<Command> {
-    let Some(trimmed) = arg.map(str::trim).filter(|trimmed| !trimmed.is_empty()) else {
-        return Some(Command::MergeCategoryHelp);
-    };
-
-    let (confirm, rest) = if let Some(rest) = trimmed.strip_prefix("confirm ") {
-        (true, rest)
-    } else {
-        (false, trimmed)
-    };
-    let rest = rest.trim();
-    if rest.is_empty() {
-        return Some(Command::MergeCategoryHelp);
-    }
-
-    let Some((from, into)) = rest.split_once("->") else {
-        return Some(Command::MergeCategoryHelp);
-    };
-
-    let from = from.trim();
-    let into = into.trim();
-    if from.is_empty() || into.is_empty() {
-        return Some(Command::MergeCategoryHelp);
-    }
-
-    Some(Command::MergeCategory {
-        confirm,
-        from: from.to_string(),
-        into: into.to_string(),
-    })
 }
 
 fn parse_usize_suffix(data: &str, prefix: &str) -> Option<usize> {
@@ -218,120 +141,6 @@ fn parse_usize_suffix(data: &str, prefix: &str) -> Option<usize> {
 fn parse_uuid_suffix(data: &str, prefix: &str) -> Option<Uuid> {
     data.strip_prefix(prefix)
         .and_then(|value| Uuid::parse_str(value).ok())
-}
-
-fn parse_members_command(arg: Option<&str>) -> Option<Command> {
-    let Some(arg) = arg else {
-        return Some(Command::MembersList);
-    };
-    let trimmed = arg.trim();
-    if trimmed.is_empty() {
-        return Some(Command::MembersList);
-    }
-
-    let mut parts = trimmed.split_whitespace();
-    let action = parts.next().unwrap_or("");
-    match action {
-        "list" => Some(Command::MembersList),
-        "add" => {
-            let Some(username) = parts.next() else {
-                return Some(Command::MembersHelp);
-            };
-            let Some(role_raw) = parts.next() else {
-                return Some(Command::MembersHelp);
-            };
-            if parts.next().is_some() {
-                return Some(Command::MembersHelp);
-            }
-            let Some(role) = parse_membership_role(role_raw) else {
-                return Some(Command::MembersHelp);
-            };
-            Some(Command::MembersAdd {
-                username: username.to_string(),
-                role,
-            })
-        }
-        "remove" | "rm" => {
-            let Some(username) = parts.next() else {
-                return Some(Command::MembersHelp);
-            };
-            if parts.next().is_some() {
-                return Some(Command::MembersHelp);
-            }
-            Some(Command::MembersRemove {
-                username: username.to_string(),
-            })
-        }
-        _ => Some(Command::MembersHelp),
-    }
-}
-
-fn parse_flow_members_command(arg: Option<&str>) -> Option<Command> {
-    let Some(arg) = arg else {
-        return Some(Command::FlowMembersHelp);
-    };
-    let trimmed = arg.trim();
-    if trimmed.is_empty() {
-        return Some(Command::FlowMembersHelp);
-    }
-
-    let parts: Vec<&str> = trimmed.split_whitespace().collect();
-    let action = parts.first().copied().unwrap_or("");
-
-    match action {
-        "list" => {
-            if parts.len() < 2 {
-                return Some(Command::FlowMembersHelp);
-            }
-            let flow = parts[1..].join(" ");
-            Some(Command::FlowMembersList { flow })
-        }
-        "add" => {
-            if parts.len() < 4 {
-                return Some(Command::FlowMembersHelp);
-            }
-            let role_raw = parts[parts.len() - 1];
-            let username = parts[parts.len() - 2];
-            let flow = parts[1..parts.len() - 2].join(" ");
-            if flow.trim().is_empty() {
-                return Some(Command::FlowMembersHelp);
-            }
-            let Some(role) = parse_membership_role(role_raw) else {
-                return Some(Command::FlowMembersHelp);
-            };
-            Some(Command::FlowMembersAdd {
-                flow,
-                username: username.to_string(),
-                role,
-            })
-        }
-        "remove" | "rm" => {
-            if parts.len() < 3 {
-                return Some(Command::FlowMembersHelp);
-            }
-            let username = parts[parts.len() - 1];
-            let flow = parts[1..parts.len() - 1].join(" ");
-            if flow.trim().is_empty() {
-                return Some(Command::FlowMembersHelp);
-            }
-            Some(Command::FlowMembersRemove {
-                flow,
-                username: username.to_string(),
-            })
-        }
-        _ => Some(Command::FlowMembersList {
-            flow: trimmed.to_string(),
-        }),
-    }
-}
-
-fn parse_membership_role(value: &str) -> Option<MembershipRole> {
-    match value.to_lowercase().as_str() {
-        "owner" => Some(MembershipRole::Owner),
-        "editor" => Some(MembershipRole::Editor),
-        "viewer" | "view" => Some(MembershipRole::Viewer),
-        _ => None,
-    }
 }
 
 #[cfg(test)]
@@ -350,48 +159,59 @@ mod tests {
     }
 
     #[test]
-    fn parse_command_members_add() {
-        let cmd = parse_command("/members add alice owner");
-        match cmd {
-            Some(Command::MembersAdd { username, role }) => {
-                assert_eq!(username, "alice");
-                assert_eq!(role, MembershipRole::Owner);
-            }
-            _ => panic!("expected members add"),
-        }
+    fn parse_command_home() {
+        let cmd = parse_command("/home");
+        assert!(matches!(cmd, Some(Command::Home)));
     }
 
     #[test]
-    fn parse_command_flow_members_list() {
-        let cmd = parse_command("/flow_members list Main Flow");
-        match cmd {
-            Some(Command::FlowMembersList { flow }) => {
-                assert_eq!(flow, "Main Flow");
-            }
-            _ => panic!("expected flow members list"),
-        }
+    fn parse_command_help() {
+        let cmd = parse_command("/help");
+        assert!(matches!(cmd, Some(Command::Help)));
+    }
+
+    #[test]
+    fn parse_command_categories() {
+        let cmd = parse_command("/categories");
+        assert!(matches!(cmd, Some(Command::Categories)));
+    }
+
+    #[test]
+    fn parse_command_unknown_returns_none() {
+        let cmd = parse_command("/unknown");
+        assert!(cmd.is_none());
     }
 
     #[test]
     fn parse_callback_action_wallet_set() {
         let id = "00000000-0000-0000-0000-000000000000";
         let action = parse_callback_action(&format!("wallet:set:{id}"));
-        let parsed = match Uuid::parse_str(id) {
-            Ok(parsed) => parsed,
-            Err(_) => panic!("expected uuid"),
-        };
+        let parsed = Uuid::parse_str(id).unwrap();
         assert_eq!(action, Some(CallbackAction::WalletSet(parsed)));
     }
 
     #[test]
-    fn parse_callback_action_wiz_category() {
-        let action = parse_callback_action("wiz:cat:3");
-        assert_eq!(action, Some(CallbackAction::WizCatIndex(3)));
+    fn parse_callback_action_tx_detail_index() {
+        let action = parse_callback_action("tx:detail:3");
+        assert_eq!(action, Some(CallbackAction::TxDetail(3)));
     }
 
     #[test]
-    fn parse_callback_action_home_list() {
-        let action = parse_callback_action("home:list");
-        assert_eq!(action, Some(CallbackAction::ShowList));
+    fn parse_callback_action_home_history() {
+        let action = parse_callback_action("home:history");
+        assert_eq!(action, Some(CallbackAction::ShowHistory));
+    }
+
+    #[test]
+    fn looks_like_quick_add_positive() {
+        assert!(looks_like_quick_add("12.50 coffee"));
+        assert!(looks_like_quick_add("+100 salary"));
+        assert!(looks_like_quick_add("-50 expense"));
+    }
+
+    #[test]
+    fn looks_like_quick_add_negative() {
+        assert!(!looks_like_quick_add("hello world"));
+        assert!(!looks_like_quick_add("/start"));
     }
 }
