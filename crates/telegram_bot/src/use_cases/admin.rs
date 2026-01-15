@@ -739,8 +739,11 @@ mod tests {
             flow(3, "My Flow", false, false),
         ];
         let found = find_flow_by_name(&flows, "  my   flow ");
-        assert!(found.is_some());
-        assert_eq!(found.unwrap().id, Uuid::from_u128(3));
+        let found = match found {
+            Some(found) => found,
+            None => panic!("expected flow"),
+        };
+        assert_eq!(found.id, Uuid::from_u128(3));
     }
 
     #[test]
@@ -777,11 +780,17 @@ mod tests {
 
         let id_str = id.to_string();
         let by_id = match_category_by_input(&categories, &id_str);
-        assert!(by_id.is_some());
-        assert_eq!(by_id.unwrap().id, id);
+        let by_id = match by_id {
+            Some(by_id) => by_id,
+            None => panic!("expected category by id"),
+        };
+        assert_eq!(by_id.id, id);
 
         let by_name = match_category_by_input(&categories, "  food ");
-        assert!(by_name.is_some());
-        assert_eq!(by_name.unwrap().id, id);
+        let by_name = match by_name {
+            Some(by_name) => by_name,
+            None => panic!("expected category by name"),
+        };
+        assert_eq!(by_name.id, id);
     }
 }

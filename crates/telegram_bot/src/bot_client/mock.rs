@@ -41,11 +41,17 @@ impl MockBot {
     }
 
     pub(crate) fn last_sent(&self) -> Option<SentMessage> {
-        self.sent.lock().expect("mock bot lock").last().cloned()
+        match self.sent.lock() {
+            Ok(guard) => guard.last().cloned(),
+            Err(_) => panic!("mock bot lock"),
+        }
     }
 
     pub(crate) fn last_edited(&self) -> Option<EditedMessage> {
-        self.edited.lock().expect("mock bot lock").last().cloned()
+        match self.edited.lock() {
+            Ok(guard) => guard.last().cloned(),
+            Err(_) => panic!("mock bot lock"),
+        }
     }
 }
 
@@ -57,16 +63,22 @@ impl BotClient for MockBot {
         text: &str,
         kb: Option<InlineKeyboardMarkup>,
     ) -> ResponseResult<MessageId> {
-        let mut next_id = self.next_id.lock().expect("mock bot lock");
+        let mut next_id = match self.next_id.lock() {
+            Ok(guard) => guard,
+            Err(_) => panic!("mock bot lock"),
+        };
         let message_id = MessageId(*next_id);
         *next_id += 1;
 
-        self.sent.lock().expect("mock bot lock").push(SentMessage {
-            chat_id,
-            text: text.to_string(),
-            has_kb: kb.is_some(),
-            message_id,
-        });
+        match self.sent.lock() {
+            Ok(mut guard) => guard.push(SentMessage {
+                chat_id,
+                text: text.to_string(),
+                has_kb: kb.is_some(),
+                message_id,
+            }),
+            Err(_) => panic!("mock bot lock"),
+        };
 
         Ok(message_id)
     }
@@ -78,15 +90,15 @@ impl BotClient for MockBot {
         text: &str,
         kb: InlineKeyboardMarkup,
     ) -> ResponseResult<()> {
-        self.edited
-            .lock()
-            .expect("mock bot lock")
-            .push(EditedMessage {
+        match self.edited.lock() {
+            Ok(mut guard) => guard.push(EditedMessage {
                 chat_id,
                 message_id,
                 text: text.to_string(),
                 has_kb: !kb.inline_keyboard.is_empty(),
-            });
+            }),
+            Err(_) => panic!("mock bot lock"),
+        };
         Ok(())
     }
 }

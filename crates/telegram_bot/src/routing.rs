@@ -372,10 +372,11 @@ mod tests {
     fn parse_callback_action_wallet_set() {
         let id = "00000000-0000-0000-0000-000000000000";
         let action = parse_callback_action(&format!("wallet:set:{id}"));
-        assert_eq!(
-            action,
-            Some(CallbackAction::WalletSet(Uuid::parse_str(id).unwrap()))
-        );
+        let parsed = match Uuid::parse_str(id) {
+            Ok(parsed) => parsed,
+            Err(_) => panic!("expected uuid"),
+        };
+        assert_eq!(action, Some(CallbackAction::WalletSet(parsed)));
     }
 
     #[test]

@@ -139,30 +139,42 @@ mod tests {
     #[tokio::test]
     async fn resolve_main_vault_id_returns_id() {
         let api = MockApi::new();
-        *api.vault_get_main.lock().expect("mock lock") = Some(Ok(Vault {
+        let mut guard = match api.vault_get_main.lock() {
+            Ok(guard) => guard,
+            Err(_) => panic!("mock lock"),
+        };
+        *guard = Some(Ok(Vault {
             id: Some("vault-1".to_string()),
             name: Some("Main".to_string()),
             currency: None,
             owner: None,
         }));
 
-        let id = resolve_main_vault_id(&api, 42).await.expect("vault id");
+        let id = match resolve_main_vault_id(&api, 42).await {
+            Ok(id) => id,
+            Err(err) => panic!("expected vault id: {err:?}"),
+        };
         assert_eq!(id, "vault-1");
     }
 
     #[tokio::test]
     async fn resolve_main_vault_id_fails_when_missing() {
         let api = MockApi::new();
-        *api.vault_get_main.lock().expect("mock lock") = Some(Ok(Vault {
+        let mut guard = match api.vault_get_main.lock() {
+            Ok(guard) => guard,
+            Err(_) => panic!("mock lock"),
+        };
+        *guard = Some(Ok(Vault {
             id: None,
             name: Some("Main".to_string()),
             currency: None,
             owner: None,
         }));
 
-        let err = resolve_main_vault_id(&api, 42)
-            .await
-            .expect_err("missing id");
+        let err = match resolve_main_vault_id(&api, 42).await {
+            Ok(_) => panic!("expected missing id"),
+            Err(err) => err,
+        };
         match err {
             ApiError::Server { status, code, .. } => {
                 assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);

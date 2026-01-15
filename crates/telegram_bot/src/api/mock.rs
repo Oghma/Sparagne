@@ -61,11 +61,24 @@ impl MockApi {
         }
     }
 
+    fn lock_error() -> ApiError {
+        ApiError::Server {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            code: ErrorCode::Unknown,
+            message: "mock api lock poisoned".to_string(),
+        }
+    }
+
     fn take_or_error<T>(
         slot: &Mutex<Option<Result<T, ApiError>>>,
         name: &'static str,
     ) -> Result<T, ApiError> {
-        match slot.lock().expect("mock api lock").take() {
+        let mut guard = match slot.lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(Self::lock_error()),
+        };
+
+        match guard.take() {
             Some(result) => result,
             None => Err(Self::unconfigured_error(name)),
         }
