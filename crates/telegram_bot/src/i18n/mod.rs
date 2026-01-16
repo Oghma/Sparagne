@@ -100,6 +100,21 @@ pub(crate) enum TextKey {
     // Categories
     CategoryListEmpty,
     CategoryListHeader,
+
+    // Onboarding
+    PairingInstructions,
+    PairingSuccess,
+    WelcomeFirstTime,
+    ConceptsExplanation,
+    QuickStartGuide,
+
+    // Contextual Help
+    HelpTextHome,
+    HelpTextWizard,
+    HelpTextList,
+    HelpTextStats,
+    HelpFooter,
+    HomeBtnHelp,
 }
 
 pub(crate) fn default_locale() -> Locale {
@@ -213,6 +228,37 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "Nessuna categoria. Aggiungi una transazione con #categoria per iniziare."
         }
         (Locale::It, TextKey::CategoryListHeader) => "Categorie:",
+        (Locale::It, TextKey::PairingInstructions) => {
+            "Per collegare il bot hai bisogno di un codice di pairing.\n\nSe non lo hai, richiedilo all'amministratore.\n\nUna volta ottenuto, invialo qui o usa /start <codice>"
+        }
+        (Locale::It, TextKey::PairingSuccess) => {
+            "✅ Pairing completato!\n\nOra puoi iniziare a tracciare le tue spese."
+        }
+        (Locale::It, TextKey::WelcomeFirstTime) => {
+            "🎉 Benvenuto su Sparagne, {display_name}!\n\n📱 Il tuo tracker di spese personale."
+        }
+        (Locale::It, TextKey::ConceptsExplanation) => {
+            "💡 Concetti base:\n\n👛 Wallet - Dove tieni i soldi (carta, contanti...)\n🎯 Budget - Come organizzi le spese (cibo, trasporti...)\n🏷 Categoria - Tag per classificare (#cibo, #bar...)"
+        }
+        (Locale::It, TextKey::QuickStartGuide) => {
+            "🚀 Per iniziare:\n\n• Scrivi: 12.50 caffè\n• Oppure: +1000 stipendio\n• Usa i pulsanti qui sotto"
+        }
+        (Locale::It, TextKey::HelpTextHome) => {
+            "📚 Aiuto - Home\n\nDa qui puoi:\n• Aggiungere spese/entrate\n• Vedere la cronologia\n• Consultare le statistiche\n\n💡 Tip: Scrivi direttamente importo e nota!\nEs: 12.50 caffè"
+        }
+        (Locale::It, TextKey::HelpTextWizard) => {
+            "📚 Aiuto - Inserimento\n\nFormato: importo [#categoria] [nota]\n\nEsempi:\n• 12.50 caffè\n• 12.50 #cibo caffè al bar\n• +500 rimborso"
+        }
+        (Locale::It, TextKey::HelpTextList) => {
+            "📚 Aiuto - Cronologia\n\nQui vedi le ultime transazioni.\n\n• Tocca una voce per i dettagli\n• Puoi modificare o annullare\n• Usa i pulsanti per navigare"
+        }
+        (Locale::It, TextKey::HelpTextStats) => {
+            "📚 Aiuto - Statistiche\n\nRiepilogo del mese corrente:\n• Entrate e uscite totali\n• Saldo netto\n• Spese per categoria"
+        }
+        (Locale::It, TextKey::HelpFooter) => {
+            "\n\n📋 Comandi:\n/home - Torna alla home\n/help - Questo aiuto\n/categories - Lista categorie"
+        }
+        (Locale::It, TextKey::HomeBtnHelp) => "Aiuto",
 
         // ============ ENGLISH ============
         (Locale::En, TextKey::WelcomeTemplate) => {
@@ -304,6 +350,37 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "No categories. Add a transaction with #category to start."
         }
         (Locale::En, TextKey::CategoryListHeader) => "Categories:",
+        (Locale::En, TextKey::PairingInstructions) => {
+            "To use this bot you need a pairing code.\n\nIf you don't have one, ask the administrator.\n\nOnce you have it, send it here or use /start <code>"
+        }
+        (Locale::En, TextKey::PairingSuccess) => {
+            "✅ Pairing complete!\n\nYou can now start tracking your expenses."
+        }
+        (Locale::En, TextKey::WelcomeFirstTime) => {
+            "🎉 Welcome to Sparagne, {display_name}!\n\n📱 Your personal expense tracker."
+        }
+        (Locale::En, TextKey::ConceptsExplanation) => {
+            "💡 Basic concepts:\n\n👛 Wallet - Where you keep money (card, cash...)\n🎯 Budget - How you organize expenses (food, transport...)\n🏷 Category - Tags to classify (#food, #bar...)"
+        }
+        (Locale::En, TextKey::QuickStartGuide) => {
+            "🚀 To get started:\n\n• Type: 12.50 coffee\n• Or: +1000 salary\n• Use the buttons below"
+        }
+        (Locale::En, TextKey::HelpTextHome) => {
+            "📚 Help - Home\n\nFrom here you can:\n• Add expenses/income\n• View transaction history\n• Check statistics\n\n💡 Tip: Type amount and note directly!\nEx: 12.50 coffee"
+        }
+        (Locale::En, TextKey::HelpTextWizard) => {
+            "📚 Help - Entry\n\nFormat: amount [#category] [note]\n\nExamples:\n• 12.50 coffee\n• 12.50 #food coffee at bar\n• +500 refund"
+        }
+        (Locale::En, TextKey::HelpTextList) => {
+            "📚 Help - History\n\nHere you see recent transactions.\n\n• Tap an entry for details\n• You can edit or void\n• Use buttons to navigate"
+        }
+        (Locale::En, TextKey::HelpTextStats) => {
+            "📚 Help - Statistics\n\nCurrent month summary:\n• Total income and expenses\n• Net balance\n• Expenses by category"
+        }
+        (Locale::En, TextKey::HelpFooter) => {
+            "\n\n📋 Commands:\n/home - Back to home\n/help - This help\n/categories - List categories"
+        }
+        (Locale::En, TextKey::HomeBtnHelp) => "Help",
     }
 }
 
