@@ -5,7 +5,7 @@ use crate::{
     bot_client::BotClient,
     i18n::{self, TextKey},
     parsing::QuickKind,
-    state::WizardSession,
+    state::{ScreenContext, WizardSession},
     ui,
     use_cases::{home, shared},
 };
@@ -55,6 +55,9 @@ pub(crate) async fn show_wizard(
         return Ok(());
     }
 
+    cfg.sessions
+        .update(chat_id, |s| s.current_screen = ScreenContext::Wizard)
+        .await;
     let (text, kb) = ui::wizard::render_wizard(locale, &snapshot, &prefs, &wizard);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }

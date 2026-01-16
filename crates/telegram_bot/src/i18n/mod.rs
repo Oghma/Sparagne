@@ -115,6 +115,19 @@ pub(crate) enum TextKey {
     HelpTextStats,
     HelpFooter,
     HomeBtnHelp,
+
+    // Feedback
+    LoadingIndicator,
+    WalletSetConfirmation,
+    FlowSetConfirmation,
+    ErrorRecoveryHint,
+
+    // Navigation
+    ListPageNumber,
+    NavBreadcrumbList,
+    NavBreadcrumbDetail,
+    NavBreadcrumbWizard,
+    NavBreadcrumbStats,
 }
 
 pub(crate) fn default_locale() -> Locale {
@@ -259,6 +272,15 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "\n\n📋 Comandi:\n/home - Torna alla home\n/help - Questo aiuto\n/categories - Lista categorie"
         }
         (Locale::It, TextKey::HomeBtnHelp) => "Aiuto",
+        (Locale::It, TextKey::LoadingIndicator) => "⏳ Caricamento...",
+        (Locale::It, TextKey::WalletSetConfirmation) => "✅ Wallet: {wallet}",
+        (Locale::It, TextKey::FlowSetConfirmation) => "✅ Budget: {flow}",
+        (Locale::It, TextKey::ErrorRecoveryHint) => "\n\n💡 Prova: /home per tornare alla home",
+        (Locale::It, TextKey::ListPageNumber) => "Pagina {page}",
+        (Locale::It, TextKey::NavBreadcrumbList) => "🏠 › 📜 Cronologia",
+        (Locale::It, TextKey::NavBreadcrumbDetail) => "🏠 › 📜 › 📋 Dettaglio",
+        (Locale::It, TextKey::NavBreadcrumbWizard) => "🏠 › ✏️ {type}",
+        (Locale::It, TextKey::NavBreadcrumbStats) => "🏠 › 📊 Statistiche",
 
         // ============ ENGLISH ============
         (Locale::En, TextKey::WelcomeTemplate) => {
@@ -381,6 +403,15 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "\n\n📋 Commands:\n/home - Back to home\n/help - This help\n/categories - List categories"
         }
         (Locale::En, TextKey::HomeBtnHelp) => "Help",
+        (Locale::En, TextKey::LoadingIndicator) => "⏳ Loading...",
+        (Locale::En, TextKey::WalletSetConfirmation) => "✅ Wallet: {wallet}",
+        (Locale::En, TextKey::FlowSetConfirmation) => "✅ Budget: {flow}",
+        (Locale::En, TextKey::ErrorRecoveryHint) => "\n\n💡 Try: /home to go back home",
+        (Locale::En, TextKey::ListPageNumber) => "Page {page}",
+        (Locale::En, TextKey::NavBreadcrumbList) => "🏠 › 📜 History",
+        (Locale::En, TextKey::NavBreadcrumbDetail) => "🏠 › 📜 › 📋 Detail",
+        (Locale::En, TextKey::NavBreadcrumbWizard) => "🏠 › ✏️ {type}",
+        (Locale::En, TextKey::NavBreadcrumbStats) => "🏠 › 📊 Statistics",
     }
 }
 

@@ -1,7 +1,7 @@
 use chrono::Datelike;
 use teloxide::prelude::*;
 
-use crate::{ConfigParameters, bot_client::BotClient, i18n, ui, use_cases::shared};
+use crate::{ConfigParameters, bot_client::BotClient, i18n, state::ScreenContext, ui, use_cases::shared};
 
 pub(crate) async fn show_stats(
     bot: &dyn BotClient,
@@ -28,6 +28,10 @@ pub(crate) async fn show_stats(
     // Category breakdown - for now empty, would need API support
     // In future: fetch transactions and aggregate by category
     let category_breakdown: Vec<(String, i64)> = Vec::new();
+
+    cfg.sessions
+        .update(chat_id, |s| s.current_screen = ScreenContext::Stats)
+        .await;
 
     let (text, kb) =
         ui::stats::render_stats(locale, currency, &stats, &month_year, &category_breakdown);

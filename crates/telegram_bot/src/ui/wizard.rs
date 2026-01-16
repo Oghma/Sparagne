@@ -20,6 +20,8 @@ pub(crate) fn render_wizard(
         QuickKind::Income => i18n::t(locale, TextKey::WizardTitleIncome),
     };
 
+    let breadcrumb = i18n::format(locale, TextKey::NavBreadcrumbWizard, &[("type", title)]);
+
     let default_wallet = prefs
         .default_wallet_id
         .and_then(|id| snapshot.wallets.iter().find(|w| w.id == id))
@@ -37,7 +39,7 @@ pub(crate) fn render_wizard(
         TextKey::WizardBodySimple,
         &[("wallet", default_wallet), ("flow", last_flow)],
     );
-    let text = format!("{title}\n\n{body}");
+    let text = format!("{breadcrumb}\n{title}\n\n{body}");
 
     let rows = vec![
         // Row 1: Main input action

@@ -6,7 +6,7 @@ use crate::{
     api::ApiError,
     bot_client::BotClient,
     i18n::{self, TextKey},
-    state::PendingAction,
+    state::{PendingAction, ScreenContext},
     ui,
     use_cases::shared,
 };
@@ -27,7 +27,7 @@ pub(crate) async fn show_home(
                     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
             );
             if needs_pairing {
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingInstructions), None)
                     .await?;
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
@@ -46,6 +46,9 @@ pub(crate) async fn show_home(
         .await
         .display_name
         .unwrap_or_else(|| "Sparagne".to_string());
+    cfg.sessions
+        .update(chat_id, |s| s.current_screen = ScreenContext::Home)
+        .await;
     let (text, kb) = ui::home::render_home(locale, &display_name, &snapshot, &prefs);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
@@ -70,7 +73,7 @@ pub(crate) async fn show_wallet_picker(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingInstructions), None)
                     .await?;
             } else {
                 shared::send_api_error(bot, chat_id, locale, err).await?;
@@ -102,7 +105,7 @@ pub(crate) async fn show_flow_picker(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingInstructions), None)
                     .await?;
             } else {
                 shared::send_api_error(bot, chat_id, locale, err).await?;

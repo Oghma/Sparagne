@@ -18,6 +18,7 @@ pub(crate) enum CallbackAction {
     StartIncome,
     ShowHistory,
     ShowStats,
+    ShowHelp,
     PickWallet,
     PickFlow,
 
@@ -74,6 +75,7 @@ pub(crate) fn parse_callback_action(data: &str) -> Option<CallbackAction> {
         "home:income" => CallbackAction::StartIncome,
         "home:history" | "nav:list" | "home:list" => CallbackAction::ShowHistory,
         "home:stats" => CallbackAction::ShowStats,
+        "home:help" => CallbackAction::ShowHelp,
         "home:wallet" => CallbackAction::PickWallet,
         "home:flow" => CallbackAction::PickFlow,
 

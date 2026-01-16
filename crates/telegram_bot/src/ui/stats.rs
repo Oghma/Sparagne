@@ -12,7 +12,8 @@ pub(crate) fn render_stats(
     month_name: &str,
     category_breakdown: &[(String, i64)], // (category_name, amount_minor)
 ) -> (String, InlineKeyboardMarkup) {
-    let mut text = i18n::format(
+    let breadcrumb = i18n::t(locale, TextKey::NavBreadcrumbStats);
+    let summary = i18n::format(
         locale,
         TextKey::StatsSummary,
         &[
@@ -28,6 +29,7 @@ pub(crate) fn render_stats(
             ),
         ],
     );
+    let mut text = format!("{breadcrumb}\n\n{summary}");
 
     // Add category breakdown if available
     if !category_breakdown.is_empty() {

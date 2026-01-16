@@ -7,7 +7,7 @@ use crate::{
     api::ApiError,
     bot_client::BotClient,
     i18n::{self, TextKey},
-    state::{ListSession, PendingAction},
+    state::{ListSession, PendingAction, ScreenContext},
     ui,
     use_cases::{home, shared},
 };
@@ -31,7 +31,7 @@ pub(crate) async fn show_list(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingInstructions), None)
                     .await?;
             } else {
                 shared::send_api_error(bot, chat_id, locale, err).await?;
@@ -105,9 +105,11 @@ pub(crate) async fn show_list(
                 next: list.next_cursor.clone(),
                 tx_ids,
             });
+            s.current_screen = ScreenContext::List;
         })
         .await;
 
+    let page_number = cursor_stack_len + 1;
     let (text, kb) = ui::list::render_list(
         locale,
         currency,
@@ -115,6 +117,7 @@ pub(crate) async fn show_list(
         prefs.include_voided,
         has_prev,
         has_next,
+        page_number,
     );
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }

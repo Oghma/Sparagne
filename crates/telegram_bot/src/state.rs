@@ -105,6 +105,15 @@ pub(crate) enum PendingAction {
     WizardDraft { kind: QuickKind },
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ScreenContext {
+    #[default]
+    Home,
+    Wizard,
+    List,
+    Stats,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ListSession {
     pub wallet_id: Uuid,
@@ -128,6 +137,7 @@ pub(crate) struct Session {
     pub list: Option<ListSession>,
     pub last_detail_tx: Option<Uuid>,
     pub wizard: Option<WizardSession>,
+    pub current_screen: ScreenContext,
 }
 
 #[derive(Clone, Default)]

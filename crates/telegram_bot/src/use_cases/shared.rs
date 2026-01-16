@@ -45,7 +45,23 @@ pub(crate) async fn send_api_error(
     locale: i18n::Locale,
     err: ApiError,
 ) -> ResponseResult<()> {
-    let text = user_message_for_api_error(locale, err);
+    // Determine if we need recovery hint before consuming the error
+    let needs_hint = match &err {
+        ApiError::Network(_) => true,
+        ApiError::Server { status, .. } => {
+            *status != StatusCode::UNAUTHORIZED
+                && *status != StatusCode::FORBIDDEN
+                && *status != StatusCode::BAD_REQUEST
+        }
+    };
+
+    let mut text = user_message_for_api_error(locale, err);
+
+    // Add recovery hint for errors that aren't auth-related (which already suggest pairing)
+    if needs_hint {
+        text.push_str(i18n::t(locale, TextKey::ErrorRecoveryHint));
+    }
+
     bot.send_message(chat_id, &text, None).await?;
     Ok(())
 }

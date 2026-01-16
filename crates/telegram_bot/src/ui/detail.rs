@@ -32,7 +32,8 @@ pub(crate) fn render_detail(
     let kind_str = localized_kind(locale, tx.kind);
     let date_str = format_date(&tx.occurred_at);
 
-    let text = i18n::format(
+    let breadcrumb = i18n::t(locale, TextKey::NavBreadcrumbDetail);
+    let detail_text = i18n::format(
         locale,
         TextKey::DetailHeader,
         &[
@@ -43,6 +44,7 @@ pub(crate) fn render_detail(
             ("note", tx.note.as_deref().unwrap_or("-")),
         ],
     );
+    let text = format!("{breadcrumb}\n\n{detail_text}");
 
     // Buttons: Void and Edit only (no Repeat)
     let kb = InlineKeyboardMarkup::new(vec![

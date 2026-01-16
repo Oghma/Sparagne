@@ -66,14 +66,24 @@ pub(crate) async fn handle_message(
                     }
 
                     cfg.sessions.update(chat_id, |s| s.pending = None).await;
-                    let display_name = cfg
-                        .sessions
-                        .get(chat_id)
-                        .await
-                        .display_name
-                        .unwrap_or_else(|| "Sparagne".to_string());
-                    bot.send_message(chat_id, text::welcome_text(locale, &display_name))
+
+                    // Show pairing success
+                    bot.send_message(chat_id, text::pairing_success(locale))
                         .await?;
+
+                    // Check if this is a first-time user (no wallet set yet)
+                    let prefs = cfg.prefs.get_or_default(user_id).await;
+                    if prefs.default_wallet_id.is_none() {
+                        let display_name = cfg
+                            .sessions
+                            .get(chat_id)
+                            .await
+                            .display_name
+                            .unwrap_or_else(|| "Sparagne".to_string());
+                        bot.send_message(chat_id, text::first_time_welcome(locale, &display_name))
+                            .await?;
+                    }
+
                     home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
                     return Ok(());
                 }
@@ -87,7 +97,9 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::Help => {
-                bot.send_message(chat_id, text::help_text(locale)).await?;
+                let screen = cfg.sessions.get(chat_id).await.current_screen;
+                bot.send_message(chat_id, &text::contextual_help(locale, screen))
+                    .await?;
                 return Ok(());
             }
             Command::Categories => {
@@ -159,6 +171,11 @@ pub(crate) async fn handle_callback(
         }
         CallbackAction::ShowStats => {
             stats::show_stats(&bot, chat_id, user_id, &cfg, locale).await?;
+        }
+        CallbackAction::ShowHelp => {
+            let screen = cfg.sessions.get(chat_id).await.current_screen;
+            bot.send_message(chat_id, &text::contextual_help(locale, screen))
+                .await?;
         }
         CallbackAction::PickWallet => {
             home::show_wallet_picker(&bot, chat_id, user_id, &cfg, locale, "nav:home").await?;
@@ -366,14 +383,24 @@ async fn handle_pending_message(
             }
 
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
-            let display_name = cfg
-                .sessions
-                .get(chat_id)
-                .await
-                .display_name
-                .unwrap_or_else(|| "Sparagne".to_string());
-            bot.send_message(chat_id, text::welcome_text(locale, &display_name))
+
+            // Show pairing success
+            bot.send_message(chat_id, text::pairing_success(locale))
                 .await?;
+
+            // Check if this is a first-time user (no wallet set yet)
+            let prefs = cfg.prefs.get_or_default(user_id).await;
+            if prefs.default_wallet_id.is_none() {
+                let display_name = cfg
+                    .sessions
+                    .get(chat_id)
+                    .await
+                    .display_name
+                    .unwrap_or_else(|| "Sparagne".to_string());
+                bot.send_message(chat_id, text::first_time_welcome(locale, &display_name))
+                    .await?;
+            }
+
             home::show_home(bot, chat_id, user_id, cfg, locale).await?;
             Ok(true)
         }

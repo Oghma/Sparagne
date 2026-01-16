@@ -12,8 +12,15 @@ pub(crate) fn render_list(
     include_voided: bool,
     has_prev: bool,
     has_next: bool,
+    page_number: usize,
 ) -> (String, InlineKeyboardMarkup) {
-    let mut text = format!("{}\n", i18n::t(locale, TextKey::ListHeader));
+    // Breadcrumb + header
+    let breadcrumb = i18n::t(locale, TextKey::NavBreadcrumbList);
+    let header = i18n::t(locale, TextKey::ListHeader);
+    let page_str = page_number.to_string();
+    let page_indicator = i18n::format(locale, TextKey::ListPageNumber, &[("page", &page_str)]);
+
+    let mut text = format!("{breadcrumb}\n{header}\n{page_indicator}\n");
 
     // Render transaction list as text
     for (idx, tx) in list.transactions.iter().enumerate() {

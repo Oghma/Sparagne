@@ -79,6 +79,11 @@ pub(crate) fn render_home(
             InlineKeyboardButton::callback(format!("👛 {wallet_name}"), "home:wallet"),
             InlineKeyboardButton::callback(format!("🎯 {flow_name}"), "home:flow"),
         ],
+        // Row 4: Help
+        vec![InlineKeyboardButton::callback(
+            format!("❓ {}", i18n::t(locale, TextKey::HomeBtnHelp)),
+            "home:help",
+        )],
     ]);
 
     (text, kb)
