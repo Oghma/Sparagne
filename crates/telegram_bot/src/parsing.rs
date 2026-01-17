@@ -1,9 +1,29 @@
-use engine::{Currency, Money};
+use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use engine::{Currency, Money};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum QuickKind {
     Income,
     Expense,
+}
+
+/// Suggests a category based on note text and user's category hints.
+/// Returns the suggested category if a keyword matches.
+pub(crate) fn suggest_category<'a>(
+    note: Option<&str>,
+    hints: &'a HashMap<String, String>,
+) -> Option<&'a str> {
+    let note = note?;
+    let note_lower = note.to_lowercase();
+
+    for (keyword, category) in hints {
+        if note_lower.contains(&keyword.to_lowercase()) {
+            return Some(category.as_str());
+        }
+    }
+    None
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -10,7 +10,23 @@ use teloxide::types::{ChatId, MessageId};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use api_types::transaction::TransactionKind;
+use chrono::NaiveDate;
+
 use crate::parsing::{QuickAdd, QuickKind};
+
+/// A saved transaction template for quick reuse.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) struct TransactionTemplate {
+    pub name: String,
+    pub amount_minor: i64,
+    pub category: Option<String>,
+    pub note: Option<String>,
+    pub kind: crate::parsing::QuickKind,
+}
+
+/// Maximum number of templates per user.
+pub(crate) const MAX_TEMPLATES: usize = 10;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct UserPrefs {
@@ -19,6 +35,12 @@ pub(crate) struct UserPrefs {
     pub default_flow_id: Option<Uuid>,
     pub last_flow_id: Option<Uuid>,
     pub include_voided: bool,
+    /// Keyword -> category mapping for smart suggestions
+    #[serde(default)]
+    pub category_hints: HashMap<String, String>,
+    /// Saved transaction templates
+    #[serde(default)]
+    pub templates: Vec<TransactionTemplate>,
 }
 
 impl Default for UserPrefs {
@@ -29,8 +51,42 @@ impl Default for UserPrefs {
             default_flow_id: None,
             last_flow_id: None,
             include_voided: false,
+            category_hints: default_category_hints(),
+            templates: Vec::new(),
         }
     }
+}
+
+/// Returns default keyword -> category mappings for smart suggestions.
+fn default_category_hints() -> HashMap<String, String> {
+    [
+        ("caffè", "bar"),
+        ("caffe", "bar"),
+        ("coffee", "bar"),
+        ("cappuccino", "bar"),
+        ("pranzo", "cibo"),
+        ("cena", "cibo"),
+        ("lunch", "cibo"),
+        ("dinner", "cibo"),
+        ("spesa", "supermercato"),
+        ("grocery", "supermercato"),
+        ("benzina", "auto"),
+        ("gas", "auto"),
+        ("fuel", "auto"),
+        ("treno", "trasporti"),
+        ("train", "trasporti"),
+        ("bus", "trasporti"),
+        ("metro", "trasporti"),
+        ("taxi", "trasporti"),
+        ("uber", "trasporti"),
+        ("farmacia", "salute"),
+        ("pharmacy", "salute"),
+        ("medico", "salute"),
+        ("doctor", "salute"),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect()
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -103,6 +159,7 @@ pub(crate) enum PendingAction {
     EditAmount { tx_id: Uuid },
     EditNote { tx_id: Uuid },
     WizardDraft { kind: QuickKind },
+    TemplateCreate,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -114,6 +171,31 @@ pub(crate) enum ScreenContext {
     Stats,
 }
 
+/// Filter options for the transaction list.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ListFilters {
+    /// Filter by transaction kind (expense/income)
+    pub kind: Option<TransactionKind>,
+    /// Filter from date (inclusive)
+    pub from: Option<NaiveDate>,
+    /// Filter to date (inclusive)
+    pub to: Option<NaiveDate>,
+}
+
+impl ListFilters {
+    /// Returns true if any filter is active.
+    pub fn is_active(&self) -> bool {
+        self.kind.is_some() || self.from.is_some() || self.to.is_some()
+    }
+
+    /// Clears all filters.
+    pub fn clear(&mut self) {
+        self.kind = None;
+        self.from = None;
+        self.to = None;
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ListSession {
     pub wallet_id: Uuid,
@@ -122,6 +204,8 @@ pub(crate) struct ListSession {
     pub next: Option<String>,
     /// Transaction UUIDs in the current page (for mapping button index -> UUID)
     pub tx_ids: Vec<Uuid>,
+    /// Active filters
+    pub filters: ListFilters,
 }
 
 #[derive(Clone, Debug)]

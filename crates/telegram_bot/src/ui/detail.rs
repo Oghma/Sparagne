@@ -46,12 +46,16 @@ pub(crate) fn render_detail(
     );
     let text = format!("{breadcrumb}\n\n{detail_text}");
 
-    // Buttons: Void and Edit only (no Repeat)
+    // Buttons: Void, Repeat, Edit
     let kb = InlineKeyboardMarkup::new(vec![
         vec![
             InlineKeyboardButton::callback(
                 format!("↩️ {}", i18n::t(locale, TextKey::DetailBtnVoid)),
-                format!("tx:void:{id}", id = tx.id),
+                format!("tx:void_confirm:{id}", id = tx.id),
+            ),
+            InlineKeyboardButton::callback(
+                format!("🔄 {}", i18n::t(locale, TextKey::DetailBtnRepeat)),
+                format!("tx:repeat:{id}", id = tx.id),
             ),
             InlineKeyboardButton::callback(
                 format!("✏️ {}", i18n::t(locale, TextKey::DetailBtnEdit)),
@@ -63,6 +67,38 @@ pub(crate) fn render_detail(
             "home:history",
         )],
     ]);
+
+    (text, kb)
+}
+
+/// Renders the void confirmation screen.
+pub(crate) fn render_void_confirm(
+    locale: i18n::Locale,
+    currency: EngineCurrency,
+    detail: &TransactionDetailResponse,
+) -> (String, InlineKeyboardMarkup) {
+    let tx = &detail.transaction;
+    let amount = Money::new(tx.amount_minor).format(currency);
+    let note = tx.note.as_deref().unwrap_or("-");
+
+    let title = i18n::t(locale, TextKey::VoidConfirmTitle);
+    let body = i18n::format(
+        locale,
+        TextKey::VoidConfirmBody,
+        &[("amount", &amount), ("note", note)],
+    );
+    let text = format!("{title}\n\n{body}");
+
+    let kb = InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::callback(
+            format!("✅ {}", i18n::t(locale, TextKey::VoidConfirmYes)),
+            format!("tx:void:{id}", id = tx.id),
+        ),
+        InlineKeyboardButton::callback(
+            format!("❌ {}", i18n::t(locale, TextKey::VoidConfirmNo)),
+            format!("tx:detail_id:{id}", id = tx.id),
+        ),
+    ]]);
 
     (text, kb)
 }

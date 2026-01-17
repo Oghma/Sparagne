@@ -10,11 +10,11 @@ use crate::{
     ConfigParameters,
     api::ApiError,
     i18n::{self, TextKey},
-    parsing::{ParseError, QuickKind, parse_quick_add},
+    parsing::{ParseError, QuickKind, parse_quick_add, suggest_category},
     routing::{CallbackAction, Command},
-    state::{DraftCreate, PendingAction},
+    state::{DraftCreate, PendingAction, TransactionTemplate, MAX_TEMPLATES},
     text, ui,
-    use_cases::{home, list, shared, stats, wizard},
+    use_cases::{export, home, list, shared, stats, wizard},
 };
 
 pub(crate) async fn handle_message(
@@ -98,7 +98,7 @@ pub(crate) async fn handle_message(
             }
             Command::Help => {
                 let screen = cfg.sessions.get(chat_id).await.current_screen;
-                bot.send_message(chat_id, &text::contextual_help(locale, screen))
+                bot.send_message(chat_id, text::contextual_help(locale, screen))
                     .await?;
                 return Ok(());
             }
@@ -112,6 +112,14 @@ pub(crate) async fn handle_message(
                 };
                 let (text, kb) = ui::categories::render_categories(locale, &cats);
                 shared::edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
+                return Ok(());
+            }
+            Command::Export => {
+                export::handle_export(&bot, chat_id, user_id, &cfg, locale).await?;
+                return Ok(());
+            }
+            Command::Template => {
+                show_template_list(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             }
         }
@@ -174,7 +182,7 @@ pub(crate) async fn handle_callback(
         }
         CallbackAction::ShowHelp => {
             let screen = cfg.sessions.get(chat_id).await.current_screen;
-            bot.send_message(chat_id, &text::contextual_help(locale, screen))
+            bot.send_message(chat_id, text::contextual_help(locale, screen))
                 .await?;
         }
         CallbackAction::PickWallet => {
@@ -259,8 +267,54 @@ pub(crate) async fn handle_callback(
             }
             list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
         }
+        CallbackAction::ListShowFilters => {
+            list::show_filters(&bot, chat_id, &cfg, locale).await?;
+        }
+        CallbackAction::ListFilterKind(kind) => {
+            list::set_filter_kind(&bot, chat_id, user_id, &cfg, kind, locale).await?;
+        }
+        CallbackAction::ListFilterClear => {
+            list::clear_filters(&bot, chat_id, user_id, &cfg, locale).await?;
+        }
         CallbackAction::TxDetail(index) => {
             list::show_detail_by_index(&bot, chat_id, user_id, &cfg, index, locale).await?;
+        }
+        CallbackAction::TxDetailById(tx_id) => {
+            list::show_detail(&bot, chat_id, user_id, &cfg, tx_id, locale).await?;
+        }
+        CallbackAction::TxVoidConfirm(tx_id) => {
+            // Show void confirmation screen
+            let detail = match cfg
+                .api
+                .transaction_get_detail(
+                    user_id,
+                    &api_types::transaction::TransactionGet {
+                        vault_id: match shared::resolve_main_vault_id(&cfg.api, user_id).await {
+                            Ok(v) => v,
+                            Err(err) => {
+                                bot.send_message(
+                                    chat_id,
+                                    shared::user_message_for_api_error(locale, err),
+                                )
+                                .await?;
+                                return Ok(());
+                            }
+                        },
+                        id: tx_id,
+                    },
+                )
+                .await
+            {
+                Ok(d) => d,
+                Err(err) => {
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
+                        .await?;
+                    return Ok(());
+                }
+            };
+            let currency = shared::engine_currency(detail.transaction.currency);
+            let (text, kb) = ui::detail::render_void_confirm(locale, currency, &detail);
+            shared::edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
         }
         CallbackAction::TxVoid(tx_id) => {
             let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
@@ -292,6 +346,108 @@ pub(crate) async fn handle_callback(
             bot.send_message(chat_id, i18n::t(locale, TextKey::TransactionVoided))
                 .await?;
             list::show_list(&bot, chat_id, user_id, &cfg, locale).await?;
+        }
+        CallbackAction::TxRepeat(tx_id) => {
+            // Repeat transaction: create new with same data but today's date
+            let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
+                Ok(v) => v,
+                Err(err) => {
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
+                        .await?;
+                    return Ok(());
+                }
+            };
+
+            let detail = match cfg
+                .api
+                .transaction_get_detail(
+                    user_id,
+                    &api_types::transaction::TransactionGet {
+                        vault_id: vault_id.clone(),
+                        id: tx_id,
+                    },
+                )
+                .await
+            {
+                Ok(d) => d,
+                Err(err) => {
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
+                        .await?;
+                    return Ok(());
+                }
+            };
+
+            let tx = &detail.transaction;
+            let occurred_at = shared::now_rome();
+
+            // Extract wallet_id and flow_id from legs
+            use api_types::transaction::{LegTarget, TransactionKind};
+            let mut wallet_id: Option<Uuid> = None;
+            let mut flow_id: Option<Uuid> = None;
+            for leg in &detail.legs {
+                match &leg.target {
+                    LegTarget::Wallet { wallet_id: wid } => wallet_id = Some(*wid),
+                    LegTarget::Flow { flow_id: fid } => flow_id = Some(*fid),
+                }
+            }
+
+            // Create new transaction based on kind
+            let result = match tx.kind {
+                TransactionKind::Expense => {
+                    cfg.api
+                        .create_expense(
+                            user_id,
+                            &api_types::transaction::ExpenseNew {
+                                vault_id,
+                                amount_minor: tx.amount_minor,
+                                flow_id,
+                                wallet_id,
+                                category_id: None,
+                                category: tx.category.clone(),
+                                note: tx.note.clone(),
+                                idempotency_key: None,
+                                occurred_at,
+                            },
+                        )
+                        .await
+                }
+                TransactionKind::Income | TransactionKind::Refund => {
+                    cfg.api
+                        .create_income(
+                            user_id,
+                            &api_types::transaction::IncomeNew {
+                                vault_id,
+                                amount_minor: tx.amount_minor,
+                                flow_id,
+                                wallet_id,
+                                category_id: None,
+                                category: tx.category.clone(),
+                                note: tx.note.clone(),
+                                idempotency_key: None,
+                                occurred_at,
+                            },
+                        )
+                        .await
+                }
+                TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
+                    // Can't repeat transfers via this method
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::ApiForbidden))
+                        .await?;
+                    return Ok(());
+                }
+            };
+
+            match result {
+                Ok(_) => {
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatSuccess))
+                        .await?;
+                    home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
+                }
+                Err(err) => {
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
+                        .await?;
+                }
+            }
         }
         CallbackAction::TxEdit(tx_id) => {
             let (text, kb) = ui::detail::render_edit_menu(locale, tx_id);
@@ -345,6 +501,28 @@ pub(crate) async fn handle_callback(
         }
         CallbackAction::WizardPickFlow => {
             home::show_flow_picker(&bot, chat_id, user_id, &cfg, locale, "wiz:cancel").await?;
+        }
+        CallbackAction::TemplateList => {
+            show_template_list(&bot, chat_id, user_id, &cfg, locale).await?;
+        }
+        CallbackAction::TemplateCreate => {
+            let prefs = cfg.prefs.get_or_default(user_id).await;
+            if prefs.templates.len() >= MAX_TEMPLATES {
+                bot.send_message(chat_id, i18n::t(locale, TextKey::TemplateMaxReached))
+                    .await?;
+                return Ok(());
+            }
+            cfg.sessions
+                .update(chat_id, |s| s.pending = Some(PendingAction::TemplateCreate))
+                .await;
+            bot.send_message(chat_id, i18n::t(locale, TextKey::TemplateCreatePrompt))
+                .await?;
+        }
+        CallbackAction::TemplateUse(idx) => {
+            use_template(&bot, chat_id, user_id, &cfg, idx, locale).await?;
+        }
+        CallbackAction::TemplateDelete(idx) => {
+            delete_template(&bot, chat_id, user_id, &cfg, idx, locale).await?;
         }
         CallbackAction::Noop => {}
     }
@@ -417,7 +595,7 @@ async fn handle_pending_message(
                 }
             };
 
-            let parsed = match parse_quick_add(&input, EngineCurrency::Eur) {
+            let mut parsed = match parse_quick_add(&input, EngineCurrency::Eur) {
                 Ok(v) => v,
                 Err(ParseError::Empty) => return Ok(true),
                 Err(ParseError::TooManyTags) => {
@@ -432,11 +610,19 @@ async fn handle_pending_message(
                 }
             };
 
-            let category = parsed.category;
-
             cfg.sessions.update(chat_id, |s| s.pending = None).await;
 
             let prefs = cfg.prefs.get_or_default(user_id).await;
+
+            // Smart category suggestion: if no category specified, suggest based on note
+            if parsed.category.is_none()
+                && let Some(suggested) =
+                    suggest_category(parsed.note.as_deref(), &prefs.category_hints)
+            {
+                parsed.category = Some(suggested.to_string());
+            }
+
+            let category = parsed.category;
             let Some(wallet_id) = prefs.default_wallet_id else {
                 home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "wiz:cancel").await?;
                 return Ok(true);
@@ -651,6 +837,62 @@ async fn handle_pending_message(
             Ok(true)
         }
         PendingAction::WalletForQuickAdd(_) => Ok(false),
+        PendingAction::TemplateCreate => {
+            let Some(text) = msg.text() else {
+                return Ok(true);
+            };
+            // Parse template: "name | amount [#category] [note]"
+            let Some((name, quick_part)) = text.split_once('|') else {
+                bot.send_message(chat_id, i18n::t(locale, TextKey::TemplateInvalid))
+                    .await?;
+                return Ok(true);
+            };
+            let name = name.trim();
+            let quick_part = quick_part.trim();
+
+            if name.is_empty() || quick_part.is_empty() {
+                bot.send_message(chat_id, i18n::t(locale, TextKey::TemplateInvalid))
+                    .await?;
+                return Ok(true);
+            }
+
+            let parsed = match parse_quick_add(quick_part, EngineCurrency::Eur) {
+                Ok(v) => v,
+                Err(_) => {
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::TemplateInvalid))
+                        .await?;
+                    return Ok(true);
+                }
+            };
+
+            let template = TransactionTemplate {
+                name: name.to_string(),
+                amount_minor: parsed.amount_minor,
+                category: parsed.category,
+                note: parsed.note,
+                kind: parsed.kind,
+            };
+
+            let result = cfg
+                .prefs
+                .update(user_id, |p| {
+                    if p.templates.len() < MAX_TEMPLATES {
+                        p.templates.push(template.clone());
+                    }
+                })
+                .await;
+            if result.is_err() {
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
+                    .await?;
+                return Ok(true);
+            }
+
+            cfg.sessions.update(chat_id, |s| s.pending = None).await;
+            bot.send_message(chat_id, i18n::t(locale, TextKey::TemplateCreated))
+                .await?;
+            show_template_list(bot, chat_id, user_id, cfg, locale).await?;
+            Ok(true)
+        }
     }
 }
 
@@ -664,7 +906,7 @@ async fn handle_quick_add(
     let Some(text) = msg.text() else {
         return Ok(());
     };
-    let parsed = match parse_quick_add(text, EngineCurrency::Eur) {
+    let mut parsed = match parse_quick_add(text, EngineCurrency::Eur) {
         Ok(v) => v,
         Err(ParseError::Empty) => return Ok(()),
         Err(ParseError::TooManyTags) => {
@@ -680,6 +922,14 @@ async fn handle_quick_add(
     };
 
     let prefs = cfg.prefs.get_or_default(user_id).await;
+
+    // Smart category suggestion: if no category specified, suggest based on note
+    if parsed.category.is_none()
+        && let Some(suggested) = suggest_category(parsed.note.as_deref(), &prefs.category_hints)
+    {
+        parsed.category = Some(suggested.to_string());
+    }
+
     let idempotency_key = format!("tg:{}:{}", msg.chat.id.0, msg.id.0);
     let draft: DraftCreate = (parsed, idempotency_key).into();
 
@@ -821,4 +1071,168 @@ async fn finalize_quick_add(
     }
 
     Ok(())
+}
+
+async fn show_template_list(
+    bot: &Bot,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let currency = EngineCurrency::Eur; // Default currency for display
+    let (text, kb) = ui::template::render_template_list(locale, currency, &prefs.templates);
+    shared::edit_or_send(bot, chat_id, cfg, text, kb).await
+}
+
+async fn use_template(
+    bot: &Bot,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    idx: usize,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let Some(template) = prefs.templates.get(idx) else {
+        // Invalid index, show list
+        show_template_list(bot, chat_id, user_id, cfg, locale).await?;
+        return Ok(());
+    };
+
+    let Some(wallet_id) = prefs.default_wallet_id else {
+        bot.send_message(
+            chat_id,
+            i18n::t(locale, TextKey::DefaultWalletMissing),
+        )
+        .await?;
+        home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "tpl:list").await?;
+        return Ok(());
+    };
+
+    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+        Ok(s) => s,
+        Err(err) => {
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let flow_id = prefs.last_flow_id.unwrap_or(snapshot.unallocated_flow_id);
+    let occurred_at = shared::now_rome();
+    let vault_id = snapshot.id.clone();
+    let currency = shared::engine_currency(snapshot.currency);
+
+    let created = match template.kind {
+        QuickKind::Expense => {
+            cfg.api
+                .create_expense(
+                    user_id,
+                    &api_types::transaction::ExpenseNew {
+                        vault_id,
+                        amount_minor: template.amount_minor,
+                        flow_id: Some(flow_id),
+                        wallet_id: Some(wallet_id),
+                        category_id: None,
+                        category: template.category.clone(),
+                        note: template.note.clone(),
+                        idempotency_key: None,
+                        occurred_at,
+                    },
+                )
+                .await
+        }
+        QuickKind::Income => {
+            cfg.api
+                .create_income(
+                    user_id,
+                    &api_types::transaction::IncomeNew {
+                        vault_id,
+                        amount_minor: template.amount_minor,
+                        flow_id: Some(flow_id),
+                        wallet_id: Some(wallet_id),
+                        category_id: None,
+                        category: template.category.clone(),
+                        note: template.note.clone(),
+                        idempotency_key: None,
+                        occurred_at,
+                    },
+                )
+                .await
+        }
+    };
+
+    match created {
+        Ok(created) => {
+            let signed_minor = match template.kind {
+                QuickKind::Expense => -template.amount_minor,
+                QuickKind::Income => template.amount_minor,
+            };
+
+            let mut saved_msg = i18n::format(
+                locale,
+                TextKey::QuickAddSaved,
+                &[("amount", &Money::new(signed_minor).format(currency))],
+            );
+            if let Some(category) = template.category.as_deref() {
+                saved_msg.push_str(&format!(" • {category}"));
+            }
+            if let Some(note) = template.note.as_deref() {
+                saved_msg.push_str(&format!(" • {note}"));
+            }
+
+            let kb = InlineKeyboardMarkup::new(vec![vec![
+                InlineKeyboardButton::callback(
+                    format!("\u{21a9} {}", i18n::t(locale, TextKey::QuickAddUndo)),
+                    format!("tx:void:{id}", id = created.id),
+                ),
+                InlineKeyboardButton::callback(
+                    format!(
+                        "\u{270f}\u{fe0f} {}",
+                        i18n::t(locale, TextKey::DetailBtnEdit)
+                    ),
+                    format!("tx:edit:{id}", id = created.id),
+                ),
+            ]]);
+
+            bot.send_message(chat_id, saved_msg)
+                .reply_markup(kb)
+                .await?;
+        }
+        Err(err) => {
+            bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn delete_template(
+    bot: &Bot,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    idx: usize,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    let result = cfg
+        .prefs
+        .update(user_id, |p| {
+            if idx < p.templates.len() {
+                p.templates.remove(idx);
+            }
+        })
+        .await;
+    if result.is_err() {
+        bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
+            .await?;
+        return Ok(());
+    }
+
+    bot.send_message(chat_id, i18n::t(locale, TextKey::TemplateDeleted))
+        .await?;
+    show_template_list(bot, chat_id, user_id, cfg, locale).await
 }

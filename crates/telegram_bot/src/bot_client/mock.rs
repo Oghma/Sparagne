@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use teloxide::{
     requests::ResponseResult,
-    types::{ChatId, InlineKeyboardMarkup, MessageId},
+    types::{ChatId, InlineKeyboardMarkup, InputFile, MessageId},
 };
 
 use super::BotClient;
@@ -100,5 +100,32 @@ impl BotClient for MockBot {
             Err(_) => panic!("mock bot lock"),
         };
         Ok(())
+    }
+
+    async fn send_document(
+        &self,
+        chat_id: ChatId,
+        _document: InputFile,
+        caption: &str,
+    ) -> ResponseResult<MessageId> {
+        let mut next_id = match self.next_id.lock() {
+            Ok(guard) => guard,
+            Err(_) => panic!("mock bot lock"),
+        };
+        let message_id = MessageId(*next_id);
+        *next_id += 1;
+
+        // Store as a sent message with the caption as text
+        match self.sent.lock() {
+            Ok(mut guard) => guard.push(SentMessage {
+                chat_id,
+                text: caption.to_string(),
+                has_kb: false,
+                message_id,
+            }),
+            Err(_) => panic!("mock bot lock"),
+        };
+
+        Ok(message_id)
     }
 }

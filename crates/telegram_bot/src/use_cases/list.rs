@@ -1,3 +1,5 @@
+use chrono::TimeZone;
+use chrono_tz::Europe::Rome;
 use reqwest::StatusCode;
 use teloxide::prelude::*;
 use uuid::Uuid;
@@ -7,7 +9,7 @@ use crate::{
     api::ApiError,
     bot_client::BotClient,
     i18n::{self, TextKey},
-    state::{ListSession, PendingAction, ScreenContext},
+    state::{ListFilters, ListSession, PendingAction, ScreenContext},
     ui,
     use_cases::{home, shared},
 };
@@ -53,10 +55,15 @@ pub(crate) async fn show_list(
     };
 
     let session = cfg.sessions.get(chat_id).await;
-    let (cursor, cursor_stack_len) = match session.list.as_ref() {
-        Some(list) if list.wallet_id == wallet_id => (list.current.clone(), list.cursors.len()),
-        _ => (None, 0),
+    let (cursor, cursor_stack_len, filters) = match session.list.as_ref() {
+        Some(list) if list.wallet_id == wallet_id => {
+            (list.current.clone(), list.cursors.len(), list.filters.clone())
+        }
+        _ => (None, 0, ListFilters::default()),
     };
+
+    // Build kinds filter from ListFilters
+    let kinds = filters.kind.map(|k| vec![k]);
 
     let list = match cfg
         .api
@@ -68,9 +75,21 @@ pub(crate) async fn show_list(
                 wallet_id: Some(wallet_id),
                 limit: Some(5), // Show 5 transactions per page for numbered buttons
                 cursor,
-                from: None,
-                to: None,
-                kinds: None,
+                from: filters.from.map(|d| {
+                    Rome
+                        .from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
+                        .single()
+                        .unwrap()
+                        .fixed_offset()
+                }),
+                to: filters.to.map(|d| {
+                    Rome
+                        .from_local_datetime(&d.and_hms_opt(23, 59, 59).unwrap())
+                        .single()
+                        .unwrap()
+                        .fixed_offset()
+                }),
+                kinds,
                 include_voided: Some(prefs.include_voided),
                 include_transfers: Some(false),
             },
@@ -92,11 +111,11 @@ pub(crate) async fn show_list(
 
     cfg.sessions
         .update(chat_id, |s| {
-            let (cursors, current) = match s.list.as_ref() {
+            let (cursors, current, current_filters) = match s.list.as_ref() {
                 Some(prev) if prev.wallet_id == wallet_id => {
-                    (prev.cursors.clone(), prev.current.clone())
+                    (prev.cursors.clone(), prev.current.clone(), prev.filters.clone())
                 }
-                _ => (Vec::new(), None),
+                _ => (Vec::new(), None, ListFilters::default()),
             };
             s.list = Some(ListSession {
                 wallet_id,
@@ -104,6 +123,7 @@ pub(crate) async fn show_list(
                 current,
                 next: list.next_cursor.clone(),
                 tx_ids,
+                filters: current_filters,
             });
             s.current_screen = ScreenContext::List;
         })
@@ -118,6 +138,7 @@ pub(crate) async fn show_list(
         has_prev,
         has_next,
         page_number,
+        &filters,
     );
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
@@ -201,4 +222,71 @@ async fn fetch_detail_with_vault(
     };
 
     Ok(Some((vault_id, detail)))
+}
+
+/// Shows the filter menu for the list.
+pub(crate) async fn show_filters(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    cfg: &ConfigParameters,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    let session = cfg.sessions.get(chat_id).await;
+    let filters = session
+        .list
+        .as_ref()
+        .map(|l| l.filters.clone())
+        .unwrap_or_default();
+
+    let (text, kb) = ui::filter::render_filter_menu(locale, &filters);
+    shared::edit_or_send(bot, chat_id, cfg, text, kb).await
+}
+
+/// Sets the kind filter and refreshes the list.
+pub(crate) async fn set_filter_kind(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    kind: Option<api_types::transaction::TransactionKind>,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    // Update filter in session and reset pagination
+    cfg.sessions
+        .update(chat_id, |s| {
+            if let Some(list) = s.list.as_mut() {
+                list.filters.kind = kind;
+                // Reset pagination when filter changes
+                list.cursors.clear();
+                list.current = None;
+                list.next = None;
+            }
+        })
+        .await;
+
+    show_list(bot, chat_id, user_id, cfg, locale).await
+}
+
+/// Clears all filters and refreshes the list.
+pub(crate) async fn clear_filters(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    // Clear all filters and reset pagination
+    cfg.sessions
+        .update(chat_id, |s| {
+            if let Some(list) = s.list.as_mut() {
+                list.filters.clear();
+                // Reset pagination when filter changes
+                list.cursors.clear();
+                list.current = None;
+                list.next = None;
+            }
+        })
+        .await;
+
+    show_list(bot, chat_id, user_id, cfg, locale).await
 }

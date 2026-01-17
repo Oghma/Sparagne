@@ -128,6 +128,45 @@ pub(crate) enum TextKey {
     NavBreadcrumbDetail,
     NavBreadcrumbWizard,
     NavBreadcrumbStats,
+
+    // Void Confirmation
+    VoidConfirmTitle,
+    VoidConfirmBody,
+    VoidConfirmYes,
+    VoidConfirmNo,
+
+    // Repeat Transaction
+    DetailBtnRepeat,
+    RepeatSuccess,
+
+    // Export
+    ExportGenerating,
+    ExportReady,
+    ExportEmpty,
+
+    // Filters
+    ListBtnFilter,
+    FilterTitle,
+    FilterKindAll,
+    FilterKindExpense,
+    FilterKindIncome,
+    FilterActiveIndicator,
+    FilterClear,
+    FilterBtnBack,
+
+    // Templates
+    TemplateListTitle,
+    TemplateEmpty,
+    TemplateBtnUse,
+    TemplateBtnDelete,
+    TemplateBtnCreate,
+    TemplateBtnHome,
+    TemplateCreatePrompt,
+    TemplateCreated,
+    TemplateUsed,
+    TemplateDeleted,
+    TemplateMaxReached,
+    TemplateInvalid,
 }
 
 pub(crate) fn default_locale() -> Locale {
@@ -281,6 +320,43 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::It, TextKey::NavBreadcrumbDetail) => "🏠 › 📜 › 📋 Dettaglio",
         (Locale::It, TextKey::NavBreadcrumbWizard) => "🏠 › ✏️ {type}",
         (Locale::It, TextKey::NavBreadcrumbStats) => "🏠 › 📊 Statistiche",
+        (Locale::It, TextKey::VoidConfirmTitle) => "⚠️ Conferma annullamento",
+        (Locale::It, TextKey::VoidConfirmBody) => {
+            "Vuoi annullare questa transazione?\n\n{amount} • {note}"
+        }
+        (Locale::It, TextKey::VoidConfirmYes) => "Sì, annulla",
+        (Locale::It, TextKey::VoidConfirmNo) => "No, torna indietro",
+        (Locale::It, TextKey::DetailBtnRepeat) => "Ripeti",
+        (Locale::It, TextKey::RepeatSuccess) => "✅ Transazione ripetuta",
+        (Locale::It, TextKey::ExportGenerating) => "⏳ Generazione export in corso...",
+        (Locale::It, TextKey::ExportReady) => "📁 Ecco il tuo export",
+        (Locale::It, TextKey::ExportEmpty) => "Nessuna transazione da esportare.",
+        (Locale::It, TextKey::ListBtnFilter) => "Filtri",
+        (Locale::It, TextKey::FilterTitle) => "🔍 Filtri",
+        (Locale::It, TextKey::FilterKindAll) => "Tutti",
+        (Locale::It, TextKey::FilterKindExpense) => "Solo spese",
+        (Locale::It, TextKey::FilterKindIncome) => "Solo entrate",
+        (Locale::It, TextKey::FilterActiveIndicator) => "🔍 Filtro attivo",
+        (Locale::It, TextKey::FilterClear) => "Rimuovi filtri",
+        (Locale::It, TextKey::FilterBtnBack) => "Indietro",
+        (Locale::It, TextKey::TemplateListTitle) => "📋 Template salvati",
+        (Locale::It, TextKey::TemplateEmpty) => {
+            "Nessun template salvato.\n\nI template ti permettono di salvare transazioni frequenti per riutilizzarle velocemente."
+        }
+        (Locale::It, TextKey::TemplateBtnUse) => "Usa",
+        (Locale::It, TextKey::TemplateBtnDelete) => "Elimina",
+        (Locale::It, TextKey::TemplateBtnCreate) => "Nuovo template",
+        (Locale::It, TextKey::TemplateBtnHome) => "Home",
+        (Locale::It, TextKey::TemplateCreatePrompt) => {
+            "Invia il template nel formato:\n\nnome | importo [#categoria] [nota]\n\nEs: Caffè | 1.50 #bar caffè"
+        }
+        (Locale::It, TextKey::TemplateCreated) => "✅ Template salvato",
+        (Locale::It, TextKey::TemplateUsed) => "✅ Transazione creata da template",
+        (Locale::It, TextKey::TemplateDeleted) => "✅ Template eliminato",
+        (Locale::It, TextKey::TemplateMaxReached) => "Hai raggiunto il limite massimo di template (10).",
+        (Locale::It, TextKey::TemplateInvalid) => {
+            "Formato non valido. Usa: nome | importo [#categoria] [nota]\nEs: Caffè | 1.50 #bar caffè"
+        }
 
         // ============ ENGLISH ============
         (Locale::En, TextKey::WelcomeTemplate) => {
@@ -412,6 +488,43 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::En, TextKey::NavBreadcrumbDetail) => "🏠 › 📜 › 📋 Detail",
         (Locale::En, TextKey::NavBreadcrumbWizard) => "🏠 › ✏️ {type}",
         (Locale::En, TextKey::NavBreadcrumbStats) => "🏠 › 📊 Statistics",
+        (Locale::En, TextKey::VoidConfirmTitle) => "⚠️ Confirm void",
+        (Locale::En, TextKey::VoidConfirmBody) => {
+            "Do you want to void this transaction?\n\n{amount} • {note}"
+        }
+        (Locale::En, TextKey::VoidConfirmYes) => "Yes, void it",
+        (Locale::En, TextKey::VoidConfirmNo) => "No, go back",
+        (Locale::En, TextKey::DetailBtnRepeat) => "Repeat",
+        (Locale::En, TextKey::RepeatSuccess) => "✅ Transaction repeated",
+        (Locale::En, TextKey::ExportGenerating) => "⏳ Generating export...",
+        (Locale::En, TextKey::ExportReady) => "📁 Here's your export",
+        (Locale::En, TextKey::ExportEmpty) => "No transactions to export.",
+        (Locale::En, TextKey::ListBtnFilter) => "Filters",
+        (Locale::En, TextKey::FilterTitle) => "🔍 Filters",
+        (Locale::En, TextKey::FilterKindAll) => "All",
+        (Locale::En, TextKey::FilterKindExpense) => "Expenses only",
+        (Locale::En, TextKey::FilterKindIncome) => "Income only",
+        (Locale::En, TextKey::FilterActiveIndicator) => "🔍 Filter active",
+        (Locale::En, TextKey::FilterClear) => "Clear filters",
+        (Locale::En, TextKey::FilterBtnBack) => "Back",
+        (Locale::En, TextKey::TemplateListTitle) => "📋 Saved templates",
+        (Locale::En, TextKey::TemplateEmpty) => {
+            "No saved templates.\n\nTemplates let you save frequent transactions for quick reuse."
+        }
+        (Locale::En, TextKey::TemplateBtnUse) => "Use",
+        (Locale::En, TextKey::TemplateBtnDelete) => "Delete",
+        (Locale::En, TextKey::TemplateBtnCreate) => "New template",
+        (Locale::En, TextKey::TemplateBtnHome) => "Home",
+        (Locale::En, TextKey::TemplateCreatePrompt) => {
+            "Send the template in format:\n\nname | amount [#category] [note]\n\nEx: Coffee | 1.50 #bar coffee"
+        }
+        (Locale::En, TextKey::TemplateCreated) => "✅ Template saved",
+        (Locale::En, TextKey::TemplateUsed) => "✅ Transaction created from template",
+        (Locale::En, TextKey::TemplateDeleted) => "✅ Template deleted",
+        (Locale::En, TextKey::TemplateMaxReached) => "You've reached the maximum number of templates (10).",
+        (Locale::En, TextKey::TemplateInvalid) => {
+            "Invalid format. Use: name | amount [#category] [note]\nEx: Coffee | 1.50 #bar coffee"
+        }
     }
 }
 
