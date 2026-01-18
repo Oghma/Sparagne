@@ -1,7 +1,9 @@
 use chrono::Datelike;
 use teloxide::prelude::*;
 
-use crate::{ConfigParameters, bot_client::BotClient, i18n, state::ScreenContext, ui, use_cases::shared};
+use crate::{
+    ConfigParameters, bot_client::BotClient, i18n, state::ScreenContext, ui, use_cases::shared,
+};
 
 pub(crate) async fn show_stats(
     bot: &dyn BotClient,

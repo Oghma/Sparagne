@@ -83,8 +83,7 @@ pub(crate) async fn show_list(
                         .fixed_offset()
                 }),
                 to: filters.to.map(|d| {
-                    Rome
-                        .from_local_datetime(&d.and_hms_opt(23, 59, 59).unwrap())
+                    Rome.from_local_datetime(&d.and_hms_opt(23, 59, 59).unwrap())
                         .single()
                         .unwrap()
                         .fixed_offset()
@@ -112,9 +111,11 @@ pub(crate) async fn show_list(
     cfg.sessions
         .update(chat_id, |s| {
             let (cursors, current, current_filters) = match s.list.as_ref() {
-                Some(prev) if prev.wallet_id == wallet_id => {
-                    (prev.cursors.clone(), prev.current.clone(), prev.filters.clone())
-                }
+                Some(prev) if prev.wallet_id == wallet_id => (
+                    prev.cursors.clone(),
+                    prev.current.clone(),
+                    prev.filters.clone(),
+                ),
                 _ => (Vec::new(), None, ListFilters::default()),
             };
             s.list = Some(ListSession {

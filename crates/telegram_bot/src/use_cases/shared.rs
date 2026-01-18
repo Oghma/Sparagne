@@ -57,7 +57,8 @@ pub(crate) async fn send_api_error(
 
     let mut text = user_message_for_api_error(locale, err);
 
-    // Add recovery hint for errors that aren't auth-related (which already suggest pairing)
+    // Add recovery hint for errors that aren't auth-related (which already suggest
+    // pairing)
     if needs_hint {
         text.push_str(i18n::t(locale, TextKey::ErrorRecoveryHint));
     }

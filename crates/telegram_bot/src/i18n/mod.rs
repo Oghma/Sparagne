@@ -353,7 +353,9 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::It, TextKey::TemplateCreated) => "✅ Template salvato",
         (Locale::It, TextKey::TemplateUsed) => "✅ Transazione creata da template",
         (Locale::It, TextKey::TemplateDeleted) => "✅ Template eliminato",
-        (Locale::It, TextKey::TemplateMaxReached) => "Hai raggiunto il limite massimo di template (10).",
+        (Locale::It, TextKey::TemplateMaxReached) => {
+            "Hai raggiunto il limite massimo di template (10)."
+        }
         (Locale::It, TextKey::TemplateInvalid) => {
             "Formato non valido. Usa: nome | importo [#categoria] [nota]\nEs: Caffè | 1.50 #bar caffè"
         }
@@ -521,7 +523,9 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::En, TextKey::TemplateCreated) => "✅ Template saved",
         (Locale::En, TextKey::TemplateUsed) => "✅ Transaction created from template",
         (Locale::En, TextKey::TemplateDeleted) => "✅ Template deleted",
-        (Locale::En, TextKey::TemplateMaxReached) => "You've reached the maximum number of templates (10).",
+        (Locale::En, TextKey::TemplateMaxReached) => {
+            "You've reached the maximum number of templates (10)."
+        }
         (Locale::En, TextKey::TemplateInvalid) => {
             "Invalid format. Use: name | amount [#category] [note]\nEx: Coffee | 1.50 #bar coffee"
         }

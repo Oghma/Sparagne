@@ -12,7 +12,7 @@ use crate::{
     i18n::{self, TextKey},
     parsing::{ParseError, QuickKind, parse_quick_add, suggest_category},
     routing::{CallbackAction, Command},
-    state::{DraftCreate, PendingAction, TransactionTemplate, MAX_TEMPLATES},
+    state::{DraftCreate, MAX_TEMPLATES, PendingAction, TransactionTemplate},
     text, ui,
     use_cases::{export, home, list, shared, stats, wizard},
 };
@@ -1102,11 +1102,8 @@ async fn use_template(
     };
 
     let Some(wallet_id) = prefs.default_wallet_id else {
-        bot.send_message(
-            chat_id,
-            i18n::t(locale, TextKey::DefaultWalletMissing),
-        )
-        .await?;
+        bot.send_message(chat_id, i18n::t(locale, TextKey::DefaultWalletMissing))
+            .await?;
         home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "tpl:list").await?;
         return Ok(());
     };
