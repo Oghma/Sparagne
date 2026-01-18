@@ -16,7 +16,10 @@ pub(crate) fn render_filter_menu(
     // Show current filter state
     let mut text = title.to_string();
     if filters.is_active() {
-        text.push_str(&format!("\n\n{}", i18n::t(locale, TextKey::FilterActiveIndicator)));
+        text.push_str(&format!(
+            "\n\n{}",
+            i18n::t(locale, TextKey::FilterActiveIndicator)
+        ));
         if let Some(kind) = &filters.kind {
             let kind_str = match kind {
                 TransactionKind::Expense => i18n::t(locale, TextKey::FilterKindExpense),
@@ -33,8 +36,11 @@ pub(crate) fn render_filter_menu(
 
     // Kind filter buttons
     let kind_all_label = format_kind_label(locale, None, filters.kind.as_ref());
-    let kind_expense_label =
-        format_kind_label(locale, Some(TransactionKind::Expense), filters.kind.as_ref());
+    let kind_expense_label = format_kind_label(
+        locale,
+        Some(TransactionKind::Expense),
+        filters.kind.as_ref(),
+    );
     let kind_income_label =
         format_kind_label(locale, Some(TransactionKind::Income), filters.kind.as_ref());
 

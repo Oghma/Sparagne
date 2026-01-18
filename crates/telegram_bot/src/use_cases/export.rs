@@ -1,7 +1,6 @@
 use api_types::transaction::{TransactionKind, TransactionView};
 use engine::{Currency as EngineCurrency, Money};
-use teloxide::prelude::*;
-use teloxide::types::InputFile;
+use teloxide::{prelude::*, types::InputFile};
 
 use crate::{
     ConfigParameters,
@@ -10,7 +9,8 @@ use crate::{
     use_cases::shared,
 };
 
-/// Handles the /export command - generates and sends a CSV file with all transactions.
+/// Handles the /export command - generates and sends a CSV file with all
+/// transactions.
 pub(crate) async fn handle_export(
     bot: &dyn BotClient,
     chat_id: ChatId,

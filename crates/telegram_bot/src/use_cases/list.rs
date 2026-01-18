@@ -56,9 +56,11 @@ pub(crate) async fn show_list(
 
     let session = cfg.sessions.get(chat_id).await;
     let (cursor, cursor_stack_len, filters) = match session.list.as_ref() {
-        Some(list) if list.wallet_id == wallet_id => {
-            (list.current.clone(), list.cursors.len(), list.filters.clone())
-        }
+        Some(list) if list.wallet_id == wallet_id => (
+            list.current.clone(),
+            list.cursors.len(),
+            list.filters.clone(),
+        ),
         _ => (None, 0, ListFilters::default()),
     };
 
@@ -76,8 +78,7 @@ pub(crate) async fn show_list(
                 limit: Some(5), // Show 5 transactions per page for numbered buttons
                 cursor,
                 from: filters.from.map(|d| {
-                    Rome
-                        .from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
+                    Rome.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
                         .single()
                         .unwrap()
                         .fixed_offset()

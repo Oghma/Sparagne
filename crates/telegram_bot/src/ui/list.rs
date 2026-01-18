@@ -68,7 +68,10 @@ pub(crate) fn render_list(
 
     // Show active filter indicator
     if filters.is_active() {
-        text.push_str(&format!("\n{}", i18n::t(locale, TextKey::FilterActiveIndicator)));
+        text.push_str(&format!(
+            "\n{}",
+            i18n::t(locale, TextKey::FilterActiveIndicator)
+        ));
     }
 
     // Render transaction list grouped by date

@@ -1,7 +1,9 @@
 use teloxide::types::User;
 
-use crate::i18n::{self, TextKey};
-use crate::state::ScreenContext;
+use crate::{
+    i18n::{self, TextKey},
+    state::ScreenContext,
+};
 
 pub(crate) fn welcome_text(locale: i18n::Locale, display_name: &str) -> String {
     let template = i18n::t(locale, TextKey::WelcomeTemplate);
@@ -17,7 +19,11 @@ pub(crate) fn pairing_success(locale: i18n::Locale) -> &'static str {
 }
 
 pub(crate) fn first_time_welcome(locale: i18n::Locale, display_name: &str) -> String {
-    let welcome = i18n::format(locale, TextKey::WelcomeFirstTime, &[("display_name", display_name)]);
+    let welcome = i18n::format(
+        locale,
+        TextKey::WelcomeFirstTime,
+        &[("display_name", display_name)],
+    );
     let concepts = i18n::t(locale, TextKey::ConceptsExplanation);
     let quickstart = i18n::t(locale, TextKey::QuickStartGuide);
     format!("{welcome}\n\n{concepts}\n\n{quickstart}")

@@ -33,9 +33,9 @@ pub(crate) enum CallbackAction {
     ListNext,
     ListPrev,
     ToggleVoided,
-    ListShowFilters,                     // Show filter menu
+    ListShowFilters,                         // Show filter menu
     ListFilterKind(Option<TransactionKind>), // Set kind filter (None = all)
-    ListFilterClear,                     // Clear all filters
+    ListFilterClear,                         // Clear all filters
 
     // Transaction actions
     TxDetail(usize),     // 1-based index in list
@@ -102,7 +102,9 @@ pub(crate) fn parse_callback_action(data: &str) -> Option<CallbackAction> {
         "list:toggle_voided" | "prefs:toggle_voided" => CallbackAction::ToggleVoided,
         "list:filters" => CallbackAction::ListShowFilters,
         "list:filter:kind:all" => CallbackAction::ListFilterKind(None),
-        "list:filter:kind:expense" => CallbackAction::ListFilterKind(Some(TransactionKind::Expense)),
+        "list:filter:kind:expense" => {
+            CallbackAction::ListFilterKind(Some(TransactionKind::Expense))
+        }
         "list:filter:kind:income" => CallbackAction::ListFilterKind(Some(TransactionKind::Income)),
         "list:filter:clear" => CallbackAction::ListFilterClear,
 
