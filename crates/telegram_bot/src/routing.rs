@@ -29,6 +29,7 @@ pub(crate) enum CallbackAction {
     // Wallet/Flow selection
     WalletSet(Uuid),
     FlowSet(Uuid),
+    VaultSet(Uuid),
 
     // List
     ListNext,
@@ -129,6 +130,9 @@ pub(crate) fn parse_callback_action(data: &str) -> Option<CallbackAction> {
             }
             if let Some(flow_id) = parse_uuid_suffix(data, "flow:set:") {
                 return Some(CallbackAction::FlowSet(flow_id));
+            }
+            if let Some(vault_id) = parse_uuid_suffix(data, "vault:set:") {
+                return Some(CallbackAction::VaultSet(vault_id));
             }
 
             // Transaction detail by index (1-based)
@@ -253,6 +257,17 @@ mod tests {
             Err(_) => panic!("invalid uuid test fixture"),
         };
         assert_eq!(action, Some(CallbackAction::WalletSet(parsed)));
+    }
+
+    #[test]
+    fn parse_callback_action_vault_set() {
+        let id = "00000000-0000-0000-0000-000000000000";
+        let action = parse_callback_action(&format!("vault:set:{id}"));
+        let parsed = match Uuid::parse_str(id) {
+            Ok(parsed) => parsed,
+            Err(_) => panic!("invalid uuid test fixture"),
+        };
+        assert_eq!(action, Some(CallbackAction::VaultSet(parsed)));
     }
 
     #[test]

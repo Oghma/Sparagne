@@ -74,9 +74,9 @@ pub(crate) enum TextKey {
     PairingRequired,
     PairingPrompt,
     PreferencesSaveError,
-    VaultSetUsage,
+    VaultPickerTitle,
+    VaultPickerEmpty,
     VaultSetConfirmation,
-    VaultSetInvalid,
     DefaultWalletMissing,
     TooManyTags,
     InvalidAmountExample,
@@ -193,7 +193,7 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "Benvenuto, {display_name}!\n\nPuoi inserire voci al volo scrivendo:\n\n12.50 bar caffè\n+1000 stipendio\n\n#tag opzionale: 12.50 #food caffè"
         }
         (Locale::It, TextKey::HelpText) => {
-            "Sintassi quick add:\n\n12.50 bar caffè → Spesa\n+1000 stipendio → Entrata\n\n#tag opzionale (max 1):\n12.50 #food caffè\n\nComandi:\n/home - Torna alla home\n/help - Mostra aiuto\n/categories - Lista categorie\n/template - Gestisci template\n/export - Esporta CSV\n/vault <nome|id:...> - Cambia vault"
+            "Sintassi quick add:\n\n12.50 bar caffè → Spesa\n+1000 stipendio → Entrata\n\n#tag opzionale (max 1):\n12.50 #food caffè\n\nComandi:\n/home - Torna alla home\n/help - Mostra aiuto\n/categories - Lista categorie\n/template - Gestisci template\n/export - Esporta CSV\n/vault - Cambia vault"
         }
         (Locale::It, TextKey::UnsetValue) => "Non impostato",
         (Locale::It, TextKey::UnallocatedFlow) => "Non allocato",
@@ -254,9 +254,9 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::It, TextKey::PairingRequired) => "Per fare pairing: /start <codice>",
         (Locale::It, TextKey::PairingPrompt) => "Inserisci il codice di pairing:",
         (Locale::It, TextKey::PreferencesSaveError) => "Errore nel salvataggio delle preferenze.",
-        (Locale::It, TextKey::VaultSetUsage) => "Uso: /vault <nome> oppure /vault id:<uuid>",
+        (Locale::It, TextKey::VaultPickerTitle) => "Scegli un vault:",
+        (Locale::It, TextKey::VaultPickerEmpty) => "Nessun vault disponibile.",
         (Locale::It, TextKey::VaultSetConfirmation) => "✅ Vault attivo: {vault}",
-        (Locale::It, TextKey::VaultSetInvalid) => "ID vault non valido. Usa: /vault id:<uuid>",
         (Locale::It, TextKey::DefaultWalletMissing) => "Imposta prima un wallet di default.",
         (Locale::It, TextKey::TooManyTags) => "Troppi tag: massimo 1.",
         (Locale::It, TextKey::InvalidAmountExample) => "Importo non valido (es: 10 o 10.50).",
@@ -309,7 +309,7 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "📚 Aiuto - Statistiche\n\nRiepilogo del mese corrente:\n• Entrate e uscite totali\n• Saldo netto\n• Spese per categoria"
         }
         (Locale::It, TextKey::HelpFooter) => {
-            "\n\n📋 Comandi:\n/home - Torna alla home\n/help - Questo aiuto\n/categories - Lista categorie\n/template - Gestisci template\n/export - Esporta CSV\n/vault <nome|id:...> - Cambia vault"
+            "\n\n📋 Comandi:\n/home - Torna alla home\n/help - Questo aiuto\n/categories - Lista categorie\n/template - Gestisci template\n/export - Esporta CSV\n/vault - Cambia vault"
         }
         (Locale::It, TextKey::HomeBtnHelp) => "Aiuto",
         (Locale::It, TextKey::ErrorRecoveryHint) => "\n\n💡 Prova: /home per tornare alla home",
@@ -363,7 +363,7 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "Welcome, {display_name}!\n\nYou can add entries on the fly:\n\n12.50 coffee\n+1000 salary\n\nOptional #tag: 12.50 #food coffee"
         }
         (Locale::En, TextKey::HelpText) => {
-            "Quick add syntax:\n\n12.50 coffee → Expense\n+1000 salary → Income\n\nOptional #tag (max 1):\n12.50 #food coffee\n\nCommands:\n/home - Go to home\n/help - Show help\n/categories - List categories\n/template - Manage templates\n/export - Export CSV\n/vault <name|id:...> - Switch vault"
+            "Quick add syntax:\n\n12.50 coffee → Expense\n+1000 salary → Income\n\nOptional #tag (max 1):\n12.50 #food coffee\n\nCommands:\n/home - Go to home\n/help - Show help\n/categories - List categories\n/template - Manage templates\n/export - Export CSV\n/vault - Switch vault"
         }
         (Locale::En, TextKey::UnsetValue) => "Not set",
         (Locale::En, TextKey::UnallocatedFlow) => "Unallocated",
@@ -424,9 +424,9 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::En, TextKey::PairingRequired) => "To pair: /start <code>",
         (Locale::En, TextKey::PairingPrompt) => "Enter the pairing code:",
         (Locale::En, TextKey::PreferencesSaveError) => "Error saving preferences.",
-        (Locale::En, TextKey::VaultSetUsage) => "Usage: /vault <name> or /vault id:<uuid>",
+        (Locale::En, TextKey::VaultPickerTitle) => "Choose a vault:",
+        (Locale::En, TextKey::VaultPickerEmpty) => "No vaults available.",
         (Locale::En, TextKey::VaultSetConfirmation) => "✅ Active vault: {vault}",
-        (Locale::En, TextKey::VaultSetInvalid) => "Invalid vault id. Use: /vault id:<uuid>",
         (Locale::En, TextKey::DefaultWalletMissing) => "Please set a default wallet first.",
         (Locale::En, TextKey::TooManyTags) => "Too many tags: max 1.",
         (Locale::En, TextKey::InvalidAmountExample) => "Invalid amount (e.g.: 10 or 10.50).",
@@ -477,7 +477,7 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "📚 Help - Statistics\n\nCurrent month summary:\n• Total income and expenses\n• Net balance\n• Expenses by category"
         }
         (Locale::En, TextKey::HelpFooter) => {
-            "\n\n📋 Commands:\n/home - Back to home\n/help - This help\n/categories - List categories\n/template - Manage templates\n/export - Export CSV\n/vault <name|id:...> - Switch vault"
+            "\n\n📋 Commands:\n/home - Back to home\n/help - This help\n/categories - List categories\n/template - Manage templates\n/export - Export CSV\n/vault - Switch vault"
         }
         (Locale::En, TextKey::HomeBtnHelp) => "Help",
         (Locale::En, TextKey::ErrorRecoveryHint) => "\n\n💡 Try: /home to go back home",

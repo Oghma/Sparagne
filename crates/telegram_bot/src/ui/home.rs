@@ -1,4 +1,4 @@
-use api_types::vault::VaultSnapshot;
+use api_types::vault::{VaultSnapshot, VaultView};
 use engine::Money;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 
@@ -133,4 +133,30 @@ pub(crate) fn render_flow_picker(
         i18n::t(locale, TextKey::PickerFlowTitle).to_string(),
         InlineKeyboardMarkup::new(rows),
     )
+}
+
+pub(crate) fn render_vault_picker(
+    locale: i18n::Locale,
+    vaults: &[VaultView],
+    back_callback: &str,
+) -> (String, InlineKeyboardMarkup) {
+    let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
+    for vault in vaults {
+        rows.push(vec![InlineKeyboardButton::callback(
+            vault.name.clone(),
+            format!("vault:set:{id}", id = vault.id),
+        )]);
+    }
+    rows.push(vec![InlineKeyboardButton::callback(
+        format!("⬅️ {}", i18n::t(locale, TextKey::DetailBtnBack)),
+        back_callback,
+    )]);
+
+    let title = if vaults.is_empty() {
+        i18n::t(locale, TextKey::VaultPickerEmpty)
+    } else {
+        i18n::t(locale, TextKey::VaultPickerTitle)
+    };
+
+    (title.to_string(), InlineKeyboardMarkup::new(rows))
 }

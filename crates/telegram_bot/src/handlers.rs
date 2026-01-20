@@ -134,74 +134,8 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::Vault { value } => {
-                let Some(raw) = value.as_deref().map(str::trim).filter(|v| !v.is_empty()) else {
-                    bot.send_message(chat_id, i18n::t(locale, TextKey::VaultSetUsage))
-                        .await?;
-                    return Ok(());
-                };
-
-                let (vault_ref, pref_value) = if let Some(id) = raw
-                    .strip_prefix("id:")
-                    .map(str::trim)
-                    .filter(|v| !v.is_empty())
-                {
-                    if uuid::Uuid::parse_str(id).is_err() {
-                        bot.send_message(chat_id, i18n::t(locale, TextKey::VaultSetInvalid))
-                            .await?;
-                        return Ok(());
-                    }
-                    (
-                        api_types::vault::Vault {
-                            id: Some(id.to_string()),
-                            name: None,
-                            currency: None,
-                            owner: None,
-                        },
-                        format!("id:{id}"),
-                    )
-                } else {
-                    (
-                        api_types::vault::Vault {
-                            id: None,
-                            name: Some(raw.to_string()),
-                            currency: None,
-                            owner: None,
-                        },
-                        raw.to_string(),
-                    )
-                };
-
-                let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
-                    Ok(snapshot) => snapshot,
-                    Err(err) => {
-                        bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
-                            .await?;
-                        return Ok(());
-                    }
-                };
-
-                let updated = cfg
-                    .prefs
-                    .update(user_id, |p| {
-                        p.active_vault_name = pref_value.clone();
-                        p.default_wallet_id = None;
-                        p.default_flow_id = None;
-                        p.last_flow_id = None;
-                    })
-                    .await;
-                if updated.is_err() {
-                    bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
-                        .await?;
-                    return Ok(());
-                }
-
-                let msg = i18n::format(
-                    locale,
-                    TextKey::VaultSetConfirmation,
-                    &[("vault", snapshot.name.as_str())],
-                );
-                bot.send_message(chat_id, msg).await?;
-                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
+                let _ = value;
+                home::show_vault_picker(&bot, chat_id, user_id, &cfg, locale, "nav:home").await?;
                 return Ok(());
             }
         }
@@ -536,6 +470,44 @@ pub(crate) async fn handle_callback(
                         .await?;
                 }
             }
+        }
+        CallbackAction::VaultSet(vault_id) => {
+            let payload = api_types::vault::Vault {
+                id: Some(vault_id.to_string()),
+                name: None,
+                currency: None,
+                owner: None,
+            };
+            let vault = match cfg.api.vault_get(user_id, &payload).await {
+                Ok(vault) => vault,
+                Err(err) => {
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
+                        .await?;
+                    return Ok(());
+                }
+            };
+            let vault_name = vault.name.clone().unwrap_or_else(|| vault_id.to_string());
+            let updated = cfg
+                .prefs
+                .update(user_id, |p| {
+                    p.active_vault_name = format!("id:{vault_id}");
+                    p.default_wallet_id = None;
+                    p.default_flow_id = None;
+                    p.last_flow_id = None;
+                })
+                .await;
+            if updated.is_err() {
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
+                    .await?;
+                return Ok(());
+            }
+            let msg = i18n::format(
+                locale,
+                TextKey::VaultSetConfirmation,
+                &[("vault", vault_name.as_str())],
+            );
+            bot.send_message(chat_id, msg).await?;
+            home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
         }
         CallbackAction::TxEdit(tx_id) => {
             let (text, kb) = ui::detail::render_edit_menu(locale, tx_id);

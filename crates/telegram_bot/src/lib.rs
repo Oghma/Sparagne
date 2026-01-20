@@ -7,7 +7,10 @@ use std::{path::PathBuf, sync::Arc};
 
 use base64::Engine;
 use reqwest::{Client, header};
-use teloxide::{prelude::*, types::BotCommand};
+use teloxide::{
+    prelude::*,
+    types::{BotCommand, BotCommandScope},
+};
 
 mod api;
 mod bot_client;
@@ -142,11 +145,27 @@ impl Bot {
             BotCommand::new("vault", "Switch active vault"),
         ];
 
-        // Set default commands (Italian)
-        bot.set_my_commands(commands_it).await?;
+        let scopes = [
+            BotCommandScope::Default,
+            BotCommandScope::AllPrivateChats,
+            BotCommandScope::AllGroupChats,
+        ];
 
-        // Set English commands for users with English language
-        bot.set_my_commands(commands_en).language_code("en").await?;
+        for scope in scopes {
+            bot.delete_my_commands().scope(scope.clone()).await?;
+            bot.delete_my_commands()
+                .scope(scope.clone())
+                .language_code("en")
+                .await?;
+
+            bot.set_my_commands(commands_it.clone())
+                .scope(scope.clone())
+                .await?;
+            bot.set_my_commands(commands_en.clone())
+                .scope(scope)
+                .language_code("en")
+                .await?;
+        }
 
         tracing::info!("Bot commands registered successfully");
         Ok(())

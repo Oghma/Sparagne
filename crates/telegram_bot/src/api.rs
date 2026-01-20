@@ -7,7 +7,7 @@ use api_types::{
         TransactionList, TransactionListResponse, TransactionUpdate, TransactionVoid,
     },
     user::PairUser,
-    vault::{Vault, VaultSnapshot},
+    vault::{Vault, VaultList, VaultListResponse, VaultSnapshot},
 };
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
@@ -34,6 +34,11 @@ pub(crate) enum ApiError {
 pub(crate) trait ApiGateway: Send + Sync {
     async fn pair_user(&self, telegram_user_id: u64, code: &str) -> Result<(), ApiError>;
     async fn vault_get(&self, telegram_user_id: u64, payload: &Vault) -> Result<Vault, ApiError>;
+    async fn vault_list(
+        &self,
+        telegram_user_id: u64,
+        payload: &VaultList,
+    ) -> Result<VaultListResponse, ApiError>;
     async fn vault_snapshot(
         &self,
         telegram_user_id: u64,
@@ -94,6 +99,14 @@ where
 
     async fn vault_get(&self, telegram_user_id: u64, payload: &Vault) -> Result<Vault, ApiError> {
         self.as_ref().vault_get(telegram_user_id, payload).await
+    }
+
+    async fn vault_list(
+        &self,
+        telegram_user_id: u64,
+        payload: &VaultList,
+    ) -> Result<VaultListResponse, ApiError> {
+        self.as_ref().vault_list(telegram_user_id, payload).await
     }
 
     async fn vault_snapshot(
@@ -286,6 +299,15 @@ impl ApiClient {
             .await
     }
 
+    pub(crate) async fn vault_list(
+        &self,
+        telegram_user_id: u64,
+        payload: &VaultList,
+    ) -> Result<VaultListResponse, ApiError> {
+        self.post_json(Some(telegram_user_id), "/vault/list", payload)
+            .await
+    }
+
     pub(crate) async fn vault_snapshot(
         &self,
         telegram_user_id: u64,
@@ -404,6 +426,14 @@ impl ApiGateway for ApiClient {
 
     async fn vault_get(&self, telegram_user_id: u64, payload: &Vault) -> Result<Vault, ApiError> {
         self.vault_get(telegram_user_id, payload).await
+    }
+
+    async fn vault_list(
+        &self,
+        telegram_user_id: u64,
+        payload: &VaultList,
+    ) -> Result<VaultListResponse, ApiError> {
+        self.vault_list(telegram_user_id, payload).await
     }
 
     async fn vault_snapshot(

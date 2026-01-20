@@ -10,6 +10,7 @@ use crate::{
     ui,
     use_cases::shared,
 };
+use api_types::vault::VaultList;
 
 pub(crate) async fn show_home(
     bot: &dyn BotClient,
@@ -120,5 +121,41 @@ pub(crate) async fn show_flow_picker(
         }
     };
     let (text, kb) = ui::home::render_flow_picker(locale, &snapshot, back_callback);
+    shared::edit_or_send(bot, chat_id, cfg, text, kb).await
+}
+
+pub(crate) async fn show_vault_picker(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    locale: i18n::Locale,
+    back_callback: &str,
+) -> ResponseResult<()> {
+    let list = match cfg.api.vault_list(user_id, &VaultList::default()).await {
+        Ok(list) => list,
+        Err(err) => {
+            let needs_pairing = matches!(
+                err,
+                ApiError::Server { status, .. }
+                    if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
+            );
+            if needs_pairing {
+                cfg.sessions
+                    .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
+                    .await;
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingPrompt), None)
+                    .await?;
+            } else {
+                shared::send_api_error(bot, chat_id, locale, err).await?;
+            }
+            return Ok(());
+        }
+    };
+
+    let mut vaults = list.vaults;
+    vaults.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    let (text, kb) = ui::home::render_vault_picker(locale, &vaults, back_callback);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }

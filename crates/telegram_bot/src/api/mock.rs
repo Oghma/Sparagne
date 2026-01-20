@@ -8,7 +8,7 @@ use api_types::{
         ExpenseNew, IncomeNew, TransactionCreated, TransactionDetailResponse, TransactionGet,
         TransactionList, TransactionListResponse, TransactionUpdate, TransactionVoid,
     },
-    vault::{Vault, VaultSnapshot},
+    vault::{Vault, VaultList, VaultListResponse, VaultSnapshot},
 };
 use async_trait::async_trait;
 use reqwest::StatusCode;
@@ -19,6 +19,7 @@ use super::{ApiError, ApiGateway};
 pub(crate) struct MockApi {
     pub(crate) pair_user: Mutex<Option<Result<(), ApiError>>>,
     pub(crate) vault_get: Mutex<Option<Result<Vault, ApiError>>>,
+    pub(crate) vault_list: Mutex<Option<Result<VaultListResponse, ApiError>>>,
     pub(crate) vault_snapshot: Mutex<Option<Result<VaultSnapshot, ApiError>>>,
     pub(crate) stats_get: Mutex<Option<Result<Statistic, ApiError>>>,
     pub(crate) transactions_list: Mutex<Option<Result<TransactionListResponse, ApiError>>>,
@@ -75,6 +76,14 @@ impl ApiGateway for MockApi {
 
     async fn vault_get(&self, _telegram_user_id: u64, _payload: &Vault) -> Result<Vault, ApiError> {
         Self::take_or_error(&self.vault_get, "vault_get")
+    }
+
+    async fn vault_list(
+        &self,
+        _telegram_user_id: u64,
+        _payload: &VaultList,
+    ) -> Result<VaultListResponse, ApiError> {
+        Self::take_or_error(&self.vault_list, "vault_list")
     }
 
     async fn vault_snapshot(
