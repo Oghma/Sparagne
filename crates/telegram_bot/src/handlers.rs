@@ -88,6 +88,14 @@ pub(crate) async fn handle_message(
                     return Ok(());
                 }
 
+                let display_name = cfg
+                    .sessions
+                    .get(chat_id)
+                    .await
+                    .display_name
+                    .unwrap_or_else(|| "Sparagne".to_string());
+                bot.send_message(chat_id, text::welcome_text(locale, &display_name))
+                    .await?;
                 home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             }
@@ -97,13 +105,16 @@ pub(crate) async fn handle_message(
                 return Ok(());
             }
             Command::Help => {
-                let screen = cfg.sessions.get(chat_id).await.current_screen;
-                bot.send_message(chat_id, text::contextual_help(locale, screen))
+                let help_text = text::help_text(locale);
+                let extra = i18n::t(locale, TextKey::PairingRequired);
+                bot.send_message(chat_id, format!("{help_text}\n\n{extra}"))
                     .await?;
                 return Ok(());
             }
             Command::Categories => {
-                let cats = match shared::list_categories(&cfg.api, user_id).await {
+                let prefs = cfg.prefs.get_or_default(user_id).await;
+                let vault_ref = shared::vault_ref_from_prefs(&prefs);
+                let cats = match shared::list_categories(&cfg.api, user_id, &vault_ref).await {
                     Ok(c) => c,
                     Err(err) => {
                         shared::send_api_error(&bot, chat_id, locale, err).await?;
@@ -120,6 +131,77 @@ pub(crate) async fn handle_message(
             }
             Command::Template => {
                 show_template_list(&bot, chat_id, user_id, &cfg, locale).await?;
+                return Ok(());
+            }
+            Command::Vault { value } => {
+                let Some(raw) = value.as_deref().map(str::trim).filter(|v| !v.is_empty()) else {
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::VaultSetUsage))
+                        .await?;
+                    return Ok(());
+                };
+
+                let (vault_ref, pref_value) = if let Some(id) = raw
+                    .strip_prefix("id:")
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                {
+                    if uuid::Uuid::parse_str(id).is_err() {
+                        bot.send_message(chat_id, i18n::t(locale, TextKey::VaultSetInvalid))
+                            .await?;
+                        return Ok(());
+                    }
+                    (
+                        api_types::vault::Vault {
+                            id: Some(id.to_string()),
+                            name: None,
+                            currency: None,
+                            owner: None,
+                        },
+                        format!("id:{id}"),
+                    )
+                } else {
+                    (
+                        api_types::vault::Vault {
+                            id: None,
+                            name: Some(raw.to_string()),
+                            currency: None,
+                            owner: None,
+                        },
+                        raw.to_string(),
+                    )
+                };
+
+                let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
+                    Ok(snapshot) => snapshot,
+                    Err(err) => {
+                        bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
+                            .await?;
+                        return Ok(());
+                    }
+                };
+
+                let updated = cfg
+                    .prefs
+                    .update(user_id, |p| {
+                        p.active_vault_name = pref_value.clone();
+                        p.default_wallet_id = None;
+                        p.default_flow_id = None;
+                        p.last_flow_id = None;
+                    })
+                    .await;
+                if updated.is_err() {
+                    bot.send_message(chat_id, i18n::t(locale, TextKey::PreferencesSaveError))
+                        .await?;
+                    return Ok(());
+                }
+
+                let msg = i18n::format(
+                    locale,
+                    TextKey::VaultSetConfirmation,
+                    &[("vault", snapshot.name.as_str())],
+                );
+                bot.send_message(chat_id, msg).await?;
+                home::show_home(&bot, chat_id, user_id, &cfg, locale).await?;
                 return Ok(());
             }
         }
@@ -284,22 +366,22 @@ pub(crate) async fn handle_callback(
         }
         CallbackAction::TxVoidConfirm(tx_id) => {
             // Show void confirmation screen
+            let prefs = cfg.prefs.get_or_default(user_id).await;
+            let vault_ref = shared::vault_ref_from_prefs(&prefs);
+            let vault_id = match shared::resolve_vault_id(&cfg.api, user_id, &vault_ref).await {
+                Ok(v) => v,
+                Err(err) => {
+                    bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
+                        .await?;
+                    return Ok(());
+                }
+            };
             let detail = match cfg
                 .api
                 .transaction_get_detail(
                     user_id,
                     &api_types::transaction::TransactionGet {
-                        vault_id: match shared::resolve_main_vault_id(&cfg.api, user_id).await {
-                            Ok(v) => v,
-                            Err(err) => {
-                                bot.send_message(
-                                    chat_id,
-                                    shared::user_message_for_api_error(locale, err),
-                                )
-                                .await?;
-                                return Ok(());
-                            }
-                        },
+                        vault_id,
                         id: tx_id,
                     },
                 )
@@ -317,7 +399,9 @@ pub(crate) async fn handle_callback(
             shared::edit_or_send(&bot, chat_id, &cfg, text, kb).await?;
         }
         CallbackAction::TxVoid(tx_id) => {
-            let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
+            let prefs = cfg.prefs.get_or_default(user_id).await;
+            let vault_ref = shared::vault_ref_from_prefs(&prefs);
+            let vault_id = match shared::resolve_vault_id(&cfg.api, user_id, &vault_ref).await {
                 Ok(vault_id) => vault_id,
                 Err(err) => {
                     bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
@@ -349,7 +433,9 @@ pub(crate) async fn handle_callback(
         }
         CallbackAction::TxRepeat(tx_id) => {
             // Repeat transaction: create new with same data but today's date
-            let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
+            let prefs = cfg.prefs.get_or_default(user_id).await;
+            let vault_ref = shared::vault_ref_from_prefs(&prefs);
+            let vault_id = match shared::resolve_vault_id(&cfg.api, user_id, &vault_ref).await {
                 Ok(v) => v,
                 Err(err) => {
                     bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
@@ -411,7 +497,7 @@ pub(crate) async fn handle_callback(
                         )
                         .await
                 }
-                TransactionKind::Income | TransactionKind::Refund => {
+                TransactionKind::Income => {
                     cfg.api
                         .create_income(
                             user_id,
@@ -429,7 +515,9 @@ pub(crate) async fn handle_callback(
                         )
                         .await
                 }
-                TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
+                TransactionKind::Refund
+                | TransactionKind::TransferWallet
+                | TransactionKind::TransferFlow => {
                     // Can't repeat transfers via this method
                     bot.send_message(chat_id, i18n::t(locale, TextKey::ApiForbidden))
                         .await?;
@@ -628,7 +716,8 @@ async fn handle_pending_message(
                 return Ok(true);
             };
 
-            let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+            let vault_ref = shared::vault_ref_from_prefs(&prefs);
+            let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
                 Ok(s) => s,
                 Err(err) => {
                     bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
@@ -636,8 +725,19 @@ async fn handle_pending_message(
                     return Ok(true);
                 }
             };
+            if !snapshot.wallets.iter().any(|w| w.id == wallet_id) {
+                let _ = cfg
+                    .prefs
+                    .update(user_id, |p| p.default_wallet_id = None)
+                    .await;
+                home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "wiz:cancel").await?;
+                return Ok(true);
+            }
 
-            let flow_id = prefs.last_flow_id.or(Some(snapshot.unallocated_flow_id));
+            let flow_id = prefs
+                .last_flow_id
+                .filter(|id| snapshot.flows.iter().any(|f| f.id == *id))
+                .or(Some(snapshot.unallocated_flow_id));
             let idempotency_key = format!("tg:{}:{}", msg.chat.id.0, msg.id.0);
             let occurred_at = shared::now_rome();
 
@@ -748,7 +848,9 @@ async fn handle_pending_message(
                 return Ok(true);
             }
 
-            let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
+            let prefs = cfg.prefs.get_or_default(user_id).await;
+            let vault_ref = shared::vault_ref_from_prefs(&prefs);
+            let vault_id = match shared::resolve_vault_id(&cfg.api, user_id, &vault_ref).await {
                 Ok(v) => v,
                 Err(err) => {
                     bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
@@ -795,7 +897,9 @@ async fn handle_pending_message(
                 .map(|t| t.trim().to_string())
                 .filter(|t| !t.is_empty());
 
-            let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
+            let prefs = cfg.prefs.get_or_default(user_id).await;
+            let vault_ref = shared::vault_ref_from_prefs(&prefs);
+            let vault_id = match shared::resolve_vault_id(&cfg.api, user_id, &vault_ref).await {
                 Ok(v) => v,
                 Err(err) => {
                     bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
@@ -955,7 +1059,9 @@ async fn finalize_quick_add(
     draft: DraftCreate,
     locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
@@ -964,9 +1070,22 @@ async fn finalize_quick_add(
         }
     };
 
+    if !snapshot.wallets.iter().any(|w| w.id == wallet_id) {
+        let _ = cfg
+            .prefs
+            .update(user_id, |p| p.default_wallet_id = None)
+            .await;
+        bot.send_message(chat_id, i18n::t(locale, TextKey::DefaultWalletMissing))
+            .await?;
+        home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "nav:home").await?;
+        return Ok(());
+    }
+
     let currency = shared::engine_currency(snapshot.currency);
-    let prefs = cfg.prefs.get_or_default(user_id).await;
-    let flow_id = match prefs.last_flow_id {
+    let flow_id = match prefs
+        .last_flow_id
+        .filter(|id| snapshot.flows.iter().any(|f| f.id == *id))
+    {
         Some(id) => id,
         None => {
             let id = snapshot.unallocated_flow_id;
@@ -1108,7 +1227,8 @@ async fn use_template(
         return Ok(());
     };
 
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             bot.send_message(chat_id, shared::user_message_for_api_error(locale, err))
@@ -1116,8 +1236,21 @@ async fn use_template(
             return Ok(());
         }
     };
+    if !snapshot.wallets.iter().any(|w| w.id == wallet_id) {
+        let _ = cfg
+            .prefs
+            .update(user_id, |p| p.default_wallet_id = None)
+            .await;
+        bot.send_message(chat_id, i18n::t(locale, TextKey::DefaultWalletMissing))
+            .await?;
+        home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "tpl:list").await?;
+        return Ok(());
+    }
 
-    let flow_id = prefs.last_flow_id.unwrap_or(snapshot.unallocated_flow_id);
+    let flow_id = prefs
+        .last_flow_id
+        .filter(|id| snapshot.flows.iter().any(|f| f.id == *id))
+        .unwrap_or(snapshot.unallocated_flow_id);
     let occurred_at = shared::now_rome();
     let vault_id = snapshot.id.clone();
     let currency = shared::engine_currency(snapshot.currency);
@@ -1168,11 +1301,13 @@ async fn use_template(
                 QuickKind::Income => template.amount_minor,
             };
 
-            let mut saved_msg = i18n::format(
+            let saved_body = i18n::format(
                 locale,
                 TextKey::QuickAddSaved,
                 &[("amount", &Money::new(signed_minor).format(currency))],
             );
+            let mut saved_msg =
+                format!("{}\n{}", i18n::t(locale, TextKey::TemplateUsed), saved_body);
             if let Some(category) = template.category.as_deref() {
                 saved_msg.push_str(&format!(" • {category}"));
             }

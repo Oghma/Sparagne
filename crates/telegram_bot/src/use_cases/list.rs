@@ -1,5 +1,3 @@
-use chrono::TimeZone;
-use chrono_tz::Europe::Rome;
 use reqwest::StatusCode;
 use teloxide::prelude::*;
 use uuid::Uuid;
@@ -21,7 +19,9 @@ pub(crate) async fn show_list(
     cfg: &ConfigParameters,
     locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             let needs_pairing = matches!(
@@ -33,7 +33,7 @@ pub(crate) async fn show_list(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingInstructions), None)
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingPrompt), None)
                     .await?;
             } else {
                 shared::send_api_error(bot, chat_id, locale, err).await?;
@@ -42,8 +42,14 @@ pub(crate) async fn show_list(
         }
     };
     let currency = shared::engine_currency(snapshot.currency);
-    let prefs = cfg.prefs.get_or_default(user_id).await;
-    let Some(wallet_id) = prefs.default_wallet_id else {
+    let wallet_id = prefs
+        .default_wallet_id
+        .filter(|id| snapshot.wallets.iter().any(|w| w.id == *id));
+    let Some(wallet_id) = wallet_id else {
+        let _ = cfg
+            .prefs
+            .update(user_id, |p| p.default_wallet_id = None)
+            .await;
         bot.send_message(
             chat_id,
             i18n::t(locale, TextKey::DefaultWalletMissing),
@@ -77,18 +83,8 @@ pub(crate) async fn show_list(
                 wallet_id: Some(wallet_id),
                 limit: Some(5), // Show 5 transactions per page for numbered buttons
                 cursor,
-                from: filters.from.map(|d| {
-                    Rome.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
-                        .single()
-                        .unwrap()
-                        .fixed_offset()
-                }),
-                to: filters.to.map(|d| {
-                    Rome.from_local_datetime(&d.and_hms_opt(23, 59, 59).unwrap())
-                        .single()
-                        .unwrap()
-                        .fixed_offset()
-                }),
+                from: filters.from.and_then(shared::rome_start_of_day),
+                to: filters.to.and_then(shared::rome_end_of_day),
                 kinds,
                 include_voided: Some(prefs.include_voided),
                 include_transfers: Some(false),
@@ -132,16 +128,16 @@ pub(crate) async fn show_list(
         .await;
 
     let page_number = cursor_stack_len + 1;
-    let (text, kb) = ui::list::render_list(
+    let (text, kb) = ui::list::render_list(&ui::list::ListRenderContext {
         locale,
         currency,
-        &list,
-        prefs.include_voided,
+        list: &list,
+        include_voided: prefs.include_voided,
         has_prev,
         has_next,
         page_number,
-        &filters,
-    );
+        filters: &filters,
+    });
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -198,7 +194,9 @@ async fn fetch_detail_with_vault(
     tx_id: Uuid,
     locale: i18n::Locale,
 ) -> ResponseResult<Option<(String, api_types::transaction::TransactionDetailResponse)>> {
-    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let vault_id = match shared::resolve_vault_id(&cfg.api, user_id, &vault_ref).await {
         Ok(vault_id) => vault_id,
         Err(err) => {
             shared::send_api_error(bot, chat_id, locale, err).await?;

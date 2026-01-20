@@ -58,7 +58,11 @@ pub(crate) fn render_template_list(
     // For each template, create use/delete buttons
     for (idx, tpl) in templates.iter().enumerate() {
         let use_label = format!("[{}] {}", idx + 1, i18n::t(locale, TextKey::TemplateBtnUse));
-        let delete_label = format!("🗑️ {}", tpl.name);
+        let delete_label = format!(
+            "🗑️ {} {}",
+            i18n::t(locale, TextKey::TemplateBtnDelete),
+            tpl.name
+        );
 
         rows.push(vec![
             InlineKeyboardButton::callback(use_label, format!("tpl:use:{}", idx)),

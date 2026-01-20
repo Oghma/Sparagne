@@ -18,7 +18,9 @@ pub(crate) async fn show_home(
     cfg: &ConfigParameters,
     locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             let needs_pairing = matches!(
@@ -27,7 +29,7 @@ pub(crate) async fn show_home(
                     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN
             );
             if needs_pairing {
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingInstructions), None)
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingPrompt), None)
                     .await?;
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
@@ -61,7 +63,9 @@ pub(crate) async fn show_wallet_picker(
     locale: i18n::Locale,
     back_callback: &str,
 ) -> ResponseResult<()> {
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             let needs_pairing = matches!(
@@ -73,7 +77,7 @@ pub(crate) async fn show_wallet_picker(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingInstructions), None)
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingPrompt), None)
                     .await?;
             } else {
                 shared::send_api_error(bot, chat_id, locale, err).await?;
@@ -93,7 +97,9 @@ pub(crate) async fn show_flow_picker(
     locale: i18n::Locale,
     back_callback: &str,
 ) -> ResponseResult<()> {
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             let needs_pairing = matches!(
@@ -105,7 +111,7 @@ pub(crate) async fn show_flow_picker(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingInstructions), None)
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingPrompt), None)
                     .await?;
             } else {
                 shared::send_api_error(bot, chat_id, locale, err).await?;

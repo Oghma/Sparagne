@@ -103,7 +103,7 @@ async fn home_flow_sends_summary_and_sets_hub_message() {
     let wallet_id = Uuid::new_v4();
     let flow_id = Uuid::new_v4();
     let snapshot = sample_snapshot(wallet_id, flow_id);
-    set_mock(&api.vault_snapshot_main, Ok(snapshot));
+    set_mock(&api.vault_snapshot, Ok(snapshot));
 
     let cfg = test_config(api.clone());
     let bot = MockBot::new();
@@ -124,10 +124,7 @@ async fn home_flow_sends_summary_and_sets_hub_message() {
     let session = cfg.sessions.get(chat_id).await;
     assert!(session.hub_message_id.is_some());
 
-    set_mock(
-        &api.vault_snapshot_main,
-        Ok(sample_snapshot(wallet_id, flow_id)),
-    );
+    set_mock(&api.vault_snapshot, Ok(sample_snapshot(wallet_id, flow_id)));
     expect_ok(
         home::show_home(&bot, chat_id, user_id, &cfg, locale).await,
         "home flow edit",
@@ -146,7 +143,7 @@ async fn home_flow_shows_english_for_english_locale() {
     let wallet_id = Uuid::new_v4();
     let flow_id = Uuid::new_v4();
     let snapshot = sample_snapshot(wallet_id, flow_id);
-    set_mock(&api.vault_snapshot_main, Ok(snapshot));
+    set_mock(&api.vault_snapshot, Ok(snapshot));
 
     let cfg = test_config(api.clone());
     let bot = MockBot::new();
@@ -170,7 +167,7 @@ async fn wizard_flow_renders_title_and_body() {
     let wallet_id = Uuid::new_v4();
     let flow_id = Uuid::new_v4();
     let snapshot = sample_snapshot(wallet_id, flow_id);
-    set_mock(&api.vault_snapshot_main, Ok(snapshot));
+    set_mock(&api.vault_snapshot, Ok(snapshot));
     set_mock(
         &api.transactions_list,
         Ok(TransactionListResponse {
@@ -216,7 +213,7 @@ async fn list_flow_renders_transactions() {
     let wallet_id = Uuid::new_v4();
     let flow_id = Uuid::new_v4();
     let snapshot = sample_snapshot(wallet_id, flow_id);
-    set_mock(&api.vault_snapshot_main, Ok(snapshot));
+    set_mock(&api.vault_snapshot, Ok(snapshot));
     set_mock(
         &api.transactions_list,
         Ok(TransactionListResponse {

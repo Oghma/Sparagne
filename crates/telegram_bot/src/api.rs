@@ -1,16 +1,10 @@
 use api_types::{
-    category::{
-        CategoryList, CategoryListResponse, CategoryMerge, CategoryMergePreview,
-        CategoryMergePreviewResponse, CategoryView,
-    },
+    category::{CategoryList, CategoryListResponse},
     error::{ErrorCode, ErrorEnvelope, ErrorPayload},
-    flow::{FlowSharedList, FlowSharedListResponse},
-    membership::{MemberUpsert, MembersResponse},
     stats::Statistic,
     transaction::{
-        ExpenseNew, IncomeNew, Refund, TransactionCreated, TransactionDetailResponse,
-        TransactionGet, TransactionList, TransactionListResponse, TransactionUpdate,
-        TransactionVoid,
+        ExpenseNew, IncomeNew, TransactionCreated, TransactionDetailResponse, TransactionGet,
+        TransactionList, TransactionListResponse, TransactionUpdate, TransactionVoid,
     },
     user::PairUser,
     vault::{Vault, VaultSnapshot},
@@ -39,51 +33,17 @@ pub(crate) enum ApiError {
 #[async_trait]
 pub(crate) trait ApiGateway: Send + Sync {
     async fn pair_user(&self, telegram_user_id: u64, code: &str) -> Result<(), ApiError>;
-    async fn vault_get_main(&self, telegram_user_id: u64) -> Result<Vault, ApiError>;
-    async fn vault_snapshot_main(&self, telegram_user_id: u64) -> Result<VaultSnapshot, ApiError>;
-    async fn flows_shared_main(
+    async fn vault_get(&self, telegram_user_id: u64, payload: &Vault) -> Result<Vault, ApiError>;
+    async fn vault_snapshot(
         &self,
         telegram_user_id: u64,
-    ) -> Result<FlowSharedListResponse, ApiError>;
-    async fn vault_delete_main(&self, telegram_user_id: u64) -> Result<(), ApiError>;
-    async fn stats_get_main(&self, telegram_user_id: u64) -> Result<Statistic, ApiError>;
-    async fn vault_members_list(
+        payload: &Vault,
+    ) -> Result<VaultSnapshot, ApiError>;
+    async fn stats_get(
         &self,
         telegram_user_id: u64,
-        vault_id: &str,
-    ) -> Result<MembersResponse, ApiError>;
-    async fn vault_member_upsert(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        payload: &MemberUpsert,
-    ) -> Result<(), ApiError>;
-    async fn vault_member_remove(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        username: &str,
-    ) -> Result<(), ApiError>;
-    async fn flow_members_list(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-    ) -> Result<MembersResponse, ApiError>;
-    async fn flow_member_upsert(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-        payload: &MemberUpsert,
-    ) -> Result<(), ApiError>;
-    async fn flow_member_remove(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-        username: &str,
-    ) -> Result<(), ApiError>;
+        payload: &Vault,
+    ) -> Result<Statistic, ApiError>;
     async fn transactions_list(
         &self,
         telegram_user_id: u64,
@@ -94,18 +54,6 @@ pub(crate) trait ApiGateway: Send + Sync {
         telegram_user_id: u64,
         payload: &CategoryList,
     ) -> Result<CategoryListResponse, ApiError>;
-    async fn categories_merge_preview(
-        &self,
-        telegram_user_id: u64,
-        category_id: uuid::Uuid,
-        payload: &CategoryMergePreview,
-    ) -> Result<CategoryMergePreviewResponse, ApiError>;
-    async fn categories_merge(
-        &self,
-        telegram_user_id: u64,
-        category_id: uuid::Uuid,
-        payload: &CategoryMerge,
-    ) -> Result<CategoryView, ApiError>;
     async fn transaction_get_detail(
         &self,
         telegram_user_id: u64,
@@ -120,11 +68,6 @@ pub(crate) trait ApiGateway: Send + Sync {
         &self,
         telegram_user_id: u64,
         payload: &ExpenseNew,
-    ) -> Result<TransactionCreated, ApiError>;
-    async fn create_refund(
-        &self,
-        telegram_user_id: u64,
-        payload: &Refund,
     ) -> Result<TransactionCreated, ApiError>;
     async fn void_transaction(
         &self,
@@ -149,94 +92,26 @@ where
         self.as_ref().pair_user(telegram_user_id, code).await
     }
 
-    async fn vault_get_main(&self, telegram_user_id: u64) -> Result<Vault, ApiError> {
-        self.as_ref().vault_get_main(telegram_user_id).await
+    async fn vault_get(&self, telegram_user_id: u64, payload: &Vault) -> Result<Vault, ApiError> {
+        self.as_ref().vault_get(telegram_user_id, payload).await
     }
 
-    async fn vault_snapshot_main(&self, telegram_user_id: u64) -> Result<VaultSnapshot, ApiError> {
-        self.as_ref().vault_snapshot_main(telegram_user_id).await
-    }
-
-    async fn flows_shared_main(
+    async fn vault_snapshot(
         &self,
         telegram_user_id: u64,
-    ) -> Result<FlowSharedListResponse, ApiError> {
-        self.as_ref().flows_shared_main(telegram_user_id).await
-    }
-
-    async fn vault_delete_main(&self, telegram_user_id: u64) -> Result<(), ApiError> {
-        self.as_ref().vault_delete_main(telegram_user_id).await
-    }
-
-    async fn stats_get_main(&self, telegram_user_id: u64) -> Result<Statistic, ApiError> {
-        self.as_ref().stats_get_main(telegram_user_id).await
-    }
-
-    async fn vault_members_list(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-    ) -> Result<MembersResponse, ApiError> {
+        payload: &Vault,
+    ) -> Result<VaultSnapshot, ApiError> {
         self.as_ref()
-            .vault_members_list(telegram_user_id, vault_id)
+            .vault_snapshot(telegram_user_id, payload)
             .await
     }
 
-    async fn vault_member_upsert(
+    async fn stats_get(
         &self,
         telegram_user_id: u64,
-        vault_id: &str,
-        payload: &MemberUpsert,
-    ) -> Result<(), ApiError> {
-        self.as_ref()
-            .vault_member_upsert(telegram_user_id, vault_id, payload)
-            .await
-    }
-
-    async fn vault_member_remove(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        username: &str,
-    ) -> Result<(), ApiError> {
-        self.as_ref()
-            .vault_member_remove(telegram_user_id, vault_id, username)
-            .await
-    }
-
-    async fn flow_members_list(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-    ) -> Result<MembersResponse, ApiError> {
-        self.as_ref()
-            .flow_members_list(telegram_user_id, vault_id, flow_id)
-            .await
-    }
-
-    async fn flow_member_upsert(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-        payload: &MemberUpsert,
-    ) -> Result<(), ApiError> {
-        self.as_ref()
-            .flow_member_upsert(telegram_user_id, vault_id, flow_id, payload)
-            .await
-    }
-
-    async fn flow_member_remove(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-        username: &str,
-    ) -> Result<(), ApiError> {
-        self.as_ref()
-            .flow_member_remove(telegram_user_id, vault_id, flow_id, username)
-            .await
+        payload: &Vault,
+    ) -> Result<Statistic, ApiError> {
+        self.as_ref().stats_get(telegram_user_id, payload).await
     }
 
     async fn transactions_list(
@@ -256,28 +131,6 @@ where
     ) -> Result<CategoryListResponse, ApiError> {
         self.as_ref()
             .categories_list(telegram_user_id, payload)
-            .await
-    }
-
-    async fn categories_merge_preview(
-        &self,
-        telegram_user_id: u64,
-        category_id: uuid::Uuid,
-        payload: &CategoryMergePreview,
-    ) -> Result<CategoryMergePreviewResponse, ApiError> {
-        self.as_ref()
-            .categories_merge_preview(telegram_user_id, category_id, payload)
-            .await
-    }
-
-    async fn categories_merge(
-        &self,
-        telegram_user_id: u64,
-        category_id: uuid::Uuid,
-        payload: &CategoryMerge,
-    ) -> Result<CategoryView, ApiError> {
-        self.as_ref()
-            .categories_merge(telegram_user_id, category_id, payload)
             .await
     }
 
@@ -307,14 +160,6 @@ where
         self.as_ref()
             .create_expense(telegram_user_id, payload)
             .await
-    }
-
-    async fn create_refund(
-        &self,
-        telegram_user_id: u64,
-        payload: &Refund,
-    ) -> Result<TransactionCreated, ApiError> {
-        self.as_ref().create_refund(telegram_user_id, payload).await
     }
 
     async fn void_transaction(
@@ -416,63 +261,6 @@ impl ApiClient {
         })
     }
 
-    async fn get_json<TResp: for<'de> serde::Deserialize<'de>>(
-        &self,
-        telegram_user_id: Option<u64>,
-        path: &str,
-    ) -> Result<TResp, ApiError> {
-        let mut req = self.client.get(self.url(path));
-        if let Some(id) = telegram_user_id {
-            req = req.header("telegram-user-id", id.to_string());
-        }
-
-        let resp = req.send().await?;
-        let status = resp.status();
-        if status.is_success() {
-            return Ok(resp.json::<TResp>().await?);
-        }
-
-        let payload = match resp.json::<ErrorEnvelope>().await {
-            Ok(err) => err.error,
-            Err(_) => ErrorPayload {
-                code: ErrorCode::Unknown,
-                message: "server error".to_string(),
-                details: None,
-            },
-        };
-        Err(ApiError::Server {
-            status,
-            code: payload.code,
-            message: payload.message,
-        })
-    }
-
-    async fn delete_unit(&self, telegram_user_id: Option<u64>, path: &str) -> Result<(), ApiError> {
-        let mut req = self.client.delete(self.url(path));
-        if let Some(id) = telegram_user_id {
-            req = req.header("telegram-user-id", id.to_string());
-        }
-
-        let resp = req.send().await?;
-        let status = resp.status();
-        if status.is_success() {
-            return Ok(());
-        }
-        let payload = match resp.json::<ErrorEnvelope>().await {
-            Ok(err) => err.error,
-            Err(_) => ErrorPayload {
-                code: ErrorCode::Unknown,
-                message: "server error".to_string(),
-                details: None,
-            },
-        };
-        Err(ApiError::Server {
-            status,
-            code: payload.code,
-            message: payload.message,
-        })
-    }
-
     pub(crate) async fn pair_user(
         &self,
         telegram_user_id: u64,
@@ -489,167 +277,31 @@ impl ApiClient {
         .await
     }
 
-    pub(crate) async fn vault_get_main(&self, telegram_user_id: u64) -> Result<Vault, ApiError> {
-        self.post_json(
-            Some(telegram_user_id),
-            "/vault/get",
-            &Vault {
-                id: None,
-                name: Some("Main".to_string()),
-                currency: None,
-                owner: None,
-            },
-        )
-        .await
-    }
-
-    pub(crate) async fn vault_snapshot_main(
+    pub(crate) async fn vault_get(
         &self,
         telegram_user_id: u64,
-    ) -> Result<VaultSnapshot, ApiError> {
-        self.post_json(
-            Some(telegram_user_id),
-            "/vault/snapshot",
-            &Vault {
-                id: None,
-                name: Some("Main".to_string()),
-                currency: None,
-                owner: None,
-            },
-        )
-        .await
-    }
-
-    pub(crate) async fn flows_shared_main(
-        &self,
-        telegram_user_id: u64,
-    ) -> Result<FlowSharedListResponse, ApiError> {
-        let vault = self.vault_get_main(telegram_user_id).await?;
-        let vault_id = vault.id.ok_or(ApiError::Server {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            code: ErrorCode::Unknown,
-            message: "vault id missing".to_string(),
-        })?;
-
-        self.post_json(
-            Some(telegram_user_id),
-            "/flows/shared",
-            &FlowSharedList {
-                vault_id,
-                include_archived: Some(true),
-            },
-        )
-        .await
-    }
-
-    pub(crate) async fn vault_delete_main(&self, telegram_user_id: u64) -> Result<(), ApiError> {
-        let vault = self.vault_get_main(telegram_user_id).await?;
-        let vault_id = vault.id.ok_or(ApiError::Server {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            code: ErrorCode::Unknown,
-            message: "vault id missing".to_string(),
-        })?;
-
-        self.delete_unit(Some(telegram_user_id), &format!("/vault/{vault_id}"))
+        payload: &Vault,
+    ) -> Result<Vault, ApiError> {
+        self.post_json(Some(telegram_user_id), "/vault/get", payload)
             .await
     }
 
-    pub(crate) async fn stats_get_main(
+    pub(crate) async fn vault_snapshot(
         &self,
         telegram_user_id: u64,
+        payload: &Vault,
+    ) -> Result<VaultSnapshot, ApiError> {
+        self.post_json(Some(telegram_user_id), "/vault/snapshot", payload)
+            .await
+    }
+
+    pub(crate) async fn stats_get(
+        &self,
+        telegram_user_id: u64,
+        payload: &Vault,
     ) -> Result<Statistic, ApiError> {
-        self.post_json(
-            Some(telegram_user_id),
-            "/stats/get",
-            &Vault {
-                id: None,
-                name: Some("Main".to_string()),
-                currency: None,
-                owner: None,
-            },
-        )
-        .await
-    }
-
-    pub(crate) async fn vault_members_list(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-    ) -> Result<MembersResponse, ApiError> {
-        self.get_json(
-            Some(telegram_user_id),
-            &format!("/vault/{vault_id}/members"),
-        )
-        .await
-    }
-
-    pub(crate) async fn vault_member_upsert(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        payload: &MemberUpsert,
-    ) -> Result<(), ApiError> {
-        self.post_json_unit(
-            Some(telegram_user_id),
-            &format!("/vault/{vault_id}/members"),
-            payload,
-        )
-        .await
-    }
-
-    pub(crate) async fn vault_member_remove(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        username: &str,
-    ) -> Result<(), ApiError> {
-        self.delete_unit(
-            Some(telegram_user_id),
-            &format!("/vault/{vault_id}/members/{username}"),
-        )
-        .await
-    }
-
-    pub(crate) async fn flow_members_list(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-    ) -> Result<MembersResponse, ApiError> {
-        self.get_json(
-            Some(telegram_user_id),
-            &format!("/vault/{vault_id}/flows/{flow_id}/members"),
-        )
-        .await
-    }
-
-    pub(crate) async fn flow_member_upsert(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-        payload: &MemberUpsert,
-    ) -> Result<(), ApiError> {
-        self.post_json_unit(
-            Some(telegram_user_id),
-            &format!("/vault/{vault_id}/flows/{flow_id}/members"),
-            payload,
-        )
-        .await
-    }
-
-    pub(crate) async fn flow_member_remove(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-        username: &str,
-    ) -> Result<(), ApiError> {
-        self.delete_unit(
-            Some(telegram_user_id),
-            &format!("/vault/{vault_id}/flows/{flow_id}/members/{username}"),
-        )
-        .await
+        self.post_json(Some(telegram_user_id), "/stats/get", payload)
+            .await
     }
 
     pub(crate) async fn transactions_list(
@@ -668,34 +320,6 @@ impl ApiClient {
     ) -> Result<CategoryListResponse, ApiError> {
         self.post_json(Some(telegram_user_id), "/categories/list", payload)
             .await
-    }
-
-    pub(crate) async fn categories_merge_preview(
-        &self,
-        telegram_user_id: u64,
-        category_id: uuid::Uuid,
-        payload: &CategoryMergePreview,
-    ) -> Result<CategoryMergePreviewResponse, ApiError> {
-        self.post_json(
-            Some(telegram_user_id),
-            &format!("/categories/{category_id}/merge/preview"),
-            payload,
-        )
-        .await
-    }
-
-    pub(crate) async fn categories_merge(
-        &self,
-        telegram_user_id: u64,
-        category_id: uuid::Uuid,
-        payload: &CategoryMerge,
-    ) -> Result<CategoryView, ApiError> {
-        self.post_json(
-            Some(telegram_user_id),
-            &format!("/categories/{category_id}/merge"),
-            payload,
-        )
-        .await
     }
 
     pub(crate) async fn transaction_get_detail(
@@ -722,15 +346,6 @@ impl ApiClient {
         payload: &ExpenseNew,
     ) -> Result<TransactionCreated, ApiError> {
         self.post_json(Some(telegram_user_id), "/expense", payload)
-            .await
-    }
-
-    pub(crate) async fn create_refund(
-        &self,
-        telegram_user_id: u64,
-        payload: &Refund,
-    ) -> Result<TransactionCreated, ApiError> {
-        self.post_json(Some(telegram_user_id), "/refund", payload)
             .await
     }
 
@@ -787,87 +402,24 @@ impl ApiGateway for ApiClient {
         self.pair_user(telegram_user_id, code).await
     }
 
-    async fn vault_get_main(&self, telegram_user_id: u64) -> Result<Vault, ApiError> {
-        self.vault_get_main(telegram_user_id).await
+    async fn vault_get(&self, telegram_user_id: u64, payload: &Vault) -> Result<Vault, ApiError> {
+        self.vault_get(telegram_user_id, payload).await
     }
 
-    async fn vault_snapshot_main(&self, telegram_user_id: u64) -> Result<VaultSnapshot, ApiError> {
-        self.vault_snapshot_main(telegram_user_id).await
-    }
-
-    async fn flows_shared_main(
+    async fn vault_snapshot(
         &self,
         telegram_user_id: u64,
-    ) -> Result<FlowSharedListResponse, ApiError> {
-        self.flows_shared_main(telegram_user_id).await
+        payload: &Vault,
+    ) -> Result<VaultSnapshot, ApiError> {
+        self.vault_snapshot(telegram_user_id, payload).await
     }
 
-    async fn vault_delete_main(&self, telegram_user_id: u64) -> Result<(), ApiError> {
-        self.vault_delete_main(telegram_user_id).await
-    }
-
-    async fn stats_get_main(&self, telegram_user_id: u64) -> Result<Statistic, ApiError> {
-        self.stats_get_main(telegram_user_id).await
-    }
-
-    async fn vault_members_list(
+    async fn stats_get(
         &self,
         telegram_user_id: u64,
-        vault_id: &str,
-    ) -> Result<MembersResponse, ApiError> {
-        self.vault_members_list(telegram_user_id, vault_id).await
-    }
-
-    async fn vault_member_upsert(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        payload: &MemberUpsert,
-    ) -> Result<(), ApiError> {
-        self.vault_member_upsert(telegram_user_id, vault_id, payload)
-            .await
-    }
-
-    async fn vault_member_remove(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        username: &str,
-    ) -> Result<(), ApiError> {
-        self.vault_member_remove(telegram_user_id, vault_id, username)
-            .await
-    }
-
-    async fn flow_members_list(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-    ) -> Result<MembersResponse, ApiError> {
-        self.flow_members_list(telegram_user_id, vault_id, flow_id)
-            .await
-    }
-
-    async fn flow_member_upsert(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-        payload: &MemberUpsert,
-    ) -> Result<(), ApiError> {
-        self.flow_member_upsert(telegram_user_id, vault_id, flow_id, payload)
-            .await
-    }
-
-    async fn flow_member_remove(
-        &self,
-        telegram_user_id: u64,
-        vault_id: &str,
-        flow_id: uuid::Uuid,
-        username: &str,
-    ) -> Result<(), ApiError> {
-        self.flow_member_remove(telegram_user_id, vault_id, flow_id, username)
-            .await
+        payload: &Vault,
+    ) -> Result<Statistic, ApiError> {
+        self.stats_get(telegram_user_id, payload).await
     }
 
     async fn transactions_list(
@@ -884,26 +436,6 @@ impl ApiGateway for ApiClient {
         payload: &CategoryList,
     ) -> Result<CategoryListResponse, ApiError> {
         self.categories_list(telegram_user_id, payload).await
-    }
-
-    async fn categories_merge_preview(
-        &self,
-        telegram_user_id: u64,
-        category_id: uuid::Uuid,
-        payload: &CategoryMergePreview,
-    ) -> Result<CategoryMergePreviewResponse, ApiError> {
-        self.categories_merge_preview(telegram_user_id, category_id, payload)
-            .await
-    }
-
-    async fn categories_merge(
-        &self,
-        telegram_user_id: u64,
-        category_id: uuid::Uuid,
-        payload: &CategoryMerge,
-    ) -> Result<CategoryView, ApiError> {
-        self.categories_merge(telegram_user_id, category_id, payload)
-            .await
     }
 
     async fn transaction_get_detail(
@@ -928,14 +460,6 @@ impl ApiGateway for ApiClient {
         payload: &ExpenseNew,
     ) -> Result<TransactionCreated, ApiError> {
         self.create_expense(telegram_user_id, payload).await
-    }
-
-    async fn create_refund(
-        &self,
-        telegram_user_id: u64,
-        payload: &Refund,
-    ) -> Result<TransactionCreated, ApiError> {
-        self.create_refund(telegram_user_id, payload).await
     }
 
     async fn void_transaction(

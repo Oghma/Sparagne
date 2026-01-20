@@ -10,8 +10,7 @@ fn localized_kind(locale: i18n::Locale, kind: TransactionKind) -> &'static str {
     match kind {
         TransactionKind::Expense => i18n::t(locale, TextKey::TxKindExpense),
         TransactionKind::Income => i18n::t(locale, TextKey::TxKindIncome),
-        TransactionKind::Refund => i18n::t(locale, TextKey::TxKindIncome), /* Treat refund as */
-        // income
+        TransactionKind::Refund => i18n::t(locale, TextKey::TxKindRefund),
         TransactionKind::TransferWallet => i18n::t(locale, TextKey::TxKindTransferWallet),
         TransactionKind::TransferFlow => i18n::t(locale, TextKey::TxKindTransferFlow),
     }

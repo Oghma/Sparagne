@@ -126,6 +126,9 @@ impl Bot {
             BotCommand::new("home", "Torna alla home"),
             BotCommand::new("help", "Mostra aiuto e sintassi"),
             BotCommand::new("categories", "Lista categorie"),
+            BotCommand::new("template", "Gestisci template"),
+            BotCommand::new("export", "Esporta CSV"),
+            BotCommand::new("vault", "Cambia vault attivo"),
         ];
 
         // English commands
@@ -134,6 +137,9 @@ impl Bot {
             BotCommand::new("home", "Go to home"),
             BotCommand::new("help", "Show help and syntax"),
             BotCommand::new("categories", "List categories"),
+            BotCommand::new("template", "Manage templates"),
+            BotCommand::new("export", "Export CSV"),
+            BotCommand::new("vault", "Switch active vault"),
         ];
 
         // Set default commands (Italian)

@@ -9,6 +9,7 @@ pub(crate) enum Command {
     Categories,
     Export,
     Template,
+    Vault { value: Option<String> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +79,7 @@ pub(crate) fn parse_command(text: &str) -> Option<Command> {
         "/categories" => Some(Command::Categories),
         "/export" => Some(Command::Export),
         "/template" | "/templates" => Some(Command::Template),
+        "/vault" => Some(Command::Vault { value: arg }),
         _ => None,
     }
 }
@@ -232,10 +234,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_command_vault_with_value() {
+        let cmd = parse_command("/vault Main");
+        match cmd {
+            Some(Command::Vault { value }) => {
+                assert_eq!(value.as_deref(), Some("Main"));
+            }
+            _ => panic!("expected vault command"),
+        }
+    }
+
+    #[test]
     fn parse_callback_action_wallet_set() {
         let id = "00000000-0000-0000-0000-000000000000";
         let action = parse_callback_action(&format!("wallet:set:{id}"));
-        let parsed = Uuid::parse_str(id).unwrap();
+        let parsed = match Uuid::parse_str(id) {
+            Ok(parsed) => parsed,
+            Err(_) => panic!("invalid uuid test fixture"),
+        };
         assert_eq!(action, Some(CallbackAction::WalletSet(parsed)));
     }
 

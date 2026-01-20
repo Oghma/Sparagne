@@ -65,6 +65,7 @@ pub(crate) enum TextKey {
     TxVoidedSuffix,
     TxKindExpense,
     TxKindIncome,
+    TxKindRefund,
     TxKindTransferWallet,
     TxKindTransferFlow,
 
@@ -73,6 +74,9 @@ pub(crate) enum TextKey {
     PairingRequired,
     PairingPrompt,
     PreferencesSaveError,
+    VaultSetUsage,
+    VaultSetConfirmation,
+    VaultSetInvalid,
     DefaultWalletMissing,
     TooManyTags,
     InvalidAmountExample,
@@ -102,7 +106,6 @@ pub(crate) enum TextKey {
     CategoryListHeader,
 
     // Onboarding
-    PairingInstructions,
     PairingSuccess,
     WelcomeFirstTime,
     ConceptsExplanation,
@@ -117,9 +120,6 @@ pub(crate) enum TextKey {
     HomeBtnHelp,
 
     // Feedback
-    LoadingIndicator,
-    WalletSetConfirmation,
-    FlowSetConfirmation,
     ErrorRecoveryHint,
 
     // Navigation
@@ -193,7 +193,7 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "Benvenuto, {display_name}!\n\nPuoi inserire voci al volo scrivendo:\n\n12.50 bar caffè\n+1000 stipendio\n\n#tag opzionale: 12.50 #food caffè"
         }
         (Locale::It, TextKey::HelpText) => {
-            "Sintassi quick add:\n\n12.50 bar caffè → Spesa\n+1000 stipendio → Entrata\n\n#tag opzionale (max 1):\n12.50 #food caffè\n\nComandi:\n/home - Torna alla home\n/help - Mostra aiuto\n/categories - Lista categorie"
+            "Sintassi quick add:\n\n12.50 bar caffè → Spesa\n+1000 stipendio → Entrata\n\n#tag opzionale (max 1):\n12.50 #food caffè\n\nComandi:\n/home - Torna alla home\n/help - Mostra aiuto\n/categories - Lista categorie\n/template - Gestisci template\n/export - Esporta CSV\n/vault <nome|id:...> - Cambia vault"
         }
         (Locale::It, TextKey::UnsetValue) => "Non impostato",
         (Locale::It, TextKey::UnallocatedFlow) => "Non allocato",
@@ -247,12 +247,16 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::It, TextKey::TxVoidedSuffix) => " • annullata",
         (Locale::It, TextKey::TxKindExpense) => "Spesa",
         (Locale::It, TextKey::TxKindIncome) => "Entrata",
+        (Locale::It, TextKey::TxKindRefund) => "Rimborso",
         (Locale::It, TextKey::TxKindTransferWallet) => "Trasf. wallet",
         (Locale::It, TextKey::TxKindTransferFlow) => "Trasf. budget",
         (Locale::It, TextKey::UnknownUser) => "Impossibile identificare l'utente.",
         (Locale::It, TextKey::PairingRequired) => "Per fare pairing: /start <codice>",
         (Locale::It, TextKey::PairingPrompt) => "Inserisci il codice di pairing:",
         (Locale::It, TextKey::PreferencesSaveError) => "Errore nel salvataggio delle preferenze.",
+        (Locale::It, TextKey::VaultSetUsage) => "Uso: /vault <nome> oppure /vault id:<uuid>",
+        (Locale::It, TextKey::VaultSetConfirmation) => "✅ Vault attivo: {vault}",
+        (Locale::It, TextKey::VaultSetInvalid) => "ID vault non valido. Usa: /vault id:<uuid>",
         (Locale::It, TextKey::DefaultWalletMissing) => "Imposta prima un wallet di default.",
         (Locale::It, TextKey::TooManyTags) => "Troppi tag: massimo 1.",
         (Locale::It, TextKey::InvalidAmountExample) => "Importo non valido (es: 10 o 10.50).",
@@ -280,9 +284,6 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "Nessuna categoria. Aggiungi una transazione con #categoria per iniziare."
         }
         (Locale::It, TextKey::CategoryListHeader) => "Categorie:",
-        (Locale::It, TextKey::PairingInstructions) => {
-            "Per collegare il bot hai bisogno di un codice di pairing.\n\nSe non lo hai, richiedilo all'amministratore.\n\nUna volta ottenuto, invialo qui o usa /start <codice>"
-        }
         (Locale::It, TextKey::PairingSuccess) => {
             "✅ Pairing completato!\n\nOra puoi iniziare a tracciare le tue spese."
         }
@@ -299,7 +300,7 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "📚 Aiuto - Home\n\nDa qui puoi:\n• Aggiungere spese/entrate\n• Vedere la cronologia\n• Consultare le statistiche\n\n💡 Tip: Scrivi direttamente importo e nota!\nEs: 12.50 caffè"
         }
         (Locale::It, TextKey::HelpTextWizard) => {
-            "📚 Aiuto - Inserimento\n\nFormato: importo [#categoria] [nota]\n\nEsempi:\n• 12.50 caffè\n• 12.50 #cibo caffè al bar\n• +500 rimborso"
+            "📚 Aiuto - Inserimento\n\nFormato: importo [#categoria] [nota]\n\nEsempi:\n• 12.50 caffè\n• 12.50 #cibo caffè al bar\n• +500 stipendio"
         }
         (Locale::It, TextKey::HelpTextList) => {
             "📚 Aiuto - Cronologia\n\nQui vedi le ultime transazioni.\n\n• Tocca una voce per i dettagli\n• Puoi modificare o annullare\n• Usa i pulsanti per navigare"
@@ -308,12 +309,9 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "📚 Aiuto - Statistiche\n\nRiepilogo del mese corrente:\n• Entrate e uscite totali\n• Saldo netto\n• Spese per categoria"
         }
         (Locale::It, TextKey::HelpFooter) => {
-            "\n\n📋 Comandi:\n/home - Torna alla home\n/help - Questo aiuto\n/categories - Lista categorie"
+            "\n\n📋 Comandi:\n/home - Torna alla home\n/help - Questo aiuto\n/categories - Lista categorie\n/template - Gestisci template\n/export - Esporta CSV\n/vault <nome|id:...> - Cambia vault"
         }
         (Locale::It, TextKey::HomeBtnHelp) => "Aiuto",
-        (Locale::It, TextKey::LoadingIndicator) => "⏳ Caricamento...",
-        (Locale::It, TextKey::WalletSetConfirmation) => "✅ Wallet: {wallet}",
-        (Locale::It, TextKey::FlowSetConfirmation) => "✅ Budget: {flow}",
         (Locale::It, TextKey::ErrorRecoveryHint) => "\n\n💡 Prova: /home per tornare alla home",
         (Locale::It, TextKey::ListPageNumber) => "Pagina {page}",
         (Locale::It, TextKey::NavBreadcrumbList) => "🏠 › 📜 Cronologia",
@@ -365,7 +363,7 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "Welcome, {display_name}!\n\nYou can add entries on the fly:\n\n12.50 coffee\n+1000 salary\n\nOptional #tag: 12.50 #food coffee"
         }
         (Locale::En, TextKey::HelpText) => {
-            "Quick add syntax:\n\n12.50 coffee → Expense\n+1000 salary → Income\n\nOptional #tag (max 1):\n12.50 #food coffee\n\nCommands:\n/home - Go to home\n/help - Show help\n/categories - List categories"
+            "Quick add syntax:\n\n12.50 coffee → Expense\n+1000 salary → Income\n\nOptional #tag (max 1):\n12.50 #food coffee\n\nCommands:\n/home - Go to home\n/help - Show help\n/categories - List categories\n/template - Manage templates\n/export - Export CSV\n/vault <name|id:...> - Switch vault"
         }
         (Locale::En, TextKey::UnsetValue) => "Not set",
         (Locale::En, TextKey::UnallocatedFlow) => "Unallocated",
@@ -419,12 +417,16 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
         (Locale::En, TextKey::TxVoidedSuffix) => " • voided",
         (Locale::En, TextKey::TxKindExpense) => "Expense",
         (Locale::En, TextKey::TxKindIncome) => "Income",
+        (Locale::En, TextKey::TxKindRefund) => "Refund",
         (Locale::En, TextKey::TxKindTransferWallet) => "Wallet transfer",
         (Locale::En, TextKey::TxKindTransferFlow) => "Budget transfer",
         (Locale::En, TextKey::UnknownUser) => "Cannot identify user.",
         (Locale::En, TextKey::PairingRequired) => "To pair: /start <code>",
         (Locale::En, TextKey::PairingPrompt) => "Enter the pairing code:",
         (Locale::En, TextKey::PreferencesSaveError) => "Error saving preferences.",
+        (Locale::En, TextKey::VaultSetUsage) => "Usage: /vault <name> or /vault id:<uuid>",
+        (Locale::En, TextKey::VaultSetConfirmation) => "✅ Active vault: {vault}",
+        (Locale::En, TextKey::VaultSetInvalid) => "Invalid vault id. Use: /vault id:<uuid>",
         (Locale::En, TextKey::DefaultWalletMissing) => "Please set a default wallet first.",
         (Locale::En, TextKey::TooManyTags) => "Too many tags: max 1.",
         (Locale::En, TextKey::InvalidAmountExample) => "Invalid amount (e.g.: 10 or 10.50).",
@@ -450,9 +452,6 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "No categories. Add a transaction with #category to start."
         }
         (Locale::En, TextKey::CategoryListHeader) => "Categories:",
-        (Locale::En, TextKey::PairingInstructions) => {
-            "To use this bot you need a pairing code.\n\nIf you don't have one, ask the administrator.\n\nOnce you have it, send it here or use /start <code>"
-        }
         (Locale::En, TextKey::PairingSuccess) => {
             "✅ Pairing complete!\n\nYou can now start tracking your expenses."
         }
@@ -469,7 +468,7 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "📚 Help - Home\n\nFrom here you can:\n• Add expenses/income\n• View transaction history\n• Check statistics\n\n💡 Tip: Type amount and note directly!\nEx: 12.50 coffee"
         }
         (Locale::En, TextKey::HelpTextWizard) => {
-            "📚 Help - Entry\n\nFormat: amount [#category] [note]\n\nExamples:\n• 12.50 coffee\n• 12.50 #food coffee at bar\n• +500 refund"
+            "📚 Help - Entry\n\nFormat: amount [#category] [note]\n\nExamples:\n• 12.50 coffee\n• 12.50 #food coffee at bar\n• +500 salary"
         }
         (Locale::En, TextKey::HelpTextList) => {
             "📚 Help - History\n\nHere you see recent transactions.\n\n• Tap an entry for details\n• You can edit or void\n• Use buttons to navigate"
@@ -478,12 +477,9 @@ pub(crate) fn t(locale: Locale, key: TextKey) -> &'static str {
             "📚 Help - Statistics\n\nCurrent month summary:\n• Total income and expenses\n• Net balance\n• Expenses by category"
         }
         (Locale::En, TextKey::HelpFooter) => {
-            "\n\n📋 Commands:\n/home - Back to home\n/help - This help\n/categories - List categories"
+            "\n\n📋 Commands:\n/home - Back to home\n/help - This help\n/categories - List categories\n/template - Manage templates\n/export - Export CSV\n/vault <name|id:...> - Switch vault"
         }
         (Locale::En, TextKey::HomeBtnHelp) => "Help",
-        (Locale::En, TextKey::LoadingIndicator) => "⏳ Loading...",
-        (Locale::En, TextKey::WalletSetConfirmation) => "✅ Wallet: {wallet}",
-        (Locale::En, TextKey::FlowSetConfirmation) => "✅ Budget: {flow}",
         (Locale::En, TextKey::ErrorRecoveryHint) => "\n\n💡 Try: /home to go back home",
         (Locale::En, TextKey::ListPageNumber) => "Page {page}",
         (Locale::En, TextKey::NavBreadcrumbList) => "🏠 › 📜 History",

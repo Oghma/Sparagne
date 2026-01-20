@@ -23,7 +23,9 @@ pub(crate) async fn handle_export(
         .await?;
 
     // Get vault snapshot for currency info
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             shared::send_api_error(bot, chat_id, locale, err).await?;
@@ -32,7 +34,9 @@ pub(crate) async fn handle_export(
     };
 
     let currency = shared::engine_currency(snapshot.currency);
-    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let wallet_id = prefs
+        .default_wallet_id
+        .filter(|id| snapshot.wallets.iter().any(|w| w.id == *id));
 
     // Fetch all transactions (paginated)
     let mut all_transactions: Vec<TransactionView> = Vec::new();
@@ -46,7 +50,7 @@ pub(crate) async fn handle_export(
                 &api_types::transaction::TransactionList {
                     vault_id: snapshot.id.clone(),
                     flow_id: None,
-                    wallet_id: prefs.default_wallet_id,
+                    wallet_id,
                     limit: Some(100), // Fetch in batches of 100
                     cursor,
                     from: None,

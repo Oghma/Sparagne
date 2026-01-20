@@ -38,7 +38,9 @@ pub(crate) async fn show_wizard(
         return home::show_home(bot, chat_id, user_id, cfg, locale).await;
     };
 
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             shared::send_api_error(bot, chat_id, locale, err).await?;
@@ -48,9 +50,16 @@ pub(crate) async fn show_wizard(
 
     let prefs =
         shared::ensure_flow_defaults(&cfg.prefs, user_id, snapshot.unallocated_flow_id).await;
+    let has_wallet = prefs
+        .default_wallet_id
+        .is_some_and(|id| snapshot.wallets.iter().any(|w| w.id == id));
 
     // Ensure wallet is set
-    if prefs.default_wallet_id.is_none() {
+    if !has_wallet {
+        let _ = cfg
+            .prefs
+            .update(user_id, |p| p.default_wallet_id = None)
+            .await;
         home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "wiz:cancel").await?;
         return Ok(());
     }

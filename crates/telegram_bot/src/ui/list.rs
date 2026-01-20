@@ -48,48 +48,50 @@ fn format_date_header(locale: i18n::Locale, date: NaiveDate) -> String {
 }
 
 /// Renders the transaction list with numbered buttons for selection.
-pub(crate) fn render_list(
-    locale: i18n::Locale,
-    currency: EngineCurrency,
-    list: &TransactionListResponse,
-    include_voided: bool,
-    has_prev: bool,
-    has_next: bool,
-    page_number: usize,
-    filters: &ListFilters,
-) -> (String, InlineKeyboardMarkup) {
+pub(crate) struct ListRenderContext<'a> {
+    pub locale: i18n::Locale,
+    pub currency: EngineCurrency,
+    pub list: &'a TransactionListResponse,
+    pub include_voided: bool,
+    pub has_prev: bool,
+    pub has_next: bool,
+    pub page_number: usize,
+    pub filters: &'a ListFilters,
+}
+
+pub(crate) fn render_list(ctx: &ListRenderContext<'_>) -> (String, InlineKeyboardMarkup) {
     // Breadcrumb + header
-    let breadcrumb = i18n::t(locale, TextKey::NavBreadcrumbList);
-    let header = i18n::t(locale, TextKey::ListHeader);
-    let page_str = page_number.to_string();
-    let page_indicator = i18n::format(locale, TextKey::ListPageNumber, &[("page", &page_str)]);
+    let breadcrumb = i18n::t(ctx.locale, TextKey::NavBreadcrumbList);
+    let header = i18n::t(ctx.locale, TextKey::ListHeader);
+    let page_str = ctx.page_number.to_string();
+    let page_indicator = i18n::format(ctx.locale, TextKey::ListPageNumber, &[("page", &page_str)]);
 
     let mut text = format!("{breadcrumb}\n{header}\n{page_indicator}");
 
     // Show active filter indicator
-    if filters.is_active() {
+    if ctx.filters.is_active() {
         text.push_str(&format!(
             "\n{}",
-            i18n::t(locale, TextKey::FilterActiveIndicator)
+            i18n::t(ctx.locale, TextKey::FilterActiveIndicator)
         ));
     }
 
     // Render transaction list grouped by date
     let mut last_date: Option<NaiveDate> = None;
-    for (idx, tx) in list.transactions.iter().enumerate() {
+    for (idx, tx) in ctx.list.transactions.iter().enumerate() {
         let tx_date = tx.occurred_at.date_naive();
 
         // Add date header when date changes
         if last_date != Some(tx_date) {
-            text.push_str(&format!("\n\n{}", format_date_header(locale, tx_date)));
+            text.push_str(&format!("\n\n{}", format_date_header(ctx.locale, tx_date)));
             last_date = Some(tx_date);
         }
 
-        let amount = Money::new(tx.amount_minor).format(currency);
+        let amount = Money::new(tx.amount_minor).format(ctx.currency);
         let category = tx.category.as_deref().unwrap_or("");
         let note = tx.note.as_deref().unwrap_or("");
         let voided_suffix = if tx.voided {
-            i18n::t(locale, TextKey::TxVoidedSuffix)
+            i18n::t(ctx.locale, TextKey::TxVoidedSuffix)
         } else {
             ""
         };
@@ -109,8 +111,9 @@ pub(crate) fn render_list(
     let mut rows: Vec<Vec<InlineKeyboardButton>> = Vec::new();
 
     // Row of numbered buttons [1] [2] [3] [4] [5]
-    if !list.transactions.is_empty() {
-        let num_buttons: Vec<InlineKeyboardButton> = list
+    if !ctx.list.transactions.is_empty() {
+        let num_buttons: Vec<InlineKeyboardButton> = ctx
+            .list
             .transactions
             .iter()
             .enumerate()
@@ -126,15 +129,15 @@ pub(crate) fn render_list(
 
     // Navigation row (Prev / Next)
     let mut nav_row: Vec<InlineKeyboardButton> = Vec::new();
-    if has_prev {
+    if ctx.has_prev {
         nav_row.push(InlineKeyboardButton::callback(
-            format!("⬅️ {}", i18n::t(locale, TextKey::ListPrev)),
+            format!("⬅️ {}", i18n::t(ctx.locale, TextKey::ListPrev)),
             "list:prev",
         ));
     }
-    if has_next {
+    if ctx.has_next {
         nav_row.push(InlineKeyboardButton::callback(
-            format!("{} ➡️", i18n::t(locale, TextKey::ListNext)),
+            format!("{} ➡️", i18n::t(ctx.locale, TextKey::ListNext)),
             "list:next",
         ));
     }
@@ -143,23 +146,23 @@ pub(crate) fn render_list(
     }
 
     // Filter and toggle voided buttons
-    let filter_label = if filters.is_active() {
-        format!("🔍 {} ✓", i18n::t(locale, TextKey::ListBtnFilter))
+    let filter_label = if ctx.filters.is_active() {
+        format!("🔍 {} ✓", i18n::t(ctx.locale, TextKey::ListBtnFilter))
     } else {
-        format!("🔍 {}", i18n::t(locale, TextKey::ListBtnFilter))
+        format!("🔍 {}", i18n::t(ctx.locale, TextKey::ListBtnFilter))
     };
     rows.push(vec![
         InlineKeyboardButton::callback(filter_label, "list:filters"),
         InlineKeyboardButton::callback(
             i18n::format(
-                locale,
+                ctx.locale,
                 TextKey::ListToggleVoided,
                 &[(
                     "state",
-                    if include_voided {
-                        i18n::t(locale, TextKey::ListStateOn)
+                    if ctx.include_voided {
+                        i18n::t(ctx.locale, TextKey::ListStateOn)
                     } else {
-                        i18n::t(locale, TextKey::ListStateOff)
+                        i18n::t(ctx.locale, TextKey::ListStateOff)
                     },
                 )],
             ),
@@ -169,7 +172,7 @@ pub(crate) fn render_list(
 
     // Home button
     rows.push(vec![InlineKeyboardButton::callback(
-        format!("🏠 {}", i18n::t(locale, TextKey::ListBtnHome)),
+        format!("🏠 {}", i18n::t(ctx.locale, TextKey::ListBtnHome)),
         "nav:home",
     )]);
 
