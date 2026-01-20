@@ -7,7 +7,7 @@ use crate::{
     api::ApiError,
     bot_client::BotClient,
     i18n::{self, TextKey},
-    state::{ListSession, PendingAction},
+    state::{ListFilters, ListSession, PendingAction, ScreenContext},
     ui,
     use_cases::{home, shared},
 };
@@ -19,7 +19,9 @@ pub(crate) async fn show_list(
     cfg: &ConfigParameters,
     locale: i18n::Locale,
 ) -> ResponseResult<()> {
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             let needs_pairing = matches!(
@@ -31,7 +33,7 @@ pub(crate) async fn show_list(
                 cfg.sessions
                     .update(chat_id, |s| s.pending = Some(PendingAction::PairCode))
                     .await;
-                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingRequired), None)
+                bot.send_message(chat_id, i18n::t(locale, TextKey::PairingPrompt), None)
                     .await?;
             } else {
                 shared::send_api_error(bot, chat_id, locale, err).await?;
@@ -40,23 +42,36 @@ pub(crate) async fn show_list(
         }
     };
     let currency = shared::engine_currency(snapshot.currency);
-    let prefs = cfg.prefs.get_or_default(user_id).await;
-    let Some(wallet_id) = prefs.default_wallet_id else {
+    let wallet_id = prefs
+        .default_wallet_id
+        .filter(|id| snapshot.wallets.iter().any(|w| w.id == *id));
+    let Some(wallet_id) = wallet_id else {
+        let _ = cfg
+            .prefs
+            .update(user_id, |p| p.default_wallet_id = None)
+            .await;
         bot.send_message(
             chat_id,
             i18n::t(locale, TextKey::DefaultWalletMissing),
             None,
         )
         .await?;
-        home::show_wallet_picker(bot, chat_id, user_id, cfg, locale).await?;
+        home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "nav:home").await?;
         return Ok(());
     };
 
     let session = cfg.sessions.get(chat_id).await;
-    let (cursor, cursor_stack_len) = match session.list.as_ref() {
-        Some(list) if list.wallet_id == wallet_id => (list.current.clone(), list.cursors.len()),
-        _ => (None, 0),
+    let (cursor, cursor_stack_len, filters) = match session.list.as_ref() {
+        Some(list) if list.wallet_id == wallet_id => (
+            list.current.clone(),
+            list.cursors.len(),
+            list.filters.clone(),
+        ),
+        _ => (None, 0, ListFilters::default()),
     };
+
+    // Build kinds filter from ListFilters
+    let kinds = filters.kind.map(|k| vec![k]);
 
     let list = match cfg
         .api
@@ -66,11 +81,11 @@ pub(crate) async fn show_list(
                 vault_id: snapshot.id.clone(),
                 flow_id: None,
                 wallet_id: Some(wallet_id),
-                limit: Some(10),
+                limit: Some(5), // Show 5 transactions per page for numbered buttons
                 cursor,
-                from: None,
-                to: None,
-                kinds: None,
+                from: filters.from.and_then(shared::rome_start_of_day),
+                to: filters.to.and_then(shared::rome_end_of_day),
+                kinds,
                 include_voided: Some(prefs.include_voided),
                 include_transfers: Some(false),
             },
@@ -86,32 +101,68 @@ pub(crate) async fn show_list(
 
     let has_prev = cursor_stack_len > 0;
     let has_next = list.next_cursor.is_some();
+
+    // Store transaction IDs for index -> UUID mapping
+    let tx_ids: Vec<Uuid> = list.transactions.iter().map(|tx| tx.id).collect();
+
     cfg.sessions
         .update(chat_id, |s| {
-            let (cursors, current) = match s.list.as_ref() {
-                Some(prev) if prev.wallet_id == wallet_id => {
-                    (prev.cursors.clone(), prev.current.clone())
-                }
-                _ => (Vec::new(), None),
+            let (cursors, current, current_filters) = match s.list.as_ref() {
+                Some(prev) if prev.wallet_id == wallet_id => (
+                    prev.cursors.clone(),
+                    prev.current.clone(),
+                    prev.filters.clone(),
+                ),
+                _ => (Vec::new(), None, ListFilters::default()),
             };
             s.list = Some(ListSession {
                 wallet_id,
                 cursors,
                 current,
                 next: list.next_cursor.clone(),
+                tx_ids,
+                filters: current_filters,
             });
+            s.current_screen = ScreenContext::List;
         })
         .await;
 
-    let (text, kb) = ui::list::render_list(
+    let page_number = cursor_stack_len + 1;
+    let (text, kb) = ui::list::render_list(&ui::list::ListRenderContext {
         locale,
         currency,
-        &list,
-        prefs.include_voided,
+        list: &list,
+        include_voided: prefs.include_voided,
         has_prev,
         has_next,
-    );
+        page_number,
+        filters: &filters,
+    });
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
+}
+
+/// Shows transaction detail by index (1-based) in the current list.
+pub(crate) async fn show_detail_by_index(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    index: usize,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    let session = cfg.sessions.get(chat_id).await;
+    let Some(list) = session.list.as_ref() else {
+        // No list session, go to list
+        return show_list(bot, chat_id, user_id, cfg, locale).await;
+    };
+
+    // index is 1-based
+    let Some(tx_id) = list.tx_ids.get(index.saturating_sub(1)) else {
+        // Invalid index, refresh list
+        return show_list(bot, chat_id, user_id, cfg, locale).await;
+    };
+
+    show_detail(bot, chat_id, user_id, cfg, *tx_id, locale).await
 }
 
 pub(crate) async fn show_detail(
@@ -135,122 +186,6 @@ pub(crate) async fn show_detail(
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
-pub(crate) async fn repeat_transaction(
-    bot: &dyn BotClient,
-    chat_id: ChatId,
-    user_id: u64,
-    cfg: &ConfigParameters,
-    tx_id: Uuid,
-    callback_id: &str,
-    locale: i18n::Locale,
-) -> ResponseResult<()> {
-    let Some((vault_id, detail)) =
-        fetch_detail_with_vault(bot, chat_id, user_id, cfg, tx_id, locale).await?
-    else {
-        return Ok(());
-    };
-
-    let wallet_id = detail.legs.iter().find_map(|leg| match leg.target {
-        api_types::transaction::LegTarget::Wallet { wallet_id } => Some(wallet_id),
-        _ => None,
-    });
-    let flow_id = detail.legs.iter().find_map(|leg| match leg.target {
-        api_types::transaction::LegTarget::Flow { flow_id } => Some(flow_id),
-        _ => None,
-    });
-
-    let Some(wallet_id) = wallet_id else {
-        bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatNoWallet), None)
-            .await?;
-        return Ok(());
-    };
-
-    let occurred_at = shared::now_rome();
-    let idempotency_key = format!("tgcb:{}:{callback_id}", chat_id.0);
-    let amount_minor = detail.transaction.amount_minor;
-    let category_id = Some(detail.transaction.category_id);
-    let category = detail.transaction.category.clone();
-    let note = detail.transaction.note.clone();
-
-    let created = match detail.transaction.kind {
-        api_types::transaction::TransactionKind::Income => {
-            cfg.api
-                .create_income(
-                    user_id,
-                    &api_types::transaction::IncomeNew {
-                        vault_id: vault_id.clone(),
-                        amount_minor,
-                        flow_id,
-                        wallet_id: Some(wallet_id),
-                        category_id,
-                        category,
-                        note,
-                        idempotency_key: Some(idempotency_key),
-                        occurred_at,
-                    },
-                )
-                .await
-        }
-        api_types::transaction::TransactionKind::Expense => {
-            cfg.api
-                .create_expense(
-                    user_id,
-                    &api_types::transaction::ExpenseNew {
-                        vault_id: vault_id.clone(),
-                        amount_minor,
-                        flow_id,
-                        wallet_id: Some(wallet_id),
-                        category_id,
-                        category,
-                        note,
-                        idempotency_key: Some(idempotency_key),
-                        occurred_at,
-                    },
-                )
-                .await
-        }
-        api_types::transaction::TransactionKind::Refund => {
-            cfg.api
-                .create_refund(
-                    user_id,
-                    &api_types::transaction::Refund {
-                        vault_id: vault_id.clone(),
-                        amount_minor,
-                        flow_id,
-                        wallet_id: Some(wallet_id),
-                        category_id,
-                        category,
-                        note,
-                        idempotency_key: Some(idempotency_key),
-                        occurred_at,
-                    },
-                )
-                .await
-        }
-        _ => {
-            bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatUnsupported), None)
-                .await?;
-            return Ok(());
-        }
-    };
-
-    match created {
-        Ok(_) => {
-            bot.send_message(chat_id, i18n::t(locale, TextKey::RepeatSuccess), None)
-                .await?;
-        }
-        Err(ApiError::Server { status, .. }) if status == StatusCode::CONFLICT => {
-            bot.send_message(chat_id, i18n::t(locale, TextKey::AlreadySaved), None)
-                .await?;
-        }
-        Err(err) => {
-            shared::send_api_error(bot, chat_id, locale, err).await?;
-        }
-    };
-
-    Ok(())
-}
-
 async fn fetch_detail_with_vault(
     bot: &dyn BotClient,
     chat_id: ChatId,
@@ -259,7 +194,9 @@ async fn fetch_detail_with_vault(
     tx_id: Uuid,
     locale: i18n::Locale,
 ) -> ResponseResult<Option<(String, api_types::transaction::TransactionDetailResponse)>> {
-    let vault_id = match shared::resolve_main_vault_id(&cfg.api, user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let vault_id = match shared::resolve_vault_id(&cfg.api, user_id, &vault_ref).await {
         Ok(vault_id) => vault_id,
         Err(err) => {
             shared::send_api_error(bot, chat_id, locale, err).await?;
@@ -285,4 +222,71 @@ async fn fetch_detail_with_vault(
     };
 
     Ok(Some((vault_id, detail)))
+}
+
+/// Shows the filter menu for the list.
+pub(crate) async fn show_filters(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    cfg: &ConfigParameters,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    let session = cfg.sessions.get(chat_id).await;
+    let filters = session
+        .list
+        .as_ref()
+        .map(|l| l.filters.clone())
+        .unwrap_or_default();
+
+    let (text, kb) = ui::filter::render_filter_menu(locale, &filters);
+    shared::edit_or_send(bot, chat_id, cfg, text, kb).await
+}
+
+/// Sets the kind filter and refreshes the list.
+pub(crate) async fn set_filter_kind(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    kind: Option<api_types::transaction::TransactionKind>,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    // Update filter in session and reset pagination
+    cfg.sessions
+        .update(chat_id, |s| {
+            if let Some(list) = s.list.as_mut() {
+                list.filters.kind = kind;
+                // Reset pagination when filter changes
+                list.cursors.clear();
+                list.current = None;
+                list.next = None;
+            }
+        })
+        .await;
+
+    show_list(bot, chat_id, user_id, cfg, locale).await
+}
+
+/// Clears all filters and refreshes the list.
+pub(crate) async fn clear_filters(
+    bot: &dyn BotClient,
+    chat_id: ChatId,
+    user_id: u64,
+    cfg: &ConfigParameters,
+    locale: i18n::Locale,
+) -> ResponseResult<()> {
+    // Clear all filters and reset pagination
+    cfg.sessions
+        .update(chat_id, |s| {
+            if let Some(list) = s.list.as_mut() {
+                list.filters.clear();
+                // Reset pagination when filter changes
+                list.cursors.clear();
+                list.current = None;
+                list.next = None;
+            }
+        })
+        .await;
+
+    show_list(bot, chat_id, user_id, cfg, locale).await
 }

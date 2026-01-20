@@ -1,10 +1,29 @@
-use engine::{Currency, Money};
+use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use engine::{Currency, Money};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum QuickKind {
     Income,
     Expense,
-    Refund,
+}
+
+/// Suggests a category based on note text and user's category hints.
+/// Returns the suggested category if a keyword matches.
+pub(crate) fn suggest_category<'a>(
+    note: Option<&str>,
+    hints: &'a HashMap<String, String>,
+) -> Option<&'a str> {
+    let note = note?;
+    let note_lower = note.to_lowercase();
+
+    for (keyword, category) in hints {
+        if note_lower.contains(&keyword.to_lowercase()) {
+            return Some(category.as_str());
+        }
+    }
+    None
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,10 +50,9 @@ fn collapse_whitespace(input: &str) -> String {
 
 /// Parses a quick-add message into a draft transaction.
 ///
-/// Rules (v2):
+/// Rules:
 /// - `12.50 ...` and `-12.50 ...` => Expense
 /// - `+12.50 ...` => Income
-/// - `r 12.50 ...` => Refund
 /// - optional `#tag` (max 1) => category (case-insensitive)
 pub(crate) fn parse_quick_add(input: &str, currency: Currency) -> Result<QuickAdd, ParseError> {
     let trimmed = collapse_whitespace(input.trim());
@@ -42,17 +60,13 @@ pub(crate) fn parse_quick_add(input: &str, currency: Currency) -> Result<QuickAd
         return Err(ParseError::Empty);
     }
 
-    let (kind, rest) = if let Some(rest) = trimmed.strip_prefix("r ") {
-        (QuickKind::Refund, rest)
-    } else if let Some(rest) = trimmed.strip_prefix("R ") {
-        (QuickKind::Refund, rest)
-    } else if trimmed.starts_with('+') {
-        (QuickKind::Income, trimmed.as_str())
+    let kind = if trimmed.starts_with('+') {
+        QuickKind::Income
     } else {
-        (QuickKind::Expense, trimmed.as_str())
+        QuickKind::Expense
     };
 
-    let mut parts = rest.splitn(2, ' ');
+    let mut parts = trimmed.splitn(2, ' ');
     let amount_str = parts.next().ok_or(ParseError::InvalidAmount)?;
     let tail = parts.next().unwrap_or("").trim();
 
@@ -116,14 +130,6 @@ mod tests {
         let parsed = parse_quick_add("+1000 stipendio", Currency::Eur)?;
         assert_eq!(parsed.kind, QuickKind::Income);
         assert_eq!(parsed.amount_minor, 100_000);
-        Ok(())
-    }
-
-    #[test]
-    fn refund_prefix_r() -> Result<(), ParseError> {
-        let parsed = parse_quick_add("r 5.20 amazon", Currency::Eur)?;
-        assert_eq!(parsed.kind, QuickKind::Refund);
-        assert_eq!(parsed.amount_minor, 520);
         Ok(())
     }
 

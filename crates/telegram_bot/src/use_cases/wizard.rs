@@ -1,4 +1,3 @@
-use api_types::transaction::TransactionKind;
 use teloxide::prelude::*;
 
 use crate::{
@@ -6,7 +5,7 @@ use crate::{
     bot_client::BotClient,
     i18n::{self, TextKey},
     parsing::QuickKind,
-    state::WizardSession,
+    state::{ScreenContext, WizardSession},
     ui,
     use_cases::{home, shared},
 };
@@ -21,11 +20,7 @@ pub(crate) async fn start_wizard(
 ) -> ResponseResult<()> {
     cfg.sessions
         .update(chat_id, |s| {
-            s.wizard = Some(WizardSession {
-                kind,
-                category: None,
-                categories: Vec::new(),
-            });
+            s.wizard = Some(WizardSession { kind });
         })
         .await;
     show_wizard(bot, chat_id, user_id, cfg, locale).await
@@ -43,88 +38,36 @@ pub(crate) async fn show_wizard(
         return home::show_home(bot, chat_id, user_id, cfg, locale).await;
     };
 
-    let snapshot = match cfg.api.vault_snapshot_main(user_id).await {
+    let prefs = cfg.prefs.get_or_default(user_id).await;
+    let vault_ref = shared::vault_ref_from_prefs(&prefs);
+    let snapshot = match cfg.api.vault_snapshot(user_id, &vault_ref).await {
         Ok(s) => s,
         Err(err) => {
             shared::send_api_error(bot, chat_id, locale, err).await?;
             return Ok(());
         }
     };
-    let currency = shared::engine_currency(snapshot.currency);
 
     let prefs =
         shared::ensure_flow_defaults(&cfg.prefs, user_id, snapshot.unallocated_flow_id).await;
-    let Some(wallet_id) = prefs.default_wallet_id else {
-        home::show_wallet_picker(bot, chat_id, user_id, cfg, locale).await?;
+    let has_wallet = prefs
+        .default_wallet_id
+        .is_some_and(|id| snapshot.wallets.iter().any(|w| w.id == id));
+
+    // Ensure wallet is set
+    if !has_wallet {
+        let _ = cfg
+            .prefs
+            .update(user_id, |p| p.default_wallet_id = None)
+            .await;
+        home::show_wallet_picker(bot, chat_id, user_id, cfg, locale, "wiz:cancel").await?;
         return Ok(());
-    };
-
-    let kind_filter = match wizard.kind {
-        QuickKind::Expense => TransactionKind::Expense,
-        QuickKind::Income => TransactionKind::Income,
-        QuickKind::Refund => TransactionKind::Refund,
-    };
-
-    let recents = match cfg
-        .api
-        .transactions_list(
-            user_id,
-            &api_types::transaction::TransactionList {
-                vault_id: snapshot.id.clone(),
-                flow_id: None,
-                wallet_id: Some(wallet_id),
-                limit: Some(6),
-                cursor: None,
-                from: None,
-                to: None,
-                kinds: Some(vec![kind_filter]),
-                include_voided: Some(false),
-                include_transfers: Some(false),
-            },
-        )
-        .await
-    {
-        Ok(v) => v,
-        Err(err) => {
-            shared::send_api_error(bot, chat_id, locale, err).await?;
-            return Ok(());
-        }
-    };
-
-    let mut categories: Vec<String> = Vec::new();
-    for tx in &recents.transactions {
-        let Some(cat) = tx.category.as_deref() else {
-            continue;
-        };
-        if categories.iter().any(|c| c == cat) {
-            continue;
-        }
-        categories.push(cat.to_string());
-        if categories.len() >= 6 {
-            break;
-        }
     }
 
-    let session = cfg
-        .sessions
-        .update(chat_id, |s| {
-            if let Some(w) = &mut s.wizard {
-                w.categories = categories;
-            }
-        })
+    cfg.sessions
+        .update(chat_id, |s| s.current_screen = ScreenContext::Wizard)
         .await;
-    let Some(wizard) = session.wizard else {
-        return home::show_home(bot, chat_id, user_id, cfg, locale).await;
-    };
-
-    let (text, kb) = ui::wizard::render_wizard(
-        locale,
-        currency,
-        &snapshot,
-        &prefs,
-        &wizard,
-        &recents.transactions,
-    );
+    let (text, kb) = ui::wizard::render_wizard(locale, &snapshot, &prefs, &wizard);
     shared::edit_or_send(bot, chat_id, cfg, text, kb).await
 }
 
@@ -132,7 +75,6 @@ pub(crate) fn wizard_prompt(locale: i18n::Locale, kind: QuickKind) -> &'static s
     match kind {
         QuickKind::Expense => i18n::t(locale, TextKey::WizardPromptExpense),
         QuickKind::Income => i18n::t(locale, TextKey::WizardPromptIncome),
-        QuickKind::Refund => i18n::t(locale, TextKey::WizardPromptRefund),
     }
 }
 
@@ -147,29 +89,16 @@ pub(crate) fn normalize_wizard_input(
     }
     match kind {
         QuickKind::Expense => {
-            if trimmed.starts_with('+') {
-                return Err(i18n::t(locale, TextKey::WizardErrorExpensePlus));
-            }
-            if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                return Err(i18n::t(locale, TextKey::WizardErrorExpenseRefund));
-            }
-            Ok(trimmed.to_string())
+            // Remove + prefix if present (treat as expense anyway)
+            let cleaned = trimmed.strip_prefix('+').unwrap_or(trimmed);
+            Ok(cleaned.to_string())
         }
         QuickKind::Income => {
-            if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                return Err(i18n::t(locale, TextKey::WizardErrorIncomeRefund));
-            }
+            // Ensure + prefix for income
             if trimmed.starts_with('+') {
                 Ok(trimmed.to_string())
             } else {
                 Ok(format!("+{trimmed}"))
-            }
-        }
-        QuickKind::Refund => {
-            if trimmed.starts_with('r') || trimmed.starts_with('R') {
-                Ok(trimmed.to_string())
-            } else {
-                Ok(format!("r {trimmed}"))
             }
         }
     }

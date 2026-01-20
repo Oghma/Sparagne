@@ -1,6 +1,9 @@
 use teloxide::types::User;
 
-use crate::i18n::{self, TextKey};
+use crate::{
+    i18n::{self, TextKey},
+    state::ScreenContext,
+};
 
 pub(crate) fn welcome_text(locale: i18n::Locale, display_name: &str) -> String {
     let template = i18n::t(locale, TextKey::WelcomeTemplate);
@@ -11,16 +14,30 @@ pub(crate) fn help_text(locale: i18n::Locale) -> &'static str {
     i18n::t(locale, TextKey::HelpText)
 }
 
-pub(crate) fn merge_category_help_text(locale: i18n::Locale) -> &'static str {
-    i18n::t(locale, TextKey::MergeCategoryHelp)
+pub(crate) fn pairing_success(locale: i18n::Locale) -> &'static str {
+    i18n::t(locale, TextKey::PairingSuccess)
 }
 
-pub(crate) fn members_help_text(locale: i18n::Locale) -> &'static str {
-    i18n::t(locale, TextKey::MembersHelp)
+pub(crate) fn first_time_welcome(locale: i18n::Locale, display_name: &str) -> String {
+    let welcome = i18n::format(
+        locale,
+        TextKey::WelcomeFirstTime,
+        &[("display_name", display_name)],
+    );
+    let concepts = i18n::t(locale, TextKey::ConceptsExplanation);
+    let quickstart = i18n::t(locale, TextKey::QuickStartGuide);
+    format!("{welcome}\n\n{concepts}\n\n{quickstart}")
 }
 
-pub(crate) fn flow_members_help_text(locale: i18n::Locale) -> &'static str {
-    i18n::t(locale, TextKey::FlowMembersHelp)
+pub(crate) fn contextual_help(locale: i18n::Locale, screen: ScreenContext) -> String {
+    let main_text = match screen {
+        ScreenContext::Home => i18n::t(locale, TextKey::HelpTextHome),
+        ScreenContext::Wizard => i18n::t(locale, TextKey::HelpTextWizard),
+        ScreenContext::List => i18n::t(locale, TextKey::HelpTextList),
+        ScreenContext::Stats => i18n::t(locale, TextKey::HelpTextStats),
+    };
+    let footer = i18n::t(locale, TextKey::HelpFooter);
+    format!("{main_text}{footer}")
 }
 
 pub(crate) fn display_name_from_telegram(user: &User) -> String {
@@ -74,9 +91,6 @@ mod tests {
     fn help_text_contains_known_commands() {
         let text = help_text(i18n::default_locale());
         assert!(text.contains("/home"));
-        assert!(text.contains("/members"));
-        assert!(text.contains("/flow_members"));
-        assert!(text.contains("/vault_delete"));
     }
 
     #[test]
@@ -84,6 +98,5 @@ mod tests {
         let text = help_text(i18n::default_locale());
         assert!(text.contains("12.50"));
         assert!(text.contains("+1000"));
-        assert!(text.contains("r 5.20"));
     }
 }

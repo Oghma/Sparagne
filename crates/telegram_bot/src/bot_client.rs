@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use teloxide::{
-    payloads::{EditMessageTextSetters, SendMessageSetters},
+    payloads::{EditMessageTextSetters, SendDocumentSetters, SendMessageSetters},
     requests::{Requester, ResponseResult},
-    types::{ChatId, InlineKeyboardMarkup, MessageId},
+    types::{ChatId, InlineKeyboardMarkup, InputFile, MessageId},
 };
 
 #[async_trait]
@@ -21,6 +21,13 @@ pub(crate) trait BotClient: Send + Sync {
         text: &str,
         kb: InlineKeyboardMarkup,
     ) -> ResponseResult<()>;
+
+    async fn send_document(
+        &self,
+        chat_id: ChatId,
+        document: InputFile,
+        caption: &str,
+    ) -> ResponseResult<MessageId>;
 }
 
 #[async_trait]
@@ -52,6 +59,18 @@ impl BotClient for teloxide::Bot {
             .reply_markup(kb)
             .await?;
         Ok(())
+    }
+
+    async fn send_document(
+        &self,
+        chat_id: ChatId,
+        document: InputFile,
+        caption: &str,
+    ) -> ResponseResult<MessageId> {
+        let message = Requester::send_document(self, chat_id, document)
+            .caption(caption)
+            .await?;
+        Ok(message.id)
     }
 }
 

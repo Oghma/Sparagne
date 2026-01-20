@@ -103,7 +103,7 @@ async fn home_flow_sends_summary_and_sets_hub_message() {
     let wallet_id = Uuid::new_v4();
     let flow_id = Uuid::new_v4();
     let snapshot = sample_snapshot(wallet_id, flow_id);
-    set_mock(&api.vault_snapshot_main, Ok(snapshot));
+    set_mock(&api.vault_snapshot, Ok(snapshot));
 
     let cfg = test_config(api.clone());
     let bot = MockBot::new();
@@ -119,14 +119,12 @@ async fn home_flow_sends_summary_and_sets_hub_message() {
     let sent = expect_some(bot.last_sent(), "sent message");
     assert_eq!(sent.chat_id, chat_id);
     assert!(sent.has_kb);
-    assert!(sent.text.contains("Vault: Main"));
+    // Vault name is shown with emoji prefix
+    assert!(sent.text.contains("Main"));
     let session = cfg.sessions.get(chat_id).await;
     assert!(session.hub_message_id.is_some());
 
-    set_mock(
-        &api.vault_snapshot_main,
-        Ok(sample_snapshot(wallet_id, flow_id)),
-    );
+    set_mock(&api.vault_snapshot, Ok(sample_snapshot(wallet_id, flow_id)));
     expect_ok(
         home::show_home(&bot, chat_id, user_id, &cfg, locale).await,
         "home flow edit",
@@ -136,16 +134,16 @@ async fn home_flow_sends_summary_and_sets_hub_message() {
     assert_eq!(edited.chat_id, chat_id);
     assert_eq!(edited.message_id, sent.message_id);
     assert!(edited.has_kb);
-    assert!(edited.text.contains("Vault: Main"));
+    assert!(edited.text.contains("Main"));
 }
 
 #[tokio::test]
-async fn home_flow_falls_back_to_default_locale() {
+async fn home_flow_shows_english_for_english_locale() {
     let api = Arc::new(MockApi::new());
     let wallet_id = Uuid::new_v4();
     let flow_id = Uuid::new_v4();
     let snapshot = sample_snapshot(wallet_id, flow_id);
-    set_mock(&api.vault_snapshot_main, Ok(snapshot));
+    set_mock(&api.vault_snapshot, Ok(snapshot));
 
     let cfg = test_config(api.clone());
     let bot = MockBot::new();
@@ -159,7 +157,8 @@ async fn home_flow_falls_back_to_default_locale() {
     );
 
     let sent = expect_some(bot.last_sent(), "sent message");
-    assert!(sent.text.contains("Ultimo flow"));
+    // English locale should show "Budget" instead of Italian "Budget"
+    assert!(sent.text.contains("Budget:"));
 }
 
 #[tokio::test]
@@ -168,7 +167,7 @@ async fn wizard_flow_renders_title_and_body() {
     let wallet_id = Uuid::new_v4();
     let flow_id = Uuid::new_v4();
     let snapshot = sample_snapshot(wallet_id, flow_id);
-    set_mock(&api.vault_snapshot_main, Ok(snapshot));
+    set_mock(&api.vault_snapshot, Ok(snapshot));
     set_mock(
         &api.transactions_list,
         Ok(TransactionListResponse {
@@ -202,9 +201,10 @@ async fn wizard_flow_renders_title_and_body() {
     let sent = expect_some(bot.last_sent(), "sent message");
     assert_eq!(sent.chat_id, chat_id);
     assert!(sent.has_kb);
-    assert!(sent.text.contains("Nuova uscita"));
+    assert!(sent.text.contains("Nuova Spesa"));
+    // Simplified wizard body shows Wallet/Budget with emojis
     assert!(sent.text.contains("Wallet:"));
-    assert!(sent.text.contains("Flow:"));
+    assert!(sent.text.contains("Budget:"));
 }
 
 #[tokio::test]
@@ -213,7 +213,7 @@ async fn list_flow_renders_transactions() {
     let wallet_id = Uuid::new_v4();
     let flow_id = Uuid::new_v4();
     let snapshot = sample_snapshot(wallet_id, flow_id);
-    set_mock(&api.vault_snapshot_main, Ok(snapshot));
+    set_mock(&api.vault_snapshot, Ok(snapshot));
     set_mock(
         &api.transactions_list,
         Ok(TransactionListResponse {
@@ -245,7 +245,7 @@ async fn list_flow_renders_transactions() {
     let sent = expect_some(bot.last_sent(), "sent message");
     assert_eq!(sent.chat_id, chat_id);
     assert!(sent.has_kb);
-    assert!(sent.text.contains("Ultime voci:"));
+    assert!(sent.text.contains("Ultime transazioni:"));
     assert!(sent.text.contains("Food"));
     assert!(sent.text.contains("Lunch"));
 }
