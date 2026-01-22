@@ -1,4 +1,5 @@
 pub mod components;
+pub mod forms;
 pub mod keymap;
 pub mod screens;
 
