@@ -16,8 +16,10 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use crate::ui::Theme;
-use crate::validation::{FieldState, ValidationResult};
+use crate::{
+    ui::Theme,
+    validation::{FieldState, ValidationResult},
+};
 
 /// Common rendering utilities for form fields.
 pub struct FormFieldRenderer;

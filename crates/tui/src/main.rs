@@ -6,6 +6,7 @@ mod local_state;
 mod quick_add;
 mod text;
 mod ui;
+mod validation;
 
 use crate::error::Result;
 
