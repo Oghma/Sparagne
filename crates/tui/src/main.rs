@@ -4,6 +4,7 @@ mod config;
 mod error;
 mod local_state;
 mod quick_add;
+mod text;
 mod ui;
 
 use crate::error::Result;
