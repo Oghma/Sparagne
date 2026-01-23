@@ -18,7 +18,7 @@ impl Validator for RequiredValidator {
 }
 
 /// Validates string length constraints.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct LengthValidator {
     /// Minimum length (inclusive). `None` means no minimum.
     pub min: Option<usize>,
@@ -51,15 +51,6 @@ impl LengthValidator {
         Self {
             min: Some(min),
             max: Some(max),
-        }
-    }
-}
-
-impl Default for LengthValidator {
-    fn default() -> Self {
-        Self {
-            min: None,
-            max: None,
         }
     }
 }
@@ -99,24 +90,24 @@ pub fn validate_length(
 ) -> ValidationResult {
     let len = value.chars().count();
 
-    if let Some(min_len) = min {
-        if len < min_len {
-            return ValidationResult::Invalid(text_format(
-                locale,
-                TextKey::ValidationLengthMin,
-                &[("min", &min_len.to_string())],
-            ));
-        }
+    if let Some(min_len) = min
+        && len < min_len
+    {
+        return ValidationResult::Invalid(text_format(
+            locale,
+            TextKey::ValidationLengthMin,
+            &[("min", &min_len.to_string())],
+        ));
     }
 
-    if let Some(max_len) = max {
-        if len > max_len {
-            return ValidationResult::Invalid(text_format(
-                locale,
-                TextKey::ValidationLengthMax,
-                &[("max", &max_len.to_string())],
-            ));
-        }
+    if let Some(max_len) = max
+        && len > max_len
+    {
+        return ValidationResult::Invalid(text_format(
+            locale,
+            TextKey::ValidationLengthMax,
+            &[("max", &max_len.to_string())],
+        ));
     }
 
     ValidationResult::Valid

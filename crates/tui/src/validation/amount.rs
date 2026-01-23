@@ -192,9 +192,7 @@ pub fn validate_amount(value: &str, require_positive: bool, locale: Locale) -> V
     match parse_amount(trimmed) {
         None => ValidationResult::Invalid(t(locale, TextKey::ValidationAmountInvalid).to_string()),
         Some(cents) => {
-            if require_positive && cents <= 0 {
-                ValidationResult::Invalid(t(locale, TextKey::ValidationAmountPositive).to_string())
-            } else if cents < 0 {
+            if cents < 0 || (require_positive && cents == 0) {
                 ValidationResult::Invalid(t(locale, TextKey::ValidationAmountPositive).to_string())
             } else {
                 ValidationResult::Valid

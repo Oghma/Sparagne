@@ -200,44 +200,39 @@ mod tests {
 
     #[test]
     fn parse_date_iso() {
-        let result = parse_date("2024-03-15", DateFormat::all(), rome());
-        assert!(result.is_some());
-        let parsed = result.unwrap();
+        let parsed = parse_date("2024-03-15", DateFormat::all(), rome())
+            .unwrap_or_else(|| panic!("expected ISO date to parse"));
         assert_eq!(parsed.format, DateFormat::Iso);
         assert_eq!(parsed.datetime.format("%Y-%m-%d").to_string(), "2024-03-15");
     }
 
     #[test]
     fn parse_date_iso_time() {
-        let result = parse_date("2024-03-15 14:30", DateFormat::all(), rome());
-        assert!(result.is_some());
-        let parsed = result.unwrap();
+        let parsed = parse_date("2024-03-15 14:30", DateFormat::all(), rome())
+            .unwrap_or_else(|| panic!("expected ISO date time to parse"));
         assert_eq!(parsed.format, DateFormat::IsoTime);
         assert_eq!(parsed.datetime.format("%H:%M").to_string(), "14:30");
     }
 
     #[test]
     fn parse_date_european() {
-        let result = parse_date("15/03/2024", DateFormat::all(), rome());
-        assert!(result.is_some());
-        let parsed = result.unwrap();
+        let parsed = parse_date("15/03/2024", DateFormat::all(), rome())
+            .unwrap_or_else(|| panic!("expected European date to parse"));
         assert_eq!(parsed.format, DateFormat::European);
         assert_eq!(parsed.datetime.format("%Y-%m-%d").to_string(), "2024-03-15");
     }
 
     #[test]
     fn parse_date_european_time() {
-        let result = parse_date("15/03/2024 14:30", DateFormat::all(), rome());
-        assert!(result.is_some());
-        let parsed = result.unwrap();
+        let parsed = parse_date("15/03/2024 14:30", DateFormat::all(), rome())
+            .unwrap_or_else(|| panic!("expected European date time to parse"));
         assert_eq!(parsed.format, DateFormat::EuropeanTime);
     }
 
     #[test]
     fn parse_date_european_dash() {
-        let result = parse_date("15-03-2024", DateFormat::all(), rome());
-        assert!(result.is_some());
-        let parsed = result.unwrap();
+        let parsed = parse_date("15-03-2024", DateFormat::all(), rome())
+            .unwrap_or_else(|| panic!("expected European dash date to parse"));
         assert_eq!(parsed.format, DateFormat::EuropeanDash);
     }
 

@@ -7,10 +7,6 @@ mod amount;
 mod date;
 mod text;
 
-pub use amount::AmountField;
-pub use date::DateField;
-pub use text::TextField;
-
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -49,14 +45,14 @@ impl FormFieldRenderer {
         }
 
         // Add validation error if touched and invalid
-        if state.should_show_error() {
-            if let Some(error) = state.validation.error_message() {
-                spans.push(Span::raw(" "));
-                spans.push(Span::styled(
-                    format!("⚠ {error}"),
-                    Style::default().fg(theme.error),
-                ));
-            }
+        if state.should_show_error()
+            && let Some(error) = state.validation.error_message()
+        {
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(
+                format!("⚠ {error}"),
+                Style::default().fg(theme.error),
+            ));
         }
 
         Line::from(spans)
