@@ -1,0 +1,209 @@
+use super::super::*;
+
+use crate::{
+    app::helpers::{login_message_for_error, member_role_rank},
+    error::Result,
+};
+use api_types::membership::MemberUpsert;
+
+impl App {
+    pub(crate) async fn open_members(&mut self) -> Result<()> {
+        self.state.section = Section::Members;
+        self.state.members.mode = MembersMode::List;
+        self.reset_member_form();
+        self.load_members().await
+    }
+    pub(crate) async fn load_members(&mut self) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+        let selected = self
+            .state
+            .members
+            .items
+            .get(self.state.members.selected)
+            .map(|member| member.username.clone());
+
+        let res = match self.state.members.scope {
+            MembersScope::Vault => {
+                self.client
+                    .vault_members_list(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                    )
+                    .await
+            }
+            MembersScope::Flow => {
+                self.ensure_member_flow_index();
+                let Some((flow_id, _)) = self.current_member_flow() else {
+                    self.state.members.items.clear();
+                    self.state.members.selected = 0;
+                    self.state.members.error = Some("Nessun flow condivisibile.".to_string());
+                    return Ok(());
+                };
+                self.client
+                    .flow_members_list(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        flow_id,
+                    )
+                    .await
+            }
+        };
+
+        match res {
+            Ok(mut response) => {
+                response.members.sort_by(|a, b| {
+                    member_role_rank(a.role)
+                        .cmp(&member_role_rank(b.role))
+                        .then_with(|| a.username.cmp(&b.username))
+                });
+                self.state.members.items = response.members;
+                if let Some(name) = selected {
+                    if let Some(pos) = self
+                        .state
+                        .members
+                        .items
+                        .iter()
+                        .position(|member| member.username == name)
+                    {
+                        self.state.members.selected = pos;
+                    } else if self.state.members.selected >= self.state.members.items.len() {
+                        self.state.members.selected =
+                            self.state.members.items.len().saturating_sub(1);
+                    }
+                } else if self.state.members.selected >= self.state.members.items.len() {
+                    self.state.members.selected = self.state.members.items.len().saturating_sub(1);
+                }
+                self.state.members.error = None;
+                self.connection_ok(None);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.members.error = Some(login_message_for_error(err));
+                self.connection_error("Errore connessione");
+            }
+        }
+        Ok(())
+    }
+    pub(crate) async fn set_members_scope(&mut self, scope: MembersScope) -> Result<()> {
+        if self.state.members.scope == scope {
+            return Ok(());
+        }
+        self.state.members.scope = scope;
+        self.state.members.mode = MembersMode::List;
+        self.reset_member_form();
+        if scope == MembersScope::Flow {
+            self.select_default_member_flow();
+        }
+        self.load_members().await
+    }
+    pub(crate) async fn submit_member_form(&mut self) -> Result<()> {
+        let username = self.state.members.form.username.trim().to_string();
+        if username.is_empty() {
+            self.state.members.form.error = Some("Inserisci un username.".to_string());
+            return Ok(());
+        }
+        let vault_id = self.current_vault_id()?;
+        let payload = MemberUpsert {
+            username: username.clone(),
+            role: self.state.members.form.role,
+        };
+
+        let res = match self.state.members.scope {
+            MembersScope::Vault => {
+                self.client
+                    .vault_member_upsert(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        payload,
+                    )
+                    .await
+            }
+            MembersScope::Flow => {
+                let Some((flow_id, _)) = self.current_member_flow() else {
+                    self.state.members.form.error = Some("Nessun flow condivisibile.".to_string());
+                    return Ok(());
+                };
+                self.client
+                    .flow_member_upsert(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        flow_id,
+                        payload,
+                    )
+                    .await
+            }
+        };
+
+        match res {
+            Ok(()) => {
+                self.state.members.mode = MembersMode::List;
+                self.reset_member_form();
+                self.load_members().await?;
+                self.select_member_by_username(username.as_str());
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.members.form.error = Some(login_message_for_error(err));
+            }
+        }
+
+        Ok(())
+    }
+    pub(crate) async fn remove_member(&mut self) -> Result<()> {
+        let Some(member) = self.state.members.items.get(self.state.members.selected) else {
+            self.state.members.error = Some("Nessun membro selezionato.".to_string());
+            return Ok(());
+        };
+        let vault_id = self.current_vault_id()?;
+
+        let res = match self.state.members.scope {
+            MembersScope::Vault => {
+                self.client
+                    .vault_member_remove(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        member.username.as_str(),
+                    )
+                    .await
+            }
+            MembersScope::Flow => {
+                let Some((flow_id, _)) = self.current_member_flow() else {
+                    self.state.members.error = Some("Nessun flow condivisibile.".to_string());
+                    return Ok(());
+                };
+                self.client
+                    .flow_member_remove(
+                        self.state.login.username.as_str(),
+                        self.state.login.password.as_str(),
+                        vault_id.as_str(),
+                        flow_id,
+                        member.username.as_str(),
+                    )
+                    .await
+            }
+        };
+
+        match res {
+            Ok(()) => {
+                self.load_members().await?;
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.members.error = Some(login_message_for_error(err));
+            }
+        }
+
+        Ok(())
+    }
+}
