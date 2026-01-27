@@ -19,7 +19,9 @@ impl App {
         self.state.palette = CommandPaletteState::default();
         self.state.help = HelpState::default();
         self.state.toast = None;
+        self.state.overlays = OverlayState::default();
         self.state.connection = ConnectionState::default();
+        self.state.spinner = SpinnerState::default();
         self.state.last_refresh = None;
         self.state.last_flow_id = None;
         self.state.default_wallet_id = None;
@@ -28,7 +30,6 @@ impl App {
 
     pub(crate) fn start_vault_create(&mut self) {
         self.reset_vault_form();
-        self.state.vault_ui.confirm_delete = false;
         self.state.vault_ui.mode = VaultMode::Create;
     }
 
@@ -73,7 +74,6 @@ impl App {
             focus: DefaultsField::Wallet,
             error: None,
         };
-        self.state.vault_ui.confirm_delete = false;
         self.state.vault_ui.mode = VaultMode::Defaults;
     }
     pub(crate) fn defaults_select_next(&mut self) {

@@ -257,6 +257,92 @@ impl App {
 
         Ok(())
     }
+
+    pub(crate) async fn archive_flow_with_undo(&mut self) -> Result<()> {
+        self.finalize_pending_undo().await?;
+        let Some(flow) = self.selected_flow() else {
+            self.state.flows.error = Some("No flow selected.".to_string());
+            return Ok(());
+        };
+        let flow_id = flow.id;
+        let flow_name = flow.name.clone();
+        let is_unallocated = flow.is_unallocated;
+        let is_archived = flow.archived;
+
+        if is_unallocated {
+            self.state.flows.error = Some("Unallocated cannot be archived.".to_string());
+            return Ok(());
+        }
+        if is_archived {
+            self.state.flows.error = Some("Flow già archiviato.".to_string());
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .flow_update(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                flow_id,
+                FlowUpdate {
+                    vault_id: self.current_vault_id()?,
+                    name: None,
+                    archived: Some(true),
+                    mode: None,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(()) => {
+                self.refresh_snapshot().await?;
+                let message = format!("Deleted \"{flow_name}\"");
+                self.set_undo_toast(&message, UndoAction::FlowArchive { id: flow_id });
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.flows.error = Some(login_message_for_error(err));
+                self.set_toast("Failed to archive flow.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn undo_flow_archive(&mut self, flow_id: uuid::Uuid) -> Result<()> {
+        let res = self
+            .client
+            .flow_update(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                flow_id,
+                FlowUpdate {
+                    vault_id: self.current_vault_id()?,
+                    name: None,
+                    archived: Some(false),
+                    mode: None,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(()) => {
+                self.refresh_snapshot().await?;
+                self.set_toast("Flow restored.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.flows.error = Some(login_message_for_error(err));
+                self.set_toast("Errore ripristino flow.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
     pub(crate) fn parse_flow_cap(&mut self, currency: engine::Currency) -> Option<i64> {
         let cap_raw = self.state.flows.form.cap.trim();
         if cap_raw.is_empty() {

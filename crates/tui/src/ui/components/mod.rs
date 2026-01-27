@@ -25,11 +25,16 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     horizontal[1]
 }
 
+pub mod bulk_category_dialog;
 pub mod card;
 pub mod charts;
 pub mod command_palette;
+pub mod confirm_dialog;
+pub mod error_dialog;
 pub mod help_overlay;
 pub mod hints;
+pub mod input_dialog;
+pub mod loading;
 pub mod money;
 pub mod tabs;
 pub mod toast;

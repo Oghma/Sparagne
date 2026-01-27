@@ -9,7 +9,7 @@ mod theme;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
 };
@@ -70,9 +70,25 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     }
 
     render_bottom_bar(frame, layout[2], state, &theme);
-    components::command_palette::render(frame, area, state);
     components::help_overlay::render(frame, area, state);
+    components::command_palette::render(frame, area, state);
+    components::confirm_dialog::render(frame, area, state.overlays.confirm.as_ref());
+    components::error_dialog::render(frame, area, state.overlays.error.as_ref());
+    components::bulk_category_dialog::render(frame, area, state.overlays.bulk_category.as_ref());
     components::toast::render(frame, area, state.toast.as_ref());
+    if state.screen == crate::app::Screen::Home
+        && state.snapshot.is_none()
+        && state.overlays.error.is_none()
+    {
+        components::loading::render_fullscreen(
+            frame,
+            area,
+            components::loading::spinner_frame(state.spinner.index()),
+            "Loading...",
+            Some("Fetching vault data"),
+            &theme,
+        );
+    }
 }
 
 fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -112,24 +128,60 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .split(area);
 
     // Left: shortcuts + context hints
-    let mut parts = Vec::new();
-    parts.extend(components::hints::hints_to_spans(
-        &components::hints::common::section_shortcuts(),
-        theme,
-    ));
-    parts.push(components::hints::hint_separator(theme));
-    parts.extend(components::hints::hints_to_spans(
-        &components::hints::common::global_shortcuts(),
-        theme,
-    ));
-
-    let context_hints = get_context_hints(state);
-    if !context_hints.is_empty() {
+    if state.section == crate::app::Section::Transactions
+        && state.transactions.mode == crate::app::TransactionsMode::List
+        && state.transactions.visual_mode
+    {
+        let mut spans = Vec::new();
+        let selected = state.transactions.visual_selected.len();
+        spans.push(Span::styled(
+            format!("VISUAL ({selected} selected)"),
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::raw("   "));
+        spans.push(Span::styled("[Space]", Style::default().fg(theme.accent)));
+        spans.push(Span::styled(
+            " toggle",
+            Style::default().fg(theme.text_muted),
+        ));
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled("[d]", Style::default().fg(theme.accent)));
+        spans.push(Span::styled(
+            " delete",
+            Style::default().fg(theme.text_muted),
+        ));
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled("[c]", Style::default().fg(theme.accent)));
+        spans.push(Span::styled(
+            " categorize",
+            Style::default().fg(theme.text_muted),
+        ));
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled("[Esc]", Style::default().fg(theme.accent)));
+        spans.push(Span::styled(" exit", Style::default().fg(theme.text_muted)));
+        frame.render_widget(Paragraph::new(Line::from(spans)), layout[0]);
+    } else {
+        let mut parts = Vec::new();
+        parts.extend(components::hints::hints_to_spans(
+            &components::hints::common::section_shortcuts(),
+            theme,
+        ));
         parts.push(components::hints::hint_separator(theme));
-        parts.extend(components::hints::hints_to_spans(&context_hints, theme));
-    }
+        parts.extend(components::hints::hints_to_spans(
+            &components::hints::common::global_shortcuts(),
+            theme,
+        ));
 
-    frame.render_widget(Paragraph::new(Line::from(parts)), layout[0]);
+        let context_hints = get_context_hints(state);
+        if !context_hints.is_empty() {
+            parts.push(components::hints::hint_separator(theme));
+            parts.extend(components::hints::hints_to_spans(&context_hints, theme));
+        }
+
+        frame.render_widget(Paragraph::new(Line::from(parts)), layout[0]);
+    }
 
     // Right: refresh status
     let refresh = state
@@ -157,9 +209,10 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 fn get_context_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.section {
         crate::app::Section::Home => vec![
-            components::hints::KeyHint::new("a", "add expense"),
-            components::hints::KeyHint::new("i", "add income"),
-            components::hints::KeyHint::new("r", "refresh"),
+            components::hints::KeyHint::new("j/k", "select"),
+            components::hints::KeyHint::new("Enter", "details"),
+            components::hints::KeyHint::new("t", "transactions"),
+            components::hints::KeyHint::new("n", "quick add"),
         ],
         crate::app::Section::Transactions => get_transactions_hints(state),
         crate::app::Section::Wallets => get_wallets_hints(state),
@@ -185,7 +238,9 @@ fn get_transactions_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
             components::hints::KeyHint::new("w", "wallet scope"),
             components::hints::KeyHint::new("f", "flow scope"),
             components::hints::KeyHint::new("c", "clear"),
+            components::hints::KeyHint::new("d", "delete"),
             components::hints::KeyHint::new("u", "undo"),
+            components::hints::KeyHint::new("v", "visual"),
         ]
         .into_iter()
         .chain(components::hints::common::list_navigation())
@@ -193,6 +248,7 @@ fn get_transactions_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         crate::app::TransactionsMode::Detail => {
             let mut hints = components::hints::common::detail_view();
             hints.push(components::hints::KeyHint::new("e", "edit"));
+            hints.push(components::hints::KeyHint::new("d", "delete"));
             hints.push(components::hints::KeyHint::new("v", "void"));
             hints.push(components::hints::KeyHint::new("r", "repeat"));
             hints
@@ -220,7 +276,7 @@ fn get_wallets_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
             let mut hints = components::hints::common::list_navigation();
             hints.push(components::hints::KeyHint::new("c", "create"));
             hints.push(components::hints::KeyHint::new("e", "rename"));
-            hints.push(components::hints::KeyHint::new("a", "archive"));
+            hints.push(components::hints::KeyHint::new("d", "delete"));
             hints
         }
         crate::app::WalletsMode::Detail => components::hints::common::detail_view(),
@@ -258,7 +314,7 @@ fn get_flows_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
             let mut hints = components::hints::common::list_navigation();
             hints.push(components::hints::KeyHint::new("c", "create"));
             hints.push(components::hints::KeyHint::new("e", "rename"));
-            hints.push(components::hints::KeyHint::new("a", "archive"));
+            hints.push(components::hints::KeyHint::new("d", "delete"));
             hints
         }
         crate::app::FlowsMode::Detail => components::hints::common::detail_view(),
@@ -277,7 +333,7 @@ fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
                 components::hints::KeyHint::new("↑↓", "select"),
                 components::hints::KeyHint::new("c", "create"),
                 components::hints::KeyHint::new("e", "rename"),
-                components::hints::KeyHint::new("a", "archive"),
+                components::hints::KeyHint::new("d", "delete"),
                 components::hints::KeyHint::new("l", "aliases"),
                 components::hints::KeyHint::new("m", "merge"),
                 components::hints::KeyHint::new("r", "refresh"),
@@ -303,16 +359,11 @@ fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
 fn get_vault_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.vault_ui.mode {
         crate::app::VaultMode::View => {
-            let delete_label = if state.vault_ui.confirm_delete {
-                "confirm delete"
-            } else {
-                "delete"
-            };
             vec![
                 components::hints::KeyHint::new("c", "create"),
                 components::hints::KeyHint::new("d", "defaults"),
                 components::hints::KeyHint::new("l", "vaults"),
-                components::hints::KeyHint::new("x", delete_label),
+                components::hints::KeyHint::new("x", "delete"),
             ]
         }
         crate::app::VaultMode::Create => components::hints::common::form_editing(),

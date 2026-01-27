@@ -1,0 +1,368 @@
+use super::super::*;
+
+use crate::{app::helpers::map_currency, error::Result, ui::keymap::AppAction};
+use engine::Money;
+
+impl App {
+    pub(crate) fn maybe_open_discard_dialog(&mut self) -> bool {
+        if self.state.section != Section::Transactions {
+            return false;
+        }
+
+        match self.state.transactions.mode {
+            TransactionsMode::Form | TransactionsMode::Edit => {
+                if !self.state.transactions.form.is_dirty() {
+                    return false;
+                }
+                self.state.overlays.confirm = Some(ConfirmDialogState::discard_changes(
+                    "Unsaved Changes",
+                    "You have unsaved changes. Discard them?",
+                    "Save",
+                    "Discard",
+                    ConfirmAction::SubmitTransactionForm,
+                    ConfirmAction::DiscardTransactionForm,
+                ));
+                true
+            }
+            TransactionsMode::TransferWallet | TransactionsMode::TransferFlow => {
+                if !self.state.transactions.transfer.is_dirty() {
+                    return false;
+                }
+                self.state.overlays.confirm = Some(ConfirmDialogState::discard_changes(
+                    "Unsaved Changes",
+                    "You have unsaved changes. Discard them?",
+                    "Save",
+                    "Discard",
+                    ConfirmAction::SubmitTransferForm,
+                    ConfirmAction::DiscardTransferForm,
+                ));
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn open_vault_delete_dialog(&mut self) {
+        let name = self
+            .state
+            .vault
+            .as_ref()
+            .and_then(|vault| vault.name.as_deref())
+            .unwrap_or("this vault");
+        let preview = vec![format!("🏦 {name}")];
+        self.state.overlays.confirm = Some(ConfirmDialogState::delete(
+            "Delete Vault",
+            format!("Delete \"{name}\"?"),
+            "This action cannot be undone.",
+            preview,
+            "Delete",
+            ConfirmAction::DeleteVault,
+        ));
+    }
+
+    pub(crate) fn open_transaction_delete_dialog(&mut self) {
+        let visual_mode = self.state.transactions.visual_mode;
+        let visual_ids = if visual_mode {
+            self.state
+                .transactions
+                .visual_selected
+                .iter()
+                .copied()
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+
+        if visual_mode && !visual_ids.is_empty() {
+            let count = visual_ids.len();
+            let preview = vec![format!("🧾 {count} transactions")];
+            self.state.overlays.confirm = Some(ConfirmDialogState::delete(
+                "Delete Transactions",
+                format!("Delete {count} transactions?"),
+                "You can undo this action for 5 seconds.",
+                preview,
+                "Delete",
+                ConfirmAction::DeleteTransaction,
+            ));
+            return;
+        }
+
+        let Some((amount_minor, note)) = self
+            .selected_transaction()
+            .map(|tx| (tx.amount_minor, tx.note.clone()))
+        else {
+            self.state.transactions.error = Some("Nessuna transazione selezionata.".to_string());
+            return;
+        };
+
+        let currency = self
+            .state
+            .vault
+            .as_ref()
+            .and_then(|v| v.currency.as_ref())
+            .map(map_currency)
+            .unwrap_or(engine::Currency::Eur);
+        let amount = Money::new(amount_minor).format(currency);
+        let note = note.as_deref().unwrap_or("Transaction");
+        let preview = vec![format!("🧾 {note}  {amount}")];
+        self.state.overlays.confirm = Some(ConfirmDialogState::delete(
+            "Delete Transaction",
+            format!("Delete \"{note}\"?"),
+            "You can undo this action for 5 seconds.",
+            preview,
+            "Delete",
+            ConfirmAction::DeleteTransaction,
+        ));
+    }
+
+    pub(crate) fn open_bulk_category_dialog(&mut self) {
+        let visual_mode = self.state.transactions.visual_mode;
+        let ids = if visual_mode && !self.state.transactions.visual_selected.is_empty() {
+            self.state
+                .transactions
+                .visual_selected
+                .iter()
+                .copied()
+                .collect::<Vec<_>>()
+        } else if let Some(id) = self.selected_transaction().map(|tx| tx.id) {
+            vec![id]
+        } else {
+            Vec::new()
+        };
+
+        if ids.is_empty() {
+            self.state.transactions.error = Some("Nessuna transazione selezionata.".to_string());
+            return;
+        }
+
+        let count = ids.len();
+        self.state.overlays.bulk_category = Some(BulkCategoryDialogState {
+            transaction_ids: ids,
+            count,
+            input: String::new(),
+            error: None,
+        });
+    }
+
+    pub(crate) fn open_wallet_archive_dialog(&mut self) {
+        let Some(wallet) = self.selected_wallet() else {
+            self.state.wallets.error = Some("No wallet selected.".to_string());
+            return;
+        };
+        let name = wallet.name.as_str();
+        let preview = vec![format!("💰 {name}")];
+        self.state.overlays.confirm = Some(ConfirmDialogState::archive(
+            "Delete Wallet",
+            format!("Delete \"{name}\"?"),
+            "The wallet will be hidden but can be restored later.",
+            preview,
+            "Delete",
+            ConfirmAction::ArchiveWalletWithUndo,
+        ));
+    }
+
+    pub(crate) fn open_flow_archive_dialog(&mut self) {
+        let Some(flow) = self.selected_flow() else {
+            self.state.flows.error = Some("No flow selected.".to_string());
+            return;
+        };
+        let name = flow.name.as_str();
+        let preview = vec![format!("📦 {name}")];
+        self.state.overlays.confirm = Some(ConfirmDialogState::archive(
+            "Delete Flow",
+            format!("Delete \"{name}\"?"),
+            "The flow will be hidden but can be restored later.",
+            preview,
+            "Delete",
+            ConfirmAction::ArchiveFlowWithUndo,
+        ));
+    }
+
+    pub(crate) fn open_category_archive_dialog(&mut self) {
+        let Some(category) = self.selected_category() else {
+            self.state.categories.error = Some("No category selected.".to_string());
+            return;
+        };
+        let name = category.name.as_str();
+        let preview = vec![format!("🏷️ {name}")];
+        self.state.overlays.confirm = Some(ConfirmDialogState::archive(
+            "Delete Category",
+            format!("Delete \"{name}\"?"),
+            "The category will be hidden but can be restored later.",
+            preview,
+            "Delete",
+            ConfirmAction::ToggleCategoryArchive,
+        ));
+    }
+
+    pub(crate) async fn handle_confirm_action(&mut self, action: AppAction) -> Result<()> {
+        let Some(dialog) = self.state.overlays.confirm.clone() else {
+            return Ok(());
+        };
+
+        match action {
+            AppAction::Cancel => {
+                self.state.overlays.confirm = None;
+            }
+            AppAction::Submit => {
+                let action = dialog.confirm_action;
+                self.state.overlays.confirm = None;
+                self.run_confirm_action(action).await?;
+            }
+            AppAction::Input('d' | 'D') if dialog.kind == ConfirmDialogKind::DiscardChanges => {
+                if let Some(action) = dialog.extra_action {
+                    self.state.overlays.confirm = None;
+                    self.run_confirm_action(action).await?;
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn handle_error_action(&mut self, action: AppAction) -> Result<()> {
+        let Some(dialog) = self.state.overlays.error.clone() else {
+            return Ok(());
+        };
+
+        match action {
+            AppAction::Cancel => {
+                self.state.overlays.error = None;
+            }
+            AppAction::Submit => {
+                if let Some(action) = dialog.retry_action {
+                    self.state.overlays.error = None;
+                    self.run_error_action(action).await?;
+                } else {
+                    self.state.overlays.error = None;
+                }
+            }
+            AppAction::Input('r' | 'R') => {
+                if let Some(action) = dialog.retry_action {
+                    self.state.overlays.error = None;
+                    self.run_error_action(action).await?;
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn handle_bulk_category_action(&mut self, action: AppAction) -> Result<()> {
+        let Some(mut dialog) = self.state.overlays.bulk_category.clone() else {
+            return Ok(());
+        };
+
+        match action {
+            AppAction::Cancel => {
+                self.state.overlays.bulk_category = None;
+            }
+            AppAction::Backspace => {
+                dialog.input.pop();
+                dialog.error = None;
+                self.state.overlays.bulk_category = Some(dialog);
+            }
+            AppAction::Input(ch) => {
+                dialog.input.push(ch);
+                dialog.error = None;
+                self.state.overlays.bulk_category = Some(dialog);
+            }
+            AppAction::Submit => {
+                self.apply_bulk_category().await?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    async fn apply_bulk_category(&mut self) -> Result<()> {
+        let Some(dialog) = self.state.overlays.bulk_category.clone() else {
+            return Ok(());
+        };
+
+        let category = dialog.input.trim().trim_start_matches('#').trim();
+        if category.is_empty() {
+            if let Some(state_dialog) = self.state.overlays.bulk_category.as_mut() {
+                state_dialog.error = Some("Inserisci una categoria.".to_string());
+            }
+            return Ok(());
+        }
+
+        self.state.overlays.bulk_category = None;
+        self.finalize_pending_undo().await?;
+        self.bulk_categorize_transactions(&dialog.transaction_ids, category)
+            .await?;
+        Ok(())
+    }
+
+    async fn run_confirm_action(&mut self, action: ConfirmAction) -> Result<()> {
+        match action {
+            ConfirmAction::DeleteTransaction => {
+                self.queue_transaction_delete().await?;
+            }
+            ConfirmAction::DeleteVault => {
+                self.delete_vault().await?;
+            }
+            ConfirmAction::ArchiveWalletWithUndo => {
+                self.archive_wallet_with_undo().await?;
+            }
+            ConfirmAction::ArchiveFlowWithUndo => {
+                self.archive_flow_with_undo().await?;
+            }
+            ConfirmAction::ToggleWalletArchive => {
+                self.toggle_wallet_archive().await?;
+            }
+            ConfirmAction::ToggleFlowArchive => {
+                self.toggle_flow_archive().await?;
+            }
+            ConfirmAction::ToggleCategoryArchive => {
+                self.toggle_category_archive().await?;
+            }
+            ConfirmAction::DiscardTransactionForm => {
+                self.discard_transaction_form();
+            }
+            ConfirmAction::DiscardTransferForm => {
+                self.discard_transfer_form();
+            }
+            ConfirmAction::SubmitTransactionForm | ConfirmAction::SubmitTransferForm => {
+                self.handle_transactions_submit().await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn run_error_action(&mut self, action: ErrorAction) -> Result<()> {
+        match action {
+            ErrorAction::RetrySnapshot => {
+                self.refresh_snapshot().await?;
+                if self.state.section == Section::Transactions {
+                    self.load_transactions(true).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn discard_transaction_form(&mut self) {
+        if self.state.transactions.form.editing_id.is_some() {
+            self.state.transactions.mode = TransactionsMode::Detail;
+        } else {
+            self.state.transactions.mode = TransactionsMode::List;
+        }
+        self.state.transactions.form = TransactionFormState::default();
+    }
+
+    fn discard_transfer_form(&mut self) {
+        if self.state.transactions.transfer.editing_id.is_some() {
+            self.state.transactions.mode = TransactionsMode::Detail;
+        } else {
+            self.state.transactions.mode = TransactionsMode::List;
+        }
+        self.state.transactions.transfer = TransferFormState::default();
+    }
+}

@@ -7,7 +7,6 @@ pub struct VaultState {
     pub defaults: DefaultsFormState,
     pub list: VaultListState,
     pub error: Option<String>,
-    pub confirm_delete: bool,
 }
 
 impl Default for VaultState {
@@ -18,7 +17,6 @@ impl Default for VaultState {
             defaults: DefaultsFormState::default(),
             list: VaultListState::default(),
             error: None,
-            confirm_delete: false,
         }
     }
 }

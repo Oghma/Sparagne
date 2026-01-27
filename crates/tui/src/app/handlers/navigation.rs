@@ -124,11 +124,14 @@ impl App {
                 return Ok(());
             }
             'v' | 'V' => {
-                // In transaction detail, 'v' voids the transaction
-                if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::Detail
-                {
-                    self.void_transaction().await?;
+                if self.state.section == Section::Transactions {
+                    match self.state.transactions.mode {
+                        TransactionsMode::List => self.toggle_visual_mode(),
+                        TransactionsMode::Detail => {
+                            self.void_transaction().await?;
+                        }
+                        _ => {}
+                    }
                 } else {
                     self.state.section = Section::Vault;
                     self.state.transactions.mode = TransactionsMode::List;
@@ -136,6 +139,50 @@ impl App {
                 return Ok(());
             }
             'd' | 'D' => {
+                if self.state.section == Section::Transactions
+                    && matches!(
+                        self.state.transactions.mode,
+                        TransactionsMode::List | TransactionsMode::Detail
+                    )
+                {
+                    self.open_transaction_delete_dialog();
+                    return Ok(());
+                }
+                if self.state.section == Section::Wallets
+                    && self.state.wallets.mode == WalletsMode::List
+                {
+                    if let Some(wallet) = self.selected_wallet()
+                        && !wallet.archived
+                    {
+                        self.open_wallet_archive_dialog();
+                    } else {
+                        self.toggle_wallet_archive().await?;
+                    }
+                    return Ok(());
+                }
+                if self.state.section == Section::Flows && self.state.flows.mode == FlowsMode::List
+                {
+                    if let Some(flow) = self.selected_flow()
+                        && !flow.archived
+                    {
+                        self.open_flow_archive_dialog();
+                    } else {
+                        self.toggle_flow_archive().await?;
+                    }
+                    return Ok(());
+                }
+                if self.state.section == Section::Categories
+                    && self.state.categories.mode == CategoriesMode::List
+                {
+                    if let Some(category) = self.selected_category()
+                        && !category.archived
+                    {
+                        self.open_category_archive_dialog();
+                    } else {
+                        self.toggle_category_archive().await?;
+                    }
+                    return Ok(());
+                }
                 if self.state.section == Section::Vault
                     && self.state.vault_ui.mode == VaultMode::View
                 {
@@ -214,7 +261,46 @@ impl App {
                 }
                 return Ok(());
             }
-            'n' | 'N' => {
+            // Quick Add: 'n' = inline, 'N' = modal (new transaction form)
+            'n' => {
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.state.transactions.quick_active = true;
+                    self.state.transactions.quick_error = None;
+                } else if self.state.section == Section::Home {
+                    // From Home, go to transactions and open quick add
+                    self.state.section = Section::Transactions;
+                    self.state.transactions.mode = TransactionsMode::List;
+                    if self.state.transactions.items.is_empty() {
+                        self.load_transactions(true).await?;
+                    }
+                    self.state.transactions.quick_active = true;
+                    self.state.transactions.quick_error = None;
+                }
+                return Ok(());
+            }
+            'N' => {
+                // Open full transaction form (modal) for new expense
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.start_transaction_form(TransactionKind::Expense)
+                        .await?;
+                } else if self.state.section == Section::Home {
+                    // From Home, go to transactions and open form
+                    self.state.section = Section::Transactions;
+                    self.state.transactions.mode = TransactionsMode::List;
+                    if self.state.transactions.items.is_empty() {
+                        self.load_transactions(true).await?;
+                    }
+                    self.start_transaction_form(TransactionKind::Expense)
+                        .await?;
+                }
+                return Ok(());
+            }
+            // Pagination for transactions/stats
+            ']' => {
                 if self.state.section == Section::Transactions {
                     self.load_transactions_next().await?;
                 } else if self.state.section == Section::Stats {
@@ -222,7 +308,7 @@ impl App {
                 }
                 return Ok(());
             }
-            'p' | 'P' => {
+            '[' => {
                 if self.state.section == Section::Transactions {
                     self.load_transactions_prev().await?;
                 } else if self.state.section == Section::Stats {
@@ -233,37 +319,33 @@ impl App {
             'j' | 'J' => {
                 if self.state.section == Section::Transactions {
                     self.state.transactions.select_next();
+                } else if self.state.section == Section::Home {
+                    self.home_feed_select_next();
                 }
                 return Ok(());
             }
             'k' | 'K' => {
                 if self.state.section == Section::Transactions {
                     self.state.transactions.select_prev();
+                } else if self.state.section == Section::Home {
+                    self.home_feed_select_prev();
                 }
                 return Ok(());
             }
-            'a' | 'A' => {
-                if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::List
-                {
-                    self.state.transactions.quick_active = true;
-                    self.state.transactions.quick_error = None;
-                } else if self.state.section == Section::Wallets
-                    && self.state.wallets.mode == WalletsMode::List
-                {
-                    self.toggle_wallet_archive().await?;
-                } else if self.state.section == Section::Flows
-                    && self.state.flows.mode == FlowsMode::List
-                {
-                    self.toggle_flow_archive().await?;
-                } else if self.state.section == Section::Categories
-                    && self.state.categories.mode == CategoriesMode::List
-                {
-                    self.toggle_category_archive().await?;
+            // 'a' navigates to Accounts section
+            'a' => {
+                // Navigate to Accounts (Flows/Envelopes section)
+                self.state.section = Section::Flows;
+                self.state.transactions.mode = TransactionsMode::List;
+                if self.state.snapshot.is_none() {
+                    self.refresh_snapshot().await?;
                 }
                 return Ok(());
             }
             'u' | 'U' => {
+                if self.handle_undo_hotkey().await? {
+                    return Ok(());
+                }
                 if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::List
                 {
@@ -271,13 +353,18 @@ impl App {
                 }
                 return Ok(());
             }
-            'e' | 'E' => {
+            ' ' => {
                 if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::List
+                    && self.state.transactions.visual_mode
                 {
-                    self.start_transaction_form(TransactionKind::Expense)
-                        .await?;
-                } else if self.state.section == Section::Transactions
+                    self.toggle_visual_selection();
+                    return Ok(());
+                }
+            }
+            // 'e' = edit selected item (uniform contract)
+            'e' | 'E' => {
+                if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::Detail
                 {
                     self.start_transaction_edit().await?;
@@ -360,6 +447,10 @@ impl App {
                 if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::List
                 {
+                    if self.state.transactions.visual_mode {
+                        self.open_bulk_category_dialog();
+                        return Ok(());
+                    }
                     self.clear_filters().await?;
                 } else if self.state.section == Section::Wallets
                     && self.state.wallets.mode == WalletsMode::List
@@ -407,12 +498,7 @@ impl App {
                 } else if self.state.section == Section::Vault
                     && self.state.vault_ui.mode == VaultMode::View
                 {
-                    if self.state.vault_ui.confirm_delete {
-                        self.delete_vault().await?;
-                    } else {
-                        self.state.vault_ui.confirm_delete = true;
-                        self.set_toast("Premi x per confermare l'eliminazione.", ToastLevel::Info);
-                    }
+                    self.open_vault_delete_dialog();
                 }
                 return Ok(());
             }

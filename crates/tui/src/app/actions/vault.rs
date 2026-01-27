@@ -5,7 +5,6 @@ use api_types::vault::{Vault, VaultNew};
 
 impl App {
     pub(crate) async fn start_vault_select(&mut self) -> Result<()> {
-        self.state.vault_ui.confirm_delete = false;
         self.state.vault_ui.error = None;
         self.state.vault_ui.mode = VaultMode::Select;
         self.state.vault_ui.list.error = None;
@@ -73,7 +72,6 @@ impl App {
         self.state.vault = Some(vault);
         self.state.vault_ui.mode = VaultMode::View;
         self.state.vault_ui.list.error = None;
-        self.state.vault_ui.confirm_delete = false;
         self.state.transactions.scope_wallet_id = None;
         self.state.transactions.scope_flow_id = None;
         self.state.transactions.search_query.clear();
@@ -192,8 +190,6 @@ impl App {
             )
             .await;
 
-        self.state.vault_ui.confirm_delete = false;
-
         match res {
             Ok(()) => {
                 self.reset_after_vault_delete();
@@ -202,7 +198,13 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.vault_ui.error = Some(login_message_for_error(err));
+                let message = login_message_for_error(err);
+                self.state.vault_ui.error = Some(message.clone());
+                self.state.overlays.error = Some(ErrorDialogState::error(
+                    "Error",
+                    "Failed to delete vault.",
+                    Some(message),
+                ));
                 self.set_toast("Errore eliminazione vault.", ToastLevel::Error);
             }
         }

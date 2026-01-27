@@ -466,6 +466,12 @@ pub mod transaction {
         pub category: Option<String>,
         pub note: Option<String>,
         pub voided: bool,
+        /// Primary wallet involved (for display in list views).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub wallet_id: Option<Uuid>,
+        /// Primary flow/envelope involved (for display in list views).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub flow_id: Option<Uuid>,
     }
 
     #[derive(Debug, Serialize, Deserialize)]

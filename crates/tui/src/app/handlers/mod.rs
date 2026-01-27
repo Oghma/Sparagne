@@ -1,8 +1,10 @@
 mod categories;
 mod flows;
 mod forms;
+mod home;
 mod members;
 mod navigation;
+mod overlays;
 mod palette;
 mod search;
 mod stats;
@@ -21,6 +23,18 @@ impl App {
     #[doc(hidden)]
     pub async fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
         let action = crate::ui::keymap::map_key(key);
+        if self.state.overlays.confirm.is_some() {
+            self.handle_confirm_action(action).await?;
+            return Ok(());
+        }
+        if self.state.overlays.error.is_some() {
+            self.handle_error_action(action).await?;
+            return Ok(());
+        }
+        if self.state.overlays.bulk_category.is_some() {
+            self.handle_bulk_category_action(action).await?;
+            return Ok(());
+        }
         if self.state.help.active {
             self.handle_help_action(action);
             return Ok(());
@@ -28,13 +42,6 @@ impl App {
         if self.state.palette.active {
             self.handle_palette_action(action).await?;
             return Ok(());
-        }
-        if self.state.section == Section::Vault
-            && self.state.vault_ui.mode == VaultMode::View
-            && self.state.vault_ui.confirm_delete
-            && !matches!(action, crate::ui::keymap::AppAction::Input('x' | 'X'))
-        {
-            self.state.vault_ui.confirm_delete = false;
         }
 
         match action {
@@ -54,6 +61,14 @@ impl App {
             crate::ui::keymap::AppAction::Cancel => {
                 if self.state.screen == Screen::Login {
                     self.should_quit = true;
+                } else if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                    && self.state.transactions.visual_mode
+                {
+                    self.exit_visual_mode();
+                    return Ok(());
+                } else if self.maybe_open_discard_dialog() {
+                    return Ok(());
                 } else if self.stop_search_if_active().await? {
                     return Ok(());
                 } else if self.state.section == Section::Transactions {
@@ -142,11 +157,7 @@ impl App {
                             self.state.vault_ui.mode = VaultMode::View;
                         }
                         VaultMode::View => {
-                            if self.state.vault_ui.confirm_delete {
-                                self.state.vault_ui.confirm_delete = false;
-                            } else {
-                                self.state.section = Section::Home;
-                            }
+                            self.state.section = Section::Home;
                         }
                     }
                 } else if self.state.section == Section::Categories {
@@ -195,6 +206,8 @@ impl App {
             crate::ui::keymap::AppAction::Submit => {
                 if self.state.screen == Screen::Login {
                     self.attempt_login().await?;
+                } else if self.state.section == Section::Home {
+                    self.open_home_feed_item().await?;
                 } else if self.state.section == Section::Transactions {
                     self.handle_transactions_submit().await?;
                 } else if self.state.section == Section::Wallets {
@@ -286,7 +299,11 @@ impl App {
                 }
             }
             crate::ui::keymap::AppAction::Up => {
-                if self.state.screen == Screen::Home && self.state.section == Section::Members {
+                if self.state.screen == Screen::Home && self.state.section == Section::Home {
+                    self.home_feed_select_prev();
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Members
+                {
                     match self.state.members.mode {
                         MembersMode::Form => {
                             if self.state.members.form.focus == MemberFormField::Role {
@@ -378,7 +395,11 @@ impl App {
                 }
             }
             crate::ui::keymap::AppAction::Down => {
-                if self.state.screen == Screen::Home && self.state.section == Section::Members {
+                if self.state.screen == Screen::Home && self.state.section == Section::Home {
+                    self.home_feed_select_next();
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Members
+                {
                     match self.state.members.mode {
                         MembersMode::Form => {
                             if self.state.members.form.focus == MemberFormField::Role {

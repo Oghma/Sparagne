@@ -192,4 +192,83 @@ impl App {
 
         Ok(())
     }
+
+    pub(crate) async fn archive_wallet_with_undo(&mut self) -> Result<()> {
+        self.finalize_pending_undo().await?;
+        let Some(wallet) = self.selected_wallet() else {
+            self.state.wallets.error = Some("Nessun wallet selezionato.".to_string());
+            return Ok(());
+        };
+        let wallet_id = wallet.id;
+        let wallet_name = wallet.name.clone();
+        let is_archived = wallet.archived;
+
+        if is_archived {
+            self.state.wallets.error = Some("Wallet già archiviato.".to_string());
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .wallet_update(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                wallet_id,
+                WalletUpdate {
+                    vault_id: self.current_vault_id()?,
+                    name: None,
+                    archived: Some(true),
+                },
+            )
+            .await;
+
+        match res {
+            Ok(()) => {
+                self.refresh_snapshot().await?;
+                let message = format!("Deleted \"{wallet_name}\"");
+                self.set_undo_toast(&message, UndoAction::WalletArchive { id: wallet_id });
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.wallets.error = Some(login_message_for_error(err));
+                self.set_toast("Errore archivio wallet.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn undo_wallet_archive(&mut self, wallet_id: uuid::Uuid) -> Result<()> {
+        let res = self
+            .client
+            .wallet_update(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                wallet_id,
+                WalletUpdate {
+                    vault_id: self.current_vault_id()?,
+                    name: None,
+                    archived: Some(false),
+                },
+            )
+            .await;
+
+        match res {
+            Ok(()) => {
+                self.refresh_snapshot().await?;
+                self.set_toast("Wallet restored.", ToastLevel::Success);
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.wallets.error = Some(login_message_for_error(err));
+                self.set_toast("Errore ripristino wallet.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
 }

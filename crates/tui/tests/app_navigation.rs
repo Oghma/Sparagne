@@ -65,6 +65,8 @@ fn sample_transaction_view() -> TransactionView {
         category: Some("Food".to_string()),
         note: None,
         voided: false,
+        wallet_id: None,
+        flow_id: None,
     }
 }
 
@@ -97,6 +99,8 @@ async fn transaction_form_flow() {
     );
 
     assert!(app.handle_key(key(KeyCode::Esc)).await.is_ok());
+    assert!(app.state.overlays.has_confirm_dialog());
+    assert!(app.handle_key(key(KeyCode::Char('d'))).await.is_ok());
     assert_eq!(app.state.transactions.mode, TransactionsMode::List);
 }
 

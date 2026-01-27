@@ -178,7 +178,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         } else {
             lines.push(Line::from(vec![
                 Span::raw("No transactions yet. Press "),
-                Span::styled("a", Style::default().fg(theme.accent)),
+                Span::styled("n", Style::default().fg(theme.accent)),
                 Span::raw(" to add one."),
             ]));
         }
@@ -188,14 +188,26 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         frame.render_widget(empty_msg, layout[1]);
         return;
     }
+    use chrono::Local;
+    let today = Local::now().date_naive();
+    let yesterday = today - chrono::Duration::days(1);
+
     for (visible_idx, idx) in visible.iter().enumerate() {
         let tx = &state.transactions.items[*idx];
-        let day_label = tx.occurred_at.format("%Y-%m-%d").to_string();
+        let tx_date = tx.occurred_at.date_naive();
+        let day_label = format_date_label(tx_date, today, yesterday);
+
         if last_day.as_ref() != Some(&day_label) {
+            // Add spacing before new date group (except first)
+            if last_day.is_some() {
+                rows.push(ListItem::new(Line::from("")));
+            }
             last_day = Some(day_label.clone());
             rows.push(ListItem::new(Line::from(Span::styled(
-                format!("── {day_label} ──"),
-                Style::default().fg(theme.dim),
+                format!("  {day_label}"),
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
             ))));
         }
 
@@ -210,15 +222,33 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             .map(|c| format!("#{c}"))
             .unwrap_or_default();
 
-        let mut spans = vec![
-            Span::styled(
-                tx.occurred_at.format("%H:%M").to_string(),
-                Style::default().fg(theme.dim),
-            ),
-            Span::raw("  "),
-            kind_chip(tx.kind, theme),
-            Span::raw(" "),
-        ];
+        // Resolve wallet and flow names for display
+        let wallet_name = tx
+            .wallet_id
+            .map(|id| resolve_wallet_name(state, id))
+            .unwrap_or_default();
+        let flow_name = tx
+            .flow_id
+            .map(|id| resolve_flow_name(state, id))
+            .unwrap_or_default();
+
+        let mut spans = Vec::new();
+        if state.transactions.visual_mode {
+            let marker = if state.transactions.visual_selected.contains(&tx.id) {
+                "*"
+            } else {
+                " "
+            };
+            spans.push(Span::styled(marker, Style::default().fg(theme.warning)));
+            spans.push(Span::raw(" "));
+        }
+        spans.push(Span::styled(
+            tx.occurred_at.format("%H:%M").to_string(),
+            Style::default().fg(theme.dim),
+        ));
+        spans.push(Span::raw("  "));
+        spans.push(kind_chip(tx.kind, theme));
+        spans.push(Span::raw(" "));
         if let Some(voided) = void_chip(tx.voided, theme) {
             spans.push(voided);
             spans.push(Span::raw(" "));
@@ -227,6 +257,22 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         spans.push(Span::raw("  "));
         if !category.is_empty() {
             spans.push(Span::styled(category, Style::default().fg(theme.accent)));
+            spans.push(Span::raw(" "));
+        }
+        // Show flow/envelope if present
+        if !flow_name.is_empty() {
+            spans.push(Span::styled(
+                format!("📦{flow_name}"),
+                Style::default().fg(theme.info),
+            ));
+            spans.push(Span::raw(" "));
+        }
+        // Show wallet if present
+        if !wallet_name.is_empty() {
+            spans.push(Span::styled(
+                format!("💰{wallet_name}"),
+                Style::default().fg(theme.dim),
+            ));
             spans.push(Span::raw(" "));
         }
         spans.push(Span::raw(note));
@@ -854,67 +900,113 @@ fn kind_toggle_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> 
 }
 
 fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let (wallet_name, flow_name) = default_wallet_flow_names(state);
-    let focus = if state.transactions.quick_active {
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.dim)
-    };
+    use crate::quick_add::{QuickAddKind, parse};
+
+    let (wallet_name, _flow_name) = default_wallet_flow_names(state);
+    let currency = state
+        .vault
+        .as_ref()
+        .and_then(|v| v.currency.as_ref())
+        .map(map_currency)
+        .unwrap_or(Currency::Eur);
 
     let input = state.transactions.quick_input.as_str();
-    let placeholder = "scrivi qui...";
+
+    // Try to parse the input for live preview
+    let parsed = if !input.trim().is_empty() {
+        parse(input, currency).ok()
+    } else {
+        None
+    };
+
+    let border_style = if state.transactions.quick_active {
+        Style::default().fg(theme.accent)
+    } else {
+        Style::default().fg(theme.border)
+    };
+
+    let placeholder = "Press [a] to add transaction...";
     let (input_text, input_style) = if input.is_empty() {
-        (placeholder, Style::default().fg(theme.dim))
+        (placeholder, Style::default().fg(theme.text_muted))
     } else {
         (input, Style::default().fg(theme.text))
     };
+
     let cursor = if state.transactions.quick_active {
-        "|"
+        "_"
     } else {
         ""
     };
 
+    // First line: input field
     let mut lines = vec![Line::from(vec![
-        Span::styled("Quick add", focus),
-        Span::raw(": "),
-        Span::styled(">", Style::default().fg(theme.accent)),
-        Span::raw(" "),
-        Span::styled("[", Style::default().fg(theme.dim)),
+        Span::styled("> ", Style::default().fg(theme.accent)),
         Span::styled(input_text.to_string(), input_style),
         Span::styled(cursor, Style::default().fg(theme.accent)),
-        Span::styled("]", Style::default().fg(theme.dim)),
-        Span::raw("   "),
-        Span::styled("wallet", Style::default().fg(theme.dim)),
-        Span::raw(format!(": {wallet_name}   ")),
-        Span::styled("flow", Style::default().fg(theme.dim)),
-        Span::raw(format!(": {flow_name}")),
     ])];
 
+    // Show preview or error or help
     if let Some(err) = &state.transactions.quick_error {
         lines.push(Line::from(Span::styled(
-            err.as_str(),
-            Style::default().fg(theme.error),
+            format!("⚠ {err}"),
+            Style::default().fg(theme.negative),
         )));
+    } else if let Some(p) = &parsed {
+        // Show live preview
+        let (type_icon, type_color) = match p.kind {
+            QuickAddKind::Income => ("▲", theme.positive),
+            QuickAddKind::Expense => ("▼", theme.negative),
+            QuickAddKind::Refund => ("↩", theme.warning),
+        };
+        let amount_str = Money::new(p.amount_minor).format(currency);
+        let note = p.note.as_deref().unwrap_or("-");
+        let category = p
+            .category
+            .as_ref()
+            .map(|c| format!("#{c}"))
+            .unwrap_or_else(|| "-".to_string());
+
+        lines.push(Line::from(vec![
+            Span::styled(type_icon, Style::default().fg(type_color)),
+            Span::raw(" "),
+            Span::styled(amount_str, Style::default().fg(type_color)),
+            Span::raw("  "),
+            Span::styled(note, Style::default().fg(theme.text)),
+            Span::raw("  │  "),
+            Span::styled(category, Style::default().fg(theme.accent)),
+            Span::raw("  "),
+            Span::styled(
+                format!("@{wallet_name}"),
+                Style::default().fg(theme.text_muted),
+            ),
+            Span::raw("  │  "),
+            Span::styled("Today", Style::default().fg(theme.text_muted)),
+        ]));
     } else if state.transactions.quick_active {
         lines.push(Line::from(Span::styled(
-            "Formato: 12.50 bar  |  +1000 stipendio  |  r 5.20 amazon  |  #tag opzionale",
-            Style::default().fg(theme.dim),
+            "Syntax: [+]amount note [#category]  |  + = income, r = refund",
+            Style::default().fg(theme.text_muted),
         )));
-        if let Some(line) = recents_line(state) {
-            lines.push(Line::from(Span::styled(
-                line,
-                Style::default().fg(theme.dim),
-            )));
-        }
+    } else {
+        // Collapsed state - show hint
+        lines.push(Line::from(vec![
+            Span::styled("[a]", Style::default().fg(theme.accent)),
+            Span::styled(" quick add  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[i]", Style::default().fg(theme.accent)),
+            Span::styled(" income  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[e]", Style::default().fg(theme.accent)),
+            Span::styled(" expense", Style::default().fg(theme.text_muted)),
+        ]));
     }
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border))
-        .title("Quick add (a)");
+        .border_style(border_style)
+        .title(Span::styled(
+            " Quick Add ",
+            Style::default().fg(theme.accent),
+        ));
     let widget = Paragraph::new(lines).block(block);
     frame.render_widget(widget, area);
 }
@@ -1069,16 +1161,13 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
 }
 
 fn kind_chip(kind: TransactionKind, theme: &Theme) -> Span<'static> {
-    let (label, color) = match kind {
-        TransactionKind::Income => ("INC", theme.positive),
-        TransactionKind::Expense => ("EXP", theme.negative),
-        TransactionKind::Refund => ("REF", theme.accent),
-        TransactionKind::TransferWallet | TransactionKind::TransferFlow => ("TR", theme.text),
+    let (icon, color) = match kind {
+        TransactionKind::Income => ("▲", theme.income),
+        TransactionKind::Expense => ("▼", theme.expense),
+        TransactionKind::Refund => ("↩", theme.refund),
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => ("⇄", theme.transfer),
     };
-    Span::styled(
-        format!("[{label}]"),
-        Style::default().fg(color).add_modifier(Modifier::BOLD),
-    )
+    Span::styled(icon.to_string(), Style::default().fg(color))
 }
 
 fn void_chip(voided: bool, theme: &Theme) -> Option<Span<'static>> {
@@ -1354,5 +1443,22 @@ fn filter_summary(state: &AppState) -> Option<String> {
         None
     } else {
         Some(format!("Filters: {}", parts.join(" • ")))
+    }
+}
+
+fn format_date_label(
+    date: chrono::NaiveDate,
+    today: chrono::NaiveDate,
+    yesterday: chrono::NaiveDate,
+) -> String {
+    use chrono::Datelike;
+    if date == today {
+        "Today".to_string()
+    } else if date == yesterday {
+        "Yesterday".to_string()
+    } else if date.year() == today.year() {
+        date.format("%A, %d %b").to_string()
+    } else {
+        date.format("%d %b %Y").to_string()
     }
 }

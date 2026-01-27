@@ -284,7 +284,6 @@ impl App {
     pub(crate) fn reset_vault_form(&mut self) {
         self.state.vault_ui.form = VaultFormState::default();
         self.state.vault_ui.error = None;
-        self.state.vault_ui.confirm_delete = false;
     }
 
     pub(crate) fn reset_category_form(&mut self) {

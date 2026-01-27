@@ -1,4 +1,5 @@
 use chrono::{DateTime, FixedOffset};
+use std::collections::BTreeSet;
 
 use api_types::transaction::{TransactionDetailResponse, TransactionKind, TransactionView};
 
@@ -11,6 +12,9 @@ pub struct TransactionsState {
     pub next_cursor: Option<String>,
     pub prev_cursors: Vec<Option<String>>,
     pub selected: usize,
+    pub pending_delete_ids: BTreeSet<uuid::Uuid>,
+    pub visual_mode: bool,
+    pub visual_selected: BTreeSet<uuid::Uuid>,
     pub scope_wallet_id: Option<uuid::Uuid>,
     pub scope_flow_id: Option<uuid::Uuid>,
     pub picker_index: usize,
@@ -44,6 +48,9 @@ impl Default for TransactionsState {
             next_cursor: None,
             prev_cursors: Vec::new(),
             selected: 0,
+            pending_delete_ids: BTreeSet::new(),
+            visual_mode: false,
+            visual_selected: BTreeSet::new(),
             scope_wallet_id: None,
             scope_flow_id: None,
             picker_index: 0,
@@ -78,6 +85,9 @@ impl TransactionsState {
         self.prev_cursors.clear();
         self.items.clear();
         self.selected = 0;
+        self.pending_delete_ids.clear();
+        self.visual_mode = false;
+        self.visual_selected.clear();
         self.mode = TransactionsMode::List;
         self.detail = None;
         self.quick_input.clear();
@@ -118,13 +128,17 @@ impl TransactionsState {
 
     pub(crate) fn visible_len(&self) -> usize {
         let query = normalize_query(self.search_query.as_str());
-        if query.is_empty() {
-            return self.items.len();
-        }
-
         self.items
             .iter()
-            .filter(|tx| transaction_matches_query(tx, query.as_str()))
+            .filter(|tx| {
+                if self.pending_delete_ids.contains(&tx.id) {
+                    return false;
+                }
+                if query.is_empty() {
+                    return true;
+                }
+                transaction_matches_query(tx, query.as_str())
+            })
             .count()
     }
 }
@@ -169,6 +183,12 @@ impl Default for TransferFormState {
     }
 }
 
+impl TransferFormState {
+    pub(crate) fn is_dirty(&self) -> bool {
+        self.editing_id.is_some() || !self.amount.trim().is_empty() || !self.note.trim().is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransferField {
     From,
@@ -208,6 +228,15 @@ impl Default for TransactionFormState {
             category_index: None,
             editing_id: None,
         }
+    }
+}
+
+impl TransactionFormState {
+    pub(crate) fn is_dirty(&self) -> bool {
+        self.editing_id.is_some()
+            || !self.amount.trim().is_empty()
+            || !self.category.trim().is_empty()
+            || !self.note.trim().is_empty()
     }
 }
 

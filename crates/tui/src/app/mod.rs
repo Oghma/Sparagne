@@ -4,7 +4,7 @@ mod helpers;
 mod state;
 
 pub(crate) use helpers::{
-    filter_commands, flows_visible_indices, ordered_flow_ids_from_state,
+    filter_commands, flows_visible_indices, home_feed_indices, ordered_flow_ids_from_state,
     ordered_wallet_ids_from_state, transactions_visible_indices, wallets_visible_indices,
 };
 pub use state::*;
@@ -46,6 +46,7 @@ impl App {
             vault: None,
             snapshot: None,
             section: Section::Home,
+            home_feed_selected: 0,
             transactions: TransactionsState::default(),
             wallets: WalletsState::default(),
             flows: FlowsState::default(),
@@ -56,7 +57,9 @@ impl App {
             palette: CommandPaletteState::default(),
             help: HelpState::default(),
             toast: None,
+            overlays: OverlayState::default(),
             connection: ConnectionState::default(),
+            spinner: SpinnerState::default(),
             last_refresh: None,
             last_flow_id: None,
             default_wallet_id: None,
@@ -84,7 +87,8 @@ impl App {
         let tick_rate = Duration::from_millis(200);
 
         while !self.should_quit {
-            self.expire_toast();
+            self.tick_spinner();
+            self.expire_toast().await?;
             terminal
                 .draw(|frame| ui::render(frame, &self.state))
                 .map_err(|err| AppError::Terminal(err.to_string()))?;
@@ -99,6 +103,10 @@ impl App {
         }
 
         Ok(())
+    }
+
+    fn tick_spinner(&mut self) {
+        self.state.spinner.tick();
     }
 
     #[allow(dead_code)]

@@ -24,13 +24,16 @@ pub fn hints_to_spans(hints: &[KeyHint], theme: &Theme) -> Vec<Span<'static>> {
 
     for (i, hint) in hints.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::raw("  "));
+            spans.push(Span::styled("  ", Style::default().fg(theme.text_muted)));
         }
         spans.push(Span::styled(
-            hint.key.clone(),
+            format!("[{}]", hint.key),
             Style::default().fg(theme.accent),
         ));
-        spans.push(Span::raw(format!(" {}", hint.action)));
+        spans.push(Span::styled(
+            format!(" {}", hint.action),
+            Style::default().fg(theme.text_muted),
+        ));
     }
 
     spans
@@ -78,11 +81,23 @@ pub mod common {
             KeyHint::new("h", "home"),
             KeyHint::new("t", "txn"),
             KeyHint::new("w", "wallet"),
-            KeyHint::new("f", "flow"),
+            KeyHint::new("a", "accounts"),
             KeyHint::new("g", "categories"),
-            KeyHint::new("m", "members"),
-            KeyHint::new("v", "vault"),
             KeyHint::new("s", "stats"),
+        ]
+    }
+
+    /// Quick add shortcuts.
+    pub fn quick_add() -> Vec<KeyHint> {
+        vec![KeyHint::new("n", "quick add"), KeyHint::new("N", "new txn")]
+    }
+
+    /// Item action shortcuts (uniform contract).
+    pub fn item_actions() -> Vec<KeyHint> {
+        vec![
+            KeyHint::new("Enter", "detail"),
+            KeyHint::new("e", "edit"),
+            KeyHint::new("d", "delete"),
         ]
     }
 }

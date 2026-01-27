@@ -255,8 +255,21 @@ pub(crate) fn default_wallet_flow(
 
 pub(crate) fn transactions_visible_indices(state: &AppState) -> Vec<usize> {
     let query = normalize_query(state.transactions.search_query.as_str());
+    let hidden_ids = &state.transactions.pending_delete_ids;
     if query.is_empty() {
-        return (0..state.transactions.items.len()).collect();
+        return state
+            .transactions
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, tx)| {
+                if hidden_ids.contains(&tx.id) {
+                    None
+                } else {
+                    Some(idx)
+                }
+            })
+            .collect();
     }
 
     state
@@ -265,10 +278,30 @@ pub(crate) fn transactions_visible_indices(state: &AppState) -> Vec<usize> {
         .iter()
         .enumerate()
         .filter_map(|(idx, tx)| {
+            if hidden_ids.contains(&tx.id) {
+                return None;
+            }
             if transaction_matches_query(tx, query.as_str()) {
                 Some(idx)
             } else {
                 None
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn home_feed_indices(state: &AppState) -> Vec<usize> {
+    let hidden_ids = &state.transactions.pending_delete_ids;
+    state
+        .transactions
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, tx)| {
+            if hidden_ids.contains(&tx.id) {
+                None
+            } else {
+                Some(idx)
             }
         })
         .collect()

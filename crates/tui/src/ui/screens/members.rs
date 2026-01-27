@@ -16,79 +16,55 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(6),
+            Constraint::Min(0),    // List
+            Constraint::Length(6), // Form
+            Constraint::Length(2), // Footer
         ])
         .split(area);
 
-    render_header(frame, layout[0], state, &theme);
-    render_list(frame, layout[1], state, &theme);
-    render_form(frame, layout[2], state, &theme);
-}
-
-fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let mode = match state.members.mode {
-        MembersMode::List => "List",
-        MembersMode::Form => {
-            if state.members.form.editing {
-                "Edit"
-            } else {
-                "Add"
-            }
-        }
-    };
-    let scope = match state.members.scope {
-        MembersScope::Vault => "Vault",
-        MembersScope::Flow => "Flow",
-    };
-    let flow_name = if state.members.scope == MembersScope::Flow {
-        member_flow_name(state)
-    } else {
-        None
-    };
-
-    let mut line = vec![
-        Span::styled("Mode", Style::default().fg(theme.dim)),
-        Span::raw(format!(": {mode}")),
-        Span::raw("   "),
-        Span::styled("Scope", Style::default().fg(theme.dim)),
-        Span::raw(format!(": {scope}")),
-    ];
-    if let Some(flow) = flow_name {
-        line.push(Span::raw("   "));
-        line.push(Span::styled("Flow", Style::default().fg(theme.dim)));
-        line.push(Span::raw(format!(": {flow}")));
-    }
-
-    if let Some(err) = state.members.error.as_ref() {
-        line.push(Span::raw("   "));
-        line.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
-    }
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border))
-        .title("Members");
-    frame.render_widget(Paragraph::new(Line::from(line)).block(block), area);
+    render_list(frame, layout[0], state, &theme);
+    render_form(frame, layout[1], state, &theme);
+    render_footer(frame, layout[2], state, &theme);
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    // Build title with scope info
+    let scope_label = match state.members.scope {
+        MembersScope::Vault => "Vault Members".to_string(),
+        MembersScope::Flow => {
+            let flow_name = member_flow_name(state).unwrap_or_else(|| "Flow".to_string());
+            format!("👥 {} Members", flow_name)
+        }
+    };
+
+    let is_focused = state.members.mode == MembersMode::List;
+    let border_color = if is_focused {
+        theme.border_focused
+    } else {
+        theme.border
+    };
+
     let list_block = Block::default()
+        .title(Span::styled(
+            format!(" {} ", scope_label),
+            Style::default().fg(theme.accent),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
+        .border_style(Style::default().fg(border_color));
 
     if state.members.items.is_empty() {
         let msg = if state.members.scope == MembersScope::Flow {
-            "Nessun membro per questo flow."
+            "No members in this flow"
         } else {
-            "Nessun membro."
+            "No vault members"
         };
-        let empty_msg = Paragraph::new(Line::from(msg))
-            .alignment(Alignment::Center)
-            .block(list_block);
+        let empty_msg = Paragraph::new(Line::from(vec![Span::styled(
+            msg,
+            Style::default().fg(theme.text_muted),
+        )]))
+        .alignment(Alignment::Center)
+        .block(list_block);
         frame.render_widget(empty_msg, area);
         return;
     }
@@ -100,9 +76,11 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .map(|member| {
             let (label, color) = role_chip(member.role, theme);
             let spans = vec![
+                Span::raw("  "),
+                Span::styled("👤 ", Style::default().fg(theme.text_muted)),
                 Span::styled(member.username.clone(), Style::default().fg(theme.text)),
-                Span::raw(" "),
-                status_chip(label, color),
+                Span::raw("  "),
+                role_badge(label, color),
             ];
             ListItem::new(Line::from(spans))
         })
@@ -113,55 +91,133 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     list_state.select(Some(selected));
     let list = List::new(items)
         .block(list_block)
-        .highlight_style(Style::default().bg(theme.accent).fg(theme.background));
+        .highlight_style(
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("» ");
     frame.render_stateful_widget(list, area, &mut list_state);
 }
 
 fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let mut border_style = Style::default().fg(theme.border);
-    if state.members.mode == MembersMode::Form {
-        border_style = border_style.fg(theme.accent);
-    }
+    let is_focused = state.members.mode == MembersMode::Form;
+    let border_color = if is_focused {
+        theme.border_focused
+    } else {
+        theme.border
+    };
+
+    let title = if state.members.form.editing {
+        " Edit Member "
+    } else {
+        " Add Member "
+    };
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(border_style)
-        .title("Member Form");
+        .border_style(Style::default().fg(border_color))
+        .title(Span::styled(title, Style::default().fg(theme.accent)));
 
     let mut lines = Vec::new();
-    let username_style = if state.members.form.focus == MemberFormField::Username {
+
+    // Username field
+    let username_focused = state.members.form.focus == MemberFormField::Username;
+    let username_label_style = if username_focused {
         Style::default()
             .fg(theme.accent)
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(theme.text_muted)
     };
+    let username_value = if state.members.form.username.is_empty() && username_focused {
+        "_"
+    } else {
+        state.members.form.username.as_str()
+    };
     lines.push(Line::from(vec![
-        Span::styled("Username", username_style),
-        Span::raw(format!(": {}", state.members.form.username)),
+        Span::styled("  Username  ", username_label_style),
+        Span::styled(username_value.to_string(), Style::default().fg(theme.text)),
+        if username_focused {
+            Span::styled("_", Style::default().fg(theme.accent))
+        } else {
+            Span::raw("")
+        },
     ]));
 
-    let role_style = if state.members.form.focus == MemberFormField::Role {
+    // Role field
+    let role_focused = state.members.form.focus == MemberFormField::Role;
+    let role_label_style = if role_focused {
         Style::default()
             .fg(theme.accent)
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(theme.text_muted)
     };
+    let (role_text, role_color) = role_chip(state.members.form.role, theme);
     lines.push(Line::from(vec![
-        Span::styled("Role", role_style),
-        Span::raw(format!(": {}", role_label(state.members.form.role))),
+        Span::styled("  Role      ", role_label_style),
+        role_badge(role_text, role_color),
+        if role_focused {
+            Span::styled("  ↑↓ change", Style::default().fg(theme.text_muted))
+        } else {
+            Span::raw("")
+        },
     ]));
 
+    // Error message
     if let Some(err) = state.members.form.error.as_ref() {
-        lines.push(Line::from(Span::styled(
-            err.as_str(),
-            Style::default().fg(theme.error),
-        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("  ✗ ", Style::default().fg(theme.negative)),
+            Span::styled(err.clone(), Style::default().fg(theme.negative)),
+        ]));
     }
 
     frame.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+fn render_footer(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let hints = match state.members.mode {
+        MembersMode::List => vec![
+            ("[a]", "add"),
+            ("[e]", "edit"),
+            ("[x]", "remove"),
+            ("[v]", "vault"),
+            ("[f]", "flow"),
+            ("[↑↓]", "select"),
+        ],
+        MembersMode::Form => vec![
+            ("[Tab]", "next"),
+            ("[↑↓]", "change"),
+            ("[Enter]", "save"),
+            ("[Esc]", "cancel"),
+        ],
+    };
+
+    let mut spans = Vec::new();
+    for (i, (key, action)) in hints.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw("  "));
+        }
+        spans.push(Span::styled(*key, Style::default().fg(theme.accent)));
+        spans.push(Span::styled(
+            format!(" {action}"),
+            Style::default().fg(theme.text_muted),
+        ));
+    }
+
+    // Add error from main state if present
+    if let Some(err) = state.members.error.as_ref() {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            err.clone(),
+            Style::default().fg(theme.negative),
+        ));
+    }
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn member_flow_name(state: &AppState) -> Option<String> {
@@ -176,14 +232,6 @@ fn member_flow_name(state: &AppState) -> Option<String> {
         .map(|flow| flow.name.clone())
 }
 
-fn role_label(role: api_types::membership::MembershipRole) -> &'static str {
-    match role {
-        api_types::membership::MembershipRole::Owner => "owner",
-        api_types::membership::MembershipRole::Editor => "editor",
-        api_types::membership::MembershipRole::Viewer => "viewer",
-    }
-}
-
 fn role_chip(
     role: api_types::membership::MembershipRole,
     theme: &Theme,
@@ -195,6 +243,6 @@ fn role_chip(
     }
 }
 
-fn status_chip(label: &str, color: ratatui::style::Color) -> Span<'static> {
-    Span::styled(format!(" {label} "), Style::default().fg(color))
+fn role_badge(label: &str, color: ratatui::style::Color) -> Span<'static> {
+    Span::styled(format!("[{label}]"), Style::default().fg(color))
 }

@@ -145,6 +145,7 @@ impl App {
                 self.refresh_wallets_search().await?;
                 self.refresh_flows_search().await?;
                 self.connection_ok(None);
+                self.state.overlays.error = None;
             }
             Err(ClientError::NotFound(_)) => {
                 if let Err(err) = self.refresh_shared_flows_snapshot().await {
@@ -152,8 +153,15 @@ impl App {
                     self.state.flows.error = Some(err.to_string());
                     self.state.stats.error = Some(err.to_string());
                     self.connection_error("Errore connessione");
+                    self.state.overlays.error = Some(ErrorDialogState::connection(
+                        "Connection Error",
+                        "Unable to connect to server.",
+                        Some(err.to_string()),
+                        ErrorAction::RetrySnapshot,
+                    ));
                 } else {
                     self.connection_ok(None);
+                    self.state.overlays.error = None;
                 }
             }
             Err(err) => {
@@ -161,10 +169,17 @@ impl App {
                     return Ok(());
                 }
                 let message = login_message_for_error(err);
+                let detail = Some(message.clone());
                 self.state.wallets.error = Some(message.clone());
                 self.state.flows.error = Some(message.clone());
                 self.state.stats.error = Some(message);
                 self.connection_error("Errore connessione");
+                self.state.overlays.error = Some(ErrorDialogState::connection(
+                    "Connection Error",
+                    "Unable to connect to server.",
+                    detail,
+                    ErrorAction::RetrySnapshot,
+                ));
             }
         }
 
@@ -173,7 +188,6 @@ impl App {
 
     pub(crate) fn apply_snapshot(&mut self, snapshot: VaultSnapshot) {
         self.state.snapshot = Some(snapshot);
-        self.state.vault_ui.confirm_delete = false;
         self.ensure_last_flow();
         self.normalize_defaults();
         self.ensure_flow_scope_for_shared();

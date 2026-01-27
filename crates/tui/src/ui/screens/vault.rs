@@ -15,55 +15,30 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .constraints([Constraint::Min(0), Constraint::Length(2)])
         .split(area);
 
-    render_header(frame, layout[0], state, &theme);
-
     match state.vault_ui.mode {
-        VaultMode::View => render_view(frame, layout[1], state, &theme),
-        VaultMode::Create => render_create(frame, layout[1], state, &theme),
-        VaultMode::Defaults => render_defaults(frame, layout[1], state, &theme),
-        VaultMode::Select => render_list(frame, layout[1], state, &theme),
+        VaultMode::View => render_view(frame, layout[0], state, &theme),
+        VaultMode::Create => render_create(frame, layout[0], state, &theme),
+        VaultMode::Defaults => render_defaults(frame, layout[0], state, &theme),
+        VaultMode::Select => render_list(frame, layout[0], state, &theme),
     }
-}
 
-fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let mode = match state.vault_ui.mode {
-        VaultMode::View => "View",
-        VaultMode::Create => "Create",
-        VaultMode::Defaults => "Defaults",
-        VaultMode::Select => "Vaults",
-    };
-    let mut line = vec![
-        Span::styled("Mode", Style::default().fg(theme.dim)),
-        Span::raw(format!(": {mode}")),
-    ];
-    if let Some(err) = state.vault_ui.error.as_ref() {
-        line.push(Span::raw("   "));
-        line.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
-    }
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border))
-        .title("Vault");
-    frame.render_widget(Paragraph::new(Line::from(line)).block(block), area);
+    render_footer(frame, layout[1], state, &theme);
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let block = Block::default()
-        .title("Vaults")
+        .title(Span::styled(
+            " 🏦 Vaults ",
+            Style::default().fg(theme.accent),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
+        .border_style(Style::default().fg(theme.border_focused));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(2)])
-        .split(inner);
 
     let items = state
         .vault_ui
@@ -84,18 +59,23 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             };
             let currency = format!("{:?}", vault.currency);
             ListItem::new(Line::from(vec![
+                Span::raw("  "),
+                Span::styled("🏦 ", Style::default().fg(theme.text_muted)),
                 Span::styled(name, name_style),
                 Span::raw("  "),
-                Span::styled(currency, Style::default().fg(theme.dim)),
+                Span::styled(currency, Style::default().fg(theme.text_muted)),
             ]))
         })
         .collect::<Vec<_>>();
 
     if items.is_empty() {
         frame.render_widget(
-            Paragraph::new(Span::styled("No vaults", Style::default().fg(theme.dim)))
-                .alignment(Alignment::Center),
-            layout[0],
+            Paragraph::new(Span::styled(
+                "No vaults",
+                Style::default().fg(theme.text_muted),
+            ))
+            .alignment(Alignment::Center),
+            inner,
         );
     } else {
         let mut list_state = ListState::default();
@@ -113,20 +93,8 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
                     .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol("» ");
-        frame.render_stateful_widget(list, layout[0], &mut list_state);
+        frame.render_stateful_widget(list, inner, &mut list_state);
     }
-
-    let mut footer = vec![Line::from(Span::styled(
-        "Enter: open • Esc: back • ↑/↓: select",
-        Style::default().fg(theme.dim),
-    ))];
-    if let Some(err) = state.vault_ui.list.error.as_ref() {
-        footer.push(Line::from(Span::styled(
-            err.as_str(),
-            Style::default().fg(theme.error),
-        )));
-    }
-    frame.render_widget(Paragraph::new(footer), layout[1]);
 }
 
 fn render_view(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -157,59 +125,114 @@ fn render_view(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .map(|id| resolve_flow_name(state, id))
         .unwrap_or_else(|| "None".to_string());
 
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("Vault", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {vault_name}")),
-        ]),
-        Line::from(vec![
-            Span::styled("ID", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {vault_id}")),
-        ]),
-        Line::from(vec![
-            Span::styled("Currency", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {currency}")),
-        ]),
-        Line::from(vec![
-            Span::styled("Wallets", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {wallets_count}")),
-            Span::raw("   "),
-            Span::styled("Flows", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {flows_count}")),
-        ]),
-        Line::from(vec![
-            Span::styled("Default wallet", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {default_wallet_name}")),
-        ]),
-        Line::from(vec![
-            Span::styled("Default flow", Style::default().fg(theme.dim)),
-            Span::raw(format!(": {default_flow_name}")),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("c", Style::default().fg(theme.accent)),
-            Span::raw(" create vault  "),
-            Span::styled("d", Style::default().fg(theme.accent)),
-            Span::raw(" defaults  "),
-            Span::styled("l", Style::default().fg(theme.accent)),
-            Span::raw(" vaults  "),
-            Span::styled("x", Style::default().fg(theme.accent)),
-            Span::raw(" delete vault"),
-        ]),
-    ];
-    if state.vault_ui.confirm_delete {
-        lines.push(Line::from(vec![Span::styled(
-            "Conferma eliminazione con x.",
-            Style::default().fg(theme.error),
-        )]));
-    }
-
     let block = Block::default()
-        .title("Vault Overview")
+        .title(Span::styled(
+            format!(" 🏦 {} ", vault_name),
+            Style::default().fg(theme.accent),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
-    frame.render_widget(Paragraph::new(lines).block(block), area);
+        .border_style(Style::default().fg(theme.border_focused));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let info_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // ID
+            Constraint::Length(1), // Currency
+            Constraint::Length(1), // Wallets/Flows
+            Constraint::Length(1), // Spacer
+            Constraint::Length(1), // Defaults header
+            Constraint::Length(1), // Default wallet
+            Constraint::Length(1), // Default flow
+            Constraint::Min(0),    // Error/confirmation
+        ])
+        .split(inner);
+
+    // Vault ID
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  ID          ", Style::default().fg(theme.text_muted)),
+            Span::styled(vault_id.to_string(), Style::default().fg(theme.text)),
+        ])),
+        info_layout[0],
+    );
+
+    // Currency
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Currency    ", Style::default().fg(theme.text_muted)),
+            Span::styled(currency, Style::default().fg(theme.text)),
+        ])),
+        info_layout[1],
+    );
+
+    // Wallets and Flows count
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Wallets     ", Style::default().fg(theme.text_muted)),
+            Span::styled(wallets_count.to_string(), Style::default().fg(theme.text)),
+            Span::raw("    "),
+            Span::styled("Flows  ", Style::default().fg(theme.text_muted)),
+            Span::styled(flows_count.to_string(), Style::default().fg(theme.text)),
+        ])),
+        info_layout[2],
+    );
+
+    // Defaults header
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![Span::styled(
+            "  Quick Defaults",
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )])),
+        info_layout[4],
+    );
+
+    // Default wallet
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Default Wallet  ", Style::default().fg(theme.text_muted)),
+            Span::styled(
+                default_wallet_name,
+                if state.default_wallet_id.is_some() {
+                    Style::default().fg(theme.text)
+                } else {
+                    Style::default().fg(theme.text_muted)
+                },
+            ),
+        ])),
+        info_layout[5],
+    );
+
+    // Default flow
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Default Flow    ", Style::default().fg(theme.text_muted)),
+            Span::styled(
+                default_flow_name,
+                if state.default_flow_id.is_some() {
+                    Style::default().fg(theme.text)
+                } else {
+                    Style::default().fg(theme.text_muted)
+                },
+            ),
+        ])),
+        info_layout[6],
+    );
+
+    // Error or confirmation
+    if let Some(err) = state.vault_ui.error.as_ref() {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("  ✗ ", Style::default().fg(theme.negative)),
+                Span::styled(err.clone(), Style::default().fg(theme.negative)),
+            ])),
+            info_layout[7],
+        );
+    }
 }
 
 fn display_vault_name(state: &AppState) -> Option<String> {
@@ -226,64 +249,102 @@ fn display_vault_name(state: &AppState) -> Option<String> {
 
 fn render_create(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let form = &state.vault_ui.form;
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("Name", Style::default().fg(theme.accent)),
-            Span::raw(format!(": {}", form.name)),
-        ]),
-        Line::from(vec![
-            Span::styled("Currency", Style::default().fg(theme.dim)),
-            Span::raw(": EUR"),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled(
-            "Enter: create • Esc: cancel",
-            Style::default().fg(theme.dim),
-        )),
-    ];
-    if let Some(err) = form.error.as_ref() {
-        lines.push(Line::from(Span::styled(
-            err.as_str(),
-            Style::default().fg(theme.error),
-        )));
-    }
 
     let block = Block::default()
-        .title("Create Vault")
+        .title(Span::styled(
+            " Create Vault ",
+            Style::default().fg(theme.accent),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
-    frame.render_widget(Paragraph::new(lines).block(block), area);
+        .border_style(Style::default().fg(theme.border_focused));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Name field
+            Constraint::Length(1), // Currency field
+            Constraint::Min(0),    // Error
+        ])
+        .split(inner);
+
+    // Name field
+    let name_value = if form.name.is_empty() {
+        "_"
+    } else {
+        form.name.as_str()
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(
+                "  Name      ",
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(name_value.to_string(), Style::default().fg(theme.text)),
+            Span::styled("_", Style::default().fg(theme.accent)),
+        ])),
+        layout[0],
+    );
+
+    // Currency field (fixed for now)
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Currency  ", Style::default().fg(theme.text_muted)),
+            Span::styled("EUR", Style::default().fg(theme.text)),
+        ])),
+        layout[1],
+    );
+
+    // Error
+    if let Some(err) = form.error.as_ref() {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("  ✗ ", Style::default().fg(theme.negative)),
+                Span::styled(err.clone(), Style::default().fg(theme.negative)),
+            ])),
+            layout[2],
+        );
+    }
 }
 
 fn render_defaults(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let Some(snapshot) = state.snapshot.as_ref() else {
         let block = Block::default()
-            .title("Defaults")
+            .title(Span::styled(
+                " Quick Defaults ",
+                Style::default().fg(theme.accent),
+            ))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.accent));
+            .border_style(Style::default().fg(theme.border_focused));
         frame.render_widget(
-            Paragraph::new(Line::from("Snapshot non disponibile."))
-                .alignment(Alignment::Center)
-                .block(block),
+            Paragraph::new(Line::from(Span::styled(
+                "Snapshot not available",
+                Style::default().fg(theme.text_muted),
+            )))
+            .alignment(Alignment::Center)
+            .block(block),
             area,
         );
         return;
     };
 
-    let wallet_names = snapshot
+    let wallet_names: Vec<String> = snapshot
         .wallets
         .iter()
         .filter(|wallet| !wallet.archived)
         .map(|wallet| wallet.name.clone())
-        .collect::<Vec<_>>();
-    let flow_names = snapshot
+        .collect();
+    let flow_names: Vec<String> = snapshot
         .flows
         .iter()
         .filter(|flow| !flow.archived)
         .map(|flow| flow.name.clone())
-        .collect::<Vec<_>>();
+        .collect();
 
     let defaults = &state.vault_ui.defaults;
     let wallet_label = if defaults.wallet_index == 0 {
@@ -305,42 +366,78 @@ fn render_defaults(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
 
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(6), Constraint::Min(0)])
+        .constraints([Constraint::Length(4), Constraint::Min(0)])
         .split(area);
 
-    let mut lines = vec![
-        render_default_field(
-            "Default wallet",
-            wallet_label,
-            defaults.focus == DefaultsField::Wallet,
-            theme,
-        ),
-        render_default_field(
-            "Default flow",
-            flow_label,
-            defaults.focus == DefaultsField::Flow,
-            theme,
-        ),
-        Line::from(""),
-        Line::from(Span::styled(
-            "Tab: next • ↑/↓: change • Enter: save • Esc: cancel",
-            Style::default().fg(theme.dim),
-        )),
-    ];
-    if let Some(err) = defaults.error.as_ref() {
-        lines.push(Line::from(Span::styled(
-            err.as_str(),
-            Style::default().fg(theme.error),
-        )));
-    }
-
-    let block = Block::default()
-        .title("Defaults")
+    // Form section
+    let form_block = Block::default()
+        .title(Span::styled(
+            " Quick Defaults ",
+            Style::default().fg(theme.accent),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
-    frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
+        .border_style(Style::default().fg(theme.border_focused));
+    let form_inner = form_block.inner(layout[0]);
+    frame.render_widget(form_block, layout[0]);
 
+    let form_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Wallet
+            Constraint::Length(1), // Flow
+        ])
+        .split(form_inner);
+
+    // Wallet field
+    let wallet_focused = defaults.focus == DefaultsField::Wallet;
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(
+                "  Default Wallet  ",
+                if wallet_focused {
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(theme.text_muted)
+                },
+            ),
+            Span::styled(wallet_label.to_string(), Style::default().fg(theme.text)),
+            if wallet_focused {
+                Span::styled("  ↑↓", Style::default().fg(theme.text_muted))
+            } else {
+                Span::raw("")
+            },
+        ])),
+        form_layout[0],
+    );
+
+    // Flow field
+    let flow_focused = defaults.focus == DefaultsField::Flow;
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(
+                "  Default Flow    ",
+                if flow_focused {
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(theme.text_muted)
+                },
+            ),
+            Span::styled(flow_label.to_string(), Style::default().fg(theme.text)),
+            if flow_focused {
+                Span::styled("  ↑↓", Style::default().fg(theme.text_muted))
+            } else {
+                Span::raw("")
+            },
+        ])),
+        form_layout[1],
+    );
+
+    // Lists section
     let lists = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -352,7 +449,7 @@ fn render_defaults(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         "Wallets",
         &wallet_names,
         defaults.wallet_index,
-        defaults.focus == DefaultsField::Wallet,
+        wallet_focused,
         theme,
     );
     render_defaults_list(
@@ -361,29 +458,25 @@ fn render_defaults(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         "Flows",
         &flow_names,
         defaults.flow_index,
-        defaults.focus == DefaultsField::Flow,
+        flow_focused,
         theme,
     );
-}
 
-fn render_default_field(label: &str, value: &str, focused: bool, theme: &Theme) -> Line<'static> {
-    let label_style = if focused {
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.dim)
-    };
-    let value_style = if focused {
-        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text)
-    };
-    Line::from(vec![
-        Span::styled(format!("{label:<15}"), label_style),
-        Span::raw(": "),
-        Span::styled(value.to_string(), value_style),
-    ])
+    // Error
+    if let Some(err) = defaults.error.as_ref() {
+        let error_area = Rect {
+            y: area.y + area.height.saturating_sub(1),
+            height: 1,
+            ..area
+        };
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("✗ ", Style::default().fg(theme.negative)),
+                Span::styled(err.clone(), Style::default().fg(theme.negative)),
+            ])),
+            error_area,
+        );
+    }
 }
 
 fn render_defaults_list(
@@ -396,12 +489,16 @@ fn render_defaults_list(
     theme: &Theme,
 ) {
     let mut list_items = Vec::with_capacity(items.len() + 1);
-    list_items.push(ListItem::new(Line::from("None")));
-    list_items.extend(
-        items
-            .iter()
-            .map(|name| ListItem::new(Line::from(name.clone()))),
-    );
+    list_items.push(ListItem::new(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("None", Style::default().fg(theme.text_muted)),
+    ])));
+    list_items.extend(items.iter().map(|name| {
+        ListItem::new(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(name.clone(), Style::default().fg(theme.text)),
+        ]))
+    }));
 
     let mut list_state = ListState::default();
     if !list_items.is_empty() {
@@ -416,16 +513,73 @@ fn render_defaults_list(
         Style::default().fg(theme.text)
     };
 
+    let border_color = if focused {
+        theme.border_focused
+    } else {
+        theme.border
+    };
+
     let block = Block::default()
-        .title(title)
+        .title(Span::styled(
+            format!(" {title} "),
+            Style::default().fg(theme.accent),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
+        .border_style(Style::default().fg(border_color));
     let list = List::new(list_items)
         .block(block)
         .highlight_style(highlight_style)
         .highlight_symbol("» ");
     frame.render_stateful_widget(list, area, &mut list_state);
+}
+
+fn render_footer(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let hints = match state.vault_ui.mode {
+        VaultMode::View => vec![
+            ("[c]", "create"),
+            ("[d]", "defaults"),
+            ("[l]", "list"),
+            ("[x]", "delete"),
+        ],
+        VaultMode::Create => vec![("[Enter]", "create"), ("[Esc]", "cancel")],
+        VaultMode::Defaults => vec![
+            ("[Tab]", "next"),
+            ("[↑↓]", "change"),
+            ("[Enter]", "save"),
+            ("[Esc]", "cancel"),
+        ],
+        VaultMode::Select => vec![
+            ("[Enter]", "select"),
+            ("[↑↓]", "navigate"),
+            ("[Esc]", "back"),
+        ],
+    };
+
+    let mut spans = Vec::new();
+    for (i, (key, action)) in hints.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw("  "));
+        }
+        spans.push(Span::styled(*key, Style::default().fg(theme.accent)));
+        spans.push(Span::styled(
+            format!(" {action}"),
+            Style::default().fg(theme.text_muted),
+        ));
+    }
+
+    // Add list error if present
+    if state.vault_ui.mode == VaultMode::Select {
+        if let Some(err) = state.vault_ui.list.error.as_ref() {
+            spans.push(Span::raw("  "));
+            spans.push(Span::styled(
+                err.clone(),
+                Style::default().fg(theme.negative),
+            ));
+        }
+    }
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn resolve_wallet_name(state: &AppState, wallet_id: uuid::Uuid) -> String {
