@@ -128,9 +128,18 @@ fn render_status_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 }
 
 fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    // Fill footer background to create a clear bottom chrome.
+    frame.render_widget(
+        ratatui::widgets::Block::default().style(
+            ratatui::style::Style::default()
+                .bg(theme.surface_bright)
+                .fg(theme.text),
+        ),
+        area,
+    );
     let layout = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+        .constraints([Constraint::Percentage(75), Constraint::Percentage(25)])
         .split(area);
 
     // Left: shortcuts + context hints
@@ -143,10 +152,11 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         spans.push(Span::styled(
             format!("VISUAL ({selected} selected)"),
             Style::default()
-                .fg(theme.warning)
+                .fg(theme.background)
+                .bg(theme.warning)
                 .add_modifier(Modifier::BOLD),
         ));
-        spans.push(Span::raw("   "));
+        spans.push(Span::raw("  "));
         spans.push(Span::styled("[Space]", Style::default().fg(theme.accent)));
         spans.push(Span::styled(
             " toggle",
@@ -174,17 +184,17 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             &components::hints::common::section_shortcuts(),
             theme,
         ));
-        parts.push(components::hints::hint_separator(theme));
-        parts.extend(components::hints::hints_to_spans(
-            &components::hints::common::global_shortcuts(),
-            theme,
-        ));
 
         let context_hints = get_context_hints(state);
         if !context_hints.is_empty() {
             parts.push(components::hints::hint_separator(theme));
             parts.extend(components::hints::hints_to_spans(&context_hints, theme));
         }
+        parts.push(components::hints::hint_separator(theme));
+        parts.extend(components::hints::hints_to_spans(
+            &components::hints::common::global_shortcuts(),
+            theme,
+        ));
 
         frame.render_widget(Paragraph::new(Line::from(parts)), layout[0]);
     }
@@ -194,16 +204,35 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .last_refresh
         .map(|dt| dt.format("%H:%M").to_string())
         .unwrap_or_else(|| "-".to_string());
-    let status = if state.connection.ok { "OK" } else { "ERR" };
+    let status = if state.connection.ok {
+        "online"
+    } else {
+        "offline"
+    };
     let status_style = if state.connection.ok {
         Style::default().fg(theme.positive)
     } else {
-        Style::default().fg(theme.error)
+        Style::default()
+            .fg(theme.error)
+            .add_modifier(Modifier::BOLD)
     };
+    let conn_msg = state.connection.message.as_deref().unwrap_or_default();
     let right_line = Line::from(vec![
         Span::styled("⟳", Style::default().fg(theme.text_muted)),
-        Span::raw(format!(" {refresh} ")),
+        Span::raw(" "),
+        Span::styled(refresh, Style::default().fg(theme.text)),
+        Span::raw(" "),
+        Span::styled("│", Style::default().fg(theme.border)),
+        Span::raw(" "),
         Span::styled(status, status_style),
+        if conn_msg.is_empty() {
+            Span::raw("")
+        } else {
+            Span::styled(
+                format!(" · {conn_msg}"),
+                Style::default().fg(theme.text_muted),
+            )
+        },
     ]);
     frame.render_widget(
         Paragraph::new(right_line).alignment(ratatui::layout::Alignment::Right),

@@ -1004,8 +1004,11 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             .unwrap_or_else(|| "-".to_string());
         let (flow_display, flow_style, flow_exact) = if let Some(flow_query) = p.flow.as_deref() {
             match resolve_flow_query(state, flow_query) {
-                Some((_, resolved, exact)) =>
-                    (format!(">{resolved}"), Style::default().fg(theme.accent), exact),
+                Some((_, resolved, exact)) => (
+                    format!(">{resolved}"),
+                    Style::default().fg(theme.accent),
+                    exact,
+                ),
                 None => (
                     format!("?>{flow_query}"),
                     Style::default().fg(theme.warning),
