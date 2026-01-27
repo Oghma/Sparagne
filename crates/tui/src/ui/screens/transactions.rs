@@ -14,7 +14,8 @@ use uuid::Uuid;
 use crate::{
     app::{
         AppState, FilterField, GroupingMode, TransactionFormField, TransactionsMode, TransferField,
-        ordered_flow_ids_from_state, ordered_wallet_ids_from_state, transactions_visible_indices,
+        flow_name_suggestions, ordered_flow_ids_from_state, ordered_wallet_ids_from_state,
+        resolve_flow_name as resolve_flow_query, transactions_visible_indices,
     },
     ui::{components::centered_rect, theme::Theme},
 };
@@ -938,7 +939,7 @@ fn kind_toggle_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> 
 fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     use crate::quick_add::{QuickAddKind, parse};
 
-    let (wallet_name, _flow_name) = default_wallet_flow_names(state);
+    let (wallet_name, flow_name) = default_wallet_flow_names(state);
     let currency = state
         .vault
         .as_ref()
@@ -1001,6 +1002,23 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             .as_ref()
             .map(|c| format!("#{c}"))
             .unwrap_or_else(|| "-".to_string());
+        let (flow_display, flow_style, flow_exact) = if let Some(flow_query) = p.flow.as_deref() {
+            match resolve_flow_query(state, flow_query) {
+                Some((_, resolved, exact)) =>
+                    (format!(">{resolved}"), Style::default().fg(theme.accent), exact),
+                None => (
+                    format!("?>{flow_query}"),
+                    Style::default().fg(theme.warning),
+                    false,
+                ),
+            }
+        } else {
+            (
+                format!(">{flow_name}"),
+                Style::default().fg(theme.text_muted),
+                true,
+            )
+        };
 
         lines.push(Line::from(vec![
             Span::styled(type_icon, Style::default().fg(type_color)),
@@ -1010,7 +1028,9 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             Span::styled(note, Style::default().fg(theme.text)),
             Span::raw("  │  "),
             Span::styled(category, Style::default().fg(theme.accent)),
-            Span::raw("  "),
+            Span::raw("  │  "),
+            Span::styled(flow_display, flow_style),
+            Span::raw("  │  "),
             Span::styled(
                 format!("@{wallet_name}"),
                 Style::default().fg(theme.text_muted),
@@ -1018,9 +1038,22 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             Span::raw("  │  "),
             Span::styled("Today", Style::default().fg(theme.text_muted)),
         ]));
+
+        if state.transactions.quick_active
+            && let Some(flow_query) = p.flow.as_deref()
+            && !flow_exact
+        {
+            let suggestions = flow_name_suggestions(state, flow_query, 3);
+            if !suggestions.is_empty() {
+                lines.push(Line::from(Span::styled(
+                    format!("Envelope suggestions: {}", suggestions.join(", ")),
+                    Style::default().fg(theme.text_muted),
+                )));
+            }
+        }
     } else if state.transactions.quick_active {
         lines.push(Line::from(Span::styled(
-            "Syntax: [+]amount note [#category]  |  + = income, r = refund",
+            "Syntax: [+]amount note [#category] [>envelope]  |  + = income, r = refund",
             Style::default().fg(theme.text_muted),
         )));
     } else {

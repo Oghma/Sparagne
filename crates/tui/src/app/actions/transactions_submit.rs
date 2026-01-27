@@ -1,7 +1,7 @@
 use super::super::*;
 
 use crate::{
-    app::helpers::{default_wallet_flow, login_message_for_error, map_currency},
+    app::helpers::{default_wallet_flow, login_message_for_error, map_currency, resolve_flow_name},
     error::Result,
     quick_add::QuickAddKind,
 };
@@ -717,14 +717,14 @@ impl App {
             .and_then(|v| v.id.as_deref())
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
 
-        let (wallet_id, flow_id, _wallet_name, _flow_name) = match default_wallet_flow(&self.state)
-        {
-            Ok(res) => res,
-            Err(message) => {
-                self.state.transactions.quick_error = Some(message);
-                return Ok(());
-            }
-        };
+        let (wallet_id, mut flow_id, _wallet_name, _flow_name) =
+            match default_wallet_flow(&self.state) {
+                Ok(res) => res,
+                Err(message) => {
+                    self.state.transactions.quick_error = Some(message);
+                    return Ok(());
+                }
+            };
 
         let currency = self
             .state
@@ -741,6 +741,17 @@ impl App {
                 return Ok(());
             }
         };
+
+        if let Some(flow_query) = parsed.flow.as_deref() {
+            match resolve_flow_name(&self.state, flow_query) {
+                Some((resolved_id, _, _)) => flow_id = resolved_id,
+                None => {
+                    self.state.transactions.quick_error =
+                        Some(format!("Envelope non trovato: >{flow_query}"));
+                    return Ok(());
+                }
+            }
+        }
 
         let occurred_at = self.now_in_timezone();
         let res = match parsed.kind {

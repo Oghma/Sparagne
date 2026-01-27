@@ -2,8 +2,10 @@ use api_types::{
     error::ErrorCode,
     membership::MembershipRole,
     transaction::{TransactionDetailResponse, TransactionKind, TransactionView},
+    vault::FlowView,
 };
 use engine::Currency;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
@@ -477,6 +479,94 @@ pub(crate) fn ordered_flow_ids_from_state(state: &AppState) -> Vec<Uuid> {
     }
     priority.extend(state.transactions.recent_flow_ids.iter().copied());
     ordered_ids(active_ids, &priority)
+}
+
+pub(crate) fn resolve_flow_name(state: &AppState, query: &str) -> Option<(Uuid, String, bool)> {
+    let query = normalize_query(query);
+    if query.is_empty() {
+        return None;
+    }
+    let ordered = ordered_active_flows(state);
+    let (exact, prefix, contains) = flow_name_buckets(&ordered, query.as_str());
+
+    exact
+        .first()
+        .map(|flow| (flow.id, flow.name.clone(), true))
+        .or_else(|| {
+            prefix
+                .first()
+                .map(|flow| (flow.id, flow.name.clone(), false))
+        })
+        .or_else(|| {
+            contains
+                .first()
+                .map(|flow| (flow.id, flow.name.clone(), false))
+        })
+}
+
+pub(crate) fn flow_name_suggestions(state: &AppState, query: &str, limit: usize) -> Vec<String> {
+    if limit == 0 {
+        return Vec::new();
+    }
+    let query = normalize_query(query);
+    if query.is_empty() {
+        return Vec::new();
+    }
+    let ordered = ordered_active_flows(state);
+    let (exact, prefix, contains) = flow_name_buckets(&ordered, query.as_str());
+    let source = if !exact.is_empty() {
+        exact
+    } else if !prefix.is_empty() {
+        prefix
+    } else {
+        contains
+    };
+    source
+        .into_iter()
+        .take(limit)
+        .map(|flow| flow.name.clone())
+        .collect()
+}
+
+fn ordered_active_flows(state: &AppState) -> Vec<&FlowView> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    let ordered_ids = ordered_flow_ids_from_state(state);
+    let mut by_id: HashMap<Uuid, &FlowView> = HashMap::with_capacity(snapshot.flows.len());
+    for flow in snapshot.flows.iter().filter(|flow| !flow.archived) {
+        by_id.insert(flow.id, flow);
+    }
+
+    let mut ordered = Vec::with_capacity(by_id.len());
+    for id in ordered_ids {
+        if let Some(flow) = by_id.get(&id) {
+            ordered.push(*flow);
+        }
+    }
+    ordered
+}
+
+fn flow_name_buckets<'a>(
+    flows: &'a [&FlowView],
+    query: &str,
+) -> (Vec<&'a FlowView>, Vec<&'a FlowView>, Vec<&'a FlowView>) {
+    let mut exact = Vec::new();
+    let mut prefix = Vec::new();
+    let mut contains = Vec::new();
+
+    for flow in flows {
+        let name = flow.name.to_lowercase();
+        if name == query {
+            exact.push(*flow);
+        } else if name.starts_with(query) {
+            prefix.push(*flow);
+        } else if name.contains(query) {
+            contains.push(*flow);
+        }
+    }
+
+    (exact, prefix, contains)
 }
 
 pub(crate) fn transaction_matches_query(tx: &TransactionView, query: &str) -> bool {

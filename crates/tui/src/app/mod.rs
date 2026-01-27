@@ -4,9 +4,10 @@ mod helpers;
 mod state;
 
 pub(crate) use helpers::{
-    FlowAlertItem, FlowAlertSeverity, HomeFeedItem, filter_commands, flows_visible_indices,
-    home_feed_items, ordered_flow_ids_from_state, ordered_wallet_ids_from_state,
-    transactions_visible_indices, wallets_visible_indices,
+    FlowAlertItem, FlowAlertSeverity, HomeFeedItem, filter_commands, flow_name_suggestions,
+    flows_visible_indices, home_feed_items, ordered_flow_ids_from_state,
+    ordered_wallet_ids_from_state, resolve_flow_name, transactions_visible_indices,
+    wallets_visible_indices,
 };
 pub use state::*;
 
