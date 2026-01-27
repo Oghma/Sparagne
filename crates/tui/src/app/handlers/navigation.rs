@@ -211,6 +211,8 @@ impl App {
                     && self.state.transactions.mode == TransactionsMode::List
                 {
                     self.open_wallet_picker();
+                } else if self.state.section == Section::Stats {
+                    self.stats_set_tab(0);
                 }
                 return Ok(());
             }
@@ -220,6 +222,14 @@ impl App {
                     && self.state.transactions.mode == TransactionsMode::List
                 {
                     self.open_flow_picker();
+                } else if self.state.section == Section::Stats {
+                    self.stats_set_tab(1);
+                }
+                return Ok(());
+            }
+            '3' => {
+                if self.state.section == Section::Stats {
+                    self.stats_set_tab(2);
                 }
                 return Ok(());
             }

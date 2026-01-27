@@ -297,6 +297,8 @@ fn stats_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
         section_header("Statistics", theme),
         Line::from(""),
         shortcut_line("r", "Refresh data", theme),
+        shortcut_line("←/→", "Switch view", theme),
+        shortcut_line("1/2/3", "Cash/Spend/Worth", theme),
         shortcut_line("[/]", "Change period", theme),
     ]
 }

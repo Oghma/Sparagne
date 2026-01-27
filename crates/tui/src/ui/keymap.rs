@@ -11,6 +11,8 @@ pub enum AppAction {
     Backspace,
     Up,
     Down,
+    Left,
+    Right,
     Input(char),
     None,
 }
@@ -36,6 +38,8 @@ pub fn map_key(key: KeyEvent) -> AppAction {
         KeyCode::Backspace => AppAction::Backspace,
         KeyCode::Up => AppAction::Up,
         KeyCode::Down => AppAction::Down,
+        KeyCode::Left => AppAction::Left,
+        KeyCode::Right => AppAction::Right,
         KeyCode::Char(ch) => AppAction::Input(ch),
         _ => AppAction::None,
     }

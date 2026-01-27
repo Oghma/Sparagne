@@ -222,7 +222,9 @@ fn get_context_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         crate::app::Section::Vault => get_vault_hints(state),
         crate::app::Section::Stats => vec![
             components::hints::KeyHint::new("r", "refresh"),
-            components::hints::KeyHint::new("←/→", "month"),
+            components::hints::KeyHint::new("←/→", "tabs"),
+            components::hints::KeyHint::new("1/2/3", "views"),
+            components::hints::KeyHint::new("[/]", "month"),
         ],
     }
 }

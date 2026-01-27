@@ -490,6 +490,16 @@ impl App {
                     self.vaults_select_next();
                 }
             }
+            crate::ui::keymap::AppAction::Left => {
+                if self.state.screen == Screen::Home && self.state.section == Section::Stats {
+                    self.stats_prev_tab();
+                }
+            }
+            crate::ui::keymap::AppAction::Right => {
+                if self.state.screen == Screen::Home && self.state.section == Section::Stats {
+                    self.stats_next_tab();
+                }
+            }
             crate::ui::keymap::AppAction::Input(ch) => {
                 if self.state.screen == Screen::Login {
                     let field = self.active_field_mut();
