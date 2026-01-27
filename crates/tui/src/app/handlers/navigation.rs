@@ -119,6 +119,12 @@ impl App {
                 return Ok(());
             }
             'g' | 'G' => {
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.open_grouping_dialog();
+                    return Ok(());
+                }
                 self.state.section = Section::Categories;
                 self.state.transactions.mode = TransactionsMode::List;
                 self.load_categories().await?;

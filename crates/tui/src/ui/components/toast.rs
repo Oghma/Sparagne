@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
 };
+use std::time::Instant;
 
 use crate::{
     app::{ToastLevel, ToastState},
@@ -32,16 +33,17 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, toast: Option<&ToastState>) {
         ToastLevel::Undo => (ICON_UNDO, theme.info, theme.text),
     };
 
-    let undo_bar = if toast.level == ToastLevel::Undo {
-        Some(render_undo_bar(toast))
+    let undo_visual = if toast.level == ToastLevel::Undo {
+        Some(render_undo_visual(toast, &theme))
     } else {
         None
     };
 
     // Calculate dimensions: icon + space + message + extras + padding
     let mut content_width = icon.len() + 1 + toast.message.len();
-    if let Some(bar) = undo_bar.as_ref() {
-        content_width += 2 + "[u] undo ".len() + bar.len();
+    if let Some(visual) = undo_visual.as_ref() {
+        // "  [u] undo  5s  ███░░"
+        content_width += 2 + "[u] undo  ".len() + visual.seconds.len() + 2 + visual.bar.len();
     }
     let width = (content_width + 4).min(area.width as usize) as u16;
     let height = 3u16;
@@ -65,14 +67,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, toast: Option<&ToastState>) {
         Span::styled(&toast.message, Style::default().fg(text_color)),
     ];
 
-    if let Some(bar) = undo_bar {
+    if let Some(visual) = undo_visual {
         spans.push(Span::raw("  "));
         spans.push(Span::styled("[u]", Style::default().fg(theme.accent)));
         spans.push(Span::styled(
             " undo ",
             Style::default().fg(theme.text_muted),
         ));
-        spans.push(Span::styled(bar, Style::default().fg(theme.info)));
+        spans.push(Span::styled(visual.seconds, Style::default().fg(theme.info)));
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(visual.bar, Style::default().fg(visual.bar_color)));
     }
 
     let content_line = Line::from(spans);
@@ -86,17 +90,42 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, toast: Option<&ToastState>) {
     frame.render_widget(content.block(block), rect);
 }
 
-fn render_undo_bar(toast: &ToastState) -> String {
+struct UndoVisual {
+    seconds: String,
+    bar: String,
+    bar_color: ratatui::style::Color,
+}
+
+fn render_undo_visual(toast: &ToastState, theme: &Theme) -> UndoVisual {
     let total = toast.expires_at.saturating_duration_since(toast.created_at);
     if total.is_zero() {
-        return "----------".to_string();
+        return UndoVisual {
+            seconds: "0s".to_string(),
+            bar: "----------".to_string(),
+            bar_color: theme.negative,
+        };
     }
-    let remaining = toast
-        .expires_at
-        .saturating_duration_since(std::time::Instant::now());
-    let segments = 10usize;
-    let ratio = remaining.as_secs_f32() / total.as_secs_f32();
+    let now = Instant::now();
+    let remaining = toast.expires_at.saturating_duration_since(now);
+    let remaining_ms = remaining.as_millis() as u64;
+    let remaining_secs = remaining_ms.saturating_add(999) / 1000;
+
+    let segments = 12usize;
+    let ratio = (remaining.as_secs_f32() / total.as_secs_f32()).clamp(0.0, 1.0);
     let filled = ((ratio * segments as f32).ceil() as usize).min(segments);
     let empty = segments.saturating_sub(filled);
-    format!("{}{}", "#".repeat(filled), "-".repeat(empty))
+    let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
+    let bar_color = if ratio > 0.66 {
+        theme.info
+    } else if ratio > 0.33 {
+        theme.warning
+    } else {
+        theme.negative
+    };
+
+    UndoVisual {
+        seconds: format!("{remaining_secs}s"),
+        bar,
+        bar_color,
+    }
 }

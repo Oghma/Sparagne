@@ -49,6 +49,7 @@ pub struct OverlayState {
     pub(crate) confirm: Option<ConfirmDialogState>,
     pub(crate) error: Option<ErrorDialogState>,
     pub(crate) bulk_category: Option<BulkCategoryDialogState>,
+    pub(crate) grouping: Option<GroupingDialogState>,
 }
 
 impl OverlayState {
@@ -69,6 +70,11 @@ pub struct BulkCategoryDialogState {
     pub(crate) count: usize,
     pub(crate) input: String,
     pub(crate) error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupingDialogState {
+    pub(crate) selected: usize,
 }
 
 /// Modal confirmation dialog variants.

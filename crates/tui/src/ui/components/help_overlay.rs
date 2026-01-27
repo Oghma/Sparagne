@@ -174,6 +174,7 @@ fn transactions_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>>
         shortcut_line("i", "New income", theme),
         shortcut_line("R", "New refund", theme),
         shortcut_line("/", "Toggle filters", theme),
+        shortcut_line("g", "Group transactions", theme),
         Line::from(""),
         shortcut_line("1", "Scope to wallet", theme),
         shortcut_line("2", "Scope to flow", theme),

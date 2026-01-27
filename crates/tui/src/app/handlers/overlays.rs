@@ -144,6 +144,17 @@ impl App {
         });
     }
 
+    pub(crate) fn open_grouping_dialog(&mut self) {
+        if self.state.section != Section::Transactions
+            || self.state.transactions.mode != TransactionsMode::List
+        {
+            return;
+        }
+        self.state.overlays.grouping = Some(GroupingDialogState {
+            selected: self.state.transactions.grouping_mode.index(),
+        });
+    }
+
     pub(crate) fn open_wallet_archive_dialog(&mut self) {
         let Some(wallet) = self.selected_wallet() else {
             self.state.wallets.error = Some("No wallet selected.".to_string());
@@ -278,6 +289,51 @@ impl App {
         Ok(())
     }
 
+    pub(crate) async fn handle_grouping_action(&mut self, action: AppAction) -> Result<()> {
+        let Some(mut dialog) = self.state.overlays.grouping.clone() else {
+            return Ok(());
+        };
+
+        match action {
+            AppAction::Cancel => {
+                self.state.overlays.grouping = None;
+            }
+            AppAction::Up | AppAction::Left => {
+                dialog.selected = GroupingMode::from_index(dialog.selected).prev().index();
+                self.state.overlays.grouping = Some(dialog);
+            }
+            AppAction::Down | AppAction::Right => {
+                dialog.selected = GroupingMode::from_index(dialog.selected).next().index();
+                self.state.overlays.grouping = Some(dialog);
+            }
+            AppAction::Submit => {
+                self.apply_grouping_mode(GroupingMode::from_index(dialog.selected));
+            }
+            AppAction::Input(ch) => {
+                let mode = match ch {
+                    'd' | 'D' | '1' => Some(GroupingMode::Date),
+                    'c' | 'C' | '2' => Some(GroupingMode::Category),
+                    'w' | 'W' | '3' => Some(GroupingMode::Wallet),
+                    'e' | 'E' | '4' => Some(GroupingMode::Envelope),
+                    _ => None,
+                };
+                if let Some(mode) = mode {
+                    self.apply_grouping_mode(mode);
+                } else {
+                    self.state.overlays.grouping = Some(dialog);
+                }
+            }
+            AppAction::Backspace | AppAction::None | AppAction::NextField => {
+                self.state.overlays.grouping = Some(dialog);
+            }
+            AppAction::Search | AppAction::TogglePalette | AppAction::Quit => {
+                self.state.overlays.grouping = None;
+            }
+        }
+
+        Ok(())
+    }
+
     async fn apply_bulk_category(&mut self) -> Result<()> {
         let Some(dialog) = self.state.overlays.bulk_category.clone() else {
             return Ok(());
@@ -296,6 +352,19 @@ impl App {
         self.bulk_categorize_transactions(&dialog.transaction_ids, category)
             .await?;
         Ok(())
+    }
+
+    fn apply_grouping_mode(&mut self, mode: GroupingMode) {
+        self.state.transactions.grouping_mode = mode;
+        self.state.overlays.grouping = None;
+
+        // Clamp selection after regrouping.
+        let len = transactions_visible_indices(&self.state).len();
+        if len == 0 {
+            self.state.transactions.selected = 0;
+        } else if self.state.transactions.selected >= len {
+            self.state.transactions.selected = len - 1;
+        }
     }
 
     async fn run_confirm_action(&mut self, action: ConfirmAction) -> Result<()> {

@@ -75,6 +75,12 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     components::confirm_dialog::render(frame, area, state.overlays.confirm.as_ref());
     components::error_dialog::render(frame, area, state.overlays.error.as_ref());
     components::bulk_category_dialog::render(frame, area, state.overlays.bulk_category.as_ref());
+    components::grouping_dialog::render(
+        frame,
+        area,
+        state.overlays.grouping.as_ref(),
+        state.transactions.grouping_mode,
+    );
     components::toast::render(frame, area, state.toast.as_ref());
     if state.screen == crate::app::Screen::Home
         && state.snapshot.is_none()
@@ -232,11 +238,12 @@ fn get_context_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
 fn get_transactions_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     match state.transactions.mode {
         crate::app::TransactionsMode::List => vec![
-            components::hints::KeyHint::new("a", "quick add"),
+            components::hints::KeyHint::new("n", "quick add"),
             components::hints::KeyHint::new("i", "income"),
             components::hints::KeyHint::new("e", "expense"),
             components::hints::KeyHint::new("R", "refund"),
             components::hints::KeyHint::new("/", "filters"),
+            components::hints::KeyHint::new("g", "group"),
             components::hints::KeyHint::new("w", "wallet scope"),
             components::hints::KeyHint::new("f", "flow scope"),
             components::hints::KeyHint::new("c", "clear"),

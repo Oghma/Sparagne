@@ -36,6 +36,10 @@ impl App {
             self.handle_bulk_category_action(action).await?;
             return Ok(());
         }
+        if self.state.overlays.grouping.is_some() {
+            self.handle_grouping_action(action).await?;
+            return Ok(());
+        }
         if self.state.help.active {
             self.handle_help_action(action);
             return Ok(());

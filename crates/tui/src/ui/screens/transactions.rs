@@ -8,11 +8,12 @@ use ratatui::{
 
 use api_types::transaction::{LegTarget, TransactionKind};
 use engine::{Currency, Money};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
     app::{
-        AppState, FilterField, TransactionFormField, TransactionsMode, TransferField,
+        AppState, FilterField, GroupingMode, TransactionFormField, TransactionsMode, TransferField,
         ordered_flow_ids_from_state, ordered_wallet_ids_from_state, transactions_visible_indices,
     },
     ui::{components::centered_rect, theme::Theme},
@@ -159,7 +160,6 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
 
     let mut rows = Vec::new();
     let mut selected_row = None;
-    let mut last_day = None;
 
     let visible = transactions_visible_indices(state);
     if visible.is_empty() {
@@ -191,97 +191,133 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     use chrono::Local;
     let today = Local::now().date_naive();
     let yesterday = today - chrono::Duration::days(1);
+    let selected_tx_id = visible
+        .get(state.transactions.selected)
+        .and_then(|idx| state.transactions.items.get(*idx))
+        .map(|tx| tx.id);
 
-    for (visible_idx, idx) in visible.iter().enumerate() {
-        let tx = &state.transactions.items[*idx];
-        let tx_date = tx.occurred_at.date_naive();
-        let day_label = format_date_label(tx_date, today, yesterday);
+    struct GroupBucket {
+        label: String,
+        total_minor: i64,
+        tx_indices: Vec<usize>,
+    }
 
-        if last_day.as_ref() != Some(&day_label) {
-            // Add spacing before new date group (except first)
-            if last_day.is_some() {
-                rows.push(ListItem::new(Line::from("")));
-            }
-            last_day = Some(day_label.clone());
-            rows.push(ListItem::new(Line::from(Span::styled(
-                format!("  {day_label}"),
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            ))));
-        }
+    let mut groups: Vec<GroupBucket> = Vec::new();
+    let mut group_index: HashMap<String, usize> = HashMap::new();
 
-        if visible_idx == state.transactions.selected {
-            selected_row = Some(rows.len());
-        }
+    for idx in visible.iter().copied() {
+        let tx = &state.transactions.items[idx];
+        let (key, label) = grouping_key_label(
+            state,
+            tx,
+            state.transactions.grouping_mode,
+            today,
+            yesterday,
+        );
+        let entry = if let Some(existing) = group_index.get(key.as_str()) {
+            *existing
+        } else {
+            let next = groups.len();
+            groups.push(GroupBucket {
+                label,
+                total_minor: 0,
+                tx_indices: Vec::new(),
+            });
+            group_index.insert(key, next);
+            next
+        };
 
-        let note = tx.note.as_deref().unwrap_or("");
-        let category = tx
-            .category
-            .as_deref()
-            .map(|c| format!("#{c}"))
-            .unwrap_or_default();
+        groups[entry].total_minor += signed_amount_minor(tx.kind, tx.amount_minor);
+        groups[entry].tx_indices.push(idx);
+    }
 
-        // Resolve wallet and flow names for display
-        let wallet_name = tx
-            .wallet_id
-            .map(|id| resolve_wallet_name(state, id))
-            .unwrap_or_default();
-        let flow_name = tx
-            .flow_id
-            .map(|id| resolve_flow_name(state, id))
-            .unwrap_or_default();
-
-        let mut spans = Vec::new();
-        if state.transactions.visual_mode {
-            let marker = if state.transactions.visual_selected.contains(&tx.id) {
-                "*"
-            } else {
-                " "
-            };
-            spans.push(Span::styled(marker, Style::default().fg(theme.warning)));
-            spans.push(Span::raw(" "));
-        }
-        spans.push(Span::styled(
-            tx.occurred_at.format("%H:%M").to_string(),
-            Style::default().fg(theme.dim),
+    for group in groups {
+        rows.push(group_header_item(
+            state.transactions.grouping_mode,
+            group.label.as_str(),
+            group.total_minor,
+            currency,
+            theme,
         ));
-        spans.push(Span::raw("  "));
-        spans.push(kind_chip(tx.kind, theme));
-        spans.push(Span::raw(" "));
-        if let Some(voided) = void_chip(tx.voided, theme) {
-            spans.push(voided);
-            spans.push(Span::raw(" "));
-        }
-        spans.push(amount_span(tx.kind, tx.amount_minor, currency, theme));
-        spans.push(Span::raw("  "));
-        if !category.is_empty() {
-            spans.push(Span::styled(category, Style::default().fg(theme.accent)));
-            spans.push(Span::raw(" "));
-        }
-        // Show flow/envelope if present
-        if !flow_name.is_empty() {
+
+        for idx in group.tx_indices {
+            let tx = &state.transactions.items[idx];
+            if selected_tx_id == Some(tx.id) {
+                selected_row = Some(rows.len());
+            }
+
+            let note = tx.note.as_deref().unwrap_or("");
+            let category = tx
+                .category
+                .as_deref()
+                .map(|c| format!("#{c}"))
+                .unwrap_or_default();
+
+            let wallet_name = tx
+                .wallet_id
+                .map(|id| resolve_wallet_name(state, id))
+                .unwrap_or_default();
+            let flow_name = tx
+                .flow_id
+                .map(|id| resolve_flow_name(state, id))
+                .unwrap_or_default();
+
+            let mut spans = Vec::new();
+            if state.transactions.visual_mode {
+                let marker = if state.transactions.visual_selected.contains(&tx.id) {
+                    "*"
+                } else {
+                    " "
+                };
+                spans.push(Span::styled(marker, Style::default().fg(theme.warning)));
+                spans.push(Span::raw(" "));
+            }
+            if state.transactions.grouping_mode != GroupingMode::Date {
+                spans.push(Span::styled(
+                    tx.occurred_at.format("%d %b").to_string(),
+                    Style::default().fg(theme.dim),
+                ));
+                spans.push(Span::raw(" "));
+            }
             spans.push(Span::styled(
-                format!("📦{flow_name}"),
-                Style::default().fg(theme.info),
-            ));
-            spans.push(Span::raw(" "));
-        }
-        // Show wallet if present
-        if !wallet_name.is_empty() {
-            spans.push(Span::styled(
-                format!("💰{wallet_name}"),
+                tx.occurred_at.format("%H:%M").to_string(),
                 Style::default().fg(theme.dim),
             ));
+            spans.push(Span::raw("  "));
+            spans.push(kind_chip(tx.kind, theme));
             spans.push(Span::raw(" "));
-        }
-        spans.push(Span::raw(note));
+            if let Some(voided) = void_chip(tx.voided, theme) {
+                spans.push(voided);
+                spans.push(Span::raw(" "));
+            }
+            spans.push(amount_span(tx.kind, tx.amount_minor, currency, theme));
+            spans.push(Span::raw("  "));
+            if !category.is_empty() {
+                spans.push(Span::styled(category, Style::default().fg(theme.accent)));
+                spans.push(Span::raw(" "));
+            }
+            if !flow_name.is_empty() {
+                spans.push(Span::styled(
+                    format!("📦{flow_name}"),
+                    Style::default().fg(theme.info),
+                ));
+                spans.push(Span::raw(" "));
+            }
+            if !wallet_name.is_empty() {
+                spans.push(Span::styled(
+                    format!("💰{wallet_name}"),
+                    Style::default().fg(theme.dim),
+                ));
+                spans.push(Span::raw(" "));
+            }
+            spans.push(Span::raw(note));
 
-        let mut item = ListItem::new(Line::from(spans));
-        if tx.voided {
-            item = item.style(Style::default().fg(theme.dim));
+            let mut item = ListItem::new(Line::from(spans));
+            if tx.voided {
+                item = item.style(Style::default().fg(theme.dim));
+            }
+            rows.push(item);
         }
-        rows.push(item);
     }
 
     let mut list_state = ListState::default();
@@ -1444,6 +1480,95 @@ fn filter_summary(state: &AppState) -> Option<String> {
     } else {
         Some(format!("Filters: {}", parts.join(" • ")))
     }
+}
+
+fn signed_amount_minor(kind: TransactionKind, amount_minor: i64) -> i64 {
+    if kind == TransactionKind::Expense {
+        -amount_minor.abs()
+    } else {
+        amount_minor
+    }
+}
+
+fn grouping_key_label(
+    state: &AppState,
+    tx: &api_types::transaction::TransactionView,
+    mode: GroupingMode,
+    today: chrono::NaiveDate,
+    yesterday: chrono::NaiveDate,
+) -> (String, String) {
+    match mode {
+        GroupingMode::Date => {
+            let date = tx.occurred_at.date_naive();
+            (
+                date.format("%Y-%m-%d").to_string(),
+                format_date_label(date, today, yesterday),
+            )
+        }
+        GroupingMode::Category => {
+            let label = tx
+                .category
+                .as_deref()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or("Uncategorized")
+                .to_string();
+            (label.clone(), label)
+        }
+        GroupingMode::Wallet => {
+            if let Some(id) = tx.wallet_id {
+                (format!("wallet:{id}"), resolve_wallet_name(state, id))
+            } else {
+                ("wallet:none".to_string(), "No wallet".to_string())
+            }
+        }
+        GroupingMode::Envelope => {
+            if let Some(id) = tx.flow_id {
+                (format!("flow:{id}"), resolve_flow_name(state, id))
+            } else {
+                ("flow:none".to_string(), "No envelope".to_string())
+            }
+        }
+    }
+}
+
+fn group_header_item(
+    mode: GroupingMode,
+    label: &str,
+    total_minor: i64,
+    currency: Currency,
+    theme: &Theme,
+) -> ListItem<'static> {
+    let title = match mode {
+        GroupingMode::Date => label.to_string(),
+        GroupingMode::Category => format!("Category: {label}"),
+        GroupingMode::Wallet => format!("Wallet: {label}"),
+        GroupingMode::Envelope => format!("Envelope: {label}"),
+    };
+
+    let spans = vec![
+        Span::styled(
+            format!("  {title}"),
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        group_total_span(total_minor, currency, theme),
+    ];
+
+    ListItem::new(Line::from(spans))
+}
+
+fn group_total_span(total_minor: i64, currency: Currency, theme: &Theme) -> Span<'static> {
+    let color = if total_minor >= 0 {
+        theme.positive
+    } else {
+        theme.negative
+    };
+    Span::styled(
+        Money::new(total_minor).format(currency),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
 }
 
 fn format_date_label(

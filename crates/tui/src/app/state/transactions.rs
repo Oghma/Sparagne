@@ -22,6 +22,7 @@ pub struct TransactionsState {
     pub include_transfers: bool,
     pub error: Option<String>,
     pub mode: TransactionsMode,
+    pub grouping_mode: GroupingMode,
     pub detail: Option<TransactionDetailResponse>,
     pub quick_input: String,
     pub quick_error: Option<String>,
@@ -58,6 +59,7 @@ impl Default for TransactionsState {
             include_transfers: false,
             error: None,
             mode: TransactionsMode::List,
+            grouping_mode: GroupingMode::Date,
             detail: None,
             quick_input: String::new(),
             quick_error: None,
@@ -89,6 +91,7 @@ impl TransactionsState {
         self.visual_mode = false;
         self.visual_selected.clear();
         self.mode = TransactionsMode::List;
+        self.grouping_mode = GroupingMode::Date;
         self.detail = None;
         self.quick_input.clear();
         self.quick_error = None;
@@ -154,6 +157,45 @@ pub enum TransactionsMode {
     TransferWallet,
     TransferFlow,
     Filter,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupingMode {
+    Date,
+    Category,
+    Wallet,
+    Envelope,
+}
+
+impl GroupingMode {
+    pub const ALL: [Self; 4] = [Self::Date, Self::Category, Self::Wallet, Self::Envelope];
+
+    pub fn index(self) -> usize {
+        match self {
+            Self::Date => 0,
+            Self::Category => 1,
+            Self::Wallet => 2,
+            Self::Envelope => 3,
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            1 => Self::Category,
+            2 => Self::Wallet,
+            3 => Self::Envelope,
+            _ => Self::Date,
+        }
+    }
+
+    pub fn next(self) -> Self {
+        Self::from_index((self.index() + 1) % Self::ALL.len())
+    }
+
+    pub fn prev(self) -> Self {
+        let len = Self::ALL.len();
+        Self::from_index((self.index() + len - 1) % len)
+    }
 }
 
 #[derive(Debug)]
