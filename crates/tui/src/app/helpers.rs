@@ -307,6 +307,84 @@ pub(crate) fn home_feed_indices(state: &AppState) -> Vec<usize> {
         .collect()
 }
 
+#[derive(Debug, Clone)]
+pub(crate) enum HomeFeedItem {
+    FlowAlert(FlowAlertItem),
+    Transaction { index: usize },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct FlowAlertItem {
+    pub flow_id: Uuid,
+    pub name: String,
+    pub balance_minor: i64,
+    pub threshold_minor: i64,
+    pub severity: FlowAlertSeverity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FlowAlertSeverity {
+    Warning,
+    Critical,
+}
+
+pub(crate) fn home_feed_items(state: &AppState) -> Vec<HomeFeedItem> {
+    let mut items = flow_alert_items(state);
+    items.extend(
+        home_feed_indices(state)
+            .into_iter()
+            .map(|index| HomeFeedItem::Transaction { index }),
+    );
+    items
+}
+
+fn flow_alert_items(state: &AppState) -> Vec<HomeFeedItem> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    let low_balance_minor = state.home_low_balance_minor.max(0);
+
+    let mut alerts: Vec<FlowAlertItem> = snapshot
+        .flows
+        .iter()
+        .filter(|flow| !flow.archived && !flow.is_unallocated)
+        .filter_map(|flow| {
+            let balance = flow.balance_minor;
+            let (severity, threshold_minor) = if balance < 0 {
+                (FlowAlertSeverity::Critical, 0)
+            } else if low_balance_minor > 0 && balance <= low_balance_minor {
+                (FlowAlertSeverity::Warning, low_balance_minor)
+            } else {
+                return None;
+            };
+
+            Some(FlowAlertItem {
+                flow_id: flow.id,
+                name: flow.name.clone(),
+                balance_minor: balance,
+                threshold_minor,
+                severity,
+            })
+        })
+        .collect();
+
+    alerts.sort_by(|a, b| {
+        severity_rank(a.severity)
+            .cmp(&severity_rank(b.severity))
+            .then_with(|| a.balance_minor.cmp(&b.balance_minor))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    alerts.into_iter().map(HomeFeedItem::FlowAlert).collect()
+}
+
+fn severity_rank(severity: FlowAlertSeverity) -> u8 {
+    match severity {
+        FlowAlertSeverity::Critical => 0,
+        FlowAlertSeverity::Warning => 1,
+    }
+}
+
 pub(crate) fn wallets_visible_indices(state: &AppState) -> Vec<usize> {
     let Some(snapshot) = state.snapshot.as_ref() else {
         return Vec::new();

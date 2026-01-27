@@ -11,7 +11,7 @@ use chrono::{Datelike, Local, NaiveDate};
 use engine::{Currency, Money};
 
 use crate::{
-    app::{AppState, home_feed_indices},
+    app::{AppState, FlowAlertSeverity, HomeFeedItem, home_feed_items},
     ui::{
         components::{
             card::Card,
@@ -649,8 +649,8 @@ fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppStat
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
-    let feed_indices = home_feed_indices(state);
-    if feed_indices.is_empty() {
+    let feed_items = home_feed_items(state);
+    if feed_items.is_empty() {
         render_empty_state(
             frame,
             inner,
@@ -666,72 +666,106 @@ fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppStat
 
     let mut items: Vec<ListItem> = Vec::new();
     let mut last_date: Option<NaiveDate> = None;
+    let mut in_transactions = false;
     let mut selected_row = None;
+    let has_alerts = feed_items
+        .iter()
+        .any(|item| matches!(item, HomeFeedItem::FlowAlert(_)));
 
-    for (feed_idx, idx) in feed_indices.iter().enumerate().take(inner.height as usize) {
-        let Some(tx) = state.transactions.items.get(*idx) else {
-            continue;
-        };
-        let tx_date = tx.occurred_at.date_naive();
+    if has_alerts {
+        items.push(ListItem::new(Line::from(Span::styled(
+            "  Alerts",
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(Modifier::BOLD),
+        ))));
+    }
 
-        // Add date header if date changed
-        if last_date != Some(tx_date) {
-            if last_date.is_some() {
-                items.push(ListItem::new(Line::from("")));
+    for (feed_idx, item) in feed_items.iter().enumerate() {
+        match item {
+            HomeFeedItem::FlowAlert(alert) => {
+                if feed_idx == state.home_feed_selected {
+                    selected_row = Some(items.len());
+                }
+                items.push(flow_alert_item(alert, currency, theme));
             }
-            let date_label = format_date_label(tx_date, today, yesterday);
-            items.push(ListItem::new(Line::from(Span::styled(
-                format!("  {date_label}"),
-                Style::default()
-                    .fg(theme.text_muted)
-                    .add_modifier(Modifier::BOLD),
-            ))));
-            last_date = Some(tx_date);
-        }
+            HomeFeedItem::Transaction { index } => {
+                let Some(tx) = state.transactions.items.get(*index) else {
+                    continue;
+                };
+                if !in_transactions {
+                    if has_alerts && !items.is_empty() {
+                        items.push(ListItem::new(Line::from("")));
+                    }
+                    items.push(ListItem::new(Line::from(Span::styled(
+                        "  Transactions",
+                        Style::default()
+                            .fg(theme.text_muted)
+                            .add_modifier(Modifier::BOLD),
+                    ))));
+                    in_transactions = true;
+                }
 
-        let (icon, icon_color) = match tx.kind {
-            TransactionKind::Income => (ICON_INCOME, theme.income),
-            TransactionKind::Expense => (ICON_EXPENSE, theme.expense),
-            TransactionKind::Refund => (ICON_REFUND, theme.refund),
-            TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                (ICON_TRANSFER, theme.transfer)
+                let tx_date = tx.occurred_at.date_naive();
+                if last_date != Some(tx_date) {
+                    if last_date.is_some() {
+                        items.push(ListItem::new(Line::from("")));
+                    }
+                    let date_label = format_date_label(tx_date, today, yesterday);
+                    items.push(ListItem::new(Line::from(Span::styled(
+                        format!("  {date_label}"),
+                        Style::default()
+                            .fg(theme.text_muted)
+                            .add_modifier(Modifier::BOLD),
+                    ))));
+                    last_date = Some(tx_date);
+                }
+
+                let (icon, icon_color) = match tx.kind {
+                    TransactionKind::Income => (ICON_INCOME, theme.income),
+                    TransactionKind::Expense => (ICON_EXPENSE, theme.expense),
+                    TransactionKind::Refund => (ICON_REFUND, theme.refund),
+                    TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
+                        (ICON_TRANSFER, theme.transfer)
+                    }
+                };
+
+                let amount = if tx.kind == TransactionKind::Expense {
+                    -tx.amount_minor.abs()
+                } else {
+                    tx.amount_minor
+                };
+
+                let note = tx.note.as_deref().unwrap_or("");
+                let category = tx
+                    .category
+                    .as_ref()
+                    .map(|c| format!("#{c}"))
+                    .unwrap_or_default();
+                let time = tx.occurred_at.format("%H:%M").to_string();
+
+                if feed_idx == state.home_feed_selected {
+                    selected_row = Some(items.len());
+                }
+
+                items.push(ListItem::new(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(icon, Style::default().fg(icon_color)),
+                    Span::raw(" "),
+                    styled_amount(amount, currency, theme),
+                    Span::raw("  "),
+                    Span::styled(
+                        format!("{:<24}", truncate(note, 24)),
+                        Style::default().fg(theme.text),
+                    ),
+                    Span::styled(
+                        format!("{:<12}", truncate(&category, 12)),
+                        Style::default().fg(theme.accent),
+                    ),
+                    Span::styled(time, Style::default().fg(theme.text_muted)),
+                ])));
             }
-        };
-
-        let amount = if tx.kind == TransactionKind::Expense {
-            -tx.amount_minor.abs()
-        } else {
-            tx.amount_minor
-        };
-
-        let note = tx.note.as_deref().unwrap_or("");
-        let category = tx
-            .category
-            .as_ref()
-            .map(|c| format!("#{c}"))
-            .unwrap_or_default();
-        let time = tx.occurred_at.format("%H:%M").to_string();
-
-        if feed_idx == state.home_feed_selected {
-            selected_row = Some(items.len());
         }
-
-        items.push(ListItem::new(Line::from(vec![
-            Span::raw("    "),
-            Span::styled(icon, Style::default().fg(icon_color)),
-            Span::raw(" "),
-            styled_amount(amount, currency, theme),
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<24}", truncate(note, 24)),
-                Style::default().fg(theme.text),
-            ),
-            Span::styled(
-                format!("{:<12}", truncate(&category, 12)),
-                Style::default().fg(theme.accent),
-            ),
-            Span::styled(time, Style::default().fg(theme.text_muted)),
-        ])));
     }
 
     // Add footer
@@ -769,8 +803,8 @@ fn render_recent_transactions_minimal(
 ) {
     let currency = get_currency(state);
 
-    let feed_indices = home_feed_indices(state);
-    if feed_indices.is_empty() {
+    let feed_items = home_feed_items(state);
+    if feed_items.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled(
                 "No transactions",
@@ -782,41 +816,48 @@ fn render_recent_transactions_minimal(
     }
 
     let mut selected_row = None;
-    let items: Vec<ListItem> = feed_indices
+    let items: Vec<ListItem> = feed_items
         .iter()
         .enumerate()
         .take(area.height as usize)
-        .filter_map(|(feed_idx, idx)| {
-            let tx = state.transactions.items.get(*idx)?;
-            let (icon, icon_color) = match tx.kind {
-                TransactionKind::Income => (ICON_INCOME, theme.income),
-                TransactionKind::Expense => (ICON_EXPENSE, theme.expense),
-                TransactionKind::Refund => (ICON_REFUND, theme.refund),
-                TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                    (ICON_TRANSFER, theme.transfer)
+        .filter_map(|(feed_idx, item)| match item {
+            HomeFeedItem::FlowAlert(alert) => {
+                if feed_idx == state.home_feed_selected {
+                    selected_row = Some(feed_idx);
                 }
-            };
-
-            let amount = if tx.kind == TransactionKind::Expense {
-                -tx.amount_minor.abs()
-            } else {
-                tx.amount_minor
-            };
-
-            let note = tx.note.as_deref().unwrap_or("");
-
-            if feed_idx == state.home_feed_selected {
-                selected_row = Some(feed_idx);
+                Some(flow_alert_item(alert, currency, theme))
             }
+            HomeFeedItem::Transaction { index } => {
+                let tx = state.transactions.items.get(*index)?;
+                let (icon, icon_color) = match tx.kind {
+                    TransactionKind::Income => (ICON_INCOME, theme.income),
+                    TransactionKind::Expense => (ICON_EXPENSE, theme.expense),
+                    TransactionKind::Refund => (ICON_REFUND, theme.refund),
+                    TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
+                        (ICON_TRANSFER, theme.transfer)
+                    }
+                };
 
-            Some(ListItem::new(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(icon, Style::default().fg(icon_color)),
-                Span::raw(" "),
-                styled_amount(amount, currency, theme),
-                Span::raw(" "),
-                Span::styled(truncate(note, 20), Style::default().fg(theme.text)),
-            ])))
+                let amount = if tx.kind == TransactionKind::Expense {
+                    -tx.amount_minor.abs()
+                } else {
+                    tx.amount_minor
+                };
+                let note = tx.note.as_deref().unwrap_or("");
+
+                if feed_idx == state.home_feed_selected {
+                    selected_row = Some(feed_idx);
+                }
+
+                Some(ListItem::new(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(icon, Style::default().fg(icon_color)),
+                    Span::raw(" "),
+                    styled_amount(amount, currency, theme),
+                    Span::raw(" "),
+                    Span::styled(truncate(note, 20), Style::default().fg(theme.text)),
+                ])))
+            }
         })
         .collect();
 
@@ -836,6 +877,43 @@ fn render_recent_transactions_minimal(
 }
 
 // === Helper Functions ===
+
+fn flow_alert_item(
+    alert: &crate::app::FlowAlertItem,
+    currency: Currency,
+    theme: &Theme,
+) -> ListItem<'static> {
+    let (icon, color) = match alert.severity {
+        FlowAlertSeverity::Critical => ("‼", theme.negative),
+        FlowAlertSeverity::Warning => ("⚠", theme.warning),
+    };
+    let balance = Money::new(alert.balance_minor).format(currency);
+    let label = match alert.severity {
+        FlowAlertSeverity::Critical => "deficit".to_string(),
+        FlowAlertSeverity::Warning => {
+            let threshold = Money::new(alert.threshold_minor).format(currency);
+            format!("≤ {threshold}")
+        }
+    };
+
+    ListItem::new(Line::from(vec![
+        Span::raw("    "),
+        Span::styled(
+            icon,
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" "),
+        Span::styled(
+            format!("{:<18}", truncate(alert.name.as_str(), 18)),
+            Style::default().fg(theme.text),
+        ),
+        Span::styled(
+            format!("{:<14}", truncate(label.as_str(), 14)),
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(balance, Style::default().fg(color)),
+    ]))
+}
 
 fn get_currency(state: &AppState) -> Currency {
     state

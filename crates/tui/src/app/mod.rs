@@ -4,8 +4,9 @@ mod helpers;
 mod state;
 
 pub(crate) use helpers::{
-    filter_commands, flows_visible_indices, home_feed_indices, ordered_flow_ids_from_state,
-    ordered_wallet_ids_from_state, transactions_visible_indices, wallets_visible_indices,
+    FlowAlertItem, FlowAlertSeverity, HomeFeedItem, filter_commands, flows_visible_indices,
+    home_feed_items, ordered_flow_ids_from_state, ordered_wallet_ids_from_state,
+    transactions_visible_indices, wallets_visible_indices,
 };
 pub use state::*;
 
@@ -48,6 +49,7 @@ impl App {
             section: Section::Home,
             accounts_tab: AccountsTab::Sources,
             home_feed_selected: 0,
+            home_low_balance_minor: config.low_balance_minor,
             transactions: TransactionsState::default(),
             wallets: WalletsState::default(),
             flows: FlowsState::default(),

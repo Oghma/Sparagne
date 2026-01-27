@@ -14,6 +14,8 @@ pub struct AppConfig {
     pub username: String,
     pub vault: String,
     pub timezone: String,
+    /// Home feed low-balance warning threshold in minor units.
+    pub low_balance_minor: i64,
 }
 
 impl Default for AppConfig {
@@ -23,6 +25,7 @@ impl Default for AppConfig {
             username: String::new(),
             vault: "Main".to_string(),
             timezone: "Europe/Rome".to_string(),
+            low_balance_minor: 25_00,
         }
     }
 }
@@ -45,6 +48,9 @@ struct Args {
     /// Override timezone (IANA name).
     #[arg(long)]
     timezone: Option<String>,
+    /// Override low-balance warning threshold (minor units, e.g. 2500 = 25.00).
+    #[arg(long)]
+    low_balance_minor: Option<i64>,
 }
 
 pub fn load() -> Result<AppConfig> {
@@ -80,6 +86,11 @@ pub fn load() -> Result<AppConfig> {
     if let Ok(timezone) = env::var("SPARAGNE_TIMEZONE") {
         settings.timezone = timezone;
     }
+    if let Ok(low_balance_minor) = env::var("SPARAGNE_LOW_BALANCE_MINOR")
+        && let Ok(parsed) = low_balance_minor.parse::<i64>()
+    {
+        settings.low_balance_minor = parsed;
+    }
 
     if let Some(base_url) = args.base_url {
         settings.base_url = base_url;
@@ -92,6 +103,9 @@ pub fn load() -> Result<AppConfig> {
     }
     if let Some(timezone) = args.timezone {
         settings.timezone = timezone;
+    }
+    if let Some(low_balance_minor) = args.low_balance_minor {
+        settings.low_balance_minor = low_balance_minor;
     }
 
     Ok(settings)
