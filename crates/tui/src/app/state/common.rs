@@ -307,7 +307,7 @@ impl PaletteCommand {
             Self::CategoryAliases => "Categories: Aliases",
             Self::Members => "Members: Open",
             Self::WalletNew => "Wallets: New",
-            Self::FlowNew => "Flows: New",
+            Self::FlowNew => "Accounts: New Envelope",
             Self::VaultCreate => "Vault: Create",
             Self::Refresh => "Refresh",
             Self::ToggleVoided => "Transactions: Toggle voided",

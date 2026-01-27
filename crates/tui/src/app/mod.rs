@@ -46,6 +46,7 @@ impl App {
             vault: None,
             snapshot: None,
             section: Section::Home,
+            accounts_tab: AccountsTab::Sources,
             home_feed_selected: 0,
             transactions: TransactionsState::default(),
             wallets: WalletsState::default(),

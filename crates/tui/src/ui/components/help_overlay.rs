@@ -41,7 +41,7 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         Section::Home => "Home",
         Section::Transactions => "Transactions",
         Section::Wallets => "Wallets",
-        Section::Flows => "Budgets & Goals",
+        Section::Flows => "Accounts",
         Section::Categories => "Categories",
         Section::Members => "Members",
         Section::Vault => "Vault",
@@ -124,7 +124,7 @@ fn global_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
         shortcut_line("h", "Home", theme),
         shortcut_line("t", "Transactions", theme),
         shortcut_line("w", "Wallets", theme),
-        shortcut_line("a", "Accounts (Flows)", theme),
+        shortcut_line("a", "Accounts", theme),
         shortcut_line("g", "Categories", theme),
         shortcut_line("s", "Statistics", theme),
         shortcut_line("↑/↓ j/k", "Navigate list", theme),
@@ -240,12 +240,14 @@ fn wallets_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
 
 fn flows_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
     vec![
-        section_header("Accounts (Budgets & Goals)", theme),
+        section_header("Accounts (Sources / Envelopes / Goals)", theme),
         Line::from(""),
-        shortcut_line("c", "Create flow", theme),
-        shortcut_line("e", "Rename flow", theme),
-        shortcut_line("d", "Delete (archive)", theme),
-        shortcut_line("m", "Change mode", theme),
+        shortcut_line("←/→", "Switch tab", theme),
+        shortcut_line("1/2/3", "Jump tab", theme),
+        shortcut_line("c", "Create (current tab)", theme),
+        shortcut_line("e", "Rename (current tab)", theme),
+        shortcut_line("d", "Delete (current tab)", theme),
+        shortcut_line("m", "Change envelope mode", theme),
         shortcut_line("Enter", "View details", theme),
     ]
 }

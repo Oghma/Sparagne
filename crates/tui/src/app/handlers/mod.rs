@@ -1,3 +1,4 @@
+mod accounts;
 mod categories;
 mod flows;
 mod forms;
@@ -130,17 +131,34 @@ impl App {
                         }
                     }
                 } else if self.state.section == Section::Flows {
-                    match self.state.flows.mode {
-                        FlowsMode::Create | FlowsMode::Rename => {
-                            self.reset_flow_form();
-                            self.state.flows.mode = FlowsMode::List;
-                        }
-                        FlowsMode::Detail => {
-                            self.state.flows.mode = FlowsMode::List;
-                            self.state.flows.detail = FlowDetailState::default();
-                        }
-                        FlowsMode::List => {
-                            self.state.section = Section::Home;
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources => match self.state.wallets.mode {
+                            WalletsMode::Create | WalletsMode::Rename => {
+                                self.reset_wallet_form();
+                                self.state.wallets.mode = WalletsMode::List;
+                            }
+                            WalletsMode::Detail => {
+                                self.state.wallets.mode = WalletsMode::List;
+                                self.state.wallets.detail = WalletDetailState::default();
+                            }
+                            WalletsMode::List => {
+                                self.state.section = Section::Home;
+                            }
+                        },
+                        AccountsTab::Envelopes | AccountsTab::Goals => {
+                            match self.state.flows.mode {
+                                FlowsMode::Create | FlowsMode::Rename => {
+                                    self.reset_flow_form();
+                                    self.state.flows.mode = FlowsMode::List;
+                                }
+                                FlowsMode::Detail => {
+                                    self.state.flows.mode = FlowsMode::List;
+                                    self.state.flows.detail = FlowDetailState::default();
+                                }
+                                FlowsMode::List => {
+                                    self.state.section = Section::Home;
+                                }
+                            }
                         }
                     }
                 } else if self.state.section == Section::Vault {
@@ -213,7 +231,11 @@ impl App {
                 } else if self.state.section == Section::Wallets {
                     self.handle_wallets_submit().await?;
                 } else if self.state.section == Section::Flows {
-                    self.handle_flows_submit().await?;
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources => self.handle_wallets_submit().await?,
+                        AccountsTab::Envelopes => self.handle_flows_submit().await?,
+                        AccountsTab::Goals => {}
+                    }
                 } else if self.state.section == Section::Categories {
                     self.handle_categories_submit().await?;
                 } else if self.state.section == Section::Members {
@@ -287,7 +309,11 @@ impl App {
                 } else if self.state.section == Section::Wallets {
                     self.backspace_wallet_form();
                 } else if self.state.section == Section::Flows {
-                    self.backspace_flow_form();
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources => self.backspace_wallet_form(),
+                        AccountsTab::Envelopes => self.backspace_flow_form(),
+                        AccountsTab::Goals => {}
+                    }
                 } else if self.state.section == Section::Members
                     && self.state.members.mode == MembersMode::Form
                 {
@@ -360,13 +386,32 @@ impl App {
                     if self.state.wallets.mode == WalletsMode::Detail {
                         self.open_wallet_detail().await?;
                     }
-                } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Flows
-                    && matches!(self.state.flows.mode, FlowsMode::List | FlowsMode::Detail)
+                } else if self.state.screen == Screen::Home && self.state.section == Section::Flows
                 {
-                    self.flows_select_prev();
-                    if self.state.flows.mode == FlowsMode::Detail {
-                        self.open_flow_detail().await?;
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources
+                            if matches!(
+                                self.state.wallets.mode,
+                                WalletsMode::List | WalletsMode::Detail
+                            ) =>
+                        {
+                            self.wallets_select_prev();
+                            if self.state.wallets.mode == WalletsMode::Detail {
+                                self.open_wallet_detail().await?;
+                            }
+                        }
+                        AccountsTab::Envelopes
+                            if matches!(
+                                self.state.flows.mode,
+                                FlowsMode::List | FlowsMode::Detail
+                            ) =>
+                        {
+                            self.flows_select_prev();
+                            if self.state.flows.mode == FlowsMode::Detail {
+                                self.open_flow_detail().await?;
+                            }
+                        }
+                        AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
                     }
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Categories
@@ -456,13 +501,32 @@ impl App {
                     if self.state.wallets.mode == WalletsMode::Detail {
                         self.open_wallet_detail().await?;
                     }
-                } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Flows
-                    && matches!(self.state.flows.mode, FlowsMode::List | FlowsMode::Detail)
+                } else if self.state.screen == Screen::Home && self.state.section == Section::Flows
                 {
-                    self.flows_select_next();
-                    if self.state.flows.mode == FlowsMode::Detail {
-                        self.open_flow_detail().await?;
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources
+                            if matches!(
+                                self.state.wallets.mode,
+                                WalletsMode::List | WalletsMode::Detail
+                            ) =>
+                        {
+                            self.wallets_select_next();
+                            if self.state.wallets.mode == WalletsMode::Detail {
+                                self.open_wallet_detail().await?;
+                            }
+                        }
+                        AccountsTab::Envelopes
+                            if matches!(
+                                self.state.flows.mode,
+                                FlowsMode::List | FlowsMode::Detail
+                            ) =>
+                        {
+                            self.flows_select_next();
+                            if self.state.flows.mode == FlowsMode::Detail {
+                                self.open_flow_detail().await?;
+                            }
+                        }
+                        AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
                     }
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Categories
@@ -491,13 +555,21 @@ impl App {
                 }
             }
             crate::ui::keymap::AppAction::Left => {
-                if self.state.screen == Screen::Home && self.state.section == Section::Stats {
-                    self.stats_prev_tab();
+                if self.state.screen == Screen::Home {
+                    if self.state.section == Section::Flows {
+                        self.accounts_prev_tab();
+                    } else if self.state.section == Section::Stats {
+                        self.stats_prev_tab();
+                    }
                 }
             }
             crate::ui::keymap::AppAction::Right => {
-                if self.state.screen == Screen::Home && self.state.section == Section::Stats {
-                    self.stats_next_tab();
+                if self.state.screen == Screen::Home {
+                    if self.state.section == Section::Flows {
+                        self.accounts_next_tab();
+                    } else if self.state.section == Section::Stats {
+                        self.stats_next_tab();
+                    }
                 }
             }
             crate::ui::keymap::AppAction::Input(ch) => {

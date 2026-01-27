@@ -111,6 +111,7 @@ impl App {
             }
             'f' | 'F' => {
                 self.state.section = Section::Flows;
+                self.accounts_set_tab(1);
                 self.state.transactions.mode = TransactionsMode::List;
                 if self.state.snapshot.is_none() {
                     self.refresh_snapshot().await?;
@@ -160,16 +161,31 @@ impl App {
                     }
                     return Ok(());
                 }
-                if self.state.section == Section::Flows && self.state.flows.mode == FlowsMode::List
-                {
-                    if let Some(flow) = self.selected_flow()
-                        && !flow.archived
-                    {
-                        self.open_flow_archive_dialog();
-                    } else {
-                        self.toggle_flow_archive().await?;
+                if self.state.section == Section::Flows {
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources if self.state.wallets.mode == WalletsMode::List => {
+                            if let Some(wallet) = self.selected_wallet()
+                                && !wallet.archived
+                            {
+                                self.open_wallet_archive_dialog();
+                            } else {
+                                self.toggle_wallet_archive().await?;
+                            }
+                            return Ok(());
+                        }
+                        AccountsTab::Envelopes if self.state.flows.mode == FlowsMode::List => {
+                            if let Some(flow) = self.selected_flow()
+                                && !flow.archived
+                            {
+                                self.open_flow_archive_dialog();
+                            } else {
+                                self.toggle_flow_archive().await?;
+                            }
+                            return Ok(());
+                        }
+                        AccountsTab::Goals => return Ok(()),
+                        AccountsTab::Sources | AccountsTab::Envelopes => {}
                     }
-                    return Ok(());
                 }
                 if self.state.section == Section::Categories
                     && self.state.categories.mode == CategoriesMode::List
@@ -211,6 +227,8 @@ impl App {
                     && self.state.transactions.mode == TransactionsMode::List
                 {
                     self.open_wallet_picker();
+                } else if self.state.section == Section::Flows {
+                    self.accounts_set_tab(0);
                 } else if self.state.section == Section::Stats {
                     self.stats_set_tab(0);
                 }
@@ -222,13 +240,17 @@ impl App {
                     && self.state.transactions.mode == TransactionsMode::List
                 {
                     self.open_flow_picker();
+                } else if self.state.section == Section::Flows {
+                    self.accounts_set_tab(1);
                 } else if self.state.section == Section::Stats {
                     self.stats_set_tab(1);
                 }
                 return Ok(());
             }
             '3' => {
-                if self.state.section == Section::Stats {
+                if self.state.section == Section::Flows {
+                    self.accounts_set_tab(2);
+                } else if self.state.section == Section::Stats {
                     self.stats_set_tab(2);
                 }
                 return Ok(());
@@ -344,7 +366,7 @@ impl App {
             }
             // 'a' navigates to Accounts section
             'a' => {
-                // Navigate to Accounts (Flows/Envelopes section)
+                // Navigate to Accounts section (Sources/Envelopes/Goals)
                 self.state.section = Section::Flows;
                 self.state.transactions.mode = TransactionsMode::List;
                 if self.state.snapshot.is_none() {
@@ -382,10 +404,16 @@ impl App {
                     && self.state.wallets.mode == WalletsMode::List
                 {
                     self.start_wallet_rename();
-                } else if self.state.section == Section::Flows
-                    && self.state.flows.mode == FlowsMode::List
-                {
-                    self.start_flow_rename();
+                } else if self.state.section == Section::Flows {
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources if self.state.wallets.mode == WalletsMode::List => {
+                            self.start_wallet_rename();
+                        }
+                        AccountsTab::Envelopes if self.state.flows.mode == FlowsMode::List => {
+                            self.start_flow_rename();
+                        }
+                        AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
+                    }
                 } else if self.state.section == Section::Categories
                     && self.state.categories.mode == CategoriesMode::List
                 {
@@ -438,12 +466,20 @@ impl App {
                     self.state.wallets.mode = WalletsMode::List;
                     self.state.wallets.detail = WalletDetailState::default();
                     self.reset_wallet_form();
-                } else if self.state.section == Section::Flows
-                    && self.state.flows.mode != FlowsMode::List
-                {
-                    self.state.flows.mode = FlowsMode::List;
-                    self.state.flows.detail = FlowDetailState::default();
-                    self.reset_flow_form();
+                } else if self.state.section == Section::Flows {
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources if self.state.wallets.mode != WalletsMode::List => {
+                            self.state.wallets.mode = WalletsMode::List;
+                            self.state.wallets.detail = WalletDetailState::default();
+                            self.reset_wallet_form();
+                        }
+                        AccountsTab::Envelopes if self.state.flows.mode != FlowsMode::List => {
+                            self.state.flows.mode = FlowsMode::List;
+                            self.state.flows.detail = FlowDetailState::default();
+                            self.reset_flow_form();
+                        }
+                        AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
+                    }
                 } else if self.state.section == Section::Vault
                     && self.state.vault_ui.mode != VaultMode::View
                 {
@@ -466,10 +502,16 @@ impl App {
                     && self.state.wallets.mode == WalletsMode::List
                 {
                     self.start_wallet_create();
-                } else if self.state.section == Section::Flows
-                    && self.state.flows.mode == FlowsMode::List
-                {
-                    self.start_flow_create();
+                } else if self.state.section == Section::Flows {
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources if self.state.wallets.mode == WalletsMode::List => {
+                            self.start_wallet_create();
+                        }
+                        AccountsTab::Envelopes if self.state.flows.mode == FlowsMode::List => {
+                            self.start_flow_create();
+                        }
+                        AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
+                    }
                 } else if self.state.section == Section::Categories
                     && self.state.categories.mode == CategoriesMode::List
                 {
@@ -514,6 +556,7 @@ impl App {
             }
             'm' | 'M' => {
                 if self.state.section == Section::Flows
+                    && self.state.accounts_tab == AccountsTab::Envelopes
                     && self.state.flows.mode == FlowsMode::Create
                     && self.state.flows.form.focus == FlowFormField::Mode
                 {

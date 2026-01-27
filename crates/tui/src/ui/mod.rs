@@ -62,7 +62,7 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
             screens::transactions::render(frame, content_inner, state)
         }
         crate::app::Section::Wallets => screens::wallets::render(frame, content_inner, state),
-        crate::app::Section::Flows => screens::flows::render(frame, content_inner, state),
+        crate::app::Section::Flows => screens::accounts::render(frame, content_inner, state),
         crate::app::Section::Categories => screens::categories::render(frame, content_inner, state),
         crate::app::Section::Members => screens::members::render(frame, content_inner, state),
         crate::app::Section::Vault => screens::vault::render(frame, content_inner, state),
@@ -311,21 +311,45 @@ fn get_members_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
 }
 
 fn get_flows_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
-    match state.flows.mode {
-        crate::app::FlowsMode::List => {
-            let mut hints = components::hints::common::list_navigation();
-            hints.push(components::hints::KeyHint::new("c", "create"));
-            hints.push(components::hints::KeyHint::new("e", "rename"));
-            hints.push(components::hints::KeyHint::new("d", "delete"));
-            hints
-        }
-        crate::app::FlowsMode::Detail => components::hints::common::detail_view(),
-        crate::app::FlowsMode::Create | crate::app::FlowsMode::Rename => {
-            let mut hints = components::hints::common::form_editing();
-            hints.insert(1, components::hints::KeyHint::new("m", "mode"));
-            hints
-        }
-    }
+    let mut hints = vec![
+        components::hints::KeyHint::new("←/→", "tabs"),
+        components::hints::KeyHint::new("1/2/3", "jump"),
+    ];
+
+    let mut tab_hints = match state.accounts_tab {
+        crate::app::AccountsTab::Sources => match state.wallets.mode {
+            crate::app::WalletsMode::List => {
+                let mut hints = components::hints::common::list_navigation();
+                hints.push(components::hints::KeyHint::new("c", "create"));
+                hints.push(components::hints::KeyHint::new("e", "rename"));
+                hints.push(components::hints::KeyHint::new("d", "delete"));
+                hints
+            }
+            crate::app::WalletsMode::Detail => components::hints::common::detail_view(),
+            crate::app::WalletsMode::Create | crate::app::WalletsMode::Rename => {
+                components::hints::common::form_editing()
+            }
+        },
+        crate::app::AccountsTab::Envelopes => match state.flows.mode {
+            crate::app::FlowsMode::List => {
+                let mut hints = components::hints::common::list_navigation();
+                hints.push(components::hints::KeyHint::new("c", "create"));
+                hints.push(components::hints::KeyHint::new("e", "rename"));
+                hints.push(components::hints::KeyHint::new("d", "delete"));
+                hints
+            }
+            crate::app::FlowsMode::Detail => components::hints::common::detail_view(),
+            crate::app::FlowsMode::Create | crate::app::FlowsMode::Rename => {
+                let mut hints = components::hints::common::form_editing();
+                hints.insert(1, components::hints::KeyHint::new("m", "mode"));
+                hints
+            }
+        },
+        crate::app::AccountsTab::Goals => vec![components::hints::KeyHint::new("r", "refresh")],
+    };
+
+    hints.append(&mut tab_hints);
+    hints
 }
 
 fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {

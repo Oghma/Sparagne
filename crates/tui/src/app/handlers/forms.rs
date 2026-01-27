@@ -52,7 +52,11 @@ impl App {
 
         match self.state.section {
             Section::Wallets => self.advance_wallet_focus(),
-            Section::Flows => self.advance_flow_focus(),
+            Section::Flows => match self.state.accounts_tab {
+                AccountsTab::Sources => self.advance_wallet_focus(),
+                AccountsTab::Envelopes => self.advance_flow_focus(),
+                AccountsTab::Goals => {}
+            },
             Section::Vault => self.advance_vault_focus(),
             _ => {}
         }
@@ -143,22 +147,37 @@ impl App {
                     return true;
                 }
             }
-            Section::Flows => {
-                if matches!(self.state.flows.mode, FlowsMode::Create | FlowsMode::Rename) {
-                    match self.state.flows.form.focus {
-                        FlowFormField::Name => self.state.flows.form.name.push(ch),
-                        FlowFormField::Cap => self.state.flows.form.cap.push(ch),
-                        FlowFormField::Opening => self.state.flows.form.opening.push(ch),
-                        FlowFormField::Mode => {
-                            if matches!(ch, 'm' | 'M' | ' ') {
-                                self.cycle_flow_mode();
-                            }
-                            return true;
+            Section::Flows => match self.state.accounts_tab {
+                AccountsTab::Sources => {
+                    if matches!(
+                        self.state.wallets.mode,
+                        WalletsMode::Create | WalletsMode::Rename
+                    ) {
+                        match self.state.wallets.form.focus {
+                            WalletFormField::Name => self.state.wallets.form.name.push(ch),
+                            WalletFormField::Opening => self.state.wallets.form.opening.push(ch),
                         }
+                        return true;
                     }
-                    return true;
                 }
-            }
+                AccountsTab::Envelopes => {
+                    if matches!(self.state.flows.mode, FlowsMode::Create | FlowsMode::Rename) {
+                        match self.state.flows.form.focus {
+                            FlowFormField::Name => self.state.flows.form.name.push(ch),
+                            FlowFormField::Cap => self.state.flows.form.cap.push(ch),
+                            FlowFormField::Opening => self.state.flows.form.opening.push(ch),
+                            FlowFormField::Mode => {
+                                if matches!(ch, 'm' | 'M' | ' ') {
+                                    self.cycle_flow_mode();
+                                }
+                                return true;
+                            }
+                        }
+                        return true;
+                    }
+                }
+                AccountsTab::Goals => {}
+            },
             Section::Categories => {
                 if matches!(
                     self.state.categories.mode,

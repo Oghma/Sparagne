@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod categories;
 pub mod flows;
 pub mod home;

@@ -11,9 +11,14 @@ impl App {
             Section::Wallets => {
                 self.state.wallets.search_active = true;
             }
-            Section::Flows => {
-                self.state.flows.search_active = true;
-            }
+            Section::Flows => match self.state.accounts_tab {
+                AccountsTab::Sources => {
+                    self.state.wallets.search_active = true;
+                }
+                AccountsTab::Envelopes | AccountsTab::Goals => {
+                    self.state.flows.search_active = true;
+                }
+            },
             _ => {}
         }
     }
@@ -49,7 +54,18 @@ impl App {
                 self.refresh_wallets_search().await?;
                 return Ok(true);
             }
-            Section::Flows if self.state.flows.search_active => {
+            Section::Flows
+                if self.state.accounts_tab == AccountsTab::Sources
+                    && self.state.wallets.search_active =>
+            {
+                self.state.wallets.search_query.push(ch);
+                self.refresh_wallets_search().await?;
+                return Ok(true);
+            }
+            Section::Flows
+                if self.state.accounts_tab != AccountsTab::Sources
+                    && self.state.flows.search_active =>
+            {
                 self.state.flows.search_query.push(ch);
                 self.refresh_flows_search().await?;
                 return Ok(true);
@@ -71,7 +87,18 @@ impl App {
                 self.refresh_wallets_search().await?;
                 return Ok(true);
             }
-            Section::Flows if self.state.flows.search_active => {
+            Section::Flows
+                if self.state.accounts_tab == AccountsTab::Sources
+                    && self.state.wallets.search_active =>
+            {
+                self.state.wallets.search_query.pop();
+                self.refresh_wallets_search().await?;
+                return Ok(true);
+            }
+            Section::Flows
+                if self.state.accounts_tab != AccountsTab::Sources
+                    && self.state.flows.search_active =>
+            {
                 self.state.flows.search_query.pop();
                 self.refresh_flows_search().await?;
                 return Ok(true);

@@ -105,6 +105,10 @@ impl App {
             }
             PaletteCommand::FlowNew => {
                 self.state.section = Section::Flows;
+                self.state.accounts_tab = AccountsTab::Envelopes;
+                if self.state.snapshot.is_none() {
+                    self.refresh_snapshot().await?;
+                }
                 self.start_flow_create();
             }
             PaletteCommand::VaultCreate => {
