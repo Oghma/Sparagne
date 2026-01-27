@@ -33,11 +33,12 @@ impl App {
 
     pub(crate) fn set_undo_toast(&mut self, message: &str, action: UndoAction) {
         let now = std::time::Instant::now();
+        let undo_secs = self.state.undo_toast_secs.max(1);
         self.state.toast = Some(ToastState {
             message: message.to_string(),
             level: ToastLevel::Undo,
             created_at: now,
-            expires_at: now + Duration::from_secs(5),
+            expires_at: now + Duration::from_secs(undo_secs),
             undo_action: Some(action),
         });
     }

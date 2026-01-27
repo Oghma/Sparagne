@@ -115,6 +115,7 @@ pub struct AppState {
     pub accounts_tab: AccountsTab,
     pub home_feed_selected: usize,
     pub home_low_balance_minor: i64,
+    pub undo_toast_secs: u64,
     pub transactions: TransactionsState,
     pub wallets: WalletsState,
     pub flows: FlowsState,

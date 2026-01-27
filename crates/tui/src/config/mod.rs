@@ -16,6 +16,8 @@ pub struct AppConfig {
     pub timezone: String,
     /// Home feed low-balance warning threshold in minor units.
     pub low_balance_minor: i64,
+    /// Undo toast duration in seconds.
+    pub undo_toast_secs: u64,
 }
 
 impl Default for AppConfig {
@@ -26,6 +28,7 @@ impl Default for AppConfig {
             vault: "Main".to_string(),
             timezone: "Europe/Rome".to_string(),
             low_balance_minor: 25_00,
+            undo_toast_secs: 5,
         }
     }
 }
@@ -51,6 +54,9 @@ struct Args {
     /// Override low-balance warning threshold (minor units, e.g. 2500 = 25.00).
     #[arg(long)]
     low_balance_minor: Option<i64>,
+    /// Override undo toast duration in seconds.
+    #[arg(long)]
+    undo_toast_secs: Option<u64>,
 }
 
 pub fn load() -> Result<AppConfig> {
@@ -91,6 +97,11 @@ pub fn load() -> Result<AppConfig> {
     {
         settings.low_balance_minor = parsed;
     }
+    if let Ok(undo_toast_secs) = env::var("SPARAGNE_UNDO_TOAST_SECS")
+        && let Ok(parsed) = undo_toast_secs.parse::<u64>()
+    {
+        settings.undo_toast_secs = parsed.max(1);
+    }
 
     if let Some(base_url) = args.base_url {
         settings.base_url = base_url;
@@ -106,6 +117,9 @@ pub fn load() -> Result<AppConfig> {
     }
     if let Some(low_balance_minor) = args.low_balance_minor {
         settings.low_balance_minor = low_balance_minor;
+    }
+    if let Some(undo_toast_secs) = args.undo_toast_secs {
+        settings.undo_toast_secs = undo_toast_secs.max(1);
     }
 
     Ok(settings)

@@ -50,6 +50,7 @@ impl App {
             accounts_tab: AccountsTab::Sources,
             home_feed_selected: 0,
             home_low_balance_minor: config.low_balance_minor,
+            undo_toast_secs: config.undo_toast_secs.max(1),
             transactions: TransactionsState::default(),
             wallets: WalletsState::default(),
             flows: FlowsState::default(),

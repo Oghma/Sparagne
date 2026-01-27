@@ -74,9 +74,15 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, toast: Option<&ToastState>) {
             " undo ",
             Style::default().fg(theme.text_muted),
         ));
-        spans.push(Span::styled(visual.seconds, Style::default().fg(theme.info)));
+        spans.push(Span::styled(
+            visual.seconds,
+            Style::default().fg(theme.info),
+        ));
         spans.push(Span::raw(" "));
-        spans.push(Span::styled(visual.bar, Style::default().fg(visual.bar_color)));
+        spans.push(Span::styled(
+            visual.bar,
+            Style::default().fg(visual.bar_color),
+        ));
     }
 
     let content_line = Line::from(spans);
