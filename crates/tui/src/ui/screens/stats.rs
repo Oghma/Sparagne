@@ -9,7 +9,7 @@ use ratatui::{
 use engine::{Currency, Money};
 
 use crate::{
-    app::AppState,
+    app::{AppState, StatsTab},
     ui::{
         components::{
             card::Card,
@@ -20,6 +20,7 @@ use crate::{
             money::{
                 flow_cap_gauge, styled_amount_bold, styled_amount_no_sign, styled_percentage_change,
             },
+            tab_bar::{self, TabBarItem},
         },
         theme::Theme,
     },
@@ -65,7 +66,40 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         return;
     }
 
-    // Main layout: Month summary, Sparkline, Category breakdown, Monthly trend
+    // Layout: tab bar + tab content
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .split(area);
+
+    render_tab_bar(frame, layout[0], state, &theme);
+    render_tab_content(frame, layout[1], state, &theme);
+}
+
+fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let items = [
+        TabBarItem {
+            label: "1 Cash Flow",
+        },
+        TabBarItem {
+            label: "2 Spending",
+        },
+        TabBarItem {
+            label: "3 Net Worth",
+        },
+    ];
+    tab_bar::render(frame, area, &items, state.stats.tab.index(), theme);
+}
+
+fn render_tab_content(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    match state.stats.tab {
+        StatsTab::CashFlow => render_cash_flow_tab(frame, area, state, theme),
+        StatsTab::Spending => render_spending_tab(frame, area, state, theme),
+        StatsTab::NetWorth => render_net_worth_tab(frame, area, state, theme),
+    }
+}
+
+fn render_cash_flow_tab(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -76,10 +110,38 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         ])
         .split(area);
 
-    render_month_summary(frame, layout[0], state, &theme);
-    render_sparkline(frame, layout[1], state, &theme);
-    render_category_breakdown(frame, layout[2], state, &theme);
-    render_monthly_trend(frame, layout[3], state, &theme);
+    render_month_summary(frame, layout[0], state, theme);
+    render_sparkline(frame, layout[1], state, theme);
+    render_category_breakdown(frame, layout[2], state, theme);
+    render_monthly_trend(frame, layout[3], state, theme);
+}
+
+fn render_spending_tab(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(12), // Category breakdown first
+            Constraint::Min(6),     // Trend chart
+        ])
+        .split(area);
+
+    render_category_breakdown(frame, layout[0], state, theme);
+    render_monthly_trend(frame, layout[1], state, theme);
+}
+
+fn render_net_worth_tab(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(9), // Summary
+            Constraint::Length(6), // Sparkline
+            Constraint::Min(6),    // Trend
+        ])
+        .split(area);
+
+    render_month_summary(frame, layout[0], state, theme);
+    render_sparkline(frame, layout[1], state, theme);
+    render_monthly_trend(frame, layout[2], state, theme);
 }
 
 fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {

@@ -1,6 +1,18 @@
 use super::super::*;
 
 impl App {
+    pub(crate) fn stats_next_tab(&mut self) {
+        self.state.stats.tab = self.state.stats.tab.next();
+    }
+
+    pub(crate) fn stats_prev_tab(&mut self) {
+        self.state.stats.tab = self.state.stats.tab.prev();
+    }
+
+    pub(crate) fn stats_set_tab(&mut self, index: usize) {
+        self.state.stats.tab = StatsTab::from_index(index);
+    }
+
     pub(crate) fn stats_next_month(&mut self) {
         let (year, month) = self.state.stats.current_month;
         if month == 12 {

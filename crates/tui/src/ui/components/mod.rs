@@ -36,5 +36,6 @@ pub mod hints;
 pub mod input_dialog;
 pub mod loading;
 pub mod money;
+pub mod tab_bar;
 pub mod tabs;
 pub mod toast;
