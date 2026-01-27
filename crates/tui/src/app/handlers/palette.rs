@@ -105,7 +105,7 @@ impl App {
             }
             PaletteCommand::FlowNew => {
                 self.state.section = Section::Flows;
-                self.state.accounts_tab = AccountsTab::Envelopes;
+                self.accounts_set_tab(1);
                 if self.state.snapshot.is_none() {
                     self.refresh_snapshot().await?;
                 }

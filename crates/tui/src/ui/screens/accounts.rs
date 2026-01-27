@@ -19,21 +19,26 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(4), Constraint::Min(0)])
+        .constraints([
+            Constraint::Length(4),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
         .split(area);
 
     render_tab_bar(frame, layout[0], state, &theme);
+    frame.render_widget(Paragraph::new(""), layout[1]);
 
     match state.accounts_tab {
-        AccountsTab::Sources => screens::wallets::render(frame, layout[1], state),
-        AccountsTab::Envelopes => screens::flows::render(frame, layout[1], state),
-        AccountsTab::Goals => render_goals_placeholder(frame, layout[1], &theme),
+        AccountsTab::Sources => screens::wallets::render(frame, layout[2], state),
+        AccountsTab::Envelopes => screens::flows::render(frame, layout[2], state),
+        AccountsTab::Goals => render_goals_placeholder(frame, layout[2], &theme),
     }
 }
 
 fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let card = Card::new("Accounts", theme);
-    let inner = card.inner(area);
+    let inner = inset(card.inner(area), 1, 0);
     card.render_frame(frame, area);
 
     let items = [
@@ -72,4 +77,17 @@ fn render_goals_placeholder(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         .alignment(ratatui::layout::Alignment::Center)
         .wrap(Wrap { trim: true });
     frame.render_widget(paragraph, inner);
+}
+
+fn inset(area: Rect, horizontal: u16, vertical: u16) -> Rect {
+    let x = area.x.saturating_add(horizontal);
+    let y = area.y.saturating_add(vertical);
+    let width = area.width.saturating_sub(horizontal.saturating_mul(2));
+    let height = area.height.saturating_sub(vertical.saturating_mul(2));
+    Rect {
+        x,
+        y,
+        width,
+        height,
+    }
 }
