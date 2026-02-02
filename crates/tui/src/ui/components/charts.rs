@@ -299,3 +299,233 @@ fn pie_color(angle: f64, slices: &[PieSlice], total: u64) -> Color {
         .map(|slice| slice.color)
         .unwrap_or(Color::Reset)
 }
+
+// ============================================================================
+// Braille Sparklines - High Resolution (8x)
+// ============================================================================
+//
+// Braille characters use a 2x4 dot matrix providing 8 dots per character.
+// This gives much higher resolution than standard bar characters.
+//
+// Dot positions in a Braille cell:
+//   ┌───┬───┐
+//   │ 1 │ 4 │  <- row 0: 0x01, 0x08
+//   │ 2 │ 5 │  <- row 1: 0x02, 0x10
+//   │ 3 │ 6 │  <- row 2: 0x04, 0x20
+//   │ 7 │ 8 │  <- row 3: 0x40, 0x80
+//   └───┴───┘
+//
+// Base character: U+2800 (⠀ - blank braille)
+
+const BRAILLE_BASE: u32 = 0x2800;
+
+/// Left column dot bits (top to bottom): rows 0, 1, 2, 3
+const BRAILLE_LEFT: [u8; 4] = [0x01, 0x02, 0x04, 0x40];
+
+/// Right column dot bits (top to bottom): rows 0, 1, 2, 3
+const BRAILLE_RIGHT: [u8; 4] = [0x08, 0x10, 0x20, 0x80];
+
+/// Creates a high-resolution Braille sparkline string.
+///
+/// Each character represents 2 data points with 4 levels of height.
+/// This provides 8x the resolution of standard bar characters.
+///
+/// # Arguments
+/// * `values` - Data points to visualize
+///
+/// # Returns
+/// A string of Braille characters representing the sparkline.
+///
+/// # Example
+/// ```ignore
+/// let data = vec![1, 3, 5, 8, 6, 4, 2, 1];
+/// let sparkline = braille_sparkline(&data);
+/// // Returns something like "⣀⣤⣶⣿⣶⣤⣀"
+/// ```
+#[must_use]
+pub fn braille_sparkline(values: &[u64]) -> String {
+    if values.is_empty() {
+        return String::new();
+    }
+
+    let max = *values.iter().max().unwrap_or(&1);
+    if max == 0 {
+        // All zeros - return blank braille characters
+        let char_count = (values.len() + 1) / 2;
+        return std::iter::repeat('⠀').take(char_count).collect();
+    }
+
+    let mut result = String::new();
+
+    // Process pairs of values (each Braille char represents 2 columns)
+    for chunk in values.chunks(2) {
+        let left_val = chunk[0];
+        let right_val = chunk.get(1).copied().unwrap_or(0);
+
+        let left_height = normalize_to_4(left_val, max);
+        let right_height = normalize_to_4(right_val, max);
+
+        let braille_char = braille_column_pair(left_height, right_height);
+        result.push(braille_char);
+    }
+
+    result
+}
+
+/// Creates a Braille sparkline with filled area (like an area chart).
+///
+/// Instead of just the top dot, fills all dots from bottom up to the value.
+#[must_use]
+pub fn braille_sparkline_filled(values: &[u64]) -> String {
+    if values.is_empty() {
+        return String::new();
+    }
+
+    let max = *values.iter().max().unwrap_or(&1);
+    if max == 0 {
+        let char_count = (values.len() + 1) / 2;
+        return std::iter::repeat('⠀').take(char_count).collect();
+    }
+
+    let mut result = String::new();
+
+    for chunk in values.chunks(2) {
+        let left_val = chunk[0];
+        let right_val = chunk.get(1).copied().unwrap_or(0);
+
+        let left_height = normalize_to_4(left_val, max);
+        let right_height = normalize_to_4(right_val, max);
+
+        let braille_char = braille_column_pair_filled(left_height, right_height);
+        result.push(braille_char);
+    }
+
+    result
+}
+
+/// Normalizes a value to a 0-4 range for Braille dots.
+fn normalize_to_4(value: u64, max: u64) -> u8 {
+    if max == 0 {
+        return 0;
+    }
+    // Scale to 0-4 (4 rows of dots)
+    let normalized = (value as f64 / max as f64) * 4.0;
+    (normalized.round() as u8).min(4)
+}
+
+/// Creates a Braille character for a pair of column values (line style).
+///
+/// Only lights the top dot for each height level.
+fn braille_column_pair(left_height: u8, right_height: u8) -> char {
+    let mut dots: u8 = 0;
+
+    // Left column: light only the top dot for the given height
+    if left_height > 0 {
+        // Height 1 = row 3 (bottom), height 4 = row 0 (top)
+        let row = 4 - left_height;
+        dots |= BRAILLE_LEFT[row as usize];
+    }
+
+    // Right column: same logic
+    if right_height > 0 {
+        let row = 4 - right_height;
+        dots |= BRAILLE_RIGHT[row as usize];
+    }
+
+    char::from_u32(BRAILLE_BASE + dots as u32).unwrap_or('?')
+}
+
+/// Creates a Braille character for a pair of column values (filled/area style).
+///
+/// Lights all dots from bottom up to the height level.
+fn braille_column_pair_filled(left_height: u8, right_height: u8) -> char {
+    let mut dots: u8 = 0;
+
+    // Left column: fill from bottom (row 3) up to the height
+    for row in (4 - left_height)..4 {
+        dots |= BRAILLE_LEFT[row as usize];
+    }
+
+    // Right column: same logic
+    for row in (4 - right_height)..4 {
+        dots |= BRAILLE_RIGHT[row as usize];
+    }
+
+    char::from_u32(BRAILLE_BASE + dots as u32).unwrap_or('?')
+}
+
+/// Renders a Braille sparkline widget with optional min/max labels.
+pub fn render_braille_sparkline(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    data: &[u64],
+    theme: &Theme,
+    show_minmax: bool,
+) {
+    if data.is_empty() || area.width == 0 || area.height == 0 {
+        return;
+    }
+
+    let sparkline_str = braille_sparkline_filled(data);
+
+    let text = if show_minmax {
+        let min = data.iter().copied().min().unwrap_or(0);
+        let max = data.iter().copied().max().unwrap_or(0);
+        format!("{sparkline_str} {min}-{max}")
+    } else {
+        sparkline_str
+    };
+
+    let paragraph = Paragraph::new(Span::styled(text, Style::default().fg(theme.accent)));
+    frame.render_widget(paragraph, area);
+}
+
+#[cfg(test)]
+mod braille_tests {
+    use super::*;
+
+    #[test]
+    fn test_braille_sparkline_empty() {
+        assert_eq!(braille_sparkline(&[]), "");
+    }
+
+    #[test]
+    fn test_braille_sparkline_all_zeros() {
+        let result = braille_sparkline(&[0, 0, 0, 0]);
+        assert_eq!(result.chars().count(), 2); // 4 values = 2 braille chars
+        assert!(result.chars().all(|c| c == '⠀'));
+    }
+
+    #[test]
+    fn test_braille_sparkline_single_value() {
+        let result = braille_sparkline(&[100]);
+        assert_eq!(result.chars().count(), 1);
+        // Max value should have the top dot
+        assert_eq!(result, "⠁"); // top-left dot
+    }
+
+    #[test]
+    fn test_braille_sparkline_pair() {
+        let result = braille_sparkline(&[100, 100]);
+        assert_eq!(result.chars().count(), 1);
+        // Both at max should have top dots in both columns
+        assert_eq!(result, "⠉"); // top-left and top-right dots
+    }
+
+    #[test]
+    fn test_braille_sparkline_filled_ascending() {
+        let result = braille_sparkline_filled(&[25, 50, 75, 100]);
+        assert_eq!(result.chars().count(), 2);
+        // Should show increasing fill from left to right
+        assert!(!result.contains('⠀')); // No blank chars for non-zero data
+    }
+
+    #[test]
+    fn test_normalize_to_4() {
+        assert_eq!(normalize_to_4(0, 100), 0);
+        assert_eq!(normalize_to_4(25, 100), 1);
+        assert_eq!(normalize_to_4(50, 100), 2);
+        assert_eq!(normalize_to_4(75, 100), 3);
+        assert_eq!(normalize_to_4(100, 100), 4);
+    }
+}

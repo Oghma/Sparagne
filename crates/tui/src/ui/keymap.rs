@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub enum AppAction {
     TogglePalette,
     Search,
+    CycleAmbiguous,
     Quit,
     Cancel,
     NextField,
@@ -27,6 +28,9 @@ pub fn map_key(key: KeyEvent) -> AppAction {
         }
         if let KeyCode::Char('f') = key.code {
             return AppAction::Search;
+        }
+        if let KeyCode::Char('r') = key.code {
+            return AppAction::CycleAmbiguous;
         }
     }
 

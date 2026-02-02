@@ -41,6 +41,38 @@ pub struct CommandPaletteState {
     pub active: bool,
     pub query: String,
     pub selected: usize,
+    /// Most recently used commands (most recent first).
+    pub mru: Vec<PaletteCommand>,
+}
+
+/// Maximum number of MRU commands to track.
+pub const MRU_LIMIT: usize = 5;
+
+/// Global search overlay state for cross-screen search.
+#[derive(Debug, Default)]
+pub struct GlobalSearchState {
+    pub active: bool,
+    pub query: String,
+    pub selected: usize,
+    pub results: Vec<SearchResult>,
+}
+
+/// A search result that can be navigated to.
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    pub kind: SearchResultKind,
+    pub id: Uuid,
+    pub label: String,
+    pub detail: Option<String>,
+}
+
+/// The type of search result, determining navigation behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchResultKind {
+    Transaction,
+    Wallet,
+    Flow,
+    Category,
 }
 
 /// Overlay state for modal dialogs and transient UI elements.
@@ -317,6 +349,45 @@ impl PaletteCommand {
             Self::VaultCreate => "Vault: Create",
             Self::Refresh => "Refresh",
             Self::ToggleVoided => "Transactions: Toggle voided",
+        }
+    }
+
+    /// Returns a unique string identifier for persistence.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NewExpense => "new_expense",
+            Self::NewIncome => "new_income",
+            Self::NewRefund => "new_refund",
+            Self::NewTransferWallet => "new_transfer_wallet",
+            Self::NewTransferFlow => "new_transfer_flow",
+            Self::Categories => "categories",
+            Self::CategoryAliases => "category_aliases",
+            Self::Members => "members",
+            Self::WalletNew => "wallet_new",
+            Self::FlowNew => "flow_new",
+            Self::VaultCreate => "vault_create",
+            Self::Refresh => "refresh",
+            Self::ToggleVoided => "toggle_voided",
+        }
+    }
+
+    /// Parses a command from its string identifier.
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "new_expense" => Some(Self::NewExpense),
+            "new_income" => Some(Self::NewIncome),
+            "new_refund" => Some(Self::NewRefund),
+            "new_transfer_wallet" => Some(Self::NewTransferWallet),
+            "new_transfer_flow" => Some(Self::NewTransferFlow),
+            "categories" => Some(Self::Categories),
+            "category_aliases" => Some(Self::CategoryAliases),
+            "members" => Some(Self::Members),
+            "wallet_new" => Some(Self::WalletNew),
+            "flow_new" => Some(Self::FlowNew),
+            "vault_create" => Some(Self::VaultCreate),
+            "refresh" => Some(Self::Refresh),
+            "toggle_voided" => Some(Self::ToggleVoided),
+            _ => None,
         }
     }
 }

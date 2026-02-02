@@ -15,7 +15,21 @@ impl App {
             _ => {}
         }
     }
+
     pub(crate) fn open_palette(&mut self) {
+        // Load MRU from local state
+        if let Some(vault) = &self.state.vault {
+            if let Some(vault_id) = &vault.id {
+                let mru_strings = self
+                    .local_state
+                    .mru_commands_for(&self.config.username, vault_id);
+                self.state.palette.mru = mru_strings
+                    .iter()
+                    .filter_map(|s| PaletteCommand::from_str(s))
+                    .collect();
+            }
+        }
+
         self.state.palette.active = true;
         self.state.palette.query.clear();
         self.state.palette.selected = 0;
@@ -64,10 +78,13 @@ impl App {
     }
 
     pub(crate) fn filtered_commands(&self) -> Vec<PaletteCommand> {
-        filter_commands(self.state.palette.query.as_str())
+        filter_commands(self.state.palette.query.as_str(), &self.state.palette.mru)
     }
 
     pub(crate) async fn execute_command(&mut self, command: PaletteCommand) -> Result<()> {
+        // Track MRU
+        self.track_mru_command(command);
+
         match command {
             PaletteCommand::NewExpense => {
                 self.start_transaction_form(TransactionKind::Expense)
@@ -135,5 +152,27 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Tracks a command in MRU and persists to local state.
+    fn track_mru_command(&mut self, command: PaletteCommand) {
+        // Update in-memory MRU
+        self.state.palette.mru.retain(|c| *c != command);
+        self.state.palette.mru.insert(0, command);
+        self.state.palette.mru.truncate(MRU_LIMIT);
+
+        // Persist to local state
+        if let Some(vault) = &self.state.vault {
+            if let Some(vault_id) = &vault.id {
+                self.local_state.push_mru_command(
+                    &self.config.username,
+                    vault_id,
+                    command.as_str(),
+                    MRU_LIMIT,
+                );
+                // Best-effort save, ignore errors
+                let _ = self.local_state.save(&self.local_state_path);
+            }
+        }
     }
 }

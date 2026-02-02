@@ -15,7 +15,7 @@ use crate::{
     ui::{
         components::{
             card::Card,
-            charts::mini_bar_chart,
+            charts::braille_sparkline_filled,
             money::{styled_amount, styled_percentage_change},
         },
         theme::Theme,
@@ -42,240 +42,135 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 }
 
 fn render_large_layout(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    // Main layout: Top row, middle row, recent transactions
-    let layout = Layout::default()
+    // Stats bar (6 rows) + Main content below
+    let main_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(8),  // Balance + This Month
-            Constraint::Length(10), // Wallets + Budgets/Goals
-            Constraint::Min(5),     // Recent transactions
-        ])
+        .constraints([Constraint::Length(6), Constraint::Min(8)])
         .split(area);
 
-    // Top row: Balance (left) + This Month (right)
-    let top_row = Layout::default()
+    render_stats_bar(frame, main_layout[0], state, theme);
+
+    // Main content: Quick Balances (30%) | Activity Feed (70%)
+    let content_layout = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
-        .split(layout[0]);
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .split(main_layout[1]);
 
-    render_balance_card(frame, top_row[0], state, theme);
-    render_this_month_card(frame, top_row[1], state, theme);
-
-    // Middle row: Wallets (left) + Budgets/Goals (right)
-    let middle_row = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-        .split(layout[1]);
-
-    render_wallets_card(frame, middle_row[0], state, theme);
-    render_budgets_goals_card(frame, middle_row[1], state, theme);
-
-    // Bottom: Recent transactions
-    render_recent_transactions(frame, layout[2], state, theme);
+    render_quick_balances(frame, content_layout[0], state, theme);
+    render_activity_feed(frame, content_layout[1], state, theme);
 }
 
 fn render_medium_layout(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    // Stats bar (5 rows) + Quick Balances (8 rows) + Activity Feed (rest)
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4), // Balance (compact)
-            Constraint::Length(4), // This Month (compact)
-            Constraint::Length(8), // Wallets + Budgets side by side
-            Constraint::Min(5),    // Recent transactions
+            Constraint::Length(5),
+            Constraint::Length(8),
+            Constraint::Min(6),
         ])
         .split(area);
 
-    render_balance_card_compact(frame, layout[0], state, theme);
-    render_this_month_card_compact(frame, layout[1], state, theme);
-
-    let middle_row = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(layout[2]);
-
-    render_wallets_card(frame, middle_row[0], state, theme);
-    render_budgets_goals_card(frame, middle_row[1], state, theme);
-
-    render_recent_transactions(frame, layout[3], state, theme);
+    render_stats_bar(frame, layout[0], state, theme);
+    render_quick_balances(frame, layout[1], state, theme);
+    render_activity_feed(frame, layout[2], state, theme);
 }
 
 fn render_small_layout(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    // Compact stats (1 row) + Quick Balances (6 rows) + Activity Feed (rest)
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Balance (minimal)
-            Constraint::Length(3), // This Month (minimal)
-            Constraint::Length(5), // Wallets
-            Constraint::Min(4),    // Recent transactions
+            Constraint::Length(1),
+            Constraint::Length(6),
+            Constraint::Min(4),
         ])
         .split(area);
 
-    render_balance_card_minimal(frame, layout[0], state, theme);
-    render_this_month_card_minimal(frame, layout[1], state, theme);
-    render_wallets_card_minimal(frame, layout[2], state, theme);
-    render_recent_transactions_minimal(frame, layout[3], state, theme);
+    render_stats_bar_compact(frame, layout[0], state, theme);
+    render_quick_balances(frame, layout[1], state, theme);
+    render_activity_feed(frame, layout[2], state, theme);
 }
 
-// === Balance Card ===
+// === Stats Bar ===
 
-fn render_balance_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+fn render_stats_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(34),
+            Constraint::Percentage(33),
+            Constraint::Percentage(33),
+        ])
+        .split(area);
+
+    render_net_worth_card(frame, layout[0], state, theme);
+    render_income_card(frame, layout[1], state, theme);
+    render_expenses_card(frame, layout[2], state, theme);
+}
+
+fn render_stats_bar_compact(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
-    let card = Card::new("Balance", theme);
-    let inner = card.inner(area);
-    card.render_frame(frame, area);
 
-    let total_balance: i64 = state
+    let net_worth_minor: i64 = state
         .snapshot
         .as_ref()
-        .map(|snap| snap.wallets.iter().map(|w| w.balance_minor).sum())
+        .map(|snap| {
+            snap.wallets
+                .iter()
+                .filter(|w| !w.archived)
+                .map(|w| w.balance_minor)
+                .sum()
+        })
         .unwrap_or(0);
 
-    // Calculate month change from stats
-    let month_change = state
+    let (income, expenses) = state
         .stats
         .data
         .as_ref()
-        .map(|s| s.total_income_minor - s.total_expenses_minor)
-        .unwrap_or(0);
+        .map(|s| (s.total_income_minor, s.total_expenses_minor))
+        .unwrap_or((0, 0));
 
-    // Build sparkline
-    let trend = mini_bar_chart(&state.stats.sparkline);
-
-    // Center the content
-    let balance_str = Money::new(total_balance).format(currency);
-    let change_str = if month_change >= 0 {
-        format!(
-            "▲ +{} this month",
-            Money::new(month_change).format(currency)
-        )
-    } else {
-        format!("▼ {} this month", Money::new(month_change).format(currency))
-    };
-
-    let change_color = if month_change >= 0 {
-        theme.positive
-    } else {
-        theme.negative
-    };
-
-    let mut lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            balance_str,
-            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-        )),
-        Line::from(Span::styled(change_str, Style::default().fg(change_color))),
-    ];
-
-    if !trend.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled(trend, Style::default().fg(theme.info)),
-            Span::styled("  last 30 days", Style::default().fg(theme.text_muted)),
-        ]));
-    }
-
-    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center), inner);
-}
-
-fn render_balance_card_compact(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let currency = get_currency(state);
-    let card = Card::new("Balance", theme);
-    let inner = card.inner(area);
-    card.render_frame(frame, area);
-
-    let total_balance: i64 = state
-        .snapshot
-        .as_ref()
-        .map(|snap| snap.wallets.iter().map(|w| w.balance_minor).sum())
-        .unwrap_or(0);
-
-    let month_change = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| s.total_income_minor - s.total_expenses_minor)
-        .unwrap_or(0);
-
-    let trend = mini_bar_chart(&state.stats.sparkline);
-
-    let balance_str = Money::new(total_balance).format(currency);
-    let (arrow, change_color) = if month_change >= 0 {
-        ("▲", theme.positive)
-    } else {
-        ("▼", theme.negative)
-    };
+    let net_worth = Money::new(net_worth_minor).format(currency);
+    let income_str = Money::new(income).format(currency);
+    let expenses_str = Money::new(expenses).format(currency);
 
     let line = Line::from(vec![
+        Span::styled("Net Worth: ", Style::default().fg(theme.text_muted)),
         Span::styled(
-            format!("{balance_str}  "),
+            net_worth,
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            format!(
-                "{arrow} {}",
-                Money::new(month_change.abs()).format(currency)
-            ),
-            Style::default().fg(change_color),
-        ),
-        Span::raw("  "),
-        Span::styled(trend, Style::default().fg(theme.info)),
-    ]);
-
-    frame.render_widget(Paragraph::new(line), inner);
-}
-
-fn render_balance_card_minimal(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let currency = get_currency(state);
-
-    let total_balance: i64 = state
-        .snapshot
-        .as_ref()
-        .map(|snap| snap.wallets.iter().map(|w| w.balance_minor).sum())
-        .unwrap_or(0);
-
-    let month_change = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| s.total_income_minor - s.total_expenses_minor)
-        .unwrap_or(0);
-
-    let (arrow, change_color) = if month_change >= 0 {
-        ("▲", theme.positive)
-    } else {
-        ("▼", theme.negative)
-    };
-
-    let line = Line::from(vec![
-        Span::styled("Balance: ", Style::default().fg(theme.text_muted)),
-        Span::styled(
-            Money::new(total_balance).format(currency),
-            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            format!(
-                "{arrow} {}",
-                Money::new(month_change.abs()).format(currency)
-            ),
-            Style::default().fg(change_color),
-        ),
+        Span::styled("  │  ", Style::default().fg(theme.border)),
+        Span::styled("In: ", Style::default().fg(theme.text_muted)),
+        Span::styled(income_str, Style::default().fg(theme.income)),
+        Span::styled("  │  ", Style::default().fg(theme.border)),
+        Span::styled("Out: ", Style::default().fg(theme.text_muted)),
+        Span::styled(expenses_str, Style::default().fg(theme.expense)),
     ]);
 
     frame.render_widget(Paragraph::new(line), area);
 }
 
-// === This Month Card ===
-
-fn render_this_month_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+fn render_net_worth_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
-    let now = Local::now();
-    let month_name = now.format("%B %Y").to_string();
-
-    let card = Card::new(&month_name, theme);
+    let card = Card::new("Net Worth", theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
+
+    let net_worth_minor: i64 = state
+        .snapshot
+        .as_ref()
+        .map(|snap| {
+            snap.wallets
+                .iter()
+                .filter(|w| !w.archived)
+                .map(|w| w.balance_minor)
+                .sum()
+        })
+        .unwrap_or(0);
+
+    let net_worth = Money::new(net_worth_minor).format(currency);
 
     let (income, expenses) = state
         .stats
@@ -285,168 +180,107 @@ fn render_this_month_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, t
         .unwrap_or((0, 0));
 
     let net = income - expenses;
-
-    // Progress bar width
-    let bar_width = 14;
-    let max_for_bar = income.max(expenses).max(1);
-
-    let income_bar = progress_bar(income, max_for_bar, bar_width);
-    let expense_bar = progress_bar(expenses, max_for_bar, bar_width);
-
-    let income_pct = if max_for_bar > 0 {
-        (income as f64 / max_for_bar as f64 * 100.0) as u16
+    let pct_change = if expenses > 0 {
+        (net as f64 / expenses as f64) * 100.0
     } else {
-        0
+        0.0
     };
-    let expense_pct = if max_for_bar > 0 {
-        (expenses as f64 / max_for_bar as f64 * 100.0) as u16
-    } else {
-        0
-    };
+
+    let trend = braille_sparkline_filled(&state.stats.sparkline);
+
+    let mut lines = vec![
+        Line::from(Span::styled(
+            net_worth,
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(styled_percentage_change(pct_change, theme)),
+    ];
+
+    if !trend.is_empty() {
+        lines.push(Line::from(Span::styled(
+            trend,
+            Style::default().fg(theme.info),
+        )));
+    }
+
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn render_income_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let currency = get_currency(state);
+    let card = Card::new("Income", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+
+    let income = state
+        .stats
+        .data
+        .as_ref()
+        .map(|s| s.total_income_minor)
+        .unwrap_or(0);
+
+    let income_str = Money::new(income).format(currency);
 
     let lines = vec![
-        Line::from(""),
         Line::from(vec![
-            Span::styled("  Income     ", Style::default().fg(theme.text_muted)),
+            Span::styled(ICON_INCOME, Style::default().fg(theme.income)),
+            Span::raw(" "),
             Span::styled(
-                format!("{:<10}", Money::new(income).format(currency)),
-                Style::default().fg(theme.positive),
-            ),
-            Span::styled(income_bar, Style::default().fg(theme.positive)),
-            Span::styled(
-                format!(" {:>3}%", income_pct),
-                Style::default().fg(theme.text_muted),
+                income_str,
+                Style::default()
+                    .fg(theme.income)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
-        Line::from(vec![
-            Span::styled("  Expenses   ", Style::default().fg(theme.text_muted)),
-            Span::styled(
-                format!("{:<10}", Money::new(expenses).format(currency)),
-                Style::default().fg(theme.negative),
-            ),
-            Span::styled(expense_bar, Style::default().fg(theme.negative)),
-            Span::styled(
-                format!(" {:>3}%", expense_pct),
-                Style::default().fg(theme.text_muted),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Net        ", Style::default().fg(theme.text_muted)),
-            styled_amount(net, currency, theme),
-            Span::raw("     "),
-            styled_percentage_change(
-                if expenses > 0 {
-                    (net as f64 / expenses as f64) * 100.0
-                } else {
-                    0.0
-                },
-                theme,
-            ),
-        ]),
+        Line::from(Span::styled(
+            "this month",
+            Style::default().fg(theme.text_muted),
+        )),
     ];
 
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
-fn render_this_month_card_compact(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    state: &AppState,
-    theme: &Theme,
-) {
+fn render_expenses_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
-    let now = Local::now();
-    let month_name = now.format("%b %Y").to_string();
-
-    let card = Card::new(&month_name, theme);
+    let card = Card::new("Expenses", theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
-    let (income, expenses) = state
+    let expenses = state
         .stats
         .data
         .as_ref()
-        .map(|s| (s.total_income_minor, s.total_expenses_minor))
-        .unwrap_or((0, 0));
+        .map(|s| s.total_expenses_minor)
+        .unwrap_or(0);
 
-    let net = income - expenses;
-    let bar_width = 8;
-    let max_for_bar = income.max(expenses).max(1);
+    let expenses_str = Money::new(expenses).format(currency);
 
-    let line = Line::from(vec![
-        Span::styled("Income ", Style::default().fg(theme.text_muted)),
-        Span::styled(
-            Money::new(income).format(currency),
-            Style::default().fg(theme.positive),
-        ),
-        Span::raw(" "),
-        Span::styled(
-            progress_bar(income, max_for_bar, bar_width),
-            Style::default().fg(theme.positive),
-        ),
-        Span::raw("   "),
-        Span::styled("Expenses ", Style::default().fg(theme.text_muted)),
-        Span::styled(
-            Money::new(expenses).format(currency),
-            Style::default().fg(theme.negative),
-        ),
-        Span::raw(" "),
-        Span::styled(
-            progress_bar(expenses, max_for_bar, bar_width),
-            Style::default().fg(theme.negative),
-        ),
-        Span::raw("   "),
-        Span::styled("Net ", Style::default().fg(theme.text_muted)),
-        styled_amount(net, currency, theme),
-    ]);
-
-    frame.render_widget(Paragraph::new(line), inner);
-}
-
-fn render_this_month_card_minimal(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    state: &AppState,
-    theme: &Theme,
-) {
-    let currency = get_currency(state);
-    let now = Local::now();
-    let month_name = now.format("%b %Y").to_string();
-
-    let (income, expenses) = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| (s.total_income_minor, s.total_expenses_minor))
-        .unwrap_or((0, 0));
-
-    let line = Line::from(vec![
-        Span::styled(
-            format!("{month_name}: "),
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(ICON_EXPENSE, Style::default().fg(theme.expense)),
+            Span::raw(" "),
+            Span::styled(
+                expenses_str,
+                Style::default()
+                    .fg(theme.expense)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(Span::styled(
+            "this month",
             Style::default().fg(theme.text_muted),
-        ),
-        Span::styled("Income ", Style::default().fg(theme.text_muted)),
-        Span::styled(
-            Money::new(income).format(currency),
-            Style::default().fg(theme.positive),
-        ),
-        Span::raw(" | "),
-        Span::styled("Expenses ", Style::default().fg(theme.text_muted)),
-        Span::styled(
-            Money::new(expenses).format(currency),
-            Style::default().fg(theme.negative),
-        ),
-    ]);
+        )),
+    ];
 
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
-// === Wallets Card ===
+// === Quick Balances ===
 
-fn render_wallets_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
-    let card = Card::new("Wallets", theme);
+    let card = Card::new("Quick Balances", theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
@@ -454,198 +288,110 @@ fn render_wallets_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, them
         render_empty_state(
             frame,
             inner,
-            "No wallets yet",
-            "[w] to create your first wallet",
+            "No data yet",
+            "[n] to add your first transaction",
             theme,
         );
         return;
     };
 
-    let wallets: Vec<_> = snapshot
-        .wallets
-        .iter()
-        .filter(|w| !w.archived)
-        .take(inner.height.saturating_sub(1) as usize)
-        .collect();
+    let mut lines: Vec<Line> = Vec::new();
 
-    if wallets.is_empty() {
-        render_empty_state(
-            frame,
-            inner,
-            "No wallets yet",
-            "[w] to create your first wallet",
-            theme,
-        );
-        return;
-    }
+    // Wallets section
+    let mut wallets: Vec<_> = snapshot.wallets.iter().filter(|w| !w.archived).collect();
+    wallets.sort_by(|a, b| b.balance_minor.cmp(&a.balance_minor));
 
-    let mut items: Vec<ListItem> = wallets
-        .iter()
-        .map(|wallet| {
-            let emoji = "💰";
+    if !wallets.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "Wallets",
+            Style::default()
+                .fg(theme.text_muted)
+                .add_modifier(Modifier::BOLD),
+        )));
+
+        // Calculate how much space we have
+        let available_height = inner.height as usize;
+        let max_wallets = (available_height / 2).max(2).min(wallets.len());
+
+        for wallet in wallets.iter().take(max_wallets) {
             let balance_color = if wallet.balance_minor >= 0 {
                 theme.positive
             } else {
                 theme.negative
             };
-
-            ListItem::new(Line::from(vec![
-                Span::raw(format!("  {emoji} ")),
+            lines.push(Line::from(vec![
+                Span::raw("  💰 "),
                 Span::styled(
-                    format!("{:<14}", wallet.name),
+                    format!("{:<12}", truncate(&wallet.name, 12)),
                     Style::default().fg(theme.text),
                 ),
-                Span::styled(
-                    format!("{:>12}", Money::new(wallet.balance_minor).format(currency)),
-                    Style::default().fg(balance_color),
-                ),
-            ]))
-        })
-        .collect();
-
-    // Add footer action
-    if inner.height as usize > items.len() + 1 {
-        items.push(ListItem::new(Line::from("")));
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled("  [", Style::default().fg(theme.text_muted)),
-            Span::styled("w", Style::default().fg(theme.accent)),
-            Span::styled("] Manage wallets", Style::default().fg(theme.text_muted)),
-        ])));
-    }
-
-    frame.render_widget(List::new(items), inner);
-}
-
-fn render_wallets_card_minimal(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let currency = get_currency(state);
-
-    let Some(snapshot) = state.snapshot.as_ref() else {
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                "No wallets",
-                Style::default().fg(theme.text_muted),
-            )),
-            area,
-        );
-        return;
-    };
-
-    let wallets: Vec<_> = snapshot
-        .wallets
-        .iter()
-        .filter(|w| !w.archived)
-        .take(area.height as usize)
-        .collect();
-
-    let items: Vec<ListItem> = wallets
-        .iter()
-        .map(|wallet| {
-            let emoji = "💰";
-            let balance_color = if wallet.balance_minor >= 0 {
-                theme.positive
-            } else {
-                theme.negative
-            };
-
-            ListItem::new(Line::from(vec![
-                Span::raw(format!("  {emoji} ")),
-                Span::styled(&wallet.name, Style::default().fg(theme.text)),
-                Span::raw("  "),
                 Span::styled(
                     Money::new(wallet.balance_minor).format(currency),
                     Style::default().fg(balance_color),
                 ),
-            ]))
-        })
-        .collect();
+            ]));
+        }
+    }
 
-    frame.render_widget(List::new(items), area);
-}
-
-// === Budgets & Goals Card ===
-
-fn render_budgets_goals_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let currency = get_currency(state);
-    let card = Card::new("Budgets & Goals", theme);
-    let inner = card.inner(area);
-    card.render_frame(frame, area);
-
-    let Some(snapshot) = state.snapshot.as_ref() else {
-        render_empty_state(
-            frame,
-            inner,
-            "No budgets set up yet",
-            "[f] to create a budget",
-            theme,
-        );
-        return;
-    };
-
+    // Budgets section (flows that are not archived and not "Unallocated")
     let flows: Vec<_> = snapshot
         .flows
         .iter()
         .filter(|f| !f.archived && !f.is_unallocated)
         .collect();
 
-    if flows.is_empty() {
-        render_empty_state(
-            frame,
-            inner,
-            "No budgets set up yet",
-            "[f] to create a budget",
-            theme,
-        );
-        return;
+    if !flows.is_empty() {
+        let remaining = inner.height as usize - lines.len();
+        if remaining > 2 {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "Budgets",
+                Style::default()
+                    .fg(theme.text_muted)
+                    .add_modifier(Modifier::BOLD),
+            )));
+
+            let max_flows = (remaining - 3).max(1).min(flows.len());
+
+            for flow in flows.iter().take(max_flows) {
+                let balance_color = if flow.balance_minor >= 0 {
+                    theme.positive
+                } else {
+                    theme.negative
+                };
+                lines.push(Line::from(vec![
+                    Span::raw("  📦 "),
+                    Span::styled(
+                        format!("{:<12}", truncate(&flow.name, 12)),
+                        Style::default().fg(theme.text),
+                    ),
+                    Span::styled(
+                        Money::new(flow.balance_minor).format(currency),
+                        Style::default().fg(balance_color),
+                    ),
+                ]));
+            }
+        }
     }
 
-    // Separate budgets (expenses) from goals (savings)
-    // For now, treat all as budgets since we don't have goal distinction in API
-    let bar_width = 10;
+    // View all link
+    let remaining = inner.height as usize - lines.len();
+    if remaining > 0 {
+        lines.push(Line::from(Span::styled(
+            "[View all →]",
+            Style::default().fg(theme.text_muted),
+        )));
+    }
 
-    let max_balance = flows
-        .iter()
-        .map(|f| f.balance_minor.unsigned_abs())
-        .max()
-        .unwrap_or(1);
-
-    let items: Vec<ListItem> = flows
-        .iter()
-        .take(inner.height as usize)
-        .map(|flow| {
-            let emoji = "📦";
-            let balance = flow.balance_minor;
-            let bar = progress_bar(balance.unsigned_abs() as i64, max_balance as i64, bar_width);
-
-            let balance_color = if balance >= 0 {
-                theme.positive
-            } else {
-                theme.negative
-            };
-
-            ListItem::new(Line::from(vec![
-                Span::raw(format!("  {emoji} ")),
-                Span::styled(
-                    format!("{:<12}", truncate(&flow.name, 12)),
-                    Style::default().fg(theme.text),
-                ),
-                Span::styled(
-                    format!("{:>10}", Money::new(balance).format(currency)),
-                    Style::default().fg(balance_color),
-                ),
-                Span::raw("  "),
-                Span::styled(bar, Style::default().fg(theme.accent)),
-            ]))
-        })
-        .collect();
-
-    frame.render_widget(List::new(items), inner);
+    lines.truncate(inner.height as usize);
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
-// === Recent Transactions Card ===
+// === Activity Feed ===
 
-fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
-    let card = Card::new("Recent Transactions", theme);
+    let card = Card::new("Activity Feed", theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
@@ -654,7 +400,7 @@ fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppStat
         render_empty_state(
             frame,
             inner,
-            "No transactions yet",
+            "No activity yet",
             "[n] to add your first transaction",
             theme,
         );
@@ -666,20 +412,16 @@ fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppStat
 
     let mut items: Vec<ListItem> = Vec::new();
     let mut last_date: Option<NaiveDate> = None;
-    let mut in_transactions = false;
     let mut selected_row = None;
-    let has_alerts = feed_items
-        .iter()
-        .any(|item| matches!(item, HomeFeedItem::FlowAlert(_)));
+    let insight = home_insight(state, currency);
+    let mut insight_inserted = false;
 
-    if has_alerts {
-        items.push(ListItem::new(Line::from(Span::styled(
-            "  Alerts",
-            Style::default()
-                .fg(theme.warning)
-                .add_modifier(Modifier::BOLD),
-        ))));
-    }
+    let note_width = (inner.width as usize).saturating_sub(30).clamp(14, 32);
+    let cat_width = 12usize.min(inner.width as usize);
+    let flow_width = 12usize.min(inner.width as usize);
+    let wallet_width = 12usize.min(inner.width as usize);
+    let show_meta = inner.width >= 70;
+    let show_time = inner.width >= 90;
 
     for (feed_idx, item) in feed_items.iter().enumerate() {
         match item {
@@ -687,30 +429,40 @@ fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppStat
                 if feed_idx == state.home_feed_selected {
                     selected_row = Some(items.len());
                 }
-                items.push(flow_alert_item(alert, currency, theme));
+                let balance = Money::new(alert.balance_minor).format(currency);
+                let label = match alert.severity {
+                    FlowAlertSeverity::Critical => "deficit".to_string(),
+                    FlowAlertSeverity::Warning => {
+                        let threshold = Money::new(alert.threshold_minor).format(currency);
+                        format!("≤ {threshold}")
+                    }
+                };
+                items.push(ListItem::new(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled("⚠", Style::default().fg(theme.warning)),
+                    Span::raw(" "),
+                    Span::styled(
+                        "Alert: ".to_string(),
+                        Style::default()
+                            .fg(theme.warning)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("{} ", truncate(&alert.name, 18)),
+                        Style::default().fg(theme.text),
+                    ),
+                    Span::styled(
+                        format!("{label} ({balance})"),
+                        Style::default().fg(theme.warning),
+                    ),
+                ])));
             }
             HomeFeedItem::Transaction { index } => {
                 let Some(tx) = state.transactions.items.get(*index) else {
                     continue;
                 };
-                if !in_transactions {
-                    if has_alerts && !items.is_empty() {
-                        items.push(ListItem::new(Line::from("")));
-                    }
-                    items.push(ListItem::new(Line::from(Span::styled(
-                        "  Transactions",
-                        Style::default()
-                            .fg(theme.text_muted)
-                            .add_modifier(Modifier::BOLD),
-                    ))));
-                    in_transactions = true;
-                }
-
                 let tx_date = tx.occurred_at.date_naive();
                 if last_date != Some(tx_date) {
-                    if last_date.is_some() {
-                        items.push(ListItem::new(Line::from("")));
-                    }
                     let date_label = format_date_label(tx_date, today, yesterday);
                     items.push(ListItem::new(Line::from(Span::styled(
                         format!("  {date_label}"),
@@ -719,6 +471,15 @@ fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppStat
                             .add_modifier(Modifier::BOLD),
                     ))));
                     last_date = Some(tx_date);
+                    if !insight_inserted {
+                        if let Some(insight_text) = insight.as_ref() {
+                            items.push(ListItem::new(Line::from(Span::styled(
+                                insight_text.clone(),
+                                Style::default().fg(theme.info),
+                            ))));
+                            insight_inserted = true;
+                        }
+                    }
                 }
 
                 let (icon, icon_color) = match tx.kind {
@@ -736,47 +497,60 @@ fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppStat
                     tx.amount_minor
                 };
 
-                let note = tx.note.as_deref().unwrap_or("");
-                let category = tx
-                    .category
-                    .as_ref()
-                    .map(|c| format!("#{c}"))
-                    .unwrap_or_default();
+                let note = tx.note.as_deref().unwrap_or("-");
+                let category = tx.category.as_deref();
+                let wallet_name = resolve_wallet_name(state, tx.wallet_id.as_ref());
+                let flow_name = resolve_flow_name(state, tx.flow_id.as_ref());
                 let time = tx.occurred_at.format("%H:%M").to_string();
 
                 if feed_idx == state.home_feed_selected {
                     selected_row = Some(items.len());
                 }
 
-                items.push(ListItem::new(Line::from(vec![
-                    Span::raw("    "),
+                let mut line = vec![
+                    Span::raw("  "),
                     Span::styled(icon, Style::default().fg(icon_color)),
                     Span::raw(" "),
                     styled_amount(amount, currency, theme),
                     Span::raw("  "),
                     Span::styled(
-                        format!("{:<24}", truncate(note, 24)),
+                        format!("{:<note_width$}", truncate(note, note_width)),
                         Style::default().fg(theme.text),
                     ),
-                    Span::styled(
-                        format!("{:<12}", truncate(&category, 12)),
-                        Style::default().fg(theme.accent),
-                    ),
-                    Span::styled(time, Style::default().fg(theme.text_muted)),
-                ])));
+                ];
+
+                if show_meta {
+                    if let Some(category) = category {
+                        line.push(Span::raw("  "));
+                        line.push(Span::styled(
+                            format!("🏷 {:<cat_width$}", truncate(category, cat_width)),
+                            Style::default().fg(theme.accent),
+                        ));
+                    }
+                    if let Some(flow) = flow_name {
+                        line.push(Span::raw("  "));
+                        line.push(Span::styled(
+                            format!("📦 {:<flow_width$}", truncate(&flow, flow_width)),
+                            Style::default().fg(theme.info),
+                        ));
+                    }
+                    if let Some(wallet) = wallet_name {
+                        line.push(Span::raw("  "));
+                        line.push(Span::styled(
+                            format!("💰 {:<wallet_width$}", truncate(&wallet, wallet_width)),
+                            Style::default().fg(theme.text_muted),
+                        ));
+                    }
+                }
+
+                if show_time {
+                    line.push(Span::raw("  "));
+                    line.push(Span::styled(time, Style::default().fg(theme.text_muted)));
+                }
+
+                items.push(ListItem::new(Line::from(line)));
             }
         }
-    }
-
-    // Add footer
-    if inner.height as usize > items.len() + 1 {
-        items.push(ListItem::new(Line::from("")));
-        items.push(ListItem::new(Line::from(vec![
-            Span::raw("  "),
-            Span::styled("[", Style::default().fg(theme.text_muted)),
-            Span::styled("t", Style::default().fg(theme.accent)),
-            Span::styled("] View all →", Style::default().fg(theme.text_muted)),
-        ])));
     }
 
     let mut list_state = ratatui::widgets::ListState::default();
@@ -795,124 +569,54 @@ fn render_recent_transactions(frame: &mut Frame<'_>, area: Rect, state: &AppStat
     frame.render_stateful_widget(list, inner, &mut list_state);
 }
 
-fn render_recent_transactions_minimal(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    state: &AppState,
-    theme: &Theme,
-) {
-    let currency = get_currency(state);
-
-    let feed_items = home_feed_items(state);
-    if feed_items.is_empty() {
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                "No transactions",
-                Style::default().fg(theme.text_muted),
-            )),
-            area,
-        );
-        return;
-    }
-
-    let mut selected_row = None;
-    let items: Vec<ListItem> = feed_items
-        .iter()
-        .enumerate()
-        .take(area.height as usize)
-        .filter_map(|(feed_idx, item)| match item {
-            HomeFeedItem::FlowAlert(alert) => {
-                if feed_idx == state.home_feed_selected {
-                    selected_row = Some(feed_idx);
-                }
-                Some(flow_alert_item(alert, currency, theme))
-            }
-            HomeFeedItem::Transaction { index } => {
-                let tx = state.transactions.items.get(*index)?;
-                let (icon, icon_color) = match tx.kind {
-                    TransactionKind::Income => (ICON_INCOME, theme.income),
-                    TransactionKind::Expense => (ICON_EXPENSE, theme.expense),
-                    TransactionKind::Refund => (ICON_REFUND, theme.refund),
-                    TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                        (ICON_TRANSFER, theme.transfer)
-                    }
-                };
-
-                let amount = if tx.kind == TransactionKind::Expense {
-                    -tx.amount_minor.abs()
-                } else {
-                    tx.amount_minor
-                };
-                let note = tx.note.as_deref().unwrap_or("");
-
-                if feed_idx == state.home_feed_selected {
-                    selected_row = Some(feed_idx);
-                }
-
-                Some(ListItem::new(Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled(icon, Style::default().fg(icon_color)),
-                    Span::raw(" "),
-                    styled_amount(amount, currency, theme),
-                    Span::raw(" "),
-                    Span::styled(truncate(note, 20), Style::default().fg(theme.text)),
-                ])))
-            }
-        })
-        .collect();
-
-    let mut list_state = ratatui::widgets::ListState::default();
-    if let Some(row) = selected_row {
-        list_state.select(Some(row));
-    }
-    let list = List::new(items)
-        .highlight_style(
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol("» ");
-
-    frame.render_stateful_widget(list, area, &mut list_state);
-}
-
 // === Helper Functions ===
 
-fn flow_alert_item(
-    alert: &crate::app::FlowAlertItem,
-    currency: Currency,
-    theme: &Theme,
-) -> ListItem<'static> {
-    let (icon, color) = match alert.severity {
-        FlowAlertSeverity::Critical => ("‼", theme.negative),
-        FlowAlertSeverity::Warning => ("⚠", theme.warning),
-    };
-    let balance = Money::new(alert.balance_minor).format(currency);
-    let label = match alert.severity {
-        FlowAlertSeverity::Critical => "deficit".to_string(),
-        FlowAlertSeverity::Warning => {
-            let threshold = Money::new(alert.threshold_minor).format(currency);
-            format!("≤ {threshold}")
-        }
-    };
+fn resolve_wallet_name(state: &AppState, wallet_id: Option<&uuid::Uuid>) -> Option<String> {
+    let id = wallet_id?;
+    state.snapshot.as_ref().and_then(|snap| {
+        snap.wallets
+            .iter()
+            .find(|wallet| wallet.id == *id)
+            .map(|wallet| wallet.name.clone())
+    })
+}
 
-    ListItem::new(Line::from(vec![
-        Span::raw("    "),
-        Span::styled(
-            icon,
-            Style::default().fg(color).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" "),
-        Span::styled(
-            format!("{:<18}", truncate(alert.name.as_str(), 18)),
-            Style::default().fg(theme.text),
-        ),
-        Span::styled(
-            format!("{:<14}", truncate(label.as_str(), 14)),
-            Style::default().fg(color).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(balance, Style::default().fg(color)),
-    ]))
+fn resolve_flow_name(state: &AppState, flow_id: Option<&uuid::Uuid>) -> Option<String> {
+    let id = flow_id?;
+    state.snapshot.as_ref().and_then(|snap| {
+        snap.flows
+            .iter()
+            .find(|flow| flow.id == *id)
+            .map(|flow| flow.name.clone())
+    })
+}
+
+fn home_insight(state: &AppState, currency: Currency) -> Option<String> {
+    let stats = state.stats.data.as_ref()?;
+    let income = stats.total_income_minor;
+    let expenses = stats.total_expenses_minor;
+    if income == 0 && expenses == 0 {
+        return None;
+    }
+    let net = income - expenses;
+    if net > 0 {
+        let pct = if income > 0 {
+            (net as f64 / income as f64) * 100.0
+        } else {
+            0.0
+        };
+        Some(format!(
+            "  💡 Insight: You saved {} ({pct:.1}% of income) this month",
+            Money::new(net).format(currency)
+        ))
+    } else if net < 0 {
+        Some(format!(
+            "  💡 Insight: Expenses exceed income by {} this month",
+            Money::new(net.abs()).format(currency)
+        ))
+    } else {
+        None
+    }
 }
 
 fn get_currency(state: &AppState) -> Currency {
@@ -928,18 +632,6 @@ fn map_currency(currency: &api_types::Currency) -> Currency {
     match currency {
         api_types::Currency::Eur => Currency::Eur,
     }
-}
-
-fn progress_bar(value: i64, max: i64, width: usize) -> String {
-    if max == 0 {
-        return "░".repeat(width);
-    }
-
-    let ratio = (value.unsigned_abs() as f64 / max.unsigned_abs() as f64).clamp(0.0, 1.0);
-    let filled = ((ratio * width as f64) as usize).min(width);
-    let empty = width.saturating_sub(filled);
-
-    format!("{}{}", "█".repeat(filled), "░".repeat(empty))
 }
 
 fn truncate(s: &str, max_len: usize) -> String {

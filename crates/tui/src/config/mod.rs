@@ -18,6 +18,46 @@ pub struct AppConfig {
     pub low_balance_minor: i64,
     /// Undo toast duration in seconds.
     pub undo_toast_secs: u64,
+    /// Enable emoji icons in the UI.
+    pub emoji_mode: bool,
+    /// UI density: "compact", "normal", or "comfortable".
+    pub density: Density,
+}
+
+/// UI density setting controlling spacing and padding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Density {
+    Compact,
+    #[default]
+    Normal,
+    Comfortable,
+}
+
+impl Density {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "compact" => Self::Compact,
+            "comfortable" => Self::Comfortable,
+            _ => Self::Normal,
+        }
+    }
+
+    pub fn list_item_height(self) -> u16 {
+        match self {
+            Self::Compact => 1,
+            Self::Normal => 2,
+            Self::Comfortable => 3,
+        }
+    }
+
+    pub fn vertical_padding(self) -> u16 {
+        match self {
+            Self::Compact => 0,
+            Self::Normal => 1,
+            Self::Comfortable => 2,
+        }
+    }
 }
 
 impl Default for AppConfig {
@@ -29,6 +69,8 @@ impl Default for AppConfig {
             timezone: "Europe/Rome".to_string(),
             low_balance_minor: 25_00,
             undo_toast_secs: 5,
+            emoji_mode: true,
+            density: Density::default(),
         }
     }
 }
@@ -57,6 +99,12 @@ struct Args {
     /// Override undo toast duration in seconds.
     #[arg(long)]
     undo_toast_secs: Option<u64>,
+    /// Enable or disable emoji icons (true/false).
+    #[arg(long)]
+    emoji_mode: Option<bool>,
+    /// UI density: compact, normal, or comfortable.
+    #[arg(long)]
+    density: Option<String>,
 }
 
 pub fn load() -> Result<AppConfig> {
@@ -102,6 +150,12 @@ pub fn load() -> Result<AppConfig> {
     {
         settings.undo_toast_secs = parsed.max(1);
     }
+    if let Ok(emoji_mode) = env::var("SPARAGNE_EMOJI_MODE") {
+        settings.emoji_mode = emoji_mode.to_lowercase() == "true" || emoji_mode == "1";
+    }
+    if let Ok(density) = env::var("SPARAGNE_DENSITY") {
+        settings.density = Density::from_str(&density);
+    }
 
     if let Some(base_url) = args.base_url {
         settings.base_url = base_url;
@@ -120,6 +174,12 @@ pub fn load() -> Result<AppConfig> {
     }
     if let Some(undo_toast_secs) = args.undo_toast_secs {
         settings.undo_toast_secs = undo_toast_secs.max(1);
+    }
+    if let Some(emoji_mode) = args.emoji_mode {
+        settings.emoji_mode = emoji_mode;
+    }
+    if let Some(density) = args.density {
+        settings.density = Density::from_str(&density);
     }
 
     Ok(settings)

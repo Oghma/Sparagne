@@ -72,7 +72,11 @@ pub mod common {
 
     /// Global application shortcuts.
     pub fn global_shortcuts() -> Vec<KeyHint> {
-        vec![KeyHint::new("Ctrl+P", "cmd"), KeyHint::new("q", "quit")]
+        vec![
+            KeyHint::new("Ctrl+F", "search"),
+            KeyHint::new("Ctrl+P", "cmd"),
+            KeyHint::new("q", "quit"),
+        ]
     }
 
     /// Section navigation shortcuts.

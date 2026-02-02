@@ -11,6 +11,7 @@ mod wallets;
 
 pub use categories::*;
 pub use common::*;
+pub use common::MRU_LIMIT;
 pub use flows::*;
 pub use members::*;
 pub use stats::*;
@@ -21,6 +22,8 @@ pub use wallets::*;
 use api_types::vault::{Vault, VaultSnapshot};
 use chrono::{DateTime, FixedOffset};
 use uuid::Uuid;
+
+use crate::config::Density;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
@@ -116,6 +119,10 @@ pub struct AppState {
     pub home_feed_selected: usize,
     pub home_low_balance_minor: i64,
     pub undo_toast_secs: u64,
+    /// Enable emoji icons in the UI.
+    pub emoji_mode: bool,
+    /// UI density setting.
+    pub density: Density,
     pub transactions: TransactionsState,
     pub wallets: WalletsState,
     pub flows: FlowsState,
@@ -124,6 +131,7 @@ pub struct AppState {
     pub members: MembersState,
     pub stats: StatsState,
     pub palette: CommandPaletteState,
+    pub global_search: GlobalSearchState,
     pub help: HelpState,
     pub toast: Option<ToastState>,
     pub overlays: OverlayState,

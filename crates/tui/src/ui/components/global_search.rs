@@ -7,12 +7,12 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, filter_commands},
+    app::{AppState, SearchResultKind},
     ui::{components::centered_rect, theme::Theme},
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    if !state.palette.active {
+    if !state.global_search.active {
         return;
     }
 
@@ -37,8 +37,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 }
 
 fn render_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let query = state.palette.query.as_str();
-    let placeholder = "Type to search commands...";
+    let query = state.global_search.query.as_str();
+    let placeholder = "Search transactions, wallets, envelopes, categories...";
     let (text, style) = if query.is_empty() {
         (placeholder, Style::default().fg(theme.text_muted))
     } else {
@@ -48,7 +48,7 @@ fn render_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &The
     let lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  > ", Style::default().fg(theme.accent)),
+            Span::styled("  / ", Style::default().fg(theme.accent)),
             Span::styled(text.to_string(), style),
             Span::styled("_", Style::default().fg(theme.accent)),
         ]),
@@ -56,7 +56,7 @@ fn render_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &The
 
     let block = Block::default()
         .title(Span::styled(
-            " Command Palette ",
+            " Global Search ",
             Style::default().fg(theme.accent),
         ))
         .borders(Borders::ALL)
@@ -66,18 +66,18 @@ fn render_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &The
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let commands = filter_commands(state.palette.query.as_str(), &state.palette.mru);
+    let results = &state.global_search.results;
 
-    if commands.is_empty() {
+    if results.is_empty() {
         let block = Block::default()
             .borders(Borders::LEFT | Borders::RIGHT)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(theme.accent));
 
-        let message = if state.palette.query.is_empty() {
-            "Type to search commands"
+        let message = if state.global_search.query.is_empty() {
+            "Type to search across all data"
         } else {
-            "No matching commands"
+            "No matching results"
         };
 
         frame.render_widget(
@@ -92,37 +92,61 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         return;
     }
 
-    let items: Vec<ListItem> = commands
+    let items: Vec<ListItem> = results
         .iter()
         .enumerate()
-        .map(|(idx, cmd)| {
-            let label = cmd.label();
-
-            let is_selected = idx == state.palette.selected.min(commands.len().saturating_sub(1));
-
-            let line = if is_selected {
-                // Highlight matched characters
-                let highlighted = highlight_matches(&label, &state.palette.query, theme);
-                Line::from(
-                    vec![Span::raw("  ")]
-                        .into_iter()
-                        .chain(highlighted)
-                        .collect::<Vec<_>>(),
-                )
-            } else {
-                Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled(label, Style::default().fg(theme.text)),
-                ])
+        .map(|(idx, result)| {
+            let icon = match result.kind {
+                SearchResultKind::Transaction => "󰄬",
+                SearchResultKind::Wallet => "󰆦",
+                SearchResultKind::Flow => "󰁫",
+                SearchResultKind::Category => "󰷏",
             };
 
-            ListItem::new(line)
+            let kind_label = match result.kind {
+                SearchResultKind::Transaction => "TXN",
+                SearchResultKind::Wallet => "WAL",
+                SearchResultKind::Flow => "ENV",
+                SearchResultKind::Category => "CAT",
+            };
+
+            let is_selected = idx == state.global_search.selected.min(results.len().saturating_sub(1));
+
+            let mut spans = vec![
+                Span::raw("  "),
+                Span::styled(
+                    format!("{icon} "),
+                    Style::default().fg(if is_selected { theme.accent } else { theme.text_muted }),
+                ),
+                Span::styled(
+                    format!("[{kind_label}] "),
+                    Style::default().fg(theme.dim),
+                ),
+            ];
+
+            if is_selected {
+                spans.extend(highlight_matches(&result.label, &state.global_search.query, theme));
+            } else {
+                spans.push(Span::styled(
+                    result.label.clone(),
+                    Style::default().fg(theme.text),
+                ));
+            }
+
+            if let Some(detail) = &result.detail {
+                spans.push(Span::styled(
+                    format!(" - {detail}"),
+                    Style::default().fg(theme.text_muted),
+                ));
+            }
+
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
     let mut list_state = ListState::default();
     if !items.is_empty() {
-        list_state.select(Some(state.palette.selected.min(items.len() - 1)));
+        list_state.select(Some(state.global_search.selected.min(items.len() - 1)));
     }
 
     let list = List::new(items)
@@ -151,7 +175,7 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         Span::styled("[↑↓]", Style::default().fg(theme.accent)),
         Span::styled(" navigate  ", Style::default().fg(theme.text_muted)),
         Span::styled("[Enter]", Style::default().fg(theme.accent)),
-        Span::styled(" select  ", Style::default().fg(theme.text_muted)),
+        Span::styled(" go to  ", Style::default().fg(theme.text_muted)),
         Span::styled("[Esc]", Style::default().fg(theme.accent)),
         Span::styled(" close", Style::default().fg(theme.text_muted)),
     ]);

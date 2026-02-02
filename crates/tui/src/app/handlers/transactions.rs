@@ -3,9 +3,11 @@ use super::super::*;
 use crate::{
     app::helpers::{
         default_wallet_flow, extract_flow_transfer, extract_wallet_flow, extract_wallet_transfer,
-        format_amount_input, map_currency, ordered_ids,
+        format_amount_input, map_currency, ordered_ids, resolve_category_matches,
+        resolve_flow_matches, resolve_wallet_matches,
     },
     error::Result,
+    quick_add::parse as parse_quick_add,
 };
 use api_types::transaction::TransactionKind;
 use engine::Money;
@@ -785,5 +787,87 @@ impl App {
             }
         }
         false
+    }
+
+    /// Cycle through ambiguous options in quick-add input (Ctrl+R)
+    pub(crate) fn cycle_quick_add_ambiguous(&mut self) {
+        // Only active in transactions list with quick_active
+        if self.state.section != Section::Transactions
+            || self.state.transactions.mode != TransactionsMode::List
+            || !self.state.transactions.quick_active
+        {
+            return;
+        }
+
+        let currency = self
+            .state
+            .vault
+            .as_ref()
+            .and_then(|v| v.currency.as_ref())
+            .map(map_currency)
+            .unwrap_or(engine::Currency::Eur);
+
+        let input = self.state.transactions.quick_input.as_str();
+        let parsed = match parse_quick_add(input, currency) {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+
+        // Detect ambiguous matches
+        let category_matches = parsed
+            .category
+            .as_ref()
+            .map(|c| resolve_category_matches(&self.state, c))
+            .unwrap_or_default();
+        let wallet_matches = parsed
+            .wallet
+            .as_ref()
+            .map(|w| resolve_wallet_matches(&self.state, w))
+            .unwrap_or_default();
+        let flow_matches = parsed
+            .flow
+            .as_ref()
+            .map(|f| resolve_flow_matches(&self.state, f))
+            .unwrap_or_default();
+
+        // Priority: cycle category first, then wallet, then flow
+        if category_matches.len() > 1 {
+            self.cycle_or_init_ambiguous(
+                QuickAddAmbiguousKind::Category,
+                parsed.category.as_deref().unwrap_or(""),
+                category_matches,
+            );
+        } else if wallet_matches.len() > 1 {
+            self.cycle_or_init_ambiguous(
+                QuickAddAmbiguousKind::Wallet,
+                parsed.wallet.as_deref().unwrap_or(""),
+                wallet_matches,
+            );
+        } else if flow_matches.len() > 1 {
+            self.cycle_or_init_ambiguous(
+                QuickAddAmbiguousKind::Flow,
+                parsed.flow.as_deref().unwrap_or(""),
+                flow_matches,
+            );
+        }
+    }
+
+    fn cycle_or_init_ambiguous(
+        &mut self,
+        kind: QuickAddAmbiguousKind,
+        query: &str,
+        options: Vec<(uuid::Uuid, String)>,
+    ) {
+        if let Some(amb) = &mut self.state.transactions.quick_ambiguous {
+            if amb.kind == kind {
+                // Cycle to next option
+                amb.cycle_next();
+                return;
+            }
+        }
+
+        // Initialize new ambiguous state
+        self.state.transactions.quick_ambiguous =
+            Some(QuickAddAmbiguous::new(kind, query.to_string(), options));
     }
 }

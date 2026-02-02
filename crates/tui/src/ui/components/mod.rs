@@ -31,6 +31,7 @@ pub mod charts;
 pub mod command_palette;
 pub mod confirm_dialog;
 pub mod error_dialog;
+pub mod global_search;
 pub mod grouping_dialog;
 pub mod help_overlay;
 pub mod hints;

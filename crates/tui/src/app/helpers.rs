@@ -2,7 +2,7 @@ use api_types::{
     error::ErrorCode,
     membership::MembershipRole,
     transaction::{TransactionDetailResponse, TransactionKind, TransactionView},
-    vault::FlowView,
+    vault::{FlowView, WalletView},
 };
 use engine::Currency;
 use std::collections::HashMap;
@@ -13,11 +13,25 @@ use crate::{
     error::AppError,
 };
 
-pub(crate) fn filter_commands(query: &str) -> Vec<PaletteCommand> {
+/// Filters and sorts palette commands, prioritizing MRU when query is empty.
+pub(crate) fn filter_commands(query: &str, mru: &[PaletteCommand]) -> Vec<PaletteCommand> {
     let query = query.trim().to_lowercase();
     let all = PaletteCommand::all();
+
     if query.is_empty() {
-        return all;
+        // When no query, show MRU first, then remaining commands
+        let mut result = Vec::with_capacity(all.len());
+        for cmd in mru {
+            if !result.contains(cmd) {
+                result.push(*cmd);
+            }
+        }
+        for cmd in &all {
+            if !result.contains(cmd) {
+                result.push(*cmd);
+            }
+        }
+        return result;
     }
 
     let mut scored = all
@@ -504,6 +518,60 @@ pub(crate) fn resolve_flow_name(state: &AppState, query: &str) -> Option<(Uuid, 
         })
 }
 
+/// Returns all matching categories for a query, ordered by match quality (exact > prefix > contains).
+pub(crate) fn resolve_category_matches(state: &AppState, query: &str) -> Vec<(Uuid, String)> {
+    let query = normalize_query(query);
+    if query.is_empty() {
+        return Vec::new();
+    }
+
+    let mut exact = Vec::new();
+    let mut prefix = Vec::new();
+    let mut contains = Vec::new();
+
+    for category in &state.categories.items {
+        if category.archived {
+            continue;
+        }
+        let name = category.name.to_lowercase();
+        if name == query {
+            exact.push((category.id, category.name.clone()));
+        } else if name.starts_with(&query) {
+            prefix.push((category.id, category.name.clone()));
+        } else if name.contains(&query) {
+            contains.push((category.id, category.name.clone()));
+        }
+    }
+
+    let mut results = Vec::new();
+    results.extend(exact);
+    results.extend(prefix);
+    results.extend(contains);
+    results
+}
+
+/// Returns all matching flows for a query, ordered by match quality (exact > prefix > contains).
+pub(crate) fn resolve_flow_matches(state: &AppState, query: &str) -> Vec<(Uuid, String)> {
+    let query = normalize_query(query);
+    if query.is_empty() {
+        return Vec::new();
+    }
+    let ordered = ordered_active_flows(state);
+    let (exact, prefix, contains) = flow_name_buckets(&ordered, query.as_str());
+
+    let mut results = Vec::new();
+    for flow in exact {
+        results.push((flow.id, flow.name.clone()));
+    }
+    for flow in prefix {
+        results.push((flow.id, flow.name.clone()));
+    }
+    for flow in contains {
+        results.push((flow.id, flow.name.clone()));
+    }
+    results
+}
+
 pub(crate) fn flow_name_suggestions(state: &AppState, query: &str, limit: usize) -> Vec<String> {
     if limit == 0 {
         return Vec::new();
@@ -563,6 +631,92 @@ fn flow_name_buckets<'a>(
             prefix.push(*flow);
         } else if name.contains(query) {
             contains.push(*flow);
+        }
+    }
+
+    (exact, prefix, contains)
+}
+
+pub(crate) fn resolve_wallet_name(state: &AppState, query: &str) -> Option<(Uuid, String, bool)> {
+    let query = normalize_query(query);
+    if query.is_empty() {
+        return None;
+    }
+    let ordered = ordered_active_wallets(state);
+    let (exact, prefix, contains) = wallet_name_buckets(&ordered, query.as_str());
+
+    exact
+        .first()
+        .map(|wallet| (wallet.id, wallet.name.clone(), true))
+        .or_else(|| {
+            prefix
+                .first()
+                .map(|wallet| (wallet.id, wallet.name.clone(), false))
+        })
+        .or_else(|| {
+            contains
+                .first()
+                .map(|wallet| (wallet.id, wallet.name.clone(), false))
+        })
+}
+
+/// Returns all matching wallets for a query, ordered by match quality (exact > prefix > contains).
+pub(crate) fn resolve_wallet_matches(state: &AppState, query: &str) -> Vec<(Uuid, String)> {
+    let query = normalize_query(query);
+    if query.is_empty() {
+        return Vec::new();
+    }
+    let ordered = ordered_active_wallets(state);
+    let (exact, prefix, contains) = wallet_name_buckets(&ordered, query.as_str());
+
+    let mut results = Vec::new();
+    for wallet in exact {
+        results.push((wallet.id, wallet.name.clone()));
+    }
+    for wallet in prefix {
+        results.push((wallet.id, wallet.name.clone()));
+    }
+    for wallet in contains {
+        results.push((wallet.id, wallet.name.clone()));
+    }
+    results
+}
+
+fn ordered_active_wallets(state: &AppState) -> Vec<&WalletView> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    let ordered_ids = ordered_wallet_ids_from_state(state);
+    let mut by_id: HashMap<Uuid, &WalletView> = HashMap::with_capacity(snapshot.wallets.len());
+    for wallet in snapshot.wallets.iter().filter(|wallet| !wallet.archived) {
+        by_id.insert(wallet.id, wallet);
+    }
+
+    let mut ordered = Vec::with_capacity(by_id.len());
+    for id in ordered_ids {
+        if let Some(wallet) = by_id.get(&id) {
+            ordered.push(*wallet);
+        }
+    }
+    ordered
+}
+
+fn wallet_name_buckets<'a>(
+    wallets: &'a [&WalletView],
+    query: &str,
+) -> (Vec<&'a WalletView>, Vec<&'a WalletView>, Vec<&'a WalletView>) {
+    let mut exact = Vec::new();
+    let mut prefix = Vec::new();
+    let mut contains = Vec::new();
+
+    for wallet in wallets {
+        let name = wallet.name.to_lowercase();
+        if name == query {
+            exact.push(*wallet);
+        } else if name.starts_with(query) {
+            prefix.push(*wallet);
+        } else if name.contains(query) {
+            contains.push(*wallet);
         }
     }
 
@@ -670,11 +824,20 @@ mod tests {
 
     #[test]
     fn filter_commands_matches_category_queries() {
-        let commands = filter_commands("cat");
+        let commands = filter_commands("cat", &[]);
         assert!(commands.contains(&PaletteCommand::Categories));
-        let commands = filter_commands("alias");
+        let commands = filter_commands("alias", &[]);
         assert!(commands.contains(&PaletteCommand::CategoryAliases));
-        let commands = filter_commands("member");
+        let commands = filter_commands("member", &[]);
         assert!(commands.contains(&PaletteCommand::Members));
+    }
+
+    #[test]
+    fn filter_commands_prioritizes_mru_when_empty() {
+        let mru = vec![PaletteCommand::Refresh, PaletteCommand::Categories];
+        let commands = filter_commands("", &mru);
+        // MRU commands should be first
+        assert_eq!(commands[0], PaletteCommand::Refresh);
+        assert_eq!(commands[1], PaletteCommand::Categories);
     }
 }

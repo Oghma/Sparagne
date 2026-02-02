@@ -2,8 +2,52 @@ use chrono::{DateTime, FixedOffset};
 use std::collections::BTreeSet;
 
 use api_types::transaction::{TransactionDetailResponse, TransactionKind, TransactionView};
+use uuid::Uuid;
 
 use crate::app::helpers::{normalize_query, transaction_matches_query};
+
+/// Represents an ambiguous match in quick-add where multiple options are available.
+#[derive(Debug, Clone)]
+pub struct QuickAddAmbiguous {
+    pub kind: QuickAddAmbiguousKind,
+    pub query: String,
+    pub options: Vec<(Uuid, String)>, // (id, name)
+    pub selected: usize,
+}
+
+impl QuickAddAmbiguous {
+    pub fn new(kind: QuickAddAmbiguousKind, query: String, options: Vec<(Uuid, String)>) -> Self {
+        Self {
+            kind,
+            query,
+            options,
+            selected: 0,
+        }
+    }
+
+    pub fn cycle_next(&mut self) {
+        if !self.options.is_empty() {
+            self.selected = (self.selected + 1) % self.options.len();
+        }
+    }
+
+    pub fn cycle_prev(&mut self) {
+        if !self.options.is_empty() {
+            self.selected = (self.selected + self.options.len() - 1) % self.options.len();
+        }
+    }
+
+    pub fn current(&self) -> Option<&(Uuid, String)> {
+        self.options.get(self.selected)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuickAddAmbiguousKind {
+    Category,
+    Wallet,
+    Flow,
+}
 
 #[derive(Debug)]
 pub struct TransactionsState {
@@ -27,6 +71,7 @@ pub struct TransactionsState {
     pub quick_input: String,
     pub quick_error: Option<String>,
     pub quick_active: bool,
+    pub quick_ambiguous: Option<QuickAddAmbiguous>,
     pub transfer: TransferFormState,
     pub form: TransactionFormState,
     pub filter_from: Option<DateTime<FixedOffset>>,
@@ -64,6 +109,7 @@ impl Default for TransactionsState {
             quick_input: String::new(),
             quick_error: None,
             quick_active: false,
+            quick_ambiguous: None,
             transfer: TransferFormState::default(),
             form: TransactionFormState::default(),
             filter_from: None,
@@ -96,6 +142,7 @@ impl TransactionsState {
         self.quick_input.clear();
         self.quick_error = None;
         self.quick_active = false;
+        self.quick_ambiguous = None;
         self.transfer = TransferFormState::default();
         self.form = TransactionFormState::default();
         self.filter = TransactionsFilterState::default();

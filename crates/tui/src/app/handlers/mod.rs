@@ -2,6 +2,7 @@ mod accounts;
 mod categories;
 mod flows;
 mod forms;
+mod global_search;
 mod home;
 mod members;
 mod navigation;
@@ -48,6 +49,10 @@ impl App {
             self.handle_palette_action(action).await?;
             return Ok(());
         }
+        if self.state.global_search.active {
+            self.handle_global_search_action(action).await?;
+            return Ok(());
+        }
 
         match action {
             crate::ui::keymap::AppAction::TogglePalette => {
@@ -57,8 +62,11 @@ impl App {
             }
             crate::ui::keymap::AppAction::Search => {
                 if self.state.screen == Screen::Home {
-                    self.start_search();
+                    self.open_global_search();
                 }
+            }
+            crate::ui::keymap::AppAction::CycleAmbiguous => {
+                self.cycle_quick_add_ambiguous();
             }
             crate::ui::keymap::AppAction::Quit => {
                 self.should_quit = true;

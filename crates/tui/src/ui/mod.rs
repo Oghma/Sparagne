@@ -72,6 +72,7 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     render_bottom_bar(frame, layout[2], state, &theme);
     components::help_overlay::render(frame, area, state);
     components::command_palette::render(frame, area, state);
+    components::global_search::render(frame, area, state);
     components::confirm_dialog::render(frame, area, state.overlays.confirm.as_ref());
     components::error_dialog::render(frame, area, state.overlays.error.as_ref());
     components::bulk_category_dialog::render(frame, area, state.overlays.bulk_category.as_ref());

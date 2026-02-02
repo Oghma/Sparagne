@@ -6,7 +6,8 @@ mod state;
 pub(crate) use helpers::{
     FlowAlertItem, FlowAlertSeverity, HomeFeedItem, filter_commands, flow_name_suggestions,
     flows_visible_indices, home_feed_items, ordered_flow_ids_from_state,
-    ordered_wallet_ids_from_state, resolve_flow_name, transactions_visible_indices,
+    ordered_wallet_ids_from_state, resolve_category_matches, resolve_flow_matches,
+    resolve_flow_name, resolve_wallet_matches, resolve_wallet_name, transactions_visible_indices,
     wallets_visible_indices,
 };
 pub use state::*;
@@ -52,6 +53,8 @@ impl App {
             home_feed_selected: 0,
             home_low_balance_minor: config.low_balance_minor,
             undo_toast_secs: config.undo_toast_secs.max(1),
+            emoji_mode: config.emoji_mode,
+            density: config.density,
             transactions: TransactionsState::default(),
             wallets: WalletsState::default(),
             flows: FlowsState::default(),
@@ -60,6 +63,7 @@ impl App {
             members: MembersState::default(),
             stats: StatsState::default(),
             palette: CommandPaletteState::default(),
+            global_search: GlobalSearchState::default(),
             help: HelpState::default(),
             toast: None,
             overlays: OverlayState::default(),

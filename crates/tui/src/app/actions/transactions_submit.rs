@@ -1,7 +1,10 @@
 use super::super::*;
 
 use crate::{
-    app::helpers::{default_wallet_flow, login_message_for_error, map_currency, resolve_flow_name},
+    app::helpers::{
+        default_wallet_flow, login_message_for_error, map_currency, resolve_flow_name,
+        resolve_wallet_name,
+    },
     error::Result,
     quick_add::QuickAddKind,
 };
@@ -717,7 +720,7 @@ impl App {
             .and_then(|v| v.id.as_deref())
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
 
-        let (wallet_id, mut flow_id, _wallet_name, _flow_name) =
+        let (mut wallet_id, mut flow_id, _wallet_name, _flow_name) =
             match default_wallet_flow(&self.state) {
                 Ok(res) => res,
                 Err(message) => {
@@ -742,16 +745,71 @@ impl App {
             }
         };
 
-        if let Some(flow_query) = parsed.flow.as_deref() {
-            match resolve_flow_name(&self.state, flow_query) {
-                Some((resolved_id, _, _)) => flow_id = resolved_id,
-                None => {
-                    self.state.transactions.quick_error =
-                        Some(format!("Envelope non trovato: >{flow_query}"));
-                    return Ok(());
+        // Check for ambiguous selection for wallet
+        if let Some(wallet_query) = parsed.wallet.as_deref() {
+            let resolved = self
+                .state
+                .transactions
+                .quick_ambiguous
+                .as_ref()
+                .filter(|amb| amb.kind == QuickAddAmbiguousKind::Wallet)
+                .and_then(|amb| amb.current())
+                .map(|(id, _)| *id);
+
+            if let Some(id) = resolved {
+                wallet_id = id;
+            } else {
+                match resolve_wallet_name(&self.state, wallet_query) {
+                    Some((resolved_id, _, _)) => wallet_id = resolved_id,
+                    None => {
+                        self.state.transactions.quick_error =
+                            Some(format!("Wallet non trovato: @{wallet_query}"));
+                        return Ok(());
+                    }
                 }
             }
         }
+
+        // Check for ambiguous selection for flow
+        if let Some(flow_query) = parsed.flow.as_deref() {
+            let resolved = self
+                .state
+                .transactions
+                .quick_ambiguous
+                .as_ref()
+                .filter(|amb| amb.kind == QuickAddAmbiguousKind::Flow)
+                .and_then(|amb| amb.current())
+                .map(|(id, _)| *id);
+
+            if let Some(id) = resolved {
+                flow_id = id;
+            } else {
+                match resolve_flow_name(&self.state, flow_query) {
+                    Some((resolved_id, _, _)) => flow_id = resolved_id,
+                    None => {
+                        self.state.transactions.quick_error =
+                            Some(format!("Envelope non trovato: >{flow_query}"));
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
+        // Check for ambiguous selection for category
+        let category = if let Some(category_query) = &parsed.category {
+            let resolved = self
+                .state
+                .transactions
+                .quick_ambiguous
+                .as_ref()
+                .filter(|amb| amb.kind == QuickAddAmbiguousKind::Category)
+                .and_then(|amb| amb.current())
+                .map(|(_, name)| name.clone());
+
+            Some(resolved.unwrap_or_else(|| category_query.clone()))
+        } else {
+            None
+        };
 
         let occurred_at = self.now_in_timezone();
         let res = match parsed.kind {
@@ -766,7 +824,7 @@ impl App {
                             flow_id: Some(flow_id),
                             wallet_id: Some(wallet_id),
                             category_id: None,
-                            category: parsed.category.clone(),
+                            category: category.clone(),
                             note: parsed.note.clone(),
                             idempotency_key: None,
                             occurred_at,
@@ -785,7 +843,7 @@ impl App {
                             flow_id: Some(flow_id),
                             wallet_id: Some(wallet_id),
                             category_id: None,
-                            category: parsed.category.clone(),
+                            category: category.clone(),
                             note: parsed.note.clone(),
                             idempotency_key: None,
                             occurred_at,
@@ -804,7 +862,7 @@ impl App {
                             flow_id: Some(flow_id),
                             wallet_id: Some(wallet_id),
                             category_id: None,
-                            category: parsed.category.clone(),
+                            category: category.clone(),
                             note: parsed.note.clone(),
                             idempotency_key: None,
                             occurred_at,
@@ -820,6 +878,7 @@ impl App {
                 self.state.transactions.last_created_id = Some(created.id);
                 self.state.transactions.quick_input.clear();
                 self.state.transactions.quick_error = None;
+                self.state.transactions.quick_ambiguous = None;
                 self.set_toast("Transazione salvata.", ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
