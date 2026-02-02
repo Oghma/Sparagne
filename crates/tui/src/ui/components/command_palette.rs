@@ -102,7 +102,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
 
             let line = if is_selected {
                 // Highlight matched characters
-                let highlighted = highlight_matches(&label, &state.palette.query, theme);
+                let highlighted = highlight_matches(label, &state.palette.query, theme);
                 Line::from(
                     vec![Span::raw("  ")]
                         .into_iter()

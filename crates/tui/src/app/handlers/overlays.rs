@@ -323,7 +323,10 @@ impl App {
                     self.state.overlays.grouping = Some(dialog);
                 }
             }
-            AppAction::Backspace | AppAction::None | AppAction::NextField | AppAction::CycleAmbiguous => {
+            AppAction::Backspace
+            | AppAction::None
+            | AppAction::NextField
+            | AppAction::CycleAmbiguous => {
                 self.state.overlays.grouping = Some(dialog);
             }
             AppAction::Search | AppAction::TogglePalette | AppAction::Quit => {

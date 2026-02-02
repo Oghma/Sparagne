@@ -518,7 +518,8 @@ pub(crate) fn resolve_flow_name(state: &AppState, query: &str) -> Option<(Uuid, 
         })
 }
 
-/// Returns all matching categories for a query, ordered by match quality (exact > prefix > contains).
+/// Returns all matching categories for a query, ordered by match quality (exact
+/// > prefix > contains).
 pub(crate) fn resolve_category_matches(state: &AppState, query: &str) -> Vec<(Uuid, String)> {
     let query = normalize_query(query);
     if query.is_empty() {
@@ -550,7 +551,8 @@ pub(crate) fn resolve_category_matches(state: &AppState, query: &str) -> Vec<(Uu
     results
 }
 
-/// Returns all matching flows for a query, ordered by match quality (exact > prefix > contains).
+/// Returns all matching flows for a query, ordered by match quality (exact >
+/// prefix > contains).
 pub(crate) fn resolve_flow_matches(state: &AppState, query: &str) -> Vec<(Uuid, String)> {
     let query = normalize_query(query);
     if query.is_empty() {
@@ -660,7 +662,8 @@ pub(crate) fn resolve_wallet_name(state: &AppState, query: &str) -> Option<(Uuid
         })
 }
 
-/// Returns all matching wallets for a query, ordered by match quality (exact > prefix > contains).
+/// Returns all matching wallets for a query, ordered by match quality (exact >
+/// prefix > contains).
 pub(crate) fn resolve_wallet_matches(state: &AppState, query: &str) -> Vec<(Uuid, String)> {
     let query = normalize_query(query);
     if query.is_empty() {
@@ -704,7 +707,11 @@ fn ordered_active_wallets(state: &AppState) -> Vec<&WalletView> {
 fn wallet_name_buckets<'a>(
     wallets: &'a [&WalletView],
     query: &str,
-) -> (Vec<&'a WalletView>, Vec<&'a WalletView>, Vec<&'a WalletView>) {
+) -> (
+    Vec<&'a WalletView>,
+    Vec<&'a WalletView>,
+    Vec<&'a WalletView>,
+) {
     let mut exact = Vec::new();
     let mut prefix = Vec::new();
     let mut contains = Vec::new();

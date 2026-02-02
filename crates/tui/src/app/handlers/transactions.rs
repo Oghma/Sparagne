@@ -858,12 +858,12 @@ impl App {
         query: &str,
         options: Vec<(uuid::Uuid, String)>,
     ) {
-        if let Some(amb) = &mut self.state.transactions.quick_ambiguous {
-            if amb.kind == kind {
-                // Cycle to next option
-                amb.cycle_next();
-                return;
-            }
+        if let Some(amb) = &mut self.state.transactions.quick_ambiguous
+            && amb.kind == kind
+        {
+            // Cycle to next option
+            amb.cycle_next();
+            return;
         }
 
         // Initialize new ambiguous state

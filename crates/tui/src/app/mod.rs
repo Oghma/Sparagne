@@ -21,6 +21,7 @@ use crate::{
     config::AppConfig,
     error::{AppError, Result},
     local_state::{LocalState, default_state_path},
+    text::Locale,
     ui,
 };
 
@@ -56,6 +57,7 @@ impl App {
             undo_toast_secs: config.undo_toast_secs.max(1),
             emoji_mode: config.emoji_mode,
             density: config.density,
+            locale: Locale::from_str(&config.locale),
             transactions: TransactionsState::default(),
             wallets: WalletsState::default(),
             flows: FlowsState::default(),

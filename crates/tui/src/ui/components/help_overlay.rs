@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{AccountsTab, AppState, Section, SettingsTab, TransactionsMode},
+    text::{Locale, TextKey, t},
     ui::{components::centered_rect, theme::Theme},
 };
 
@@ -17,6 +18,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     }
 
     let theme = Theme::default();
+    let locale = state.locale;
     let popup = centered_rect(75, 70, area);
 
     // Clear the background
@@ -31,25 +33,55 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         ])
         .split(popup);
 
-    render_header(frame, layout[0], state, &theme);
-    render_content(frame, layout[1], state, &theme);
-    render_footer(frame, layout[2], &theme);
+    render_header(frame, layout[0], state, locale, &theme);
+    render_content(frame, layout[1], state, locale, &theme);
+    render_footer(frame, layout[2], locale, &theme);
 }
 
-fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+fn render_header(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    state: &AppState,
+    locale: Locale,
+    theme: &Theme,
+) {
     let section_name = match state.section {
-        Section::Home => "Home",
-        Section::Transactions => "Transactions",
+        Section::Home => t(locale, TextKey::SectionHome).to_string(),
+        Section::Transactions => t(locale, TextKey::SectionTransactions).to_string(),
         Section::Accounts => match state.accounts_tab {
-            AccountsTab::Sources => "Accounts > Sources",
-            AccountsTab::Envelopes => "Accounts > Envelopes",
-            AccountsTab::Goals => "Accounts > Goals",
+            AccountsTab::Sources => format!(
+                "{} > {}",
+                t(locale, TextKey::HintAccounts),
+                t(locale, TextKey::HelpSourcesWallets)
+            ),
+            AccountsTab::Envelopes => format!(
+                "{} > {}",
+                t(locale, TextKey::HintAccounts),
+                t(locale, TextKey::HelpEnvelopesFlows)
+            ),
+            AccountsTab::Goals => format!(
+                "{} > {}",
+                t(locale, TextKey::HintAccounts),
+                t(locale, TextKey::HelpGoals)
+            ),
         },
-        Section::Analytics => "Analytics",
+        Section::Analytics => t(locale, TextKey::HintAnalytics).to_string(),
         Section::Settings => match state.settings_tab {
-            SettingsTab::Categories => "Settings > Categories",
-            SettingsTab::Vault => "Settings > Vault",
-            SettingsTab::Members => "Settings > Members",
+            SettingsTab::Categories => format!(
+                "{} > {}",
+                t(locale, TextKey::HintSettings),
+                t(locale, TextKey::SectionCategories)
+            ),
+            SettingsTab::Vault => format!(
+                "{} > {}",
+                t(locale, TextKey::HintSettings),
+                t(locale, TextKey::SectionVault)
+            ),
+            SettingsTab::Members => format!(
+                "{} > {}",
+                t(locale, TextKey::HintSettings),
+                t(locale, TextKey::SectionMembers)
+            ),
         },
     };
 
@@ -57,7 +89,7 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         Line::from(""),
         Line::from(vec![
             Span::styled(
-                "  Keyboard Shortcuts  ",
+                format!("  {}  ", t(locale, TextKey::HelpTitle)),
                 Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
             ),
             Span::styled("─ ", Style::default().fg(theme.border)),
@@ -73,7 +105,13 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
-fn render_content(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+fn render_content(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    state: &AppState,
+    locale: Locale,
+    theme: &Theme,
+) {
     let block = Block::default()
         .borders(Borders::LEFT | Borders::RIGHT)
         .border_type(BorderType::Rounded)
@@ -88,14 +126,14 @@ fn render_content(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &T
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(inner);
 
-    let left_lines = global_shortcuts(theme);
-    let right_lines = context_shortcuts(state, theme);
+    let left_lines = global_shortcuts(locale, theme);
+    let right_lines = context_shortcuts(state, locale, theme);
 
     frame.render_widget(Paragraph::new(left_lines), columns[0]);
     frame.render_widget(Paragraph::new(right_lines), columns[1]);
 }
 
-fn render_footer(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+fn render_footer(frame: &mut Frame<'_>, area: Rect, locale: Locale, theme: &Theme) {
     let block = Block::default()
         .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
         .border_type(BorderType::Rounded)
@@ -103,7 +141,10 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
 
     let line = Line::from(vec![
         Span::styled("[Esc]", Style::default().fg(theme.accent)),
-        Span::styled(" close help", Style::default().fg(theme.text_muted)),
+        Span::styled(
+            format!(" {}", t(locale, TextKey::HelpCloseHelp)),
+            Style::default().fg(theme.text_muted),
+        ),
     ]);
 
     frame.render_widget(
@@ -114,113 +155,145 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     );
 }
 
-fn global_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
+fn global_shortcuts(locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     vec![
-        section_header("Global", theme),
+        section_header(t(locale, TextKey::HelpGlobal), theme),
         Line::from(""),
-        shortcut_line("n", "Quick add transaction", theme),
-        shortcut_line("N", "New transaction (modal)", theme),
-        shortcut_line("Ctrl+P", "Command palette", theme),
-        shortcut_line("Ctrl+F", "Search", theme),
-        shortcut_line("?", "Show/hide help", theme),
+        shortcut_line("n", t(locale, TextKey::HelpQuickAddTxn), theme),
+        shortcut_line("N", t(locale, TextKey::HelpNewTxnModal), theme),
+        shortcut_line("Ctrl+P", t(locale, TextKey::HelpCommandPalette), theme),
+        shortcut_line("Ctrl+F", t(locale, TextKey::HelpSearch), theme),
+        shortcut_line("?", t(locale, TextKey::HelpShowHelp), theme),
         Line::from(""),
-        section_header("Navigation", theme),
+        section_header(t(locale, TextKey::HelpNavigation), theme),
         Line::from(""),
-        shortcut_line("h", "Home", theme),
-        shortcut_line("t", "Transactions", theme),
-        shortcut_line("a", "Accounts", theme),
-        shortcut_line("y", "Analytics", theme),
-        shortcut_line("s", "Settings", theme),
-        shortcut_line("Tab", "Next sub-tab", theme),
-        shortcut_line("Shift+Tab", "Prev sub-tab", theme),
-        shortcut_line("↑/↓ j/k", "Navigate list", theme),
-        shortcut_line("Enter", "Open details", theme),
-        shortcut_line("Esc", "Back / Close", theme),
+        shortcut_line("h", t(locale, TextKey::SectionHome), theme),
+        shortcut_line("t", t(locale, TextKey::SectionTransactions), theme),
+        shortcut_line("a", t(locale, TextKey::HintAccounts), theme),
+        shortcut_line("y", t(locale, TextKey::HintAnalytics), theme),
+        shortcut_line("s", t(locale, TextKey::HintSettings), theme),
+        shortcut_line("Tab", t(locale, TextKey::HelpNextSubTab), theme),
+        shortcut_line("Shift+Tab", t(locale, TextKey::HelpPrevSubTab), theme),
+        shortcut_line("↑/↓ j/k", t(locale, TextKey::HelpNavigateList), theme),
+        shortcut_line("Enter", t(locale, TextKey::HelpOpenDetails), theme),
+        shortcut_line("Esc", t(locale, TextKey::HelpBackClose), theme),
         Line::from(""),
-        section_header("Common Actions", theme),
+        section_header(t(locale, TextKey::HelpCommonActions), theme),
         Line::from(""),
-        shortcut_line("e", "Edit selected", theme),
-        shortcut_line("d", "Delete selected", theme),
+        shortcut_line("e", t(locale, TextKey::HelpEditSelected), theme),
+        shortcut_line("d", t(locale, TextKey::HelpDeleteSelected), theme),
     ]
 }
 
-fn context_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
+fn context_shortcuts(state: &AppState, locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     match state.section {
-        Section::Home => home_shortcuts(theme),
-        Section::Transactions => transactions_shortcuts(state, theme),
-        Section::Accounts => accounts_shortcuts(state, theme),
-        Section::Analytics => analytics_shortcuts(theme),
-        Section::Settings => settings_shortcuts(state, theme),
+        Section::Home => home_shortcuts(locale, theme),
+        Section::Transactions => transactions_shortcuts(state, locale, theme),
+        Section::Accounts => accounts_shortcuts(state, locale, theme),
+        Section::Analytics => analytics_shortcuts(locale, theme),
+        Section::Settings => settings_shortcuts(state, locale, theme),
     }
 }
 
-fn home_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
+fn home_shortcuts(locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     vec![
-        section_header("Home", theme),
+        section_header(t(locale, TextKey::SectionHome), theme),
         Line::from(""),
-        shortcut_line("j/k", "Navigate feed", theme),
-        shortcut_line("Enter", "Open details", theme),
-        shortcut_line("n", "Quick add transaction", theme),
-        shortcut_line("N", "New transaction (modal)", theme),
-        shortcut_line("t", "Go to Transactions", theme),
-        shortcut_line("a", "Go to Accounts", theme),
-        shortcut_line("y", "Go to Analytics", theme),
-        shortcut_line("s", "Go to Settings", theme),
+        shortcut_line("j/k", t(locale, TextKey::HelpNavigateFeed), theme),
+        shortcut_line("Enter", t(locale, TextKey::HelpOpenDetails), theme),
+        shortcut_line("n", t(locale, TextKey::HelpQuickAddTxn), theme),
+        shortcut_line("N", t(locale, TextKey::HelpNewTxnModal), theme),
+        shortcut_line("t", t(locale, TextKey::HelpGoToTransactions), theme),
+        shortcut_line("a", t(locale, TextKey::HelpGoToAccounts), theme),
+        shortcut_line("y", t(locale, TextKey::HelpGoToAnalytics), theme),
+        shortcut_line("s", t(locale, TextKey::HelpGoToSettings), theme),
     ]
 }
 
-fn transactions_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
+fn transactions_shortcuts(state: &AppState, locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     let mut lines = vec![
-        section_header("Transactions", theme),
+        section_header(t(locale, TextKey::SectionTransactions), theme),
         Line::from(""),
-        shortcut_line("n", "Quick add", theme),
-        shortcut_line("N", "New transaction (modal)", theme),
-        shortcut_line("i", "New income", theme),
-        shortcut_line("R", "New refund", theme),
-        shortcut_line("/", "Toggle filters", theme),
-        shortcut_line("g", "Group transactions", theme),
+        shortcut_line("n", t(locale, TextKey::HintQuickAdd), theme),
+        shortcut_line("N", t(locale, TextKey::HelpNewTxnModal), theme),
+        shortcut_line("i", t(locale, TextKey::HelpNewIncome), theme),
+        shortcut_line("R", t(locale, TextKey::HelpNewRefund), theme),
+        shortcut_line("/", t(locale, TextKey::HelpToggleFilters), theme),
+        shortcut_line("g", t(locale, TextKey::HelpGroupTxns), theme),
         Line::from(""),
-        shortcut_line("1", "Scope to wallet", theme),
-        shortcut_line("2", "Scope to flow", theme),
-        shortcut_line("c", "Clear filters", theme),
-        shortcut_line("d", "Delete transaction", theme),
-        shortcut_line("u", "Undo delete (when shown)", theme),
-        shortcut_line("z", "Toggle voided", theme),
-        shortcut_line("]/[", "Next/prev page", theme),
+        shortcut_line("1", t(locale, TextKey::HelpScopeWallet), theme),
+        shortcut_line("2", t(locale, TextKey::HelpScopeFlow), theme),
+        shortcut_line("c", t(locale, TextKey::HelpClearFilters), theme),
+        shortcut_line("d", t(locale, TextKey::HelpDeleteTxn), theme),
+        shortcut_line("u", t(locale, TextKey::HelpUndoDelete), theme),
+        shortcut_line("z", t(locale, TextKey::HelpToggleVoided), theme),
+        shortcut_line("]/[", t(locale, TextKey::HelpNextPrevPage), theme),
     ];
 
     lines.push(Line::from(""));
-    lines.push(section_header("Visual Mode", theme));
+    lines.push(section_header(t(locale, TextKey::HelpVisualMode), theme));
     lines.push(Line::from(""));
-    lines.push(shortcut_line("v", "Toggle visual mode", theme));
-    lines.push(shortcut_line("Space", "Select transaction", theme));
-    lines.push(shortcut_line("Esc", "Exit visual mode", theme));
+    lines.push(shortcut_line(
+        "v",
+        t(locale, TextKey::HelpToggleVisual),
+        theme,
+    ));
+    lines.push(shortcut_line(
+        "Space",
+        t(locale, TextKey::HelpSelectTxn),
+        theme,
+    ));
+    lines.push(shortcut_line(
+        "Esc",
+        t(locale, TextKey::HelpExitVisual),
+        theme,
+    ));
 
     match state.transactions.mode {
         TransactionsMode::Detail => {
             lines.push(Line::from(""));
-            lines.push(section_header("Detail View", theme));
+            lines.push(section_header(t(locale, TextKey::HelpDetailView), theme));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("e", "Edit transaction", theme));
-            lines.push(shortcut_line("d", "Delete transaction", theme));
-            lines.push(shortcut_line("r", "Repeat transaction", theme));
-            lines.push(shortcut_line("v", "Void transaction", theme));
+            lines.push(shortcut_line("e", t(locale, TextKey::HelpEditTxn), theme));
+            lines.push(shortcut_line("d", t(locale, TextKey::HelpDeleteTxn), theme));
+            lines.push(shortcut_line("r", t(locale, TextKey::HelpRepeatTxn), theme));
+            lines.push(shortcut_line("v", t(locale, TextKey::HelpVoidTxn), theme));
         }
         TransactionsMode::Form | TransactionsMode::Edit => {
             lines.push(Line::from(""));
-            lines.push(section_header("Form", theme));
+            lines.push(section_header(t(locale, TextKey::HelpForm), theme));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("Tab", "Next field", theme));
-            lines.push(shortcut_line("↑/↓", "Change value", theme));
-            lines.push(shortcut_line("Enter", "Save", theme));
+            lines.push(shortcut_line(
+                "Tab",
+                t(locale, TextKey::HelpNextField),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "↑/↓",
+                t(locale, TextKey::HelpChangeValue),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "Enter",
+                t(locale, TextKey::ActionSave),
+                theme,
+            ));
         }
         TransactionsMode::Filter => {
             lines.push(Line::from(""));
-            lines.push(section_header("Filters", theme));
+            lines.push(section_header(t(locale, TextKey::HelpFilters), theme));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("i/e/r", "Toggle type", theme));
-            lines.push(shortcut_line("w/f", "Toggle scope", theme));
-            lines.push(shortcut_line("Enter", "Apply", theme));
+            lines.push(shortcut_line(
+                "i/e/r",
+                t(locale, TextKey::HelpToggleType),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "w/f",
+                t(locale, TextKey::HelpToggleScope),
+                theme,
+            ));
+            lines.push(shortcut_line("Enter", t(locale, TextKey::HelpApply), theme));
         }
         _ => {}
     }
@@ -228,98 +301,204 @@ fn transactions_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>>
     lines
 }
 
-fn accounts_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
+fn accounts_shortcuts(state: &AppState, locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     let mut lines = vec![
-        section_header("Accounts", theme),
+        section_header(t(locale, TextKey::HintAccounts), theme),
         Line::from(""),
-        shortcut_line("Tab", "Next sub-tab", theme),
-        shortcut_line("Shift+Tab", "Prev sub-tab", theme),
-        shortcut_line("1/2/3", "Jump to sub-tab", theme),
+        shortcut_line("Tab", t(locale, TextKey::HelpNextSubTab), theme),
+        shortcut_line("Shift+Tab", t(locale, TextKey::HelpPrevSubTab), theme),
+        shortcut_line("1/2/3", t(locale, TextKey::HelpJumpSubTab), theme),
         Line::from(""),
     ];
 
     match state.accounts_tab {
         AccountsTab::Sources => {
-            lines.push(section_header("Sources (Wallets)", theme));
+            lines.push(section_header(
+                t(locale, TextKey::HelpSourcesWallets),
+                theme,
+            ));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("c", "Create wallet", theme));
-            lines.push(shortcut_line("e", "Rename wallet", theme));
-            lines.push(shortcut_line("d", "Delete (archive)", theme));
-            lines.push(shortcut_line("Enter", "View details", theme));
+            lines.push(shortcut_line(
+                "c",
+                t(locale, TextKey::HelpCreateWallet),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "e",
+                t(locale, TextKey::HelpRenameWallet),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "d",
+                t(locale, TextKey::HelpDeleteArchive),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "Enter",
+                t(locale, TextKey::HelpViewDetails),
+                theme,
+            ));
         }
         AccountsTab::Envelopes => {
-            lines.push(section_header("Envelopes (Flows)", theme));
+            lines.push(section_header(
+                t(locale, TextKey::HelpEnvelopesFlows),
+                theme,
+            ));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("c", "Create envelope", theme));
-            lines.push(shortcut_line("e", "Rename envelope", theme));
-            lines.push(shortcut_line("d", "Delete (archive)", theme));
-            lines.push(shortcut_line("m", "Change mode", theme));
-            lines.push(shortcut_line("Enter", "View details", theme));
+            lines.push(shortcut_line(
+                "c",
+                t(locale, TextKey::HelpCreateEnvelope),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "e",
+                t(locale, TextKey::HelpRenameEnvelope),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "d",
+                t(locale, TextKey::HelpDeleteArchive),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "m",
+                t(locale, TextKey::HelpChangeMode),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "Enter",
+                t(locale, TextKey::HelpViewDetails),
+                theme,
+            ));
         }
         AccountsTab::Goals => {
-            lines.push(section_header("Goals", theme));
+            lines.push(section_header(t(locale, TextKey::HelpGoals), theme));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("(coming soon)", "", theme));
+            lines.push(shortcut_line(t(locale, TextKey::HelpComingSoon), "", theme));
         }
     }
 
     lines
 }
 
-fn analytics_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
+fn analytics_shortcuts(locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     vec![
-        section_header("Analytics", theme),
+        section_header(t(locale, TextKey::HintAnalytics), theme),
         Line::from(""),
-        shortcut_line("r", "Refresh data", theme),
-        shortcut_line("←/→", "Switch view", theme),
-        shortcut_line("1/2/3", "Cash/Spend/Worth", theme),
-        shortcut_line("[/]", "Change period", theme),
+        shortcut_line("r", t(locale, TextKey::HelpRefreshData), theme),
+        shortcut_line("←/→", t(locale, TextKey::HelpSwitchView), theme),
+        shortcut_line("1/2/3", t(locale, TextKey::HelpCashSpendWorth), theme),
+        shortcut_line("[/]", t(locale, TextKey::HelpChangePeriod), theme),
     ]
 }
 
-fn settings_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
+fn settings_shortcuts(state: &AppState, locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     let mut lines = vec![
-        section_header("Settings", theme),
+        section_header(t(locale, TextKey::HintSettings), theme),
         Line::from(""),
-        shortcut_line("Tab", "Next sub-tab", theme),
-        shortcut_line("Shift+Tab", "Prev sub-tab", theme),
-        shortcut_line("1/2/3", "Jump to sub-tab", theme),
+        shortcut_line("Tab", t(locale, TextKey::HelpNextSubTab), theme),
+        shortcut_line("Shift+Tab", t(locale, TextKey::HelpPrevSubTab), theme),
+        shortcut_line("1/2/3", t(locale, TextKey::HelpJumpSubTab), theme),
         Line::from(""),
     ];
 
     match state.settings_tab {
         SettingsTab::Categories => {
-            lines.push(section_header("Categories", theme));
+            lines.push(section_header(t(locale, TextKey::SectionCategories), theme));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("c", "Create category", theme));
-            lines.push(shortcut_line("e", "Rename category", theme));
-            lines.push(shortcut_line("d", "Delete (archive)", theme));
-            lines.push(shortcut_line("l", "Manage aliases", theme));
-            lines.push(shortcut_line("m", "Merge categories", theme));
+            lines.push(shortcut_line(
+                "c",
+                t(locale, TextKey::HelpCreateCategory),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "e",
+                t(locale, TextKey::HelpRenameCategory),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "d",
+                t(locale, TextKey::HelpDeleteArchive),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "l",
+                t(locale, TextKey::HelpManageAliases),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "m",
+                t(locale, TextKey::HelpMergeCategories),
+                theme,
+            ));
             lines.push(Line::from(""));
-            lines.push(section_header("Aliases", theme));
+            lines.push(section_header(t(locale, TextKey::HelpAliases), theme));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("Tab", "Switch focus", theme));
-            lines.push(shortcut_line("x", "Delete alias", theme));
-            lines.push(shortcut_line("Enter", "Add/Save", theme));
+            lines.push(shortcut_line(
+                "Tab",
+                t(locale, TextKey::HelpSwitchFocus),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "x",
+                t(locale, TextKey::HelpDeleteAlias),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "Enter",
+                t(locale, TextKey::HelpAddSave),
+                theme,
+            ));
         }
         SettingsTab::Vault => {
-            lines.push(section_header("Vault", theme));
+            lines.push(section_header(t(locale, TextKey::HelpVault), theme));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("c", "Create vault", theme));
-            lines.push(shortcut_line("Enter", "Select vault", theme));
+            lines.push(shortcut_line(
+                "c",
+                t(locale, TextKey::HelpCreateVault),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "Enter",
+                t(locale, TextKey::HelpSelectVault),
+                theme,
+            ));
         }
         SettingsTab::Members => {
-            lines.push(section_header("Members", theme));
+            lines.push(section_header(t(locale, TextKey::HelpMembers), theme));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("a", "Add member", theme));
-            lines.push(shortcut_line("e", "Edit member", theme));
-            lines.push(shortcut_line("x", "Remove member", theme));
-            lines.push(shortcut_line("v", "Vault members", theme));
-            lines.push(shortcut_line("f", "Flow sharing", theme));
+            lines.push(shortcut_line("a", t(locale, TextKey::HelpAddMember), theme));
+            lines.push(shortcut_line(
+                "e",
+                t(locale, TextKey::HelpEditMember),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "x",
+                t(locale, TextKey::HelpRemoveMember),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "v",
+                t(locale, TextKey::HelpVaultMembers),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "f",
+                t(locale, TextKey::HelpFlowSharing),
+                theme,
+            ));
             lines.push(Line::from(""));
-            lines.push(shortcut_line("[/]", "Change flow", theme));
-            lines.push(shortcut_line("↑/↓", "Change role", theme));
+            lines.push(shortcut_line(
+                "[/]",
+                t(locale, TextKey::HelpChangeFlow),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "↑/↓",
+                t(locale, TextKey::HelpChangeRole),
+                theme,
+            ));
         }
     }
 

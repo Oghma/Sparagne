@@ -569,14 +569,14 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     }
 
     // Add list error if present
-    if state.vault_ui.mode == VaultMode::Select {
-        if let Some(err) = state.vault_ui.list.error.as_ref() {
-            spans.push(Span::raw("  "));
-            spans.push(Span::styled(
-                err.clone(),
-                Style::default().fg(theme.negative),
-            ));
-        }
+    if state.vault_ui.mode == VaultMode::Select
+        && let Some(err) = state.vault_ui.list.error.as_ref()
+    {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            err.clone(),
+            Style::default().fg(theme.negative),
+        ));
     }
 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);

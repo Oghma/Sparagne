@@ -22,6 +22,8 @@ pub struct AppConfig {
     pub emoji_mode: bool,
     /// UI density: "compact", "normal", or "comfortable".
     pub density: Density,
+    /// UI locale: "it" or "en".
+    pub locale: String,
 }
 
 /// UI density setting controlling spacing and padding.
@@ -34,15 +36,20 @@ pub enum Density {
     Comfortable,
 }
 
-impl Density {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl std::str::FromStr for Density {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "compact" => Self::Compact,
             "comfortable" => Self::Comfortable,
             _ => Self::Normal,
-        }
+        })
     }
+}
 
+impl Density {
+    #[allow(dead_code)]
     pub fn list_item_height(self) -> u16 {
         match self {
             Self::Compact => 1,
@@ -51,6 +58,7 @@ impl Density {
         }
     }
 
+    #[allow(dead_code)]
     pub fn vertical_padding(self) -> u16 {
         match self {
             Self::Compact => 0,
@@ -71,6 +79,7 @@ impl Default for AppConfig {
             undo_toast_secs: 5,
             emoji_mode: true,
             density: Density::default(),
+            locale: "it".to_string(),
         }
     }
 }
@@ -105,6 +114,9 @@ struct Args {
     /// UI density: compact, normal, or comfortable.
     #[arg(long)]
     density: Option<String>,
+    /// UI locale: it or en.
+    #[arg(long)]
+    locale: Option<String>,
 }
 
 pub fn load() -> Result<AppConfig> {
@@ -154,7 +166,10 @@ pub fn load() -> Result<AppConfig> {
         settings.emoji_mode = emoji_mode.to_lowercase() == "true" || emoji_mode == "1";
     }
     if let Ok(density) = env::var("SPARAGNE_DENSITY") {
-        settings.density = Density::from_str(&density);
+        settings.density = density.parse().unwrap_or_default();
+    }
+    if let Ok(locale) = env::var("SPARAGNE_LOCALE") {
+        settings.locale = locale;
     }
 
     if let Some(base_url) = args.base_url {
@@ -179,7 +194,10 @@ pub fn load() -> Result<AppConfig> {
         settings.emoji_mode = emoji_mode;
     }
     if let Some(density) = args.density {
-        settings.density = Density::from_str(&density);
+        settings.density = density.parse().unwrap_or_default();
+    }
+    if let Some(locale) = args.locale {
+        settings.locale = locale;
     }
 
     Ok(settings)

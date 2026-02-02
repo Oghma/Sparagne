@@ -463,9 +463,7 @@ impl App {
                         }
                         AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
                     }
-                } else if self.is_settings_vault()
-                    && self.state.vault_ui.mode != VaultMode::View
-                {
+                } else if self.is_settings_vault() && self.state.vault_ui.mode != VaultMode::View {
                     self.reset_vault_form();
                     self.state.vault_ui.defaults = DefaultsFormState::default();
                     self.state.vault_ui.mode = VaultMode::View;

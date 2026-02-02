@@ -471,14 +471,12 @@ fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                             .add_modifier(Modifier::BOLD),
                     ))));
                     last_date = Some(tx_date);
-                    if !insight_inserted {
-                        if let Some(insight_text) = insight.as_ref() {
-                            items.push(ListItem::new(Line::from(Span::styled(
-                                insight_text.clone(),
-                                Style::default().fg(theme.info),
-                            ))));
-                            insight_inserted = true;
-                        }
+                    if !insight_inserted && let Some(insight_text) = insight.as_ref() {
+                        items.push(ListItem::new(Line::from(Span::styled(
+                            insight_text.clone(),
+                            Style::default().fg(theme.info),
+                        ))));
+                        insight_inserted = true;
                     }
                 }
 

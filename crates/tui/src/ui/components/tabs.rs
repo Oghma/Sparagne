@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{AccountsTab, Section, SettingsTab},
+    text::{Locale, TextKey, t},
     ui::theme::Theme,
 };
 
@@ -18,6 +19,7 @@ pub fn render_tabs(
     active: Section,
     accounts_tab: Option<AccountsTab>,
     settings_tab: Option<SettingsTab>,
+    locale: Locale,
     theme: &Theme,
 ) {
     let sections = [
@@ -37,7 +39,7 @@ pub fn render_tabs(
             spans.push(Span::raw("  ")); // Gap between tabs
         }
 
-        let label = section.label();
+        let label = section_label(*section, locale);
         if *section == active {
             spans.push(Span::styled("[", Style::default().fg(theme.accent)));
             spans.push(Span::styled(
@@ -49,8 +51,8 @@ pub fn render_tabs(
 
             // Add breadcrumb for sub-tab
             let sub_label = match *section {
-                Section::Accounts => accounts_tab.map(|t| t.label()),
-                Section::Settings => settings_tab.map(|t| t.label()),
+                Section::Accounts => accounts_tab.map(|tab| accounts_tab_label(tab, locale)),
+                Section::Settings => settings_tab.map(|tab| settings_tab_label(tab, locale)),
                 _ => None,
             };
             if let Some(sub) = sub_label {
@@ -72,18 +74,28 @@ pub fn render_tabs(
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-/// Returns the shortcut hint for tab navigation.
-pub fn tab_shortcuts(theme: &Theme) -> Vec<Span<'static>> {
-    vec![
-        Span::styled("h", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("t", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("a", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("y", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("s", Style::default().fg(theme.accent)),
-        Span::raw(" nav"),
-    ]
+fn section_label(section: Section, locale: Locale) -> &'static str {
+    match section {
+        Section::Home => t(locale, TextKey::SectionHome),
+        Section::Transactions => t(locale, TextKey::SectionTransactions),
+        Section::Accounts => t(locale, TextKey::HintAccounts),
+        Section::Analytics => t(locale, TextKey::HintAnalytics),
+        Section::Settings => t(locale, TextKey::HintSettings),
+    }
+}
+
+fn accounts_tab_label(tab: AccountsTab, locale: Locale) -> &'static str {
+    match tab {
+        AccountsTab::Sources => t(locale, TextKey::SectionWallets),
+        AccountsTab::Envelopes => t(locale, TextKey::SectionFlows),
+        AccountsTab::Goals => t(locale, TextKey::HelpGoals),
+    }
+}
+
+fn settings_tab_label(tab: SettingsTab, locale: Locale) -> &'static str {
+    match tab {
+        SettingsTab::Categories => t(locale, TextKey::SectionCategories),
+        SettingsTab::Vault => t(locale, TextKey::SectionVault),
+        SettingsTab::Members => t(locale, TextKey::SectionMembers),
+    }
 }

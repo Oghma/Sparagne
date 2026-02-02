@@ -1,6 +1,9 @@
 use ratatui::{style::Style, text::Span};
 
-use crate::ui::theme::Theme;
+use crate::{
+    text::{Locale, TextKey, t},
+    ui::theme::Theme,
+};
 
 /// A keyboard hint consisting of a key and its action.
 #[derive(Debug, Clone)]
@@ -45,40 +48,41 @@ pub fn hint_separator(theme: &Theme) -> Span<'static> {
 }
 
 /// Help hint to remind users about the help overlay.
-pub fn help_hint() -> KeyHint {
-    KeyHint::new("?", "help")
+pub fn help_hint(locale: Locale) -> KeyHint {
+    KeyHint::new("?", t(locale, TextKey::HintHelp))
 }
 
 /// Common hint groups for reuse across screens.
 pub mod common {
     use super::KeyHint;
+    use crate::text::{Locale, TextKey, t};
 
     /// Hints for form editing.
-    pub fn form_editing() -> Vec<KeyHint> {
+    pub fn form_editing(locale: Locale) -> Vec<KeyHint> {
         vec![
-            KeyHint::new("Enter", "save"),
-            KeyHint::new("Esc", "cancel"),
+            KeyHint::new("Enter", t(locale, TextKey::HintSave)),
+            KeyHint::new("Esc", t(locale, TextKey::HintCancel)),
         ]
     }
 
     /// Hints for detail views.
-    pub fn detail_view() -> Vec<KeyHint> {
-        vec![KeyHint::new("Esc", "back")]
+    pub fn detail_view(locale: Locale) -> Vec<KeyHint> {
+        vec![KeyHint::new("Esc", t(locale, TextKey::HintBack))]
     }
 
     /// Section navigation shortcuts.
-    pub fn section_shortcuts() -> Vec<KeyHint> {
+    pub fn section_shortcuts(locale: Locale) -> Vec<KeyHint> {
         vec![
-            KeyHint::new("h", "home"),
-            KeyHint::new("t", "txn"),
-            KeyHint::new("a", "accounts"),
-            KeyHint::new("y", "analytics"),
-            KeyHint::new("s", "settings"),
+            KeyHint::new("h", t(locale, TextKey::HintHome)),
+            KeyHint::new("t", t(locale, TextKey::HintTransactions)),
+            KeyHint::new("a", t(locale, TextKey::HintAccounts)),
+            KeyHint::new("y", t(locale, TextKey::HintAnalytics)),
+            KeyHint::new("s", t(locale, TextKey::HintSettings)),
         ]
     }
 
     /// Quick add shortcut.
-    pub fn quick_add() -> KeyHint {
-        KeyHint::new("n", "quick add")
+    pub fn quick_add(locale: Locale) -> KeyHint {
+        KeyHint::new("n", t(locale, TextKey::HintQuickAdd))
     }
 }

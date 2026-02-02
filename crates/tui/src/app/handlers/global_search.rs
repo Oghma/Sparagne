@@ -28,7 +28,6 @@ impl App {
         Ok(())
     }
 
-
     pub(crate) fn open_global_search(&mut self) {
         self.state.global_search.active = true;
         self.state.global_search.query.clear();
@@ -58,7 +57,8 @@ impl App {
     pub(crate) fn global_search_select_next(&mut self) {
         let len = self.state.global_search.results.len();
         if len > 0 {
-            self.state.global_search.selected = (self.state.global_search.selected + 1).min(len - 1);
+            self.state.global_search.selected =
+                (self.state.global_search.selected + 1).min(len - 1);
         }
     }
 
@@ -113,11 +113,11 @@ impl App {
                 self.state.accounts_tab = AccountsTab::Sources;
                 self.state.wallets.mode = WalletsMode::List;
 
-                if let Some(snapshot) = &self.state.snapshot {
-                    if let Some(idx) = snapshot.wallets.iter().position(|w| w.id == result.id) {
-                        self.state.wallets.selected = idx;
-                        self.open_wallet_detail().await?;
-                    }
+                if let Some(snapshot) = &self.state.snapshot
+                    && let Some(idx) = snapshot.wallets.iter().position(|w| w.id == result.id)
+                {
+                    self.state.wallets.selected = idx;
+                    self.open_wallet_detail().await?;
                 }
             }
             SearchResultKind::Flow => {
@@ -125,11 +125,11 @@ impl App {
                 self.state.accounts_tab = AccountsTab::Envelopes;
                 self.state.flows.mode = FlowsMode::List;
 
-                if let Some(snapshot) = &self.state.snapshot {
-                    if let Some(idx) = snapshot.flows.iter().position(|f| f.id == result.id) {
-                        self.state.flows.selected = idx;
-                        self.open_flow_detail().await?;
-                    }
+                if let Some(snapshot) = &self.state.snapshot
+                    && let Some(idx) = snapshot.flows.iter().position(|f| f.id == result.id)
+                {
+                    self.state.flows.selected = idx;
+                    self.open_flow_detail().await?;
                 }
             }
             SearchResultKind::Category => {
@@ -175,10 +175,11 @@ impl App {
                 .unwrap_or(false);
 
             if note_match || category_match {
-                let label = tx
-                    .note
-                    .clone()
-                    .unwrap_or_else(|| tx.category.clone().unwrap_or_else(|| "Transaction".to_string()));
+                let label = tx.note.clone().unwrap_or_else(|| {
+                    tx.category
+                        .clone()
+                        .unwrap_or_else(|| "Transaction".to_string())
+                });
                 let detail = tx.occurred_at.format("%Y-%m-%d").to_string();
 
                 results.push(SearchResult {

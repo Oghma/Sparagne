@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 use crate::app::helpers::{normalize_query, transaction_matches_query};
 
-/// Represents an ambiguous match in quick-add where multiple options are available.
+/// Represents an ambiguous match in quick-add where multiple options are
+/// available.
 #[derive(Debug, Clone)]
 pub struct QuickAddAmbiguous {
     pub kind: QuickAddAmbiguousKind,

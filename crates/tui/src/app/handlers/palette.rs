@@ -18,16 +18,13 @@ impl App {
 
     pub(crate) fn open_palette(&mut self) {
         // Load MRU from local state
-        if let Some(vault) = &self.state.vault {
-            if let Some(vault_id) = &vault.id {
-                let mru_strings = self
-                    .local_state
-                    .mru_commands_for(&self.config.username, vault_id);
-                self.state.palette.mru = mru_strings
-                    .iter()
-                    .filter_map(|s| PaletteCommand::from_str(s))
-                    .collect();
-            }
+        if let Some(vault) = &self.state.vault
+            && let Some(vault_id) = &vault.id
+        {
+            let mru_strings = self
+                .local_state
+                .mru_commands_for(&self.config.username, vault_id);
+            self.state.palette.mru = mru_strings.iter().filter_map(|s| s.parse().ok()).collect();
         }
 
         self.state.palette.active = true;
@@ -166,17 +163,17 @@ impl App {
         self.state.palette.mru.truncate(MRU_LIMIT);
 
         // Persist to local state
-        if let Some(vault) = &self.state.vault {
-            if let Some(vault_id) = &vault.id {
-                self.local_state.push_mru_command(
-                    &self.config.username,
-                    vault_id,
-                    command.as_str(),
-                    MRU_LIMIT,
-                );
-                // Best-effort save, ignore errors
-                let _ = self.local_state.save(&self.local_state_path);
-            }
+        if let Some(vault) = &self.state.vault
+            && let Some(vault_id) = &vault.id
+        {
+            self.local_state.push_mru_command(
+                &self.config.username,
+                vault_id,
+                command.as_str(),
+                MRU_LIMIT,
+            );
+            // Best-effort save, ignore errors
+            let _ = self.local_state.save(&self.local_state_path);
         }
     }
 }

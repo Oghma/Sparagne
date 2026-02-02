@@ -110,22 +110,31 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
                 SearchResultKind::Category => "CAT",
             };
 
-            let is_selected = idx == state.global_search.selected.min(results.len().saturating_sub(1));
+            let is_selected = idx
+                == state
+                    .global_search
+                    .selected
+                    .min(results.len().saturating_sub(1));
 
             let mut spans = vec![
                 Span::raw("  "),
                 Span::styled(
                     format!("{icon} "),
-                    Style::default().fg(if is_selected { theme.accent } else { theme.text_muted }),
+                    Style::default().fg(if is_selected {
+                        theme.accent
+                    } else {
+                        theme.text_muted
+                    }),
                 ),
-                Span::styled(
-                    format!("[{kind_label}] "),
-                    Style::default().fg(theme.dim),
-                ),
+                Span::styled(format!("[{kind_label}] "), Style::default().fg(theme.dim)),
             ];
 
             if is_selected {
-                spans.extend(highlight_matches(&result.label, &state.global_search.query, theme));
+                spans.extend(highlight_matches(
+                    &result.label,
+                    &state.global_search.query,
+                    theme,
+                ));
             } else {
                 spans.push(Span::styled(
                     result.label.clone(),

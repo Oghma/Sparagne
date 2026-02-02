@@ -315,6 +315,29 @@ pub enum PaletteCommand {
     ToggleVoided,
 }
 
+impl std::str::FromStr for PaletteCommand {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "new_expense" => Ok(Self::NewExpense),
+            "new_income" => Ok(Self::NewIncome),
+            "new_refund" => Ok(Self::NewRefund),
+            "new_transfer_wallet" => Ok(Self::NewTransferWallet),
+            "new_transfer_flow" => Ok(Self::NewTransferFlow),
+            "categories" => Ok(Self::Categories),
+            "category_aliases" => Ok(Self::CategoryAliases),
+            "members" => Ok(Self::Members),
+            "wallet_new" => Ok(Self::WalletNew),
+            "flow_new" => Ok(Self::FlowNew),
+            "vault_create" => Ok(Self::VaultCreate),
+            "refresh" => Ok(Self::Refresh),
+            "toggle_voided" => Ok(Self::ToggleVoided),
+            _ => Err(()),
+        }
+    }
+}
+
 impl PaletteCommand {
     pub fn all() -> Vec<Self> {
         vec![
@@ -368,26 +391,6 @@ impl PaletteCommand {
             Self::VaultCreate => "vault_create",
             Self::Refresh => "refresh",
             Self::ToggleVoided => "toggle_voided",
-        }
-    }
-
-    /// Parses a command from its string identifier.
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "new_expense" => Some(Self::NewExpense),
-            "new_income" => Some(Self::NewIncome),
-            "new_refund" => Some(Self::NewRefund),
-            "new_transfer_wallet" => Some(Self::NewTransferWallet),
-            "new_transfer_flow" => Some(Self::NewTransferFlow),
-            "categories" => Some(Self::Categories),
-            "category_aliases" => Some(Self::CategoryAliases),
-            "members" => Some(Self::Members),
-            "wallet_new" => Some(Self::WalletNew),
-            "flow_new" => Some(Self::FlowNew),
-            "vault_create" => Some(Self::VaultCreate),
-            "refresh" => Some(Self::Refresh),
-            "toggle_voided" => Some(Self::ToggleVoided),
-            _ => None,
         }
     }
 }

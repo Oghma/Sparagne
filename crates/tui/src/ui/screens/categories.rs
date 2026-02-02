@@ -142,16 +142,16 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
                 ));
                 spans.push(Span::raw(" "));
             }
-            if let Some(from_idx) = from_index {
-                if idx == from_idx {
-                    spans.push(Span::styled("[FROM]", Style::default().fg(theme.negative)));
-                    spans.push(Span::raw(" "));
-                }
+            if let Some(from_idx) = from_index
+                && idx == from_idx
+            {
+                spans.push(Span::styled("[FROM]", Style::default().fg(theme.negative)));
+                spans.push(Span::raw(" "));
             }
-            if let Some(target_idx) = target_index {
-                if idx == target_idx {
-                    spans.push(Span::styled("[TO]", Style::default().fg(theme.positive)));
-                }
+            if let Some(target_idx) = target_index
+                && idx == target_idx
+            {
+                spans.push(Span::styled("[TO]", Style::default().fg(theme.positive)));
             }
 
             ListItem::new(Line::from(spans))

@@ -1,3 +1,4 @@
+mod en;
 mod it;
 
 /// Supported locales for the TUI.
@@ -5,6 +6,21 @@ mod it;
 pub enum Locale {
     #[default]
     It,
+    En,
+}
+
+impl Locale {
+    /// Parses a locale string into a `Locale` variant.
+    ///
+    /// Supports common locale identifiers like "en", "en_US", "en_GB", "it",
+    /// "it_IT". Defaults to `Locale::It` for unrecognized values.
+    #[must_use]
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "en" | "en_us" | "en_gb" | "english" => Self::En,
+            _ => Self::It,
+        }
+    }
 }
 
 /// Text keys for all user-facing strings in the TUI.
@@ -108,7 +124,7 @@ pub enum TextKey {
     ActionBack,
     ActionRefresh,
 
-    // Hints (8)
+    // Hints - General (8)
     HintPressEnter,
     HintPressEsc,
     HintPressTab,
@@ -117,6 +133,117 @@ pub enum TextKey {
     HintLoadingData,
     HintNoSelection,
     HintConfirmDelete,
+
+    // Hints - Footer Navigation
+    HintHome,
+    HintTransactions,
+    HintAccounts,
+    HintAnalytics,
+    HintSettings,
+
+    // Hints - Footer Actions
+    HintQuickAdd,
+    HintHelp,
+    HintCreate,
+    HintEdit,
+    HintDelete,
+    HintSave,
+    HintCancel,
+    HintBack,
+    HintRefresh,
+    HintAdd,
+    HintToggle,
+    HintCategorize,
+    HintExit,
+
+    // Help Overlay
+    HelpTitle,
+    HelpCloseHelp,
+    HelpGlobal,
+    HelpNavigation,
+    HelpCommonActions,
+    HelpQuickAddTxn,
+    HelpNewTxnModal,
+    HelpCommandPalette,
+    HelpSearch,
+    HelpShowHelp,
+    HelpNextSubTab,
+    HelpPrevSubTab,
+    HelpNavigateList,
+    HelpOpenDetails,
+    HelpBackClose,
+    HelpEditSelected,
+    HelpDeleteSelected,
+    HelpNavigateFeed,
+    HelpGoToTransactions,
+    HelpGoToAccounts,
+    HelpGoToAnalytics,
+    HelpGoToSettings,
+    HelpNewIncome,
+    HelpNewRefund,
+    HelpToggleFilters,
+    HelpGroupTxns,
+    HelpScopeWallet,
+    HelpScopeFlow,
+    HelpClearFilters,
+    HelpDeleteTxn,
+    HelpUndoDelete,
+    HelpToggleVoided,
+    HelpNextPrevPage,
+    HelpVisualMode,
+    HelpToggleVisual,
+    HelpSelectTxn,
+    HelpExitVisual,
+    HelpDetailView,
+    HelpEditTxn,
+    HelpRepeatTxn,
+    HelpVoidTxn,
+    HelpForm,
+    HelpNextField,
+    HelpChangeValue,
+    HelpFilters,
+    HelpToggleType,
+    HelpToggleScope,
+    HelpApply,
+    HelpJumpSubTab,
+    HelpSourcesWallets,
+    HelpCreateWallet,
+    HelpRenameWallet,
+    HelpDeleteArchive,
+    HelpViewDetails,
+    HelpEnvelopesFlows,
+    HelpCreateEnvelope,
+    HelpRenameEnvelope,
+    HelpChangeMode,
+    HelpGoals,
+    HelpComingSoon,
+    HelpRefreshData,
+    HelpSwitchView,
+    HelpCashSpendWorth,
+    HelpChangePeriod,
+    HelpCreateCategory,
+    HelpRenameCategory,
+    HelpManageAliases,
+    HelpMergeCategories,
+    HelpAliases,
+    HelpSwitchFocus,
+    HelpDeleteAlias,
+    HelpAddSave,
+    HelpVault,
+    HelpCreateVault,
+    HelpSelectVault,
+    HelpMembers,
+    HelpAddMember,
+    HelpEditMember,
+    HelpRemoveMember,
+    HelpVaultMembers,
+    HelpFlowSharing,
+    HelpChangeFlow,
+    HelpChangeRole,
+
+    // Status bar
+    StatusOnline,
+    StatusOffline,
 
     // Success Messages (6)
     SuccessCreated,
@@ -144,6 +271,7 @@ pub enum TextKey {
 pub fn t(locale: Locale, key: TextKey) -> &'static str {
     match locale {
         Locale::It => it::get(key),
+        Locale::En => en::get(key),
     }
 }
 

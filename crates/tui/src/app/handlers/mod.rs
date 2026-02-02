@@ -94,9 +94,7 @@ impl App {
                 {
                     self.exit_visual_mode();
                     return Ok(());
-                } else if self.maybe_open_discard_dialog() {
-                    return Ok(());
-                } else if self.stop_search_if_active().await? {
+                } else if self.maybe_open_discard_dialog() || self.stop_search_if_active().await? {
                     return Ok(());
                 } else if self.state.section == Section::Transactions {
                     match self.state.transactions.mode {
@@ -325,8 +323,7 @@ impl App {
                         AccountsTab::Envelopes => self.backspace_flow_form(),
                         AccountsTab::Goals => {}
                     }
-                } else if self.is_settings_members()
-                    && self.state.members.mode == MembersMode::Form
+                } else if self.is_settings_members() && self.state.members.mode == MembersMode::Form
                 {
                     if self.state.members.form.focus == MemberFormField::Username {
                         self.state.members.form.username.pop();

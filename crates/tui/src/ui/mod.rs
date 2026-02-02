@@ -14,7 +14,10 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::app::{AppState, Section, SettingsTab};
+use crate::{
+    app::{AppState, Section, SettingsTab},
+    text::{TextKey, t},
+};
 
 pub use terminal::{AppTerminal as Terminal, restore_terminal, setup_terminal};
 pub use theme::Theme;
@@ -58,9 +61,7 @@ fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
     match state.section {
         Section::Home => screens::home::render(frame, content_inner, state),
-        Section::Transactions => {
-            screens::transactions::render(frame, content_inner, state)
-        }
+        Section::Transactions => screens::transactions::render(frame, content_inner, state),
         Section::Accounts => screens::accounts::render(frame, content_inner, state),
         Section::Analytics => screens::analytics::render(frame, content_inner, state),
         Section::Settings => screens::settings::render(frame, content_inner, state),
@@ -119,6 +120,7 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         state.section,
         accounts_tab,
         settings_tab,
+        state.locale,
         theme,
     );
     render_status_bar(frame, layout[1], state, theme);
@@ -160,6 +162,7 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .split(area);
 
     // Left: shortcuts + context hints
+    let locale = state.locale;
     if state.section == Section::Transactions
         && state.transactions.mode == crate::app::TransactionsMode::List
         && state.transactions.visual_mode
@@ -176,29 +179,32 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         spans.push(Span::raw("  "));
         spans.push(Span::styled("[Space]", Style::default().fg(theme.accent)));
         spans.push(Span::styled(
-            " toggle",
+            format!(" {}", t(locale, TextKey::HintToggle)),
             Style::default().fg(theme.text_muted),
         ));
         spans.push(Span::raw("  "));
         spans.push(Span::styled("[d]", Style::default().fg(theme.accent)));
         spans.push(Span::styled(
-            " delete",
+            format!(" {}", t(locale, TextKey::HintDelete)),
             Style::default().fg(theme.text_muted),
         ));
         spans.push(Span::raw("  "));
         spans.push(Span::styled("[c]", Style::default().fg(theme.accent)));
         spans.push(Span::styled(
-            " categorize",
+            format!(" {}", t(locale, TextKey::HintCategorize)),
             Style::default().fg(theme.text_muted),
         ));
         spans.push(Span::raw("  "));
         spans.push(Span::styled("[Esc]", Style::default().fg(theme.accent)));
-        spans.push(Span::styled(" exit", Style::default().fg(theme.text_muted)));
+        spans.push(Span::styled(
+            format!(" {}", t(locale, TextKey::HintExit)),
+            Style::default().fg(theme.text_muted),
+        ));
         frame.render_widget(Paragraph::new(Line::from(spans)), layout[0]);
     } else {
         let mut parts = Vec::new();
         parts.extend(components::hints::hints_to_spans(
-            &components::hints::common::section_shortcuts(),
+            &components::hints::common::section_shortcuts(locale),
             theme,
         ));
 
@@ -209,7 +215,7 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         }
         parts.push(components::hints::hint_separator(theme));
         parts.extend(components::hints::hints_to_spans(
-            &[components::hints::help_hint()],
+            &[components::hints::help_hint(locale)],
             theme,
         ));
 
@@ -222,9 +228,9 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .map(|dt| dt.format("%H:%M").to_string())
         .unwrap_or_else(|| "-".to_string());
     let status = if state.connection.ok {
-        "online"
+        t(locale, TextKey::StatusOnline)
     } else {
-        "offline"
+        t(locale, TextKey::StatusOffline)
     };
     let status_style = if state.connection.ok {
         Style::default().fg(theme.positive)
@@ -260,53 +266,63 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 /// Returns context-specific keyboard hints based on current section and mode.
 /// Limited to 1-2 most important hints per context.
 fn get_context_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    let locale = state.locale;
     match state.section {
-        Section::Home => vec![components::hints::common::quick_add()],
+        Section::Home => vec![components::hints::common::quick_add(locale)],
         Section::Transactions => get_transactions_hints(state),
         Section::Accounts => get_accounts_hints(state),
-        Section::Analytics => vec![components::hints::KeyHint::new("r", "refresh")],
+        Section::Analytics => vec![components::hints::KeyHint::new(
+            "r",
+            t(locale, TextKey::HintRefresh),
+        )],
         Section::Settings => get_settings_hints(state),
     }
 }
 
 fn get_transactions_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    let locale = state.locale;
     match state.transactions.mode {
-        crate::app::TransactionsMode::List => vec![components::hints::common::quick_add()],
+        crate::app::TransactionsMode::List => vec![components::hints::common::quick_add(locale)],
         crate::app::TransactionsMode::Detail => vec![
-            components::hints::KeyHint::new("e", "edit"),
-            components::hints::KeyHint::new("d", "delete"),
+            components::hints::KeyHint::new("e", t(locale, TextKey::HintEdit)),
+            components::hints::KeyHint::new("d", t(locale, TextKey::HintDelete)),
         ],
         crate::app::TransactionsMode::PickWallet
         | crate::app::TransactionsMode::PickFlow
         | crate::app::TransactionsMode::TransferWallet
         | crate::app::TransactionsMode::TransferFlow
-        | crate::app::TransactionsMode::Filter => {
-            components::hints::common::form_editing()
-        }
+        | crate::app::TransactionsMode::Filter => components::hints::common::form_editing(locale),
         crate::app::TransactionsMode::Form | crate::app::TransactionsMode::Edit => {
-            components::hints::common::form_editing()
+            components::hints::common::form_editing(locale)
         }
     }
 }
 
 fn get_accounts_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    let locale = state.locale;
     match state.accounts_tab {
         crate::app::AccountsTab::Sources => match state.wallets.mode {
             crate::app::WalletsMode::List => {
-                vec![components::hints::KeyHint::new("c", "create")]
+                vec![components::hints::KeyHint::new(
+                    "c",
+                    t(locale, TextKey::HintCreate),
+                )]
             }
-            crate::app::WalletsMode::Detail => components::hints::common::detail_view(),
+            crate::app::WalletsMode::Detail => components::hints::common::detail_view(locale),
             crate::app::WalletsMode::Create | crate::app::WalletsMode::Rename => {
-                components::hints::common::form_editing()
+                components::hints::common::form_editing(locale)
             }
         },
         crate::app::AccountsTab::Envelopes => match state.flows.mode {
             crate::app::FlowsMode::List => {
-                vec![components::hints::KeyHint::new("c", "create")]
+                vec![components::hints::KeyHint::new(
+                    "c",
+                    t(locale, TextKey::HintCreate),
+                )]
             }
-            crate::app::FlowsMode::Detail => components::hints::common::detail_view(),
+            crate::app::FlowsMode::Detail => components::hints::common::detail_view(locale),
             crate::app::FlowsMode::Create | crate::app::FlowsMode::Rename => {
-                components::hints::common::form_editing()
+                components::hints::common::form_editing(locale)
             }
         },
         crate::app::AccountsTab::Goals => vec![],
@@ -322,33 +338,45 @@ fn get_settings_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
 }
 
 fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    let locale = state.locale;
     match state.categories.mode {
         crate::app::CategoriesMode::List => {
-            vec![components::hints::KeyHint::new("c", "create")]
+            vec![components::hints::KeyHint::new(
+                "c",
+                t(locale, TextKey::HintCreate),
+            )]
         }
         crate::app::CategoriesMode::Merge
         | crate::app::CategoriesMode::Create
         | crate::app::CategoriesMode::Rename
-        | crate::app::CategoriesMode::Aliases => components::hints::common::form_editing(),
+        | crate::app::CategoriesMode::Aliases => components::hints::common::form_editing(locale),
     }
 }
 
 fn get_vault_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    let locale = state.locale;
     match state.vault_ui.mode {
         crate::app::VaultMode::View => {
-            vec![components::hints::KeyHint::new("c", "create")]
+            vec![components::hints::KeyHint::new(
+                "c",
+                t(locale, TextKey::HintCreate),
+            )]
         }
         crate::app::VaultMode::Create
         | crate::app::VaultMode::Defaults
-        | crate::app::VaultMode::Select => components::hints::common::form_editing(),
+        | crate::app::VaultMode::Select => components::hints::common::form_editing(locale),
     }
 }
 
 fn get_members_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    let locale = state.locale;
     match state.members.mode {
         crate::app::MembersMode::List => {
-            vec![components::hints::KeyHint::new("a", "add")]
+            vec![components::hints::KeyHint::new(
+                "a",
+                t(locale, TextKey::HintAdd),
+            )]
         }
-        crate::app::MembersMode::Form => components::hints::common::form_editing(),
+        crate::app::MembersMode::Form => components::hints::common::form_editing(locale),
     }
 }

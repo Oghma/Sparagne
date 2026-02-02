@@ -351,8 +351,8 @@ pub fn braille_sparkline(values: &[u64]) -> String {
     let max = *values.iter().max().unwrap_or(&1);
     if max == 0 {
         // All zeros - return blank braille characters
-        let char_count = (values.len() + 1) / 2;
-        return std::iter::repeat('⠀').take(char_count).collect();
+        let char_count = values.len().div_ceil(2);
+        return "⠀".repeat(char_count);
     }
 
     let mut result = String::new();
@@ -383,8 +383,8 @@ pub fn braille_sparkline_filled(values: &[u64]) -> String {
 
     let max = *values.iter().max().unwrap_or(&1);
     if max == 0 {
-        let char_count = (values.len() + 1) / 2;
-        return std::iter::repeat('⠀').take(char_count).collect();
+        let char_count = values.len().div_ceil(2);
+        return "⠀".repeat(char_count);
     }
 
     let mut result = String::new();

@@ -17,6 +17,14 @@ pub struct QuickAddParsed {
     pub note: Option<String>,
 }
 
+/// Type alias for parsed tags result.
+type ParsedTags = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
 pub fn parse(input: &str, currency: Currency) -> Result<QuickAddParsed, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -62,9 +70,7 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAddParsed, String> 
     })
 }
 
-fn parse_tags(
-    note_raw: &str,
-) -> Result<(Option<String>, Option<String>, Option<String>, Option<String>), String> {
+fn parse_tags(note_raw: &str) -> Result<ParsedTags, String> {
     if note_raw.is_empty() {
         return Ok((None, None, None, None));
     }

@@ -10,8 +10,7 @@ mod vault;
 mod wallets;
 
 pub use categories::*;
-pub use common::*;
-pub use common::MRU_LIMIT;
+pub use common::{MRU_LIMIT, *};
 pub use flows::*;
 pub use members::*;
 pub use stats::*;
@@ -23,7 +22,7 @@ use api_types::vault::{Vault, VaultSnapshot};
 use chrono::{DateTime, FixedOffset};
 use uuid::Uuid;
 
-use crate::config::Density;
+use crate::{config::Density, text::Locale};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
@@ -38,18 +37,6 @@ pub enum Section {
     Accounts,
     Analytics,
     Settings,
-}
-
-impl Section {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Home => "Home",
-            Self::Transactions => "Transactions",
-            Self::Accounts => "Accounts",
-            Self::Analytics => "Analytics",
-            Self::Settings => "Settings",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -87,14 +74,6 @@ impl SettingsTab {
         let len = Self::ALL.len();
         Self::from_index((self.index() + len - 1) % len)
     }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Categories => "Categories",
-            Self::Vault => "Vault",
-            Self::Members => "Members",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,14 +110,6 @@ impl AccountsTab {
         let len = Self::ALL.len();
         Self::from_index((self.index() + len - 1) % len)
     }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Sources => "Sources",
-            Self::Envelopes => "Envelopes",
-            Self::Goals => "Goals",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -171,6 +142,8 @@ pub struct AppState {
     pub emoji_mode: bool,
     /// UI density setting.
     pub density: Density,
+    /// UI locale for translations.
+    pub locale: Locale,
     pub transactions: TransactionsState,
     pub wallets: WalletsState,
     pub flows: FlowsState,

@@ -105,7 +105,13 @@ impl LocalState {
     }
 
     /// Adds a command to the MRU list for a user/vault.
-    pub fn push_mru_command(&mut self, username: &str, vault_id: &str, command: &str, limit: usize) {
+    pub fn push_mru_command(
+        &mut self,
+        username: &str,
+        vault_id: &str,
+        command: &str,
+        limit: usize,
+    ) {
         let entry = self
             .command_history
             .iter_mut()

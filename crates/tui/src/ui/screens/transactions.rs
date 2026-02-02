@@ -13,11 +13,10 @@ use uuid::Uuid;
 
 use crate::{
     app::{
-        AppState, FilterField, GroupingMode, QuickAddAmbiguousKind,
-        TransactionFormField, TransactionsMode, TransferField, flow_name_suggestions,
-        ordered_flow_ids_from_state, ordered_wallet_ids_from_state,
-        resolve_category_matches, resolve_flow_matches, resolve_wallet_matches,
-        transactions_visible_indices,
+        AppState, FilterField, GroupingMode, QuickAddAmbiguousKind, TransactionFormField,
+        TransactionsMode, TransferField, flow_name_suggestions, ordered_flow_ids_from_state,
+        ordered_wallet_ids_from_state, resolve_category_matches, resolve_flow_matches,
+        resolve_wallet_matches, transactions_visible_indices,
     },
     ui::{components::centered_rect, theme::Theme},
 };
@@ -1018,19 +1017,47 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             .unwrap_or_default();
 
         // Determine display values considering ambiguous state
-        let (category_display, category_style, category_ambiguous) =
-            resolve_ambiguous_display(state, &p.category, &category_matches, QuickAddAmbiguousKind::Category, "#", theme);
+        let (category_display, category_style, category_ambiguous) = resolve_ambiguous_display(
+            state,
+            &p.category,
+            &category_matches,
+            QuickAddAmbiguousKind::Category,
+            "#",
+            theme,
+        );
 
         let (wallet_display, wallet_style, wallet_ambiguous) = if p.wallet.is_some() {
-            resolve_ambiguous_display(state, &p.wallet, &wallet_matches, QuickAddAmbiguousKind::Wallet, "@", theme)
+            resolve_ambiguous_display(
+                state,
+                &p.wallet,
+                &wallet_matches,
+                QuickAddAmbiguousKind::Wallet,
+                "@",
+                theme,
+            )
         } else {
-            (format!("@{default_wallet_name}"), Style::default().fg(theme.text_muted), false)
+            (
+                format!("@{default_wallet_name}"),
+                Style::default().fg(theme.text_muted),
+                false,
+            )
         };
 
         let (flow_display, flow_style, flow_ambiguous) = if p.flow.is_some() {
-            resolve_ambiguous_display(state, &p.flow, &flow_matches, QuickAddAmbiguousKind::Flow, ">", theme)
+            resolve_ambiguous_display(
+                state,
+                &p.flow,
+                &flow_matches,
+                QuickAddAmbiguousKind::Flow,
+                ">",
+                theme,
+            )
         } else {
-            (format!(">{default_flow_name}"), Style::default().fg(theme.text_muted), false)
+            (
+                format!(">{default_flow_name}"),
+                Style::default().fg(theme.text_muted),
+                false,
+            )
         };
 
         lines.push(Line::from(vec![
@@ -1085,15 +1112,27 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
                 // Build ambiguous hint for fields with multiple matches
                 let mut hints = Vec::new();
                 if category_matches.len() > 1 {
-                    let names: Vec<&str> = category_matches.iter().take(3).map(|(_id, name)| name.as_str()).collect();
+                    let names: Vec<&str> = category_matches
+                        .iter()
+                        .take(3)
+                        .map(|(_id, name)| name.as_str())
+                        .collect();
                     hints.push(format!("#? {}", names.join(" | ")));
                 }
                 if wallet_matches.len() > 1 {
-                    let names: Vec<&str> = wallet_matches.iter().take(3).map(|(_id, name)| name.as_str()).collect();
+                    let names: Vec<&str> = wallet_matches
+                        .iter()
+                        .take(3)
+                        .map(|(_id, name)| name.as_str())
+                        .collect();
                     hints.push(format!("@? {}", names.join(" | ")));
                 }
                 if flow_matches.len() > 1 {
-                    let names: Vec<&str> = flow_matches.iter().take(3).map(|(_id, name)| name.as_str()).collect();
+                    let names: Vec<&str> = flow_matches
+                        .iter()
+                        .take(3)
+                        .map(|(_id, name)| name.as_str())
+                        .collect();
                     hints.push(format!(">? {}", names.join(" | ")));
                 }
                 if !hints.is_empty() {
@@ -1105,18 +1144,19 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
                     ]));
                 }
             }
-        } else if state.transactions.quick_active {
+        } else if state.transactions.quick_active
+            && let Some(flow_query) = p.flow.as_deref()
+            && flow_matches
+                .first()
+                .is_none_or(|(_id, name)| name.to_lowercase() != flow_query.to_lowercase())
+        {
             // Show envelope suggestions if not exact match
-            if let Some(flow_query) = p.flow.as_deref() {
-                if flow_matches.len() != 1 || !flow_matches.first().map(|(_id, name)| name.to_lowercase() == flow_query.to_lowercase()).unwrap_or(false) {
-                    let suggestions = flow_name_suggestions(state, flow_query, 3);
-                    if !suggestions.is_empty() {
-                        lines.push(Line::from(Span::styled(
-                            format!("Envelope suggestions: {}", suggestions.join(", ")),
-                            Style::default().fg(theme.text_muted),
-                        )));
-                    }
-                }
+            let suggestions = flow_name_suggestions(state, flow_query, 3);
+            if !suggestions.is_empty() {
+                lines.push(Line::from(Span::styled(
+                    format!("Envelope suggestions: {}", suggestions.join(", ")),
+                    Style::default().fg(theme.text_muted),
+                )));
             }
         }
     } else if state.transactions.quick_active {
@@ -1159,7 +1199,11 @@ fn resolve_ambiguous_display(
     theme: &Theme,
 ) -> (String, Style, bool) {
     let Some(query_str) = query else {
-        return ("-".to_string(), Style::default().fg(theme.text_muted), false);
+        return (
+            "-".to_string(),
+            Style::default().fg(theme.text_muted),
+            false,
+        );
     };
 
     if matches.is_empty() {
@@ -1182,16 +1226,15 @@ fn resolve_ambiguous_display(
 
     // Multiple matches - ambiguous
     // Check if we have a selection in quick_ambiguous
-    if let Some(amb) = &state.transactions.quick_ambiguous {
-        if amb.kind == kind {
-            if let Some((_, name)) = amb.current() {
-                return (
-                    format!("{prefix}{name}"),
-                    Style::default().fg(theme.warning),
-                    true,
-                );
-            }
-        }
+    if let Some(amb) = &state.transactions.quick_ambiguous
+        && amb.kind == kind
+        && let Some((_, name)) = amb.current()
+    {
+        return (
+            format!("{prefix}{name}"),
+            Style::default().fg(theme.warning),
+            true,
+        );
     }
 
     // No selection yet - show first match with warning style
