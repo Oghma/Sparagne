@@ -82,6 +82,11 @@ fn render_header(
                 t(locale, TextKey::HintSettings),
                 t(locale, TextKey::SectionMembers)
             ),
+            SettingsTab::Preferences => format!(
+                "{} > {}",
+                t(locale, TextKey::HintSettings),
+                t(locale, TextKey::SectionPreferences)
+            ),
         },
     };
 
@@ -497,6 +502,28 @@ fn settings_shortcuts(state: &AppState, locale: Locale, theme: &Theme) -> Vec<Li
             lines.push(shortcut_line(
                 "↑/↓",
                 t(locale, TextKey::HelpChangeRole),
+                theme,
+            ));
+        }
+        SettingsTab::Preferences => {
+            lines.push(section_header(
+                t(locale, TextKey::SectionPreferences),
+                theme,
+            ));
+            lines.push(Line::from(""));
+            lines.push(shortcut_line(
+                "Space",
+                t(locale, TextKey::HintToggle),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "↑/↓",
+                t(locale, TextKey::HelpNavigateList),
+                theme,
+            ));
+            lines.push(shortcut_line(
+                "←/→",
+                t(locale, TextKey::HelpChangeValue),
                 theme,
             ));
         }

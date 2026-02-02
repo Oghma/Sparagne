@@ -103,6 +103,21 @@ impl App {
                 }
                 return Ok(());
             }
+            // Toggle archived visibility in Accounts section
+            'A' => {
+                if self.state.section == Section::Accounts {
+                    match self.state.accounts_tab {
+                        AccountsTab::Sources if self.state.wallets.mode == WalletsMode::List => {
+                            self.toggle_wallets_show_archived();
+                        }
+                        AccountsTab::Envelopes if self.state.flows.mode == FlowsMode::List => {
+                            self.toggle_flows_show_archived();
+                        }
+                        AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
+                    }
+                }
+                return Ok(());
+            }
             // Main navigation: y -> Analytics (was Stats)
             'y' | 'Y' => {
                 self.state.section = Section::Analytics;
@@ -119,6 +134,7 @@ impl App {
                     SettingsTab::Categories => self.load_categories().await?,
                     SettingsTab::Vault => {}
                     SettingsTab::Members => self.load_members().await?,
+                    SettingsTab::Preferences => {}
                 }
                 return Ok(());
             }
@@ -257,6 +273,12 @@ impl App {
                     self.stats_set_tab(2);
                 } else if self.state.section == Section::Settings {
                     self.settings_set_tab(2);
+                }
+                return Ok(());
+            }
+            '4' => {
+                if self.state.section == Section::Settings {
+                    self.settings_set_tab(3);
                 }
                 return Ok(());
             }
@@ -596,5 +618,42 @@ impl App {
     /// Goes to previous settings tab.
     pub(crate) fn settings_prev_tab(&mut self) {
         self.state.settings_tab = self.state.settings_tab.prev();
+    }
+
+    /// Handles toggle/cycle actions in the Preferences settings tab.
+    pub(crate) fn handle_preferences_toggle(&mut self) {
+        use crate::config::Density;
+        match self.state.preferences.focus {
+            PreferencesField::EmojiMode => {
+                self.state.emoji_mode = !self.state.emoji_mode;
+            }
+            PreferencesField::Density => {
+                self.state.density = match self.state.density {
+                    Density::Compact => Density::Normal,
+                    Density::Normal => Density::Comfortable,
+                    Density::Comfortable => Density::Compact,
+                };
+            }
+        }
+    }
+
+    /// Cycles density to the next value (Compact -> Normal -> Comfortable).
+    pub(crate) fn cycle_density_next(&mut self) {
+        use crate::config::Density;
+        self.state.density = match self.state.density {
+            Density::Compact => Density::Normal,
+            Density::Normal => Density::Comfortable,
+            Density::Comfortable => Density::Compact,
+        };
+    }
+
+    /// Cycles density to the previous value (Comfortable -> Normal -> Compact).
+    pub(crate) fn cycle_density_prev(&mut self) {
+        use crate::config::Density;
+        self.state.density = match self.state.density {
+            Density::Compact => Density::Comfortable,
+            Density::Normal => Density::Compact,
+            Density::Comfortable => Density::Normal,
+        };
     }
 }

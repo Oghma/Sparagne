@@ -17,6 +17,7 @@ use crate::{
             loading,
             money::{flow_cap_line_gauge, styled_amount_no_sign, styled_progress_bar},
         },
+        forms::FormFieldRenderer,
         theme::Theme,
     },
 };
@@ -73,8 +74,9 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     // Search bar in header
     let search_active = state.flows.search_active;
     let search_query = state.flows.search_query.trim();
+    let show_archived = state.flows.show_archived;
 
-    let header_spans = if search_active || !search_query.is_empty() {
+    let mut header_spans = if search_active || !search_query.is_empty() {
         vec![
             Span::styled("Search: ", Style::default().fg(theme.text_muted)),
             Span::styled(
@@ -101,6 +103,15 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             Span::styled(" details", Style::default().fg(theme.text_muted)),
         ]
     };
+
+    // Add archived indicator
+    if show_archived {
+        header_spans.push(Span::styled("  ", Style::default()));
+        header_spans.push(Span::styled(
+            "Archived: On",
+            Style::default().fg(theme.warning),
+        ));
+    }
 
     let list_block = Block::default()
         .borders(Borders::ALL)
@@ -258,14 +269,16 @@ fn render_rename_dialog(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         return;
     };
 
+    let error = state.flows.form.name.state.validation.error_message();
+
     let dialog = InputDialog {
         title: "Rename Flow",
         current_label: Some("Current:"),
         current_value: Some(flow.name.as_str()),
         prompt: "New name:",
-        value: state.flows.form.name.as_str(),
+        value: state.flows.form.name.value(),
         focused: state.flows.form.focus == FlowFormField::Name,
-        error: state.flows.form.error.as_deref(),
+        error,
         confirm_label: "Save",
         cancel_label: "Cancel",
     };
@@ -285,35 +298,53 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
 
     let mut lines = vec![
         Line::from(""),
-        render_field(
-            "Name",
-            form.name.as_str(),
-            form.focus == FlowFormField::Name,
+        FormFieldRenderer::render_input_field(
+            &form.name.label,
+            form.name.value(),
+            &form.name.state,
             theme,
         ),
     ];
 
     if !is_rename {
-        lines.push(render_field(
-            "Type",
-            form.mode.label(),
-            form.focus == FlowFormField::Mode,
+        // Mode field (not a TextField, render manually)
+        let mode_focused = form.focus == FlowFormField::Mode;
+        let mode_label_style = if mode_focused {
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.text)
+        };
+        let mode_value_style = if mode_focused {
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.text)
+        };
+        let mode_cursor = if mode_focused { "▏" } else { "" };
+        lines.push(Line::from(vec![
+            Span::styled("Type: ", mode_label_style),
+            Span::styled(form.mode.label().to_string(), mode_value_style),
+            Span::styled(mode_cursor.to_string(), Style::default().fg(theme.accent)),
+        ]));
+
+        // Cap field (show "-" if unlimited mode)
+        let cap_value = if matches!(form.mode, FlowModeChoice::Unlimited) {
+            "-"
+        } else {
+            form.cap.value()
+        };
+        lines.push(FormFieldRenderer::render_input_field(
+            &form.cap.label,
+            cap_value,
+            &form.cap.state,
             theme,
         ));
-        lines.push(render_field(
-            "Cap",
-            if matches!(form.mode, FlowModeChoice::Unlimited) {
-                "-"
-            } else {
-                form.cap.as_str()
-            },
-            form.focus == FlowFormField::Cap,
-            theme,
-        ));
-        lines.push(render_field(
-            "Opening",
-            form.opening.as_str(),
-            form.focus == FlowFormField::Opening,
+
+        lines.push(FormFieldRenderer::render_input_field(
+            &form.opening.label,
+            form.opening.value(),
+            &form.opening.state,
             theme,
         ));
     }
@@ -340,13 +371,6 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         Span::styled("[Esc]", Style::default().fg(theme.accent)),
         Span::styled(" cancel", Style::default().fg(theme.text_muted)),
     ]));
-
-    if let Some(err) = form.error.as_ref() {
-        lines.push(Line::from(Span::styled(
-            format!("⚠ {err}"),
-            Style::default().fg(theme.negative),
-        )));
-    }
 
     let block = Block::default()
         .title(Span::styled(title, Style::default().fg(theme.accent)))
@@ -577,29 +601,6 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
             .border_style(Style::default().fg(theme.border)),
     );
     frame.render_widget(list, layout[1]);
-}
-
-fn render_field(label: &str, value: &str, focused: bool, theme: &Theme) -> Line<'static> {
-    let label_style = if focused {
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text_muted)
-    };
-    let value_style = if focused {
-        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text)
-    };
-    let cursor = if focused { "_" } else { "" };
-
-    Line::from(vec![
-        Span::styled(format!("  {label:<10}"), label_style),
-        Span::raw(": "),
-        Span::styled(value.to_string(), value_style),
-        Span::styled(cursor, Style::default().fg(theme.accent)),
-    ])
 }
 
 fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str) {

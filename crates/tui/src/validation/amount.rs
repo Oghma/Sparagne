@@ -12,6 +12,7 @@ use crate::text::{Locale, TextKey, t};
 
 /// Validates amount strings for currency input.
 #[derive(Debug, Clone, Copy, Default)]
+#[allow(dead_code)]
 pub struct AmountValidator {
     /// If `true`, the amount must be positive (> 0).
     pub require_positive: bool,
@@ -19,6 +20,7 @@ pub struct AmountValidator {
     pub allow_zero: bool,
 }
 
+#[allow(dead_code)]
 impl AmountValidator {
     /// Creates a new validator that requires positive amounts.
     #[must_use]

@@ -12,13 +12,15 @@ use crate::{
     app::{AppState, StatsTab},
     ui::{
         components::{
-            card::Card,
+            card::{Card, StatCard},
             charts::{
-                BarStyle, ascii_bar_styled, compute_percentage, percentage_bar, render_bar_chart,
-                render_inline_sparkline, render_sparkline as render_sparkline_card,
+                BarStyle, PieSlice, ascii_bar_styled, compute_percentage, percentage_bar,
+                render_bar_chart, render_braille_sparkline, render_inline_sparkline,
+                render_pie_chart,
             },
             money::{
-                flow_cap_gauge, styled_amount_bold, styled_amount_no_sign, styled_percentage_change,
+                flow_cap_gauge, styled_amount_bold_emoji, styled_amount_no_sign,
+                styled_percentage_change,
             },
             tab_bar::{self, TabBarItem},
         },
@@ -103,6 +105,7 @@ fn render_cash_flow_tab(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(5),  // StatCards row
             Constraint::Length(9),  // Month summary with navigation
             Constraint::Length(6),  // Sparkline
             Constraint::Length(12), // Category breakdown
@@ -110,23 +113,26 @@ fn render_cash_flow_tab(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         ])
         .split(area);
 
-    render_month_summary(frame, layout[0], state, theme);
-    render_sparkline(frame, layout[1], state, theme);
-    render_category_breakdown(frame, layout[2], state, theme);
-    render_monthly_trend(frame, layout[3], state, theme);
+    render_stat_cards(frame, layout[0], state, theme);
+    render_month_summary(frame, layout[1], state, theme);
+    render_sparkline(frame, layout[2], state, theme);
+    render_category_breakdown(frame, layout[3], state, theme);
+    render_monthly_trend(frame, layout[4], state, theme);
 }
 
 fn render_spending_tab(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(12), // Category breakdown first
+            Constraint::Length(6),  // Sparkline for expense trend
+            Constraint::Length(12), // Category breakdown
             Constraint::Min(6),     // Trend chart
         ])
         .split(area);
 
-    render_category_breakdown(frame, layout[0], state, theme);
-    render_monthly_trend(frame, layout[1], state, theme);
+    render_expense_sparkline(frame, layout[0], state, theme);
+    render_category_breakdown(frame, layout[1], state, theme);
+    render_monthly_trend(frame, layout[2], state, theme);
 }
 
 fn render_net_worth_tab(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -142,6 +148,54 @@ fn render_net_worth_tab(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     render_month_summary(frame, layout[0], state, theme);
     render_sparkline(frame, layout[1], state, theme);
     render_monthly_trend(frame, layout[2], state, theme);
+}
+
+fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let currency = get_currency(state);
+
+    let (income, expenses, _balance) = state
+        .stats
+        .data
+        .as_ref()
+        .map(|s| {
+            (
+                s.total_income_minor,
+                s.total_expenses_minor,
+                s.balance_minor,
+            )
+        })
+        .unwrap_or((0, 0, 0));
+
+    let net = income - expenses;
+
+    // Split into 3 columns for the stat cards
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(33),
+            Constraint::Percentage(34),
+            Constraint::Percentage(33),
+        ])
+        .split(area);
+
+    // Income StatCard
+    let income_formatted = Money::new(income).format(currency);
+    StatCard::new("Total Income", income_formatted, theme)
+        .subtitle("This month")
+        .render(frame, cols[0]);
+
+    // Expenses StatCard
+    let expenses_formatted = Money::new(-expenses).format(currency);
+    StatCard::new("Total Expenses", expenses_formatted, theme)
+        .subtitle("This month")
+        .render(frame, cols[1]);
+
+    // Net Balance StatCard
+    let net_formatted = Money::new(net).format(currency);
+    let net_subtitle = if net >= 0 { "Surplus" } else { "Deficit" };
+    StatCard::new("Net Balance", net_formatted, theme)
+        .subtitle(net_subtitle)
+        .render(frame, cols[2]);
 }
 
 fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -295,7 +349,7 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     // Net row
     let net_line = Line::from(vec![
         Span::styled("Net         ", Style::default().fg(theme.dim)),
-        styled_amount_bold(net, currency, theme),
+        styled_amount_bold_emoji(net, currency, theme, state.emoji_mode),
     ]);
     frame.render_widget(Paragraph::new(net_line), stats_layout[4]);
 
@@ -368,15 +422,12 @@ fn render_stat_row(
 }
 
 fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let card = Card::new("Category Breakdown", theme);
-    let inner = card.inner(area);
-    card.render_frame(frame, area);
-
-    let currency = get_currency(state);
-
     let breakdown = &state.stats.category_breakdown;
 
     if breakdown.is_empty() {
+        let card = Card::new("Category Breakdown", theme);
+        let inner = card.inner(area);
+        card.render_frame(frame, area);
         frame.render_widget(
             Paragraph::new(Span::styled(
                 "No expense data for category breakdown",
@@ -388,6 +439,54 @@ fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppState
         return;
     }
 
+    // Split area: pie chart on the left, list on the right
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(20), Constraint::Min(30)])
+        .split(area);
+
+    // Render pie chart on the left
+    render_category_pie_chart(frame, cols[0], breakdown, theme);
+
+    // Render category list on the right
+    render_category_list(frame, cols[1], state, theme);
+}
+
+fn render_category_pie_chart(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    breakdown: &[(String, i64)],
+    theme: &Theme,
+) {
+    // Define colors for pie slices (cycling through theme-compatible colors)
+    let colors = [
+        theme.negative,   // Red for largest
+        theme.warning,    // Orange/Yellow
+        theme.accent,     // Blue/Accent
+        theme.positive,   // Green
+        theme.text_muted, // Muted
+        theme.dim,        // Dim for smaller slices
+    ];
+
+    let slices: Vec<PieSlice> = breakdown
+        .iter()
+        .enumerate()
+        .map(|(i, (_, amount))| PieSlice {
+            value: amount.unsigned_abs(),
+            color: colors[i % colors.len()],
+        })
+        .collect();
+
+    render_pie_chart(frame, area, "Distribution", &slices, theme);
+}
+
+fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let card = Card::new("Category Breakdown", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+
+    let currency = get_currency(state);
+    let breakdown = &state.stats.category_breakdown;
     let total: i64 = breakdown.iter().map(|(_, v)| *v).sum();
 
     let rows: Vec<Line> = breakdown
@@ -554,10 +653,11 @@ fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 }
 
 fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let card = Card::new("Balance Trend (30d)", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+
     if state.stats.sparkline.is_empty() {
-        let card = Card::new("Balance Trend (30d)", theme);
-        let inner = card.inner(area);
-        card.render_frame(frame, area);
         frame.render_widget(
             Paragraph::new(Span::styled(
                 "No data. Press 'r' to refresh stats.",
@@ -569,13 +669,35 @@ fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
         return;
     }
 
-    render_sparkline_card(
-        frame,
-        area,
-        "Balance Trend (30d)",
-        &state.stats.sparkline,
-        theme,
-    );
+    render_braille_sparkline(frame, inner, &state.stats.sparkline, theme, true);
+}
+
+fn render_expense_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let card = Card::new("Expense Trend (6m)", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+
+    // Convert monthly trend data (last 6 months) to sparkline format
+    let expense_data: Vec<u64> = state
+        .stats
+        .monthly_trend
+        .iter()
+        .map(|(_, value)| (*value).max(0) as u64)
+        .collect();
+
+    if expense_data.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "No expense trend data. Press 'r' to refresh.",
+                Style::default().fg(theme.dim),
+            ))
+            .alignment(Alignment::Center),
+            inner,
+        );
+        return;
+    }
+
+    render_braille_sparkline(frame, inner, &expense_data, theme, true);
 }
 
 fn get_currency(state: &AppState) -> Currency {

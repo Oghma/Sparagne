@@ -36,6 +36,11 @@ impl App {
         self.state.section == Section::Settings && self.state.settings_tab == SettingsTab::Members
     }
 
+    fn is_settings_preferences(&self) -> bool {
+        self.state.section == Section::Settings
+            && self.state.settings_tab == SettingsTab::Preferences
+    }
+
     #[doc(hidden)]
     pub async fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
         let action = crate::ui::keymap::map_key(key);
@@ -76,7 +81,27 @@ impl App {
             }
             crate::ui::keymap::AppAction::Search => {
                 if self.state.screen == Screen::Home {
-                    self.open_global_search();
+                    match self.state.section {
+                        Section::Transactions
+                            if self.state.transactions.mode == TransactionsMode::List =>
+                        {
+                            self.start_search();
+                        }
+                        Section::Accounts => match self.state.accounts_tab {
+                            AccountsTab::Sources
+                                if self.state.wallets.mode == WalletsMode::List =>
+                            {
+                                self.start_search();
+                            }
+                            AccountsTab::Envelopes | AccountsTab::Goals
+                                if self.state.flows.mode == FlowsMode::List =>
+                            {
+                                self.start_search();
+                            }
+                            _ => self.open_global_search(),
+                        },
+                        _ => self.open_global_search(),
+                    }
                 }
             }
             crate::ui::keymap::AppAction::CycleAmbiguous => {
@@ -224,6 +249,8 @@ impl App {
                             self.state.section = Section::Home;
                         }
                     }
+                } else if self.is_settings_preferences() {
+                    self.state.section = Section::Home;
                 } else if self.state.section == Section::Settings {
                     // Default for Settings - go home
                     self.state.section = Section::Home;
@@ -431,6 +458,8 @@ impl App {
                     && self.state.vault_ui.mode == VaultMode::Select
                 {
                     self.vaults_select_prev();
+                } else if self.state.screen == Screen::Home && self.is_settings_preferences() {
+                    self.state.preferences.focus = self.state.preferences.focus.prev();
                 }
             }
             crate::ui::keymap::AppAction::Down => {
@@ -532,11 +561,17 @@ impl App {
                     && self.state.vault_ui.mode == VaultMode::Select
                 {
                     self.vaults_select_next();
+                } else if self.state.screen == Screen::Home && self.is_settings_preferences() {
+                    self.state.preferences.focus = self.state.preferences.focus.next();
                 }
             }
             crate::ui::keymap::AppAction::Left => {
                 if self.state.screen == Screen::Home {
-                    if self.state.section == Section::Accounts {
+                    if self.is_settings_preferences()
+                        && self.state.preferences.focus == PreferencesField::Density
+                    {
+                        self.cycle_density_prev();
+                    } else if self.state.section == Section::Accounts {
                         self.accounts_prev_tab();
                     } else if self.state.section == Section::Analytics {
                         self.stats_prev_tab();
@@ -547,7 +582,11 @@ impl App {
             }
             crate::ui::keymap::AppAction::Right => {
                 if self.state.screen == Screen::Home {
-                    if self.state.section == Section::Accounts {
+                    if self.is_settings_preferences()
+                        && self.state.preferences.focus == PreferencesField::Density
+                    {
+                        self.cycle_density_next();
+                    } else if self.state.section == Section::Accounts {
                         self.accounts_next_tab();
                     } else if self.state.section == Section::Analytics {
                         self.stats_next_tab();
@@ -569,6 +608,10 @@ impl App {
                         return Ok(());
                     }
                     if self.is_settings_members() && self.handle_members_input(ch).await? {
+                        return Ok(());
+                    }
+                    if self.is_settings_preferences() && ch == ' ' {
+                        self.handle_preferences_toggle();
                         return Ok(());
                     }
                     if self.handle_search_input(ch).await? {

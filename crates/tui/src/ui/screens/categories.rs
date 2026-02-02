@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{AliasFocus, AppState, CategoriesMode},
-    ui::{components::input_dialog::InputDialog, theme::Theme},
+    ui::{components::input_dialog::InputDialog, forms::FormFieldRenderer, theme::Theme},
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
@@ -177,14 +177,16 @@ fn render_rename_dialog(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         return;
     };
 
+    let error = state.categories.form.name.state.validation.error_message();
+
     let dialog = InputDialog {
         title: "Rename Category",
         current_label: Some("Current:"),
         current_value: Some(category.name.as_str()),
         prompt: "New name:",
-        value: state.categories.form.name.as_str(),
+        value: state.categories.form.name.value(),
         focused: true,
-        error: state.categories.form.error.as_deref(),
+        error,
         confirm_label: "Save",
         cancel_label: "Cancel",
     };
@@ -390,16 +392,14 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         " New Category "
     };
 
-    let mut lines = vec![
+    let lines = vec![
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  Name: ", Style::default().fg(theme.accent)),
-            Span::styled(
-                form.name.as_str(),
-                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("_", Style::default().fg(theme.accent)),
-        ]),
+        FormFieldRenderer::render_input_field(
+            &form.name.label,
+            form.name.value(),
+            &form.name.state,
+            theme,
+        ),
         Line::from(""),
         Line::from(vec![
             Span::styled("  [Enter]", Style::default().fg(theme.accent)),
@@ -411,13 +411,6 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             Span::styled(" cancel", Style::default().fg(theme.text_muted)),
         ]),
     ];
-
-    if let Some(err) = form.error.as_ref() {
-        lines.push(Line::from(Span::styled(
-            format!("  ⚠ {err}"),
-            Style::default().fg(theme.negative),
-        )));
-    }
 
     let block = Block::default()
         .title(Span::styled(title, Style::default().fg(theme.accent)))

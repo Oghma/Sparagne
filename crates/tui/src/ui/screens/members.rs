@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, MemberFormField, MembersMode, MembersScope},
-    ui::theme::Theme,
+    ui::{forms::FormFieldRenderer, theme::Theme},
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
@@ -122,31 +122,15 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
 
     let mut lines = Vec::new();
 
-    // Username field
-    let username_focused = state.members.form.focus == MemberFormField::Username;
-    let username_label_style = if username_focused {
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text_muted)
-    };
-    let username_value = if state.members.form.username.is_empty() && username_focused {
-        "_"
-    } else {
-        state.members.form.username.as_str()
-    };
-    lines.push(Line::from(vec![
-        Span::styled("  Username  ", username_label_style),
-        Span::styled(username_value.to_string(), Style::default().fg(theme.text)),
-        if username_focused {
-            Span::styled("_", Style::default().fg(theme.accent))
-        } else {
-            Span::raw("")
-        },
-    ]));
+    // Username field using FormFieldRenderer
+    lines.push(FormFieldRenderer::render_input_field(
+        &state.members.form.username.label,
+        state.members.form.username.value(),
+        &state.members.form.username.state,
+        theme,
+    ));
 
-    // Role field
+    // Role field (not a TextField, render manually)
     let role_focused = state.members.form.focus == MemberFormField::Role;
     let role_label_style = if role_focused {
         Style::default()
@@ -157,23 +141,14 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     };
     let (role_text, role_color) = role_chip(state.members.form.role, theme);
     lines.push(Line::from(vec![
-        Span::styled("  Role      ", role_label_style),
+        Span::styled("Role: ", role_label_style),
         role_badge(role_text, role_color),
         if role_focused {
-            Span::styled("  ↑↓ change", Style::default().fg(theme.text_muted))
+            Span::styled("  [Space] change", Style::default().fg(theme.text_muted))
         } else {
             Span::raw("")
         },
     ]));
-
-    // Error message
-    if let Some(err) = state.members.form.error.as_ref() {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("  ✗ ", Style::default().fg(theme.negative)),
-            Span::styled(err.clone(), Style::default().fg(theme.negative)),
-        ]));
-    }
 
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }

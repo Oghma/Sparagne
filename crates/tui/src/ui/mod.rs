@@ -334,7 +334,16 @@ fn get_settings_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         SettingsTab::Categories => get_categories_hints(state),
         SettingsTab::Vault => get_vault_hints(state),
         SettingsTab::Members => get_members_hints(state),
+        SettingsTab::Preferences => get_preferences_hints(state),
     }
+}
+
+fn get_preferences_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    let locale = state.locale;
+    vec![
+        components::hints::KeyHint::new("Space", t(locale, TextKey::HintToggle)),
+        components::hints::KeyHint::new("Esc", t(locale, TextKey::HintBack)),
+    ]
 }
 
 fn get_categories_hints(state: &AppState) -> Vec<components::hints::KeyHint> {

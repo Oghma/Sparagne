@@ -384,12 +384,6 @@ impl App {
             ConfirmAction::ArchiveFlowWithUndo => {
                 self.archive_flow_with_undo().await?;
             }
-            ConfirmAction::ToggleWalletArchive => {
-                self.toggle_wallet_archive().await?;
-            }
-            ConfirmAction::ToggleFlowArchive => {
-                self.toggle_flow_archive().await?;
-            }
             ConfirmAction::ToggleCategoryArchive => {
                 self.toggle_category_archive().await?;
             }

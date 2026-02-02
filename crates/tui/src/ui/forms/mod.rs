@@ -7,6 +7,9 @@ mod amount;
 mod date;
 mod text;
 
+pub use amount::AmountField;
+pub use text::TextField;
+
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -18,8 +21,10 @@ use crate::{
 };
 
 /// Common rendering utilities for form fields.
+#[allow(dead_code)]
 pub struct FormFieldRenderer;
 
+#[allow(dead_code)]
 impl FormFieldRenderer {
     /// Renders a labeled form field with validation feedback.
     ///
@@ -125,6 +130,7 @@ impl FormFieldRenderer {
 }
 
 /// Trait for form field components that can be rendered.
+#[allow(dead_code)]
 pub trait FormField {
     /// Renders the field to a single line.
     fn render_line(&self, theme: &Theme) -> Line<'static>;

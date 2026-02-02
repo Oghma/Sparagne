@@ -97,5 +97,6 @@ fn settings_tab_label(tab: SettingsTab, locale: Locale) -> &'static str {
         SettingsTab::Categories => t(locale, TextKey::SectionCategories),
         SettingsTab::Vault => t(locale, TextKey::SectionVault),
         SettingsTab::Members => t(locale, TextKey::SectionMembers),
+        SettingsTab::Preferences => t(locale, TextKey::SectionPreferences),
     }
 }

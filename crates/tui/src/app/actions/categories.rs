@@ -294,9 +294,16 @@ impl App {
     }
     pub(crate) async fn submit_category_create(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
-        let name = self.state.categories.form.name.trim();
+
+        // Validate the form
+        if let Some(err) = self.state.categories.form.validate_all() {
+            self.state.categories.error = Some(err);
+            return Ok(());
+        }
+
+        let name = self.state.categories.form.name.value().trim();
         if name.is_empty() {
-            self.state.categories.form.error = Some("Inserisci un nome.".to_string());
+            self.state.categories.error = Some("Inserisci un nome.".to_string());
             return Ok(());
         }
 
@@ -324,7 +331,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.form.error = Some(login_message_for_error(err));
+                self.state.categories.error = Some(login_message_for_error(err));
                 self.set_toast("Errore creazione categoria.", ToastLevel::Error);
             }
         }
@@ -332,18 +339,26 @@ impl App {
         Ok(())
     }
     pub(crate) async fn submit_category_rename(&mut self) -> Result<()> {
-        let Some(category) = self.selected_category() else {
-            self.state.categories.form.error = Some("Nessuna categoria selezionata.".to_string());
+        let Some((category_id, is_system)) = self.selected_category().map(|c| (c.id, c.is_system))
+        else {
+            self.state.categories.error = Some("Nessuna categoria selezionata.".to_string());
             return Ok(());
         };
-        if category.is_system {
-            self.state.categories.form.error =
+        if is_system {
+            self.state.categories.error =
                 Some("Le categorie di sistema non si modificano.".to_string());
             return Ok(());
         }
-        let name = self.state.categories.form.name.trim();
+
+        // Validate the form
+        if let Some(err) = self.state.categories.form.validate_all() {
+            self.state.categories.error = Some(err);
+            return Ok(());
+        }
+
+        let name = self.state.categories.form.name.value().trim();
         if name.is_empty() {
-            self.state.categories.form.error = Some("Inserisci un nome.".to_string());
+            self.state.categories.error = Some("Inserisci un nome.".to_string());
             return Ok(());
         }
 
@@ -352,7 +367,7 @@ impl App {
             .categories_update(
                 self.state.login.username.as_str(),
                 self.state.login.password.as_str(),
-                category.id,
+                category_id,
                 CategoryUpdate {
                     vault_id: self.current_vault_id()?,
                     name: Some(name.to_string()),
@@ -372,7 +387,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.form.error = Some(login_message_for_error(err));
+                self.state.categories.error = Some(login_message_for_error(err));
                 self.set_toast("Errore aggiornamento categoria.", ToastLevel::Error);
             }
         }

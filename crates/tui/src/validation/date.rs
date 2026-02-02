@@ -69,6 +69,7 @@ impl DateFormat {
 
 /// Validates date strings for form input.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct DateValidator {
     /// Formats to try, in order of preference.
     pub formats: Vec<DateFormat>,
@@ -85,6 +86,7 @@ impl Default for DateValidator {
     }
 }
 
+#[allow(dead_code)]
 impl DateValidator {
     /// Creates a validator with all supported formats.
     #[must_use]
@@ -187,6 +189,202 @@ pub fn validate_date(
     match parse_date(trimmed, formats, timezone) {
         Some(_) => ValidationResult::Valid,
         None => ValidationResult::Invalid(t(locale, TextKey::ValidationDateInvalid).to_string()),
+    }
+}
+
+use ratatui::{
+    style::Style,
+    text::{Line, Span},
+};
+
+use crate::ui::Theme;
+
+/// A form field for date input with real-time validation.
+///
+/// Supports multiple date formats and provides visual feedback.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct DateField {
+    /// Current input value.
+    pub value: String,
+    /// Timezone for parsing dates.
+    pub timezone: Tz,
+    /// Locale for error messages.
+    pub locale: Locale,
+    /// Whether the field is required.
+    pub required: bool,
+    /// Cached validation result.
+    validation: ValidationResult,
+}
+
+impl Default for DateField {
+    fn default() -> Self {
+        Self {
+            value: String::new(),
+            timezone: chrono_tz::Europe::Rome,
+            locale: Locale::It,
+            required: false,
+            validation: ValidationResult::Valid,
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl DateField {
+    /// Creates a new empty date field.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a new date field with an initial value.
+    #[must_use]
+    pub fn with_value(value: impl Into<String>) -> Self {
+        let value = value.into();
+        let mut field = Self {
+            value,
+            ..Default::default()
+        };
+        field.revalidate();
+        field
+    }
+
+    /// Creates a new required date field.
+    #[must_use]
+    pub fn required() -> Self {
+        Self {
+            required: true,
+            ..Default::default()
+        }
+    }
+
+    /// Sets the timezone for parsing.
+    #[must_use]
+    pub fn with_timezone(mut self, timezone: Tz) -> Self {
+        self.timezone = timezone;
+        self.revalidate();
+        self
+    }
+
+    /// Sets the locale for error messages.
+    #[must_use]
+    pub fn with_locale(mut self, locale: Locale) -> Self {
+        self.locale = locale;
+        self.revalidate();
+        self
+    }
+
+    /// Pushes a character to the input.
+    pub fn push(&mut self, ch: char) {
+        self.value.push(ch);
+        self.revalidate();
+    }
+
+    /// Removes the last character from the input.
+    pub fn pop(&mut self) {
+        self.value.pop();
+        self.revalidate();
+    }
+
+    /// Clears the input.
+    pub fn clear(&mut self) {
+        self.value.clear();
+        self.revalidate();
+    }
+
+    /// Sets the value directly.
+    pub fn set_value(&mut self, value: impl Into<String>) {
+        self.value = value.into();
+        self.revalidate();
+    }
+
+    /// Returns whether the current value is valid.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.validation.is_valid()
+    }
+
+    /// Returns the validation result.
+    #[must_use]
+    pub fn validation(&self) -> &ValidationResult {
+        &self.validation
+    }
+
+    /// Returns the error message if validation failed.
+    #[must_use]
+    pub fn error_message(&self) -> Option<&str> {
+        self.validation.error_message()
+    }
+
+    /// Parses the current value and returns the datetime if valid.
+    #[must_use]
+    pub fn parse_date(&self) -> Option<ParsedDate> {
+        parse_date(&self.value, DateFormat::all(), self.timezone)
+    }
+
+    /// Returns the datetime value if valid.
+    #[must_use]
+    pub fn datetime(&self) -> Option<DateTime<FixedOffset>> {
+        self.parse_date().map(|p| p.datetime)
+    }
+
+    /// Revalidates the current value.
+    fn revalidate(&mut self) {
+        let trimmed = self.value.trim();
+        if trimmed.is_empty() {
+            if self.required {
+                self.validation =
+                    ValidationResult::Invalid(t(self.locale, TextKey::ValidationDateRequired).to_string());
+            } else {
+                self.validation = ValidationResult::Valid;
+            }
+            return;
+        }
+
+        self.validation = validate_date(trimmed, DateFormat::all(), self.timezone, self.locale);
+    }
+
+    /// Renders the field as a Line with validation feedback.
+    ///
+    /// Returns a styled Line that shows the value with visual feedback:
+    /// - Green if valid
+    /// - Red if invalid
+    /// - Dimmed placeholder if empty
+    #[must_use]
+    pub fn render_line(&self, label: &str, focused: bool, theme: &Theme) -> Line<'static> {
+        let label_style = if focused {
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(ratatui::style::Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.text)
+        };
+
+        let (display_value, value_style) = if self.value.is_empty() {
+            ("-".to_string(), Style::default().fg(theme.text_muted))
+        } else if self.validation.is_valid() {
+            (self.value.clone(), Style::default().fg(theme.positive))
+        } else {
+            (self.value.clone(), Style::default().fg(theme.negative))
+        };
+
+        let value_style = if focused {
+            value_style.add_modifier(ratatui::style::Modifier::BOLD)
+        } else {
+            value_style
+        };
+
+        Line::from(vec![
+            Span::styled(format!("{label:<8}"), label_style),
+            Span::raw(": "),
+            Span::styled(display_value, value_style),
+        ])
+    }
+
+    /// Returns a hint string showing accepted formats.
+    #[must_use]
+    pub fn format_hint() -> &'static str {
+        "YYYY-MM-DD, DD/MM/YYYY, or DD-MM-YYYY (+ HH:MM for time)"
     }
 }
 

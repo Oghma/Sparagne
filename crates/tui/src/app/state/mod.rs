@@ -45,16 +45,23 @@ pub enum SettingsTab {
     Categories,
     Vault,
     Members,
+    Preferences,
 }
 
 impl SettingsTab {
-    pub const ALL: [Self; 3] = [Self::Categories, Self::Vault, Self::Members];
+    pub const ALL: [Self; 4] = [
+        Self::Categories,
+        Self::Vault,
+        Self::Members,
+        Self::Preferences,
+    ];
 
     pub fn index(self) -> usize {
         match self {
             Self::Categories => 0,
             Self::Vault => 1,
             Self::Members => 2,
+            Self::Preferences => 3,
         }
     }
 
@@ -62,6 +69,7 @@ impl SettingsTab {
         match index {
             1 => Self::Vault,
             2 => Self::Members,
+            3 => Self::Preferences,
             _ => Self::Categories,
         }
     }
@@ -74,6 +82,33 @@ impl SettingsTab {
         let len = Self::ALL.len();
         Self::from_index((self.index() + len - 1) % len)
     }
+}
+
+/// Focus state for the Preferences settings screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PreferencesField {
+    #[default]
+    EmojiMode,
+    Density,
+}
+
+impl PreferencesField {
+    pub fn next(self) -> Self {
+        match self {
+            Self::EmojiMode => Self::Density,
+            Self::Density => Self::EmojiMode,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        self.next()
+    }
+}
+
+/// State for the Preferences settings screen.
+#[derive(Debug, Clone, Default)]
+pub struct PreferencesState {
+    pub focus: PreferencesField,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,4 +197,5 @@ pub struct AppState {
     pub last_flow_id: Option<Uuid>,
     pub default_wallet_id: Option<Uuid>,
     pub default_flow_id: Option<Uuid>,
+    pub preferences: PreferencesState,
 }

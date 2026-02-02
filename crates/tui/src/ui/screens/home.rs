@@ -16,7 +16,7 @@ use crate::{
         components::{
             card::Card,
             charts::braille_sparkline_filled,
-            money::{styled_amount, styled_percentage_change},
+            money::{styled_amount_emoji, styled_percentage_change},
         },
         theme::Theme,
     },
@@ -509,7 +509,7 @@ fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                     Span::raw("  "),
                     Span::styled(icon, Style::default().fg(icon_color)),
                     Span::raw(" "),
-                    styled_amount(amount, currency, theme),
+                    styled_amount_emoji(amount, currency, theme, state.emoji_mode),
                     Span::raw("  "),
                     Span::styled(
                         format!("{:<note_width$}", truncate(note, note_width)),

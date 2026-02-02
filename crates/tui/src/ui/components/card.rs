@@ -17,6 +17,7 @@ pub struct Card<'a> {
     focused: bool,
 }
 
+#[allow(dead_code)]
 impl<'a> Card<'a> {
     pub fn new(title: &'a str, theme: &'a Theme) -> Self {
         Self {

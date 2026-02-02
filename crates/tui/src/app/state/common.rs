@@ -84,6 +84,7 @@ pub struct OverlayState {
     pub(crate) grouping: Option<GroupingDialogState>,
 }
 
+#[allow(dead_code)]
 impl OverlayState {
     /// Returns true if a confirmation dialog is currently displayed.
     pub fn has_confirm_dialog(&self) -> bool {
@@ -211,8 +212,6 @@ pub enum ConfirmAction {
     DeleteVault,
     ArchiveWalletWithUndo,
     ArchiveFlowWithUndo,
-    ToggleWalletArchive,
-    ToggleFlowArchive,
     ToggleCategoryArchive,
     DiscardTransactionForm,
     DiscardTransferForm,

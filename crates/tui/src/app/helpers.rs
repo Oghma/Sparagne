@@ -406,20 +406,22 @@ pub(crate) fn wallets_visible_indices(state: &AppState) -> Vec<usize> {
         return Vec::new();
     };
     let query = normalize_query(state.wallets.search_query.as_str());
-    if query.is_empty() {
-        return (0..snapshot.wallets.len()).collect();
-    }
+    let show_archived = state.wallets.show_archived;
 
     snapshot
         .wallets
         .iter()
         .enumerate()
         .filter_map(|(idx, wallet)| {
-            if wallet.name.to_lowercase().contains(query.as_str()) {
-                Some(idx)
-            } else {
-                None
+            // Filter by archived status
+            if !show_archived && wallet.archived {
+                return None;
             }
+            // Filter by search query
+            if !query.is_empty() && !wallet.name.to_lowercase().contains(query.as_str()) {
+                return None;
+            }
+            Some(idx)
         })
         .collect()
 }
@@ -429,20 +431,22 @@ pub(crate) fn flows_visible_indices(state: &AppState) -> Vec<usize> {
         return Vec::new();
     };
     let query = normalize_query(state.flows.search_query.as_str());
-    if query.is_empty() {
-        return (0..snapshot.flows.len()).collect();
-    }
+    let show_archived = state.flows.show_archived;
 
     snapshot
         .flows
         .iter()
         .enumerate()
         .filter_map(|(idx, flow)| {
-            if flow.name.to_lowercase().contains(query.as_str()) {
-                Some(idx)
-            } else {
-                None
+            // Filter by archived status
+            if !show_archived && flow.archived {
+                return None;
             }
+            // Filter by search query
+            if !query.is_empty() && !flow.name.to_lowercase().contains(query.as_str()) {
+                return None;
+            }
+            Some(idx)
         })
         .collect()
 }

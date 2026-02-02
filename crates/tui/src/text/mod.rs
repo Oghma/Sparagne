@@ -36,8 +36,9 @@ impl Locale {
 /// - Success/Error: operation feedback
 /// - Misc: other strings
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum TextKey {
-    // Sections (8)
+    // Sections (9)
     SectionHome,
     SectionTransactions,
     SectionWallets,
@@ -46,6 +47,7 @@ pub enum TextKey {
     SectionMembers,
     SectionVault,
     SectionStats,
+    SectionPreferences,
 
     // Form Labels (13)
     LabelAmount,
@@ -297,6 +299,7 @@ pub fn format(locale: Locale, key: TextKey, pairs: &[(&str, &str)]) -> String {
 
 /// Returns the default locale for the TUI.
 #[must_use]
+#[allow(dead_code)]
 pub fn default_locale() -> Locale {
     Locale::default()
 }

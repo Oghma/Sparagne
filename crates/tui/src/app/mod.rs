@@ -4,11 +4,10 @@ mod helpers;
 mod state;
 
 pub(crate) use helpers::{
-    FlowAlertItem, FlowAlertSeverity, HomeFeedItem, filter_commands, flow_name_suggestions,
-    flows_visible_indices, home_feed_items, ordered_flow_ids_from_state,
-    ordered_wallet_ids_from_state, resolve_category_matches, resolve_flow_matches,
-    resolve_flow_name, resolve_wallet_matches, resolve_wallet_name, transactions_visible_indices,
-    wallets_visible_indices,
+    FlowAlertSeverity, HomeFeedItem, filter_commands, flow_name_suggestions, flows_visible_indices,
+    home_feed_items, ordered_flow_ids_from_state, ordered_wallet_ids_from_state,
+    resolve_category_matches, resolve_flow_matches, resolve_wallet_matches,
+    transactions_visible_indices, wallets_visible_indices,
 };
 pub use state::*;
 
@@ -76,6 +75,7 @@ impl App {
             last_flow_id: None,
             default_wallet_id: None,
             default_flow_id: None,
+            preferences: PreferencesState::default(),
         };
 
         Ok(Self {

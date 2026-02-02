@@ -122,7 +122,7 @@ impl App {
             return;
         }
         self.reset_category_form();
-        self.state.categories.form.name = name;
+        self.state.categories.form.name.set_value(name);
         self.state.categories.mode = CategoriesMode::Rename;
         self.reset_category_aliases();
     }

@@ -63,11 +63,16 @@ impl App {
             return;
         };
         self.state.members.mode = MembersMode::Form;
-        self.state.members.form.username = member.username.clone();
+        self.state
+            .members
+            .form
+            .username
+            .set_value(member.username.clone());
         self.state.members.form.role = member.role;
         self.state.members.form.focus = MemberFormField::Role;
         self.state.members.form.editing = true;
-        self.state.members.form.error = None;
+        self.state.members.form.update_focus();
+        self.state.members.error = None;
     }
     pub(crate) fn cycle_member_role(&mut self, forward: bool) {
         self.state.members.form.role = match (self.state.members.form.role, forward) {

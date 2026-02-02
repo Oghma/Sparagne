@@ -466,10 +466,10 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         ),
         render_transfer_field(
             "When",
-            if transfer.occurred_at.trim().is_empty() {
+            if transfer.occurred_at.value.trim().is_empty() {
                 "-"
             } else {
-                transfer.occurred_at.as_str()
+                transfer.occurred_at.value.as_str()
             },
             transfer.focus == TransferField::OccurredAt,
             theme,
@@ -575,10 +575,10 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
     } else {
         form.note.trim().to_string()
     };
-    let occurred_at = if form.occurred_at.trim().is_empty() {
+    let occurred_at = if form.occurred_at.value.trim().is_empty() {
         "-".to_string()
     } else {
-        form.occurred_at.trim().to_string()
+        form.occurred_at.value.trim().to_string()
     };
 
     let is_edit = form.editing_id.is_some();

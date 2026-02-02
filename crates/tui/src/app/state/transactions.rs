@@ -5,10 +5,12 @@ use api_types::transaction::{TransactionDetailResponse, TransactionKind, Transac
 use uuid::Uuid;
 
 use crate::app::helpers::{normalize_query, transaction_matches_query};
+use crate::validation::DateField;
 
 /// Represents an ambiguous match in quick-add where multiple options are
 /// available.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct QuickAddAmbiguous {
     pub kind: QuickAddAmbiguousKind,
     pub query: String,
@@ -16,6 +18,7 @@ pub struct QuickAddAmbiguous {
     pub selected: usize,
 }
 
+#[allow(dead_code)]
 impl QuickAddAmbiguous {
     pub fn new(kind: QuickAddAmbiguousKind, query: String, options: Vec<(Uuid, String)>) -> Self {
         Self {
@@ -246,13 +249,13 @@ impl GroupingMode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TransferFormState {
     pub from_index: usize,
     pub to_index: usize,
     pub amount: String,
     pub note: String,
-    pub occurred_at: String,
+    pub occurred_at: DateField,
     pub focus: TransferField,
     pub error: Option<String>,
     pub editing_id: Option<uuid::Uuid>,
@@ -265,7 +268,7 @@ impl Default for TransferFormState {
             to_index: 1,
             amount: String::new(),
             note: String::new(),
-            occurred_at: String::new(),
+            occurred_at: DateField::new(),
             focus: TransferField::From,
             error: None,
             editing_id: None,
@@ -288,7 +291,7 @@ pub enum TransferField {
     OccurredAt,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TransactionFormState {
     pub kind: TransactionKind,
     pub amount: String,
@@ -296,7 +299,7 @@ pub struct TransactionFormState {
     pub flow_index: usize,
     pub category: String,
     pub note: String,
-    pub occurred_at: String,
+    pub occurred_at: DateField,
     pub focus: TransactionFormField,
     pub error: Option<String>,
     pub category_index: Option<usize>,
@@ -312,7 +315,7 @@ impl Default for TransactionFormState {
             flow_index: 0,
             category: String::new(),
             note: String::new(),
-            occurred_at: String::new(),
+            occurred_at: DateField::new(),
             focus: TransactionFormField::Amount,
             error: None,
             category_index: None,

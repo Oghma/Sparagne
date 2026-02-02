@@ -60,14 +60,21 @@ impl App {
     }
     pub(crate) async fn submit_wallet_create(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
-        let name = self.state.wallets.form.name.trim();
+
+        // Validate the form
+        if let Some(err) = self.state.wallets.form.validate_all() {
+            self.state.wallets.error = Some(err);
+            return Ok(());
+        }
+
+        let name = self.state.wallets.form.name.value().trim();
         if name.is_empty() {
-            self.state.wallets.form.error = Some("Enter a name.".to_string());
+            self.state.wallets.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
         let currency = self.current_currency();
-        let opening_raw = self.state.wallets.form.opening.trim();
+        let opening_raw = self.state.wallets.form.opening.value().trim();
         let opening_raw = if opening_raw.is_empty() {
             "0"
         } else {
@@ -76,7 +83,7 @@ impl App {
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
-                self.state.wallets.form.error = Some("Invalid opening balance.".to_string());
+                self.state.wallets.error = Some("Invalid opening balance.".to_string());
                 return Ok(());
             }
         };
@@ -107,7 +114,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.wallets.form.error = Some(login_message_for_error(err));
+                self.state.wallets.error = Some(login_message_for_error(err));
                 self.set_toast("Failed to create wallet.", ToastLevel::Error);
             }
         }
@@ -115,13 +122,20 @@ impl App {
         Ok(())
     }
     pub(crate) async fn submit_wallet_rename(&mut self) -> Result<()> {
-        let Some(wallet) = self.selected_wallet() else {
-            self.state.wallets.form.error = Some("No wallet selected.".to_string());
+        let Some(wallet_id) = self.selected_wallet().map(|w| w.id) else {
+            self.state.wallets.error = Some("No wallet selected.".to_string());
             return Ok(());
         };
-        let name = self.state.wallets.form.name.trim();
+
+        // Validate the form
+        if let Some(err) = self.state.wallets.form.validate_all() {
+            self.state.wallets.error = Some(err);
+            return Ok(());
+        }
+
+        let name = self.state.wallets.form.name.value().trim();
         if name.is_empty() {
-            self.state.wallets.form.error = Some("Enter a name.".to_string());
+            self.state.wallets.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -130,7 +144,7 @@ impl App {
             .wallet_update(
                 self.state.login.username.as_str(),
                 self.state.login.password.as_str(),
-                wallet.id,
+                wallet_id,
                 WalletUpdate {
                     vault_id: self.current_vault_id()?,
                     name: Some(name.to_string()),
@@ -150,7 +164,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.wallets.form.error = Some(login_message_for_error(err));
+                self.state.wallets.error = Some(login_message_for_error(err));
                 self.set_toast("Failed to update wallet.", ToastLevel::Error);
             }
         }

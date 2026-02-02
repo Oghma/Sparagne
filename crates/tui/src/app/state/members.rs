@@ -1,5 +1,7 @@
 use api_types::membership::{MemberView, MembershipRole};
 
+use crate::ui::forms::TextField;
+
 #[derive(Debug)]
 pub struct MembersState {
     pub scope: MembersScope,
@@ -43,23 +45,53 @@ pub enum MemberFormField {
     Role,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MemberFormState {
-    pub username: String,
+    pub username: TextField,
     pub role: MembershipRole,
     pub focus: MemberFormField,
     pub editing: bool,
-    pub error: Option<String>,
 }
 
 impl Default for MemberFormState {
     fn default() -> Self {
         Self {
-            username: String::new(),
+            username: TextField::new("Username").required(true).min_length(1),
             role: MembershipRole::Viewer,
             focus: MemberFormField::Username,
             editing: false,
-            error: None,
         }
+    }
+}
+
+#[allow(dead_code)]
+impl MemberFormState {
+    /// Updates focus state on all fields based on current focus.
+    pub fn update_focus(&mut self) {
+        self.username.state.focused = self.focus == MemberFormField::Username;
+    }
+
+    /// Returns true if all fields are valid.
+    pub fn is_valid(&self) -> bool {
+        self.username.state.validation.is_valid()
+    }
+
+    /// Validates all fields and returns the first error message if any.
+    pub fn validate_all(&mut self) -> Option<String> {
+        self.username.validate();
+        self.username
+            .state
+            .validation
+            .error_message()
+            .map(String::from)
+    }
+
+    /// Clears the form and resets to default state.
+    pub fn clear(&mut self) {
+        self.username.clear();
+        self.role = MembershipRole::Viewer;
+        self.focus = MemberFormField::Username;
+        self.editing = false;
+        self.update_focus();
     }
 }

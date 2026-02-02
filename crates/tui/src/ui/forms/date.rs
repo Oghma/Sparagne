@@ -13,6 +13,7 @@ use super::{FormField, FormFieldRenderer};
 ///
 /// Supports multiple date formats including ISO and European styles.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct DateField {
     /// The label to display for this field.
     pub label: String,
@@ -24,6 +25,7 @@ pub struct DateField {
     pub timezone: chrono_tz::Tz,
 }
 
+#[allow(dead_code)]
 impl DateField {
     /// Creates a new date field with the given label.
     #[must_use]

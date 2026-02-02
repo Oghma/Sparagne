@@ -13,6 +13,7 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::SectionMembers => "Members",
         TextKey::SectionVault => "Vault",
         TextKey::SectionStats => "Statistics",
+        TextKey::SectionPreferences => "Preferences",
 
         // Form Labels
         TextKey::LabelAmount => "Amount",

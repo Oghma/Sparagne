@@ -27,9 +27,10 @@ impl App {
             return;
         };
         self.reset_wallet_form();
-        self.state.wallets.form.name = name;
+        self.state.wallets.form.name.set_value(name);
         self.state.wallets.mode = WalletsMode::Rename;
         self.state.wallets.form.focus = WalletFormField::Name;
+        self.state.wallets.form.update_focus();
     }
     pub(crate) fn selected_wallet(&self) -> Option<&api_types::vault::WalletView> {
         let indices = wallets_visible_indices(&self.state);
@@ -53,6 +54,17 @@ impl App {
                 .unwrap_or(false)
         }) {
             self.state.wallets.selected = pos;
+        }
+    }
+
+    pub(crate) fn toggle_wallets_show_archived(&mut self) {
+        self.state.wallets.show_archived = !self.state.wallets.show_archived;
+        // Clamp selection after toggling
+        let len = wallets_visible_indices(&self.state).len();
+        if len == 0 {
+            self.state.wallets.selected = 0;
+        } else if self.state.wallets.selected >= len {
+            self.state.wallets.selected = len - 1;
         }
     }
 }

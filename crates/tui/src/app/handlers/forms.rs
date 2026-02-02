@@ -50,7 +50,7 @@ impl App {
                 MemberFormField::Username => MemberFormField::Role,
                 MemberFormField::Role => MemberFormField::Username,
             };
-            self.state.members.form.error = None;
+            self.state.members.form.update_focus();
             return;
         }
 
@@ -84,6 +84,7 @@ impl App {
 
         if self.state.wallets.mode == WalletsMode::Rename {
             self.state.wallets.form.focus = WalletFormField::Name;
+            self.state.wallets.form.update_focus();
             return;
         }
 
@@ -91,6 +92,7 @@ impl App {
             WalletFormField::Name => WalletFormField::Opening,
             WalletFormField::Opening => WalletFormField::Name,
         };
+        self.state.wallets.form.update_focus();
     }
 
     pub(crate) fn advance_flow_focus(&mut self) {
@@ -100,6 +102,7 @@ impl App {
 
         if self.state.flows.mode == FlowsMode::Rename {
             self.state.flows.form.focus = FlowFormField::Name;
+            self.state.flows.form.update_focus();
             return;
         }
 
@@ -109,6 +112,7 @@ impl App {
             FlowFormField::Cap => FlowFormField::Opening,
             FlowFormField::Opening => FlowFormField::Name,
         };
+        self.state.flows.form.update_focus();
     }
 
     pub(crate) fn advance_vault_focus(&mut self) {
@@ -201,6 +205,9 @@ impl App {
                         return true;
                     }
                 }
+                SettingsTab::Preferences => {
+                    // Preferences tab handles input through dedicated handlers
+                }
             },
             _ => {}
         }
@@ -287,11 +294,13 @@ impl App {
 
     pub(crate) fn reset_wallet_form(&mut self) {
         self.state.wallets.form = WalletFormState::default();
+        self.state.wallets.form.update_focus();
         self.state.wallets.error = None;
     }
 
     pub(crate) fn reset_flow_form(&mut self) {
         self.state.flows.form = FlowFormState::default();
+        self.state.flows.form.update_focus();
         self.state.flows.error = None;
     }
 
@@ -302,11 +311,13 @@ impl App {
 
     pub(crate) fn reset_category_form(&mut self) {
         self.state.categories.form = CategoryFormState::default();
+        self.state.categories.form.update_focus(true);
         self.state.categories.error = None;
     }
 
     pub(crate) fn reset_member_form(&mut self) {
         self.state.members.form = MemberFormState::default();
+        self.state.members.form.update_focus();
         self.state.members.error = None;
     }
 

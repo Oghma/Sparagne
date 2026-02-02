@@ -47,6 +47,7 @@ pub fn render_bar_chart(
 /// Renders a sparkline (mini line chart) for trend visualization.
 ///
 /// Useful for showing trends in a compact space.
+#[allow(dead_code)]
 pub fn render_sparkline(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -118,6 +119,7 @@ pub fn render_inline_sparkline(frame: &mut Frame<'_>, area: Rect, data: &[u64], 
 ///
 /// Returns a string like `████████░░░░░░░░░░░░` representing the ratio.
 #[must_use]
+#[allow(dead_code)]
 pub fn ascii_bar(value: u64, max: u64, width: usize) -> String {
     if max == 0 {
         return "░".repeat(width);
@@ -167,6 +169,7 @@ pub enum BarStyle {
 ///
 /// Returns something like `▁▂▃▅▇▅▃▂▁` for a series of values.
 #[must_use]
+#[allow(dead_code)]
 pub fn mini_bar_chart(values: &[u64]) -> String {
     if values.is_empty() {
         return String::new();
@@ -343,6 +346,7 @@ const BRAILLE_RIGHT: [u8; 4] = [0x08, 0x10, 0x20, 0x80];
 /// // Returns something like "⣀⣤⣶⣿⣶⣤⣀"
 /// ```
 #[must_use]
+#[allow(dead_code)]
 pub fn braille_sparkline(values: &[u64]) -> String {
     if values.is_empty() {
         return String::new();
@@ -416,6 +420,7 @@ fn normalize_to_4(value: u64, max: u64) -> u8 {
 /// Creates a Braille character for a pair of column values (line style).
 ///
 /// Only lights the top dot for each height level.
+#[allow(dead_code)]
 fn braille_column_pair(left_height: u8, right_height: u8) -> char {
     let mut dots: u8 = 0;
 

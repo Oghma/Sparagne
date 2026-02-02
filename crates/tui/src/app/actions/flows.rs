@@ -92,14 +92,21 @@ impl App {
     }
     pub(crate) async fn submit_flow_create(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
-        let name = self.state.flows.form.name.trim().to_string();
+
+        // Validate the form
+        if let Some(err) = self.state.flows.form.validate_all() {
+            self.state.flows.error = Some(err);
+            return Ok(());
+        }
+
+        let name = self.state.flows.form.name.value().trim().to_string();
         if name.is_empty() {
-            self.state.flows.form.error = Some("Enter a name.".to_string());
+            self.state.flows.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
         let currency = self.current_currency();
-        let opening_raw = self.state.flows.form.opening.trim();
+        let opening_raw = self.state.flows.form.opening.value().trim();
         let opening_raw = if opening_raw.is_empty() {
             "0"
         } else {
@@ -108,12 +115,12 @@ impl App {
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
-                self.state.flows.form.error = Some("Invalid opening allocation.".to_string());
+                self.state.flows.error = Some("Invalid opening allocation.".to_string());
                 return Ok(());
             }
         };
         if opening < 0 {
-            self.state.flows.form.error = Some("Opening allocation must be >= 0.".to_string());
+            self.state.flows.error = Some("Opening allocation must be >= 0.".to_string());
             return Ok(());
         }
 
@@ -162,7 +169,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.flows.form.error = Some(login_message_for_error(err));
+                self.state.flows.error = Some(login_message_for_error(err));
                 self.set_toast("Failed to create flow.", ToastLevel::Error);
             }
         }
@@ -170,17 +177,26 @@ impl App {
         Ok(())
     }
     pub(crate) async fn submit_flow_rename(&mut self) -> Result<()> {
-        let Some(flow) = self.selected_flow() else {
-            self.state.flows.form.error = Some("No flow selected.".to_string());
+        let Some((flow_id, is_unallocated)) =
+            self.selected_flow().map(|f| (f.id, f.is_unallocated))
+        else {
+            self.state.flows.error = Some("No flow selected.".to_string());
             return Ok(());
         };
-        if flow.is_unallocated {
-            self.state.flows.form.error = Some("Unallocated cannot be renamed.".to_string());
+        if is_unallocated {
+            self.state.flows.error = Some("Unallocated cannot be renamed.".to_string());
             return Ok(());
         }
-        let name = self.state.flows.form.name.trim();
+
+        // Validate the form
+        if let Some(err) = self.state.flows.form.validate_all() {
+            self.state.flows.error = Some(err);
+            return Ok(());
+        }
+
+        let name = self.state.flows.form.name.value().trim();
         if name.is_empty() {
-            self.state.flows.form.error = Some("Enter a name.".to_string());
+            self.state.flows.error = Some("Enter a name.".to_string());
             return Ok(());
         }
 
@@ -189,7 +205,7 @@ impl App {
             .flow_update(
                 self.state.login.username.as_str(),
                 self.state.login.password.as_str(),
-                flow.id,
+                flow_id,
                 FlowUpdate {
                     vault_id: self.current_vault_id()?,
                     name: Some(name.to_string()),
@@ -210,7 +226,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.flows.form.error = Some(login_message_for_error(err));
+                self.state.flows.error = Some(login_message_for_error(err));
                 self.set_toast("Failed to update flow.", ToastLevel::Error);
             }
         }
@@ -344,20 +360,20 @@ impl App {
         Ok(())
     }
     pub(crate) fn parse_flow_cap(&mut self, currency: engine::Currency) -> Option<i64> {
-        let cap_raw = self.state.flows.form.cap.trim();
+        let cap_raw = self.state.flows.form.cap.value().trim();
         if cap_raw.is_empty() {
-            self.state.flows.form.error = Some("Inserisci un cap.".to_string());
+            self.state.flows.error = Some("Inserisci un cap.".to_string());
             return None;
         }
         let cap = match Money::parse_major(cap_raw, currency) {
             Ok(money) => money.minor().abs(),
             Err(_) => {
-                self.state.flows.form.error = Some("Cap non valido.".to_string());
+                self.state.flows.error = Some("Cap non valido.".to_string());
                 return None;
             }
         };
         if cap <= 0 {
-            self.state.flows.form.error = Some("Cap deve essere > 0.".to_string());
+            self.state.flows.error = Some("Cap deve essere > 0.".to_string());
             return None;
         }
         Some(cap)

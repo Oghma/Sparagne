@@ -13,6 +13,7 @@ use crate::{
     app::{AppState, WalletFormField, WalletsMode, wallets_visible_indices},
     ui::{
         components::{input_dialog::InputDialog, loading},
+        forms::FormFieldRenderer,
         theme::Theme,
     },
 };
@@ -69,8 +70,9 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     // Search bar in header
     let search_active = state.wallets.search_active;
     let search_query = state.wallets.search_query.trim();
+    let show_archived = state.wallets.show_archived;
 
-    let header_spans = if search_active || !search_query.is_empty() {
+    let mut header_spans = if search_active || !search_query.is_empty() {
         vec![
             Span::styled("Search: ", Style::default().fg(theme.text_muted)),
             Span::styled(
@@ -97,6 +99,15 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             Span::styled(" details", Style::default().fg(theme.text_muted)),
         ]
     };
+
+    // Add archived indicator
+    if show_archived {
+        header_spans.push(Span::styled("  ", Style::default()));
+        header_spans.push(Span::styled(
+            "Archived: On",
+            Style::default().fg(theme.warning),
+        ));
+    }
 
     let list_block = Block::default()
         .borders(Borders::ALL)
@@ -246,14 +257,16 @@ fn render_rename_dialog(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         return;
     };
 
+    let error = state.wallets.form.name.state.validation.error_message();
+
     let dialog = InputDialog {
         title: "Rename Wallet",
         current_label: Some("Current:"),
         current_value: Some(wallet.name.as_str()),
         prompt: "New name:",
-        value: state.wallets.form.name.as_str(),
+        value: state.wallets.form.name.value(),
         focused: state.wallets.form.focus == WalletFormField::Name,
-        error: state.wallets.form.error.as_deref(),
+        error,
         confirm_label: "Save",
         cancel_label: "Cancel",
     };
@@ -273,19 +286,19 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
 
     let mut lines = vec![
         Line::from(""),
-        render_field(
-            "Name",
-            form.name.as_str(),
-            form.focus == WalletFormField::Name,
+        FormFieldRenderer::render_input_field(
+            &form.name.label,
+            form.name.value(),
+            &form.name.state,
             theme,
         ),
     ];
 
     if !is_rename {
-        lines.push(render_field(
-            "Opening",
-            form.opening.as_str(),
-            form.focus == WalletFormField::Opening,
+        lines.push(FormFieldRenderer::render_input_field(
+            &form.opening.label,
+            form.opening.value(),
+            &form.opening.state,
             theme,
         ));
     }
@@ -302,13 +315,6 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         Span::styled("[Esc]", Style::default().fg(theme.accent)),
         Span::styled(" cancel", Style::default().fg(theme.text_muted)),
     ]));
-
-    if let Some(err) = form.error.as_ref() {
-        lines.push(Line::from(Span::styled(
-            format!("⚠ {err}"),
-            Style::default().fg(theme.negative),
-        )));
-    }
 
     let block = Block::default()
         .title(Span::styled(title, Style::default().fg(theme.accent)))
@@ -492,29 +498,6 @@ fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
             .border_style(Style::default().fg(theme.border)),
     );
     frame.render_widget(list, layout[1]);
-}
-
-fn render_field(label: &str, value: &str, focused: bool, theme: &Theme) -> Line<'static> {
-    let label_style = if focused {
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text_muted)
-    };
-    let value_style = if focused {
-        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text)
-    };
-    let cursor = if focused { "_" } else { "" };
-
-    Line::from(vec![
-        Span::styled(format!("  {label:<10}"), label_style),
-        Span::raw(": "),
-        Span::styled(value.to_string(), value_style),
-        Span::styled(cursor, Style::default().fg(theme.accent)),
-    ])
 }
 
 fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str) {

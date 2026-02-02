@@ -13,6 +13,7 @@ use super::{FormField, FormFieldRenderer};
 ///
 /// Provides real-time validation and formatting feedback for currency input.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AmountField {
     /// The label to display for this field.
     pub label: String,
@@ -22,6 +23,7 @@ pub struct AmountField {
     pub require_positive: bool,
 }
 
+#[allow(dead_code)]
 impl AmountField {
     /// Creates a new amount field with the given label.
     #[must_use]
@@ -96,6 +98,12 @@ impl AmountField {
     /// Clears the field.
     pub fn clear(&mut self) {
         self.state.clear();
+    }
+
+    /// Returns the current value of the field.
+    #[must_use]
+    pub fn value(&self) -> &str {
+        &self.state.value
     }
 }
 

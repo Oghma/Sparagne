@@ -33,9 +33,10 @@ impl App {
             return;
         }
         self.reset_flow_form();
-        self.state.flows.form.name = name;
+        self.state.flows.form.name.set_value(name);
         self.state.flows.mode = FlowsMode::Rename;
         self.state.flows.form.focus = FlowFormField::Name;
+        self.state.flows.form.update_focus();
     }
     pub(crate) fn cycle_flow_mode(&mut self) {
         self.state.flows.form.mode = match self.state.flows.form.mode {
@@ -66,6 +67,17 @@ impl App {
                 .unwrap_or(false)
         }) {
             self.state.flows.selected = pos;
+        }
+    }
+
+    pub(crate) fn toggle_flows_show_archived(&mut self) {
+        self.state.flows.show_archived = !self.state.flows.show_archived;
+        // Clamp selection after toggling
+        let len = flows_visible_indices(&self.state).len();
+        if len == 0 {
+            self.state.flows.selected = 0;
+        } else if self.state.flows.selected >= len {
+            self.state.flows.selected = len - 1;
         }
     }
 }

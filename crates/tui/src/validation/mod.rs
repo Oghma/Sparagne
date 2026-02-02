@@ -8,11 +8,12 @@ mod date;
 mod text;
 
 pub use amount::AmountValidator;
-pub use date::{DateFormat, DateValidator};
+pub use date::{DateField, DateFormat, DateValidator};
 pub use text::{LengthValidator, RequiredValidator};
 
 /// Result of validating a form field value.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[allow(dead_code)]
 pub enum ValidationResult {
     /// Input is valid.
     #[default]
@@ -23,6 +24,7 @@ pub enum ValidationResult {
     Pending,
 }
 
+#[allow(dead_code)]
 impl ValidationResult {
     /// Returns `true` if the validation passed.
     #[must_use]
@@ -63,6 +65,7 @@ pub trait Validator {
 
 /// State of a form field including its validation status.
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct FieldState {
     /// Current value of the field.
     pub value: String,
@@ -76,6 +79,7 @@ pub struct FieldState {
     pub required: bool,
 }
 
+#[allow(dead_code)]
 impl FieldState {
     /// Creates a new empty field state.
     #[must_use]

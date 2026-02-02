@@ -1,5 +1,7 @@
 use api_types::category::{CategoryAliasView, CategoryMergePreviewResponse, CategoryView};
 
+use crate::ui::forms::TextField;
+
 #[derive(Debug)]
 pub struct CategoriesState {
     pub selected: usize,
@@ -42,10 +44,41 @@ pub struct CategoryMergeState {
     pub confirming: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct CategoryFormState {
-    pub name: String,
-    pub error: Option<String>,
+    pub name: TextField,
+}
+
+impl Default for CategoryFormState {
+    fn default() -> Self {
+        Self {
+            name: TextField::new("Name").required(true).min_length(1),
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl CategoryFormState {
+    /// Updates focus state on all fields.
+    pub fn update_focus(&mut self, focused: bool) {
+        self.name.state.focused = focused;
+    }
+
+    /// Returns true if all fields are valid.
+    pub fn is_valid(&self) -> bool {
+        self.name.state.validation.is_valid()
+    }
+
+    /// Validates all fields and returns the first error message if any.
+    pub fn validate_all(&mut self) -> Option<String> {
+        self.name.validate();
+        self.name.state.validation.error_message().map(String::from)
+    }
+
+    /// Clears the form and resets to default state.
+    pub fn clear(&mut self) {
+        self.name.clear();
+    }
 }
 
 #[derive(Debug)]

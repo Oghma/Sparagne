@@ -8,6 +8,7 @@ use crate::{
     },
     error::Result,
     quick_add::parse as parse_quick_add,
+    validation::DateField,
 };
 use api_types::transaction::TransactionKind;
 use engine::Money;
@@ -236,9 +237,9 @@ impl App {
     }
 
     pub(crate) fn start_transfer_wallet(&mut self) {
-        let occurred_at = self.format_local_datetime(self.now_in_timezone());
+        let occurred_at_str = self.format_local_datetime(self.now_in_timezone());
         self.state.transactions.transfer = TransferFormState {
-            occurred_at,
+            occurred_at: DateField::with_value(occurred_at_str),
             ..TransferFormState::default()
         };
         self.state.transactions.mode = TransactionsMode::TransferWallet;
@@ -246,9 +247,9 @@ impl App {
     }
 
     pub(crate) fn start_transfer_flow(&mut self) {
-        let occurred_at = self.format_local_datetime(self.now_in_timezone());
+        let occurred_at_str = self.format_local_datetime(self.now_in_timezone());
         self.state.transactions.transfer = TransferFormState {
-            occurred_at,
+            occurred_at: DateField::with_value(occurred_at_str),
             ..TransferFormState::default()
         };
         self.state.transactions.mode = TransactionsMode::TransferFlow;
@@ -329,7 +330,7 @@ impl App {
             }
         };
 
-        let occurred_at = self.format_local_datetime(self.now_in_timezone());
+        let occurred_at_str = self.format_local_datetime(self.now_in_timezone());
         self.state.transactions.form = TransactionFormState {
             kind,
             amount: String::new(),
@@ -337,7 +338,7 @@ impl App {
             flow_index,
             category: String::new(),
             note: String::new(),
-            occurred_at,
+            occurred_at: DateField::with_value(occurred_at_str),
             focus: TransactionFormField::Amount,
             error: None,
             category_index: None,
@@ -366,7 +367,7 @@ impl App {
         }
 
         let currency = self.current_currency();
-        let occurred_at = self.format_local_datetime(detail.transaction.occurred_at);
+        let occurred_at_str = self.format_local_datetime(detail.transaction.occurred_at);
         let amount = format_amount_input(detail.transaction.amount_minor, currency);
 
         match detail.transaction.kind {
@@ -401,7 +402,7 @@ impl App {
                     flow_index,
                     category: detail.transaction.category.clone().unwrap_or_default(),
                     note: detail.transaction.note.clone().unwrap_or_default(),
-                    occurred_at,
+                    occurred_at: DateField::with_value(occurred_at_str.clone()),
                     focus: TransactionFormField::Amount,
                     error: None,
                     category_index: None,
@@ -441,7 +442,7 @@ impl App {
                     to_index,
                     amount,
                     note: detail.transaction.note.clone().unwrap_or_default(),
-                    occurred_at,
+                    occurred_at: DateField::with_value(occurred_at_str.clone()),
                     focus: TransferField::From,
                     error: None,
                     editing_id: Some(detail.transaction.id),
@@ -480,7 +481,7 @@ impl App {
                     to_index,
                     amount,
                     note: detail.transaction.note.clone().unwrap_or_default(),
-                    occurred_at,
+                    occurred_at: DateField::with_value(occurred_at_str),
                     focus: TransferField::From,
                     error: None,
                     editing_id: Some(detail.transaction.id),

@@ -15,6 +15,7 @@ use crate::{
 /// Status icons for toast notifications
 const ICON_SUCCESS: &str = "✓";
 const ICON_ERROR: &str = "✗";
+#[allow(dead_code)]
 const ICON_WARNING: &str = "⚠";
 const ICON_INFO: &str = "ℹ";
 const ICON_UNDO: &str = "↺";

@@ -102,9 +102,15 @@ impl App {
         self.load_members().await
     }
     pub(crate) async fn submit_member_form(&mut self) -> Result<()> {
-        let username = self.state.members.form.username.trim().to_string();
+        // Validate the form
+        if let Some(err) = self.state.members.form.validate_all() {
+            self.state.members.error = Some(err);
+            return Ok(());
+        }
+
+        let username = self.state.members.form.username.value().trim().to_string();
         if username.is_empty() {
-            self.state.members.form.error = Some("Inserisci un username.".to_string());
+            self.state.members.error = Some("Inserisci un username.".to_string());
             return Ok(());
         }
         let vault_id = self.current_vault_id()?;
@@ -126,7 +132,7 @@ impl App {
             }
             MembersScope::Flow => {
                 let Some((flow_id, _)) = self.current_member_flow() else {
-                    self.state.members.form.error = Some("Nessun flow condivisibile.".to_string());
+                    self.state.members.error = Some("Nessun flow condivisibile.".to_string());
                     return Ok(());
                 };
                 self.client
@@ -152,7 +158,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.members.form.error = Some(login_message_for_error(err));
+                self.state.members.error = Some(login_message_for_error(err));
             }
         }
 

@@ -28,7 +28,7 @@ impl App {
                 form.flow_index,
                 form.category.trim().to_string(),
                 form.note.trim().to_string(),
-                form.occurred_at.trim().to_string(),
+                form.occurred_at.value.trim().to_string(),
             )
         };
         let editing_id = self.state.transactions.form.editing_id;
@@ -263,7 +263,7 @@ impl App {
         }
 
         let note = self.state.transactions.transfer.note.trim();
-        let occurred_raw = self.state.transactions.transfer.occurred_at.trim();
+        let occurred_raw = self.state.transactions.transfer.occurred_at.value.trim();
         let occurred_at = if occurred_raw.is_empty() {
             None
         } else {
@@ -389,7 +389,7 @@ impl App {
         }
 
         let note = self.state.transactions.transfer.note.trim();
-        let occurred_raw = self.state.transactions.transfer.occurred_at.trim();
+        let occurred_raw = self.state.transactions.transfer.occurred_at.value.trim();
         let occurred_at = if occurred_raw.is_empty() {
             None
         } else {
