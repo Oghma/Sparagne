@@ -8,7 +8,8 @@ use api_types::membership::MemberUpsert;
 
 impl App {
     pub(crate) async fn open_members(&mut self) -> Result<()> {
-        self.state.section = Section::Members;
+        self.state.section = Section::Settings;
+        self.state.settings_tab = SettingsTab::Members;
         self.state.members.mode = MembersMode::List;
         self.reset_member_form();
         self.load_members().await

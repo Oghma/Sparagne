@@ -121,7 +121,9 @@ impl App {
     }
 
     pub(crate) async fn handle_members_input(&mut self, ch: char) -> Result<bool> {
-        if self.state.section != Section::Members {
+        if !(self.state.section == Section::Settings
+            && self.state.settings_tab == SettingsTab::Members)
+        {
             return Ok(false);
         }
         if self.state.members.mode == MembersMode::Form {

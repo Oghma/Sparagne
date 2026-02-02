@@ -52,7 +52,7 @@ impl App {
                 self.open_transaction_detail().await?;
             }
             HomeFeedItem::FlowAlert(alert) => {
-                self.state.section = Section::Flows;
+                self.state.section = Section::Accounts;
                 self.accounts_set_tab(1);
                 self.state.flows.search_query.clear();
                 self.state.flows.search_active = false;

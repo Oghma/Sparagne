@@ -22,6 +22,20 @@ use crate::error::Result;
 use super::{App, state::*};
 
 impl App {
+    /// Checks if we are in Settings section showing a specific sub-tab.
+    fn is_settings_categories(&self) -> bool {
+        self.state.section == Section::Settings
+            && self.state.settings_tab == SettingsTab::Categories
+    }
+
+    fn is_settings_vault(&self) -> bool {
+        self.state.section == Section::Settings && self.state.settings_tab == SettingsTab::Vault
+    }
+
+    fn is_settings_members(&self) -> bool {
+        self.state.section == Section::Settings && self.state.settings_tab == SettingsTab::Members
+    }
+
     #[doc(hidden)]
     pub async fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
         let action = crate::ui::keymap::map_key(key);
@@ -128,21 +142,7 @@ impl App {
                             }
                         }
                     }
-                } else if self.state.section == Section::Wallets {
-                    match self.state.wallets.mode {
-                        WalletsMode::Create | WalletsMode::Rename => {
-                            self.reset_wallet_form();
-                            self.state.wallets.mode = WalletsMode::List;
-                        }
-                        WalletsMode::Detail => {
-                            self.state.wallets.mode = WalletsMode::List;
-                            self.state.wallets.detail = WalletDetailState::default();
-                        }
-                        WalletsMode::List => {
-                            self.state.section = Section::Home;
-                        }
-                    }
-                } else if self.state.section == Section::Flows {
+                } else if self.state.section == Section::Accounts {
                     match self.state.accounts_tab {
                         AccountsTab::Sources => match self.state.wallets.mode {
                             WalletsMode::Create | WalletsMode::Rename => {
@@ -173,7 +173,7 @@ impl App {
                             }
                         }
                     }
-                } else if self.state.section == Section::Vault {
+                } else if self.is_settings_vault() {
                     match self.state.vault_ui.mode {
                         VaultMode::Create => {
                             self.reset_vault_form();
@@ -190,7 +190,7 @@ impl App {
                             self.state.section = Section::Home;
                         }
                     }
-                } else if self.state.section == Section::Categories {
+                } else if self.is_settings_categories() {
                     match self.state.categories.mode {
                         CategoriesMode::Merge => {
                             self.state.categories.mode = CategoriesMode::List;
@@ -216,7 +216,7 @@ impl App {
                             self.state.section = Section::Home;
                         }
                     }
-                } else if self.state.section == Section::Members {
+                } else if self.is_settings_members() {
                     match self.state.members.mode {
                         MembersMode::Form => {
                             self.reset_member_form();
@@ -226,7 +226,10 @@ impl App {
                             self.state.section = Section::Home;
                         }
                     }
-                } else if self.state.section == Section::Stats {
+                } else if self.state.section == Section::Settings {
+                    // Default for Settings - go home
+                    self.state.section = Section::Home;
+                } else if self.state.section == Section::Analytics {
                     self.state.section = Section::Home;
                 }
             }
@@ -240,21 +243,19 @@ impl App {
                     self.open_home_feed_item().await?;
                 } else if self.state.section == Section::Transactions {
                     self.handle_transactions_submit().await?;
-                } else if self.state.section == Section::Wallets {
-                    self.handle_wallets_submit().await?;
-                } else if self.state.section == Section::Flows {
+                } else if self.state.section == Section::Accounts {
                     match self.state.accounts_tab {
                         AccountsTab::Sources => self.handle_wallets_submit().await?,
                         AccountsTab::Envelopes => self.handle_flows_submit().await?,
                         AccountsTab::Goals => {}
                     }
-                } else if self.state.section == Section::Categories {
+                } else if self.is_settings_categories() {
                     self.handle_categories_submit().await?;
-                } else if self.state.section == Section::Members {
+                } else if self.is_settings_members() {
                     self.handle_members_submit().await?;
-                } else if self.state.section == Section::Vault {
+                } else if self.is_settings_vault() {
                     self.handle_vault_submit().await?;
-                } else if self.state.section == Section::Stats {
+                } else if self.state.section == Section::Analytics {
                     self.load_stats().await?;
                 }
             }
@@ -306,42 +307,38 @@ impl App {
                     && self.state.transactions.quick_active
                 {
                     self.state.transactions.quick_input.pop();
-                } else if self.state.section == Section::Categories
+                } else if self.is_settings_categories()
                     && self.state.categories.mode == CategoriesMode::Aliases
                     && self.state.categories.aliases.focus == AliasFocus::Input
                 {
                     self.state.categories.aliases.input.pop();
-                } else if self.state.section == Section::Categories
+                } else if self.is_settings_categories()
                     && matches!(
                         self.state.categories.mode,
                         CategoriesMode::Create | CategoriesMode::Rename
                     )
                 {
                     self.backspace_category_form();
-                } else if self.state.section == Section::Wallets {
-                    self.backspace_wallet_form();
-                } else if self.state.section == Section::Flows {
+                } else if self.state.section == Section::Accounts {
                     match self.state.accounts_tab {
                         AccountsTab::Sources => self.backspace_wallet_form(),
                         AccountsTab::Envelopes => self.backspace_flow_form(),
                         AccountsTab::Goals => {}
                     }
-                } else if self.state.section == Section::Members
+                } else if self.is_settings_members()
                     && self.state.members.mode == MembersMode::Form
                 {
                     if self.state.members.form.focus == MemberFormField::Username {
                         self.state.members.form.username.pop();
                     }
-                } else if self.state.section == Section::Vault {
+                } else if self.is_settings_vault() {
                     self.backspace_vault_form();
                 }
             }
             crate::ui::keymap::AppAction::Up => {
                 if self.state.screen == Screen::Home && self.state.section == Section::Home {
                     self.home_feed_select_prev();
-                } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Members
-                {
+                } else if self.state.screen == Screen::Home && self.is_settings_members() {
                     match self.state.members.mode {
                         MembersMode::Form => {
                             if self.state.members.form.focus == MemberFormField::Role {
@@ -388,17 +385,7 @@ impl App {
                 {
                     self.transaction_form_select_prev();
                 } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Wallets
-                    && matches!(
-                        self.state.wallets.mode,
-                        WalletsMode::List | WalletsMode::Detail
-                    )
-                {
-                    self.wallets_select_prev();
-                    if self.state.wallets.mode == WalletsMode::Detail {
-                        self.open_wallet_detail().await?;
-                    }
-                } else if self.state.screen == Screen::Home && self.state.section == Section::Flows
+                    && self.state.section == Section::Accounts
                 {
                     match self.state.accounts_tab {
                         AccountsTab::Sources
@@ -425,9 +412,7 @@ impl App {
                         }
                         AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
                     }
-                } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Categories
-                {
+                } else if self.state.screen == Screen::Home && self.is_settings_categories() {
                     match self.state.categories.mode {
                         CategoriesMode::List | CategoriesMode::Create | CategoriesMode::Rename => {
                             self.categories_select_prev();
@@ -440,12 +425,12 @@ impl App {
                         }
                     }
                 } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Vault
+                    && self.is_settings_vault()
                     && self.state.vault_ui.mode == VaultMode::Defaults
                 {
                     self.defaults_select_prev();
                 } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Vault
+                    && self.is_settings_vault()
                     && self.state.vault_ui.mode == VaultMode::Select
                 {
                     self.vaults_select_prev();
@@ -454,9 +439,7 @@ impl App {
             crate::ui::keymap::AppAction::Down => {
                 if self.state.screen == Screen::Home && self.state.section == Section::Home {
                     self.home_feed_select_next();
-                } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Members
-                {
+                } else if self.state.screen == Screen::Home && self.is_settings_members() {
                     match self.state.members.mode {
                         MembersMode::Form => {
                             if self.state.members.form.focus == MemberFormField::Role {
@@ -503,17 +486,7 @@ impl App {
                 {
                     self.transaction_form_select_next();
                 } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Wallets
-                    && matches!(
-                        self.state.wallets.mode,
-                        WalletsMode::List | WalletsMode::Detail
-                    )
-                {
-                    self.wallets_select_next();
-                    if self.state.wallets.mode == WalletsMode::Detail {
-                        self.open_wallet_detail().await?;
-                    }
-                } else if self.state.screen == Screen::Home && self.state.section == Section::Flows
+                    && self.state.section == Section::Accounts
                 {
                     match self.state.accounts_tab {
                         AccountsTab::Sources
@@ -540,9 +513,7 @@ impl App {
                         }
                         AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
                     }
-                } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Categories
-                {
+                } else if self.state.screen == Screen::Home && self.is_settings_categories() {
                     match self.state.categories.mode {
                         CategoriesMode::List | CategoriesMode::Create | CategoriesMode::Rename => {
                             self.categories_select_next();
@@ -555,12 +526,12 @@ impl App {
                         }
                     }
                 } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Vault
+                    && self.is_settings_vault()
                     && self.state.vault_ui.mode == VaultMode::Defaults
                 {
                     self.defaults_select_next();
                 } else if self.state.screen == Screen::Home
-                    && self.state.section == Section::Vault
+                    && self.is_settings_vault()
                     && self.state.vault_ui.mode == VaultMode::Select
                 {
                     self.vaults_select_next();
@@ -568,19 +539,23 @@ impl App {
             }
             crate::ui::keymap::AppAction::Left => {
                 if self.state.screen == Screen::Home {
-                    if self.state.section == Section::Flows {
+                    if self.state.section == Section::Accounts {
                         self.accounts_prev_tab();
-                    } else if self.state.section == Section::Stats {
+                    } else if self.state.section == Section::Analytics {
                         self.stats_prev_tab();
+                    } else if self.state.section == Section::Settings {
+                        self.settings_prev_tab();
                     }
                 }
             }
             crate::ui::keymap::AppAction::Right => {
                 if self.state.screen == Screen::Home {
-                    if self.state.section == Section::Flows {
+                    if self.state.section == Section::Accounts {
                         self.accounts_next_tab();
-                    } else if self.state.section == Section::Stats {
+                    } else if self.state.section == Section::Analytics {
                         self.stats_next_tab();
+                    } else if self.state.section == Section::Settings {
+                        self.settings_next_tab();
                     }
                 }
             }
@@ -589,16 +564,14 @@ impl App {
                     let field = self.active_field_mut();
                     field.push(ch);
                 } else {
-                    if self.state.section == Section::Categories
+                    if self.is_settings_categories()
                         && self.state.categories.mode == CategoriesMode::Aliases
                         && self.state.categories.aliases.focus == AliasFocus::Input
                     {
                         self.state.categories.aliases.input.push(ch);
                         return Ok(());
                     }
-                    if self.state.section == Section::Members
-                        && self.handle_members_input(ch).await?
-                    {
+                    if self.is_settings_members() && self.handle_members_input(ch).await? {
                         return Ok(());
                     }
                     if self.handle_search_input(ch).await? {

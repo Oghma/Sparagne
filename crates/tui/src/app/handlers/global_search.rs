@@ -109,7 +109,7 @@ impl App {
                 }
             }
             SearchResultKind::Wallet => {
-                self.state.section = Section::Flows;
+                self.state.section = Section::Accounts;
                 self.state.accounts_tab = AccountsTab::Sources;
                 self.state.wallets.mode = WalletsMode::List;
 
@@ -121,7 +121,7 @@ impl App {
                 }
             }
             SearchResultKind::Flow => {
-                self.state.section = Section::Flows;
+                self.state.section = Section::Accounts;
                 self.state.accounts_tab = AccountsTab::Envelopes;
                 self.state.flows.mode = FlowsMode::List;
 
@@ -133,7 +133,8 @@ impl App {
                 }
             }
             SearchResultKind::Category => {
-                self.state.section = Section::Categories;
+                self.state.section = Section::Settings;
+                self.state.settings_tab = SettingsTab::Categories;
                 self.state.categories.mode = CategoriesMode::List;
 
                 if let Some(idx) = self

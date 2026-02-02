@@ -6,19 +6,26 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{app::Section, ui::theme::Theme};
+use crate::{
+    app::{AccountsTab, Section, SettingsTab},
+    ui::theme::Theme,
+};
 
 /// Renders a horizontal tab bar for section navigation.
-pub fn render_tabs(frame: &mut Frame<'_>, area: Rect, active: Section, theme: &Theme) {
+pub fn render_tabs(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    active: Section,
+    accounts_tab: Option<AccountsTab>,
+    settings_tab: Option<SettingsTab>,
+    theme: &Theme,
+) {
     let sections = [
         Section::Home,
         Section::Transactions,
-        Section::Wallets,
-        Section::Flows,
-        Section::Categories,
-        Section::Members,
-        Section::Vault,
-        Section::Stats,
+        Section::Accounts,
+        Section::Analytics,
+        Section::Settings,
     ];
 
     // Build the tab labels
@@ -39,6 +46,23 @@ pub fn render_tabs(frame: &mut Frame<'_>, area: Rect, active: Section, theme: &T
                     .fg(theme.accent)
                     .add_modifier(Modifier::BOLD),
             ));
+
+            // Add breadcrumb for sub-tab
+            let sub_label = match *section {
+                Section::Accounts => accounts_tab.map(|t| t.label()),
+                Section::Settings => settings_tab.map(|t| t.label()),
+                _ => None,
+            };
+            if let Some(sub) = sub_label {
+                spans.push(Span::styled(" > ", Style::default().fg(theme.dim)));
+                spans.push(Span::styled(
+                    sub,
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                ));
+            }
+
             spans.push(Span::styled("]", Style::default().fg(theme.accent)));
         } else {
             spans.push(Span::styled(label, Style::default().fg(theme.text_muted)));
@@ -55,15 +79,9 @@ pub fn tab_shortcuts(theme: &Theme) -> Vec<Span<'static>> {
         Span::raw("/"),
         Span::styled("t", Style::default().fg(theme.accent)),
         Span::raw("/"),
-        Span::styled("w", Style::default().fg(theme.accent)),
+        Span::styled("a", Style::default().fg(theme.accent)),
         Span::raw("/"),
-        Span::styled("f", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("g", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("m", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("v", Style::default().fg(theme.accent)),
+        Span::styled("y", Style::default().fg(theme.accent)),
         Span::raw("/"),
         Span::styled("s", Style::default().fg(theme.accent)),
         Span::raw(" nav"),

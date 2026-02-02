@@ -35,13 +35,17 @@ impl App {
             self.advance_filter_focus();
             return;
         }
-        if self.state.section == Section::Categories
+        if self.state.section == Section::Settings
+            && self.state.settings_tab == SettingsTab::Categories
             && self.state.categories.mode == CategoriesMode::Aliases
         {
             self.toggle_alias_focus();
             return;
         }
-        if self.state.section == Section::Members && self.state.members.mode == MembersMode::Form {
+        if self.state.section == Section::Settings
+            && self.state.settings_tab == SettingsTab::Members
+            && self.state.members.mode == MembersMode::Form
+        {
             self.state.members.form.focus = match self.state.members.form.focus {
                 MemberFormField::Username => MemberFormField::Role,
                 MemberFormField::Role => MemberFormField::Username,
@@ -51,13 +55,14 @@ impl App {
         }
 
         match self.state.section {
-            Section::Wallets => self.advance_wallet_focus(),
-            Section::Flows => match self.state.accounts_tab {
+            Section::Accounts => match self.state.accounts_tab {
                 AccountsTab::Sources => self.advance_wallet_focus(),
                 AccountsTab::Envelopes => self.advance_flow_focus(),
                 AccountsTab::Goals => {}
             },
-            Section::Vault => self.advance_vault_focus(),
+            Section::Settings if self.state.settings_tab == SettingsTab::Vault => {
+                self.advance_vault_focus()
+            }
             _ => {}
         }
     }
@@ -135,19 +140,7 @@ impl App {
     }
     pub(crate) fn handle_form_input(&mut self, ch: char) -> bool {
         match self.state.section {
-            Section::Wallets => {
-                if matches!(
-                    self.state.wallets.mode,
-                    WalletsMode::Create | WalletsMode::Rename
-                ) {
-                    match self.state.wallets.form.focus {
-                        WalletFormField::Name => self.state.wallets.form.name.push(ch),
-                        WalletFormField::Opening => self.state.wallets.form.opening.push(ch),
-                    }
-                    return true;
-                }
-            }
-            Section::Flows => match self.state.accounts_tab {
+            Section::Accounts => match self.state.accounts_tab {
                 AccountsTab::Sources => {
                     if matches!(
                         self.state.wallets.mode,
@@ -178,35 +171,37 @@ impl App {
                 }
                 AccountsTab::Goals => {}
             },
-            Section::Categories => {
-                if matches!(
-                    self.state.categories.mode,
-                    CategoriesMode::Create | CategoriesMode::Rename
-                ) {
-                    self.state.categories.form.name.push(ch);
-                    return true;
-                }
-            }
-            Section::Members => {
-                if self.state.members.mode == MembersMode::Form {
-                    match self.state.members.form.focus {
-                        MemberFormField::Username => self.state.members.form.username.push(ch),
-                        MemberFormField::Role => {
-                            if ch == ' ' {
-                                self.cycle_member_role(true);
-                            }
-                            return true;
-                        }
+            Section::Settings => match self.state.settings_tab {
+                SettingsTab::Categories => {
+                    if matches!(
+                        self.state.categories.mode,
+                        CategoriesMode::Create | CategoriesMode::Rename
+                    ) {
+                        self.state.categories.form.name.push(ch);
+                        return true;
                     }
-                    return true;
                 }
-            }
-            Section::Vault => {
-                if self.state.vault_ui.mode == VaultMode::Create {
-                    self.state.vault_ui.form.name.push(ch);
-                    return true;
+                SettingsTab::Members => {
+                    if self.state.members.mode == MembersMode::Form {
+                        match self.state.members.form.focus {
+                            MemberFormField::Username => self.state.members.form.username.push(ch),
+                            MemberFormField::Role => {
+                                if ch == ' ' {
+                                    self.cycle_member_role(true);
+                                }
+                                return true;
+                            }
+                        }
+                        return true;
+                    }
                 }
-            }
+                SettingsTab::Vault => {
+                    if self.state.vault_ui.mode == VaultMode::Create {
+                        self.state.vault_ui.form.name.push(ch);
+                        return true;
+                    }
+                }
+            },
             _ => {}
         }
         false

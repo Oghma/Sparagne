@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, Section, TransactionsMode},
+    app::{AccountsTab, AppState, Section, SettingsTab, TransactionsMode},
     ui::{components::centered_rect, theme::Theme},
 };
 
@@ -40,12 +40,17 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
     let section_name = match state.section {
         Section::Home => "Home",
         Section::Transactions => "Transactions",
-        Section::Wallets => "Wallets",
-        Section::Flows => "Accounts",
-        Section::Categories => "Categories",
-        Section::Members => "Members",
-        Section::Vault => "Vault",
-        Section::Stats => "Statistics",
+        Section::Accounts => match state.accounts_tab {
+            AccountsTab::Sources => "Accounts > Sources",
+            AccountsTab::Envelopes => "Accounts > Envelopes",
+            AccountsTab::Goals => "Accounts > Goals",
+        },
+        Section::Analytics => "Analytics",
+        Section::Settings => match state.settings_tab {
+            SettingsTab::Categories => "Settings > Categories",
+            SettingsTab::Vault => "Settings > Vault",
+            SettingsTab::Members => "Settings > Members",
+        },
     };
 
     let lines = vec![
@@ -123,10 +128,11 @@ fn global_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
         Line::from(""),
         shortcut_line("h", "Home", theme),
         shortcut_line("t", "Transactions", theme),
-        shortcut_line("w", "Wallets", theme),
         shortcut_line("a", "Accounts", theme),
-        shortcut_line("g", "Categories", theme),
-        shortcut_line("s", "Statistics", theme),
+        shortcut_line("y", "Analytics", theme),
+        shortcut_line("s", "Settings", theme),
+        shortcut_line("Tab", "Next sub-tab", theme),
+        shortcut_line("Shift+Tab", "Prev sub-tab", theme),
         shortcut_line("↑/↓ j/k", "Navigate list", theme),
         shortcut_line("Enter", "Open details", theme),
         shortcut_line("Esc", "Back / Close", theme),
@@ -142,12 +148,9 @@ fn context_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
     match state.section {
         Section::Home => home_shortcuts(theme),
         Section::Transactions => transactions_shortcuts(state, theme),
-        Section::Wallets => wallets_shortcuts(theme),
-        Section::Flows => flows_shortcuts(theme),
-        Section::Categories => categories_shortcuts(theme),
-        Section::Members => members_shortcuts(theme),
-        Section::Vault => vault_shortcuts(theme),
-        Section::Stats => stats_shortcuts(theme),
+        Section::Accounts => accounts_shortcuts(state, theme),
+        Section::Analytics => analytics_shortcuts(theme),
+        Section::Settings => settings_shortcuts(state, theme),
     }
 }
 
@@ -160,8 +163,9 @@ fn home_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
         shortcut_line("n", "Quick add transaction", theme),
         shortcut_line("N", "New transaction (modal)", theme),
         shortcut_line("t", "Go to Transactions", theme),
-        shortcut_line("w", "Go to Wallets", theme),
         shortcut_line("a", "Go to Accounts", theme),
+        shortcut_line("y", "Go to Analytics", theme),
+        shortcut_line("s", "Go to Settings", theme),
     ]
 }
 
@@ -224,86 +228,102 @@ fn transactions_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>>
     lines
 }
 
-fn wallets_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
-    vec![
-        section_header("Wallets", theme),
+fn accounts_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        section_header("Accounts", theme),
         Line::from(""),
-        shortcut_line("c", "Create wallet", theme),
-        shortcut_line("e", "Rename wallet", theme),
-        shortcut_line("d", "Delete (archive)", theme),
-        shortcut_line("Enter", "View details", theme),
+        shortcut_line("Tab", "Next sub-tab", theme),
+        shortcut_line("Shift+Tab", "Prev sub-tab", theme),
+        shortcut_line("1/2/3", "Jump to sub-tab", theme),
         Line::from(""),
-        section_header("Detail View", theme),
-        Line::from(""),
-        shortcut_line("Esc", "Back to list", theme),
-    ]
+    ];
+
+    match state.accounts_tab {
+        AccountsTab::Sources => {
+            lines.push(section_header("Sources (Wallets)", theme));
+            lines.push(Line::from(""));
+            lines.push(shortcut_line("c", "Create wallet", theme));
+            lines.push(shortcut_line("e", "Rename wallet", theme));
+            lines.push(shortcut_line("d", "Delete (archive)", theme));
+            lines.push(shortcut_line("Enter", "View details", theme));
+        }
+        AccountsTab::Envelopes => {
+            lines.push(section_header("Envelopes (Flows)", theme));
+            lines.push(Line::from(""));
+            lines.push(shortcut_line("c", "Create envelope", theme));
+            lines.push(shortcut_line("e", "Rename envelope", theme));
+            lines.push(shortcut_line("d", "Delete (archive)", theme));
+            lines.push(shortcut_line("m", "Change mode", theme));
+            lines.push(shortcut_line("Enter", "View details", theme));
+        }
+        AccountsTab::Goals => {
+            lines.push(section_header("Goals", theme));
+            lines.push(Line::from(""));
+            lines.push(shortcut_line("(coming soon)", "", theme));
+        }
+    }
+
+    lines
 }
 
-fn flows_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
+fn analytics_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
     vec![
-        section_header("Accounts (Sources / Envelopes / Goals)", theme),
-        Line::from(""),
-        shortcut_line("←/→", "Switch tab", theme),
-        shortcut_line("1/2/3", "Jump tab", theme),
-        shortcut_line("c", "Create (current tab)", theme),
-        shortcut_line("e", "Rename (current tab)", theme),
-        shortcut_line("d", "Delete (current tab)", theme),
-        shortcut_line("m", "Change envelope mode", theme),
-        shortcut_line("Enter", "View details", theme),
-    ]
-}
-
-fn categories_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
-    vec![
-        section_header("Categories", theme),
-        Line::from(""),
-        shortcut_line("c", "Create category", theme),
-        shortcut_line("e", "Rename category", theme),
-        shortcut_line("d", "Delete (archive)", theme),
-        shortcut_line("l", "Manage aliases", theme),
-        shortcut_line("m", "Merge categories", theme),
-        Line::from(""),
-        section_header("Aliases", theme),
-        Line::from(""),
-        shortcut_line("Tab", "Switch focus", theme),
-        shortcut_line("x", "Delete alias", theme),
-        shortcut_line("Enter", "Add/Save", theme),
-    ]
-}
-
-fn members_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
-    vec![
-        section_header("Members", theme),
-        Line::from(""),
-        shortcut_line("a", "Add member", theme),
-        shortcut_line("e", "Edit member", theme),
-        shortcut_line("x", "Remove member", theme),
-        shortcut_line("v", "Vault members", theme),
-        shortcut_line("f", "Flow sharing", theme),
-        Line::from(""),
-        shortcut_line("[/]", "Change flow", theme),
-        shortcut_line("↑/↓", "Change role", theme),
-    ]
-}
-
-fn vault_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
-    vec![
-        section_header("Vault", theme),
-        Line::from(""),
-        shortcut_line("c", "Create vault", theme),
-        shortcut_line("Enter", "Select vault", theme),
-    ]
-}
-
-fn stats_shortcuts(theme: &Theme) -> Vec<Line<'static>> {
-    vec![
-        section_header("Statistics", theme),
+        section_header("Analytics", theme),
         Line::from(""),
         shortcut_line("r", "Refresh data", theme),
         shortcut_line("←/→", "Switch view", theme),
         shortcut_line("1/2/3", "Cash/Spend/Worth", theme),
         shortcut_line("[/]", "Change period", theme),
     ]
+}
+
+fn settings_shortcuts(state: &AppState, theme: &Theme) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        section_header("Settings", theme),
+        Line::from(""),
+        shortcut_line("Tab", "Next sub-tab", theme),
+        shortcut_line("Shift+Tab", "Prev sub-tab", theme),
+        shortcut_line("1/2/3", "Jump to sub-tab", theme),
+        Line::from(""),
+    ];
+
+    match state.settings_tab {
+        SettingsTab::Categories => {
+            lines.push(section_header("Categories", theme));
+            lines.push(Line::from(""));
+            lines.push(shortcut_line("c", "Create category", theme));
+            lines.push(shortcut_line("e", "Rename category", theme));
+            lines.push(shortcut_line("d", "Delete (archive)", theme));
+            lines.push(shortcut_line("l", "Manage aliases", theme));
+            lines.push(shortcut_line("m", "Merge categories", theme));
+            lines.push(Line::from(""));
+            lines.push(section_header("Aliases", theme));
+            lines.push(Line::from(""));
+            lines.push(shortcut_line("Tab", "Switch focus", theme));
+            lines.push(shortcut_line("x", "Delete alias", theme));
+            lines.push(shortcut_line("Enter", "Add/Save", theme));
+        }
+        SettingsTab::Vault => {
+            lines.push(section_header("Vault", theme));
+            lines.push(Line::from(""));
+            lines.push(shortcut_line("c", "Create vault", theme));
+            lines.push(shortcut_line("Enter", "Select vault", theme));
+        }
+        SettingsTab::Members => {
+            lines.push(section_header("Members", theme));
+            lines.push(Line::from(""));
+            lines.push(shortcut_line("a", "Add member", theme));
+            lines.push(shortcut_line("e", "Edit member", theme));
+            lines.push(shortcut_line("x", "Remove member", theme));
+            lines.push(shortcut_line("v", "Vault members", theme));
+            lines.push(shortcut_line("f", "Flow sharing", theme));
+            lines.push(Line::from(""));
+            lines.push(shortcut_line("[/]", "Change flow", theme));
+            lines.push(shortcut_line("↑/↓", "Change role", theme));
+        }
+    }
+
+    lines
 }
 
 fn section_header(title: &str, theme: &Theme) -> Line<'static> {

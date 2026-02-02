@@ -105,11 +105,13 @@ impl App {
                 self.start_transfer_flow();
             }
             PaletteCommand::Categories => {
-                self.state.section = Section::Categories;
+                self.state.section = Section::Settings;
+                self.state.settings_tab = SettingsTab::Categories;
                 self.load_categories().await?;
             }
             PaletteCommand::CategoryAliases => {
-                self.state.section = Section::Categories;
+                self.state.section = Section::Settings;
+                self.state.settings_tab = SettingsTab::Categories;
                 self.load_categories().await?;
                 self.start_category_aliases().await?;
             }
@@ -117,11 +119,12 @@ impl App {
                 self.open_members().await?;
             }
             PaletteCommand::WalletNew => {
-                self.state.section = Section::Wallets;
+                self.state.section = Section::Accounts;
+                self.state.accounts_tab = AccountsTab::Sources;
                 self.start_wallet_create();
             }
             PaletteCommand::FlowNew => {
-                self.state.section = Section::Flows;
+                self.state.section = Section::Accounts;
                 self.accounts_set_tab(1);
                 if self.state.snapshot.is_none() {
                     self.refresh_snapshot().await?;
@@ -129,16 +132,17 @@ impl App {
                 self.start_flow_create();
             }
             PaletteCommand::VaultCreate => {
-                self.state.section = Section::Vault;
+                self.state.section = Section::Settings;
+                self.state.settings_tab = SettingsTab::Vault;
                 self.start_vault_create();
             }
             PaletteCommand::Refresh => {
                 self.refresh_snapshot().await?;
                 if self.state.section == Section::Transactions {
                     self.load_transactions(true).await?;
-                } else if self.state.section == Section::Categories {
+                } else if self.is_settings_categories() {
                     self.load_categories().await?;
-                } else if self.state.section == Section::Stats {
+                } else if self.state.section == Section::Analytics {
                     self.load_stats().await?;
                 }
             }

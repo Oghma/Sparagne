@@ -1,9 +1,11 @@
 pub mod accounts;
+pub mod analytics;
 pub mod categories;
 pub mod flows;
 pub mod home;
 pub mod login;
 pub mod members;
+pub mod settings;
 pub mod stats;
 pub mod transactions;
 pub mod vault;

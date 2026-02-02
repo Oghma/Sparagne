@@ -35,12 +35,9 @@ pub enum Screen {
 pub enum Section {
     Home,
     Transactions,
-    Wallets,
-    Flows,
-    Categories,
-    Members,
-    Vault,
-    Stats,
+    Accounts,
+    Analytics,
+    Settings,
 }
 
 impl Section {
@@ -48,12 +45,54 @@ impl Section {
         match self {
             Self::Home => "Home",
             Self::Transactions => "Transactions",
-            Self::Wallets => "Wallets",
-            Self::Flows => "Accounts",
+            Self::Accounts => "Accounts",
+            Self::Analytics => "Analytics",
+            Self::Settings => "Settings",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SettingsTab {
+    #[default]
+    Categories,
+    Vault,
+    Members,
+}
+
+impl SettingsTab {
+    pub const ALL: [Self; 3] = [Self::Categories, Self::Vault, Self::Members];
+
+    pub fn index(self) -> usize {
+        match self {
+            Self::Categories => 0,
+            Self::Vault => 1,
+            Self::Members => 2,
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            1 => Self::Vault,
+            2 => Self::Members,
+            _ => Self::Categories,
+        }
+    }
+
+    pub fn next(self) -> Self {
+        Self::from_index((self.index() + 1) % Self::ALL.len())
+    }
+
+    pub fn prev(self) -> Self {
+        let len = Self::ALL.len();
+        Self::from_index((self.index() + len - 1) % len)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
             Self::Categories => "Categories",
-            Self::Members => "Members",
             Self::Vault => "Vault",
-            Self::Stats => "Stats",
+            Self::Members => "Members",
         }
     }
 }
@@ -92,6 +131,14 @@ impl AccountsTab {
         let len = Self::ALL.len();
         Self::from_index((self.index() + len - 1) % len)
     }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Sources => "Sources",
+            Self::Envelopes => "Envelopes",
+            Self::Goals => "Goals",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +163,7 @@ pub struct AppState {
     pub snapshot: Option<VaultSnapshot>,
     pub section: Section,
     pub accounts_tab: AccountsTab,
+    pub settings_tab: SettingsTab,
     pub home_feed_selected: usize,
     pub home_low_balance_minor: i64,
     pub undo_toast_secs: u64,

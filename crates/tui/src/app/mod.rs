@@ -50,6 +50,7 @@ impl App {
             snapshot: None,
             section: Section::Home,
             accounts_tab: AccountsTab::Sources,
+            settings_tab: SettingsTab::default(),
             home_feed_selected: 0,
             home_low_balance_minor: config.low_balance_minor,
             undo_toast_secs: config.undo_toast_secs.max(1),

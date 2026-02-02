@@ -44,22 +44,18 @@ pub fn hint_separator(theme: &Theme) -> Span<'static> {
     Span::styled("  │  ", Style::default().fg(theme.border))
 }
 
+/// Help hint to remind users about the help overlay.
+pub fn help_hint() -> KeyHint {
+    KeyHint::new("?", "help")
+}
+
 /// Common hint groups for reuse across screens.
 pub mod common {
     use super::KeyHint;
 
-    /// Navigation hints for list views.
-    pub fn list_navigation() -> Vec<KeyHint> {
-        vec![
-            KeyHint::new("↑↓", "select"),
-            KeyHint::new("Enter", "detail"),
-        ]
-    }
-
     /// Hints for form editing.
     pub fn form_editing() -> Vec<KeyHint> {
         vec![
-            KeyHint::new("Tab", "next"),
             KeyHint::new("Enter", "save"),
             KeyHint::new("Esc", "cancel"),
         ]
@@ -67,16 +63,7 @@ pub mod common {
 
     /// Hints for detail views.
     pub fn detail_view() -> Vec<KeyHint> {
-        vec![KeyHint::new("b", "back"), KeyHint::new("Esc", "back")]
-    }
-
-    /// Global application shortcuts.
-    pub fn global_shortcuts() -> Vec<KeyHint> {
-        vec![
-            KeyHint::new("Ctrl+F", "search"),
-            KeyHint::new("Ctrl+P", "cmd"),
-            KeyHint::new("q", "quit"),
-        ]
+        vec![KeyHint::new("Esc", "back")]
     }
 
     /// Section navigation shortcuts.
@@ -84,24 +71,14 @@ pub mod common {
         vec![
             KeyHint::new("h", "home"),
             KeyHint::new("t", "txn"),
-            KeyHint::new("w", "wallet"),
             KeyHint::new("a", "accounts"),
-            KeyHint::new("g", "categories"),
-            KeyHint::new("s", "stats"),
+            KeyHint::new("y", "analytics"),
+            KeyHint::new("s", "settings"),
         ]
     }
 
-    /// Quick add shortcuts.
-    pub fn quick_add() -> Vec<KeyHint> {
-        vec![KeyHint::new("n", "quick add"), KeyHint::new("N", "new txn")]
-    }
-
-    /// Item action shortcuts (uniform contract).
-    pub fn item_actions() -> Vec<KeyHint> {
-        vec![
-            KeyHint::new("Enter", "detail"),
-            KeyHint::new("e", "edit"),
-            KeyHint::new("d", "delete"),
-        ]
+    /// Quick add shortcut.
+    pub fn quick_add() -> KeyHint {
+        KeyHint::new("n", "quick add")
     }
 }

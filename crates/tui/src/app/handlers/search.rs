@@ -8,10 +8,7 @@ impl App {
             Section::Transactions => {
                 self.state.transactions.search_active = true;
             }
-            Section::Wallets => {
-                self.state.wallets.search_active = true;
-            }
-            Section::Flows => match self.state.accounts_tab {
+            Section::Accounts => match self.state.accounts_tab {
                 AccountsTab::Sources => {
                     self.state.wallets.search_active = true;
                 }
@@ -49,12 +46,7 @@ impl App {
                 self.refresh_transactions_search().await?;
                 return Ok(true);
             }
-            Section::Wallets if self.state.wallets.search_active => {
-                self.state.wallets.search_query.push(ch);
-                self.refresh_wallets_search().await?;
-                return Ok(true);
-            }
-            Section::Flows
+            Section::Accounts
                 if self.state.accounts_tab == AccountsTab::Sources
                     && self.state.wallets.search_active =>
             {
@@ -62,7 +54,7 @@ impl App {
                 self.refresh_wallets_search().await?;
                 return Ok(true);
             }
-            Section::Flows
+            Section::Accounts
                 if self.state.accounts_tab != AccountsTab::Sources
                     && self.state.flows.search_active =>
             {
@@ -82,12 +74,7 @@ impl App {
                 self.refresh_transactions_search().await?;
                 return Ok(true);
             }
-            Section::Wallets if self.state.wallets.search_active => {
-                self.state.wallets.search_query.pop();
-                self.refresh_wallets_search().await?;
-                return Ok(true);
-            }
-            Section::Flows
+            Section::Accounts
                 if self.state.accounts_tab == AccountsTab::Sources
                     && self.state.wallets.search_active =>
             {
@@ -95,7 +82,7 @@ impl App {
                 self.refresh_wallets_search().await?;
                 return Ok(true);
             }
-            Section::Flows
+            Section::Accounts
                 if self.state.accounts_tab != AccountsTab::Sources
                     && self.state.flows.search_active =>
             {
