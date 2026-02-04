@@ -213,7 +213,7 @@ impl App {
             Ok(()) => {
                 self.state.transactions.mode = TransactionsMode::List;
                 self.state.transactions.detail = None;
-                self.set_toast("Transazione annullata.", ToastLevel::Success);
+                self.set_toast(&t(self.state.locale, TextKey::SuccessTransactionVoided), ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
@@ -221,7 +221,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore durante l'annullamento.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorVoiding), ToastLevel::Error);
             }
         }
 
@@ -349,7 +349,7 @@ impl App {
                     self.state.last_flow_id = Some(flow_id);
                 }
                 self.state.transactions.last_created_id = Some(created.id);
-                self.set_toast("Transazione ripetuta.", ToastLevel::Success);
+                self.set_toast(&t(self.state.locale, TextKey::SuccessTransactionRepeated), ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
@@ -357,7 +357,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore durante la ripetizione.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorRepeating), ToastLevel::Error);
             }
         }
 

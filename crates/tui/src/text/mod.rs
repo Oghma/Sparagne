@@ -82,7 +82,7 @@ pub enum TextKey {
     TitleVaultDefaults,
     TitleSelectVault,
 
-    // Validation Errors (18)
+    // Validation Errors (32)
     ValidationRequired,
     ValidationAmountRequired,
     ValidationAmountInvalid,
@@ -101,6 +101,22 @@ pub enum TextKey {
     ValidationRoleRequired,
     ValidationFromRequired,
     ValidationToRequired,
+    ValidationTransferSameSource,
+    ValidationTransferSameDestination,
+    ValidationTransferSameElements,
+    ValidationTransferMinimumTwo,
+    ValidationWalletInvalid,
+    ValidationFlowInvalid,
+    ValidationCategoryInvalid,
+    ValidationOpeningBalanceInvalid,
+    ValidationCapInvalid,
+    ValidationNoWalletSelected,
+    ValidationNoFlowSelected,
+    ValidationNoTransactionToVoid,
+    ValidationUnallocatedCannotRename,
+    ValidationUnallocatedCannotArchive,
+    ValidationAlreadyArchived,
+    ValidationSystemCategoryImmutable,
 
     // Empty States (8)
     EmptyTransactions,
@@ -248,19 +264,69 @@ pub enum TextKey {
     StatusOnline,
     StatusOffline,
 
-    // Success Messages (6)
+    // Success Messages (24)
     SuccessCreated,
     SuccessUpdated,
     SuccessDeleted,
     SuccessArchived,
     SuccessVoided,
     SuccessRefreshed,
+    SuccessTransactionSaved,
+    SuccessTransactionUpdated,
+    SuccessTransactionVoided,
+    SuccessTransactionRepeated,
+    SuccessTransferWalletSaved,
+    SuccessTransferWalletUpdated,
+    SuccessTransferFlowSaved,
+    SuccessTransferFlowUpdated,
+    SuccessWalletCreated,
+    SuccessWalletUpdated,
+    SuccessWalletRestored,
+    SuccessFlowCreated,
+    SuccessFlowUpdated,
+    SuccessFlowRestored,
+    SuccessCategoryCreated,
+    SuccessCategoryUpdated,
+    SuccessAliasCreated,
+    SuccessAliasDeleted,
+    SuccessVaultCreated,
+    SuccessVaultSelected,
+    SuccessDefaultsSaved,
+    SuccessMergeCompleted,
+    SuccessMergePreviewOk,
 
-    // Error Messages (4)
+    // Error Messages (28)
     ErrorGeneric,
     ErrorNetwork,
     ErrorNotFound,
     ErrorUnauthorized,
+    ErrorSaving,
+    ErrorUpdating,
+    ErrorDeleting,
+    ErrorArchiving,
+    ErrorRestoring,
+    ErrorVoiding,
+    ErrorRepeating,
+    ErrorConnection,
+    ErrorTransferWallet,
+    ErrorTransferFlow,
+    ErrorCreateWallet,
+    ErrorUpdateWallet,
+    ErrorArchiveWallet,
+    ErrorRestoreWallet,
+    ErrorCreateFlow,
+    ErrorUpdateFlow,
+    ErrorArchiveFlow,
+    ErrorRestoreFlow,
+    ErrorCreateCategory,
+    ErrorUpdateCategory,
+    ErrorArchiveCategory,
+    ErrorCreateAlias,
+    ErrorDeleteAlias,
+    ErrorCreateVault,
+    ErrorDeleteVault,
+    ErrorSaveDefaults,
+    ErrorMergeCategories,
 
     // Misc (4)
     MiscYes,
@@ -299,6 +365,68 @@ pub enum TextKey {
     // UI Improvements - Transactions
     TransactionsFilterTypes,
     TransactionsSyntaxHelp,
+
+    // Error Messages - API/Login
+    ErrorInvalidCredentials,
+    ErrorMembershipLastOwner,
+    ErrorMembershipOwnerImmutable,
+    ErrorMembershipOwnerRemoveForbidden,
+    ErrorOperationForbidden,
+    ErrorResourceNotFound,
+    ErrorConflict,
+    ErrorValidation,
+    ErrorValidationAmbiguousVault,
+    ErrorBadRequest,
+    ErrorServerError,
+    ErrorServerUnreachable,
+
+    // State Messages
+    StateSnapshotUnavailable,
+    StateNoWalletAvailable,
+    StateUnallocatedMissing,
+    StateCannotDetermineWalletTransfer,
+    StateCannotDetermineFlowTransfer,
+
+    // UI Labels
+    UiVaultLabel,
+    UiUserLabel,
+    UiMainLabel,
+    UiFetchingVaultData,
+    UiNoData,
+    UiOther,
+    UiError,
+    UiConnectionError,
+    UiUnableToConnect,
+    UiFailedToDeleteVault,
+    UiTypeToSearchAllData,
+    UiNoMatchingResults,
+
+    // Dialog/Modal Labels
+    DialogBulkCategorizeTitle,
+    DialogBulkCategorizeConfirm,
+    DialogBulkCategorizeCancel,
+    DialogGroupByDate,
+    DialogGroupByCategory,
+    DialogGroupByWallet,
+    DialogGroupByEnvelope,
+    DialogCancel,
+
+    // Prompts and Hints
+    PromptEnterName,
+    PromptEnterUsername,
+    PromptEnterAlias,
+    PromptEnterCap,
+    PromptFillAllFields,
+    PromptUseDedicatedTransferForm,
+    PromptAtLeastTwoCategories,
+    PromptSourceCategoryInvalid,
+    PromptDestinationCategoryInvalid,
+    PromptPressEnterToConfirm,
+    PromptCheckConflicts,
+    PromptNoShareableFlows,
+    PromptNoMemberSelected,
+    PromptNoAliasSelected,
+    PromptNoCategorySelected,
 }
 
 /// Returns the localized string for a text key.
@@ -330,12 +458,6 @@ pub fn format(locale: Locale, key: TextKey, pairs: &[(&str, &str)]) -> String {
     result
 }
 
-/// Returns the default locale for the TUI.
-#[must_use]
-#[allow(dead_code)]
-pub fn default_locale() -> Locale {
-    Locale::default()
-}
 
 #[cfg(test)]
 mod tests {

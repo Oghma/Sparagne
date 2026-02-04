@@ -26,7 +26,7 @@ use crate::{
     config::AppConfig,
     error::{AppError, Result},
     local_state::{LocalState, default_state_path},
-    text::Locale,
+    text::{Locale, TextKey, t},
     ui,
 };
 

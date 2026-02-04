@@ -36,43 +36,43 @@ impl App {
 
         let amount_raw = amount_raw.as_str();
         if amount_raw.is_empty() {
-            self.set_transaction_form_error("Inserisci un importo.");
+            self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationAmountRequired));
             return Ok(());
         }
         let amount_minor = match Money::parse_major(amount_raw, currency) {
             Ok(money) => money.minor().abs(),
             Err(_) => {
-                self.set_transaction_form_error("Importo non valido.");
+                self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationAmountInvalid));
                 return Ok(());
             }
         };
         if amount_minor <= 0 {
-            self.set_transaction_form_error("Importo deve essere > 0.");
+            self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationAmountPositive));
             return Ok(());
         }
 
         let wallet_ids = self.ordered_wallet_ids();
         if wallet_ids.is_empty() {
-            self.set_transaction_form_error("Nessun wallet disponibile.");
+            self.set_transaction_form_error(&t(self.state.locale, TextKey::StateNoWalletAvailable));
             return Ok(());
         }
         let wallet_id = match wallet_ids.get(wallet_index) {
             Some(id) => *id,
             None => {
-                self.set_transaction_form_error("Wallet non valido.");
+                self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationWalletInvalid));
                 return Ok(());
             }
         };
 
         let flow_ids = self.ordered_flow_ids();
         if flow_ids.is_empty() {
-            self.set_transaction_form_error("Nessun flow disponibile.");
+            self.set_transaction_form_error(&t(self.state.locale, TextKey::StateUnallocatedMissing));
             return Ok(());
         }
         let flow_id = match flow_ids.get(flow_index) {
             Some(id) => *id,
             None => {
-                self.set_transaction_form_error("Flow non valido.");
+                self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationFlowInvalid));
                 return Ok(());
             }
         };
@@ -134,7 +134,7 @@ impl App {
                 Ok(()) => {
                     self.state.last_flow_id = Some(flow_id);
                     self.state.transactions.form = TransactionFormState::default();
-                    self.set_toast("Transazione aggiornata.", ToastLevel::Success);
+                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransactionUpdated), ToastLevel::Success);
                     self.load_transactions(true).await?;
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
@@ -143,7 +143,7 @@ impl App {
                         return Ok(());
                     }
                     self.state.transactions.form.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast("Errore aggiornamento.", ToastLevel::Error);
+                    self.set_toast(&t(self.state.locale, TextKey::ErrorUpdating), ToastLevel::Error);
                 }
             }
         } else {
@@ -206,7 +206,7 @@ impl App {
                         .await
                 }
                 TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                    self.set_transaction_form_error("Usa il form transfer dedicato.");
+                    self.set_transaction_form_error(&t(self.state.locale, TextKey::PromptUseDedicatedTransferForm));
                     return Ok(());
                 }
             };
@@ -217,7 +217,7 @@ impl App {
                     self.state.transactions.last_created_id = Some(created.id);
                     self.state.transactions.mode = TransactionsMode::List;
                     self.state.transactions.form = TransactionFormState::default();
-                    self.set_toast("Transazione salvata.", ToastLevel::Success);
+                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransactionSaved), ToastLevel::Success);
                     self.load_transactions(true).await?;
                 }
                 Err(err) => {
@@ -225,7 +225,7 @@ impl App {
                         return Ok(());
                     }
                     self.state.transactions.form.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast("Errore salvataggio.", ToastLevel::Error);
+                    self.set_toast(&t(self.state.locale, TextKey::ErrorSaving), ToastLevel::Error);
                 }
             }
         }
@@ -248,7 +248,7 @@ impl App {
         let from_id = ids[self.state.transactions.transfer.from_index];
         let to_id = ids[self.state.transactions.transfer.to_index];
         if super::validate_different_ids(from_id, to_id).is_err() {
-            self.state.transactions.transfer.error = Some("Scegli due wallet diversi.".to_string());
+            self.state.transactions.transfer.error = Some(t(self.state.locale, TextKey::ValidationTransferSameSource).to_string());
             return Ok(());
         }
 
@@ -308,7 +308,7 @@ impl App {
             match res {
                 Ok(()) => {
                     self.state.transactions.transfer = TransferFormState::default();
-                    self.set_toast("Transfer wallet aggiornato.", ToastLevel::Success);
+                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransferWalletUpdated), ToastLevel::Success);
                     self.load_transactions(true).await?;
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
@@ -317,7 +317,7 @@ impl App {
                         return Ok(());
                     }
                     self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast("Errore transfer wallet.", ToastLevel::Error);
+                    self.set_toast(&t(self.state.locale, TextKey::ErrorTransferWallet), ToastLevel::Error);
                 }
             }
         } else {
@@ -347,7 +347,7 @@ impl App {
                     self.state.transactions.mode = TransactionsMode::List;
                     self.state.transactions.transfer = TransferFormState::default();
                     self.state.transactions.last_created_id = Some(created.id);
-                    self.set_toast("Transfer wallet salvato.", ToastLevel::Success);
+                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransferWalletSaved), ToastLevel::Success);
                     self.load_transactions(true).await?;
                 }
                 Err(err) => {
@@ -355,7 +355,7 @@ impl App {
                         return Ok(());
                     }
                     self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast("Errore transfer wallet.", ToastLevel::Error);
+                    self.set_toast(&t(self.state.locale, TextKey::ErrorTransferWallet), ToastLevel::Error);
                 }
             }
         }
@@ -377,7 +377,7 @@ impl App {
         let from_id = ids[self.state.transactions.transfer.from_index];
         let to_id = ids[self.state.transactions.transfer.to_index];
         if super::validate_different_ids(from_id, to_id).is_err() {
-            self.state.transactions.transfer.error = Some("Scegli due flow diversi.".to_string());
+            self.state.transactions.transfer.error = Some(t(self.state.locale, TextKey::ValidationTransferSameDestination).to_string());
             return Ok(());
         }
 
@@ -437,7 +437,7 @@ impl App {
             match res {
                 Ok(()) => {
                     self.state.transactions.transfer = TransferFormState::default();
-                    self.set_toast("Transfer flow aggiornato.", ToastLevel::Success);
+                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransferFlowUpdated), ToastLevel::Success);
                     self.load_transactions(true).await?;
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
@@ -446,7 +446,7 @@ impl App {
                         return Ok(());
                     }
                     self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast("Errore transfer flow.", ToastLevel::Error);
+                    self.set_toast(&t(self.state.locale, TextKey::ErrorTransferFlow), ToastLevel::Error);
                 }
             }
         } else {
@@ -476,7 +476,7 @@ impl App {
                     self.state.transactions.mode = TransactionsMode::List;
                     self.state.transactions.transfer = TransferFormState::default();
                     self.state.transactions.last_created_id = Some(created.id);
-                    self.set_toast("Transfer flow salvato.", ToastLevel::Success);
+                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransferFlowSaved), ToastLevel::Success);
                     self.load_transactions(true).await?;
                 }
                 Err(err) => {
@@ -484,7 +484,7 @@ impl App {
                         return Ok(());
                     }
                     self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast("Errore transfer flow.", ToastLevel::Error);
+                    self.set_toast(&t(self.state.locale, TextKey::ErrorTransferFlow), ToastLevel::Error);
                 }
             }
         }
@@ -567,10 +567,10 @@ impl App {
     }
     pub(crate) async fn undo_last_transaction(&mut self) -> Result<()> {
         let Some(id) = self.state.transactions.last_created_id else {
-            self.set_toast("Nessuna transazione da annullare.", ToastLevel::Info);
+            self.set_toast(&t(self.state.locale, TextKey::ValidationNoTransactionToVoid), ToastLevel::Info);
             return Ok(());
         };
-        self.void_transaction_by_id(id, Some("Transazione annullata."))
+        self.void_transaction_by_id(id, Some(&t(self.state.locale, TextKey::SuccessTransactionVoided)))
             .await?;
         Ok(())
     }
@@ -653,7 +653,7 @@ impl App {
         }
         let category_clean = category.trim().trim_start_matches('#').trim();
         if category_clean.is_empty() {
-            self.set_toast("Categoria non valida.", ToastLevel::Error);
+            self.set_toast(&t(self.state.locale, TextKey::ValidationCategoryInvalid), ToastLevel::Error);
             return Ok(());
         }
 
@@ -710,7 +710,7 @@ impl App {
         }
 
         if failures > 0 {
-            let base = last_error.unwrap_or_else(|| "Errore aggiornamento.".to_string());
+            let base = last_error.unwrap_or_else(|| t(self.state.locale, TextKey::ErrorUpdating).to_string());
             self.set_toast(
                 format!("{base} ({failures}/{total})", total = transaction_ids.len()).as_str(),
                 ToastLevel::Error,
@@ -904,7 +904,7 @@ impl App {
                 self.state.transactions.quick_input.clear();
                 self.state.transactions.quick_error = None;
                 self.state.transactions.quick_ambiguous = None;
-                self.set_toast("Transazione salvata.", ToastLevel::Success);
+                self.set_toast(&t(self.state.locale, TextKey::SuccessTransactionSaved), ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
@@ -912,7 +912,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.transactions.quick_error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore durante il salvataggio.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorSaving), ToastLevel::Error);
             }
         }
 
@@ -974,7 +974,7 @@ impl App {
                 self.state.transactions.quick_input.clear();
                 self.state.transactions.quick_error = None;
                 self.state.transactions.quick_ambiguous = None;
-                self.set_toast("Transfer wallet salvato.", ToastLevel::Success);
+                self.set_toast(&t(self.state.locale, TextKey::SuccessTransferWalletSaved), ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
@@ -982,7 +982,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.transactions.quick_error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore durante il salvataggio.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorSaving), ToastLevel::Error);
             }
         }
 
@@ -1044,7 +1044,7 @@ impl App {
                 self.state.transactions.quick_input.clear();
                 self.state.transactions.quick_error = None;
                 self.state.transactions.quick_ambiguous = None;
-                self.set_toast("Transfer flow salvato.", ToastLevel::Success);
+                self.set_toast(&t(self.state.locale, TextKey::SuccessTransferFlowSaved), ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
@@ -1052,7 +1052,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.transactions.quick_error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore durante il salvataggio.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorSaving), ToastLevel::Error);
             }
         }
 

@@ -10,7 +10,7 @@ use engine::Money;
 impl App {
     pub(crate) async fn open_wallet_detail(&mut self) -> Result<()> {
         let Some(wallet_id) = self.selected_wallet().map(|wallet| wallet.id) else {
-            self.state.wallets.error = Some("Nessun wallet selezionato.".to_string());
+            self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationNoWalletSelected).to_string());
             return Ok(());
         };
         self.state.wallets.detail.wallet_id = Some(wallet_id);
@@ -52,7 +52,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.wallets.detail.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                self.connection_error(&t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -69,7 +69,7 @@ impl App {
 
         let name = self.state.wallets.form.name.value().trim();
         if name.is_empty() {
-            self.state.wallets.error = Some("Enter a name.".to_string());
+            self.state.wallets.error = Some(t(self.state.locale, TextKey::PromptEnterName).to_string());
             return Ok(());
         }
 
@@ -83,7 +83,7 @@ impl App {
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
-                self.state.wallets.error = Some("Invalid opening balance.".to_string());
+                self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationOpeningBalanceInvalid).to_string());
                 return Ok(());
             }
         };
@@ -108,14 +108,14 @@ impl App {
                 self.state.wallets.mode = WalletsMode::List;
                 self.refresh_snapshot().await?;
                 self.select_wallet_by_id(created.id);
-                self.set_toast("Wallet created.", ToastLevel::Success);
+                self.set_toast(&t(self.state.locale, TextKey::SuccessWalletCreated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Failed to create wallet.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorCreateWallet), ToastLevel::Error);
             }
         }
 
@@ -123,7 +123,7 @@ impl App {
     }
     pub(crate) async fn submit_wallet_rename(&mut self) -> Result<()> {
         let Some(wallet_id) = self.selected_wallet().map(|w| w.id) else {
-            self.state.wallets.error = Some("No wallet selected.".to_string());
+            self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationNoWalletSelected).to_string());
             return Ok(());
         };
 
@@ -135,7 +135,7 @@ impl App {
 
         let name = self.state.wallets.form.name.value().trim();
         if name.is_empty() {
-            self.state.wallets.error = Some("Enter a name.".to_string());
+            self.state.wallets.error = Some(t(self.state.locale, TextKey::PromptEnterName).to_string());
             return Ok(());
         }
 
@@ -158,14 +158,14 @@ impl App {
                 self.reset_wallet_form();
                 self.state.wallets.mode = WalletsMode::List;
                 self.refresh_snapshot().await?;
-                self.set_toast("Wallet updated.", ToastLevel::Success);
+                self.set_toast(&t(self.state.locale, TextKey::SuccessWalletUpdated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Failed to update wallet.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorUpdateWallet), ToastLevel::Error);
             }
         }
 
@@ -173,7 +173,7 @@ impl App {
     }
     pub(crate) async fn toggle_wallet_archive(&mut self) -> Result<()> {
         let Some(wallet) = self.selected_wallet() else {
-            self.state.wallets.error = Some("Nessun wallet selezionato.".to_string());
+            self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationNoWalletSelected).to_string());
             return Ok(());
         };
         let res = self
@@ -193,14 +193,14 @@ impl App {
         match res {
             Ok(()) => {
                 self.refresh_snapshot().await?;
-                self.set_toast("Wallet aggiornato.", ToastLevel::Success);
+                self.set_toast(&t(self.state.locale, TextKey::SuccessWalletUpdated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore archivio wallet.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorArchiveWallet), ToastLevel::Error);
             }
         }
 
@@ -210,7 +210,7 @@ impl App {
     pub(crate) async fn archive_wallet_with_undo(&mut self) -> Result<()> {
         self.finalize_pending_undo().await?;
         let Some(wallet) = self.selected_wallet() else {
-            self.state.wallets.error = Some("Nessun wallet selezionato.".to_string());
+            self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationNoWalletSelected).to_string());
             return Ok(());
         };
         let wallet_id = wallet.id;
@@ -218,7 +218,7 @@ impl App {
         let is_archived = wallet.archived;
 
         if is_archived {
-            self.state.wallets.error = Some("Wallet già archiviato.".to_string());
+            self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationAlreadyArchived).to_string());
             return Ok(());
         }
 
@@ -247,7 +247,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore archivio wallet.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorArchiveWallet), ToastLevel::Error);
             }
         }
 
@@ -272,14 +272,14 @@ impl App {
         match res {
             Ok(()) => {
                 self.refresh_snapshot().await?;
-                self.set_toast("Wallet restored.", ToastLevel::Success);
+                self.set_toast(&t(self.state.locale, TextKey::SuccessWalletRestored), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore ripristino wallet.", ToastLevel::Error);
+                self.set_toast(&t(self.state.locale, TextKey::ErrorRestoreWallet), ToastLevel::Error);
             }
         }
 
