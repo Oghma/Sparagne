@@ -7,9 +7,7 @@ use ratatui::style::Color;
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
     // Base colors
-    pub background: Color,     // #282828 (bg)
-    pub surface: Color,        // #3c3836 (bg1)
-    pub surface_bright: Color, // #504945 (bg2)
+    pub background: Color, // #282828 (bg)
 
     // Text hierarchy
     pub text: Color,       // #ebdbb2 (fg)
@@ -41,7 +39,6 @@ impl Default for Theme {
     fn default() -> Self {
         // Gruvbox Dark Palette
         let background = Color::Rgb(40, 40, 40); // #282828
-        let surface = Color::Rgb(60, 56, 54); // #3c3836 (bg1)
         let surface_bright = Color::Rgb(80, 73, 69); // #504945 (bg2)
 
         let text = Color::Rgb(235, 219, 178); // #ebdbb2 (fg)
@@ -57,8 +54,6 @@ impl Default for Theme {
         Self {
             // Base surfaces
             background,
-            surface,
-            surface_bright,
 
             // Text hierarchy
             text,

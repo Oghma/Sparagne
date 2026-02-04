@@ -15,19 +15,6 @@ use crate::text::{Locale, TextKey, t};
 pub struct AmountValidator {
     /// If `true`, the amount must be positive (> 0).
     pub require_positive: bool,
-    /// If `true`, the amount must be non-negative (>= 0).
-    pub allow_zero: bool,
-}
-
-impl AmountValidator {
-    /// Creates a new validator that requires positive amounts.
-    #[must_use]
-    pub fn positive() -> Self {
-        Self {
-            require_positive: true,
-            allow_zero: false,
-        }
-    }
 }
 
 impl Validator for AmountValidator {
@@ -268,7 +255,9 @@ mod tests {
 
     #[test]
     fn validator_trait() {
-        let validator = AmountValidator::positive();
+        let validator = AmountValidator {
+            require_positive: true,
+        };
         assert!(validator.validate("100").is_valid());
         assert!(validator.validate("0").is_invalid());
     }

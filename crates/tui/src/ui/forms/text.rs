@@ -1,13 +1,6 @@
 //! Text form field with length validation.
 
-use ratatui::text::Line;
-
-use crate::{
-    ui::Theme,
-    validation::{FieldState, LengthValidator, RequiredValidator, ValidationResult, Validator},
-};
-
-use super::{FormField, FormFieldRenderer};
+use crate::validation::{FieldState, LengthValidator, RequiredValidator, ValidationResult, Validator};
 
 /// A form field for entering text with optional length constraints.
 #[derive(Debug, Clone)]
@@ -124,20 +117,6 @@ impl TextField {
     #[must_use]
     pub fn value(&self) -> &str {
         &self.state.value
-    }
-}
-
-impl FormField for TextField {
-    fn render_line(&self, theme: &Theme) -> Line<'static> {
-        FormFieldRenderer::render_input_field(&self.label, &self.state.value, &self.state, theme)
-    }
-
-    fn value(&self) -> &str {
-        &self.state.value
-    }
-
-    fn state(&self) -> &FieldState {
-        &self.state
     }
 }
 

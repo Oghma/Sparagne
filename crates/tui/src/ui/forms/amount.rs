@@ -1,13 +1,6 @@
 //! Amount form field with currency validation.
 
-use ratatui::text::Line;
-
-use crate::{
-    ui::Theme,
-    validation::{AmountValidator, FieldState, ValidationResult, Validator},
-};
-
-use super::{FormField, FormFieldRenderer};
+use crate::validation::{AmountValidator, FieldState, ValidationResult, Validator};
 
 /// A form field for entering monetary amounts.
 ///
@@ -61,7 +54,6 @@ impl AmountField {
     pub fn validate(&mut self) {
         let validator = AmountValidator {
             require_positive: self.require_positive,
-            allow_zero: !self.require_positive,
         };
 
         // Check required first
@@ -102,20 +94,6 @@ impl AmountField {
     #[must_use]
     pub fn value(&self) -> &str {
         &self.state.value
-    }
-}
-
-impl FormField for AmountField {
-    fn render_line(&self, theme: &Theme) -> Line<'static> {
-        FormFieldRenderer::render_input_field(&self.label, &self.state.value, &self.state, theme)
-    }
-
-    fn value(&self) -> &str {
-        &self.state.value
-    }
-
-    fn state(&self) -> &FieldState {
-        &self.state
     }
 }
 

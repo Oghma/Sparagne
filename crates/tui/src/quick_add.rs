@@ -58,11 +58,11 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAddParsed, String> 
     };
 
     let mut parts = rest.splitn(2, ' ');
-    let amount_raw = parts.next().unwrap_or("").trim();
+    let amount_raw = parts.next().unwrap_or_default().trim();
     if amount_raw.is_empty() {
         return Err("Importo mancante.".to_string());
     }
-    let note_raw = parts.next().unwrap_or("").trim();
+    let note_raw = parts.next().unwrap_or_default().trim();
 
     let amount = Money::parse_major(amount_raw, currency)
         .map_err(|_| "Importo non valido.".to_string())?
@@ -91,11 +91,11 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAddParsed, String> 
 fn parse_transfer_wallet(input: &str, currency: Currency) -> Result<QuickAddParsed, String> {
     // Syntax: tw>50 @bank @cash note
     let mut parts = input.splitn(2, ' ');
-    let amount_raw = parts.next().unwrap_or("").trim();
+    let amount_raw = parts.next().unwrap_or_default().trim();
     if amount_raw.is_empty() {
         return Err("Importo mancante.".to_string());
     }
-    let rest = parts.next().unwrap_or("").trim();
+    let rest = parts.next().unwrap_or_default().trim();
 
     let amount = Money::parse_major(amount_raw, currency)
         .map_err(|_| "Importo non valido.".to_string())?
@@ -127,11 +127,11 @@ fn parse_transfer_wallet(input: &str, currency: Currency) -> Result<QuickAddPars
 fn parse_transfer_flow(input: &str, currency: Currency) -> Result<QuickAddParsed, String> {
     // Syntax: tf>50 >food >savings note
     let mut parts = input.splitn(2, ' ');
-    let amount_raw = parts.next().unwrap_or("").trim();
+    let amount_raw = parts.next().unwrap_or_default().trim();
     if amount_raw.is_empty() {
         return Err("Importo mancante.".to_string());
     }
-    let rest = parts.next().unwrap_or("").trim();
+    let rest = parts.next().unwrap_or_default().trim();
 
     let amount = Money::parse_major(amount_raw, currency)
         .map_err(|_| "Importo non valido.".to_string())?

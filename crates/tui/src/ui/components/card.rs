@@ -3,7 +3,7 @@ use ratatui::{
     layout::Rect,
     style::Style,
     text::Span,
-    widgets::{Block, BorderType, Borders, Paragraph, Widget},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
 use crate::ui::theme::Theme;
@@ -58,13 +58,6 @@ impl<'a> Card<'a> {
     /// Renders the card border/frame without content.
     pub fn render_frame(&self, frame: &mut Frame<'_>, area: Rect) {
         frame.render_widget(self.block(), area);
-    }
-
-    /// Renders the card with the given widget as content.
-    pub fn render_with<W: Widget>(&self, frame: &mut Frame<'_>, area: Rect, content: W) {
-        let inner = self.inner(area);
-        frame.render_widget(self.block(), area);
-        frame.render_widget(content, inner);
     }
 }
 

@@ -1,0 +1,417 @@
+//! Cash flow tab rendering: stat cards, month summary, sparklines, category breakdown, trends.
+
+use ratatui::{
+    Frame,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
+    text::{Line, Span},
+    widgets::Paragraph,
+};
+
+use engine::Money;
+
+use crate::{
+    app::AppState,
+    ui::{
+        components::{
+            card::Card,
+            charts::{PieSlice, compute_percentage, render_bar_chart, render_braille_sparkline, render_inline_sparkline, render_pie_chart},
+            money::{flow_cap_gauge, styled_amount_bold_emoji, styled_percentage_change},
+        },
+        theme::Theme,
+    },
+};
+
+use super::components::{
+    StatRow, build_month_timeline, build_trend_line, calculate_net_change, get_currency,
+    percentage_change, render_category_list, render_stat_cards, render_stat_row,
+    trend_status_badge,
+};
+
+/// Render the cash flow tab.
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(5),  // StatCards row
+            Constraint::Length(9),  // Month summary with navigation
+            Constraint::Length(6),  // Sparkline
+            Constraint::Length(12), // Category breakdown
+            Constraint::Min(6),     // Monthly trend chart
+        ])
+        .split(area);
+
+    render_stat_cards(frame, layout[0], state, theme);
+    render_month_summary(frame, layout[1], state, theme);
+    render_sparkline(frame, layout[2], state, theme);
+    render_category_breakdown(frame, layout[3], state, theme);
+    render_monthly_trend(frame, layout[4], state, theme);
+}
+
+/// Render the month summary card with navigation, stats, and gauges.
+pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let (year, month) = state.stats.current_month;
+
+    let card = Card::new("Month Summary", theme).focused(true);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+
+    let currency = get_currency(state);
+
+    let (income, expenses, balance) = state
+        .stats
+        .data
+        .as_ref()
+        .map(|s| {
+            (
+                s.total_income_minor,
+                s.total_expenses_minor,
+                s.balance_minor,
+            )
+        })
+        .unwrap_or((0, 0, 0));
+
+    let net = income - expenses;
+
+    // Layout: header with navigation, then stats
+    let inner_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Navigation header
+            Constraint::Length(1), // Inline trend + MoM
+            Constraint::Min(0),    // Stats content
+        ])
+        .split(inner);
+
+    // Month navigation timeline
+    let nav_line = build_month_timeline(year, month, theme);
+    frame.render_widget(Paragraph::new(nav_line), inner_layout[0]);
+
+    let change_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(inner_layout[1]);
+
+    if !state.stats.sparkline.is_empty() {
+        render_inline_sparkline(frame, change_layout[0], &state.stats.sparkline, theme);
+    } else {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "No trend data yet",
+                Style::default().fg(theme.dim),
+            )),
+            change_layout[0],
+        );
+    }
+
+    let income_change = percentage_change(&state.stats.monthly_income);
+    let expense_change = percentage_change(&state.stats.monthly_trend);
+    let change_line = Line::from(vec![
+        Span::styled("MoM", Style::default().fg(theme.dim)),
+        Span::raw(" "),
+        Span::styled("Inc", Style::default().fg(theme.text_muted)),
+        Span::raw(" "),
+        income_change
+            .map(|value| styled_percentage_change(value, theme))
+            .unwrap_or_else(|| Span::styled("n/a", Style::default().fg(theme.dim))),
+        Span::raw("  "),
+        Span::styled("Exp", Style::default().fg(theme.text_muted)),
+        Span::raw(" "),
+        expense_change
+            .map(|value| styled_percentage_change(value, theme))
+            .unwrap_or_else(|| Span::styled("n/a", Style::default().fg(theme.dim))),
+    ]);
+    frame.render_widget(Paragraph::new(change_line), change_layout[1]);
+
+    // Stats content
+    let stats_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Income
+            Constraint::Length(1), // Expenses
+            Constraint::Length(1), // Gauge
+            Constraint::Length(1), // Divider
+            Constraint::Length(1), // Net
+            Constraint::Length(1), // Total Balance
+        ])
+        .split(inner_layout[2]);
+
+    // Income row with ASCII bar
+    let income_pct = compute_percentage(income, income);
+    render_stat_row(
+        frame,
+        stats_layout[0],
+        StatRow {
+            label: "Income",
+            amount: income,
+            percentage: income_pct,
+            color: theme.positive,
+        },
+        currency,
+        theme,
+    );
+
+    // Expenses row with ASCII bar (relative to income)
+    let expense_pct = if income == 0 && expenses > 0 {
+        100
+    } else {
+        compute_percentage(expenses, income)
+    };
+    render_stat_row(
+        frame,
+        stats_layout[1],
+        StatRow {
+            label: "Expenses",
+            amount: -expenses,
+            percentage: expense_pct,
+            color: theme.negative,
+        },
+        currency,
+        theme,
+    );
+
+    if let Some(gauge) = flow_cap_gauge(expenses, Some(income), "Expense/Income", theme) {
+        frame.render_widget(gauge, stats_layout[2]);
+    } else {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "No income to compare",
+                Style::default().fg(theme.dim),
+            )),
+            stats_layout[2],
+        );
+    }
+
+    // Divider
+    let divider = "─".repeat(stats_layout[3].width as usize);
+    frame.render_widget(
+        Paragraph::new(Span::styled(divider, Style::default().fg(theme.border))),
+        stats_layout[3],
+    );
+
+    // Net row
+    let net_line = Line::from(vec![
+        Span::styled("Net         ", Style::default().fg(theme.dim)),
+        styled_amount_bold_emoji(net, currency, theme, state.emoji_mode),
+    ]);
+    frame.render_widget(Paragraph::new(net_line), stats_layout[4]);
+
+    // Total Balance row
+    let balance_line = Line::from(vec![
+        Span::styled("Balance     ", Style::default().fg(theme.dim)),
+        Span::styled(
+            Money::new(balance).format(currency),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+        ),
+    ]);
+    frame.render_widget(Paragraph::new(balance_line), stats_layout[5]);
+
+    // Show error if any
+    if let Some(err) = state.stats.error.as_ref() {
+        let error_area = Rect {
+            y: inner.y + inner.height.saturating_sub(1),
+            height: 1,
+            ..inner
+        };
+        frame.render_widget(
+            Paragraph::new(Span::styled(err.as_str(), Style::default().fg(theme.error))),
+            error_area,
+        );
+    }
+}
+
+/// Render the category breakdown with pie chart and list.
+pub fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let breakdown = &state.stats.category_breakdown;
+
+    if breakdown.is_empty() {
+        let card = Card::new("Category Breakdown", theme);
+        let inner = card.inner(area);
+        card.render_frame(frame, area);
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "No expense data for category breakdown",
+                Style::default().fg(theme.dim),
+            ))
+            .alignment(Alignment::Center),
+            inner,
+        );
+        return;
+    }
+
+    // Split area: pie chart on the left, list on the right
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(20), Constraint::Min(30)])
+        .split(area);
+
+    // Render pie chart on the left
+    render_category_pie_chart(frame, cols[0], breakdown, theme);
+
+    // Render category list on the right
+    render_category_list(frame, cols[1], state, theme);
+}
+
+/// Render a pie chart for category distribution.
+fn render_category_pie_chart(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    breakdown: &[(String, i64)],
+    theme: &Theme,
+) {
+    // Define colors for pie slices (cycling through theme-compatible colors)
+    let colors = [
+        theme.negative,   // Red for largest
+        theme.warning,    // Orange/Yellow
+        theme.accent,     // Blue/Accent
+        theme.positive,   // Green
+        theme.text_muted, // Muted
+        theme.dim,        // Dim for smaller slices
+    ];
+
+    let slices: Vec<PieSlice> = breakdown
+        .iter()
+        .enumerate()
+        .map(|(i, (_, amount))| PieSlice {
+            value: amount.unsigned_abs(),
+            color: colors[i % colors.len()],
+        })
+        .collect();
+
+    render_pie_chart(frame, area, "Distribution", &slices, theme);
+}
+
+/// Render the balance sparkline.
+pub fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let card = Card::new("Balance Trend (30d)", theme);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+
+    if state.stats.sparkline.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "No data. Press 'r' to refresh stats.",
+                Style::default().fg(theme.dim),
+            ))
+            .alignment(Alignment::Center),
+            inner,
+        );
+        return;
+    }
+
+    render_braille_sparkline(frame, inner, &state.stats.sparkline, theme, true);
+}
+
+/// Render the monthly trend charts with income/expense comparison.
+pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let expense_trend = &state.stats.monthly_trend;
+    let income_trend = &state.stats.monthly_income;
+
+    if expense_trend.is_empty() && income_trend.is_empty() {
+        let card = Card::new("Monthly Trend", theme);
+        let inner = card.inner(area);
+        card.render_frame(frame, area);
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "Monthly trend data not available. Press 'r' to refresh stats.",
+                Style::default().fg(theme.dim),
+            ))
+            .alignment(Alignment::Center),
+            inner,
+        );
+        return;
+    }
+
+    // Consolidated trend view with status badges
+    let card = Card::new("Financial Trends (6 months)", theme).focused(true);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+
+    let currency = get_currency(state);
+
+    // Calculate trends and status
+    let income_change = percentage_change(income_trend);
+    let expense_change = percentage_change(expense_trend);
+    let net_change = calculate_net_change(income_trend, expense_trend);
+
+    // Get current values
+    let current_income = income_trend.last().map(|(_, v)| *v).unwrap_or(0);
+    let current_expense = expense_trend.last().map(|(_, v)| *v).unwrap_or(0);
+    let current_net = current_income - current_expense;
+
+    let inner_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Income row
+            Constraint::Length(1), // Expense row
+            Constraint::Length(1), // Net savings row
+            Constraint::Min(0),    // Charts
+        ])
+        .split(inner);
+
+    // Income trend row
+    let income_status = trend_status_badge(income_change, true, theme);
+    let income_line = build_trend_line(
+        "Income",
+        income_change,
+        current_income,
+        income_status,
+        income_trend,
+        currency,
+        theme,
+    );
+    frame.render_widget(Paragraph::new(income_line), inner_layout[0]);
+
+    // Expense trend row
+    let expense_status = trend_status_badge(expense_change, false, theme);
+    let expense_line = build_trend_line(
+        "Expenses",
+        expense_change,
+        -current_expense,
+        expense_status,
+        expense_trend,
+        currency,
+        theme,
+    );
+    frame.render_widget(Paragraph::new(expense_line), inner_layout[1]);
+
+    // Net savings row
+    let net_status = trend_status_badge(net_change, true, theme);
+    let net_sparkline: Vec<(String, i64)> = income_trend
+        .iter()
+        .zip(expense_trend.iter())
+        .map(|((label, inc), (_, exp))| (label.clone(), inc - exp))
+        .collect();
+    let net_line = build_trend_line(
+        "Net Savings",
+        net_change,
+        current_net,
+        net_status,
+        &net_sparkline,
+        currency,
+        theme,
+    );
+    frame.render_widget(Paragraph::new(net_line), inner_layout[2]);
+
+    // Render mini bar charts side by side
+    let chart_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(inner_layout[3]);
+
+    let income_data: Vec<(&str, u64)> = income_trend
+        .iter()
+        .map(|(label, value)| (label.as_str(), (*value).max(0) as u64))
+        .collect();
+    let expense_data: Vec<(&str, u64)> = expense_trend
+        .iter()
+        .map(|(label, value)| (label.as_str(), (*value).max(0) as u64))
+        .collect();
+
+    if !income_data.is_empty() {
+        render_bar_chart(frame, chart_layout[0], "Income", &income_data, theme);
+    }
+    if !expense_data.is_empty() {
+        render_bar_chart(frame, chart_layout[1], "Expenses", &expense_data, theme);
+    }
+}

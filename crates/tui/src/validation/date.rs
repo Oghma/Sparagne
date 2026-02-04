@@ -8,7 +8,7 @@
 //! - `DD-MM-YYYY` (European with dashes)
 //! - `DD-MM-YYYY HH:MM` (European with dashes and time)
 
-use super::{ValidationResult, Validator};
+use super::ValidationResult;
 use crate::text::{Locale, TextKey, t};
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, TimeZone};
 use chrono_tz::Tz;
@@ -64,38 +64,6 @@ impl DateFormat {
             self,
             Self::IsoTime | Self::EuropeanTime | Self::EuropeanDashTime
         )
-    }
-}
-
-/// Validates date strings for form input.
-#[derive(Debug, Clone)]
-pub struct DateValidator {
-    /// Formats to try, in order of preference.
-    pub formats: Vec<DateFormat>,
-    /// Timezone for parsing dates without timezone info.
-    pub timezone: Tz,
-}
-
-impl Default for DateValidator {
-    fn default() -> Self {
-        Self {
-            formats: DateFormat::all().to_vec(),
-            timezone: chrono_tz::Europe::Rome,
-        }
-    }
-}
-
-impl DateValidator {
-    /// Creates a validator with all supported formats.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl Validator for DateValidator {
-    fn validate(&self, value: &str) -> ValidationResult {
-        validate_date(value, &self.formats, self.timezone, Locale::It)
     }
 }
 
@@ -333,10 +301,4 @@ mod tests {
         assert!(validate_date("   ", DateFormat::all(), rome(), Locale::It).is_valid());
     }
 
-    #[test]
-    fn validator_trait() {
-        let validator = DateValidator::new();
-        assert!(validator.validate("2024-03-15").is_valid());
-        assert!(validator.validate("invalid").is_invalid());
-    }
 }

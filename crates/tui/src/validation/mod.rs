@@ -8,7 +8,7 @@ mod date;
 mod text;
 
 pub use amount::AmountValidator;
-pub use date::{DateField, DateFormat, DateValidator};
+pub use date::DateField;
 pub use text::{LengthValidator, RequiredValidator};
 
 /// Result of validating a form field value.
