@@ -38,7 +38,7 @@ impl App {
             .map(map_currency)
             .unwrap_or(engine::Currency::Eur);
 
-        let parsed = match crate::quick_add::parse(&self.state.transactions.quick_input, currency) {
+        let parsed = match crate::quick_add::parse(&self.state.transactions.quick_input, currency, self.state.locale) {
             Ok(parsed) => parsed,
             Err(message) => {
                 self.state.transactions.quick_error = Some(message);
@@ -64,7 +64,7 @@ impl App {
                     Some((resolved_id, _, _)) => wallet_id = resolved_id,
                     None => {
                         self.state.transactions.quick_error =
-                            Some(format!("Wallet non trovato: @{wallet_query}"));
+                            Some(crate::text::format(self.state.locale, TextKey::QuickAddWalletNotFound, &[("query", wallet_query)]));
                         return Ok(());
                     }
                 }
@@ -89,7 +89,7 @@ impl App {
                     Some((resolved_id, _, _)) => flow_id = resolved_id,
                     None => {
                         self.state.transactions.quick_error =
-                            Some(format!("Envelope non trovato: >{flow_query}"));
+                            Some(crate::text::format(self.state.locale, TextKey::QuickAddEnvelopeNotFound, &[("query", flow_query)]));
                         return Ok(());
                     }
                 }
@@ -225,7 +225,7 @@ impl App {
             Some((id, _, _)) => id,
             None => {
                 self.state.transactions.quick_error =
-                    Some(format!("Wallet non trovato: @{from_query}"));
+                    Some(crate::text::format(self.state.locale, TextKey::QuickAddWalletNotFound, &[("query", from_query)]));
                 return Ok(());
             }
         };
@@ -233,14 +233,14 @@ impl App {
             Some((id, _, _)) => id,
             None => {
                 self.state.transactions.quick_error =
-                    Some(format!("Wallet non trovato: @{to_query}"));
+                    Some(crate::text::format(self.state.locale, TextKey::QuickAddWalletNotFound, &[("query", to_query)]));
                 return Ok(());
             }
         };
 
         if from_id == to_id {
             self.state.transactions.quick_error =
-                Some("I due wallet devono essere diversi.".to_string());
+                Some(t(self.state.locale, TextKey::QuickAddWalletsMustBeDifferent).to_string());
             return Ok(());
         }
 
@@ -295,7 +295,7 @@ impl App {
             Some((id, _, _)) => id,
             None => {
                 self.state.transactions.quick_error =
-                    Some(format!("Flow non trovato: >{from_query}"));
+                    Some(crate::text::format(self.state.locale, TextKey::QuickAddFlowNotFound, &[("query", from_query)]));
                 return Ok(());
             }
         };
@@ -303,14 +303,14 @@ impl App {
             Some((id, _, _)) => id,
             None => {
                 self.state.transactions.quick_error =
-                    Some(format!("Flow non trovato: >{to_query}"));
+                    Some(crate::text::format(self.state.locale, TextKey::QuickAddFlowNotFound, &[("query", to_query)]));
                 return Ok(());
             }
         };
 
         if from_id == to_id {
             self.state.transactions.quick_error =
-                Some("I due flow devono essere diversi.".to_string());
+                Some(t(self.state.locale, TextKey::QuickAddFlowsMustBeDifferent).to_string());
             return Ok(());
         }
 

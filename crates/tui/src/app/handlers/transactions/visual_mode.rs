@@ -7,6 +7,7 @@ use crate::{
         format::map_currency, transactions_visible_indices, App, TransactionsMode, UndoAction,
     },
     error::Result,
+    text::{TextKey, format as t_format, t},
 };
 use engine::Money;
 
@@ -58,7 +59,7 @@ impl App {
 
         let selected_tx_id = self.selected_transaction().map(|tx| tx.id);
         let Some(tx_id) = selected_tx_id else {
-            self.state.transactions.error = Some("Nessuna transazione selezionata.".to_string());
+            self.state.transactions.error = Some(t(self.state.locale, TextKey::ValidationNoTransactionSelected).to_string());
             return Ok(());
         };
 
@@ -108,9 +109,9 @@ impl App {
         let message = if let Some((amount_minor, note)) = single_info {
             let amount = Money::new(amount_minor).format(currency);
             let label = note.as_deref().unwrap_or("Transaction");
-            format!("Deleted \"{label}\" ({amount})")
+            t_format(self.state.locale, TextKey::SuccessDeletedItem, &[("label", label), ("amount", &amount)])
         } else {
-            format!("Deleted {} transactions", ids.len())
+            t_format(self.state.locale, TextKey::SuccessDeletedMultiple, &[("count", &ids.len().to_string())])
         };
 
         self.set_undo_toast(&message, UndoAction::TransactionVoid { ids });

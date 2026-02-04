@@ -59,7 +59,7 @@ impl App {
             .unwrap_or(engine::Currency::Eur);
 
         let input = self.state.transactions.quick_input.as_str();
-        let parsed = match parse_quick_add(input, currency) {
+        let parsed = match parse_quick_add(input, currency, self.state.locale) {
             Ok(p) => p,
             Err(_) => return,
         };

@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::errors::login_message_for_error, error::Result};
+use crate::{app::errors::login_message_for_error, error::Result, text::format as t_format};
 use api_types::{
     transaction::TransactionList,
     wallet::{WalletNew, WalletUpdate},
@@ -239,7 +239,7 @@ impl App {
         match res {
             Ok(()) => {
                 self.refresh_snapshot().await?;
-                let message = format!("Deleted \"{wallet_name}\"");
+                let message = t_format(self.state.locale, TextKey::SuccessDeletedWallet, &[("name", &wallet_name)]);
                 self.set_undo_toast(&message, UndoAction::WalletArchive { id: wallet_id });
             }
             Err(err) => {

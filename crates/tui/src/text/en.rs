@@ -397,5 +397,49 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::PromptNoMemberSelected => "No member selected.",
         TextKey::PromptNoAliasSelected => "No alias selected.",
         TextKey::PromptNoCategorySelected => "No category selected.",
+        TextKey::PromptEnterCategory => "Enter a category.",
+
+        // Quick Add / Parsing Errors
+        TextKey::QuickAddEnterAmount => "Enter an amount.",
+        TextKey::QuickAddAmountMissing => "Amount missing.",
+        TextKey::QuickAddAmountInvalid => "Invalid amount.",
+        TextKey::QuickAddAmountMustBePositive => "Amount must be > 0.",
+        TextKey::QuickAddTooManyCategories => "Too many tags: maximum 1.",
+        TextKey::QuickAddTooManyWallets => "Too many wallets: maximum 1.",
+        TextKey::QuickAddTooManyEnvelopes => "Too many envelopes: maximum 1.",
+        TextKey::QuickAddSpecifyTwoWallets => "Specify exactly 2 wallets (@from @to).",
+        TextKey::QuickAddSpecifyTwoFlows => "Specify exactly 2 flows (>from >to).",
+        TextKey::QuickAddWalletNotFound => "Wallet not found: @{query}",
+        TextKey::QuickAddEnvelopeNotFound => "Envelope not found: >{query}",
+        TextKey::QuickAddFlowNotFound => "Flow not found: >{query}",
+        TextKey::QuickAddWalletsMustBeDifferent => "The two wallets must be different.",
+        TextKey::QuickAddFlowsMustBeDifferent => "The two flows must be different.",
+
+        // Validation Errors - Additional
+        TextKey::ValidationNoTransactionSelected => "No transaction selected.",
+        TextKey::ValidationNoWalletAvailable => "No wallet available.",
+        TextKey::ValidationNoFlowAvailable => "No flow available.",
+        TextKey::ValidationNoElementAvailable => "No element available.",
+        TextKey::ValidationTransactionVoided => "Voided transaction: editing not available.",
+        TextKey::ValidationTransactionInvalid => "Invalid transaction.",
+        TextKey::ValidationTransferWalletInvalid => "Invalid wallet transfer.",
+        TextKey::ValidationTransferFlowInvalid => "Invalid flow transfer.",
+        TextKey::ValidationWalletArchived => "Archived wallet: editing not available.",
+        TextKey::ValidationFlowArchived => "Archived flow: editing not available.",
+        TextKey::ValidationSnapshotUnavailable => "Snapshot unavailable.",
+
+        // Success Messages - Additional
+        TextKey::SuccessDeletedItem => "Deleted \"{label}\" ({amount})",
+        TextKey::SuccessDeletedMultiple => "Deleted {count} transactions",
+        TextKey::SuccessCategorizedTransactions => "Categorized {count} transactions as #{category}",
+        TextKey::SuccessDeletedWallet => "Deleted \"{name}\"",
+        TextKey::SuccessDeletedFlow => "Deleted \"{name}\"",
+
+        // UI Labels - Additional
+        TextKey::UiNoDetailAvailable => "No detail available.",
+        TextKey::UiNoElement => "No element.",
+        TextKey::UiNoRecentCategories => "No recent categories.",
+        TextKey::UiRecentCategories => "Recent categories",
+        TextKey::UiTransactionDetail => "Transaction Detail",
     }
 }

@@ -11,6 +11,7 @@ use crate::{
         TransferField, TransferFormState,
     },
     error::Result,
+    text::{TextKey, t},
     ui::forms::{AmountField, TextField},
     validation::DateField,
 };
@@ -63,7 +64,7 @@ impl App {
         };
         if detail.transaction.voided {
             self.set_toast(
-                "Transazione annullata: modifica non disponibile.",
+                t(self.state.locale, TextKey::ValidationTransactionVoided),
                 ToastLevel::Error,
             );
             return Ok(());
@@ -77,7 +78,7 @@ impl App {
             TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
                 let (wallet_id, flow_id) = extract_wallet_flow(detail);
                 let (Some(wallet_id), Some(flow_id)) = (wallet_id, flow_id) else {
-                    self.set_toast("Transazione non valida.", ToastLevel::Error);
+                    self.set_toast(t(self.state.locale, TextKey::ValidationTransactionInvalid), ToastLevel::Error);
                     return Ok(());
                 };
 
@@ -85,14 +86,14 @@ impl App {
                 let flow_ids = self.ordered_flow_ids();
                 let Some(wallet_index) = wallet_ids.iter().position(|id| *id == wallet_id) else {
                     self.set_toast(
-                        "Wallet archiviato: modifica non disponibile.",
+                        t(self.state.locale, TextKey::ValidationWalletArchived),
                         ToastLevel::Error,
                     );
                     return Ok(());
                 };
                 let Some(flow_index) = flow_ids.iter().position(|id| *id == flow_id) else {
                     self.set_toast(
-                        "Flow archiviato: modifica non disponibile.",
+                        t(self.state.locale, TextKey::ValidationFlowArchived),
                         ToastLevel::Error,
                     );
                     return Ok(());
@@ -122,21 +123,21 @@ impl App {
                 let (from_id, to_id) = match extract_wallet_transfer(detail, self.state.locale) {
                     Ok(values) => values,
                     Err(_) => {
-                        self.set_toast("Transfer wallet non valido.", ToastLevel::Error);
+                        self.set_toast(t(self.state.locale, TextKey::ValidationTransferWalletInvalid), ToastLevel::Error);
                         return Ok(());
                     }
                 };
                 let ids = self.active_wallet_ids();
                 let Some(from_index) = ids.iter().position(|id| *id == from_id) else {
                     self.set_toast(
-                        "Wallet archiviato: modifica non disponibile.",
+                        t(self.state.locale, TextKey::ValidationWalletArchived),
                         ToastLevel::Error,
                     );
                     return Ok(());
                 };
                 let Some(to_index) = ids.iter().position(|id| *id == to_id) else {
                     self.set_toast(
-                        "Wallet archiviato: modifica non disponibile.",
+                        t(self.state.locale, TextKey::ValidationWalletArchived),
                         ToastLevel::Error,
                     );
                     return Ok(());
@@ -162,21 +163,21 @@ impl App {
                 let (from_id, to_id) = match extract_flow_transfer(detail, self.state.locale) {
                     Ok(values) => values,
                     Err(_) => {
-                        self.set_toast("Transfer flow non valido.", ToastLevel::Error);
+                        self.set_toast(t(self.state.locale, TextKey::ValidationTransferFlowInvalid), ToastLevel::Error);
                         return Ok(());
                     }
                 };
                 let ids = self.active_flow_ids();
                 let Some(from_index) = ids.iter().position(|id| *id == from_id) else {
                     self.set_toast(
-                        "Flow archiviato: modifica non disponibile.",
+                        t(self.state.locale, TextKey::ValidationFlowArchived),
                         ToastLevel::Error,
                     );
                     return Ok(());
                 };
                 let Some(to_index) = ids.iter().position(|id| *id == to_id) else {
                     self.set_toast(
-                        "Flow archiviato: modifica non disponibile.",
+                        t(self.state.locale, TextKey::ValidationFlowArchived),
                         ToastLevel::Error,
                     );
                     return Ok(());
@@ -211,10 +212,10 @@ impl App {
         let wallet_ids = self.ordered_wallet_ids();
         let flow_ids = self.ordered_flow_ids();
         if wallet_ids.is_empty() {
-            return Err("Nessun wallet disponibile.".to_string());
+            return Err(t(self.state.locale, TextKey::ValidationNoWalletAvailable).to_string());
         }
         if flow_ids.is_empty() {
-            return Err("Nessun flow disponibile.".to_string());
+            return Err(t(self.state.locale, TextKey::ValidationNoFlowAvailable).to_string());
         }
         let wallet_id = if self.state.transactions.scope_wallet_id.is_some() {
             default_wallet_id

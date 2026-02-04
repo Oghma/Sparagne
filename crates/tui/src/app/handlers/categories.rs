@@ -1,6 +1,7 @@
 use super::super::*;
 
 use api_types::category::CategoryView;
+use crate::text::{TextKey, t};
 impl App {
     pub(crate) fn categories_select_next(&mut self) {
         let len = self.state.categories.items.len();
@@ -84,7 +85,7 @@ impl App {
     pub(crate) fn start_category_merge(&mut self) {
         let len = self.state.categories.items.len();
         if len < 2 {
-            self.set_toast("Serve almeno 2 categorie per unire.", ToastLevel::Error);
+            self.set_toast(t(self.state.locale, TextKey::PromptAtLeastTwoCategories), ToastLevel::Error);
             return;
         }
 
@@ -113,12 +114,12 @@ impl App {
             .selected_category()
             .map(|category| (category.id, category.name.clone(), category.is_system))
         else {
-            self.state.categories.error = Some("Nessuna categoria selezionata.".to_string());
+            self.state.categories.error = Some(t(self.state.locale, TextKey::PromptNoCategorySelected).to_string());
             return;
         };
         if is_system {
             self.state.categories.error =
-                Some("Le categorie di sistema non si modificano.".to_string());
+                Some(t(self.state.locale, TextKey::ValidationSystemCategoryImmutable).to_string());
             return;
         }
         self.reset_category_form();

@@ -42,7 +42,7 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 
     // Try to parse the input for live preview
     let parsed = if !input.trim().is_empty() {
-        parse(input, currency).ok()
+        parse(input, currency, state.locale).ok()
     } else {
         None
     };

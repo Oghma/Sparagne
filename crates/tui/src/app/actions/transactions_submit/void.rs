@@ -1,7 +1,7 @@
 use crate::{
     app::{App, ToastLevel, errors::login_message_for_error},
     error::Result,
-    text::{TextKey, t},
+    text::{TextKey, format as t_format, t},
 };
 use api_types::transaction::{TransactionUpdate, TransactionVoid};
 
@@ -148,7 +148,7 @@ impl App {
             self.exit_visual_mode();
             self.load_transactions(true).await?;
             self.set_toast(
-                format!("Categorized {successes} transactions as #{category_clean}").as_str(),
+                &t_format(self.state.locale, TextKey::SuccessCategorizedTransactions, &[("count", &successes.to_string()), ("category", category_clean)]),
                 ToastLevel::Success,
             );
         }

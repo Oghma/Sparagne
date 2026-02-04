@@ -1,5 +1,7 @@
 use super::super::*;
 
+use crate::text::{TextKey, t};
+
 impl App {
     pub(crate) fn wallets_select_next(&mut self) {
         let len = wallets_visible_indices(&self.state).len();
@@ -23,7 +25,7 @@ impl App {
 
     pub(crate) fn start_wallet_rename(&mut self) {
         let Some(name) = self.selected_wallet().map(|wallet| wallet.name.clone()) else {
-            self.state.wallets.error = Some("Nessun wallet selezionato.".to_string());
+            self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationNoWalletSelected).to_string());
             return;
         };
         self.reset_wallet_form();

@@ -5,6 +5,7 @@
 use crate::{
     app::{App, TransactionsMode, TransferField, TransferFormState},
     error::Result,
+    text::{TextKey, t},
     validation::DateField,
 };
 
@@ -75,7 +76,7 @@ impl App {
 
     pub(crate) async fn apply_wallet_picker(&mut self) -> Result<()> {
         let Some(snapshot) = self.state.snapshot.as_ref() else {
-            self.state.transactions.error = Some("Snapshot non disponibile.".to_string());
+            self.state.transactions.error = Some(t(self.state.locale, TextKey::ValidationSnapshotUnavailable).to_string());
             self.state.transactions.mode = TransactionsMode::List;
             return Ok(());
         };
@@ -98,7 +99,7 @@ impl App {
 
     pub(crate) async fn apply_flow_picker(&mut self) -> Result<()> {
         let Some(snapshot) = self.state.snapshot.as_ref() else {
-            self.state.transactions.error = Some("Snapshot non disponibile.".to_string());
+            self.state.transactions.error = Some(t(self.state.locale, TextKey::ValidationSnapshotUnavailable).to_string());
             self.state.transactions.mode = TransactionsMode::List;
             return Ok(());
         };
@@ -171,7 +172,7 @@ impl App {
         };
         if len == 0 {
             self.state.transactions.transfer.error =
-                Some("Nessun elemento disponibile.".to_string());
+                Some(t(self.state.locale, TextKey::ValidationNoElementAvailable).to_string());
             return;
         }
         self.state.transactions.transfer.from_index = 0;

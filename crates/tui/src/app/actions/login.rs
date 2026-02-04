@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::errors::login_message_for_error, client::ClientError, error::Result};
+use crate::{app::errors::login_message_for_error, client::ClientError, error::Result, text::{TextKey, t}};
 
 impl App {
     pub(crate) async fn attempt_login(&mut self) -> Result<()> {
@@ -19,7 +19,7 @@ impl App {
                 .unwrap_or(false);
 
         if username.is_empty() || password.is_empty() || !has_vault {
-            self.state.login.message = Some("Compila tutti i campi.".to_string());
+            self.state.login.message = Some(t(self.state.locale, TextKey::PromptFillAllFields).to_string());
             return Ok(());
         }
 

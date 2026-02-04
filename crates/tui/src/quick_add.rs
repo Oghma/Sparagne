@@ -1,3 +1,4 @@
+use crate::text::{Locale, TextKey, t};
 use engine::{Currency, Money};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,18 +32,18 @@ type ParsedTags = (
     Option<String>,
 );
 
-pub fn parse(input: &str, currency: Currency) -> Result<QuickAddParsed, String> {
+pub fn parse(input: &str, currency: Currency, locale: Locale) -> Result<QuickAddParsed, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        return Err("Inserisci un importo.".to_string());
+        return Err(t(locale, TextKey::QuickAddEnterAmount).to_string());
     }
 
     // Check for transfer prefixes: tw> (wallet transfer) or tf> (flow transfer)
     if let Some(rest) = trimmed.strip_prefix("tw>").or_else(|| trimmed.strip_prefix("TW>")) {
-        return parse_transfer_wallet(rest.trim_start(), currency);
+        return parse_transfer_wallet(rest.trim_start(), currency, locale);
     }
     if let Some(rest) = trimmed.strip_prefix("tf>").or_else(|| trimmed.strip_prefix("TF>")) {
-        return parse_transfer_flow(rest.trim_start(), currency);
+        return parse_transfer_flow(rest.trim_start(), currency, locale);
     }
 
     let (kind, rest) = if let Some(stripped) = trimmed.strip_prefix('r') {
@@ -60,19 +61,19 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAddParsed, String> 
     let mut parts = rest.splitn(2, ' ');
     let amount_raw = parts.next().unwrap_or_default().trim();
     if amount_raw.is_empty() {
-        return Err("Importo mancante.".to_string());
+        return Err(t(locale, TextKey::QuickAddAmountMissing).to_string());
     }
     let note_raw = parts.next().unwrap_or_default().trim();
 
     let amount = Money::parse_major(amount_raw, currency)
-        .map_err(|_| "Importo non valido.".to_string())?
+        .map_err(|_| t(locale, TextKey::QuickAddAmountInvalid).to_string())?
         .minor()
         .abs();
     if amount == 0 {
-        return Err("Importo deve essere > 0.".to_string());
+        return Err(t(locale, TextKey::QuickAddAmountMustBePositive).to_string());
     }
 
-    let (category, wallet, flow, note) = parse_tags(note_raw)?;
+    let (category, wallet, flow, note) = parse_tags(note_raw, locale)?;
 
     Ok(QuickAddParsed {
         kind,
@@ -88,26 +89,26 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAddParsed, String> 
     })
 }
 
-fn parse_transfer_wallet(input: &str, currency: Currency) -> Result<QuickAddParsed, String> {
+fn parse_transfer_wallet(input: &str, currency: Currency, locale: Locale) -> Result<QuickAddParsed, String> {
     // Syntax: tw>50 @bank @cash note
     let mut parts = input.splitn(2, ' ');
     let amount_raw = parts.next().unwrap_or_default().trim();
     if amount_raw.is_empty() {
-        return Err("Importo mancante.".to_string());
+        return Err(t(locale, TextKey::QuickAddAmountMissing).to_string());
     }
     let rest = parts.next().unwrap_or_default().trim();
 
     let amount = Money::parse_major(amount_raw, currency)
-        .map_err(|_| "Importo non valido.".to_string())?
+        .map_err(|_| t(locale, TextKey::QuickAddAmountInvalid).to_string())?
         .minor()
         .abs();
     if amount == 0 {
-        return Err("Importo deve essere > 0.".to_string());
+        return Err(t(locale, TextKey::QuickAddAmountMustBePositive).to_string());
     }
 
-    let (wallets, note) = parse_transfer_targets(rest, '@')?;
+    let (wallets, note) = parse_transfer_targets(rest, '@', locale)?;
     if wallets.len() != 2 {
-        return Err("Specifica esattamente 2 wallet (@from @to).".to_string());
+        return Err(t(locale, TextKey::QuickAddSpecifyTwoWallets).to_string());
     }
 
     Ok(QuickAddParsed {
@@ -124,26 +125,26 @@ fn parse_transfer_wallet(input: &str, currency: Currency) -> Result<QuickAddPars
     })
 }
 
-fn parse_transfer_flow(input: &str, currency: Currency) -> Result<QuickAddParsed, String> {
+fn parse_transfer_flow(input: &str, currency: Currency, locale: Locale) -> Result<QuickAddParsed, String> {
     // Syntax: tf>50 >food >savings note
     let mut parts = input.splitn(2, ' ');
     let amount_raw = parts.next().unwrap_or_default().trim();
     if amount_raw.is_empty() {
-        return Err("Importo mancante.".to_string());
+        return Err(t(locale, TextKey::QuickAddAmountMissing).to_string());
     }
     let rest = parts.next().unwrap_or_default().trim();
 
     let amount = Money::parse_major(amount_raw, currency)
-        .map_err(|_| "Importo non valido.".to_string())?
+        .map_err(|_| t(locale, TextKey::QuickAddAmountInvalid).to_string())?
         .minor()
         .abs();
     if amount == 0 {
-        return Err("Importo deve essere > 0.".to_string());
+        return Err(t(locale, TextKey::QuickAddAmountMustBePositive).to_string());
     }
 
-    let (flows, note) = parse_transfer_targets(rest, '>')?;
+    let (flows, note) = parse_transfer_targets(rest, '>', locale)?;
     if flows.len() != 2 {
-        return Err("Specifica esattamente 2 flow (>from >to).".to_string());
+        return Err(t(locale, TextKey::QuickAddSpecifyTwoFlows).to_string());
     }
 
     Ok(QuickAddParsed {
@@ -160,7 +161,7 @@ fn parse_transfer_flow(input: &str, currency: Currency) -> Result<QuickAddParsed
     })
 }
 
-fn parse_transfer_targets(input: &str, prefix: char) -> Result<(Vec<String>, Option<String>), String> {
+fn parse_transfer_targets(input: &str, prefix: char, _locale: Locale) -> Result<(Vec<String>, Option<String>), String> {
     let mut targets: Vec<String> = Vec::new();
     let mut kept: Vec<&str> = Vec::new();
 
@@ -181,7 +182,7 @@ fn parse_transfer_targets(input: &str, prefix: char) -> Result<(Vec<String>, Opt
     Ok((targets, note))
 }
 
-fn parse_tags(note_raw: &str) -> Result<ParsedTags, String> {
+fn parse_tags(note_raw: &str, locale: Locale) -> Result<ParsedTags, String> {
     if note_raw.is_empty() {
         return Ok((None, None, None, None));
     }
@@ -198,7 +199,7 @@ fn parse_tags(note_raw: &str) -> Result<ParsedTags, String> {
                 continue;
             }
             if category.is_some() {
-                return Err("Troppi tag: massimo 1.".to_string());
+                return Err(t(locale, TextKey::QuickAddTooManyCategories).to_string());
             }
             category = Some(rest.to_lowercase());
         } else if let Some(rest) = token.strip_prefix('@') {
@@ -207,7 +208,7 @@ fn parse_tags(note_raw: &str) -> Result<ParsedTags, String> {
                 continue;
             }
             if wallet.is_some() {
-                return Err("Troppi wallet: massimo 1.".to_string());
+                return Err(t(locale, TextKey::QuickAddTooManyWallets).to_string());
             }
             wallet = Some(rest.to_lowercase());
         } else if let Some(rest) = token.strip_prefix('>') {
@@ -216,7 +217,7 @@ fn parse_tags(note_raw: &str) -> Result<ParsedTags, String> {
                 continue;
             }
             if flow.is_some() {
-                return Err("Troppi envelope: massimo 1.".to_string());
+                return Err(t(locale, TextKey::QuickAddTooManyEnvelopes).to_string());
             }
             flow = Some(rest.to_lowercase());
         } else {
@@ -235,7 +236,7 @@ mod tests {
 
     #[test]
     fn parse_with_envelope() {
-        let parsed = parse("15 pizza >ufficio", Currency::Eur).expect("parse should succeed");
+        let parsed = parse("15 pizza >ufficio", Currency::Eur, Locale::It).expect("parse should succeed");
         assert_eq!(parsed.kind, QuickAddKind::Expense);
         assert_eq!(parsed.amount_minor, 1_500);
         assert_eq!(parsed.flow.as_deref(), Some("ufficio"));
@@ -245,7 +246,7 @@ mod tests {
     #[test]
     fn parse_with_category_and_envelope() {
         let parsed =
-            parse("+10 bonus #lavoro >ufficio", Currency::Eur).expect("parse should succeed");
+            parse("+10 bonus #lavoro >ufficio", Currency::Eur, Locale::It).expect("parse should succeed");
         assert_eq!(parsed.kind, QuickAddKind::Income);
         assert_eq!(parsed.category.as_deref(), Some("lavoro"));
         assert_eq!(parsed.flow.as_deref(), Some("ufficio"));
@@ -254,13 +255,13 @@ mod tests {
 
     #[test]
     fn parse_rejects_multiple_envelopes() {
-        let err = parse("15 pizza >ufficio >casa", Currency::Eur).expect_err("should fail");
+        let err = parse("15 pizza >ufficio >casa", Currency::Eur, Locale::En).expect_err("should fail");
         assert!(err.contains("envelope"));
     }
 
     #[test]
     fn parse_with_wallet() {
-        let parsed = parse("20 groceries @cash", Currency::Eur).expect("parse should succeed");
+        let parsed = parse("20 groceries @cash", Currency::Eur, Locale::It).expect("parse should succeed");
         assert_eq!(parsed.kind, QuickAddKind::Expense);
         assert_eq!(parsed.amount_minor, 2_000);
         assert_eq!(parsed.wallet.as_deref(), Some("cash"));
@@ -269,7 +270,7 @@ mod tests {
 
     #[test]
     fn parse_with_all_tags() {
-        let parsed = parse("+50 salary #income @bank >savings", Currency::Eur)
+        let parsed = parse("+50 salary #income @bank >savings", Currency::Eur, Locale::It)
             .expect("parse should succeed");
         assert_eq!(parsed.kind, QuickAddKind::Income);
         assert_eq!(parsed.amount_minor, 5_000);
@@ -281,14 +282,14 @@ mod tests {
 
     #[test]
     fn parse_rejects_multiple_wallets() {
-        let err = parse("15 pizza @cash @card", Currency::Eur).expect_err("should fail");
+        let err = parse("15 pizza @cash @card", Currency::Eur, Locale::En).expect_err("should fail");
         assert!(err.contains("wallet"));
     }
 
     #[test]
     fn parse_transfer_wallet() {
         let parsed =
-            parse("tw>50 @bank @cash spostamento", Currency::Eur).expect("parse should succeed");
+            parse("tw>50 @bank @cash spostamento", Currency::Eur, Locale::It).expect("parse should succeed");
         assert_eq!(parsed.kind, QuickAddKind::TransferWallet);
         assert_eq!(parsed.amount_minor, 5_000);
         assert_eq!(parsed.from_wallet.as_deref(), Some("bank"));
@@ -299,7 +300,7 @@ mod tests {
     #[test]
     fn parse_transfer_flow() {
         let parsed =
-            parse("tf>30 >food >savings rialloco", Currency::Eur).expect("parse should succeed");
+            parse("tf>30 >food >savings rialloco", Currency::Eur, Locale::It).expect("parse should succeed");
         assert_eq!(parsed.kind, QuickAddKind::TransferFlow);
         assert_eq!(parsed.amount_minor, 3_000);
         assert_eq!(parsed.from_flow.as_deref(), Some("food"));
@@ -309,13 +310,13 @@ mod tests {
 
     #[test]
     fn parse_transfer_wallet_requires_two_wallets() {
-        let err = parse("tw>50 @bank", Currency::Eur).expect_err("should fail");
+        let err = parse("tw>50 @bank", Currency::Eur, Locale::En).expect_err("should fail");
         assert!(err.contains("2 wallet"));
     }
 
     #[test]
     fn parse_transfer_flow_requires_two_flows() {
-        let err = parse("tf>50 >food", Currency::Eur).expect_err("should fail");
+        let err = parse("tf>50 >food", Currency::Eur, Locale::En).expect_err("should fail");
         assert!(err.contains("2 flow"));
     }
 }

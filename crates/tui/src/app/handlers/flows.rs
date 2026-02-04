@@ -1,5 +1,7 @@
 use super::super::*;
 
+use crate::text::{TextKey, t};
+
 impl App {
     pub(crate) fn flows_select_next(&mut self) {
         let len = flows_visible_indices(&self.state).len();
@@ -25,11 +27,11 @@ impl App {
             .selected_flow()
             .map(|flow| (flow.name.clone(), flow.is_unallocated))
         else {
-            self.state.flows.error = Some("Nessun flow selezionato.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
             return;
         };
         if is_unallocated {
-            self.state.flows.error = Some("Unallocated non si può rinominare.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationUnallocatedCannotRename).to_string());
             return;
         }
         self.reset_flow_form();

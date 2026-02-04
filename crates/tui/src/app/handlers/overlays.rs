@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::format::map_currency, error::Result, ui::keymap::AppAction};
+use crate::{app::format::map_currency, error::Result, text::{TextKey, t}, ui::keymap::AppAction};
 use engine::Money;
 
 impl App {
@@ -91,7 +91,7 @@ impl App {
             .selected_transaction()
             .map(|tx| (tx.amount_minor, tx.note.clone()))
         else {
-            self.state.transactions.error = Some("Nessuna transazione selezionata.".to_string());
+            self.state.transactions.error = Some(t(self.state.locale, TextKey::ValidationNoTransactionSelected).to_string());
             return;
         };
 
@@ -131,7 +131,7 @@ impl App {
         };
 
         if ids.is_empty() {
-            self.state.transactions.error = Some("Nessuna transazione selezionata.".to_string());
+            self.state.transactions.error = Some(t(self.state.locale, TextKey::ValidationNoTransactionSelected).to_string());
             return;
         }
 
@@ -157,7 +157,7 @@ impl App {
 
     pub(crate) fn open_wallet_archive_dialog(&mut self) {
         let Some(wallet) = self.selected_wallet() else {
-            self.state.wallets.error = Some("No wallet selected.".to_string());
+            self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationNoWalletSelected).to_string());
             return;
         };
         let name = wallet.name.as_str();
@@ -174,7 +174,7 @@ impl App {
 
     pub(crate) fn open_flow_archive_dialog(&mut self) {
         let Some(flow) = self.selected_flow() else {
-            self.state.flows.error = Some("No flow selected.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
             return;
         };
         let name = flow.name.as_str();
@@ -191,7 +191,7 @@ impl App {
 
     pub(crate) fn open_category_archive_dialog(&mut self) {
         let Some(category) = self.selected_category() else {
-            self.state.categories.error = Some("No category selected.".to_string());
+            self.state.categories.error = Some(t(self.state.locale, TextKey::PromptNoCategorySelected).to_string());
             return;
         };
         let name = category.name.as_str();
@@ -345,7 +345,7 @@ impl App {
         let category = dialog.input.trim().trim_start_matches('#').trim();
         if category.is_empty() {
             if let Some(state_dialog) = self.state.overlays.bulk_category.as_mut() {
-                state_dialog.error = Some("Inserisci una categoria.".to_string());
+                state_dialog.error = Some(t(self.state.locale, TextKey::PromptEnterCategory).to_string());
             }
             return Ok(());
         }

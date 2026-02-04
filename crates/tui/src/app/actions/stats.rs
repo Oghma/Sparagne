@@ -8,6 +8,7 @@ use crate::{
         format::{map_currency, month_label},
     },
     error::Result,
+    text::{TextKey, t},
 };
 use api_types::{
     transaction::{TransactionList, TransactionView},
@@ -22,14 +23,14 @@ impl App {
         input: &str,
     ) -> std::result::Result<DateTime<FixedOffset>, String> {
         let naive = chrono::NaiveDateTime::parse_from_str(input.trim(), "%Y-%m-%d %H:%M")
-            .map_err(|_| "Formato data non valido. Usa YYYY-MM-DD HH:MM".to_string())?;
+            .map_err(|_| t(self.state.locale, TextKey::ValidationDateInvalid).to_string())?;
         let tz = Tz::from_str(self.config.timezone.as_str()).unwrap_or(Tz::UTC);
         let localized = tz.from_local_datetime(&naive);
         let dt: DateTime<Tz> = match localized {
             chrono::LocalResult::Single(dt) => dt,
             chrono::LocalResult::Ambiguous(dt, _) => dt,
             chrono::LocalResult::None => {
-                return Err("Data/ora non valida.".to_string());
+                return Err(t(self.state.locale, TextKey::ValidationDateInvalidTimezone).to_string());
             }
         };
         let offset = dt.offset().fix();
@@ -72,7 +73,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.stats.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -179,7 +180,7 @@ impl App {
                     entry.0 += tx.amount_minor.abs();
 
                     if year == current_year && month == current_month {
-                        let category = tx.category.clone().unwrap_or_else(|| "Other".to_string());
+                        let category = tx.category.clone().unwrap_or_else(|| t(self.state.locale, TextKey::UiOther).to_string());
                         *category_breakdown.entry(category).or_insert(0) += tx.amount_minor.abs();
                     }
                 }

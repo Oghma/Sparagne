@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::error::Result;
+use crate::{error::Result, text::{TextKey, t}};
 use api_types::membership::MembershipRole;
 
 impl App {
@@ -59,7 +59,7 @@ impl App {
 
     pub(crate) fn start_member_edit(&mut self) {
         let Some(member) = self.state.members.items.get(self.state.members.selected) else {
-            self.state.members.error = Some("Nessun membro selezionato.".to_string());
+            self.state.members.error = Some(t(self.state.locale, TextKey::PromptNoMemberSelected).to_string());
             return;
         };
         self.state.members.mode = MembersMode::Form;

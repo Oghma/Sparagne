@@ -21,6 +21,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, TransactionFormField, ordered_flow_ids_from_state, ordered_wallet_ids_from_state},
+    text::{TextKey, t},
     ui::{components::centered_rect, theme::Theme},
 };
 
@@ -237,6 +238,7 @@ fn render_form_bottom(
         form.wallet_index,
         form.focus == TransactionFormField::Wallet,
         theme,
+        t(state.locale, TextKey::UiNoElement),
     );
     render_picker_list(
         frame,
@@ -249,6 +251,7 @@ fn render_form_bottom(
         form.flow_index,
         form.focus == TransactionFormField::Flow,
         theme,
+        t(state.locale, TextKey::UiNoElement),
     );
 
     render_category_list(frame, bottom_layout[1], state, theme);
@@ -298,6 +301,7 @@ fn render_picker_list(
     selected: usize,
     focused: bool,
     theme: &Theme,
+    no_element_text: &str,
 ) {
     let block = Block::default()
         .title(title)
@@ -307,7 +311,7 @@ fn render_picker_list(
         .style(Style::default().bg(theme.background));
     if items.is_empty() {
         frame.render_widget(
-            Paragraph::new(Line::from("Nessun elemento."))
+            Paragraph::new(Line::from(no_element_text))
                 .alignment(ratatui::layout::Alignment::Center)
                 .block(block),
             area,
@@ -340,7 +344,7 @@ fn render_picker_list(
 /// Renders the recent categories list
 fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let block = Block::default()
-        .title("Categorie recenti")
+        .title(t(state.locale, TextKey::UiRecentCategories))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border))
@@ -348,7 +352,7 @@ fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 
     if state.transactions.recent_categories.is_empty() {
         frame.render_widget(
-            Paragraph::new(Line::from("Nessuna categoria recente."))
+            Paragraph::new(Line::from(t(state.locale, TextKey::UiNoRecentCategories)))
                 .alignment(ratatui::layout::Alignment::Center)
                 .block(block),
             area,

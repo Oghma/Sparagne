@@ -17,6 +17,7 @@ use ratatui::{
 
 use crate::{
     app::AppState,
+    text::{TextKey, t},
     ui::theme::Theme,
 };
 
@@ -31,7 +32,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(theme.accent));
         frame.render_widget(
-            Paragraph::new(Line::from("Nessun dettaglio disponibile."))
+            Paragraph::new(Line::from(t(state.locale, TextKey::UiNoDetailAvailable)))
                 .block(block)
                 .alignment(ratatui::layout::Alignment::Center),
             area,

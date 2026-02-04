@@ -15,7 +15,7 @@ impl App {
 
         // Validate minimum count
         let ids = self.active_wallet_ids();
-        if let Err(message) = super::super::validate_minimum_count(ids.len(), super::super::TransferType::Wallet) {
+        if let Err(message) = super::super::validate_minimum_count(ids.len(), super::super::TransferType::Wallet, self.state.locale) {
             self.state.transactions.transfer.error = Some(message);
             return Ok(());
         }
@@ -23,7 +23,7 @@ impl App {
         // Get and validate IDs
         let from_id = ids[self.state.transactions.transfer.from_index];
         let to_id = ids[self.state.transactions.transfer.to_index];
-        if super::super::validate_different_ids(from_id, to_id).is_err() {
+        if super::super::validate_different_ids(from_id, to_id, self.state.locale).is_err() {
             self.state.transactions.transfer.error = Some(t(self.state.locale, TextKey::ValidationTransferSameSource).to_string());
             return Ok(());
         }
@@ -33,6 +33,7 @@ impl App {
         let amount = match super::super::validate_transfer_amount(
             self.state.transactions.transfer.amount.value().trim(),
             currency,
+            self.state.locale,
         ) {
             Ok(amount) => amount,
             Err(message) => {
@@ -145,7 +146,7 @@ impl App {
 
         // Validate minimum count
         let ids = self.active_flow_ids();
-        if let Err(message) = super::super::validate_minimum_count(ids.len(), super::super::TransferType::Flow) {
+        if let Err(message) = super::super::validate_minimum_count(ids.len(), super::super::TransferType::Flow, self.state.locale) {
             self.state.transactions.transfer.error = Some(message);
             return Ok(());
         }
@@ -153,7 +154,7 @@ impl App {
         // Get and validate IDs
         let from_id = ids[self.state.transactions.transfer.from_index];
         let to_id = ids[self.state.transactions.transfer.to_index];
-        if super::super::validate_different_ids(from_id, to_id).is_err() {
+        if super::super::validate_different_ids(from_id, to_id, self.state.locale).is_err() {
             self.state.transactions.transfer.error = Some(t(self.state.locale, TextKey::ValidationTransferSameDestination).to_string());
             return Ok(());
         }
@@ -163,6 +164,7 @@ impl App {
         let amount = match super::super::validate_transfer_amount(
             self.state.transactions.transfer.amount.value().trim(),
             currency,
+            self.state.locale,
         ) {
             Ok(amount) => amount,
             Err(message) => {

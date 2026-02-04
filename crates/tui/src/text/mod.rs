@@ -431,6 +431,50 @@ pub enum TextKey {
     PromptNoMemberSelected,
     PromptNoAliasSelected,
     PromptNoCategorySelected,
+    PromptEnterCategory,
+
+    // Quick Add / Parsing Errors
+    QuickAddEnterAmount,
+    QuickAddAmountMissing,
+    QuickAddAmountInvalid,
+    QuickAddAmountMustBePositive,
+    QuickAddTooManyCategories,
+    QuickAddTooManyWallets,
+    QuickAddTooManyEnvelopes,
+    QuickAddSpecifyTwoWallets,
+    QuickAddSpecifyTwoFlows,
+    QuickAddWalletNotFound,
+    QuickAddEnvelopeNotFound,
+    QuickAddFlowNotFound,
+    QuickAddWalletsMustBeDifferent,
+    QuickAddFlowsMustBeDifferent,
+
+    // Validation Errors - Additional
+    ValidationNoTransactionSelected,
+    ValidationNoWalletAvailable,
+    ValidationNoFlowAvailable,
+    ValidationNoElementAvailable,
+    ValidationTransactionVoided,
+    ValidationTransactionInvalid,
+    ValidationTransferWalletInvalid,
+    ValidationTransferFlowInvalid,
+    ValidationWalletArchived,
+    ValidationFlowArchived,
+    ValidationSnapshotUnavailable,
+
+    // Success Messages - Additional
+    SuccessDeletedItem,
+    SuccessDeletedMultiple,
+    SuccessCategorizedTransactions,
+    SuccessDeletedWallet,
+    SuccessDeletedFlow,
+
+    // UI Labels - Additional
+    UiNoDetailAvailable,
+    UiNoElement,
+    UiNoRecentCategories,
+    UiRecentCategories,
+    UiTransactionDetail,
 }
 
 /// Returns the localized string for a text key.
