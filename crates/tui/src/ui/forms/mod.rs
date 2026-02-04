@@ -21,15 +21,14 @@ use crate::{
 };
 
 /// Common rendering utilities for form fields.
-#[allow(dead_code)]
 pub struct FormFieldRenderer;
 
-#[allow(dead_code)]
 impl FormFieldRenderer {
     /// Renders a labeled form field with validation feedback.
     ///
     /// Returns the rendered line suitable for inclusion in a form.
     #[must_use]
+    #[allow(dead_code)]
     pub fn render_field(
         label: &str,
         value: &str,

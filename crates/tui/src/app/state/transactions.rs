@@ -5,6 +5,7 @@ use api_types::transaction::{TransactionDetailResponse, TransactionKind, Transac
 use uuid::Uuid;
 
 use crate::app::helpers::{normalize_query, transaction_matches_query};
+use crate::ui::forms::{AmountField, TextField};
 use crate::validation::DateField;
 
 /// Represents an ambiguous match in quick-add where multiple options are
@@ -254,8 +255,8 @@ impl GroupingMode {
 pub struct TransferFormState {
     pub from_index: usize,
     pub to_index: usize,
-    pub amount: String,
-    pub note: String,
+    pub amount: AmountField,
+    pub note: TextField,
     pub occurred_at: DateField,
     pub focus: TransferField,
     pub error: Option<String>,
@@ -267,8 +268,8 @@ impl Default for TransferFormState {
         Self {
             from_index: 0,
             to_index: 1,
-            amount: String::new(),
-            note: String::new(),
+            amount: AmountField::new("Amount"),
+            note: TextField::new("Note"),
             occurred_at: DateField::new(),
             focus: TransferField::From,
             error: None,
@@ -279,7 +280,7 @@ impl Default for TransferFormState {
 
 impl TransferFormState {
     pub(crate) fn is_dirty(&self) -> bool {
-        self.editing_id.is_some() || !self.amount.trim().is_empty() || !self.note.trim().is_empty()
+        self.editing_id.is_some() || !self.amount.value().trim().is_empty() || !self.note.value().trim().is_empty()
     }
 }
 
@@ -295,11 +296,11 @@ pub enum TransferField {
 #[derive(Debug, Clone)]
 pub struct TransactionFormState {
     pub kind: TransactionKind,
-    pub amount: String,
+    pub amount: AmountField,
     pub wallet_index: usize,
     pub flow_index: usize,
-    pub category: String,
-    pub note: String,
+    pub category: TextField,
+    pub note: TextField,
     pub occurred_at: DateField,
     pub focus: TransactionFormField,
     pub error: Option<String>,
@@ -311,11 +312,11 @@ impl Default for TransactionFormState {
     fn default() -> Self {
         Self {
             kind: TransactionKind::Expense,
-            amount: String::new(),
+            amount: AmountField::new("Amount"),
             wallet_index: 0,
             flow_index: 0,
-            category: String::new(),
-            note: String::new(),
+            category: TextField::new("Category"),
+            note: TextField::new("Note"),
             occurred_at: DateField::new(),
             focus: TransactionFormField::Amount,
             error: None,
@@ -328,9 +329,9 @@ impl Default for TransactionFormState {
 impl TransactionFormState {
     pub(crate) fn is_dirty(&self) -> bool {
         self.editing_id.is_some()
-            || !self.amount.trim().is_empty()
-            || !self.category.trim().is_empty()
-            || !self.note.trim().is_empty()
+            || !self.amount.value().trim().is_empty()
+            || !self.category.value().trim().is_empty()
+            || !self.note.value().trim().is_empty()
     }
 }
 

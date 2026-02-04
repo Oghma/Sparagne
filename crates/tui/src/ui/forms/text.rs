@@ -11,7 +11,6 @@ use super::{FormField, FormFieldRenderer};
 
 /// A form field for entering text with optional length constraints.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct TextField {
     /// The label to display for this field.
     pub label: String,
@@ -23,7 +22,6 @@ pub struct TextField {
     pub max_length: Option<usize>,
 }
 
-#[allow(dead_code)]
 impl TextField {
     /// Creates a new text field with the given label.
     #[must_use]
@@ -52,6 +50,7 @@ impl TextField {
 
     /// Sets the maximum length constraint.
     #[must_use]
+    #[allow(dead_code)]
     pub fn max_length(mut self, max: usize) -> Self {
         self.max_length = Some(max);
         self
@@ -59,6 +58,7 @@ impl TextField {
 
     /// Sets both minimum and maximum length constraints.
     #[must_use]
+    #[allow(dead_code)]
     pub fn length_range(mut self, min: usize, max: usize) -> Self {
         self.min_length = Some(min);
         self.max_length = Some(max);
@@ -126,6 +126,7 @@ impl TextField {
 
     /// Returns the current character count.
     #[must_use]
+    #[allow(dead_code)]
     pub fn char_count(&self) -> usize {
         self.state.value.chars().count()
     }

@@ -69,7 +69,6 @@ impl DateFormat {
 
 /// Validates date strings for form input.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct DateValidator {
     /// Formats to try, in order of preference.
     pub formats: Vec<DateFormat>,
@@ -86,16 +85,17 @@ impl Default for DateValidator {
     }
 }
 
-#[allow(dead_code)]
 impl DateValidator {
     /// Creates a validator with all supported formats.
     #[must_use]
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Creates a validator with a specific timezone.
     #[must_use]
+    #[allow(dead_code)]
     pub fn with_timezone(timezone: Tz) -> Self {
         Self {
             timezone,
@@ -203,7 +203,6 @@ use crate::ui::Theme;
 ///
 /// Supports multiple date formats and provides visual feedback.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct DateField {
     /// Current input value.
     pub value: String,
@@ -229,7 +228,6 @@ impl Default for DateField {
     }
 }
 
-#[allow(dead_code)]
 impl DateField {
     /// Creates a new empty date field.
     #[must_use]
@@ -251,6 +249,7 @@ impl DateField {
 
     /// Creates a new required date field.
     #[must_use]
+    #[allow(dead_code)]
     pub fn required() -> Self {
         Self {
             required: true,
@@ -260,6 +259,7 @@ impl DateField {
 
     /// Sets the timezone for parsing.
     #[must_use]
+    #[allow(dead_code)]
     pub fn with_timezone(mut self, timezone: Tz) -> Self {
         self.timezone = timezone;
         self.revalidate();
@@ -268,6 +268,7 @@ impl DateField {
 
     /// Sets the locale for error messages.
     #[must_use]
+    #[allow(dead_code)]
     pub fn with_locale(mut self, locale: Locale) -> Self {
         self.locale = locale;
         self.revalidate();
@@ -287,12 +288,14 @@ impl DateField {
     }
 
     /// Clears the input.
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.value.clear();
         self.revalidate();
     }
 
     /// Sets the value directly.
+    #[allow(dead_code)]
     pub fn set_value(&mut self, value: impl Into<String>) {
         self.value = value.into();
         self.revalidate();
@@ -300,30 +303,35 @@ impl DateField {
 
     /// Returns whether the current value is valid.
     #[must_use]
+    #[allow(dead_code)]
     pub fn is_valid(&self) -> bool {
         self.validation.is_valid()
     }
 
     /// Returns the validation result.
     #[must_use]
+    #[allow(dead_code)]
     pub fn validation(&self) -> &ValidationResult {
         &self.validation
     }
 
     /// Returns the error message if validation failed.
     #[must_use]
+    #[allow(dead_code)]
     pub fn error_message(&self) -> Option<&str> {
         self.validation.error_message()
     }
 
     /// Parses the current value and returns the datetime if valid.
     #[must_use]
+    #[allow(dead_code)]
     pub fn parse_date(&self) -> Option<ParsedDate> {
         parse_date(&self.value, DateFormat::all(), self.timezone)
     }
 
     /// Returns the datetime value if valid.
     #[must_use]
+    #[allow(dead_code)]
     pub fn datetime(&self) -> Option<DateTime<FixedOffset>> {
         self.parse_date().map(|p| p.datetime)
     }
@@ -351,6 +359,7 @@ impl DateField {
     /// - Red if invalid
     /// - Dimmed placeholder if empty
     #[must_use]
+    #[allow(dead_code)]
     pub fn render_line(&self, label: &str, focused: bool, theme: &Theme) -> Line<'static> {
         let label_style = if focused {
             Style::default()
@@ -383,6 +392,7 @@ impl DateField {
 
     /// Returns a hint string showing accepted formats.
     #[must_use]
+    #[allow(dead_code)]
     pub fn format_hint() -> &'static str {
         "YYYY-MM-DD, DD/MM/YYYY, or DD-MM-YYYY (+ HH:MM for time)"
     }

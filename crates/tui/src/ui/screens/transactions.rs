@@ -521,13 +521,13 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         render_transfer_field("To", to, transfer.focus == TransferField::To, theme),
         render_transfer_field(
             "Amount",
-            transfer.amount.as_str(),
+            transfer.amount.value(),
             transfer.focus == TransferField::Amount,
             theme,
         ),
         render_transfer_field(
             "Note",
-            transfer.note.as_str(),
+            transfer.note.value(),
             transfer.focus == TransferField::Note,
             theme,
         ),
@@ -633,16 +633,16 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
         .map(|flow| flow.name.as_str())
         .unwrap_or("-");
 
-    let category_raw = form.category.trim().trim_start_matches('#');
+    let category_raw = form.category.value().trim().trim_start_matches('#');
     let category = if category_raw.is_empty() {
         "-".to_string()
     } else {
         format!("#{category_raw}")
     };
-    let note = if form.note.trim().is_empty() {
+    let note = if form.note.value().trim().is_empty() {
         "-".to_string()
     } else {
-        form.note.trim().to_string()
+        form.note.value().trim().to_string()
     };
     let occurred_at = if form.occurred_at.value.trim().is_empty() {
         "-".to_string()
@@ -693,7 +693,7 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
     let mut lines = vec![
         render_transaction_field(
             "Amount",
-            form.amount.as_str(),
+            form.amount.value(),
             form.focus == TransactionFormField::Amount,
             "Enter numerical amount (required)",
             theme,

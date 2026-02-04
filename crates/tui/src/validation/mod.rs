@@ -13,7 +13,6 @@ pub use text::{LengthValidator, RequiredValidator};
 
 /// Result of validating a form field value.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[allow(dead_code)]
 pub enum ValidationResult {
     /// Input is valid.
     #[default]
@@ -21,10 +20,10 @@ pub enum ValidationResult {
     /// Input is invalid with an error message.
     Invalid(String),
     /// Validation in progress (for async validation, future use).
+    #[allow(dead_code)]
     Pending,
 }
 
-#[allow(dead_code)]
 impl ValidationResult {
     /// Returns `true` if the validation passed.
     #[must_use]
@@ -49,6 +48,7 @@ impl ValidationResult {
 
     /// Combines two validation results, returning the first error if any.
     #[must_use]
+    #[allow(dead_code)]
     pub fn and(self, other: Self) -> Self {
         match self {
             Self::Valid => other,
@@ -65,7 +65,6 @@ pub trait Validator {
 
 /// State of a form field including its validation status.
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
 pub struct FieldState {
     /// Current value of the field.
     pub value: String,
@@ -79,16 +78,17 @@ pub struct FieldState {
     pub required: bool,
 }
 
-#[allow(dead_code)]
 impl FieldState {
     /// Creates a new empty field state.
     #[must_use]
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Creates a new required field state.
     #[must_use]
+    #[allow(dead_code)]
     pub fn required() -> Self {
         Self {
             required: true,
@@ -98,6 +98,7 @@ impl FieldState {
 
     /// Creates a field state with an initial value.
     #[must_use]
+    #[allow(dead_code)]
     pub fn with_value(value: impl Into<String>) -> Self {
         Self {
             value: value.into(),
@@ -114,6 +115,7 @@ impl FieldState {
     }
 
     /// Marks the field as touched.
+    #[allow(dead_code)]
     pub fn touch(&mut self) {
         self.touched = true;
     }

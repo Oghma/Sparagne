@@ -90,7 +90,7 @@ async fn transaction_form_flow() {
     for ch in "50.00".chars() {
         assert!(app.handle_key(key(KeyCode::Char(ch))).await.is_ok());
     }
-    assert_eq!(app.state.transactions.form.amount, "50.00");
+    assert_eq!(app.state.transactions.form.amount.value(), "50.00");
 
     assert!(app.handle_key(key(KeyCode::Tab)).await.is_ok());
     assert_eq!(
@@ -112,8 +112,8 @@ async fn section_navigation_without_fetch() {
     assert!(app.handle_key(key(KeyCode::Char('t'))).await.is_ok());
     assert_eq!(app.state.section, Section::Transactions);
 
-    assert!(app.handle_key(key(KeyCode::Char('w'))).await.is_ok());
-    assert_eq!(app.state.section, Section::Wallets);
+    assert!(app.handle_key(key(KeyCode::Char('a'))).await.is_ok());
+    assert_eq!(app.state.section, Section::Accounts);
 }
 
 #[tokio::test]

@@ -8,6 +8,7 @@ use crate::{
     },
     error::Result,
     quick_add::parse as parse_quick_add,
+    ui::forms::{AmountField, TextField},
     validation::DateField,
 };
 use api_types::transaction::TransactionKind;
@@ -357,11 +358,11 @@ impl App {
         let occurred_at_str = self.format_local_datetime(self.now_in_timezone());
         self.state.transactions.form = TransactionFormState {
             kind,
-            amount: String::new(),
+            amount: AmountField::new("Amount"),
             wallet_index,
             flow_index,
-            category: String::new(),
-            note: String::new(),
+            category: TextField::new("Category"),
+            note: TextField::new("Note"),
             occurred_at: DateField::with_value(occurred_at_str),
             focus: TransactionFormField::Amount,
             error: None,
@@ -421,11 +422,11 @@ impl App {
 
                 self.state.transactions.form = TransactionFormState {
                     kind: detail.transaction.kind,
-                    amount,
+                    amount: AmountField::new("Amount").with_value(amount),
                     wallet_index,
                     flow_index,
-                    category: detail.transaction.category.clone().unwrap_or_default(),
-                    note: detail.transaction.note.clone().unwrap_or_default(),
+                    category: TextField::new("Category").with_value(detail.transaction.category.clone().unwrap_or_default()),
+                    note: TextField::new("Note").with_value(detail.transaction.note.clone().unwrap_or_default()),
                     occurred_at: DateField::with_value(occurred_at_str.clone()),
                     focus: TransactionFormField::Amount,
                     error: None,
@@ -438,7 +439,7 @@ impl App {
                 self.state.transactions.mode = TransactionsMode::Edit;
             }
             TransactionKind::TransferWallet => {
-                let (from_id, to_id) = match extract_wallet_transfer(detail) {
+                let (from_id, to_id) = match extract_wallet_transfer(detail, self.state.locale) {
                     Ok(values) => values,
                     Err(_) => {
                         self.set_toast("Transfer wallet non valido.", ToastLevel::Error);
@@ -464,8 +465,8 @@ impl App {
                 self.state.transactions.transfer = TransferFormState {
                     from_index,
                     to_index,
-                    amount,
-                    note: detail.transaction.note.clone().unwrap_or_default(),
+                    amount: AmountField::new("Amount").with_value(amount),
+                    note: TextField::new("Note").with_value(detail.transaction.note.clone().unwrap_or_default()),
                     occurred_at: DateField::with_value(occurred_at_str.clone()),
                     focus: TransferField::From,
                     error: None,
@@ -477,7 +478,7 @@ impl App {
                 self.state.transactions.mode = TransactionsMode::TransferWallet;
             }
             TransactionKind::TransferFlow => {
-                let (from_id, to_id) = match extract_flow_transfer(detail) {
+                let (from_id, to_id) = match extract_flow_transfer(detail, self.state.locale) {
                     Ok(values) => values,
                     Err(_) => {
                         self.set_toast("Transfer flow non valido.", ToastLevel::Error);
@@ -503,8 +504,8 @@ impl App {
                 self.state.transactions.transfer = TransferFormState {
                     from_index,
                     to_index,
-                    amount,
-                    note: detail.transaction.note.clone().unwrap_or_default(),
+                    amount: AmountField::new("Amount").with_value(amount),
+                    note: TextField::new("Note").with_value(detail.transaction.note.clone().unwrap_or_default()),
                     occurred_at: DateField::with_value(occurred_at_str),
                     focus: TransferField::From,
                     error: None,
@@ -523,7 +524,7 @@ impl App {
         &self,
     ) -> std::result::Result<(usize, usize), String> {
         let (default_wallet_id, default_flow_id, _wallet_name, _flow_name) =
-            default_wallet_flow(&self.state)?;
+            default_wallet_flow(&self.state, self.state.locale)?;
         let wallet_ids = self.ordered_wallet_ids();
         let flow_ids = self.ordered_flow_ids();
         if wallet_ids.is_empty() {
@@ -673,7 +674,7 @@ impl App {
             None => 0,
         };
         form.category_index = Some(next);
-        form.category = categories[next].clone();
+        form.category.set_value(categories[next].clone());
     }
 
     pub(crate) fn select_category_prev(&mut self) {
@@ -687,7 +688,7 @@ impl App {
             None => categories.len() - 1,
         };
         form.category_index = Some(prev);
-        form.category = categories[prev].clone();
+        form.category.set_value(categories[prev].clone());
     }
     pub(crate) fn set_transaction_form_error(&mut self, message: &str) {
         self.state.transactions.form.error = Some(message.to_string());

@@ -19,7 +19,6 @@ impl Validator for RequiredValidator {
 
 /// Validates string length constraints.
 #[derive(Debug, Clone, Copy, Default)]
-#[allow(dead_code)]
 pub struct LengthValidator {
     /// Minimum length (inclusive). `None` means no minimum.
     pub min: Option<usize>,
@@ -27,10 +26,10 @@ pub struct LengthValidator {
     pub max: Option<usize>,
 }
 
-#[allow(dead_code)]
 impl LengthValidator {
     /// Creates a validator with minimum length only.
     #[must_use]
+    #[allow(dead_code)]
     pub fn min(min: usize) -> Self {
         Self {
             min: Some(min),
@@ -40,6 +39,7 @@ impl LengthValidator {
 
     /// Creates a validator with maximum length only.
     #[must_use]
+    #[allow(dead_code)]
     pub fn max(max: usize) -> Self {
         Self {
             min: None,
@@ -49,6 +49,7 @@ impl LengthValidator {
 
     /// Creates a validator with both minimum and maximum length.
     #[must_use]
+    #[allow(dead_code)]
     pub fn range(min: usize, max: usize) -> Self {
         Self {
             min: Some(min),

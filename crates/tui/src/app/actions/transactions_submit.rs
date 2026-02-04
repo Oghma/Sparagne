@@ -23,11 +23,11 @@ impl App {
             let form = &self.state.transactions.form;
             (
                 form.kind,
-                form.amount.trim().to_string(),
+                form.amount.value().trim().to_string(),
                 form.wallet_index,
                 form.flow_index,
-                form.category.trim().to_string(),
-                form.note.trim().to_string(),
+                form.category.value().trim().to_string(),
+                form.note.value().trim().to_string(),
                 form.occurred_at.value.trim().to_string(),
             )
         };
@@ -141,7 +141,7 @@ impl App {
                     if self.handle_auth_error(&err) {
                         return Ok(());
                     }
-                    self.state.transactions.form.error = Some(login_message_for_error(err));
+                    self.state.transactions.form.error = Some(login_message_for_error(err, self.state.locale));
                     self.set_toast("Errore aggiornamento.", ToastLevel::Error);
                 }
             }
@@ -223,7 +223,7 @@ impl App {
                     if self.handle_auth_error(&err) {
                         return Ok(());
                     }
-                    self.state.transactions.form.error = Some(login_message_for_error(err));
+                    self.state.transactions.form.error = Some(login_message_for_error(err, self.state.locale));
                     self.set_toast("Errore salvataggio.", ToastLevel::Error);
                 }
             }
@@ -249,7 +249,7 @@ impl App {
 
         let currency = self.current_currency();
         let amount =
-            match Money::parse_major(self.state.transactions.transfer.amount.trim(), currency) {
+            match Money::parse_major(self.state.transactions.transfer.amount.value().trim(), currency) {
                 Ok(money) => money.minor().abs(),
                 Err(_) => {
                     self.state.transactions.transfer.error =
@@ -262,7 +262,7 @@ impl App {
             return Ok(());
         }
 
-        let note = self.state.transactions.transfer.note.trim();
+        let note = self.state.transactions.transfer.note.value().trim();
         let occurred_raw = self.state.transactions.transfer.occurred_at.value.trim();
         let occurred_at = if occurred_raw.is_empty() {
             None
@@ -312,7 +312,7 @@ impl App {
                     if self.handle_auth_error(&err) {
                         return Ok(());
                     }
-                    self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                    self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
                     self.set_toast("Errore transfer wallet.", ToastLevel::Error);
                 }
             }
@@ -350,7 +350,7 @@ impl App {
                     if self.handle_auth_error(&err) {
                         return Ok(());
                     }
-                    self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                    self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
                     self.set_toast("Errore transfer wallet.", ToastLevel::Error);
                 }
             }
@@ -375,7 +375,7 @@ impl App {
 
         let currency = self.current_currency();
         let amount =
-            match Money::parse_major(self.state.transactions.transfer.amount.trim(), currency) {
+            match Money::parse_major(self.state.transactions.transfer.amount.value().trim(), currency) {
                 Ok(money) => money.minor().abs(),
                 Err(_) => {
                     self.state.transactions.transfer.error =
@@ -388,7 +388,7 @@ impl App {
             return Ok(());
         }
 
-        let note = self.state.transactions.transfer.note.trim();
+        let note = self.state.transactions.transfer.note.value().trim();
         let occurred_raw = self.state.transactions.transfer.occurred_at.value.trim();
         let occurred_at = if occurred_raw.is_empty() {
             None
@@ -438,7 +438,7 @@ impl App {
                     if self.handle_auth_error(&err) {
                         return Ok(());
                     }
-                    self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                    self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
                     self.set_toast("Errore transfer flow.", ToastLevel::Error);
                 }
             }
@@ -476,7 +476,7 @@ impl App {
                     if self.handle_auth_error(&err) {
                         return Ok(());
                     }
-                    self.state.transactions.transfer.error = Some(login_message_for_error(err));
+                    self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
                     self.set_toast("Errore transfer flow.", ToastLevel::Error);
                 }
             }
@@ -606,7 +606,7 @@ impl App {
                         return Ok(());
                     }
                     failures += 1;
-                    last_error = Some(login_message_for_error(err));
+                    last_error = Some(login_message_for_error(err, self.state.locale));
                 }
             }
         }
@@ -688,7 +688,7 @@ impl App {
                         return Ok(());
                     }
                     failures += 1;
-                    last_error = Some(login_message_for_error(err));
+                    last_error = Some(login_message_for_error(err, self.state.locale));
                 }
             }
         }
@@ -722,7 +722,7 @@ impl App {
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
 
         let (mut wallet_id, mut flow_id, _wallet_name, _flow_name) =
-            match default_wallet_flow(&self.state) {
+            match default_wallet_flow(&self.state, self.state.locale) {
                 Ok(res) => res,
                 Err(message) => {
                     self.state.transactions.quick_error = Some(message);
@@ -904,7 +904,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.transactions.quick_error = Some(login_message_for_error(err));
+                self.state.transactions.quick_error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore durante il salvataggio.", ToastLevel::Error);
             }
         }
@@ -974,7 +974,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.transactions.quick_error = Some(login_message_for_error(err));
+                self.state.transactions.quick_error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore durante il salvataggio.", ToastLevel::Error);
             }
         }
@@ -1044,7 +1044,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.transactions.quick_error = Some(login_message_for_error(err));
+                self.state.transactions.quick_error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore durante il salvataggio.", ToastLevel::Error);
             }
         }
