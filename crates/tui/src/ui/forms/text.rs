@@ -50,17 +50,7 @@ impl TextField {
 
     /// Sets the maximum length constraint.
     #[must_use]
-    #[allow(dead_code)]
     pub fn max_length(mut self, max: usize) -> Self {
-        self.max_length = Some(max);
-        self
-    }
-
-    /// Sets both minimum and maximum length constraints.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn length_range(mut self, min: usize, max: usize) -> Self {
-        self.min_length = Some(min);
         self.max_length = Some(max);
         self
     }
@@ -126,7 +116,6 @@ impl TextField {
 
     /// Returns the current character count.
     #[must_use]
-    #[allow(dead_code)]
     pub fn char_count(&self) -> usize {
         self.state.value.chars().count()
     }

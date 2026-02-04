@@ -2,7 +2,6 @@ use ratatui::{
     Frame,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
-    symbols,
     text::{Line, Span},
     widgets::{BarChart, Paragraph, Sparkline, Wrap},
 };
@@ -41,31 +40,6 @@ pub fn render_bar_chart(
         let inner = card.inner(area);
         card.render_frame(frame, area);
         frame.render_widget(chart, inner);
-    }
-}
-
-/// Renders a sparkline (mini line chart) for trend visualization.
-///
-/// Useful for showing trends in a compact space.
-#[allow(dead_code)]
-pub fn render_sparkline(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    title: &str,
-    data: &[u64],
-    theme: &Theme,
-) {
-    let sparkline = Sparkline::default()
-        .data(data)
-        .style(Style::default().fg(theme.accent));
-
-    if title.is_empty() {
-        frame.render_widget(sparkline, area);
-    } else {
-        let card = Card::new(title, theme);
-        let inner = card.inner(area);
-        card.render_frame(frame, area);
-        frame.render_widget(sparkline, inner);
     }
 }
 
@@ -115,23 +89,6 @@ pub fn render_inline_sparkline(frame: &mut Frame<'_>, area: Rect, data: &[u64], 
     frame.render_widget(sparkline, area);
 }
 
-/// Creates a simple ASCII-based horizontal bar for inline use.
-///
-/// Returns a string like `████████░░░░░░░░░░░░` representing the ratio.
-#[must_use]
-#[allow(dead_code)]
-pub fn ascii_bar(value: u64, max: u64, width: usize) -> String {
-    if max == 0 {
-        return "░".repeat(width);
-    }
-
-    let ratio = (value as f64 / max as f64).clamp(0.0, 1.0);
-    let filled = ((ratio * width as f64) as usize).min(width);
-    let empty = width.saturating_sub(filled);
-
-    format!("{}{}", "█".repeat(filled), "░".repeat(empty))
-}
-
 /// Creates a simple ASCII-based horizontal bar with different fill styles.
 #[must_use]
 pub fn ascii_bar_styled(value: u64, max: u64, width: usize, style: BarStyle) -> String {
@@ -163,45 +120,6 @@ pub enum BarStyle {
     Line,
     /// Dot characters: ● and ○
     Dot,
-}
-
-/// Creates a mini bar chart representation as a string.
-///
-/// Returns something like `▁▂▃▅▇▅▃▂▁` for a series of values.
-#[must_use]
-#[allow(dead_code)]
-pub fn mini_bar_chart(values: &[u64]) -> String {
-    if values.is_empty() {
-        return String::new();
-    }
-
-    let max = *values.iter().max().unwrap_or(&1);
-    if max == 0 {
-        return " ".repeat(values.len());
-    }
-
-    let bars = [
-        symbols::bar::ONE_EIGHTH,
-        symbols::bar::ONE_QUARTER,
-        symbols::bar::THREE_EIGHTHS,
-        symbols::bar::HALF,
-        symbols::bar::FIVE_EIGHTHS,
-        symbols::bar::THREE_QUARTERS,
-        symbols::bar::SEVEN_EIGHTHS,
-        symbols::bar::FULL,
-    ];
-
-    values
-        .iter()
-        .map(|&v| {
-            if v == 0 {
-                " "
-            } else {
-                let index = ((v as f64 / max as f64) * 7.0) as usize;
-                bars[index.min(7)]
-            }
-        })
-        .collect()
 }
 
 /// Creates a percentage bar with label.
@@ -328,54 +246,6 @@ const BRAILLE_LEFT: [u8; 4] = [0x01, 0x02, 0x04, 0x40];
 /// Right column dot bits (top to bottom): rows 0, 1, 2, 3
 const BRAILLE_RIGHT: [u8; 4] = [0x08, 0x10, 0x20, 0x80];
 
-/// Creates a high-resolution Braille sparkline string.
-///
-/// Each character represents 2 data points with 4 levels of height.
-/// This provides 8x the resolution of standard bar characters.
-///
-/// # Arguments
-/// * `values` - Data points to visualize
-///
-/// # Returns
-/// A string of Braille characters representing the sparkline.
-///
-/// # Example
-/// ```ignore
-/// let data = vec![1, 3, 5, 8, 6, 4, 2, 1];
-/// let sparkline = braille_sparkline(&data);
-/// // Returns something like "⣀⣤⣶⣿⣶⣤⣀"
-/// ```
-#[must_use]
-#[allow(dead_code)]
-pub fn braille_sparkline(values: &[u64]) -> String {
-    if values.is_empty() {
-        return String::new();
-    }
-
-    let max = *values.iter().max().unwrap_or(&1);
-    if max == 0 {
-        // All zeros - return blank braille characters
-        let char_count = values.len().div_ceil(2);
-        return "⠀".repeat(char_count);
-    }
-
-    let mut result = String::new();
-
-    // Process pairs of values (each Braille char represents 2 columns)
-    for chunk in values.chunks(2) {
-        let left_val = chunk[0];
-        let right_val = chunk.get(1).copied().unwrap_or(0);
-
-        let left_height = normalize_to_4(left_val, max);
-        let right_height = normalize_to_4(right_val, max);
-
-        let braille_char = braille_column_pair(left_height, right_height);
-        result.push(braille_char);
-    }
-
-    result
-}
-
 /// Creates a Braille sparkline with filled area (like an area chart).
 ///
 /// Instead of just the top dot, fills all dots from bottom up to the value.
@@ -415,29 +285,6 @@ fn normalize_to_4(value: u64, max: u64) -> u8 {
     // Scale to 0-4 (4 rows of dots)
     let normalized = (value as f64 / max as f64) * 4.0;
     (normalized.round() as u8).min(4)
-}
-
-/// Creates a Braille character for a pair of column values (line style).
-///
-/// Only lights the top dot for each height level.
-#[allow(dead_code)]
-fn braille_column_pair(left_height: u8, right_height: u8) -> char {
-    let mut dots: u8 = 0;
-
-    // Left column: light only the top dot for the given height
-    if left_height > 0 {
-        // Height 1 = row 3 (bottom), height 4 = row 0 (top)
-        let row = 4 - left_height;
-        dots |= BRAILLE_LEFT[row as usize];
-    }
-
-    // Right column: same logic
-    if right_height > 0 {
-        let row = 4 - right_height;
-        dots |= BRAILLE_RIGHT[row as usize];
-    }
-
-    char::from_u32(BRAILLE_BASE + dots as u32).unwrap_or('?')
 }
 
 /// Creates a Braille character for a pair of column values (filled/area style).
@@ -490,31 +337,34 @@ mod braille_tests {
     use super::*;
 
     #[test]
-    fn test_braille_sparkline_empty() {
-        assert_eq!(braille_sparkline(&[]), "");
+    fn test_braille_sparkline_filled_empty() {
+        assert_eq!(braille_sparkline_filled(&[]), "");
     }
 
     #[test]
-    fn test_braille_sparkline_all_zeros() {
-        let result = braille_sparkline(&[0, 0, 0, 0]);
+    fn test_braille_sparkline_filled_all_zeros() {
+        let result = braille_sparkline_filled(&[0, 0, 0, 0]);
         assert_eq!(result.chars().count(), 2); // 4 values = 2 braille chars
         assert!(result.chars().all(|c| c == '⠀'));
     }
 
     #[test]
-    fn test_braille_sparkline_single_value() {
-        let result = braille_sparkline(&[100]);
+    fn test_braille_sparkline_filled_single_value() {
+        let result = braille_sparkline_filled(&[100]);
         assert_eq!(result.chars().count(), 1);
-        // Max value should have the top dot
-        assert_eq!(result, "⠁"); // top-left dot
+        // Max value should fill all 4 rows in left column
+        // Rows 0-3 filled: 0x01 | 0x02 | 0x04 | 0x40 = 0x47 -> U+2847
+        assert_eq!(result, "⡇");
     }
 
     #[test]
-    fn test_braille_sparkline_pair() {
-        let result = braille_sparkline(&[100, 100]);
+    fn test_braille_sparkline_filled_pair() {
+        let result = braille_sparkline_filled(&[100, 100]);
         assert_eq!(result.chars().count(), 1);
-        // Both at max should have top dots in both columns
-        assert_eq!(result, "⠉"); // top-left and top-right dots
+        // Both at max should fill all dots in both columns
+        // Left: 0x47, Right: 0x88 | 0x10 | 0x20 | 0x80 = 0xB8
+        // Combined: 0x47 | 0xB8 = 0xFF -> U+28FF
+        assert_eq!(result, "⣿");
     }
 
     #[test]

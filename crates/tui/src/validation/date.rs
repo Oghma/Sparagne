@@ -88,19 +88,8 @@ impl Default for DateValidator {
 impl DateValidator {
     /// Creates a validator with all supported formats.
     #[must_use]
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Creates a validator with a specific timezone.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn with_timezone(timezone: Tz) -> Self {
-        Self {
-            timezone,
-            ..Default::default()
-        }
     }
 }
 
@@ -192,13 +181,6 @@ pub fn validate_date(
     }
 }
 
-use ratatui::{
-    style::Style,
-    text::{Line, Span},
-};
-
-use crate::ui::Theme;
-
 /// A form field for date input with real-time validation.
 ///
 /// Supports multiple date formats and provides visual feedback.
@@ -247,34 +229,6 @@ impl DateField {
         field
     }
 
-    /// Creates a new required date field.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn required() -> Self {
-        Self {
-            required: true,
-            ..Default::default()
-        }
-    }
-
-    /// Sets the timezone for parsing.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn with_timezone(mut self, timezone: Tz) -> Self {
-        self.timezone = timezone;
-        self.revalidate();
-        self
-    }
-
-    /// Sets the locale for error messages.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn with_locale(mut self, locale: Locale) -> Self {
-        self.locale = locale;
-        self.revalidate();
-        self
-    }
-
     /// Pushes a character to the input.
     pub fn push(&mut self, ch: char) {
         self.value.push(ch);
@@ -285,55 +239,6 @@ impl DateField {
     pub fn pop(&mut self) {
         self.value.pop();
         self.revalidate();
-    }
-
-    /// Clears the input.
-    #[allow(dead_code)]
-    pub fn clear(&mut self) {
-        self.value.clear();
-        self.revalidate();
-    }
-
-    /// Sets the value directly.
-    #[allow(dead_code)]
-    pub fn set_value(&mut self, value: impl Into<String>) {
-        self.value = value.into();
-        self.revalidate();
-    }
-
-    /// Returns whether the current value is valid.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn is_valid(&self) -> bool {
-        self.validation.is_valid()
-    }
-
-    /// Returns the validation result.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn validation(&self) -> &ValidationResult {
-        &self.validation
-    }
-
-    /// Returns the error message if validation failed.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn error_message(&self) -> Option<&str> {
-        self.validation.error_message()
-    }
-
-    /// Parses the current value and returns the datetime if valid.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn parse_date(&self) -> Option<ParsedDate> {
-        parse_date(&self.value, DateFormat::all(), self.timezone)
-    }
-
-    /// Returns the datetime value if valid.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn datetime(&self) -> Option<DateTime<FixedOffset>> {
-        self.parse_date().map(|p| p.datetime)
     }
 
     /// Revalidates the current value.
@@ -350,51 +255,6 @@ impl DateField {
         }
 
         self.validation = validate_date(trimmed, DateFormat::all(), self.timezone, self.locale);
-    }
-
-    /// Renders the field as a Line with validation feedback.
-    ///
-    /// Returns a styled Line that shows the value with visual feedback:
-    /// - Green if valid
-    /// - Red if invalid
-    /// - Dimmed placeholder if empty
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn render_line(&self, label: &str, focused: bool, theme: &Theme) -> Line<'static> {
-        let label_style = if focused {
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(ratatui::style::Modifier::BOLD)
-        } else {
-            Style::default().fg(theme.text)
-        };
-
-        let (display_value, value_style) = if self.value.is_empty() {
-            ("-".to_string(), Style::default().fg(theme.text_muted))
-        } else if self.validation.is_valid() {
-            (self.value.clone(), Style::default().fg(theme.positive))
-        } else {
-            (self.value.clone(), Style::default().fg(theme.negative))
-        };
-
-        let value_style = if focused {
-            value_style.add_modifier(ratatui::style::Modifier::BOLD)
-        } else {
-            value_style
-        };
-
-        Line::from(vec![
-            Span::styled(format!("{label:<8}"), label_style),
-            Span::raw(": "),
-            Span::styled(display_value, value_style),
-        ])
-    }
-
-    /// Returns a hint string showing accepted formats.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn format_hint() -> &'static str {
-        "YYYY-MM-DD, DD/MM/YYYY, or DD-MM-YYYY (+ HH:MM for time)"
     }
 }
 

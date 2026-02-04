@@ -1,55 +1,10 @@
 use ratatui::style::Color;
 
-use crate::config::Density;
-
-/// Spacing values based on UI density.
-#[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
-pub struct Spacing {
-    /// Padding inside cards and blocks.
-    pub padding: u16,
-    /// Vertical spacing between sections.
-    pub section_gap: u16,
-    /// Height of list items.
-    pub list_item_height: u16,
-    /// Margin around main content areas.
-    pub margin: u16,
-}
-
-#[allow(dead_code)]
-impl Spacing {
-    /// Creates spacing values for the given density.
-    #[must_use]
-    pub fn from_density(density: Density) -> Self {
-        match density {
-            Density::Compact => Self {
-                padding: 0,
-                section_gap: 0,
-                list_item_height: 1,
-                margin: 0,
-            },
-            Density::Normal => Self {
-                padding: 1,
-                section_gap: 1,
-                list_item_height: 2,
-                margin: 1,
-            },
-            Density::Comfortable => Self {
-                padding: 2,
-                section_gap: 2,
-                list_item_height: 3,
-                margin: 2,
-            },
-        }
-    }
-}
-
 /// Gruvbox (Dark) theme for Sparagne TUI.
 ///
 /// A retro groove color scheme for the terminal.
 /// <https://github.com/morhetz/gruvbox>
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 pub struct Theme {
     // Base colors
     pub background: Color,     // #282828 (bg)

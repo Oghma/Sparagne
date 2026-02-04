@@ -10,7 +10,7 @@ use engine::Money;
 impl App {
     pub(crate) async fn open_flow_detail(&mut self) -> Result<()> {
         let Some(flow_id) = self.selected_flow().map(|flow| flow.id) else {
-            self.state.flows.error = Some("Nessun flow selezionato.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
             return Ok(());
         };
         self.state.flows.detail.flow_id = Some(flow_id);
@@ -53,7 +53,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.flows.detail.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -84,7 +84,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.flows.detail.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -101,7 +101,7 @@ impl App {
 
         let name = self.state.flows.form.name.value().trim().to_string();
         if name.is_empty() {
-            self.state.flows.error = Some("Enter a name.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::PromptEnterName).to_string());
             return Ok(());
         }
 
@@ -115,12 +115,12 @@ impl App {
         let opening = match Money::parse_major(opening_raw, currency) {
             Ok(money) => money.minor(),
             Err(_) => {
-                self.state.flows.error = Some("Invalid opening allocation.".to_string());
+                self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationOpeningBalanceInvalid).to_string());
                 return Ok(());
             }
         };
         if opening < 0 {
-            self.state.flows.error = Some("Opening allocation must be >= 0.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationOpeningBalanceNonNegative).to_string());
             return Ok(());
         }
 
@@ -163,14 +163,14 @@ impl App {
                 self.state.flows.mode = FlowsMode::List;
                 self.refresh_snapshot().await?;
                 self.select_flow_by_id(created.id);
-                self.set_toast("Flow created.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessFlowCreated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Failed to create flow.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorCreateFlow), ToastLevel::Error);
             }
         }
 
@@ -180,11 +180,11 @@ impl App {
         let Some((flow_id, is_unallocated)) =
             self.selected_flow().map(|f| (f.id, f.is_unallocated))
         else {
-            self.state.flows.error = Some("No flow selected.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
             return Ok(());
         };
         if is_unallocated {
-            self.state.flows.error = Some("Unallocated cannot be renamed.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationUnallocatedCannotRename).to_string());
             return Ok(());
         }
 
@@ -196,7 +196,7 @@ impl App {
 
         let name = self.state.flows.form.name.value().trim();
         if name.is_empty() {
-            self.state.flows.error = Some("Enter a name.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::PromptEnterName).to_string());
             return Ok(());
         }
 
@@ -220,14 +220,14 @@ impl App {
                 self.reset_flow_form();
                 self.state.flows.mode = FlowsMode::List;
                 self.refresh_snapshot().await?;
-                self.set_toast("Flow updated.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessFlowUpdated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Failed to update flow.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorUpdateFlow), ToastLevel::Error);
             }
         }
 
@@ -235,11 +235,11 @@ impl App {
     }
     pub(crate) async fn toggle_flow_archive(&mut self) -> Result<()> {
         let Some(flow) = self.selected_flow() else {
-            self.state.flows.error = Some("No flow selected.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
             return Ok(());
         };
         if flow.is_unallocated {
-            self.state.flows.error = Some("Unallocated cannot be archived.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationUnallocatedCannotArchive).to_string());
             return Ok(());
         }
         let res = self
@@ -260,14 +260,14 @@ impl App {
         match res {
             Ok(()) => {
                 self.refresh_snapshot().await?;
-                self.set_toast("Flow updated.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessFlowUpdated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Failed to archive flow.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorArchiveFlow), ToastLevel::Error);
             }
         }
 
@@ -277,7 +277,7 @@ impl App {
     pub(crate) async fn archive_flow_with_undo(&mut self) -> Result<()> {
         self.finalize_pending_undo().await?;
         let Some(flow) = self.selected_flow() else {
-            self.state.flows.error = Some("No flow selected.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
             return Ok(());
         };
         let flow_id = flow.id;
@@ -286,11 +286,11 @@ impl App {
         let is_archived = flow.archived;
 
         if is_unallocated {
-            self.state.flows.error = Some("Unallocated cannot be archived.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationUnallocatedCannotArchive).to_string());
             return Ok(());
         }
         if is_archived {
-            self.state.flows.error = Some("Flow già archiviato.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationAlreadyArchived).to_string());
             return Ok(());
         }
 
@@ -320,7 +320,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Failed to archive flow.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorArchiveFlow), ToastLevel::Error);
             }
         }
 
@@ -346,14 +346,14 @@ impl App {
         match res {
             Ok(()) => {
                 self.refresh_snapshot().await?;
-                self.set_toast("Flow restored.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessFlowRestored), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore ripristino flow.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorRestoreFlow), ToastLevel::Error);
             }
         }
 
@@ -362,18 +362,18 @@ impl App {
     pub(crate) fn parse_flow_cap(&mut self, currency: engine::Currency) -> Option<i64> {
         let cap_raw = self.state.flows.form.cap.value().trim();
         if cap_raw.is_empty() {
-            self.state.flows.error = Some("Inserisci un cap.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::PromptEnterCap).to_string());
             return None;
         }
         let cap = match Money::parse_major(cap_raw, currency) {
             Ok(money) => money.minor().abs(),
             Err(_) => {
-                self.state.flows.error = Some("Cap non valido.".to_string());
+                self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationCapInvalid).to_string());
                 return None;
             }
         };
         if cap <= 0 {
-            self.state.flows.error = Some("Cap deve essere > 0.".to_string());
+            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationCapMustBePositive).to_string());
             return None;
         }
         Some(cap)

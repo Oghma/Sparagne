@@ -3,6 +3,7 @@ use super::super::*;
 use crate::{
     app::{errors::login_message_for_error, format::member_role_rank},
     error::Result,
+    text::{t, TextKey},
 };
 use api_types::membership::MemberUpsert;
 
@@ -38,7 +39,8 @@ impl App {
                 let Some((flow_id, _)) = self.current_member_flow() else {
                     self.state.members.items.clear();
                     self.state.members.selected = 0;
-                    self.state.members.error = Some("Nessun flow condivisibile.".to_string());
+                    self.state.members.error =
+                        Some(t(self.state.locale, TextKey::PromptNoShareableFlows).to_string());
                     return Ok(());
                 };
                 self.client
@@ -84,7 +86,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.members.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
         Ok(())
@@ -110,7 +112,8 @@ impl App {
 
         let username = self.state.members.form.username.value().trim().to_string();
         if username.is_empty() {
-            self.state.members.error = Some("Inserisci un username.".to_string());
+            self.state.members.error =
+                Some(t(self.state.locale, TextKey::PromptEnterUsername).to_string());
             return Ok(());
         }
         let vault_id = self.current_vault_id()?;
@@ -132,7 +135,8 @@ impl App {
             }
             MembersScope::Flow => {
                 let Some((flow_id, _)) = self.current_member_flow() else {
-                    self.state.members.error = Some("Nessun flow condivisibile.".to_string());
+                    self.state.members.error =
+                        Some(t(self.state.locale, TextKey::PromptNoShareableFlows).to_string());
                     return Ok(());
                 };
                 self.client
@@ -166,7 +170,8 @@ impl App {
     }
     pub(crate) async fn remove_member(&mut self) -> Result<()> {
         let Some(member) = self.state.members.items.get(self.state.members.selected) else {
-            self.state.members.error = Some("Nessun membro selezionato.".to_string());
+            self.state.members.error =
+                Some(t(self.state.locale, TextKey::PromptNoMemberSelected).to_string());
             return Ok(());
         };
         let vault_id = self.current_vault_id()?;
@@ -184,7 +189,8 @@ impl App {
             }
             MembersScope::Flow => {
                 let Some((flow_id, _)) = self.current_member_flow() else {
-                    self.state.members.error = Some("Nessun flow condivisibile.".to_string());
+                    self.state.members.error =
+                        Some(t(self.state.locale, TextKey::PromptNoShareableFlows).to_string());
                     return Ok(());
                 };
                 self.client

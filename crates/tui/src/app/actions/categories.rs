@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::errors::login_message_for_error, error::Result};
+use crate::{app::errors::login_message_for_error, error::Result, text::{TextKey, t}};
 use api_types::category::{CategoryCreate, CategoryUpdate};
 
 impl App {
@@ -46,7 +46,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
         Ok(())
@@ -55,17 +55,17 @@ impl App {
         let vault_id = self.current_vault_id()?;
         let items_len = self.state.categories.items.len();
         if items_len < 2 {
-            self.set_toast("Serve almeno 2 categorie per unire.", ToastLevel::Error);
+            self.set_toast(t(self.state.locale, TextKey::PromptAtLeastTwoCategories), ToastLevel::Error);
             return Ok(());
         }
         let from_index = self.state.categories.merge.from_index.min(items_len - 1);
         let target_index = self.state.categories.merge.target_index.min(items_len - 1);
         let Some(from) = self.state.categories.items.get(from_index) else {
-            self.set_toast("Categoria sorgente non valida.", ToastLevel::Error);
+            self.set_toast(t(self.state.locale, TextKey::PromptSourceCategoryInvalid), ToastLevel::Error);
             return Ok(());
         };
         let Some(target) = self.state.categories.items.get(target_index) else {
-            self.set_toast("Categoria destinazione non valida.", ToastLevel::Error);
+            self.set_toast(t(self.state.locale, TextKey::PromptDestinationCategoryInvalid), ToastLevel::Error);
             return Ok(());
         };
         let from_id = from.id;
@@ -97,11 +97,11 @@ impl App {
                         .unwrap_or(false)
                     {
                         self.state.categories.merge.confirming = true;
-                        self.set_toast("Preview ok. Premi Enter per confermare.", ToastLevel::Info);
+                        self.set_toast(t(self.state.locale, TextKey::SuccessMergePreviewOk), ToastLevel::Info);
                     } else {
                         self.state.categories.merge.confirming = false;
                         self.set_toast(
-                            "Merge non valido. Controlla i conflitti.",
+                            t(self.state.locale, TextKey::PromptCheckConflicts),
                             ToastLevel::Error,
                         );
                     }
@@ -111,7 +111,7 @@ impl App {
                         return Ok(());
                     }
                     self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
-                    self.connection_error("Errore connessione");
+                    self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
                 }
             }
             return Ok(());
@@ -134,21 +134,21 @@ impl App {
                 self.state.categories.mode = CategoriesMode::List;
                 self.state.categories.merge = CategoryMergeState::default();
                 self.load_categories().await?;
-                self.set_toast("Merge completato.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessMergeCompleted), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
         Ok(())
     }
     pub(crate) async fn start_category_aliases(&mut self) -> Result<()> {
         let Some(category_id) = self.selected_category().map(|category| category.id) else {
-            self.set_toast("Nessuna categoria selezionata.", ToastLevel::Error);
+            self.set_toast(t(self.state.locale, TextKey::PromptNoCategorySelected), ToastLevel::Error);
             return Ok(());
         };
         self.state.categories.mode = CategoriesMode::Aliases;
@@ -192,7 +192,7 @@ impl App {
                     return Ok(());
                 }
                 self.state.categories.aliases.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
         Ok(())
@@ -205,12 +205,12 @@ impl App {
 
         let Some(category_id) = self.selected_category().map(|category| category.id) else {
             self.state.categories.aliases.error =
-                Some("Nessuna categoria selezionata.".to_string());
+                Some(t(self.state.locale, TextKey::PromptNoCategorySelected).to_string());
             return Ok(());
         };
         let alias = self.state.categories.aliases.input.trim().to_string();
         if alias.is_empty() {
-            self.state.categories.aliases.error = Some("Inserisci un alias.".to_string());
+            self.state.categories.aliases.error = Some(t(self.state.locale, TextKey::PromptEnterAlias).to_string());
             return Ok(());
         }
 
@@ -232,14 +232,14 @@ impl App {
                 self.state.categories.aliases.input.clear();
                 self.state.categories.aliases.focus = AliasFocus::List;
                 self.load_category_aliases(category_id).await?;
-                self.set_toast("Alias creato.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessAliasCreated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.categories.aliases.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore creazione alias.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorCreateAlias), ToastLevel::Error);
             }
         }
 
@@ -248,7 +248,7 @@ impl App {
     pub(crate) async fn delete_category_alias(&mut self) -> Result<()> {
         let Some(category_id) = self.selected_category().map(|category| category.id) else {
             self.state.categories.aliases.error =
-                Some("Nessuna categoria selezionata.".to_string());
+                Some(t(self.state.locale, TextKey::PromptNoCategorySelected).to_string());
             return Ok(());
         };
         let Some(alias_id) = self
@@ -259,7 +259,7 @@ impl App {
             .get(self.state.categories.aliases.selected)
             .map(|alias| alias.id)
         else {
-            self.state.categories.aliases.error = Some("Nessun alias selezionato.".to_string());
+            self.state.categories.aliases.error = Some(t(self.state.locale, TextKey::PromptNoAliasSelected).to_string());
             return Ok(());
         };
 
@@ -279,14 +279,14 @@ impl App {
         match res {
             Ok(()) => {
                 self.load_category_aliases(category_id).await?;
-                self.set_toast("Alias eliminato.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessAliasDeleted), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.categories.aliases.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore eliminazione alias.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorDeleteAlias), ToastLevel::Error);
             }
         }
 
@@ -303,7 +303,7 @@ impl App {
 
         let name = self.state.categories.form.name.value().trim();
         if name.is_empty() {
-            self.state.categories.error = Some("Inserisci un nome.".to_string());
+            self.state.categories.error = Some(t(self.state.locale, TextKey::PromptEnterName).to_string());
             return Ok(());
         }
 
@@ -325,14 +325,14 @@ impl App {
                 self.state.categories.mode = CategoriesMode::List;
                 self.load_categories().await?;
                 self.select_category_by_id(created.id);
-                self.set_toast("Categoria creata.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessCategoryCreated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore creazione categoria.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorCreateCategory), ToastLevel::Error);
             }
         }
 
@@ -341,12 +341,12 @@ impl App {
     pub(crate) async fn submit_category_rename(&mut self) -> Result<()> {
         let Some((category_id, is_system)) = self.selected_category().map(|c| (c.id, c.is_system))
         else {
-            self.state.categories.error = Some("Nessuna categoria selezionata.".to_string());
+            self.state.categories.error = Some(t(self.state.locale, TextKey::PromptNoCategorySelected).to_string());
             return Ok(());
         };
         if is_system {
             self.state.categories.error =
-                Some("Le categorie di sistema non si modificano.".to_string());
+                Some(t(self.state.locale, TextKey::ValidationSystemCategoryImmutable).to_string());
             return Ok(());
         }
 
@@ -358,7 +358,7 @@ impl App {
 
         let name = self.state.categories.form.name.value().trim();
         if name.is_empty() {
-            self.state.categories.error = Some("Inserisci un nome.".to_string());
+            self.state.categories.error = Some(t(self.state.locale, TextKey::PromptEnterName).to_string());
             return Ok(());
         }
 
@@ -381,14 +381,14 @@ impl App {
                 self.reset_category_form();
                 self.state.categories.mode = CategoriesMode::List;
                 self.load_categories().await?;
-                self.set_toast("Categoria aggiornata.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessCategoryUpdated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore aggiornamento categoria.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorUpdateCategory), ToastLevel::Error);
             }
         }
 
@@ -396,12 +396,12 @@ impl App {
     }
     pub(crate) async fn toggle_category_archive(&mut self) -> Result<()> {
         let Some(category) = self.selected_category() else {
-            self.state.categories.error = Some("Nessuna categoria selezionata.".to_string());
+            self.state.categories.error = Some(t(self.state.locale, TextKey::PromptNoCategorySelected).to_string());
             return Ok(());
         };
         if category.is_system {
             self.state.categories.error =
-                Some("Le categorie di sistema non si modificano.".to_string());
+                Some(t(self.state.locale, TextKey::ValidationSystemCategoryImmutable).to_string());
             return Ok(());
         }
 
@@ -422,14 +422,14 @@ impl App {
         match res {
             Ok(_) => {
                 self.load_categories().await?;
-                self.set_toast("Categoria aggiornata.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessCategoryUpdated), ToastLevel::Success);
             }
             Err(err) => {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
                 self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast("Errore archivio categoria.", ToastLevel::Error);
+                self.set_toast(t(self.state.locale, TextKey::ErrorArchiveCategory), ToastLevel::Error);
             }
         }
 

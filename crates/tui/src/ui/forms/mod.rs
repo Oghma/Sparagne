@@ -4,7 +4,6 @@
 //! the validation system to show real-time validation feedback.
 
 mod amount;
-mod date;
 mod text;
 
 pub use amount::AmountField;
@@ -28,7 +27,6 @@ impl FormFieldRenderer {
     ///
     /// Returns the rendered line suitable for inclusion in a form.
     #[must_use]
-    #[allow(dead_code)]
     pub fn render_field(
         label: &str,
         value: &str,
@@ -129,7 +127,6 @@ impl FormFieldRenderer {
 }
 
 /// Trait for form field components that can be rendered.
-#[allow(dead_code)]
 pub trait FormField {
     /// Renders the field to a single line.
     fn render_line(&self, theme: &Theme) -> Line<'static>;

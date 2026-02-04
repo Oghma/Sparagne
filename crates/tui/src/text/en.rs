@@ -76,12 +76,14 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::ValidationCategoryInvalid => "Invalid category.",
         TextKey::ValidationOpeningBalanceInvalid => "Invalid opening balance.",
         TextKey::ValidationCapInvalid => "Invalid cap.",
+        TextKey::ValidationCapMustBePositive => "Cap must be > 0.",
+        TextKey::ValidationOpeningBalanceNonNegative => "Opening allocation must be >= 0.",
         TextKey::ValidationNoWalletSelected => "No wallet selected.",
         TextKey::ValidationNoFlowSelected => "No flow selected.",
         TextKey::ValidationNoTransactionToVoid => "No transaction to void.",
         TextKey::ValidationUnallocatedCannotRename => "Unallocated cannot be renamed.",
         TextKey::ValidationUnallocatedCannotArchive => "Unallocated cannot be archived.",
-        TextKey::ValidationAlreadyArchived => "Wallet already archived.",
+        TextKey::ValidationAlreadyArchived => "Already archived.",
         TextKey::ValidationSystemCategoryImmutable => "System categories cannot be modified.",
 
         // Empty States
@@ -348,6 +350,8 @@ pub fn get(key: TextKey) -> &'static str {
 
         // State Messages
         TextKey::StateSnapshotUnavailable => "Snapshot unavailable.",
+        TextKey::StateVaultUnavailable => "Vault unavailable.",
+        TextKey::StateUserUnavailable => "User unavailable.",
         TextKey::StateNoWalletAvailable => "No wallet available.",
         TextKey::StateUnallocatedMissing => "Unallocated flow missing.",
         TextKey::StateCannotDetermineWalletTransfer => "Cannot determine transfer wallets.",

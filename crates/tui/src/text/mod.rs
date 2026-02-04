@@ -110,6 +110,8 @@ pub enum TextKey {
     ValidationCategoryInvalid,
     ValidationOpeningBalanceInvalid,
     ValidationCapInvalid,
+    ValidationCapMustBePositive,
+    ValidationOpeningBalanceNonNegative,
     ValidationNoWalletSelected,
     ValidationNoFlowSelected,
     ValidationNoTransactionToVoid,
@@ -382,6 +384,8 @@ pub enum TextKey {
 
     // State Messages
     StateSnapshotUnavailable,
+    StateVaultUnavailable,
+    StateUserUnavailable,
     StateNoWalletAvailable,
     StateUnallocatedMissing,
     StateCannotDetermineWalletTransfer,

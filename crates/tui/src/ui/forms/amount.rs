@@ -74,7 +74,6 @@ impl AmountField {
     }
 
     /// Updates the field value and triggers validation.
-    #[allow(dead_code)]
     pub fn set_value(&mut self, value: impl Into<String>) {
         self.state.value = value.into();
         self.state.touched = true;

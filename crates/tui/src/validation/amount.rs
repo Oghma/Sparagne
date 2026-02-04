@@ -16,28 +16,16 @@ pub struct AmountValidator {
     /// If `true`, the amount must be positive (> 0).
     pub require_positive: bool,
     /// If `true`, the amount must be non-negative (>= 0).
-    #[allow(dead_code)]
     pub allow_zero: bool,
 }
 
 impl AmountValidator {
     /// Creates a new validator that requires positive amounts.
     #[must_use]
-    #[allow(dead_code)]
     pub fn positive() -> Self {
         Self {
             require_positive: true,
             allow_zero: false,
-        }
-    }
-
-    /// Creates a new validator that allows zero and positive amounts.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn non_negative() -> Self {
-        Self {
-            require_positive: false,
-            allow_zero: true,
         }
     }
 }

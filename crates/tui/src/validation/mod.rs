@@ -20,7 +20,6 @@ pub enum ValidationResult {
     /// Input is invalid with an error message.
     Invalid(String),
     /// Validation in progress (for async validation, future use).
-    #[allow(dead_code)]
     Pending,
 }
 
@@ -43,16 +42,6 @@ impl ValidationResult {
         match self {
             Self::Invalid(msg) => Some(msg),
             _ => None,
-        }
-    }
-
-    /// Combines two validation results, returning the first error if any.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn and(self, other: Self) -> Self {
-        match self {
-            Self::Valid => other,
-            _ => self,
         }
     }
 }
@@ -81,29 +70,8 @@ pub struct FieldState {
 impl FieldState {
     /// Creates a new empty field state.
     #[must_use]
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Creates a new required field state.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn required() -> Self {
-        Self {
-            required: true,
-            ..Default::default()
-        }
-    }
-
-    /// Creates a field state with an initial value.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn with_value(value: impl Into<String>) -> Self {
-        Self {
-            value: value.into(),
-            ..Default::default()
-        }
     }
 
     /// Returns `true` if the field should display an error.
@@ -112,12 +80,6 @@ impl FieldState {
     #[must_use]
     pub fn should_show_error(&self) -> bool {
         self.touched && self.validation.is_invalid()
-    }
-
-    /// Marks the field as touched.
-    #[allow(dead_code)]
-    pub fn touch(&mut self) {
-        self.touched = true;
     }
 
     /// Clears the field value and validation state.
@@ -154,22 +116,6 @@ mod tests {
             Some("test error")
         );
         assert_eq!(ValidationResult::Pending.error_message(), None);
-    }
-
-    #[test]
-    fn validation_result_and() {
-        let valid = ValidationResult::Valid;
-        let invalid = ValidationResult::Invalid("first".to_string());
-
-        assert!(valid.clone().and(ValidationResult::Valid).is_valid());
-        assert_eq!(
-            valid.and(ValidationResult::Invalid("second".to_string())),
-            ValidationResult::Invalid("second".to_string())
-        );
-        assert_eq!(
-            invalid.and(ValidationResult::Valid),
-            ValidationResult::Invalid("first".to_string())
-        );
     }
 
     #[test]

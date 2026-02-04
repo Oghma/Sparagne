@@ -27,29 +27,8 @@ pub struct LengthValidator {
 }
 
 impl LengthValidator {
-    /// Creates a validator with minimum length only.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn min(min: usize) -> Self {
-        Self {
-            min: Some(min),
-            max: None,
-        }
-    }
-
-    /// Creates a validator with maximum length only.
-    #[must_use]
-    #[allow(dead_code)]
-    pub fn max(max: usize) -> Self {
-        Self {
-            min: None,
-            max: Some(max),
-        }
-    }
-
     /// Creates a validator with both minimum and maximum length.
     #[must_use]
-    #[allow(dead_code)]
     pub fn range(min: usize, max: usize) -> Self {
         Self {
             min: Some(min),
