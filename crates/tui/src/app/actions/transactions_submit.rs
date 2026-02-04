@@ -235,33 +235,36 @@ impl App {
     pub(crate) async fn submit_transfer_wallet(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
         let editing_id = self.state.transactions.transfer.editing_id;
+
+        // Validate minimum count
         let ids = self.active_wallet_ids();
-        if ids.len() < 2 {
-            self.state.transactions.transfer.error = Some("Servono almeno 2 wallet.".to_string());
+        if let Err(message) = super::validate_minimum_count(ids.len(), super::TransferType::Wallet) {
+            self.state.transactions.transfer.error = Some(message);
             return Ok(());
         }
+
+        // Get and validate IDs
         let from_id = ids[self.state.transactions.transfer.from_index];
         let to_id = ids[self.state.transactions.transfer.to_index];
-        if from_id == to_id {
+        if super::validate_different_ids(from_id, to_id).is_err() {
             self.state.transactions.transfer.error = Some("Scegli due wallet diversi.".to_string());
             return Ok(());
         }
 
+        // Validate amount
         let currency = self.current_currency();
-        let amount =
-            match Money::parse_major(self.state.transactions.transfer.amount.value().trim(), currency) {
-                Ok(money) => money.minor().abs(),
-                Err(_) => {
-                    self.state.transactions.transfer.error =
-                        Some("Importo non valido.".to_string());
-                    return Ok(());
-                }
-            };
-        if amount <= 0 {
-            self.state.transactions.transfer.error = Some("Importo deve essere > 0.".to_string());
-            return Ok(());
-        }
+        let amount = match super::validate_transfer_amount(
+            self.state.transactions.transfer.amount.value().trim(),
+            currency,
+        ) {
+            Ok(amount) => amount,
+            Err(message) => {
+                self.state.transactions.transfer.error = Some(message);
+                return Ok(());
+            }
+        };
 
+        // Parse occurred_at
         let note = self.state.transactions.transfer.note.value().trim();
         let occurred_raw = self.state.transactions.transfer.occurred_at.value.trim();
         let occurred_at = if occurred_raw.is_empty() {
@@ -361,33 +364,36 @@ impl App {
     pub(crate) async fn submit_transfer_flow(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
         let editing_id = self.state.transactions.transfer.editing_id;
+
+        // Validate minimum count
         let ids = self.active_flow_ids();
-        if ids.len() < 2 {
-            self.state.transactions.transfer.error = Some("Servono almeno 2 flow.".to_string());
+        if let Err(message) = super::validate_minimum_count(ids.len(), super::TransferType::Flow) {
+            self.state.transactions.transfer.error = Some(message);
             return Ok(());
         }
+
+        // Get and validate IDs
         let from_id = ids[self.state.transactions.transfer.from_index];
         let to_id = ids[self.state.transactions.transfer.to_index];
-        if from_id == to_id {
+        if super::validate_different_ids(from_id, to_id).is_err() {
             self.state.transactions.transfer.error = Some("Scegli due flow diversi.".to_string());
             return Ok(());
         }
 
+        // Validate amount
         let currency = self.current_currency();
-        let amount =
-            match Money::parse_major(self.state.transactions.transfer.amount.value().trim(), currency) {
-                Ok(money) => money.minor().abs(),
-                Err(_) => {
-                    self.state.transactions.transfer.error =
-                        Some("Importo non valido.".to_string());
-                    return Ok(());
-                }
-            };
-        if amount <= 0 {
-            self.state.transactions.transfer.error = Some("Importo deve essere > 0.".to_string());
-            return Ok(());
-        }
+        let amount = match super::validate_transfer_amount(
+            self.state.transactions.transfer.amount.value().trim(),
+            currency,
+        ) {
+            Ok(amount) => amount,
+            Err(message) => {
+                self.state.transactions.transfer.error = Some(message);
+                return Ok(());
+            }
+        };
 
+        // Parse occurred_at
         let note = self.state.transactions.transfer.note.value().trim();
         let occurred_raw = self.state.transactions.transfer.occurred_at.value.trim();
         let occurred_at = if occurred_raw.is_empty() {
