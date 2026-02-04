@@ -1,0 +1,402 @@
+/// Common utilities and helpers shared across transaction screen modules.
+///
+/// This module contains:
+/// - Display formatting helpers (amounts, dates, currencies)
+/// - Color and style utilities
+/// - Name resolution functions (wallet, flow)
+/// - Shared constants and theme values
+
+use api_types::transaction::TransactionKind;
+use engine::{Currency, Money};
+use ratatui::{
+    style::{Modifier, Style},
+    text::Span,
+};
+use uuid::Uuid;
+
+use crate::{
+    app::{AppState, GroupingMode},
+    ui::theme::Theme,
+};
+
+/// Returns the scope label for the header (e.g., "All", "Wallet: Main", "Flow: Income")
+pub fn scope_label(state: &AppState) -> String {
+    if let Some(flow_id) = state.transactions.scope_flow_id {
+        return state
+            .snapshot
+            .as_ref()
+            .and_then(|snap| {
+                snap.flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id)
+                    .map(|flow| format!("Flow: {}", flow.name))
+            })
+            .unwrap_or_else(|| "Flow: ?".to_string());
+    }
+
+    if let Some(wallet_id) = state.transactions.scope_wallet_id {
+        return state
+            .snapshot
+            .as_ref()
+            .and_then(|snap| {
+                snap.wallets
+                    .iter()
+                    .find(|wallet| wallet.id == wallet_id)
+                    .map(|wallet| format!("Wallet: {}", wallet.name))
+            })
+            .unwrap_or_else(|| "Wallet: ?".to_string());
+    }
+
+    "All".to_string()
+}
+
+/// Returns a colored kind chip (icon) for the transaction kind
+pub fn kind_chip(kind: TransactionKind, theme: &Theme) -> Span<'static> {
+    let (icon, color) = match kind {
+        TransactionKind::Income => ("▲", theme.income),
+        TransactionKind::Expense => ("▼", theme.expense),
+        TransactionKind::Refund => ("↩", theme.refund),
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => ("⇄", theme.transfer),
+    };
+    Span::styled(icon.to_string(), Style::default().fg(color))
+}
+
+/// Returns a VOID chip if the transaction is voided
+pub fn void_chip(voided: bool, theme: &Theme) -> Option<Span<'static>> {
+    if voided {
+        Some(Span::styled(
+            "[VOID]",
+            Style::default()
+                .fg(theme.error)
+                .add_modifier(Modifier::BOLD),
+        ))
+    } else {
+        None
+    }
+}
+
+/// Formats an amount with sign based on transaction kind
+pub fn amount_span(
+    kind: TransactionKind,
+    amount_minor: i64,
+    currency: Currency,
+    theme: &Theme,
+) -> Span<'static> {
+    let signed = match kind {
+        TransactionKind::Expense => -amount_minor,
+        TransactionKind::Income | TransactionKind::Refund => amount_minor,
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => amount_minor,
+    };
+    let color = if signed < 0 {
+        theme.negative
+    } else if signed > 0 {
+        theme.positive
+    } else {
+        theme.dim
+    };
+    let amount = Money::new(signed).format(currency);
+    Span::styled(format!("{amount:<14}"), Style::default().fg(color))
+}
+
+/// Formats a leg amount (signed integer)
+pub fn leg_amount_span(amount_minor: i64, currency: Currency, theme: &Theme) -> Span<'static> {
+    let color = if amount_minor < 0 {
+        theme.negative
+    } else if amount_minor > 0 {
+        theme.positive
+    } else {
+        theme.dim
+    };
+    let amount = Money::new(amount_minor).format(currency);
+    Span::styled(amount, Style::default().fg(color))
+}
+
+/// Formats a group total with sign and color
+pub fn group_total_span(total_minor: i64, currency: Currency, theme: &Theme) -> Span<'static> {
+    let color = if total_minor >= 0 {
+        theme.positive
+    } else {
+        theme.negative
+    };
+    Span::styled(
+        Money::new(total_minor).format(currency),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
+}
+
+/// Converts API currency to engine currency
+pub fn map_currency(currency: &api_types::Currency) -> Currency {
+    match currency {
+        api_types::Currency::Eur => Currency::Eur,
+    }
+}
+
+/// Resolves a wallet name from its ID
+pub fn resolve_wallet_name(state: &AppState, wallet_id: Uuid) -> String {
+    state
+        .snapshot
+        .as_ref()
+        .and_then(|snap| {
+            snap.wallets
+                .iter()
+                .find(|wallet| wallet.id == wallet_id)
+                .map(|wallet| wallet.name.clone())
+        })
+        .unwrap_or_else(|| wallet_id.to_string())
+}
+
+/// Resolves a flow name from its ID
+pub fn resolve_flow_name(state: &AppState, flow_id: Uuid) -> String {
+    state
+        .snapshot
+        .as_ref()
+        .and_then(|snap| {
+            snap.flows
+                .iter()
+                .find(|flow| flow.id == flow_id)
+                .map(|flow| flow.name.clone())
+        })
+        .unwrap_or_else(|| flow_id.to_string())
+}
+
+/// Returns recent wallet names
+pub fn recent_wallet_names(state: &AppState) -> Vec<String> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    state
+        .transactions
+        .recent_wallet_ids
+        .iter()
+        .filter_map(|wallet_id| {
+            snapshot
+                .wallets
+                .iter()
+                .find(|wallet| wallet.id == *wallet_id && !wallet.archived)
+                .map(|wallet| wallet.name.clone())
+        })
+        .collect()
+}
+
+/// Returns recent flow names
+pub fn recent_flow_names(state: &AppState) -> Vec<String> {
+    let Some(snapshot) = state.snapshot.as_ref() else {
+        return Vec::new();
+    };
+    state
+        .transactions
+        .recent_flow_ids
+        .iter()
+        .filter_map(|flow_id| {
+            snapshot
+                .flows
+                .iter()
+                .find(|flow| flow.id == *flow_id && !flow.archived)
+                .map(|flow| flow.name.clone())
+        })
+        .collect()
+}
+
+/// Returns default wallet and flow names based on state preferences
+pub fn default_wallet_flow_names(state: &AppState) -> (String, String) {
+    let snapshot = match state.snapshot.as_ref() {
+        Some(snapshot) => snapshot,
+        None => return ("-".to_string(), "-".to_string()),
+    };
+
+    let wallet_name = state
+        .transactions
+        .scope_wallet_id
+        .and_then(|wallet_id| {
+            snapshot
+                .wallets
+                .iter()
+                .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+                .map(|wallet| wallet.name.clone())
+        })
+        .or_else(|| {
+            state.default_wallet_id.and_then(|wallet_id| {
+                snapshot
+                    .wallets
+                    .iter()
+                    .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+                    .map(|wallet| wallet.name.clone())
+            })
+        })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_wallet_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .wallets
+                        .iter()
+                        .find(|wallet| wallet.id == *recent_id && !wallet.archived)
+                        .map(|wallet| wallet.name.clone())
+                })
+        })
+        .or_else(|| {
+            snapshot
+                .wallets
+                .iter()
+                .find(|wallet| !wallet.archived)
+                .map(|wallet| wallet.name.clone())
+        })
+        .unwrap_or_else(|| "-".to_string());
+
+    let flow_name = state
+        .transactions
+        .scope_flow_id
+        .and_then(|flow_id| {
+            snapshot
+                .flows
+                .iter()
+                .find(|flow| flow.id == flow_id && !flow.archived)
+                .map(|flow| flow.name.clone())
+        })
+        .or_else(|| {
+            state.default_flow_id.and_then(|flow_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id && !flow.archived)
+                    .map(|flow| flow.name.clone())
+            })
+        })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_flow_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .flows
+                        .iter()
+                        .find(|flow| flow.id == *recent_id && !flow.archived)
+                        .map(|flow| flow.name.clone())
+                })
+        })
+        .or_else(|| {
+            state.last_flow_id.and_then(|flow_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id && !flow.archived)
+                    .map(|flow| flow.name.clone())
+            })
+        })
+        .or_else(|| {
+            snapshot
+                .flows
+                .iter()
+                .find(|flow| flow.is_unallocated)
+                .map(|flow| flow.name.clone())
+        })
+        .unwrap_or_else(|| "Non in flow".to_string());
+
+    (wallet_name, flow_name)
+}
+
+/// Converts a transaction kind and amount to a signed amount (for totals)
+pub fn signed_amount_minor(kind: TransactionKind, amount_minor: i64) -> i64 {
+    if kind == TransactionKind::Expense {
+        -amount_minor.abs()
+    } else {
+        amount_minor
+    }
+}
+
+/// Returns the grouping key and label for a transaction based on grouping mode
+pub fn grouping_key_label(
+    state: &AppState,
+    tx: &api_types::transaction::TransactionView,
+    mode: GroupingMode,
+    today: chrono::NaiveDate,
+    yesterday: chrono::NaiveDate,
+) -> (String, String) {
+    match mode {
+        GroupingMode::Date => {
+            let date = tx.occurred_at.date_naive();
+            (
+                date.format("%Y-%m-%d").to_string(),
+                format_date_label(date, today, yesterday),
+            )
+        }
+        GroupingMode::Category => {
+            let label = tx
+                .category
+                .as_deref()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or("Uncategorized")
+                .to_string();
+            (label.clone(), label)
+        }
+        GroupingMode::Wallet => {
+            if let Some(id) = tx.wallet_id {
+                (format!("wallet:{id}"), resolve_wallet_name(state, id))
+            } else {
+                ("wallet:none".to_string(), "No wallet".to_string())
+            }
+        }
+        GroupingMode::Envelope => {
+            if let Some(id) = tx.flow_id {
+                (format!("flow:{id}"), resolve_flow_name(state, id))
+            } else {
+                ("flow:none".to_string(), "No envelope".to_string())
+            }
+        }
+    }
+}
+
+/// Formats a date label with special handling for today/yesterday
+pub fn format_date_label(
+    date: chrono::NaiveDate,
+    today: chrono::NaiveDate,
+    yesterday: chrono::NaiveDate,
+) -> String {
+    use chrono::Datelike;
+    if date == today {
+        "Today".to_string()
+    } else if date == yesterday {
+        "Yesterday".to_string()
+    } else if date.year() == today.year() {
+        date.format("%A, %d %b").to_string()
+    } else {
+        date.format("%d %b %Y").to_string()
+    }
+}
+
+/// Builds a recents summary line for the form footer
+pub fn recents_line(state: &AppState) -> Option<String> {
+    let mut parts = Vec::new();
+    let categories = state
+        .transactions
+        .recent_categories
+        .iter()
+        .take(3)
+        .map(|cat| format!("#{cat}"))
+        .collect::<Vec<_>>();
+    if !categories.is_empty() {
+        parts.push(format!("Categorie: {}", categories.join(" ")));
+    }
+
+    let wallets = recent_wallet_names(state)
+        .into_iter()
+        .take(3)
+        .collect::<Vec<_>>();
+    if !wallets.is_empty() {
+        parts.push(format!("Wallet: {}", wallets.join(", ")));
+    }
+
+    let flows = recent_flow_names(state).into_iter().take(3).collect::<Vec<_>>();
+    if !flows.is_empty() {
+        parts.push(format!("Flow: {}", flows.join(", ")));
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(format!("Recenti: {}", parts.join(" • ")))
+    }
+}
