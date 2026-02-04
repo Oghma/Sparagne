@@ -149,6 +149,7 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::HelpGoToSettings => "Go to Settings",
         TextKey::HelpNewIncome => "New income",
         TextKey::HelpNewRefund => "New refund",
+        TextKey::HelpNewTransfer => "New transfer",
         TextKey::HelpToggleFilters => "Toggle filters",
         TextKey::HelpGroupTxns => "Group transactions",
         TextKey::HelpScopeWallet => "Scope to wallet",
@@ -232,5 +233,37 @@ pub fn get(key: TextKey) -> &'static str {
         // Status bar
         TextKey::StatusOnline => "online",
         TextKey::StatusOffline => "offline",
+
+        // Section Labels (Capitalized for tab bar)
+        TextKey::SectionAccounts => "Accounts",
+        TextKey::SectionAnalytics => "Analytics",
+        TextKey::SectionSettings => "Settings",
+
+        // Transfer picker
+        TextKey::TransferPickerTitle => "Transfer Type",
+        TextKey::TransferPickerWallet => "Wallet Transfer",
+        TextKey::TransferPickerFlow => "Flow Transfer",
+
+        // UI Improvements - Stats
+        TextKey::StatsQuickActionRefresh => "refresh",
+        TextKey::StatsQuickActionPeriod => "period",
+        TextKey::StatsTrendExcellent => "EXCELLENT",
+        TextKey::StatsTrendGood => "GOOD",
+        TextKey::StatsTrendStable => "STABLE",
+        TextKey::StatsTrendDeclining => "DECLINING",
+        TextKey::StatsTrendCaution => "CAUTION",
+        TextKey::StatsTrendRising => "RISING",
+
+        // UI Improvements - Accounts
+        TextKey::AccountsWelcomeTitle => "Welcome!",
+        TextKey::AccountsWelcomeDesc => "Let's create your first wallet to start tracking your finances.",
+        TextKey::AccountsEnvelopesTitle => "Budget with Envelopes",
+        TextKey::AccountsEnvelopesDesc => "Create envelopes to organize and track spending by category or goal.",
+        TextKey::AccountsQuickCreate => "Quick create",
+        TextKey::AccountsCreateDetails => "Create with details",
+
+        // UI Improvements - Transactions
+        TextKey::TransactionsFilterTypes => "Transaction Types",
+        TextKey::TransactionsSyntaxHelp => "Syntax: [+]amount note [#category] [@wallet] [>envelope]",
     }
 }

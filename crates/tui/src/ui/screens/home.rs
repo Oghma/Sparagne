@@ -188,7 +188,8 @@ fn render_net_worth_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
 
     let trend = braille_sparkline_filled(&state.stats.sparkline);
 
-    let mut lines = vec![
+    // Amount and percentage centered
+    let centered_lines = vec![
         Line::from(Span::styled(
             net_worth,
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
@@ -196,14 +197,30 @@ fn render_net_worth_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
         Line::from(styled_percentage_change(pct_change, theme)),
     ];
 
-    if !trend.is_empty() {
-        lines.push(Line::from(Span::styled(
-            trend,
-            Style::default().fg(theme.info),
-        )));
-    }
+    // Split inner area: centered content on top, sparkline at bottom
+    if !trend.is_empty() && inner.height >= 3 {
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(2), Constraint::Length(1)])
+            .split(inner);
 
-    frame.render_widget(Paragraph::new(lines), inner);
+        frame.render_widget(
+            Paragraph::new(centered_lines).alignment(Alignment::Center),
+            layout[0],
+        );
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                trend,
+                Style::default().fg(theme.info),
+            ))),
+            layout[1],
+        );
+    } else {
+        frame.render_widget(
+            Paragraph::new(centered_lines).alignment(Alignment::Center),
+            inner,
+        );
+    }
 }
 
 fn render_income_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -238,7 +255,7 @@ fn render_income_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         )),
     ];
 
-    frame.render_widget(Paragraph::new(lines), inner);
+    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center), inner);
 }
 
 fn render_expenses_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -273,7 +290,7 @@ fn render_expenses_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         )),
     ];
 
-    frame.render_widget(Paragraph::new(lines), inner);
+    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center), inner);
 }
 
 // === Quick Balances ===
@@ -374,15 +391,6 @@ fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
         }
     }
 
-    // View all link
-    let remaining = inner.height as usize - lines.len();
-    if remaining > 0 {
-        lines.push(Line::from(Span::styled(
-            "[View all →]",
-            Style::default().fg(theme.text_muted),
-        )));
-    }
-
     lines.truncate(inner.height as usize);
     frame.render_widget(Paragraph::new(lines), inner);
 }
@@ -418,10 +426,8 @@ fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 
     let note_width = (inner.width as usize).saturating_sub(30).clamp(14, 32);
     let cat_width = 12usize.min(inner.width as usize);
-    let flow_width = 12usize.min(inner.width as usize);
-    let wallet_width = 12usize.min(inner.width as usize);
+    let show_time = inner.width >= 50;
     let show_meta = inner.width >= 70;
-    let show_time = inner.width >= 90;
 
     for (feed_idx, item) in feed_items.iter().enumerate() {
         match item {
@@ -497,53 +503,39 @@ fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 
                 let note = tx.note.as_deref().unwrap_or("-");
                 let category = tx.category.as_deref();
-                let wallet_name = resolve_wallet_name(state, tx.wallet_id.as_ref());
-                let flow_name = resolve_flow_name(state, tx.flow_id.as_ref());
                 let time = tx.occurred_at.format("%H:%M").to_string();
 
                 if feed_idx == state.home_feed_selected {
                     selected_row = Some(items.len());
                 }
 
+                // Layout: icon → amount → time → note → [category]
                 let mut line = vec![
                     Span::raw("  "),
                     Span::styled(icon, Style::default().fg(icon_color)),
                     Span::raw(" "),
                     styled_amount_emoji(amount, currency, theme, state.emoji_mode),
-                    Span::raw("  "),
-                    Span::styled(
-                        format!("{:<note_width$}", truncate(note, note_width)),
-                        Style::default().fg(theme.text),
-                    ),
                 ];
+
+                if show_time {
+                    line.push(Span::raw("  "));
+                    line.push(Span::styled(time, Style::default().fg(theme.text_muted)));
+                }
+
+                line.push(Span::raw("  "));
+                line.push(Span::styled(
+                    format!("{:<note_width$}", truncate(note, note_width)),
+                    Style::default().fg(theme.text),
+                ));
 
                 if show_meta {
                     if let Some(category) = category {
                         line.push(Span::raw("  "));
                         line.push(Span::styled(
-                            format!("🏷 {:<cat_width$}", truncate(category, cat_width)),
+                            format!("🏷{}", truncate(category, cat_width)),
                             Style::default().fg(theme.accent),
                         ));
                     }
-                    if let Some(flow) = flow_name {
-                        line.push(Span::raw("  "));
-                        line.push(Span::styled(
-                            format!("📦 {:<flow_width$}", truncate(&flow, flow_width)),
-                            Style::default().fg(theme.info),
-                        ));
-                    }
-                    if let Some(wallet) = wallet_name {
-                        line.push(Span::raw("  "));
-                        line.push(Span::styled(
-                            format!("💰 {:<wallet_width$}", truncate(&wallet, wallet_width)),
-                            Style::default().fg(theme.text_muted),
-                        ));
-                    }
-                }
-
-                if show_time {
-                    line.push(Span::raw("  "));
-                    line.push(Span::styled(time, Style::default().fg(theme.text_muted)));
                 }
 
                 items.push(ListItem::new(Line::from(line)));
@@ -568,26 +560,6 @@ fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 }
 
 // === Helper Functions ===
-
-fn resolve_wallet_name(state: &AppState, wallet_id: Option<&uuid::Uuid>) -> Option<String> {
-    let id = wallet_id?;
-    state.snapshot.as_ref().and_then(|snap| {
-        snap.wallets
-            .iter()
-            .find(|wallet| wallet.id == *id)
-            .map(|wallet| wallet.name.clone())
-    })
-}
-
-fn resolve_flow_name(state: &AppState, flow_id: Option<&uuid::Uuid>) -> Option<String> {
-    let id = flow_id?;
-    state.snapshot.as_ref().and_then(|snap| {
-        snap.flows
-            .iter()
-            .find(|flow| flow.id == *id)
-            .map(|flow| flow.name.clone())
-    })
-}
 
 fn home_insight(state: &AppState, currency: Currency) -> Option<String> {
     let stats = state.stats.data.as_ref()?;

@@ -131,7 +131,9 @@ impl App {
                             self.state.transactions.mode = TransactionsMode::List;
                             self.state.transactions.detail = None;
                         }
-                        TransactionsMode::PickWallet | TransactionsMode::PickFlow => {
+                        TransactionsMode::PickWallet
+                        | TransactionsMode::PickFlow
+                        | TransactionsMode::TransferPicker => {
                             self.state.transactions.mode = TransactionsMode::List;
                             self.state.transactions.picker_index = 0;
                         }
@@ -394,6 +396,11 @@ impl App {
                     self.transactions_picker_prev();
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::TransferPicker
+                {
+                    self.transfer_picker_prev();
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Transactions
                     && matches!(
                         self.state.transactions.mode,
                         TransactionsMode::TransferWallet | TransactionsMode::TransferFlow
@@ -495,6 +502,11 @@ impl App {
                     )
                 {
                     self.transactions_picker_next();
+                } else if self.state.screen == Screen::Home
+                    && self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::TransferPicker
+                {
+                    self.transfer_picker_next();
                 } else if self.state.screen == Screen::Home
                     && self.state.section == Section::Transactions
                     && matches!(

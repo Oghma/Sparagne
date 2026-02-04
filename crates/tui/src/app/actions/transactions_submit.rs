@@ -718,6 +718,7 @@ impl App {
             .vault
             .as_ref()
             .and_then(|v| v.id.as_deref())
+            .map(|s| s.to_string())
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
 
         let (mut wallet_id, mut flow_id, _wallet_name, _flow_name) =
@@ -812,6 +813,19 @@ impl App {
         };
 
         let occurred_at = self.now_in_timezone();
+
+        // Handle transfers separately
+        if parsed.kind == QuickAddKind::TransferWallet {
+            return self
+                .submit_quick_add_transfer_wallet(&vault_id, &parsed, occurred_at)
+                .await;
+        }
+        if parsed.kind == QuickAddKind::TransferFlow {
+            return self
+                .submit_quick_add_transfer_flow(&vault_id, &parsed, occurred_at)
+                .await;
+        }
+
         let res = match parsed.kind {
             QuickAddKind::Income => {
                 self.client
@@ -819,7 +833,7 @@ impl App {
                         self.state.login.username.as_str(),
                         self.state.login.password.as_str(),
                         IncomeNew {
-                            vault_id: vault_id.to_string(),
+                            vault_id: vault_id.clone(),
                             amount_minor: parsed.amount_minor,
                             flow_id: Some(flow_id),
                             wallet_id: Some(wallet_id),
@@ -838,7 +852,7 @@ impl App {
                         self.state.login.username.as_str(),
                         self.state.login.password.as_str(),
                         ExpenseNew {
-                            vault_id: vault_id.to_string(),
+                            vault_id: vault_id.clone(),
                             amount_minor: parsed.amount_minor,
                             flow_id: Some(flow_id),
                             wallet_id: Some(wallet_id),
@@ -857,7 +871,7 @@ impl App {
                         self.state.login.username.as_str(),
                         self.state.login.password.as_str(),
                         Refund {
-                            vault_id: vault_id.to_string(),
+                            vault_id: vault_id.clone(),
                             amount_minor: parsed.amount_minor,
                             flow_id: Some(flow_id),
                             wallet_id: Some(wallet_id),
@@ -870,6 +884,10 @@ impl App {
                     )
                     .await
             }
+            QuickAddKind::TransferWallet | QuickAddKind::TransferFlow => {
+                // Already handled above
+                unreachable!()
+            }
         };
 
         match res {
@@ -880,6 +898,146 @@ impl App {
                 self.state.transactions.quick_error = None;
                 self.state.transactions.quick_ambiguous = None;
                 self.set_toast("Transazione salvata.", ToastLevel::Success);
+                self.load_transactions(true).await?;
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.transactions.quick_error = Some(login_message_for_error(err));
+                self.set_toast("Errore durante il salvataggio.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn submit_quick_add_transfer_wallet(
+        &mut self,
+        vault_id: &str,
+        parsed: &crate::quick_add::QuickAddParsed,
+        occurred_at: chrono::DateTime<chrono::FixedOffset>,
+    ) -> Result<()> {
+        let from_query = parsed.from_wallet.as_deref().unwrap_or("");
+        let to_query = parsed.to_wallet.as_deref().unwrap_or("");
+
+        let from_id = match resolve_wallet_name(&self.state, from_query) {
+            Some((id, _, _)) => id,
+            None => {
+                self.state.transactions.quick_error =
+                    Some(format!("Wallet non trovato: @{from_query}"));
+                return Ok(());
+            }
+        };
+        let to_id = match resolve_wallet_name(&self.state, to_query) {
+            Some((id, _, _)) => id,
+            None => {
+                self.state.transactions.quick_error =
+                    Some(format!("Wallet non trovato: @{to_query}"));
+                return Ok(());
+            }
+        };
+
+        if from_id == to_id {
+            self.state.transactions.quick_error =
+                Some("I due wallet devono essere diversi.".to_string());
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .transfer_wallet_new(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                TransferWalletNew {
+                    vault_id: vault_id.to_string(),
+                    amount_minor: parsed.amount_minor,
+                    from_wallet_id: from_id,
+                    to_wallet_id: to_id,
+                    note: parsed.note.clone(),
+                    idempotency_key: None,
+                    occurred_at,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(created) => {
+                self.state.transactions.last_created_id = Some(created.id);
+                self.state.transactions.quick_input.clear();
+                self.state.transactions.quick_error = None;
+                self.state.transactions.quick_ambiguous = None;
+                self.set_toast("Transfer wallet salvato.", ToastLevel::Success);
+                self.load_transactions(true).await?;
+            }
+            Err(err) => {
+                if self.handle_auth_error(&err) {
+                    return Ok(());
+                }
+                self.state.transactions.quick_error = Some(login_message_for_error(err));
+                self.set_toast("Errore durante il salvataggio.", ToastLevel::Error);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn submit_quick_add_transfer_flow(
+        &mut self,
+        vault_id: &str,
+        parsed: &crate::quick_add::QuickAddParsed,
+        occurred_at: chrono::DateTime<chrono::FixedOffset>,
+    ) -> Result<()> {
+        let from_query = parsed.from_flow.as_deref().unwrap_or("");
+        let to_query = parsed.to_flow.as_deref().unwrap_or("");
+
+        let from_id = match resolve_flow_name(&self.state, from_query) {
+            Some((id, _, _)) => id,
+            None => {
+                self.state.transactions.quick_error =
+                    Some(format!("Flow non trovato: >{from_query}"));
+                return Ok(());
+            }
+        };
+        let to_id = match resolve_flow_name(&self.state, to_query) {
+            Some((id, _, _)) => id,
+            None => {
+                self.state.transactions.quick_error =
+                    Some(format!("Flow non trovato: >{to_query}"));
+                return Ok(());
+            }
+        };
+
+        if from_id == to_id {
+            self.state.transactions.quick_error =
+                Some("I due flow devono essere diversi.".to_string());
+            return Ok(());
+        }
+
+        let res = self
+            .client
+            .transfer_flow_new(
+                self.state.login.username.as_str(),
+                self.state.login.password.as_str(),
+                TransferFlowNew {
+                    vault_id: vault_id.to_string(),
+                    amount_minor: parsed.amount_minor,
+                    from_flow_id: from_id,
+                    to_flow_id: to_id,
+                    note: parsed.note.clone(),
+                    idempotency_key: None,
+                    occurred_at,
+                },
+            )
+            .await;
+
+        match res {
+            Ok(created) => {
+                self.state.transactions.last_created_id = Some(created.id);
+                self.state.transactions.quick_input.clear();
+                self.state.transactions.quick_error = None;
+                self.state.transactions.quick_ambiguous = None;
+                self.set_toast("Transfer flow salvato.", ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {

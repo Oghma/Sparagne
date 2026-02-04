@@ -183,6 +183,7 @@ pub enum TextKey {
     HelpGoToSettings,
     HelpNewIncome,
     HelpNewRefund,
+    HelpNewTransfer,
     HelpToggleFilters,
     HelpGroupTxns,
     HelpScopeWallet,
@@ -266,6 +267,38 @@ pub enum TextKey {
     MiscNo,
     MiscAll,
     MiscNone,
+
+    // Section Labels (Capitalized for tab bar)
+    SectionAccounts,
+    SectionAnalytics,
+    SectionSettings,
+
+    // Transfer picker
+    TransferPickerTitle,
+    TransferPickerWallet,
+    TransferPickerFlow,
+
+    // UI Improvements - Stats
+    StatsQuickActionRefresh,
+    StatsQuickActionPeriod,
+    StatsTrendExcellent,
+    StatsTrendGood,
+    StatsTrendStable,
+    StatsTrendDeclining,
+    StatsTrendCaution,
+    StatsTrendRising,
+
+    // UI Improvements - Accounts
+    AccountsWelcomeTitle,
+    AccountsWelcomeDesc,
+    AccountsEnvelopesTitle,
+    AccountsEnvelopesDesc,
+    AccountsQuickCreate,
+    AccountsCreateDetails,
+
+    // UI Improvements - Transactions
+    TransactionsFilterTypes,
+    TransactionsSyntaxHelp,
 }
 
 /// Returns the localized string for a text key.

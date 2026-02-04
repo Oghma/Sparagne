@@ -78,9 +78,9 @@ fn section_label(section: Section, locale: Locale) -> &'static str {
     match section {
         Section::Home => t(locale, TextKey::SectionHome),
         Section::Transactions => t(locale, TextKey::SectionTransactions),
-        Section::Accounts => t(locale, TextKey::HintAccounts),
-        Section::Analytics => t(locale, TextKey::HintAnalytics),
-        Section::Settings => t(locale, TextKey::HintSettings),
+        Section::Accounts => t(locale, TextKey::SectionAccounts),
+        Section::Analytics => t(locale, TextKey::SectionAnalytics),
+        Section::Settings => t(locale, TextKey::SectionSettings),
     }
 }
 

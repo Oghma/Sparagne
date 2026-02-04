@@ -205,6 +205,7 @@ pub enum TransactionsMode {
     Form,
     PickWallet,
     PickFlow,
+    TransferPicker,
     TransferWallet,
     TransferFlow,
     Filter,

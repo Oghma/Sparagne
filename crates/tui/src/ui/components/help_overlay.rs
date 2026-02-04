@@ -223,6 +223,7 @@ fn transactions_shortcuts(state: &AppState, locale: Locale, theme: &Theme) -> Ve
         shortcut_line("N", t(locale, TextKey::HelpNewTxnModal), theme),
         shortcut_line("i", t(locale, TextKey::HelpNewIncome), theme),
         shortcut_line("R", t(locale, TextKey::HelpNewRefund), theme),
+        shortcut_line("T", t(locale, TextKey::HelpNewTransfer), theme),
         shortcut_line("/", t(locale, TextKey::HelpToggleFilters), theme),
         shortcut_line("g", t(locale, TextKey::HelpGroupTxns), theme),
         Line::from(""),

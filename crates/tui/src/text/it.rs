@@ -149,6 +149,7 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::HelpGoToSettings => "Vai a Impostazioni",
         TextKey::HelpNewIncome => "Nuova entrata",
         TextKey::HelpNewRefund => "Nuovo rimborso",
+        TextKey::HelpNewTransfer => "Nuovo trasferimento",
         TextKey::HelpToggleFilters => "Mostra/nascondi filtri",
         TextKey::HelpGroupTxns => "Raggruppa transazioni",
         TextKey::HelpScopeWallet => "Filtra per portafoglio",
@@ -232,5 +233,37 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::MiscNo => "No",
         TextKey::MiscAll => "Tutti",
         TextKey::MiscNone => "Nessuno",
+
+        // Section Labels (Capitalized for tab bar)
+        TextKey::SectionAccounts => "Conti",
+        TextKey::SectionAnalytics => "Statistiche",
+        TextKey::SectionSettings => "Impostazioni",
+
+        // Transfer picker
+        TextKey::TransferPickerTitle => "Tipo Trasferimento",
+        TextKey::TransferPickerWallet => "Trasferimento Wallet",
+        TextKey::TransferPickerFlow => "Trasferimento Flow",
+
+        // UI Improvements - Stats
+        TextKey::StatsQuickActionRefresh => "aggiorna",
+        TextKey::StatsQuickActionPeriod => "periodo",
+        TextKey::StatsTrendExcellent => "ECCELLENTE",
+        TextKey::StatsTrendGood => "BUONO",
+        TextKey::StatsTrendStable => "STABILE",
+        TextKey::StatsTrendDeclining => "IN CALO",
+        TextKey::StatsTrendCaution => "ATTENZIONE",
+        TextKey::StatsTrendRising => "IN AUMENTO",
+
+        // UI Improvements - Accounts
+        TextKey::AccountsWelcomeTitle => "Benvenuto!",
+        TextKey::AccountsWelcomeDesc => "Crea il tuo primo portafoglio per iniziare a monitorare le tue finanze.",
+        TextKey::AccountsEnvelopesTitle => "Budget con Buste",
+        TextKey::AccountsEnvelopesDesc => "Crea buste per organizzare e monitorare le spese per categoria o obiettivo.",
+        TextKey::AccountsQuickCreate => "Crea veloce",
+        TextKey::AccountsCreateDetails => "Crea con dettagli",
+
+        // UI Improvements - Transactions
+        TextKey::TransactionsFilterTypes => "Tipi di Transazione",
+        TextKey::TransactionsSyntaxHelp => "Sintassi: [+]importo nota [#categoria] [@wallet] [>busta]",
     }
 }

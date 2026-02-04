@@ -43,14 +43,10 @@ fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &T
     card.render_frame(frame, area);
 
     let items = [
-        TabBarItem {
-            label: "1 Categories",
-        },
-        TabBarItem { label: "2 Vault" },
-        TabBarItem { label: "3 Members" },
-        TabBarItem {
-            label: "4 Preferences",
-        },
+        TabBarItem::new("1 Categories"),
+        TabBarItem::new("2 Vault"),
+        TabBarItem::new("3 Members"),
+        TabBarItem::new("4 Preferences"),
     ];
 
     tab_bar::render(frame, inner, &items, state.settings_tab.index(), theme);

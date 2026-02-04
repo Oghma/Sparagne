@@ -80,15 +80,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
 fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let items = [
-        TabBarItem {
-            label: "1 Cash Flow",
-        },
-        TabBarItem {
-            label: "2 Spending",
-        },
-        TabBarItem {
-            label: "3 Net Worth",
-        },
+        TabBarItem::new("1 Cash Flow"),
+        TabBarItem::new("2 Spending"),
+        TabBarItem::new("3 Net Worth"),
     ];
     tab_bar::render(frame, area, &items, state.stats.tab.index(), theme);
 }
@@ -168,6 +162,11 @@ fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 
     let net = income - expenses;
 
+    // Calculate MoM changes
+    let income_change = percentage_change(&state.stats.monthly_income);
+    let expense_change = percentage_change(&state.stats.monthly_trend);
+    let net_change = calculate_net_change(&state.stats.monthly_income, &state.stats.monthly_trend);
+
     // Split into 3 columns for the stat cards
     let cols = Layout::default()
         .direction(Direction::Horizontal)
@@ -178,29 +177,61 @@ fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         ])
         .split(area);
 
-    // Income StatCard
+    // Income StatCard with MoM trend
     let income_formatted = Money::new(income).format(currency);
+    let income_subtitle = format_mom_subtitle(income_change, true);
     StatCard::new("Total Income", income_formatted, theme)
-        .subtitle("This month")
+        .subtitle(&income_subtitle)
         .render(frame, cols[0]);
 
-    // Expenses StatCard
+    // Expenses StatCard with MoM trend
     let expenses_formatted = Money::new(-expenses).format(currency);
+    let expense_subtitle = format_mom_subtitle(expense_change, false);
     StatCard::new("Total Expenses", expenses_formatted, theme)
-        .subtitle("This month")
+        .subtitle(&expense_subtitle)
         .render(frame, cols[1]);
 
-    // Net Balance StatCard
+    // Net Balance StatCard with MoM trend
     let net_formatted = Money::new(net).format(currency);
-    let net_subtitle = if net >= 0 { "Surplus" } else { "Deficit" };
+    let net_subtitle = format_mom_subtitle(net_change, true);
     StatCard::new("Net Balance", net_formatted, theme)
-        .subtitle(net_subtitle)
+        .subtitle(&net_subtitle)
         .render(frame, cols[2]);
+}
+
+/// Calculate net change from income and expense trends
+fn calculate_net_change(income_trend: &[(String, i64)], expense_trend: &[(String, i64)]) -> Option<f64> {
+    if income_trend.len() < 2 || expense_trend.len() < 2 {
+        return None;
+    }
+    let prev_income = income_trend[income_trend.len() - 2].1;
+    let curr_income = income_trend[income_trend.len() - 1].1;
+    let prev_expense = expense_trend[expense_trend.len() - 2].1;
+    let curr_expense = expense_trend[expense_trend.len() - 1].1;
+
+    let prev_net = prev_income - prev_expense;
+    let curr_net = curr_income - curr_expense;
+
+    if prev_net == 0 {
+        return None;
+    }
+    Some(((curr_net - prev_net) as f64 / prev_net.abs() as f64) * 100.0)
+}
+
+/// Format MoM subtitle with arrow indicator
+fn format_mom_subtitle(change: Option<f64>, _positive_is_good: bool) -> String {
+    match change {
+        Some(pct) => {
+            let arrow = if pct > 0.0 { "↑" } else if pct < 0.0 { "↓" } else { "→" };
+            let sign = if pct > 0.0 { "+" } else { "" };
+            format!("{arrow} {sign}{:.0}% MoM", pct)
+        }
+        None => "This month".to_string(),
+    }
 }
 
 fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let (year, month) = state.stats.current_month;
-    let month_name = month_name(month);
 
     let card = Card::new("Month Summary", theme).focused(true);
     let inner = card.inner(area);
@@ -233,15 +264,8 @@ fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         ])
         .split(inner);
 
-    // Month navigation header
-    let nav_line = Line::from(vec![
-        Span::styled(
-            format!("{month_name} {year}"),
-            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled("[Current]", Style::default().fg(theme.dim)),
-    ]);
+    // Month navigation timeline
+    let nav_line = build_month_timeline(year, month, theme);
     frame.render_widget(Paragraph::new(nav_line), inner_layout[0]);
 
     let change_layout = Layout::default()
@@ -491,8 +515,9 @@ fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 
     let rows: Vec<Line> = breakdown
         .iter()
+        .enumerate()
         .take(inner.height as usize)
-        .map(|(category, amount)| {
+        .map(|(idx, (category, amount))| {
             let pct = compute_percentage(*amount, total);
             let style = if pct >= 75 {
                 BarStyle::Block
@@ -504,27 +529,74 @@ fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             let bar = ascii_bar_styled(
                 amount.saturating_abs() as u64,
                 total.saturating_abs() as u64,
-                20,
+                15,
                 style,
             );
 
+            // Get category icon based on name pattern
+            let icon = get_category_icon(category);
+
+            // Alert indicator for high spending categories
+            let alert = if pct >= 40 {
+                Span::styled(" ⚠️", Style::default().fg(theme.warning))
+            } else {
+                Span::raw("  ")
+            };
+
             Line::from(vec![
                 Span::styled(
-                    format!("{:<16}", truncate_string(category, 15)),
+                    format!("{}. ", idx + 1),
+                    Style::default().fg(theme.dim),
+                ),
+                Span::styled(
+                    format!("{icon} "),
+                    Style::default().fg(theme.text_muted),
+                ),
+                Span::styled(
+                    format!("{:<14}", truncate_string(category, 13)),
                     Style::default().fg(theme.text),
                 ),
                 Span::styled(
-                    format!("{:>12}", Money::new(*amount).format(currency)),
+                    format!("{:>10}", Money::new(*amount).format(currency)),
                     Style::default().fg(theme.negative),
                 ),
-                Span::raw("  "),
+                Span::raw(" "),
                 Span::styled(bar, Style::default().fg(theme.negative)),
-                Span::styled(format!(" {pct:>3}%"), Style::default().fg(theme.dim)),
+                Span::styled(format!(" {:>2}%", pct), Style::default().fg(theme.dim)),
+                alert,
             ])
         })
         .collect();
 
     frame.render_widget(Paragraph::new(rows), inner);
+}
+
+/// Get an emoji icon for a category based on common patterns
+fn get_category_icon(category: &str) -> &'static str {
+    let lower = category.to_lowercase();
+    if lower.contains("food") || lower.contains("grocer") || lower.contains("restaurant") || lower.contains("cibo") {
+        "🍽️"
+    } else if lower.contains("house") || lower.contains("rent") || lower.contains("home") || lower.contains("casa") {
+        "🏠"
+    } else if lower.contains("transport") || lower.contains("car") || lower.contains("gas") || lower.contains("auto") {
+        "🚗"
+    } else if lower.contains("health") || lower.contains("medical") || lower.contains("salute") {
+        "🏥"
+    } else if lower.contains("entertain") || lower.contains("fun") || lower.contains("svago") {
+        "🎬"
+    } else if lower.contains("shop") || lower.contains("cloth") || lower.contains("acquist") {
+        "🛍️"
+    } else if lower.contains("bill") || lower.contains("utilit") || lower.contains("bolletta") {
+        "💡"
+    } else if lower.contains("subscri") || lower.contains("abbonament") {
+        "📱"
+    } else if lower.contains("travel") || lower.contains("viaggio") {
+        "✈️"
+    } else if lower.contains("educat") || lower.contains("school") || lower.contains("scuola") {
+        "📚"
+    } else {
+        "📁"
+    }
 }
 
 fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -546,109 +618,160 @@ fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         return;
     }
 
-    let layout = Layout::default()
+    // Consolidated trend view with status badges
+    let card = Card::new("Financial Trends (6 months)", theme).focused(true);
+    let inner = card.inner(area);
+    card.render_frame(frame, area);
+
+    let currency = get_currency(state);
+
+    // Calculate trends and status
+    let income_change = percentage_change(income_trend);
+    let expense_change = percentage_change(expense_trend);
+    let net_change = calculate_net_change(income_trend, expense_trend);
+
+    // Get current values
+    let current_income = income_trend.last().map(|(_, v)| *v).unwrap_or(0);
+    let current_expense = expense_trend.last().map(|(_, v)| *v).unwrap_or(0);
+    let current_net = current_income - current_expense;
+
+    let inner_layout = Layout::default()
         .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Income row
+            Constraint::Length(1), // Expense row
+            Constraint::Length(1), // Net savings row
+            Constraint::Min(0),    // Charts
+        ])
+        .split(inner);
+
+    // Income trend row
+    let income_status = trend_status_badge(income_change, true, theme);
+    let income_line = build_trend_line(
+        "Income",
+        income_change,
+        current_income,
+        income_status,
+        income_trend,
+        currency,
+        theme,
+    );
+    frame.render_widget(Paragraph::new(income_line), inner_layout[0]);
+
+    // Expense trend row
+    let expense_status = trend_status_badge(expense_change, false, theme);
+    let expense_line = build_trend_line(
+        "Expenses",
+        expense_change,
+        -current_expense,
+        expense_status,
+        expense_trend,
+        currency,
+        theme,
+    );
+    frame.render_widget(Paragraph::new(expense_line), inner_layout[1]);
+
+    // Net savings row
+    let net_status = trend_status_badge(net_change, true, theme);
+    let net_sparkline: Vec<(String, i64)> = income_trend
+        .iter()
+        .zip(expense_trend.iter())
+        .map(|((label, inc), (_, exp))| (label.clone(), inc - exp))
+        .collect();
+    let net_line = build_trend_line(
+        "Net Savings",
+        net_change,
+        current_net,
+        net_status,
+        &net_sparkline,
+        currency,
+        theme,
+    );
+    frame.render_widget(Paragraph::new(net_line), inner_layout[2]);
+
+    // Render mini bar charts side by side
+    let chart_layout = Layout::default()
+        .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(area);
+        .split(inner_layout[3]);
 
     let income_data: Vec<(&str, u64)> = income_trend
         .iter()
         .map(|(label, value)| (label.as_str(), (*value).max(0) as u64))
         .collect();
-    let income_color = if income_data.is_empty() {
-        theme.dim
-    } else if income_data.last().map(|(_, v)| *v).unwrap_or(0)
-        >= income_data.first().map(|(_, v)| *v).unwrap_or(0)
-    {
-        theme.positive
-    } else {
-        theme.warning
-    };
-    let income_title = Line::from(vec![
-        Span::styled("Income (6m)", Style::default().fg(theme.text_muted)),
-        Span::raw(" "),
-        Span::styled(
-            if income_color == theme.positive {
-                "●"
-            } else {
-                "○"
-            },
-            Style::default().fg(income_color),
-        ),
-    ]);
-    if income_data.is_empty() {
-        let card = Card::new("Income (6m)", theme);
-        let inner = card.inner(layout[0]);
-        card.render_frame(frame, layout[0]);
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                "No income data yet.",
-                Style::default().fg(theme.dim),
-            ))
-            .alignment(Alignment::Center),
-            inner,
-        );
-    } else {
-        let card = Card::new("Income (6m)", theme).focused(true);
-        let inner = card.inner(layout[0]);
-        card.render_frame(frame, layout[0]);
-        frame.render_widget(Paragraph::new(income_title), Rect { height: 1, ..inner });
-        let chart_area = Rect {
-            y: inner.y + 1,
-            height: inner.height.saturating_sub(1),
-            ..inner
-        };
-        render_bar_chart(frame, chart_area, "", &income_data, theme);
-    }
-
     let expense_data: Vec<(&str, u64)> = expense_trend
         .iter()
         .map(|(label, value)| (label.as_str(), (*value).max(0) as u64))
         .collect();
-    let expense_color = if expense_data.is_empty() {
-        theme.dim
-    } else if expense_data.last().map(|(_, v)| *v).unwrap_or(0)
-        >= expense_data.first().map(|(_, v)| *v).unwrap_or(0)
-    {
-        theme.warning
-    } else {
-        theme.positive
+
+    if !income_data.is_empty() {
+        render_bar_chart(frame, chart_layout[0], "Income", &income_data, theme);
+    }
+    if !expense_data.is_empty() {
+        render_bar_chart(frame, chart_layout[1], "Expenses", &expense_data, theme);
+    }
+}
+
+/// Build a consolidated trend line with sparkline, amount, and status
+fn build_trend_line<'a>(
+    label: &str,
+    change: Option<f64>,
+    amount: i64,
+    status: (&'static str, ratatui::style::Color),
+    _data: &[(String, i64)],
+    currency: Currency,
+    theme: &Theme,
+) -> Line<'a> {
+    let (status_label, status_color) = status;
+    let arrow = match change {
+        Some(pct) if pct > 5.0 => "↑",
+        Some(pct) if pct < -5.0 => "↓",
+        _ => "→",
     };
-    let expense_title = Line::from(vec![
-        Span::styled("Expenses (6m)", Style::default().fg(theme.text_muted)),
-        Span::raw(" "),
+    let change_str = change
+        .map(|pct| format!("{:+.0}%", pct))
+        .unwrap_or_else(|| "n/a".to_string());
+
+    let amount_color = if amount >= 0 { theme.positive } else { theme.negative };
+
+    Line::from(vec![
+        Span::styled(format!("{label:<12}"), Style::default().fg(theme.text)),
+        Span::styled(format!("({arrow} {change_str}) "), Style::default().fg(theme.text_muted)),
         Span::styled(
-            if expense_color == theme.warning {
-                "●"
-            } else {
-                "○"
-            },
-            Style::default().fg(expense_color),
+            format!("{:>12}", Money::new(amount).format(currency)),
+            Style::default().fg(amount_color),
         ),
-    ]);
-    if expense_data.is_empty() {
-        let card = Card::new("Expenses (6m)", theme);
-        let inner = card.inner(layout[1]);
-        card.render_frame(frame, layout[1]);
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                "No expense data yet.",
-                Style::default().fg(theme.dim),
-            ))
-            .alignment(Alignment::Center),
-            inner,
-        );
-    } else {
-        let card = Card::new("Expenses (6m)", theme).focused(true);
-        let inner = card.inner(layout[1]);
-        card.render_frame(frame, layout[1]);
-        frame.render_widget(Paragraph::new(expense_title), Rect { height: 1, ..inner });
-        let chart_area = Rect {
-            y: inner.y + 1,
-            height: inner.height.saturating_sub(1),
-            ..inner
-        };
-        render_bar_chart(frame, chart_area, "", &expense_data, theme);
+        Span::raw("  "),
+        Span::styled(format!("Status: {status_label}"), Style::default().fg(status_color)),
+    ])
+}
+
+/// Get status badge based on trend
+fn trend_status_badge(change: Option<f64>, positive_is_good: bool, theme: &Theme) -> (&'static str, ratatui::style::Color) {
+    match change {
+        Some(pct) if pct > 10.0 => {
+            if positive_is_good {
+                ("EXCELLENT", theme.positive)
+            } else {
+                ("CAUTION", theme.warning)
+            }
+        }
+        Some(pct) if pct > 0.0 => {
+            if positive_is_good {
+                ("GOOD", theme.positive)
+            } else {
+                ("RISING", theme.warning)
+            }
+        }
+        Some(pct) if pct > -10.0 => ("STABLE", theme.text_muted),
+        Some(_) => {
+            if positive_is_good {
+                ("DECLINING", theme.warning)
+            } else {
+                ("GOOD", theme.positive)
+            }
+        }
+        None => ("N/A", theme.dim),
     }
 }
 
@@ -751,4 +874,79 @@ fn truncate_string(s: &str, max_len: usize) -> String {
     } else {
         format!("{}…", &s[..max_len - 1])
     }
+}
+
+/// Build a visual timeline showing recent months with the current one highlighted
+fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a> {
+    let mut spans = Vec::new();
+
+    // Show 5 months: 2 before, current, 2 after
+    let months_to_show = [
+        offset_month(year, month, -2),
+        offset_month(year, month, -1),
+        (year, month),
+        offset_month(year, month, 1),
+        offset_month(year, month, 2),
+    ];
+
+    spans.push(Span::styled("Month: ", Style::default().fg(theme.text_muted)));
+    spans.push(Span::styled(
+        format!("{} {}", month_name(month), year),
+        Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+    ));
+    spans.push(Span::raw("  "));
+
+    // Navigation hint
+    spans.push(Span::styled("[◀", Style::default().fg(theme.accent)));
+
+    for (i, (y, m)) in months_to_show.iter().enumerate() {
+        let short_name = month_short_name(*m);
+        if i > 0 {
+            spans.push(Span::raw("  "));
+        }
+
+        if (*y, *m) == (year, month) {
+            // Current month - highlighted
+            spans.push(Span::styled(
+                format!("[{short_name}]*"),
+                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+            ));
+        } else {
+            spans.push(Span::styled(
+                format!("[{short_name}]"),
+                Style::default().fg(theme.dim),
+            ));
+        }
+    }
+
+    spans.push(Span::styled("▶]", Style::default().fg(theme.accent)));
+
+    Line::from(spans)
+}
+
+/// Get short month name (3 letters)
+fn month_short_name(month: u32) -> &'static str {
+    match month {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        12 => "Dec",
+        _ => "???",
+    }
+}
+
+/// Calculate year/month with offset
+fn offset_month(year: i32, month: u32, offset: i32) -> (i32, u32) {
+    let total_months = (year * 12) as i32 + (month as i32 - 1) + offset;
+    let new_year = total_months / 12;
+    let new_month = (total_months % 12 + 12) % 12 + 1;
+    (new_year, new_month as u32)
 }

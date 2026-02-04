@@ -289,6 +289,7 @@ fn get_transactions_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         ],
         crate::app::TransactionsMode::PickWallet
         | crate::app::TransactionsMode::PickFlow
+        | crate::app::TransactionsMode::TransferPicker
         | crate::app::TransactionsMode::TransferWallet
         | crate::app::TransactionsMode::TransferFlow
         | crate::app::TransactionsMode::Filter => components::hints::common::form_editing(locale),

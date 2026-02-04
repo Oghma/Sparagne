@@ -10,6 +10,18 @@ use crate::ui::theme::Theme;
 
 pub struct TabBarItem<'a> {
     pub label: &'a str,
+    pub badge: Option<usize>,
+}
+
+impl<'a> TabBarItem<'a> {
+    pub fn new(label: &'a str) -> Self {
+        Self { label, badge: None }
+    }
+
+    pub fn with_badge(mut self, count: usize) -> Self {
+        self.badge = Some(count);
+        self
+    }
 }
 
 pub fn render(
@@ -41,8 +53,14 @@ pub fn render(
             underline_spans.push(Span::raw("  "));
         }
 
-        let label = format!(" {} ", item.label);
         let is_active = idx == active_index;
+
+        // Build label with optional badge
+        let label_text = if let Some(count) = item.badge {
+            format!(" {} [{}] ", item.label, count)
+        } else {
+            format!(" {} ", item.label)
+        };
 
         let label_style = if is_active {
             Style::default()
@@ -51,13 +69,13 @@ pub fn render(
         } else {
             Style::default().fg(theme.text_muted)
         };
-        label_spans.push(Span::styled(label.clone(), label_style));
+        label_spans.push(Span::styled(label_text.clone(), label_style));
 
         // VSCode-like underline under the active tab.
         let underline = if is_active {
-            "━".repeat(label.len())
+            "━".repeat(label_text.len())
         } else {
-            " ".repeat(label.len())
+            " ".repeat(label_text.len())
         };
         underline_spans.push(Span::styled(underline, Style::default().fg(theme.accent)));
     }

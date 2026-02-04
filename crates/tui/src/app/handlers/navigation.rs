@@ -17,6 +17,7 @@ impl App {
             TransactionsMode::Edit | TransactionsMode::Form => self.submit_transaction_form().await,
             TransactionsMode::PickWallet => self.apply_wallet_picker().await,
             TransactionsMode::PickFlow => self.apply_flow_picker().await,
+            TransactionsMode::TransferPicker => self.apply_transfer_picker(),
             TransactionsMode::TransferWallet => self.submit_transfer_wallet().await,
             TransactionsMode::TransferFlow => self.submit_transfer_flow().await,
             TransactionsMode::Filter => self.apply_filter().await,
@@ -85,12 +86,21 @@ impl App {
                 self.state.transactions.mode = TransactionsMode::List;
                 return Ok(());
             }
-            // Main navigation: t -> Transactions
-            't' | 'T' => {
+            // Main navigation: t -> Transactions (lowercase only)
+            't' => {
                 self.state.section = Section::Transactions;
                 self.state.transactions.mode = TransactionsMode::List;
                 if self.state.transactions.items.is_empty() {
                     self.load_transactions(true).await?;
+                }
+                return Ok(());
+            }
+            // Transfer picker: T (uppercase) opens transfer type picker in Transactions
+            'T' => {
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.open_transfer_picker();
                 }
                 return Ok(());
             }
@@ -462,6 +472,10 @@ impl App {
                             self.state.transactions.transfer = TransferFormState::default();
                         }
                         TransactionsMode::PickWallet | TransactionsMode::PickFlow => {
+                            self.state.transactions.mode = TransactionsMode::List;
+                            self.state.transactions.picker_index = 0;
+                        }
+                        TransactionsMode::TransferPicker => {
                             self.state.transactions.mode = TransactionsMode::List;
                             self.state.transactions.picker_index = 0;
                         }

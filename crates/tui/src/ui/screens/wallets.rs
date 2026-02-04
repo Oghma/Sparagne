@@ -49,10 +49,27 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let show_form = state.wallets.mode == WalletsMode::Create;
 
+    // Calculate stats for header
+    let (total_balance, wallet_count, archived_count) = state
+        .snapshot
+        .as_ref()
+        .map(|snap| {
+            let active: i64 = snap
+                .wallets
+                .iter()
+                .filter(|w| !w.archived)
+                .map(|w| w.balance_minor)
+                .sum();
+            let count = snap.wallets.iter().filter(|w| !w.archived).count();
+            let archived = snap.wallets.iter().filter(|w| w.archived).count();
+            (active, count, archived)
+        })
+        .unwrap_or((0, 0, 0));
+
     let constraints = if show_form {
-        vec![Constraint::Length(7), Constraint::Min(0)]
+        vec![Constraint::Length(2), Constraint::Length(7), Constraint::Min(0)]
     } else {
-        vec![Constraint::Min(0)]
+        vec![Constraint::Length(2), Constraint::Min(0)]
     };
 
     let layout = Layout::default()
@@ -60,11 +77,14 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .constraints(constraints)
         .split(area);
 
+    // Render stats header
+    render_stats_header(frame, layout[0], total_balance, wallet_count, archived_count, state, theme);
+
     let list_area = if show_form {
-        render_form(frame, layout[0], state, theme);
-        layout[1]
+        render_form(frame, layout[1], state, theme);
+        layout[2]
     } else {
-        layout[0]
+        layout[1]
     };
 
     // Search bar in header
@@ -146,10 +166,13 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .max()
         .unwrap_or(1) as i64;
 
+    let selected_idx = state.wallets.selected;
     let items = visible
         .iter()
-        .filter_map(|idx| snapshot.wallets.get(*idx))
-        .map(|wallet| {
+        .enumerate()
+        .filter_map(|(list_idx, idx)| snapshot.wallets.get(*idx).map(|w| (list_idx, w)))
+        .map(|(list_idx, wallet)| {
+            let is_selected = list_idx == selected_idx;
             let emoji = "💰";
             let name_style = if wallet.archived {
                 Style::default().fg(theme.text_muted)
@@ -185,7 +208,23 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
                 ));
             }
 
-            ListItem::new(Line::from(spans))
+            // Build item with optional action hints for selected item
+            if is_selected && state.wallets.mode == WalletsMode::List {
+                let hints = vec![
+                    Span::raw("     "),
+                    Span::styled("[e]", Style::default().fg(theme.accent)),
+                    Span::styled("dit ", Style::default().fg(theme.dim)),
+                    Span::styled("[a]", Style::default().fg(theme.accent)),
+                    Span::styled("rchive ", Style::default().fg(theme.dim)),
+                    Span::styled("[d]", Style::default().fg(theme.accent)),
+                    Span::styled("elete ", Style::default().fg(theme.dim)),
+                    Span::styled("[Enter]", Style::default().fg(theme.accent)),
+                    Span::styled(" details", Style::default().fg(theme.dim)),
+                ];
+                ListItem::new(vec![Line::from(spans), Line::from(hints)])
+            } else {
+                ListItem::new(Line::from(spans))
+            }
         })
         .collect::<Vec<_>>();
 
@@ -205,19 +244,28 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
                 )),
             ]
         } else {
+            // Rich empty state with welcome message
             vec![
                 Line::from(""),
                 Line::from(Span::styled(
-                    "No wallets yet",
+                    "💰 Welcome!",
+                    Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Let's create your first wallet to start",
+                    Style::default().fg(theme.text_muted),
+                )),
+                Line::from(Span::styled(
+                    "tracking your finances.",
                     Style::default().fg(theme.text_muted),
                 )),
                 Line::from(""),
                 Line::from(vec![
                     Span::styled("[c]", Style::default().fg(theme.accent)),
-                    Span::styled(
-                        " to create your first wallet",
-                        Style::default().fg(theme.text_muted),
-                    ),
+                    Span::styled(" Quick create  ", Style::default().fg(theme.text_muted)),
+                    Span::styled("[n]", Style::default().fg(theme.accent)),
+                    Span::styled(" Create with details", Style::default().fg(theme.text_muted)),
                 ]),
             ]
         };
@@ -518,6 +566,51 @@ fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str)
         .block(block),
         area,
     );
+}
+
+fn render_stats_header(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    total_balance: i64,
+    wallet_count: usize,
+    archived_count: usize,
+    state: &AppState,
+    theme: &Theme,
+) {
+    let currency = state
+        .vault
+        .as_ref()
+        .and_then(|v| v.currency.as_ref())
+        .map(map_currency)
+        .unwrap_or(Currency::Eur);
+
+    let balance_color = if total_balance >= 0 {
+        theme.positive
+    } else {
+        theme.negative
+    };
+
+    let mut spans = vec![
+        Span::styled(" Total: ", Style::default().fg(theme.text_muted)),
+        Span::styled(
+            Money::new(total_balance).format(currency),
+            Style::default().fg(balance_color).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!(" ({wallet_count} wallets)"),
+            Style::default().fg(theme.dim),
+        ),
+    ];
+
+    if archived_count > 0 {
+        spans.push(Span::styled("  │  ", Style::default().fg(theme.border)));
+        spans.push(Span::styled(
+            format!("Archived: {archived_count}"),
+            Style::default().fg(theme.warning),
+        ));
+    }
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn progress_bar(value: i64, max: i64, width: usize) -> String {

@@ -172,6 +172,30 @@ impl App {
         self.state.transactions.mode = TransactionsMode::PickWallet;
     }
 
+    pub(crate) fn open_transfer_picker(&mut self) {
+        self.state.transactions.quick_active = false;
+        self.state.transactions.picker_index = 0;
+        self.state.transactions.mode = TransactionsMode::TransferPicker;
+    }
+
+    pub(crate) fn apply_transfer_picker(&mut self) -> Result<()> {
+        match self.state.transactions.picker_index {
+            0 => self.start_transfer_wallet(),
+            1 => self.start_transfer_flow(),
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub(crate) fn transfer_picker_next(&mut self) {
+        self.state.transactions.picker_index = (self.state.transactions.picker_index + 1) % 2;
+    }
+
+    pub(crate) fn transfer_picker_prev(&mut self) {
+        self.state.transactions.picker_index =
+            (self.state.transactions.picker_index + 1) % 2;
+    }
+
     pub(crate) fn open_flow_picker(&mut self) {
         self.state.transactions.quick_active = false;
         self.state.transactions.picker_index = self

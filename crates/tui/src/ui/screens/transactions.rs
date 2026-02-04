@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
 use api_types::transaction::{LegTarget, TransactionKind};
@@ -25,7 +25,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .constraints([Constraint::Length(4), Constraint::Min(0)])
         .split(area);
 
     render_header(frame, layout[0], state);
@@ -33,6 +33,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         TransactionsMode::List
         | TransactionsMode::PickWallet
         | TransactionsMode::PickFlow
+        | TransactionsMode::TransferPicker
         | TransactionsMode::TransferWallet
         | TransactionsMode::TransferFlow
         | TransactionsMode::Filter
@@ -44,6 +45,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
                 TransactionsMode::PickWallet | TransactionsMode::PickFlow
             ) {
                 render_scope_picker(frame, layout[1], state, &theme);
+            } else if state.transactions.mode == TransactionsMode::TransferPicker {
+                render_transfer_picker(frame, layout[1], state, &theme);
             } else if matches!(
                 state.transactions.mode,
                 TransactionsMode::TransferWallet | TransactionsMode::TransferFlow
@@ -71,38 +74,57 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
 
 fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     let theme = Theme::default();
-    let include_voided = if state.transactions.include_voided {
-        "On"
-    } else {
-        "Off"
-    };
-    let include_transfers = if state.transactions.include_transfers {
-        "On"
-    } else {
-        "Off"
+
+    // Determine grouping mode label
+    let grouping_label = match state.transactions.grouping_mode {
+        GroupingMode::Date => "Date",
+        GroupingMode::Category => "Category",
+        GroupingMode::Wallet => "Wallet",
+        GroupingMode::Envelope => "Envelope",
     };
 
     let scope = scope_label(state);
-    let filter_summary = filter_summary(state);
-    let mut line = vec![
-        Span::styled("Scope", Style::default().fg(theme.dim)),
-        Span::raw(format!(": {scope}   ")),
-        Span::styled("Voided", Style::default().fg(theme.dim)),
-        Span::raw(format!(": {include_voided}   ")),
-        Span::styled("Transfers", Style::default().fg(theme.dim)),
-        Span::raw(format!(": {include_transfers}")),
+
+    // Build title with grouping and scope info
+    let title = format!(" Transactions (Group: {grouping_label}, Scope: {scope}) ");
+
+    // Row 1: Voided toggle, Transfers toggle, Filters status
+    let voided_status = if state.transactions.include_voided {
+        Span::styled("[On]", Style::default().fg(theme.positive))
+    } else {
+        Span::styled("[Off]", Style::default().fg(theme.dim))
+    };
+    let transfers_status = if state.transactions.include_transfers {
+        Span::styled("[On]", Style::default().fg(theme.positive))
+    } else {
+        Span::styled("[Off]", Style::default().fg(theme.dim))
+    };
+
+    let mut line1 = vec![
+        Span::styled("Voided ", Style::default().fg(theme.text_muted)),
+        voided_status,
+        Span::raw("  "),
+        Span::styled("Transfers ", Style::default().fg(theme.text_muted)),
+        transfers_status,
+        Span::raw("     │     "),
     ];
 
-    if let Some(summary) = filter_summary {
-        line.push(Span::raw("   "));
-        line.push(Span::styled(summary, Style::default().fg(theme.dim)));
+    // Add filter status
+    if let Some(summary) = filter_summary(state) {
+        line1.push(Span::styled(
+            format!("Filters [{summary}]"),
+            Style::default().fg(theme.warning),
+        ));
+    } else {
+        line1.push(Span::styled("Filters [off]", Style::default().fg(theme.dim)));
     }
 
+    // Row 2: Search field and hints
     let search_query = state.transactions.search_query.trim();
+    let mut line2 = vec![];
+
     if !search_query.is_empty() || state.transactions.search_active {
-        line.push(Span::raw("   "));
-        line.push(Span::styled("Search", Style::default().fg(theme.dim)));
-        line.push(Span::raw(": "));
+        line2.push(Span::styled("Search: ", Style::default().fg(theme.text_muted)));
         let shown = if search_query.is_empty() {
             "…"
         } else {
@@ -112,34 +134,36 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         if state.transactions.search_active {
             style = style.fg(theme.accent).add_modifier(Modifier::BOLD);
         }
-        line.push(Span::styled(shown.to_string(), style));
+        line2.push(Span::styled(format!("\"{shown}\""), style));
+        line2.push(Span::raw("  "));
     }
 
-    line.push(Span::raw("   "));
-    line.push(Span::styled(
-        "Ctrl+F: search",
+    line2.push(Span::styled(
+        "[Ctrl+F] search  [g] group  [f] filters  [w/W] scope",
         Style::default().fg(theme.dim),
     ));
 
+    // Add error if present
     if let Some(err) = &state.transactions.error {
-        line.push(Span::raw("   "));
-        line.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
+        line2.push(Span::raw("  "));
+        line2.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
     }
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border))
-        .title("Transactions");
-    let content = Paragraph::new(Line::from(line)).block(block);
+        .title(Span::styled(title, Style::default().fg(theme.accent)));
+
+    let content = Paragraph::new(vec![Line::from(line1), Line::from(line2)]).block(block);
     frame.render_widget(content, area);
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let quick_height = if state.transactions.quick_active {
-        5
+        6
     } else {
-        4
+        5
     };
     let layout = Layout::default()
         .direction(Direction::Vertical)
@@ -264,57 +288,64 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
                 .map(|id| resolve_flow_name(state, id))
                 .unwrap_or_default();
 
-            let mut spans = Vec::new();
+            // Build 2-line transaction display
+            // Line 1: time, amount with direction indicator, note
+            let mut line1_spans = Vec::new();
             if state.transactions.visual_mode {
                 let marker = if state.transactions.visual_selected.contains(&tx.id) {
                     "*"
                 } else {
                     " "
                 };
-                spans.push(Span::styled(marker, Style::default().fg(theme.warning)));
-                spans.push(Span::raw(" "));
+                line1_spans.push(Span::styled(marker, Style::default().fg(theme.warning)));
+                line1_spans.push(Span::raw(" "));
             }
             if state.transactions.grouping_mode != GroupingMode::Date {
-                spans.push(Span::styled(
+                line1_spans.push(Span::styled(
                     tx.occurred_at.format("%d %b").to_string(),
                     Style::default().fg(theme.dim),
                 ));
-                spans.push(Span::raw(" "));
+                line1_spans.push(Span::raw(" "));
             }
-            spans.push(Span::styled(
+            line1_spans.push(Span::styled(
                 tx.occurred_at.format("%H:%M").to_string(),
                 Style::default().fg(theme.dim),
             ));
-            spans.push(Span::raw("  "));
-            spans.push(kind_chip(tx.kind, theme));
-            spans.push(Span::raw(" "));
+            line1_spans.push(Span::raw("  "));
+            line1_spans.push(kind_chip(tx.kind, theme));
+            line1_spans.push(Span::raw(" "));
             if let Some(voided) = void_chip(tx.voided, theme) {
-                spans.push(voided);
-                spans.push(Span::raw(" "));
+                line1_spans.push(voided);
+                line1_spans.push(Span::raw(" "));
             }
-            spans.push(amount_span(tx.kind, tx.amount_minor, currency, theme));
-            spans.push(Span::raw("  "));
+            line1_spans.push(amount_span(tx.kind, tx.amount_minor, currency, theme));
+            line1_spans.push(Span::raw(" "));
+            line1_spans.push(Span::styled(note.to_string(), Style::default().fg(theme.text)));
+
+            // Line 2: category, wallet, envelope (indented)
+            let mut line2_spans = Vec::new();
+            line2_spans.push(Span::raw("      ")); // Indentation to align with content
             if !category.is_empty() {
-                spans.push(Span::styled(category, Style::default().fg(theme.accent)));
-                spans.push(Span::raw(" "));
-            }
-            if !flow_name.is_empty() {
-                spans.push(Span::styled(
-                    format!("📦{flow_name}"),
-                    Style::default().fg(theme.info),
-                ));
-                spans.push(Span::raw(" "));
+                line2_spans.push(Span::styled(category, Style::default().fg(theme.accent)));
+                line2_spans.push(Span::raw("  "));
             }
             if !wallet_name.is_empty() {
-                spans.push(Span::styled(
-                    format!("💰{wallet_name}"),
+                line2_spans.push(Span::styled(
+                    format!("@{wallet_name}"),
                     Style::default().fg(theme.dim),
                 ));
-                spans.push(Span::raw(" "));
+                line2_spans.push(Span::raw("  "));
             }
-            spans.push(Span::raw(note));
+            if !flow_name.is_empty() {
+                line2_spans.push(Span::styled(
+                    format!(">{flow_name}"),
+                    Style::default().fg(theme.info),
+                ));
+            }
 
-            let mut item = ListItem::new(Line::from(spans));
+            // Create 2-line list item
+            let lines = vec![Line::from(line1_spans), Line::from(line2_spans)];
+            let mut item = ListItem::new(lines);
             if tx.voided {
                 item = item.style(Style::default().fg(theme.dim));
             }
@@ -376,6 +407,8 @@ fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, them
     };
 
     let popup_area = centered_rect(60, 60, area);
+    frame.render_widget(Clear, popup_area);
+
     let mut list_state = ListState::default();
     if !items.is_empty() {
         list_state.select(Some(state.transactions.picker_index));
@@ -387,7 +420,39 @@ fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, them
                 .title(title)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(theme.accent)),
+                .border_style(Style::default().fg(theme.accent))
+                .style(Style::default().bg(theme.background)),
+        )
+        .highlight_style(
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("» ");
+
+    frame.render_stateful_widget(list, popup_area, &mut list_state);
+}
+
+fn render_transfer_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let items = vec![
+        ListItem::new(Line::from("Wallet Transfer")),
+        ListItem::new(Line::from("Flow Transfer")),
+    ];
+
+    let popup_area = centered_rect(40, 25, area);
+    frame.render_widget(Clear, popup_area);
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(state.transactions.picker_index));
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title("Transfer Type")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(theme.accent))
+                .style(Style::default().bg(theme.background)),
         )
         .highlight_style(
             Style::default()
@@ -444,6 +509,8 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         .unwrap_or("-");
 
     let popup = centered_rect(70, 60, area);
+    frame.render_widget(Clear, popup);
+
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(9), Constraint::Min(0)])
@@ -491,14 +558,16 @@ fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         .title(title)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
+        .border_style(Style::default().fg(theme.accent))
+        .style(Style::default().bg(theme.background));
     frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
 
     let hint_block = Block::default()
         .title("Available")
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
+        .border_style(Style::default().fg(theme.accent))
+        .style(Style::default().bg(theme.background));
     let list_items = items
         .iter()
         .enumerate()
@@ -614,6 +683,8 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
     };
 
     let popup = centered_rect(70, 70, area);
+    frame.render_widget(Clear, popup);
+
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(9), Constraint::Min(0)])
@@ -624,42 +695,55 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
             "Amount",
             form.amount.as_str(),
             form.focus == TransactionFormField::Amount,
+            "Enter numerical amount (required)",
             theme,
         ),
         render_transaction_field(
             "Wallet",
             wallet_name,
             form.focus == TransactionFormField::Wallet,
+            "Source/destination wallet",
             theme,
         ),
         render_transaction_field(
             "Flow",
             flow_name,
             form.focus == TransactionFormField::Flow,
+            "Envelope/budget allocation",
             theme,
         ),
         render_transaction_field(
             "Category",
             category.as_str(),
             form.focus == TransactionFormField::Category,
+            "Tag for analytics",
             theme,
         ),
         render_transaction_field(
             "Note",
             note.as_str(),
             form.focus == TransactionFormField::Note,
+            "Optional description",
             theme,
         ),
         render_transaction_field(
             "When",
             occurred_at.as_str(),
             form.focus == TransactionFormField::OccurredAt,
+            "Date & time (default: now)",
             theme,
         ),
-        Line::from(Span::styled(
-            "Tab: next • ↑/↓: change • Enter: save • Esc: cancel",
-            Style::default().fg(theme.dim),
-        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("[Enter]", Style::default().fg(theme.accent)),
+            Span::styled(" Save  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[Esc]", Style::default().fg(theme.accent)),
+            Span::styled(" Cancel  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[Tab]", Style::default().fg(theme.accent)),
+            Span::styled(" Next field  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[↑↓]", Style::default().fg(theme.accent)),
+            Span::styled(" Cycle choices", Style::default().fg(theme.text_muted)),
+        ]),
     ];
 
     if let Some(err) = form.error.as_ref() {
@@ -673,7 +757,8 @@ fn render_transaction_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
         .title(title)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
+        .border_style(Style::default().fg(theme.accent))
+        .style(Style::default().bg(theme.background));
     frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
 
     let bottom_layout = Layout::default()
@@ -732,7 +817,8 @@ fn render_picker_list(
         .title(title)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
+        .border_style(Style::default().fg(theme.border))
+        .style(Style::default().bg(theme.background));
     if items.is_empty() {
         frame.render_widget(
             Paragraph::new(Line::from("Nessun elemento."))
@@ -770,7 +856,8 @@ fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         .title("Categorie recenti")
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
+        .border_style(Style::default().fg(theme.border))
+        .style(Style::default().bg(theme.background));
 
     if state.transactions.recent_categories.is_empty() {
         frame.render_widget(
@@ -813,6 +900,7 @@ fn render_transaction_field(
     label: &str,
     value: &str,
     focused: bool,
+    helper: &str,
     theme: &Theme,
 ) -> Line<'static> {
     let label_style = if focused {
@@ -827,20 +915,38 @@ fn render_transaction_field(
     } else {
         Style::default().fg(theme.text)
     };
+    let cursor = if focused { "▏" } else { "" };
+    let helper_style = if focused {
+        Style::default().fg(theme.text_muted)
+    } else {
+        Style::default().fg(theme.dim)
+    };
     Line::from(vec![
-        Span::styled(format!("{label:<8}"), label_style),
-        Span::raw(": "),
-        Span::styled(value.to_string(), value_style),
+        Span::styled(format!("{label:<10}"), label_style),
+        Span::styled(format!("[{value}{cursor}]"), value_style),
+        Span::raw("  "),
+        Span::styled(format!("← {helper}"), helper_style),
     ])
 }
 
 fn render_filter_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let filter = &state.transactions.filter;
-    let popup = centered_rect(70, 60, area);
+    let popup = centered_rect(75, 60, area);
+    frame.render_widget(Clear, popup);
+
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(8), Constraint::Min(0)])
+        .constraints([Constraint::Length(11), Constraint::Min(0)])
         .split(popup);
+
+    let kinds_focused = filter.focus == FilterField::Kinds;
+    let kinds_label_style = if kinds_focused {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
 
     let mut lines = vec![
         render_filter_field(
@@ -855,32 +961,36 @@ fn render_filter_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
             filter.focus == FilterField::To,
             theme,
         ),
+        Line::from(""),
         Line::from(vec![
-            Span::styled(
-                "Kinds",
-                if filter.focus == FilterField::Kinds {
-                    Style::default()
-                        .fg(theme.accent)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(theme.text)
-                },
-            ),
-            Span::raw(": "),
-            kind_toggle_chip("Income", filter.kind_income, theme),
-            Span::raw(" "),
-            kind_toggle_chip("Expense", filter.kind_expense, theme),
-            Span::raw(" "),
-            kind_toggle_chip("Refund", filter.kind_refund, theme),
-            Span::raw(" "),
-            kind_toggle_chip("T.Wallet", filter.kind_transfer_wallet, theme),
-            Span::raw(" "),
-            kind_toggle_chip("T.Flow", filter.kind_transfer_flow, theme),
+            Span::styled("Transaction Types ", kinds_label_style),
+            Span::styled("(press key to toggle)", Style::default().fg(theme.dim)),
         ]),
-        Line::from(Span::styled(
-            "Tab: next • i/e/r/w/f toggle kinds • Enter: apply • Esc: cancel",
-            Style::default().fg(theme.dim),
-        )),
+        // Row 1: Income, Expense, Refund
+        Line::from(vec![
+            Span::raw("  "),
+            filter_toggle_with_icon("▲", "Income", "i", filter.kind_income, theme),
+            Span::raw("    "),
+            filter_toggle_with_icon("▼", "Expense", "e", filter.kind_expense, theme),
+            Span::raw("    "),
+            filter_toggle_with_icon("↩", "Refund", "r", filter.kind_refund, theme),
+        ]),
+        // Row 2: Transfers
+        Line::from(vec![
+            Span::raw("  "),
+            filter_toggle_with_icon("⇄", "Wallet Transfer", "w", filter.kind_transfer_wallet, theme),
+            Span::raw("    "),
+            filter_toggle_with_icon("⇄", "Flow Transfer", "f", filter.kind_transfer_flow, theme),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("[Tab]", Style::default().fg(theme.accent)),
+            Span::styled(" next  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[Enter]", Style::default().fg(theme.accent)),
+            Span::styled(" apply  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[Esc]", Style::default().fg(theme.accent)),
+            Span::styled(" cancel", Style::default().fg(theme.text_muted)),
+        ]),
     ];
 
     if let Some(err) = filter.error.as_ref() {
@@ -891,11 +1001,29 @@ fn render_filter_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
     }
 
     let block = Block::default()
-        .title("Filters")
+        .title(Span::styled(" Filters ", Style::default().fg(theme.accent)))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
+        .border_style(Style::default().fg(theme.accent))
+        .style(Style::default().bg(theme.background));
     frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
+}
+
+/// Renders a filter toggle with icon, label, and key hint
+fn filter_toggle_with_icon(
+    icon: &str,
+    label: &str,
+    key: &str,
+    enabled: bool,
+    theme: &Theme,
+) -> Span<'static> {
+    let (checkbox, style) = if enabled {
+        ("[✓]", Style::default().fg(theme.positive))
+    } else {
+        ("[✗]", Style::default().fg(theme.dim))
+    };
+    let text = format!("{checkbox} {icon} {label} ({key})");
+    Span::styled(text, style)
 }
 
 fn render_filter_field(label: &str, value: &str, focused: bool, theme: &Theme) -> Line<'static> {
@@ -924,17 +1052,6 @@ fn render_recents_footer(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
     };
     let line = Line::from(Span::styled(text, Style::default().fg(theme.dim)));
     frame.render_widget(Paragraph::new(line), area);
-}
-
-fn kind_toggle_chip(label: &str, enabled: bool, theme: &Theme) -> Span<'static> {
-    let style = if enabled {
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.dim)
-    };
-    Span::styled(format!("[{label}]"), style)
 }
 
 fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -995,6 +1112,7 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             QuickAddKind::Income => ("▲", theme.positive),
             QuickAddKind::Expense => ("▼", theme.negative),
             QuickAddKind::Refund => ("↩", theme.warning),
+            QuickAddKind::TransferWallet | QuickAddKind::TransferFlow => ("⇄", theme.transfer),
         };
         let amount_str = Money::new(p.amount_minor).format(currency);
         let note = p.note.as_deref().unwrap_or("-");
@@ -1060,21 +1178,52 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             )
         };
 
-        lines.push(Line::from(vec![
-            Span::styled(type_icon, Style::default().fg(type_color)),
-            Span::raw(" "),
-            Span::styled(amount_str, Style::default().fg(type_color)),
-            Span::raw("  "),
-            Span::styled(note, Style::default().fg(theme.text)),
-            Span::raw("  │  "),
-            Span::styled(category_display, category_style),
-            Span::raw("  │  "),
-            Span::styled(flow_display, flow_style),
-            Span::raw("  │  "),
-            Span::styled(wallet_display, wallet_style),
-            Span::raw("  │  "),
-            Span::styled("Today", Style::default().fg(theme.text_muted)),
-        ]));
+        // Build preview line based on transaction type
+        if p.kind == QuickAddKind::TransferWallet {
+            let from = p.from_wallet.as_deref().unwrap_or("-");
+            let to = p.to_wallet.as_deref().unwrap_or("-");
+            lines.push(Line::from(vec![
+                Span::styled(type_icon, Style::default().fg(type_color)),
+                Span::raw(" "),
+                Span::styled(amount_str, Style::default().fg(type_color)),
+                Span::raw("  "),
+                Span::styled(note, Style::default().fg(theme.text)),
+                Span::raw("  │  "),
+                Span::styled(format!("@{from} → @{to}"), Style::default().fg(theme.transfer)),
+                Span::raw("  │  "),
+                Span::styled("Today", Style::default().fg(theme.text_muted)),
+            ]));
+        } else if p.kind == QuickAddKind::TransferFlow {
+            let from = p.from_flow.as_deref().unwrap_or("-");
+            let to = p.to_flow.as_deref().unwrap_or("-");
+            lines.push(Line::from(vec![
+                Span::styled(type_icon, Style::default().fg(type_color)),
+                Span::raw(" "),
+                Span::styled(amount_str, Style::default().fg(type_color)),
+                Span::raw("  "),
+                Span::styled(note, Style::default().fg(theme.text)),
+                Span::raw("  │  "),
+                Span::styled(format!(">{from} → >{to}"), Style::default().fg(theme.transfer)),
+                Span::raw("  │  "),
+                Span::styled("Today", Style::default().fg(theme.text_muted)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(type_icon, Style::default().fg(type_color)),
+                Span::raw(" "),
+                Span::styled(amount_str, Style::default().fg(type_color)),
+                Span::raw("  "),
+                Span::styled(note, Style::default().fg(theme.text)),
+                Span::raw("  │  "),
+                Span::styled(category_display, category_style),
+                Span::raw("  │  "),
+                Span::styled(flow_display, flow_style),
+                Span::raw("  │  "),
+                Span::styled(wallet_display, wallet_style),
+                Span::raw("  │  "),
+                Span::styled("Today", Style::default().fg(theme.text_muted)),
+            ]));
+        }
 
         // Show ambiguous options if any
         let has_ambiguous = category_ambiguous || wallet_ambiguous || flow_ambiguous;
@@ -1165,14 +1314,34 @@ fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
             Style::default().fg(theme.text_muted),
         )));
     } else {
-        // Collapsed state - show hint
+        // Collapsed state - show syntax and shortcuts
         lines.push(Line::from(vec![
-            Span::styled("[a]", Style::default().fg(theme.accent)),
+            Span::styled("⚡ ", Style::default().fg(theme.warning)),
+            Span::styled("Syntax: ", Style::default().fg(theme.text_muted)),
+            Span::styled(
+                "[+]amount note [#category] [@wallet] [>envelope]",
+                Style::default().fg(theme.dim),
+            ),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("   Examples: ", Style::default().fg(theme.text_muted)),
+            Span::styled("50 lunch #food @main", Style::default().fg(theme.dim)),
+            Span::styled("  |  ", Style::default().fg(theme.border)),
+            Span::styled("+100 salary >income", Style::default().fg(theme.dim)),
+            Span::styled("  |  ", Style::default().fg(theme.border)),
+            Span::styled("r30 refund", Style::default().fg(theme.dim)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("   [a]", Style::default().fg(theme.accent)),
             Span::styled(" quick add  ", Style::default().fg(theme.text_muted)),
             Span::styled("[i]", Style::default().fg(theme.accent)),
             Span::styled(" income  ", Style::default().fg(theme.text_muted)),
             Span::styled("[e]", Style::default().fg(theme.accent)),
-            Span::styled(" expense", Style::default().fg(theme.text_muted)),
+            Span::styled(" expense  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[t]", Style::default().fg(theme.accent)),
+            Span::styled(" transfer  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[?]", Style::default().fg(theme.accent)),
+            Span::styled(" help", Style::default().fg(theme.text_muted)),
         ]));
     }
 
