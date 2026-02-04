@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::helpers::login_message_for_error, client::ClientError, error::Result};
+use crate::{app::errors::login_message_for_error, client::ClientError, error::Result};
 
 impl App {
     pub(crate) async fn attempt_login(&mut self) -> Result<()> {
@@ -53,12 +53,13 @@ impl App {
                         self.load_transactions(true).await?;
                     }
                     Err(err) => {
-                        self.state.login.message = Some(login_message_for_error(err));
+                        self.state.login.message =
+                            Some(login_message_for_error(err, self.state.locale));
                     }
                 }
             }
             Err(err) => {
-                self.state.login.message = Some(login_message_for_error(err));
+                self.state.login.message = Some(login_message_for_error(err, self.state.locale));
             }
         }
 

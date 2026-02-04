@@ -1,7 +1,7 @@
 use super::super::*;
 
 use crate::{
-    app::helpers::{login_message_for_error, member_role_rank},
+    app::{errors::login_message_for_error, format::member_role_rank},
     error::Result,
 };
 use api_types::membership::MemberUpsert;
@@ -83,7 +83,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.members.error = Some(login_message_for_error(err));
+                self.state.members.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -158,7 +158,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.members.error = Some(login_message_for_error(err));
+                self.state.members.error = Some(login_message_for_error(err, self.state.locale));
             }
         }
 
@@ -207,7 +207,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.members.error = Some(login_message_for_error(err));
+                self.state.members.error = Some(login_message_for_error(err, self.state.locale));
             }
         }
 

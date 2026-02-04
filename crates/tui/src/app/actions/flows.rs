@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::helpers::login_message_for_error, error::Result};
+use crate::{app::errors::login_message_for_error, error::Result};
 use api_types::{
     flow::{FlowMode, FlowNew, FlowUpdate},
     transaction::TransactionList,
@@ -52,7 +52,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.flows.detail.error = Some(login_message_for_error(err));
+                self.state.flows.detail.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -83,7 +83,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.flows.detail.error = Some(login_message_for_error(err));
+                self.state.flows.detail.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -169,7 +169,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.flows.error = Some(login_message_for_error(err));
+                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Failed to create flow.", ToastLevel::Error);
             }
         }
@@ -226,7 +226,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.flows.error = Some(login_message_for_error(err));
+                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Failed to update flow.", ToastLevel::Error);
             }
         }
@@ -266,7 +266,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.flows.error = Some(login_message_for_error(err));
+                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Failed to archive flow.", ToastLevel::Error);
             }
         }
@@ -319,7 +319,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.flows.error = Some(login_message_for_error(err));
+                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Failed to archive flow.", ToastLevel::Error);
             }
         }
@@ -352,7 +352,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.flows.error = Some(login_message_for_error(err));
+                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore ripristino flow.", ToastLevel::Error);
             }
         }

@@ -8,7 +8,11 @@ use api_types::{
 use chrono::Duration as ChronoDuration;
 
 use crate::{
-    app::helpers::{extract_wallet_flow, login_message_for_error, push_recent_id},
+    app::{
+        errors::login_message_for_error,
+        ordering::push_recent_id,
+        resolve::extract_wallet_flow,
+    },
     client::ClientError,
     error::{AppError, Result},
 };
@@ -168,7 +172,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                let message = login_message_for_error(err);
+                let message = login_message_for_error(err, self.state.locale);
                 let detail = Some(message.clone());
                 self.state.wallets.error = Some(message.clone());
                 self.state.flows.error = Some(message.clone());
@@ -267,7 +271,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                Err(AppError::Terminal(login_message_for_error(err)))
+                Err(AppError::Terminal(login_message_for_error(err, self.state.locale)))
             }
         }
     }

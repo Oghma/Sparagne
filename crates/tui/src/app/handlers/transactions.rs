@@ -1,10 +1,14 @@
 use super::super::*;
 
 use crate::{
-    app::helpers::{
-        default_wallet_flow, extract_flow_transfer, extract_wallet_flow, extract_wallet_transfer,
-        format_amount_input, map_currency, ordered_ids, resolve_category_matches,
-        resolve_flow_matches, resolve_wallet_matches,
+    app::{
+        format::{format_amount_input, map_currency},
+        ordering::ordered_ids,
+        resolve::{
+            default_wallet_flow, extract_flow_transfer, extract_wallet_flow,
+            extract_wallet_transfer, resolve_category_matches, resolve_flow_matches,
+            resolve_wallet_matches,
+        },
     },
     error::Result,
     quick_add::parse as parse_quick_add,

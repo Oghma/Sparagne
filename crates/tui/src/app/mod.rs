@@ -1,14 +1,20 @@
 mod actions;
+mod errors;
+mod format;
 mod handlers;
-mod helpers;
+mod ordering;
+mod query;
+mod resolve;
 mod state;
 
-pub(crate) use helpers::{
-    FlowAlertSeverity, HomeFeedItem, filter_commands, flow_name_suggestions, flows_visible_indices,
+// Re-export commonly used items for UI
+pub(crate) use ordering::{
+    FlowAlertSeverity, HomeFeedItem, flow_name_suggestions, flows_visible_indices,
     home_feed_items, ordered_flow_ids_from_state, ordered_wallet_ids_from_state,
-    resolve_category_matches, resolve_flow_matches, resolve_wallet_matches,
     transactions_visible_indices, wallets_visible_indices,
 };
+pub(crate) use query::filter_commands;
+pub(crate) use resolve::{resolve_category_matches, resolve_flow_matches, resolve_wallet_matches};
 pub use state::*;
 
 use std::time::Duration;
@@ -119,15 +125,5 @@ impl App {
 
     fn tick_spinner(&mut self) {
         self.state.spinner.tick();
-    }
-
-    #[allow(dead_code)]
-    pub fn client(&self) -> &Client {
-        &self.client
-    }
-
-    #[allow(dead_code)]
-    pub fn config(&self) -> &AppConfig {
-        &self.config
     }
 }

@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::helpers::login_message_for_error, error::Result};
+use crate::{app::errors::login_message_for_error, error::Result};
 use api_types::vault::{Vault, VaultNew};
 
 impl App {
@@ -44,7 +44,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.vault_ui.list.error = Some(login_message_for_error(err));
+                self.state.vault_ui.list.error = Some(login_message_for_error(err, self.state.locale));
             }
         }
 
@@ -172,7 +172,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.vault_ui.form.error = Some(login_message_for_error(err));
+                self.state.vault_ui.form.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore creazione vault.", ToastLevel::Error);
             }
         }
@@ -198,7 +198,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                let message = login_message_for_error(err);
+                let message = login_message_for_error(err, self.state.locale);
                 self.state.vault_ui.error = Some(message.clone());
                 self.state.overlays.error = Some(ErrorDialogState::error(
                     "Error",

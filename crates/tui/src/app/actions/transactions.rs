@@ -1,9 +1,9 @@
 use super::super::*;
 
 use crate::{
-    app::helpers::{
-        extract_flow_transfer, extract_wallet_flow, extract_wallet_transfer,
-        login_message_for_error,
+    app::{
+        errors::login_message_for_error,
+        resolve::{extract_flow_transfer, extract_wallet_flow, extract_wallet_transfer},
     },
     error::{AppError, Result},
 };
@@ -67,7 +67,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.transactions.error = Some(login_message_for_error(err));
+                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -132,7 +132,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.transactions.error = Some(login_message_for_error(err));
+                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -178,7 +178,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.transactions.error = Some(login_message_for_error(err));
+                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -220,7 +220,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.transactions.error = Some(login_message_for_error(err));
+                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore durante l'annullamento.", ToastLevel::Error);
             }
         }
@@ -306,7 +306,7 @@ impl App {
                     .await
             }
             api_types::transaction::TransactionKind::TransferWallet => {
-                let (from_wallet_id, to_wallet_id) = extract_wallet_transfer(detail)?;
+                let (from_wallet_id, to_wallet_id) = extract_wallet_transfer(detail, self.state.locale)?;
                 self.client
                     .transfer_wallet_new(
                         self.state.login.username.as_str(),
@@ -324,7 +324,7 @@ impl App {
                     .await
             }
             api_types::transaction::TransactionKind::TransferFlow => {
-                let (from_flow_id, to_flow_id) = extract_flow_transfer(detail)?;
+                let (from_flow_id, to_flow_id) = extract_flow_transfer(detail, self.state.locale)?;
                 self.client
                     .transfer_flow_new(
                         self.state.login.username.as_str(),
@@ -356,7 +356,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.transactions.error = Some(login_message_for_error(err));
+                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore durante la ripetizione.", ToastLevel::Error);
             }
         }

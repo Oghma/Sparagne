@@ -3,7 +3,10 @@ use super::super::*;
 use std::str::FromStr;
 
 use crate::{
-    app::helpers::{login_message_for_error, map_currency, month_label},
+    app::{
+        errors::login_message_for_error,
+        format::{map_currency, month_label},
+    },
     error::Result,
 };
 use api_types::{
@@ -68,7 +71,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.stats.error = Some(login_message_for_error(err));
+                self.state.stats.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -118,7 +121,7 @@ impl App {
                     if self.handle_auth_error(&err) {
                         return Ok(());
                     }
-                    self.state.stats.error = Some(login_message_for_error(err));
+                    self.state.stats.error = Some(login_message_for_error(err, self.state.locale));
                     return Ok(());
                 }
             }

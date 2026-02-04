@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::helpers::map_currency, error::Result, ui::keymap::AppAction};
+use crate::{app::format::map_currency, error::Result, ui::keymap::AppAction};
 use engine::Money;
 
 impl App {

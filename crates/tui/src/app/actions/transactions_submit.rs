@@ -1,9 +1,10 @@
 use super::super::*;
 
 use crate::{
-    app::helpers::{
-        default_wallet_flow, login_message_for_error, map_currency, resolve_flow_name,
-        resolve_wallet_name,
+    app::{
+        errors::login_message_for_error,
+        format::map_currency,
+        resolve::{default_wallet_flow, resolve_flow_name, resolve_wallet_name},
     },
     error::Result,
     quick_add::QuickAddKind,

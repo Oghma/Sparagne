@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::helpers::login_message_for_error, error::Result};
+use crate::{app::errors::login_message_for_error, error::Result};
 use api_types::{
     transaction::TransactionList,
     wallet::{WalletNew, WalletUpdate},
@@ -51,7 +51,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.wallets.detail.error = Some(login_message_for_error(err));
+                self.state.wallets.detail.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -114,7 +114,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.wallets.error = Some(login_message_for_error(err));
+                self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Failed to create wallet.", ToastLevel::Error);
             }
         }
@@ -164,7 +164,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.wallets.error = Some(login_message_for_error(err));
+                self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Failed to update wallet.", ToastLevel::Error);
             }
         }
@@ -199,7 +199,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.wallets.error = Some(login_message_for_error(err));
+                self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore archivio wallet.", ToastLevel::Error);
             }
         }
@@ -246,7 +246,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.wallets.error = Some(login_message_for_error(err));
+                self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore archivio wallet.", ToastLevel::Error);
             }
         }
@@ -278,7 +278,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.wallets.error = Some(login_message_for_error(err));
+                self.state.wallets.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore ripristino wallet.", ToastLevel::Error);
             }
         }

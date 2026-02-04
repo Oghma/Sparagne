@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use api_types::transaction::{TransactionDetailResponse, TransactionKind, TransactionView};
 use uuid::Uuid;
 
-use crate::app::helpers::{normalize_query, transaction_matches_query};
+use crate::app::query::{normalize_query, transaction_matches_query};
 use crate::ui::forms::{AmountField, TextField};
 use crate::validation::DateField;
 

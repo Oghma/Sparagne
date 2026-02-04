@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::helpers::login_message_for_error, error::Result};
+use crate::{app::errors::login_message_for_error, error::Result};
 use api_types::category::{CategoryCreate, CategoryUpdate};
 
 impl App {
@@ -45,7 +45,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.error = Some(login_message_for_error(err));
+                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -110,7 +110,7 @@ impl App {
                     if self.handle_auth_error(&err) {
                         return Ok(());
                     }
-                    self.state.categories.error = Some(login_message_for_error(err));
+                    self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
                     self.connection_error("Errore connessione");
                 }
             }
@@ -140,7 +140,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.error = Some(login_message_for_error(err));
+                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -191,7 +191,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.aliases.error = Some(login_message_for_error(err));
+                self.state.categories.aliases.error = Some(login_message_for_error(err, self.state.locale));
                 self.connection_error("Errore connessione");
             }
         }
@@ -238,7 +238,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.aliases.error = Some(login_message_for_error(err));
+                self.state.categories.aliases.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore creazione alias.", ToastLevel::Error);
             }
         }
@@ -285,7 +285,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.aliases.error = Some(login_message_for_error(err));
+                self.state.categories.aliases.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore eliminazione alias.", ToastLevel::Error);
             }
         }
@@ -331,7 +331,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.error = Some(login_message_for_error(err));
+                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore creazione categoria.", ToastLevel::Error);
             }
         }
@@ -387,7 +387,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.error = Some(login_message_for_error(err));
+                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore aggiornamento categoria.", ToastLevel::Error);
             }
         }
@@ -428,7 +428,7 @@ impl App {
                 if self.handle_auth_error(&err) {
                     return Ok(());
                 }
-                self.state.categories.error = Some(login_message_for_error(err));
+                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
                 self.set_toast("Errore archivio categoria.", ToastLevel::Error);
             }
         }
