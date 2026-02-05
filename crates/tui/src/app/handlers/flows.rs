@@ -4,18 +4,13 @@ use crate::text::{TextKey, t};
 
 impl App {
     pub(crate) fn flows_select_next(&mut self) {
-        let len = flows_visible_indices(&self.state).len();
-        if len == 0 {
-            return;
-        }
-        self.state.flows.selected = (self.state.flows.selected + 1).min(len - 1);
+        let count = flows_visible_indices(&self.state).len();
+        SelectableWithCount::new(&mut self.state.flows, count).select_next();
     }
 
     pub(crate) fn flows_select_prev(&mut self) {
-        if flows_visible_indices(&self.state).is_empty() {
-            return;
-        }
-        self.state.flows.selected = self.state.flows.selected.saturating_sub(1);
+        let count = flows_visible_indices(&self.state).len();
+        SelectableWithCount::new(&mut self.state.flows, count).select_prev();
     }
     pub(crate) fn start_flow_create(&mut self) {
         self.reset_flow_form();
@@ -73,13 +68,8 @@ impl App {
     }
 
     pub(crate) fn toggle_flows_show_archived(&mut self) {
-        self.state.flows.show_archived = !self.state.flows.show_archived;
-        // Clamp selection after toggling
-        let len = flows_visible_indices(&self.state).len();
-        if len == 0 {
-            self.state.flows.selected = 0;
-        } else if self.state.flows.selected >= len {
-            self.state.flows.selected = len - 1;
-        }
+        self.state.flows.toggle_show_archived();
+        let count = flows_visible_indices(&self.state).len();
+        SelectableWithCount::new(&mut self.state.flows, count).clamp_selection();
     }
 }

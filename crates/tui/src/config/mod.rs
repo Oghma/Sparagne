@@ -48,25 +48,6 @@ impl std::str::FromStr for Density {
     }
 }
 
-impl Density {
-    #[allow(dead_code)]
-    pub fn list_item_height(self) -> u16 {
-        match self {
-            Self::Compact => 1,
-            Self::Normal => 2,
-            Self::Comfortable => 3,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn vertical_padding(self) -> u16 {
-        match self {
-            Self::Compact => 0,
-            Self::Normal => 1,
-            Self::Comfortable => 2,
-        }
-    }
-}
 
 impl Default for AppConfig {
     fn default() -> Self {

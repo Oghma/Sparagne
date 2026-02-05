@@ -12,6 +12,7 @@ use engine::{Currency, Money};
 
 use crate::{
     app::{AppState, FlowAlertSeverity, HomeFeedItem, home_feed_items},
+    text::{TextKey, t},
     ui::{
         components::{
             card::Card,
@@ -105,8 +106,34 @@ fn render_stats_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: 
         .split(area);
 
     render_net_worth_card(frame, layout[0], state, theme);
-    render_income_card(frame, layout[1], state, theme);
-    render_expenses_card(frame, layout[2], state, theme);
+
+    let (income, expenses) = state
+        .stats
+        .data
+        .as_ref()
+        .map(|s| (s.total_income_minor, s.total_expenses_minor))
+        .unwrap_or((0, 0));
+
+    render_stat_card(
+        frame,
+        layout[1],
+        state,
+        theme,
+        TextKey::HomeCardIncome,
+        ICON_INCOME,
+        income,
+        theme.income,
+    );
+    render_stat_card(
+        frame,
+        layout[2],
+        state,
+        theme,
+        TextKey::HomeCardExpenses,
+        ICON_EXPENSE,
+        expenses,
+        theme.expense,
+    );
 }
 
 fn render_stats_bar_compact(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -223,69 +250,34 @@ fn render_net_worth_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
     }
 }
 
-fn render_income_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+fn render_stat_card(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    state: &AppState,
+    theme: &Theme,
+    title: TextKey,
+    icon: &str,
+    amount: i64,
+    color: ratatui::style::Color,
+) {
     let currency = get_currency(state);
-    let card = Card::new("Income", theme);
+    let card = Card::new(t(state.locale, title), theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
-    let income = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| s.total_income_minor)
-        .unwrap_or(0);
-
-    let income_str = Money::new(income).format(currency);
+    let amount_str = Money::new(amount).format(currency);
 
     let lines = vec![
         Line::from(vec![
-            Span::styled(ICON_INCOME, Style::default().fg(theme.income)),
+            Span::styled(icon, Style::default().fg(color)),
             Span::raw(" "),
             Span::styled(
-                income_str,
-                Style::default()
-                    .fg(theme.income)
-                    .add_modifier(Modifier::BOLD),
+                amount_str,
+                Style::default().fg(color).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(Span::styled(
-            "this month",
-            Style::default().fg(theme.text_muted),
-        )),
-    ];
-
-    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center), inner);
-}
-
-fn render_expenses_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let currency = get_currency(state);
-    let card = Card::new("Expenses", theme);
-    let inner = card.inner(area);
-    card.render_frame(frame, area);
-
-    let expenses = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| s.total_expenses_minor)
-        .unwrap_or(0);
-
-    let expenses_str = Money::new(expenses).format(currency);
-
-    let lines = vec![
-        Line::from(vec![
-            Span::styled(ICON_EXPENSE, Style::default().fg(theme.expense)),
-            Span::raw(" "),
-            Span::styled(
-                expenses_str,
-                Style::default()
-                    .fg(theme.expense)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(Span::styled(
-            "this month",
+            t(state.locale, TextKey::HomeCardThisMonth),
             Style::default().fg(theme.text_muted),
         )),
     ];

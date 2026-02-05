@@ -65,13 +65,6 @@ impl AmountField {
         self.state.validation = validator.validate(&self.state.value);
     }
 
-    /// Updates the field value and triggers validation.
-    pub fn set_value(&mut self, value: impl Into<String>) {
-        self.state.value = value.into();
-        self.state.touched = true;
-        self.validate();
-    }
-
     /// Appends a character to the value.
     pub fn push(&mut self, c: char) {
         self.state.value.push(c);
@@ -83,11 +76,6 @@ impl AmountField {
     pub fn pop(&mut self) {
         self.state.value.pop();
         self.validate();
-    }
-
-    /// Clears the field.
-    pub fn clear(&mut self) {
-        self.state.clear();
     }
 
     /// Returns the current value of the field.
@@ -128,14 +116,6 @@ mod tests {
         let mut field = AmountField::new("Amount").with_value("abc");
         field.validate();
         assert!(field.state.validation.is_invalid());
-    }
-
-    #[test]
-    fn set_value_triggers_validation() {
-        let mut field = AmountField::new("Amount");
-        field.set_value("100");
-        assert!(field.state.touched);
-        assert!(field.state.validation.is_valid());
     }
 
     #[test]

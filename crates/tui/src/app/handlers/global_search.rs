@@ -55,15 +55,11 @@ impl App {
     }
 
     pub(crate) fn global_search_select_next(&mut self) {
-        let len = self.state.global_search.results.len();
-        if len > 0 {
-            self.state.global_search.selected =
-                (self.state.global_search.selected + 1).min(len - 1);
-        }
+        self.state.global_search.select_next();
     }
 
     pub(crate) fn global_search_select_prev(&mut self) {
-        self.state.global_search.selected = self.state.global_search.selected.saturating_sub(1);
+        self.state.global_search.select_prev();
     }
 
     pub(crate) async fn global_search_submit(&mut self) -> Result<()> {

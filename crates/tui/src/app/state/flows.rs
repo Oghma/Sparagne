@@ -1,6 +1,7 @@
 use api_types::transaction::TransactionView;
 use engine::CashFlow;
 
+use super::selectable::{HasArchiveToggle, HasSelection, Resettable, UpdateFocus};
 use crate::ui::forms::{AmountField, TextField};
 
 #[derive(Debug)]
@@ -13,6 +14,26 @@ pub struct FlowsState {
     pub search_query: String,
     pub search_active: bool,
     pub show_archived: bool,
+}
+
+impl HasSelection for FlowsState {
+    fn selected(&self) -> usize {
+        self.selected
+    }
+
+    fn set_selected(&mut self, idx: usize) {
+        self.selected = idx;
+    }
+}
+
+impl HasArchiveToggle for FlowsState {
+    fn show_archived(&self) -> bool {
+        self.show_archived
+    }
+
+    fn set_show_archived(&mut self, show: bool) {
+        self.show_archived = show;
+    }
 }
 
 impl Default for FlowsState {
@@ -71,24 +92,30 @@ impl Default for FlowFormState {
     }
 }
 
-#[allow(dead_code)]
-impl FlowFormState {
-    /// Updates focus state on all fields based on current focus.
-    pub fn update_focus(&mut self) {
+impl UpdateFocus for FlowFormState {
+    fn update_focus(&mut self) {
         self.name.state.focused = self.focus == FlowFormField::Name;
         self.cap.state.focused = self.focus == FlowFormField::Cap;
         self.opening.state.focused = self.focus == FlowFormField::Opening;
     }
+}
 
-    /// Returns true if all fields are valid.
-    pub fn is_valid(&self) -> bool {
-        self.name.state.validation.is_valid()
-            && self.cap.state.validation.is_valid()
-            && self.opening.state.validation.is_valid()
+impl Resettable for FlowsState {
+    type Form = FlowFormState;
+
+    fn form_mut(&mut self) -> &mut Self::Form {
+        &mut self.form
     }
 
+    fn error_mut(&mut self) -> &mut Option<String> {
+        &mut self.error
+    }
+}
+
+impl FlowFormState {
+
     /// Validates all fields and returns the first error message if any.
-    pub fn validate_all(&mut self) -> Option<String> {
+    pub(crate) fn validate_all(&mut self) -> Option<String> {
         self.name.validate();
         // Only validate cap if mode requires it
         if !matches!(self.mode, FlowModeChoice::Unlimited) {
@@ -108,16 +135,6 @@ impl FlowFormState {
             return Some(err.to_string());
         }
         None
-    }
-
-    /// Clears the form and resets to default state.
-    pub fn clear(&mut self) {
-        self.name.clear();
-        self.mode = FlowModeChoice::Unlimited;
-        self.cap.clear();
-        self.opening.clear();
-        self.focus = FlowFormField::Name;
-        self.update_focus();
     }
 }
 

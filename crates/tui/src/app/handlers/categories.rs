@@ -2,23 +2,17 @@ use super::super::*;
 
 use api_types::category::CategoryView;
 use crate::text::{TextKey, t};
+
 impl App {
     pub(crate) fn categories_select_next(&mut self) {
-        let len = self.state.categories.items.len();
-        if len == 0 {
-            return;
-        }
-        self.state.categories.selected = (self.state.categories.selected + 1).min(len - 1);
+        self.state.categories.select_next();
         self.state.categories.aliases.category_id = None;
         self.state.categories.aliases.items.clear();
         self.state.categories.aliases.selected = 0;
     }
 
     pub(crate) fn categories_select_prev(&mut self) {
-        if self.state.categories.items.is_empty() {
-            return;
-        }
-        self.state.categories.selected = self.state.categories.selected.saturating_sub(1);
+        self.state.categories.select_prev();
         self.state.categories.aliases.category_id = None;
         self.state.categories.aliases.items.clear();
         self.state.categories.aliases.selected = 0;
@@ -59,20 +53,11 @@ impl App {
         self.state.categories.merge.confirming = false;
     }
     pub(crate) fn category_alias_select_next(&mut self) {
-        let len = self.state.categories.aliases.items.len();
-        if len == 0 {
-            return;
-        }
-        self.state.categories.aliases.selected =
-            (self.state.categories.aliases.selected + 1).min(len - 1);
+        self.state.categories.aliases.select_next();
     }
 
     pub(crate) fn category_alias_select_prev(&mut self) {
-        if self.state.categories.aliases.items.is_empty() {
-            return;
-        }
-        self.state.categories.aliases.selected =
-            self.state.categories.aliases.selected.saturating_sub(1);
+        self.state.categories.aliases.select_prev();
     }
 
     pub(crate) fn toggle_alias_focus(&mut self) {

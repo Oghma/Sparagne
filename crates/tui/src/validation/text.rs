@@ -26,16 +26,7 @@ pub struct LengthValidator {
     pub max: Option<usize>,
 }
 
-impl LengthValidator {
-    /// Creates a validator with both minimum and maximum length.
-    #[must_use]
-    pub fn range(min: usize, max: usize) -> Self {
-        Self {
-            min: Some(min),
-            max: Some(max),
-        }
-    }
-}
+impl LengthValidator {}
 
 impl Validator for LengthValidator {
     fn validate(&self, value: &str) -> ValidationResult {
@@ -157,7 +148,10 @@ mod tests {
 
     #[test]
     fn length_validator_trait() {
-        let validator = LengthValidator::range(2, 5);
+        let validator = LengthValidator {
+            min: Some(2),
+            max: Some(5),
+        };
         assert!(validator.validate("a").is_invalid());
         assert!(validator.validate("ab").is_valid());
         assert!(validator.validate("abcdef").is_invalid());

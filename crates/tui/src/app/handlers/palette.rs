@@ -30,6 +30,7 @@ impl App {
         self.state.palette.active = true;
         self.state.palette.query.clear();
         self.state.palette.selected = 0;
+        self.update_palette_filtered_count();
     }
 
     pub(crate) async fn handle_palette_action(
@@ -43,21 +44,18 @@ impl App {
             crate::ui::keymap::AppAction::Backspace => {
                 self.state.palette.query.pop();
                 self.state.palette.selected = 0;
+                self.update_palette_filtered_count();
             }
             crate::ui::keymap::AppAction::Up => {
-                if self.state.palette.selected > 0 {
-                    self.state.palette.selected -= 1;
-                }
+                self.state.palette.select_prev();
             }
             crate::ui::keymap::AppAction::Down => {
-                let max = self.filtered_commands().len();
-                if max > 0 {
-                    self.state.palette.selected = (self.state.palette.selected + 1).min(max - 1);
-                }
+                self.state.palette.select_next();
             }
             crate::ui::keymap::AppAction::Input(ch) => {
                 self.state.palette.query.push(ch);
                 self.state.palette.selected = 0;
+                self.update_palette_filtered_count();
             }
             crate::ui::keymap::AppAction::Submit => {
                 if let Some(command) = self.filtered_commands().get(self.state.palette.selected) {
@@ -72,6 +70,11 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Updates the cached filtered command count for selection bounds.
+    fn update_palette_filtered_count(&mut self) {
+        self.state.palette.filtered_count = self.filtered_commands().len();
     }
 
     pub(crate) fn filtered_commands(&self) -> Vec<PaletteCommand> {
@@ -137,7 +140,7 @@ impl App {
                 self.refresh_snapshot().await?;
                 if self.state.section == Section::Transactions {
                     self.load_transactions(true).await?;
-                } else if self.is_settings_categories() {
+                } else if self.is_settings_tab(SettingsTab::Categories) {
                     self.load_categories().await?;
                 } else if self.state.section == Section::Analytics {
                     self.load_stats().await?;

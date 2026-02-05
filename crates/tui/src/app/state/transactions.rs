@@ -11,20 +11,16 @@ use crate::validation::DateField;
 /// Represents an ambiguous match in quick-add where multiple options are
 /// available.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct QuickAddAmbiguous {
     pub kind: QuickAddAmbiguousKind,
-    pub query: String,
     pub options: Vec<(Uuid, String)>, // (id, name)
     pub selected: usize,
 }
 
-#[allow(dead_code)]
 impl QuickAddAmbiguous {
-    pub fn new(kind: QuickAddAmbiguousKind, query: String, options: Vec<(Uuid, String)>) -> Self {
+    pub fn new(kind: QuickAddAmbiguousKind, options: Vec<(Uuid, String)>) -> Self {
         Self {
             kind,
-            query,
             options,
             selected: 0,
         }
@@ -33,12 +29,6 @@ impl QuickAddAmbiguous {
     pub fn cycle_next(&mut self) {
         if !self.options.is_empty() {
             self.selected = (self.selected + 1) % self.options.len();
-        }
-    }
-
-    pub fn cycle_prev(&mut self) {
-        if !self.options.is_empty() {
-            self.selected = (self.selected + self.options.len() - 1) % self.options.len();
         }
     }
 

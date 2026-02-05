@@ -41,13 +41,6 @@ impl TextField {
         self
     }
 
-    /// Sets the maximum length constraint.
-    #[must_use]
-    pub fn max_length(mut self, max: usize) -> Self {
-        self.max_length = Some(max);
-        self
-    }
-
     /// Sets the initial value.
     #[must_use]
     pub fn with_value(mut self, value: impl Into<String>) -> Self {
@@ -102,17 +95,6 @@ impl TextField {
         self.validate();
     }
 
-    /// Clears the field.
-    pub fn clear(&mut self) {
-        self.state.clear();
-    }
-
-    /// Returns the current character count.
-    #[must_use]
-    pub fn char_count(&self) -> usize {
-        self.state.value.chars().count()
-    }
-
     /// Returns the current value of the field.
     #[must_use]
     pub fn value(&self) -> &str {
@@ -153,25 +135,6 @@ mod tests {
 
         field.set_value("abc");
         assert!(field.state.validation.is_valid());
-    }
-
-    #[test]
-    fn validate_max_length() {
-        let mut field = TextField::new("Code").max_length(5).with_value("abcdef");
-        field.validate();
-        assert!(field.state.validation.is_invalid());
-
-        field.set_value("abcde");
-        assert!(field.state.validation.is_valid());
-    }
-
-    #[test]
-    fn char_count_works() {
-        let field = TextField::new("Note").with_value("hello");
-        assert_eq!(field.char_count(), 5);
-
-        let field_unicode = TextField::new("Note").with_value("日本語");
-        assert_eq!(field_unicode.char_count(), 3);
     }
 
     #[test]

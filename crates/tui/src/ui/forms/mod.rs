@@ -55,7 +55,6 @@ impl FormFieldRenderer {
             let (icon, color) = match &state.validation {
                 ValidationResult::Valid => ("✓", theme.positive),
                 ValidationResult::Invalid(_) => ("✗", theme.error),
-                ValidationResult::Pending => ("…", theme.warning),
             };
             spans.push(Span::raw(" "));
             spans.push(Span::styled(icon.to_string(), Style::default().fg(color)));

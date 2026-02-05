@@ -19,12 +19,11 @@ pub enum ValidationResult {
     Valid,
     /// Input is invalid with an error message.
     Invalid(String),
-    /// Validation in progress (for async validation, future use).
-    Pending,
 }
 
 impl ValidationResult {
     /// Returns `true` if the validation passed.
+    #[cfg(test)]
     #[must_use]
     pub fn is_valid(&self) -> bool {
         matches!(self, Self::Valid)
@@ -41,7 +40,7 @@ impl ValidationResult {
     pub fn error_message(&self) -> Option<&str> {
         match self {
             Self::Invalid(msg) => Some(msg),
-            _ => None,
+            Self::Valid => None,
         }
     }
 }
@@ -67,45 +66,16 @@ pub struct FieldState {
     pub required: bool,
 }
 
-impl FieldState {
-    /// Creates a new empty field state.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Returns `true` if the field should display an error.
-    ///
-    /// Errors are shown only if the field has been touched and is invalid.
-    #[must_use]
-    pub fn should_show_error(&self) -> bool {
-        self.touched && self.validation.is_invalid()
-    }
-
-    /// Clears the field value and validation state.
-    pub fn clear(&mut self) {
-        self.value.clear();
-        self.validation = ValidationResult::Valid;
-        self.touched = false;
-    }
-}
+impl FieldState {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn validation_result_is_valid() {
-        assert!(ValidationResult::Valid.is_valid());
-        assert!(!ValidationResult::Invalid("error".to_string()).is_valid());
-        assert!(!ValidationResult::Pending.is_valid());
-    }
-
-    #[test]
     fn validation_result_is_invalid() {
         assert!(!ValidationResult::Valid.is_invalid());
         assert!(ValidationResult::Invalid("error".to_string()).is_invalid());
-        assert!(!ValidationResult::Pending.is_invalid());
     }
 
     #[test]
@@ -115,40 +85,5 @@ mod tests {
             ValidationResult::Invalid("test error".to_string()).error_message(),
             Some("test error")
         );
-        assert_eq!(ValidationResult::Pending.error_message(), None);
-    }
-
-    #[test]
-    fn field_state_should_show_error() {
-        let mut field = FieldState::new();
-        assert!(!field.should_show_error());
-
-        field.touched = true;
-        assert!(!field.should_show_error());
-
-        field.validation = ValidationResult::Invalid("error".to_string());
-        assert!(field.should_show_error());
-
-        field.touched = false;
-        assert!(!field.should_show_error());
-    }
-
-    #[test]
-    fn field_state_clear() {
-        let mut field = FieldState {
-            value: "test".to_string(),
-            validation: ValidationResult::Invalid("error".to_string()),
-            touched: true,
-            focused: true,
-            required: true,
-        };
-
-        field.clear();
-
-        assert!(field.value.is_empty());
-        assert!(field.validation.is_valid());
-        assert!(!field.touched);
-        assert!(field.focused); // focused is not cleared
-        assert!(field.required); // required is not cleared
     }
 }

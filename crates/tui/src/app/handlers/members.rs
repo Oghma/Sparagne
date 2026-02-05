@@ -5,18 +5,11 @@ use api_types::membership::MembershipRole;
 
 impl App {
     pub(crate) fn members_select_next(&mut self) {
-        let len = self.state.members.items.len();
-        if len == 0 {
-            return;
-        }
-        self.state.members.selected = (self.state.members.selected + 1).min(len - 1);
+        self.state.members.select_next();
     }
 
     pub(crate) fn members_select_prev(&mut self) {
-        if self.state.members.items.is_empty() {
-            return;
-        }
-        self.state.members.selected = self.state.members.selected.saturating_sub(1);
+        self.state.members.select_prev();
     }
 
     pub(crate) fn members_flow_next(&mut self) {

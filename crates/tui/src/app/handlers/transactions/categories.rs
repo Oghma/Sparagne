@@ -83,30 +83,17 @@ impl App {
 
         // Priority: cycle category first, then wallet, then flow
         if category_matches.len() > 1 {
-            self.cycle_or_init_ambiguous(
-                QuickAddAmbiguousKind::Category,
-                parsed.category.as_deref().unwrap_or(""),
-                category_matches,
-            );
+            self.cycle_or_init_ambiguous(QuickAddAmbiguousKind::Category, category_matches);
         } else if wallet_matches.len() > 1 {
-            self.cycle_or_init_ambiguous(
-                QuickAddAmbiguousKind::Wallet,
-                parsed.wallet.as_deref().unwrap_or(""),
-                wallet_matches,
-            );
+            self.cycle_or_init_ambiguous(QuickAddAmbiguousKind::Wallet, wallet_matches);
         } else if flow_matches.len() > 1 {
-            self.cycle_or_init_ambiguous(
-                QuickAddAmbiguousKind::Flow,
-                parsed.flow.as_deref().unwrap_or(""),
-                flow_matches,
-            );
+            self.cycle_or_init_ambiguous(QuickAddAmbiguousKind::Flow, flow_matches);
         }
     }
 
     fn cycle_or_init_ambiguous(
         &mut self,
         kind: QuickAddAmbiguousKind,
-        query: &str,
         options: Vec<(uuid::Uuid, String)>,
     ) {
         if let Some(amb) = &mut self.state.transactions.quick_ambiguous
@@ -118,7 +105,6 @@ impl App {
         }
 
         // Initialize new ambiguous state
-        self.state.transactions.quick_ambiguous =
-            Some(QuickAddAmbiguous::new(kind, query.to_string(), options));
+        self.state.transactions.quick_ambiguous = Some(QuickAddAmbiguous::new(kind, options));
     }
 }

@@ -4,18 +4,13 @@ use crate::text::{TextKey, t};
 
 impl App {
     pub(crate) fn wallets_select_next(&mut self) {
-        let len = wallets_visible_indices(&self.state).len();
-        if len == 0 {
-            return;
-        }
-        self.state.wallets.selected = (self.state.wallets.selected + 1).min(len - 1);
+        let count = wallets_visible_indices(&self.state).len();
+        SelectableWithCount::new(&mut self.state.wallets, count).select_next();
     }
 
     pub(crate) fn wallets_select_prev(&mut self) {
-        if wallets_visible_indices(&self.state).is_empty() {
-            return;
-        }
-        self.state.wallets.selected = self.state.wallets.selected.saturating_sub(1);
+        let count = wallets_visible_indices(&self.state).len();
+        SelectableWithCount::new(&mut self.state.wallets, count).select_prev();
     }
 
     pub(crate) fn start_wallet_create(&mut self) {
@@ -60,13 +55,8 @@ impl App {
     }
 
     pub(crate) fn toggle_wallets_show_archived(&mut self) {
-        self.state.wallets.show_archived = !self.state.wallets.show_archived;
-        // Clamp selection after toggling
-        let len = wallets_visible_indices(&self.state).len();
-        if len == 0 {
-            self.state.wallets.selected = 0;
-        } else if self.state.wallets.selected >= len {
-            self.state.wallets.selected = len - 1;
-        }
+        self.state.wallets.toggle_show_archived();
+        let count = wallets_visible_indices(&self.state).len();
+        SelectableWithCount::new(&mut self.state.wallets, count).clamp_selection();
     }
 }

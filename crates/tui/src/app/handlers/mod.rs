@@ -1,14 +1,17 @@
 mod accounts;
+mod cancel;
 mod categories;
 mod flows;
 mod forms;
 mod global_search;
 mod home;
+mod input;
 mod members;
 mod navigation;
 mod overlays;
 mod palette;
 mod search;
+mod shortcuts;
 mod stats;
 mod toast;
 mod transactions;
@@ -23,28 +26,14 @@ use super::{App, state::*};
 
 impl App {
     /// Checks if we are in Settings section showing a specific sub-tab.
-    fn is_settings_categories(&self) -> bool {
-        self.state.section == Section::Settings
-            && self.state.settings_tab == SettingsTab::Categories
-    }
-
-    fn is_settings_vault(&self) -> bool {
-        self.state.section == Section::Settings && self.state.settings_tab == SettingsTab::Vault
-    }
-
-    fn is_settings_members(&self) -> bool {
-        self.state.section == Section::Settings && self.state.settings_tab == SettingsTab::Members
-    }
-
-    fn is_settings_preferences(&self) -> bool {
-        self.state.section == Section::Settings
-            && self.state.settings_tab == SettingsTab::Preferences
+    fn is_settings_tab(&self, tab: SettingsTab) -> bool {
+        self.state.section == Section::Settings && self.state.settings_tab == tab
     }
 
     #[doc(hidden)]
     pub async fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
         let action = crate::ui::keymap::map_key(key);
-        if self.state.overlays.confirm.is_some() {
+        if self.state.overlays.has_confirm_dialog() {
             self.handle_confirm_action(action).await?;
             return Ok(());
         }
@@ -111,154 +100,7 @@ impl App {
                 self.should_quit = true;
             }
             crate::ui::keymap::AppAction::Cancel => {
-                if self.state.screen == Screen::Login {
-                    self.should_quit = true;
-                } else if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::List
-                    && self.state.transactions.visual_mode
-                {
-                    self.exit_visual_mode();
-                    return Ok(());
-                } else if self.maybe_open_discard_dialog() || self.stop_search_if_active().await? {
-                    return Ok(());
-                } else if self.state.section == Section::Transactions {
-                    match self.state.transactions.mode {
-                        TransactionsMode::Edit => {
-                            self.state.transactions.mode = TransactionsMode::Detail;
-                            self.state.transactions.form = TransactionFormState::default();
-                        }
-                        TransactionsMode::Detail => {
-                            self.state.transactions.mode = TransactionsMode::List;
-                            self.state.transactions.detail = None;
-                        }
-                        TransactionsMode::PickWallet
-                        | TransactionsMode::PickFlow
-                        | TransactionsMode::TransferPicker => {
-                            self.state.transactions.mode = TransactionsMode::List;
-                            self.state.transactions.picker_index = 0;
-                        }
-                        TransactionsMode::TransferWallet | TransactionsMode::TransferFlow => {
-                            if self.state.transactions.transfer.editing_id.is_some() {
-                                self.state.transactions.mode = TransactionsMode::Detail;
-                            } else {
-                                self.state.transactions.mode = TransactionsMode::List;
-                            }
-                            self.state.transactions.transfer = TransferFormState::default();
-                        }
-                        TransactionsMode::Form => {
-                            if self.state.transactions.form.editing_id.is_some() {
-                                self.state.transactions.mode = TransactionsMode::Detail;
-                            } else {
-                                self.state.transactions.mode = TransactionsMode::List;
-                            }
-                            self.state.transactions.form = TransactionFormState::default();
-                        }
-                        TransactionsMode::Filter => {
-                            self.state.transactions.mode = TransactionsMode::List;
-                            self.state.transactions.filter.error = None;
-                        }
-                        TransactionsMode::List => {
-                            if self.state.transactions.quick_active {
-                                self.state.transactions.quick_active = false;
-                                self.state.transactions.quick_input.clear();
-                                self.state.transactions.quick_error = None;
-                            } else {
-                                self.state.section = Section::Home;
-                            }
-                        }
-                    }
-                } else if self.state.section == Section::Accounts {
-                    match self.state.accounts_tab {
-                        AccountsTab::Sources => match self.state.wallets.mode {
-                            WalletsMode::Create | WalletsMode::Rename => {
-                                self.reset_wallet_form();
-                                self.state.wallets.mode = WalletsMode::List;
-                            }
-                            WalletsMode::Detail => {
-                                self.state.wallets.mode = WalletsMode::List;
-                                self.state.wallets.detail = WalletDetailState::default();
-                            }
-                            WalletsMode::List => {
-                                self.state.section = Section::Home;
-                            }
-                        },
-                        AccountsTab::Envelopes | AccountsTab::Goals => {
-                            match self.state.flows.mode {
-                                FlowsMode::Create | FlowsMode::Rename => {
-                                    self.reset_flow_form();
-                                    self.state.flows.mode = FlowsMode::List;
-                                }
-                                FlowsMode::Detail => {
-                                    self.state.flows.mode = FlowsMode::List;
-                                    self.state.flows.detail = FlowDetailState::default();
-                                }
-                                FlowsMode::List => {
-                                    self.state.section = Section::Home;
-                                }
-                            }
-                        }
-                    }
-                } else if self.is_settings_vault() {
-                    match self.state.vault_ui.mode {
-                        VaultMode::Create => {
-                            self.reset_vault_form();
-                            self.state.vault_ui.mode = VaultMode::View;
-                        }
-                        VaultMode::Defaults => {
-                            self.state.vault_ui.defaults = DefaultsFormState::default();
-                            self.state.vault_ui.mode = VaultMode::View;
-                        }
-                        VaultMode::Select => {
-                            self.state.vault_ui.mode = VaultMode::View;
-                        }
-                        VaultMode::View => {
-                            self.state.section = Section::Home;
-                        }
-                    }
-                } else if self.is_settings_categories() {
-                    match self.state.categories.mode {
-                        CategoriesMode::Merge => {
-                            self.state.categories.mode = CategoriesMode::List;
-                            self.state.categories.merge = CategoryMergeState::default();
-                        }
-                        CategoriesMode::Create | CategoriesMode::Rename => {
-                            self.reset_category_form();
-                            self.state.categories.mode = CategoriesMode::List;
-                        }
-                        CategoriesMode::Aliases => {
-                            if self.state.categories.aliases.focus == AliasFocus::Input
-                                && !self.state.categories.aliases.input.is_empty()
-                            {
-                                self.state.categories.aliases.input.clear();
-                                self.state.categories.aliases.error = None;
-                                self.state.categories.aliases.focus = AliasFocus::List;
-                            } else {
-                                self.state.categories.mode = CategoriesMode::List;
-                                self.state.categories.aliases = CategoryAliasState::default();
-                            }
-                        }
-                        CategoriesMode::List => {
-                            self.state.section = Section::Home;
-                        }
-                    }
-                } else if self.is_settings_members() {
-                    match self.state.members.mode {
-                        MembersMode::Form => {
-                            self.reset_member_form();
-                            self.state.members.mode = MembersMode::List;
-                        }
-                        MembersMode::List => {
-                            self.state.section = Section::Home;
-                        }
-                    }
-                } else if self.is_settings_preferences() {
-                    self.state.section = Section::Home;
-                } else if self.state.section == Section::Settings {
-                    // Default for Settings - go home
-                    self.state.section = Section::Home;
-                } else if self.state.section == Section::Analytics {
-                    self.state.section = Section::Home;
-                }
+                self.handle_cancel().await?;
             }
             crate::ui::keymap::AppAction::NextField => {
                 self.advance_focus();
@@ -276,11 +118,11 @@ impl App {
                         AccountsTab::Envelopes => self.handle_flows_submit().await?,
                         AccountsTab::Goals => {}
                     }
-                } else if self.is_settings_categories() {
+                } else if self.is_settings_tab(SettingsTab::Categories) {
                     self.handle_categories_submit().await?;
-                } else if self.is_settings_members() {
+                } else if self.is_settings_tab(SettingsTab::Members) {
                     self.handle_members_submit().await?;
-                } else if self.is_settings_vault() {
+                } else if self.is_settings_tab(SettingsTab::Vault) {
                     self.handle_vault_submit().await?;
                 } else if self.state.section == Section::Analytics {
                     self.load_stats().await?;
@@ -334,12 +176,12 @@ impl App {
                     && self.state.transactions.quick_active
                 {
                     self.state.transactions.quick_input.pop();
-                } else if self.is_settings_categories()
+                } else if self.is_settings_tab(SettingsTab::Categories)
                     && self.state.categories.mode == CategoriesMode::Aliases
                     && self.state.categories.aliases.focus == AliasFocus::Input
                 {
                     self.state.categories.aliases.input.pop();
-                } else if self.is_settings_categories()
+                } else if self.is_settings_tab(SettingsTab::Categories)
                     && matches!(
                         self.state.categories.mode,
                         CategoriesMode::Create | CategoriesMode::Rename
@@ -352,19 +194,22 @@ impl App {
                         AccountsTab::Envelopes => self.backspace_flow_form(),
                         AccountsTab::Goals => {}
                     }
-                } else if self.is_settings_members() && self.state.members.mode == MembersMode::Form
+                } else if self.is_settings_tab(SettingsTab::Members)
+                    && self.state.members.mode == MembersMode::Form
                 {
                     if self.state.members.form.focus == MemberFormField::Username {
                         self.state.members.form.username.pop();
                     }
-                } else if self.is_settings_vault() {
+                } else if self.is_settings_tab(SettingsTab::Vault) {
                     self.backspace_vault_form();
                 }
             }
             crate::ui::keymap::AppAction::Up => {
                 if self.state.screen == Screen::Home && self.state.section == Section::Home {
                     self.home_feed_select_prev();
-                } else if self.state.screen == Screen::Home && self.is_settings_members() {
+                } else if self.state.screen == Screen::Home
+                    && self.is_settings_tab(SettingsTab::Members)
+                {
                     match self.state.members.mode {
                         MembersMode::Form => {
                             if self.state.members.form.focus == MemberFormField::Role {
@@ -443,7 +288,9 @@ impl App {
                         }
                         AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
                     }
-                } else if self.state.screen == Screen::Home && self.is_settings_categories() {
+                } else if self.state.screen == Screen::Home
+                    && self.is_settings_tab(SettingsTab::Categories)
+                {
                     match self.state.categories.mode {
                         CategoriesMode::List | CategoriesMode::Create | CategoriesMode::Rename => {
                             self.categories_select_prev();
@@ -456,23 +303,27 @@ impl App {
                         }
                     }
                 } else if self.state.screen == Screen::Home
-                    && self.is_settings_vault()
+                    && self.is_settings_tab(SettingsTab::Vault)
                     && self.state.vault_ui.mode == VaultMode::Defaults
                 {
                     self.defaults_select_prev();
                 } else if self.state.screen == Screen::Home
-                    && self.is_settings_vault()
+                    && self.is_settings_tab(SettingsTab::Vault)
                     && self.state.vault_ui.mode == VaultMode::Select
                 {
                     self.vaults_select_prev();
-                } else if self.state.screen == Screen::Home && self.is_settings_preferences() {
+                } else if self.state.screen == Screen::Home
+                    && self.is_settings_tab(SettingsTab::Preferences)
+                {
                     self.state.preferences.focus = self.state.preferences.focus.prev();
                 }
             }
             crate::ui::keymap::AppAction::Down => {
                 if self.state.screen == Screen::Home && self.state.section == Section::Home {
                     self.home_feed_select_next();
-                } else if self.state.screen == Screen::Home && self.is_settings_members() {
+                } else if self.state.screen == Screen::Home
+                    && self.is_settings_tab(SettingsTab::Members)
+                {
                     match self.state.members.mode {
                         MembersMode::Form => {
                             if self.state.members.form.focus == MemberFormField::Role {
@@ -551,7 +402,9 @@ impl App {
                         }
                         AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
                     }
-                } else if self.state.screen == Screen::Home && self.is_settings_categories() {
+                } else if self.state.screen == Screen::Home
+                    && self.is_settings_tab(SettingsTab::Categories)
+                {
                     match self.state.categories.mode {
                         CategoriesMode::List | CategoriesMode::Create | CategoriesMode::Rename => {
                             self.categories_select_next();
@@ -564,22 +417,24 @@ impl App {
                         }
                     }
                 } else if self.state.screen == Screen::Home
-                    && self.is_settings_vault()
+                    && self.is_settings_tab(SettingsTab::Vault)
                     && self.state.vault_ui.mode == VaultMode::Defaults
                 {
                     self.defaults_select_next();
                 } else if self.state.screen == Screen::Home
-                    && self.is_settings_vault()
+                    && self.is_settings_tab(SettingsTab::Vault)
                     && self.state.vault_ui.mode == VaultMode::Select
                 {
                     self.vaults_select_next();
-                } else if self.state.screen == Screen::Home && self.is_settings_preferences() {
+                } else if self.state.screen == Screen::Home
+                    && self.is_settings_tab(SettingsTab::Preferences)
+                {
                     self.state.preferences.focus = self.state.preferences.focus.next();
                 }
             }
             crate::ui::keymap::AppAction::Left => {
                 if self.state.screen == Screen::Home {
-                    if self.is_settings_preferences()
+                    if self.is_settings_tab(SettingsTab::Preferences)
                         && self.state.preferences.focus == PreferencesField::Density
                     {
                         self.cycle_density_prev();
@@ -594,7 +449,7 @@ impl App {
             }
             crate::ui::keymap::AppAction::Right => {
                 if self.state.screen == Screen::Home {
-                    if self.is_settings_preferences()
+                    if self.is_settings_tab(SettingsTab::Preferences)
                         && self.state.preferences.focus == PreferencesField::Density
                     {
                         self.cycle_density_next();
@@ -611,68 +466,8 @@ impl App {
                 if self.state.screen == Screen::Login {
                     let field = self.active_field_mut();
                     field.push(ch);
-                } else {
-                    if self.is_settings_categories()
-                        && self.state.categories.mode == CategoriesMode::Aliases
-                        && self.state.categories.aliases.focus == AliasFocus::Input
-                    {
-                        self.state.categories.aliases.input.push(ch);
-                        return Ok(());
-                    }
-                    if self.is_settings_members() && self.handle_members_input(ch).await? {
-                        return Ok(());
-                    }
-                    if self.is_settings_preferences() && ch == ' ' {
-                        self.handle_preferences_toggle();
-                        return Ok(());
-                    }
-                    if self.handle_search_input(ch).await? {
-                        return Ok(());
-                    } else if self.state.section == Section::Transactions
-                        && matches!(
-                            self.state.transactions.mode,
-                            TransactionsMode::Form | TransactionsMode::Edit
-                        )
-                    {
-                        self.handle_transaction_form_input(ch);
-                        return Ok(());
-                    } else if self.state.section == Section::Transactions
-                        && matches!(
-                            self.state.transactions.mode,
-                            TransactionsMode::TransferWallet | TransactionsMode::TransferFlow
-                        )
-                    {
-                        match self.state.transactions.transfer.focus {
-                            TransferField::Amount => {
-                                self.state.transactions.transfer.amount.push(ch);
-                                return Ok(());
-                            }
-                            TransferField::Note => {
-                                self.state.transactions.transfer.note.push(ch);
-                                return Ok(());
-                            }
-                            TransferField::OccurredAt => {
-                                self.state.transactions.transfer.occurred_at.push(ch);
-                                return Ok(());
-                            }
-                            _ => {}
-                        }
-                    } else if self.state.section == Section::Transactions
-                        && self.state.transactions.mode == TransactionsMode::Filter
-                    {
-                        self.handle_filter_input(ch);
-                        return Ok(());
-                    } else if self.state.section == Section::Transactions
-                        && self.state.transactions.mode == TransactionsMode::List
-                        && self.state.transactions.quick_active
-                    {
-                        self.state.transactions.quick_input.push(ch);
-                        return Ok(());
-                    } else if self.handle_form_input(ch) {
-                        return Ok(());
-                    } else {
-                        self.handle_non_login_key(ch).await?;
-                    }
+                } else if !self.route_input(ch).await? {
+                    self.handle_non_login_key(ch).await?;
                 }
             }
             crate::ui::keymap::AppAction::None => {}

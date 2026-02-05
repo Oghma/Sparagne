@@ -293,15 +293,11 @@ impl App {
     }
 
     pub(crate) fn reset_wallet_form(&mut self) {
-        self.state.wallets.form = WalletFormState::default();
-        self.state.wallets.form.update_focus();
-        self.state.wallets.error = None;
+        self.state.wallets.reset_form();
     }
 
     pub(crate) fn reset_flow_form(&mut self) {
-        self.state.flows.form = FlowFormState::default();
-        self.state.flows.form.update_focus();
-        self.state.flows.error = None;
+        self.state.flows.reset_form();
     }
 
     pub(crate) fn reset_vault_form(&mut self) {
@@ -310,15 +306,11 @@ impl App {
     }
 
     pub(crate) fn reset_category_form(&mut self) {
-        self.state.categories.form = CategoryFormState::default();
-        self.state.categories.form.update_focus(true);
-        self.state.categories.error = None;
+        self.state.categories.reset_form();
     }
 
     pub(crate) fn reset_member_form(&mut self) {
-        self.state.members.form = MemberFormState::default();
-        self.state.members.form.update_focus();
-        self.state.members.error = None;
+        self.state.members.reset_form();
     }
 
     pub(crate) fn reset_category_aliases(&mut self) {

@@ -1,6 +1,8 @@
 use std::time::Instant;
 use uuid::Uuid;
 
+use super::selectable::SelectableList;
+
 #[derive(Debug, Default)]
 pub struct HelpState {
     pub active: bool,
@@ -43,6 +45,22 @@ pub struct CommandPaletteState {
     pub selected: usize,
     /// Most recently used commands (most recent first).
     pub mru: Vec<PaletteCommand>,
+    /// Cached filtered command count for selection bounds.
+    pub(crate) filtered_count: usize,
+}
+
+impl SelectableList for CommandPaletteState {
+    fn visible_count(&self) -> usize {
+        self.filtered_count
+    }
+
+    fn selected(&self) -> usize {
+        self.selected
+    }
+
+    fn set_selected(&mut self, idx: usize) {
+        self.selected = idx;
+    }
 }
 
 /// Maximum number of MRU commands to track.
@@ -55,6 +73,20 @@ pub struct GlobalSearchState {
     pub query: String,
     pub selected: usize,
     pub results: Vec<SearchResult>,
+}
+
+impl SelectableList for GlobalSearchState {
+    fn visible_count(&self) -> usize {
+        self.results.len()
+    }
+
+    fn selected(&self) -> usize {
+        self.selected
+    }
+
+    fn set_selected(&mut self, idx: usize) {
+        self.selected = idx;
+    }
 }
 
 /// A search result that can be navigated to.
@@ -84,16 +116,11 @@ pub struct OverlayState {
     pub(crate) grouping: Option<GroupingDialogState>,
 }
 
-#[allow(dead_code)]
 impl OverlayState {
-    /// Returns true if a confirmation dialog is currently displayed.
+    /// Returns `true` if a confirmation dialog is currently active.
+    #[must_use]
     pub fn has_confirm_dialog(&self) -> bool {
         self.confirm.is_some()
-    }
-
-    /// Returns true if an error dialog is currently displayed.
-    pub fn has_error_dialog(&self) -> bool {
-        self.error.is_some()
     }
 }
 

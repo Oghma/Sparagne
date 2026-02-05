@@ -24,21 +24,9 @@ impl Locale {
 }
 
 /// Text keys for all user-facing strings in the TUI.
-///
-/// Keys are organized by category:
-/// - Section: navigation/section names
-/// - Label: form field labels
-/// - Title: screen/modal titles
-/// - Validation: validation error messages
-/// - Empty: empty state messages
-/// - Action: button/action labels
-/// - Hint: contextual hints
-/// - Success/Error: operation feedback
-/// - Misc: other strings
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub enum TextKey {
-    // Sections (9)
+    // Sections
     SectionHome,
     SectionTransactions,
     SectionWallets,
@@ -46,113 +34,13 @@ pub enum TextKey {
     SectionCategories,
     SectionMembers,
     SectionVault,
-    SectionStats,
     SectionPreferences,
+    SectionAccounts,
+    SectionAnalytics,
+    SectionSettings,
 
-    // Form Labels (13)
-    LabelAmount,
-    LabelWallet,
-    LabelFlow,
-    LabelCategory,
-    LabelNote,
-    LabelOccurredAt,
-    LabelFrom,
-    LabelTo,
-    LabelName,
-    LabelUsername,
-    LabelRole,
-    LabelOpeningBalance,
-    LabelCap,
-
-    // Form Titles (16)
-    TitleNewExpense,
-    TitleNewIncome,
-    TitleNewRefund,
-    TitleNewTransfer,
-    TitleEditTransaction,
-    TitleNewWallet,
-    TitleEditWallet,
-    TitleNewFlow,
-    TitleEditFlow,
-    TitleNewCategory,
-    TitleEditCategory,
-    TitleNewMember,
-    TitleEditMember,
-    TitleNewVault,
-    TitleVaultDefaults,
-    TitleSelectVault,
-
-    // Validation Errors (32)
-    ValidationRequired,
-    ValidationAmountRequired,
-    ValidationAmountInvalid,
-    ValidationAmountPositive,
-    ValidationAmountNegative,
-    ValidationDateRequired,
-    ValidationDateInvalid,
-    ValidationDateInvalidTimezone,
-    ValidationLengthMin,
-    ValidationLengthMax,
-    ValidationWalletRequired,
-    ValidationFlowRequired,
-    ValidationCategoryRequired,
-    ValidationNameRequired,
-    ValidationUsernameRequired,
-    ValidationRoleRequired,
-    ValidationFromRequired,
-    ValidationToRequired,
-    ValidationTransferSameSource,
-    ValidationTransferSameDestination,
-    ValidationTransferSameElements,
-    ValidationTransferMinimumTwo,
-    ValidationWalletInvalid,
-    ValidationFlowInvalid,
-    ValidationCategoryInvalid,
-    ValidationOpeningBalanceInvalid,
-    ValidationCapInvalid,
-    ValidationCapMustBePositive,
-    ValidationOpeningBalanceNonNegative,
-    ValidationNoWalletSelected,
-    ValidationNoFlowSelected,
-    ValidationNoTransactionToVoid,
-    ValidationUnallocatedCannotRename,
-    ValidationUnallocatedCannotArchive,
-    ValidationAlreadyArchived,
-    ValidationSystemCategoryImmutable,
-
-    // Empty States (8)
-    EmptyTransactions,
-    EmptyWallets,
-    EmptyFlows,
-    EmptyCategories,
-    EmptyMembers,
-    EmptyVaults,
-    EmptyStats,
-    EmptyResults,
-
-    // Actions (12)
+    // Actions
     ActionSave,
-    ActionCancel,
-    ActionCreate,
-    ActionEdit,
-    ActionDelete,
-    ActionArchive,
-    ActionVoid,
-    ActionRefund,
-    ActionTransfer,
-    ActionConfirm,
-    ActionBack,
-    ActionRefresh,
-
-    // Hints - General (8)
-    HintPressEnter,
-    HintPressEsc,
-    HintPressTab,
-    HintSelectWithArrows,
-    HintTypeToSearch,
-    HintLoadingData,
-    HintNoSelection,
-    HintConfirmDelete,
 
     // Hints - Footer Navigation
     HintHome,
@@ -266,13 +154,7 @@ pub enum TextKey {
     StatusOnline,
     StatusOffline,
 
-    // Success Messages (24)
-    SuccessCreated,
-    SuccessUpdated,
-    SuccessDeleted,
-    SuccessArchived,
-    SuccessVoided,
-    SuccessRefreshed,
+    // Success Messages
     SuccessTransactionSaved,
     SuccessTransactionUpdated,
     SuccessTransactionVoided,
@@ -296,17 +178,15 @@ pub enum TextKey {
     SuccessDefaultsSaved,
     SuccessMergeCompleted,
     SuccessMergePreviewOk,
+    SuccessDeletedItem,
+    SuccessDeletedMultiple,
+    SuccessCategorizedTransactions,
+    SuccessDeletedWallet,
+    SuccessDeletedFlow,
 
-    // Error Messages (28)
-    ErrorGeneric,
-    ErrorNetwork,
-    ErrorNotFound,
-    ErrorUnauthorized,
+    // Error Messages
     ErrorSaving,
     ErrorUpdating,
-    ErrorDeleting,
-    ErrorArchiving,
-    ErrorRestoring,
     ErrorVoiding,
     ErrorRepeating,
     ErrorConnection,
@@ -328,47 +208,6 @@ pub enum TextKey {
     ErrorCreateVault,
     ErrorDeleteVault,
     ErrorSaveDefaults,
-    ErrorMergeCategories,
-
-    // Misc (4)
-    MiscYes,
-    MiscNo,
-    MiscAll,
-    MiscNone,
-
-    // Section Labels (Capitalized for tab bar)
-    SectionAccounts,
-    SectionAnalytics,
-    SectionSettings,
-
-    // Transfer picker
-    TransferPickerTitle,
-    TransferPickerWallet,
-    TransferPickerFlow,
-
-    // UI Improvements - Stats
-    StatsQuickActionRefresh,
-    StatsQuickActionPeriod,
-    StatsTrendExcellent,
-    StatsTrendGood,
-    StatsTrendStable,
-    StatsTrendDeclining,
-    StatsTrendCaution,
-    StatsTrendRising,
-
-    // UI Improvements - Accounts
-    AccountsWelcomeTitle,
-    AccountsWelcomeDesc,
-    AccountsEnvelopesTitle,
-    AccountsEnvelopesDesc,
-    AccountsQuickCreate,
-    AccountsCreateDetails,
-
-    // UI Improvements - Transactions
-    TransactionsFilterTypes,
-    TransactionsSyntaxHelp,
-
-    // Error Messages - API/Login
     ErrorInvalidCredentials,
     ErrorMembershipLastOwner,
     ErrorMembershipOwnerImmutable,
@@ -392,28 +231,13 @@ pub enum TextKey {
     StateCannotDetermineFlowTransfer,
 
     // UI Labels
-    UiVaultLabel,
-    UiUserLabel,
-    UiMainLabel,
-    UiFetchingVaultData,
-    UiNoData,
     UiOther,
     UiError,
-    UiConnectionError,
-    UiUnableToConnect,
     UiFailedToDeleteVault,
-    UiTypeToSearchAllData,
-    UiNoMatchingResults,
-
-    // Dialog/Modal Labels
-    DialogBulkCategorizeTitle,
-    DialogBulkCategorizeConfirm,
-    DialogBulkCategorizeCancel,
-    DialogGroupByDate,
-    DialogGroupByCategory,
-    DialogGroupByWallet,
-    DialogGroupByEnvelope,
-    DialogCancel,
+    UiNoDetailAvailable,
+    UiNoElement,
+    UiNoRecentCategories,
+    UiRecentCategories,
 
     // Prompts and Hints
     PromptEnterName,
@@ -425,7 +249,6 @@ pub enum TextKey {
     PromptAtLeastTwoCategories,
     PromptSourceCategoryInvalid,
     PromptDestinationCategoryInvalid,
-    PromptPressEnterToConfirm,
     PromptCheckConflicts,
     PromptNoShareableFlows,
     PromptNoMemberSelected,
@@ -449,7 +272,34 @@ pub enum TextKey {
     QuickAddWalletsMustBeDifferent,
     QuickAddFlowsMustBeDifferent,
 
-    // Validation Errors - Additional
+    // Validation Errors
+    ValidationRequired,
+    ValidationAmountRequired,
+    ValidationAmountInvalid,
+    ValidationAmountPositive,
+    ValidationDateRequired,
+    ValidationDateInvalid,
+    ValidationDateInvalidTimezone,
+    ValidationLengthMin,
+    ValidationLengthMax,
+    ValidationTransferSameSource,
+    ValidationTransferSameDestination,
+    ValidationTransferSameElements,
+    ValidationTransferMinimumTwo,
+    ValidationWalletInvalid,
+    ValidationFlowInvalid,
+    ValidationCategoryInvalid,
+    ValidationOpeningBalanceInvalid,
+    ValidationCapInvalid,
+    ValidationCapMustBePositive,
+    ValidationOpeningBalanceNonNegative,
+    ValidationNoWalletSelected,
+    ValidationNoFlowSelected,
+    ValidationNoTransactionToVoid,
+    ValidationUnallocatedCannotRename,
+    ValidationUnallocatedCannotArchive,
+    ValidationAlreadyArchived,
+    ValidationSystemCategoryImmutable,
     ValidationNoTransactionSelected,
     ValidationNoWalletAvailable,
     ValidationNoFlowAvailable,
@@ -462,19 +312,10 @@ pub enum TextKey {
     ValidationFlowArchived,
     ValidationSnapshotUnavailable,
 
-    // Success Messages - Additional
-    SuccessDeletedItem,
-    SuccessDeletedMultiple,
-    SuccessCategorizedTransactions,
-    SuccessDeletedWallet,
-    SuccessDeletedFlow,
-
-    // UI Labels - Additional
-    UiNoDetailAvailable,
-    UiNoElement,
-    UiNoRecentCategories,
-    UiRecentCategories,
-    UiTransactionDetail,
+    // Home screen stat cards
+    HomeCardIncome,
+    HomeCardExpenses,
+    HomeCardThisMonth,
 }
 
 /// Returns the localized string for a text key.
@@ -490,13 +331,6 @@ pub fn t(locale: Locale, key: TextKey) -> &'static str {
 ///
 /// Placeholders in the form `{name}` are replaced with the corresponding value
 /// from the `pairs` slice.
-///
-/// # Example
-///
-/// ```ignore
-/// let msg = format(Locale::It, TextKey::ValidationLengthMin, &[("min", "3")]);
-/// // "Minimo 3 caratteri"
-/// ```
 #[must_use]
 pub fn format(locale: Locale, key: TextKey, pairs: &[(&str, &str)]) -> String {
     let mut result = t(locale, key).to_string();
@@ -505,7 +339,6 @@ pub fn format(locale: Locale, key: TextKey, pairs: &[(&str, &str)]) -> String {
     }
     result
 }
-
 
 #[cfg(test)]
 mod tests {

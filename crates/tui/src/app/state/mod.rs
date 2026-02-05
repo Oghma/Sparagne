@@ -4,6 +4,7 @@ mod categories;
 mod common;
 mod flows;
 mod members;
+mod selectable;
 mod stats;
 mod transactions;
 mod vault;
@@ -13,6 +14,9 @@ pub use categories::*;
 pub use common::{MRU_LIMIT, *};
 pub use flows::*;
 pub use members::*;
+pub(crate) use selectable::{
+    HasArchiveToggle, Resettable, SelectableList, SelectableWithCount, UpdateFocus,
+};
 pub use stats::*;
 pub use transactions::*;
 pub use vault::*;

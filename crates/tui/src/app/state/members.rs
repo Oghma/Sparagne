@@ -1,5 +1,6 @@
 use api_types::membership::{MemberView, MembershipRole};
 
+use super::selectable::{Resettable, SelectableList, UpdateFocus};
 use crate::ui::forms::TextField;
 
 #[derive(Debug)]
@@ -11,6 +12,20 @@ pub struct MembersState {
     pub flow_index: usize,
     pub form: MemberFormState,
     pub error: Option<String>,
+}
+
+impl SelectableList for MembersState {
+    fn visible_count(&self) -> usize {
+        self.items.len()
+    }
+
+    fn selected(&self) -> usize {
+        self.selected
+    }
+
+    fn set_selected(&mut self, idx: usize) {
+        self.selected = idx;
+    }
 }
 
 impl Default for MembersState {
@@ -64,34 +79,33 @@ impl Default for MemberFormState {
     }
 }
 
-#[allow(dead_code)]
-impl MemberFormState {
-    /// Updates focus state on all fields based on current focus.
-    pub fn update_focus(&mut self) {
+impl UpdateFocus for MemberFormState {
+    fn update_focus(&mut self) {
         self.username.state.focused = self.focus == MemberFormField::Username;
     }
+}
 
-    /// Returns true if all fields are valid.
-    pub fn is_valid(&self) -> bool {
-        self.username.state.validation.is_valid()
+impl Resettable for MembersState {
+    type Form = MemberFormState;
+
+    fn form_mut(&mut self) -> &mut Self::Form {
+        &mut self.form
     }
 
+    fn error_mut(&mut self) -> &mut Option<String> {
+        &mut self.error
+    }
+}
+
+impl MemberFormState {
+
     /// Validates all fields and returns the first error message if any.
-    pub fn validate_all(&mut self) -> Option<String> {
+    pub(crate) fn validate_all(&mut self) -> Option<String> {
         self.username.validate();
         self.username
             .state
             .validation
             .error_message()
             .map(String::from)
-    }
-
-    /// Clears the form and resets to default state.
-    pub fn clear(&mut self) {
-        self.username.clear();
-        self.role = MembershipRole::Viewer;
-        self.focus = MemberFormField::Username;
-        self.editing = false;
-        self.update_focus();
     }
 }

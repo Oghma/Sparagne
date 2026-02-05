@@ -1,5 +1,6 @@
 use api_types::category::{CategoryAliasView, CategoryMergePreviewResponse, CategoryView};
 
+use super::selectable::{Resettable, SelectableList, UpdateFocus};
 use crate::ui::forms::TextField;
 
 #[derive(Debug)]
@@ -11,6 +12,20 @@ pub struct CategoriesState {
     pub merge: CategoryMergeState,
     pub form: CategoryFormState,
     pub aliases: CategoryAliasState,
+}
+
+impl SelectableList for CategoriesState {
+    fn visible_count(&self) -> usize {
+        self.items.len()
+    }
+
+    fn selected(&self) -> usize {
+        self.selected
+    }
+
+    fn set_selected(&mut self, idx: usize) {
+        self.selected = idx;
+    }
 }
 
 impl Default for CategoriesState {
@@ -57,27 +72,29 @@ impl Default for CategoryFormState {
     }
 }
 
-#[allow(dead_code)]
+impl UpdateFocus for CategoryFormState {
+    fn update_focus(&mut self) {
+        self.name.state.focused = true;
+    }
+}
+
+impl Resettable for CategoriesState {
+    type Form = CategoryFormState;
+
+    fn form_mut(&mut self) -> &mut Self::Form {
+        &mut self.form
+    }
+
+    fn error_mut(&mut self) -> &mut Option<String> {
+        &mut self.error
+    }
+}
+
 impl CategoryFormState {
-    /// Updates focus state on all fields.
-    pub fn update_focus(&mut self, focused: bool) {
-        self.name.state.focused = focused;
-    }
-
-    /// Returns true if all fields are valid.
-    pub fn is_valid(&self) -> bool {
-        self.name.state.validation.is_valid()
-    }
-
     /// Validates all fields and returns the first error message if any.
-    pub fn validate_all(&mut self) -> Option<String> {
+    pub(crate) fn validate_all(&mut self) -> Option<String> {
         self.name.validate();
         self.name.state.validation.error_message().map(String::from)
-    }
-
-    /// Clears the form and resets to default state.
-    pub fn clear(&mut self) {
-        self.name.clear();
     }
 }
 
@@ -89,6 +106,20 @@ pub struct CategoryAliasState {
     pub error: Option<String>,
     pub focus: AliasFocus,
     pub category_id: Option<uuid::Uuid>,
+}
+
+impl SelectableList for CategoryAliasState {
+    fn visible_count(&self) -> usize {
+        self.items.len()
+    }
+
+    fn selected(&self) -> usize {
+        self.selected
+    }
+
+    fn set_selected(&mut self, idx: usize) {
+        self.selected = idx;
+    }
 }
 
 impl Default for CategoryAliasState {
