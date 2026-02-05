@@ -1,5 +1,6 @@
 //! Amount form field with currency validation.
 
+use crate::app::TextInputField;
 use crate::validation::{AmountValidator, FieldState, ValidationResult, Validator};
 
 /// A form field for entering monetary amounts.
@@ -81,6 +82,23 @@ impl AmountField {
     /// Returns the current value of the field.
     #[must_use]
     pub fn value(&self) -> &str {
+        &self.state.value
+    }
+}
+
+impl TextInputField for AmountField {
+    fn push(&mut self, c: char) {
+        self.state.value.push(c);
+        self.state.touched = true;
+        self.validate();
+    }
+
+    fn pop(&mut self) {
+        self.state.value.pop();
+        self.validate();
+    }
+
+    fn value(&self) -> &str {
         &self.state.value
     }
 }
