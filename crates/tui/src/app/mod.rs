@@ -19,6 +19,7 @@ pub use state::*;
 
 use std::time::Duration;
 
+use chrono_tz::Tz;
 use crossterm::event::{self, Event};
 
 use crate::{
@@ -33,7 +34,8 @@ use crate::{
 pub struct App {
     config: AppConfig,
     client: Client,
-    pub state: AppState,
+    pub(crate) state: AppState,
+    tz: Tz,
     should_quit: bool,
     local_state: LocalState,
     local_state_path: String,
@@ -44,6 +46,7 @@ impl App {
         let client = Client::new(&config.base_url)?;
         let local_state_path = default_state_path().to_string();
         let local_state = LocalState::load(local_state_path.as_str())?;
+        let tz: Tz = config.timezone.parse().unwrap_or(Tz::UTC);
         let state = AppState {
             screen: Screen::Login,
             login: LoginState {
@@ -88,6 +91,7 @@ impl App {
             config,
             client,
             state,
+            tz,
             should_quit: false,
             local_state,
             local_state_path,
@@ -121,6 +125,16 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Mutable access to the application state (for integration tests).
+    pub fn state_mut(&mut self) -> &mut AppState {
+        &mut self.state
+    }
+
+    /// Read access to the application state (for integration tests).
+    pub fn state(&self) -> &AppState {
+        &self.state
     }
 
     fn tick_spinner(&mut self) {

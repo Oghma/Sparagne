@@ -109,15 +109,3 @@ pub(crate) trait Resettable {
         *self.error_mut() = None;
     }
 }
-
-/// Trait for form field types that support push/pop text input.
-pub(crate) trait TextInputField {
-    /// Appends a character to the field value.
-    fn push(&mut self, c: char);
-
-    /// Removes the last character from the field value.
-    fn pop(&mut self);
-
-    /// Returns the current field value.
-    fn value(&self) -> &str;
-}

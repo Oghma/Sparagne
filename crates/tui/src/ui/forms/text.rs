@@ -1,6 +1,5 @@
 //! Text form field with length validation.
 
-use crate::app::TextInputField;
 use crate::validation::{FieldState, LengthValidator, RequiredValidator, ValidationResult, Validator};
 
 /// A form field for entering text with optional length constraints.
@@ -99,23 +98,6 @@ impl TextField {
     /// Returns the current value of the field.
     #[must_use]
     pub fn value(&self) -> &str {
-        &self.state.value
-    }
-}
-
-impl TextInputField for TextField {
-    fn push(&mut self, c: char) {
-        self.state.value.push(c);
-        self.state.touched = true;
-        self.validate();
-    }
-
-    fn pop(&mut self) {
-        self.state.value.pop();
-        self.validate();
-    }
-
-    fn value(&self) -> &str {
         &self.state.value
     }
 }

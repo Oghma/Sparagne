@@ -24,7 +24,7 @@ pub use overlays::{
 pub use palette::{CommandPaletteState, PaletteCommand, MRU_LIMIT};
 pub use search::{GlobalSearchState, SearchResult, SearchResultKind};
 pub(crate) use selectable::{
-    HasArchiveToggle, Resettable, SelectableList, SelectableWithCount, TextInputField, UpdateFocus,
+    HasArchiveToggle, Resettable, SelectableList, SelectableWithCount, UpdateFocus,
 };
 pub use stats::*;
 pub use toast::{ToastLevel, ToastState, UndoAction};

@@ -73,10 +73,10 @@ fn sample_transaction_view() -> TransactionView {
 fn test_app() -> App {
     let mut app =
         App::new(AppConfig::default()).unwrap_or_else(|err| panic!("create test app: {err}"));
-    app.state.screen = Screen::Home;
-    app.state.section = Section::Transactions;
-    app.state.vault = Some(sample_vault());
-    app.state.snapshot = Some(sample_snapshot());
+    app.state_mut().screen = Screen::Home;
+    app.state_mut().section = Section::Transactions;
+    app.state_mut().vault = Some(sample_vault());
+    app.state_mut().snapshot = Some(sample_snapshot());
     app
 }
 
@@ -85,48 +85,48 @@ async fn transaction_form_flow() {
     let mut app = test_app();
 
     assert!(app.handle_key(key(KeyCode::Char('i'))).await.is_ok());
-    assert_eq!(app.state.transactions.mode, TransactionsMode::Form);
+    assert_eq!(app.state_mut().transactions.mode, TransactionsMode::Form);
 
     for ch in "50.00".chars() {
         assert!(app.handle_key(key(KeyCode::Char(ch))).await.is_ok());
     }
-    assert_eq!(app.state.transactions.form.amount.value(), "50.00");
+    assert_eq!(app.state_mut().transactions.form.amount.value(), "50.00");
 
     assert!(app.handle_key(key(KeyCode::Tab)).await.is_ok());
     assert_eq!(
-        app.state.transactions.form.focus,
+        app.state_mut().transactions.form.focus,
         TransactionFormField::Wallet
     );
 
     assert!(app.handle_key(key(KeyCode::Esc)).await.is_ok());
-    assert!(app.state.overlays.has_confirm_dialog());
+    assert!(app.state_mut().overlays.has_confirm_dialog());
     assert!(app.handle_key(key(KeyCode::Char('d'))).await.is_ok());
-    assert_eq!(app.state.transactions.mode, TransactionsMode::List);
+    assert_eq!(app.state_mut().transactions.mode, TransactionsMode::List);
 }
 
 #[tokio::test]
 async fn section_navigation_without_fetch() {
     let mut app = test_app();
-    app.state.transactions.items.push(sample_transaction_view());
+    app.state_mut().transactions.items.push(sample_transaction_view());
 
     assert!(app.handle_key(key(KeyCode::Char('t'))).await.is_ok());
-    assert_eq!(app.state.section, Section::Transactions);
+    assert_eq!(app.state_mut().section, Section::Transactions);
 
     assert!(app.handle_key(key(KeyCode::Char('a'))).await.is_ok());
-    assert_eq!(app.state.section, Section::Accounts);
+    assert_eq!(app.state_mut().section, Section::Accounts);
 }
 
 #[tokio::test]
 async fn list_boundary_navigation() {
     let mut app = test_app();
-    app.state.transactions.mode = TransactionsMode::List;
-    app.state.transactions.items = (0..5).map(|_| sample_transaction_view()).collect();
+    app.state_mut().transactions.mode = TransactionsMode::List;
+    app.state_mut().transactions.items = (0..5).map(|_| sample_transaction_view()).collect();
 
-    app.state.transactions.selected = 0;
+    app.state_mut().transactions.selected = 0;
     assert!(app.handle_key(key(KeyCode::Up)).await.is_ok());
-    assert_eq!(app.state.transactions.selected, 0);
+    assert_eq!(app.state_mut().transactions.selected, 0);
 
-    app.state.transactions.selected = 4;
+    app.state_mut().transactions.selected = 4;
     assert!(app.handle_key(key(KeyCode::Down)).await.is_ok());
-    assert_eq!(app.state.transactions.selected, 4);
+    assert_eq!(app.state_mut().transactions.selected, 4);
 }
