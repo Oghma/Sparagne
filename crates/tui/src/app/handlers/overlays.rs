@@ -207,69 +207,65 @@ impl App {
     }
 
     pub(crate) async fn handle_confirm_action(&mut self, action: AppAction) -> Result<()> {
-        let Some(dialog) = self.state.overlays.confirm.clone() else {
+        let Some(dialog) = self.state.overlays.confirm.take() else {
             return Ok(());
         };
 
         match action {
-            AppAction::Cancel => {
-                self.state.overlays.confirm = None;
-            }
+            AppAction::Cancel => {}
             AppAction::Submit => {
                 let action = dialog.confirm_action;
-                self.state.overlays.confirm = None;
                 self.run_confirm_action(action).await?;
             }
             AppAction::Input('d' | 'D') if dialog.kind == ConfirmDialogKind::DiscardChanges => {
                 if let Some(action) = dialog.extra_action {
-                    self.state.overlays.confirm = None;
                     self.run_confirm_action(action).await?;
+                } else {
+                    self.state.overlays.confirm = Some(dialog);
                 }
             }
-            _ => {}
+            _ => {
+                self.state.overlays.confirm = Some(dialog);
+            }
         }
 
         Ok(())
     }
 
     pub(crate) async fn handle_error_action(&mut self, action: AppAction) -> Result<()> {
-        let Some(dialog) = self.state.overlays.error.clone() else {
+        let Some(dialog) = self.state.overlays.error.take() else {
             return Ok(());
         };
 
         match action {
-            AppAction::Cancel => {
-                self.state.overlays.error = None;
-            }
+            AppAction::Cancel => {}
             AppAction::Submit => {
                 if let Some(action) = dialog.retry_action {
-                    self.state.overlays.error = None;
                     self.run_error_action(action).await?;
-                } else {
-                    self.state.overlays.error = None;
                 }
             }
             AppAction::Input('r' | 'R') => {
                 if let Some(action) = dialog.retry_action {
-                    self.state.overlays.error = None;
                     self.run_error_action(action).await?;
+                } else {
+                    self.state.overlays.error = Some(dialog);
                 }
             }
-            _ => {}
+            _ => {
+                self.state.overlays.error = Some(dialog);
+            }
         }
 
         Ok(())
     }
 
     pub(crate) async fn handle_bulk_category_action(&mut self, action: AppAction) -> Result<()> {
-        let Some(mut dialog) = self.state.overlays.bulk_category.clone() else {
+        let Some(mut dialog) = self.state.overlays.bulk_category.take() else {
             return Ok(());
         };
 
         match action {
-            AppAction::Cancel => {
-                self.state.overlays.bulk_category = None;
-            }
+            AppAction::Cancel => {}
             AppAction::Backspace => {
                 dialog.input.pop();
                 dialog.error = None;
@@ -281,23 +277,24 @@ impl App {
                 self.state.overlays.bulk_category = Some(dialog);
             }
             AppAction::Submit => {
+                self.state.overlays.bulk_category = Some(dialog);
                 self.apply_bulk_category().await?;
             }
-            _ => {}
+            _ => {
+                self.state.overlays.bulk_category = Some(dialog);
+            }
         }
 
         Ok(())
     }
 
     pub(crate) async fn handle_grouping_action(&mut self, action: AppAction) -> Result<()> {
-        let Some(mut dialog) = self.state.overlays.grouping.clone() else {
+        let Some(mut dialog) = self.state.overlays.grouping.take() else {
             return Ok(());
         };
 
         match action {
-            AppAction::Cancel => {
-                self.state.overlays.grouping = None;
-            }
+            AppAction::Cancel => {}
             AppAction::Up | AppAction::Left => {
                 dialog.selected = GroupingMode::from_index(dialog.selected).prev().index();
                 self.state.overlays.grouping = Some(dialog);
@@ -329,30 +326,27 @@ impl App {
             | AppAction::CycleAmbiguous => {
                 self.state.overlays.grouping = Some(dialog);
             }
-            AppAction::Search | AppAction::TogglePalette | AppAction::Quit => {
-                self.state.overlays.grouping = None;
-            }
+            AppAction::Search | AppAction::TogglePalette | AppAction::Quit => {}
         }
 
         Ok(())
     }
 
     async fn apply_bulk_category(&mut self) -> Result<()> {
-        let Some(dialog) = self.state.overlays.bulk_category.clone() else {
+        let Some(mut dialog) = self.state.overlays.bulk_category.take() else {
             return Ok(());
         };
 
         let category = dialog.input.trim().trim_start_matches('#').trim();
         if category.is_empty() {
-            if let Some(state_dialog) = self.state.overlays.bulk_category.as_mut() {
-                state_dialog.error = Some(t(self.state.locale, TextKey::PromptEnterCategory).to_string());
-            }
+            dialog.error = Some(t(self.state.locale, TextKey::PromptEnterCategory).to_string());
+            self.state.overlays.bulk_category = Some(dialog);
             return Ok(());
         }
 
-        self.state.overlays.bulk_category = None;
+        let category = category.to_string();
         self.finalize_pending_undo().await?;
-        self.bulk_categorize_transactions(&dialog.transaction_ids, category)
+        self.bulk_categorize_transactions(&dialog.transaction_ids, &category)
             .await?;
         Ok(())
     }

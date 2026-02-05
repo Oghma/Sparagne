@@ -149,17 +149,16 @@ impl App {
                     return Ok(());
                 }
                 let message = login_message_for_error(err, self.state.locale);
-                let detail = Some(message.clone());
                 self.state.wallets.error = Some(message.clone());
                 self.state.flows.error = Some(message.clone());
-                self.state.stats.error = Some(message);
                 self.connection_error("Errore connessione");
                 self.state.overlays.error = Some(ErrorDialogState::connection(
                     "Connection Error",
                     "Unable to connect to server.",
-                    detail,
+                    Some(message.clone()),
                     ErrorAction::RetrySnapshot,
                 ));
+                self.state.stats.error = Some(message);
             }
         }
 

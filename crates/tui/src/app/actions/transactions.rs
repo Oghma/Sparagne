@@ -74,10 +74,9 @@ impl App {
     }
 
     pub(crate) async fn load_transactions_next(&mut self) -> Result<()> {
-        if let Some(next) = self.state.transactions.next_cursor.clone() {
-            self.state
-                .transactions
-                .push_cursor(self.state.transactions.cursor.clone());
+        if let Some(next) = self.state.transactions.next_cursor.take() {
+            let prev = self.state.transactions.cursor.take();
+            self.state.transactions.push_cursor(prev);
             self.state.transactions.cursor = Some(next);
             self.load_transactions(false).await?;
         }

@@ -7,16 +7,16 @@ use api_types::error::ErrorCode;
 
 impl App {
     pub(crate) async fn expire_toast(&mut self) -> Result<()> {
-        let Some(toast) = self.state.toast.clone() else {
+        let Some(toast) = self.state.toast.take() else {
             return Ok(());
         };
         if std::time::Instant::now() < toast.expires_at {
+            self.state.toast = Some(toast);
             return Ok(());
         }
         if let Some(action) = toast.undo_action {
             self.apply_undo_expired(action).await?;
         }
-        self.state.toast = None;
         Ok(())
     }
 
@@ -73,31 +73,34 @@ impl App {
     }
 
     pub(crate) async fn finalize_pending_undo(&mut self) -> Result<()> {
-        let Some(toast) = self.state.toast.clone() else {
+        let Some(toast) = self.state.toast.take() else {
             return Ok(());
         };
         if toast.level != ToastLevel::Undo {
+            self.state.toast = Some(toast);
             return Ok(());
         }
         if let Some(action) = toast.undo_action {
             self.apply_undo_expired(action).await?;
         }
-        self.state.toast = None;
         Ok(())
     }
 
     pub(crate) async fn handle_undo_hotkey(&mut self) -> Result<bool> {
-        let Some(toast) = self.state.toast.clone() else {
-            return Ok(false);
-        };
-        if toast.level != ToastLevel::Undo {
+        let is_undo = self
+            .state
+            .toast
+            .as_ref()
+            .is_some_and(|t| t.level == ToastLevel::Undo && t.undo_action.is_some());
+        if !is_undo {
             return Ok(false);
         }
-        let Some(action) = toast.undo_action else {
-            return Ok(false);
-        };
-        self.state.toast = None;
-        self.apply_undo_action(action).await?;
+        // Safety: we just verified toast is Some with an undo action.
+        let toast = self.state.toast.take();
+        let action = toast.and_then(|t| t.undo_action);
+        if let Some(action) = action {
+            self.apply_undo_action(action).await?;
+        }
         Ok(true)
     }
 
