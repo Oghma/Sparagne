@@ -29,8 +29,7 @@ use list::render_list;
 
 /// Main entry point for wallet screen rendering.
 /// Routes to appropriate sub-views based on mode.
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     match state.wallets.mode {
         WalletsMode::Detail => {
@@ -38,15 +37,15 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(area);
-            render_list(frame, columns[0], state, &theme);
-            render_detail(frame, columns[1], state, &theme);
+            render_list(frame, columns[0], state, theme);
+            render_detail(frame, columns[1], state, theme);
         }
         WalletsMode::Create | WalletsMode::Rename | WalletsMode::List => {
-            render_list(frame, area, state, &theme)
+            render_list(frame, area, state, theme)
         }
     }
 
     if state.wallets.mode == WalletsMode::Rename {
-        render_rename_dialog(frame, area, state, &theme);
+        render_rename_dialog(frame, area, state, theme);
     }
 }

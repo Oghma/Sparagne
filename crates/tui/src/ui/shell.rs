@@ -12,8 +12,7 @@ use crate::{
     ui::{components, screens, Theme},
 };
 
-pub(crate) fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub(crate) fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     // Main layout: header, content, bottom bar
     let layout = Layout::default()
@@ -25,7 +24,7 @@ pub(crate) fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) 
         ])
         .split(area);
 
-    render_header(frame, layout[0], state, &theme);
+    render_header(frame, layout[0], state, theme);
 
     // Content area
     let content_inner = layout[1];
@@ -36,14 +35,14 @@ pub(crate) fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState) 
     );
 
     match state.section {
-        Section::Home => screens::home::render(frame, content_inner, state),
-        Section::Transactions => screens::transactions::render(frame, content_inner, state),
-        Section::Accounts => screens::accounts::render(frame, content_inner, state),
-        Section::Analytics => screens::analytics::render(frame, content_inner, state),
-        Section::Settings => screens::settings::render(frame, content_inner, state),
+        Section::Home => screens::home::render(frame, content_inner, state, theme),
+        Section::Transactions => screens::transactions::render(frame, content_inner, state, theme),
+        Section::Accounts => screens::accounts::render(frame, content_inner, state, theme),
+        Section::Analytics => screens::analytics::render(frame, content_inner, state, theme),
+        Section::Settings => screens::settings::render(frame, content_inner, state, theme),
     }
 
-    render_bottom_bar(frame, layout[2], state, &theme);
+    render_bottom_bar(frame, layout[2], state, theme);
 }
 
 fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {

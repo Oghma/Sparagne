@@ -30,8 +30,7 @@ use crate::app::FlowsMode;
 
 /// Main entry point for flows screen rendering.
 /// Routes to appropriate sub-views based on mode.
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     match state.flows.mode {
         FlowsMode::Detail => {
@@ -39,15 +38,15 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(area);
-            render_list(frame, columns[0], state, &theme);
-            render_detail(frame, columns[1], state, &theme);
+            render_list(frame, columns[0], state, theme);
+            render_detail(frame, columns[1], state, theme);
         }
         FlowsMode::Create | FlowsMode::Rename | FlowsMode::List => {
-            render_list(frame, area, state, &theme)
+            render_list(frame, area, state, theme)
         }
     }
 
     if state.flows.mode == FlowsMode::Rename {
-        render_rename_dialog(frame, area, state, &theme);
+        render_rename_dialog(frame, area, state, theme);
     }
 }

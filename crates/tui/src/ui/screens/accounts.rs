@@ -16,11 +16,10 @@ use crate::{
     },
 };
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     // Build breadcrumb based on current state
-    let breadcrumb = build_breadcrumb(state, &theme);
+    let breadcrumb = build_breadcrumb(state, theme);
     let has_breadcrumb = !breadcrumb.is_empty();
 
     let layout = Layout::default()
@@ -32,16 +31,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         ])
         .split(area);
 
-    render_tab_bar(frame, layout[0], state, &theme);
+    render_tab_bar(frame, layout[0], state, theme);
 
     if has_breadcrumb {
         frame.render_widget(Paragraph::new(Line::from(breadcrumb)), layout[1]);
     }
 
     match state.accounts_tab {
-        AccountsTab::Sources => screens::wallets::render(frame, layout[2], state),
-        AccountsTab::Envelopes => screens::flows::render(frame, layout[2], state),
-        AccountsTab::Goals => render_goals_placeholder(frame, layout[2], &theme),
+        AccountsTab::Sources => screens::wallets::render(frame, layout[2], state, theme),
+        AccountsTab::Envelopes => screens::flows::render(frame, layout[2], state, theme),
+        AccountsTab::Goals => render_goals_placeholder(frame, layout[2], theme),
     }
 }
 

@@ -11,8 +11,7 @@ use crate::{
     ui::{components::input_dialog::InputDialog, forms::FormFieldRenderer, theme::Theme},
 };
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     match state.categories.mode {
         CategoriesMode::Merge => {
@@ -20,16 +19,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Min(0), Constraint::Length(8)])
                 .split(area);
-            render_list(frame, body[0], state, &theme);
-            render_merge_info(frame, body[1], state, &theme);
+            render_list(frame, body[0], state, theme);
+            render_merge_info(frame, body[1], state, theme);
         }
         CategoriesMode::Aliases => {
             let body = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Min(0), Constraint::Length(7)])
                 .split(area);
-            render_alias_list(frame, body[0], state, &theme);
-            render_alias_input(frame, body[1], state, &theme);
+            render_alias_list(frame, body[0], state, theme);
+            render_alias_input(frame, body[1], state, theme);
         }
         CategoriesMode::Create => {
             let body = Layout::default()
@@ -40,22 +39,22 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
                     Constraint::Length(6),
                 ])
                 .split(area);
-            render_form(frame, body[0], state, &theme);
-            render_list(frame, body[1], state, &theme);
-            render_alias_preview(frame, body[2], state, &theme);
+            render_form(frame, body[0], state, theme);
+            render_list(frame, body[1], state, theme);
+            render_alias_preview(frame, body[2], state, theme);
         }
         CategoriesMode::Rename | CategoriesMode::List => {
             let body = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Min(0), Constraint::Length(6)])
                 .split(area);
-            render_list(frame, body[0], state, &theme);
-            render_alias_preview(frame, body[1], state, &theme);
+            render_list(frame, body[0], state, theme);
+            render_alias_preview(frame, body[1], state, theme);
         }
     }
 
     if state.categories.mode == CategoriesMode::Rename {
-        render_rename_dialog(frame, area, state, &theme);
+        render_rename_dialog(frame, area, state, theme);
     }
 }
 

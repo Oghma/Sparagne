@@ -12,12 +12,15 @@ use crate::{
 };
 
 /// Renders the active error dialog overlay.
-pub fn render(frame: &mut Frame<'_>, area: Rect, dialog: Option<&ErrorDialogState>) {
+pub fn render(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    dialog: Option<&ErrorDialogState>,
+    theme: &Theme,
+) {
     let Some(dialog) = dialog else {
         return;
     };
-
-    let theme = Theme::default();
     let popup = centered_rect(70, 40, area);
     frame.render_widget(Clear, popup);
 

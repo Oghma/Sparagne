@@ -34,8 +34,7 @@ fn centered_box(width: u16, height: u16, area: Rect) -> Rect {
     horizontal[1]
 }
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     // Centered login box - compact
     let box_width = 32;
@@ -76,7 +75,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         &login.username,
         false,
         username_focused,
-        &theme,
+        theme,
     );
 
     // Password field (no label)
@@ -87,7 +86,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         &login.password,
         true,
         password_focused,
-        &theme,
+        theme,
     );
 
     // Error message below the box (only shown when there's an error)

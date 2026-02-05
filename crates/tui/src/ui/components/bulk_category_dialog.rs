@@ -5,12 +5,15 @@ use crate::{
     ui::{Theme, components::input_dialog},
 };
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, dialog: Option<&BulkCategoryDialogState>) {
+pub fn render(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    dialog: Option<&BulkCategoryDialogState>,
+    theme: &Theme,
+) {
     let Some(dialog) = dialog else {
         return;
     };
-
-    let theme = Theme::default();
     let current_value = format!("{} selected", dialog.count);
     input_dialog::render(
         frame,
@@ -26,6 +29,6 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, dialog: Option<&BulkCategoryDia
             confirm_label: "Apply",
             cancel_label: "Cancel",
         },
-        &theme,
+        theme,
     );
 }

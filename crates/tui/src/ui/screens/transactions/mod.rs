@@ -40,14 +40,13 @@ use pickers::{render_scope_picker, render_transfer_form, render_transfer_picker}
 
 /// Main entry point for transaction screen rendering.
 /// Routes to appropriate sub-views based on mode.
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(4), Constraint::Min(0)])
         .split(area);
 
-    render_header(frame, layout[0], state);
+    render_header(frame, layout[0], state, theme);
     match state.transactions.mode {
         TransactionsMode::List
         | TransactionsMode::PickWallet
@@ -58,26 +57,26 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         | TransactionsMode::Filter
         | TransactionsMode::Form
         | TransactionsMode::Edit => {
-            render_list(frame, layout[1], state, &theme);
+            render_list(frame, layout[1], state, theme);
             if matches!(
                 state.transactions.mode,
                 TransactionsMode::PickWallet | TransactionsMode::PickFlow
             ) {
-                render_scope_picker(frame, layout[1], state, &theme);
+                render_scope_picker(frame, layout[1], state, theme);
             } else if state.transactions.mode == TransactionsMode::TransferPicker {
-                render_transfer_picker(frame, layout[1], state, &theme);
+                render_transfer_picker(frame, layout[1], state, theme);
             } else if matches!(
                 state.transactions.mode,
                 TransactionsMode::TransferWallet | TransactionsMode::TransferFlow
             ) {
-                render_transfer_form(frame, layout[1], state, &theme);
+                render_transfer_form(frame, layout[1], state, theme);
             } else if matches!(
                 state.transactions.mode,
                 TransactionsMode::Form | TransactionsMode::Edit
             ) {
-                render_form_overlay(frame, layout[1], state, &theme);
+                render_form_overlay(frame, layout[1], state, theme);
             } else if state.transactions.mode == TransactionsMode::Filter {
-                render_filter_overlay(frame, layout[1], state, &theme);
+                render_filter_overlay(frame, layout[1], state, theme);
             }
         }
         TransactionsMode::Detail => {
@@ -85,8 +84,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
                 .split(layout[1]);
-            render_list(frame, columns[0], state, &theme);
-            render_detail(frame, columns[1], state, &theme);
+            render_list(frame, columns[0], state, theme);
+            render_detail(frame, columns[1], state, theme);
         }
     }
 }

@@ -17,8 +17,7 @@ use crate::{
     },
 };
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -28,13 +27,13 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         ])
         .split(area);
 
-    render_tab_bar(frame, layout[0], state, &theme);
+    render_tab_bar(frame, layout[0], state, theme);
 
     match state.settings_tab {
-        SettingsTab::Categories => screens::categories::render(frame, layout[2], state),
-        SettingsTab::Vault => screens::vault::render(frame, layout[2], state),
-        SettingsTab::Members => screens::members::render(frame, layout[2], state),
-        SettingsTab::Preferences => render_preferences(frame, layout[2], state, &theme),
+        SettingsTab::Categories => screens::categories::render(frame, layout[2], state, theme),
+        SettingsTab::Vault => screens::vault::render(frame, layout[2], state, theme),
+        SettingsTab::Members => screens::members::render(frame, layout[2], state, theme),
+        SettingsTab::Preferences => render_preferences(frame, layout[2], state, theme),
     }
 }
 

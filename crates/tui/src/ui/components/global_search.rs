@@ -11,12 +11,10 @@ use crate::{
     ui::{common::highlight_matches, components::centered_rect, theme::Theme},
 };
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     if !state.global_search.active {
         return;
     }
-
-    let theme = Theme::default();
     let popup = centered_rect(60, 50, area);
 
     // Clear the background
@@ -31,9 +29,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         ])
         .split(popup);
 
-    render_input(frame, layout[0], state, &theme);
-    render_list(frame, layout[1], state, &theme);
-    render_footer(frame, layout[2], &theme);
+    render_input(frame, layout[0], state, theme);
+    render_list(frame, layout[1], state, theme);
+    render_footer(frame, layout[2], theme);
 }
 
 fn render_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {

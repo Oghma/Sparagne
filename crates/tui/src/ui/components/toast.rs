@@ -18,11 +18,10 @@ const ICON_ERROR: &str = "✗";
 const ICON_INFO: &str = "ℹ";
 const ICON_UNDO: &str = "↺";
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, toast: Option<&ToastState>) {
+pub fn render(frame: &mut Frame<'_>, area: Rect, toast: Option<&ToastState>, theme: &Theme) {
     let Some(toast) = toast else {
         return;
     };
-    let theme = Theme::default();
 
     // Get icon and color based on toast level
     let (icon, border_color, text_color) = match toast.level {
@@ -33,7 +32,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, toast: Option<&ToastState>) {
     };
 
     let undo_visual = if toast.level == ToastLevel::Undo {
-        Some(render_undo_visual(toast, &theme))
+        Some(render_undo_visual(toast, theme))
     } else {
         None
     };

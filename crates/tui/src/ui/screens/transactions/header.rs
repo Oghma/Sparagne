@@ -24,8 +24,7 @@ use crate::{
 use super::common::scope_label;
 
 /// Renders the header area with filters, search, and hints
-pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     // Determine grouping mode label
     let grouping_label = match state.transactions.grouping_mode {

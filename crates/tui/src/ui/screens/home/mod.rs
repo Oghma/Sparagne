@@ -26,16 +26,15 @@ use stats_bar::{render_stats_bar, render_stats_bar_compact};
 
 /// Main entry point for home screen rendering.
 /// Adapts layout based on terminal width.
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     // Main layout based on terminal width
     if area.width >= 100 {
-        render_large_layout(frame, area, state, &theme);
+        render_large_layout(frame, area, state, theme);
     } else if area.width >= 80 {
-        render_medium_layout(frame, area, state, &theme);
+        render_medium_layout(frame, area, state, theme);
     } else {
-        render_small_layout(frame, area, state, &theme);
+        render_small_layout(frame, area, state, theme);
     }
 }
 

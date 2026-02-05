@@ -16,12 +16,11 @@ pub fn render(
     area: Rect,
     dialog: Option<&GroupingDialogState>,
     current: GroupingMode,
+    theme: &Theme,
 ) {
     let Some(dialog) = dialog else {
         return;
     };
-
-    let theme = Theme::default();
     let popup = centered_rect(46, 38, area);
     frame.render_widget(Clear, popup);
 

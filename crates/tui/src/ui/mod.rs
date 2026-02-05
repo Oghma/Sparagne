@@ -25,10 +25,10 @@ pub fn render(frame: &mut Frame<'_>, state: &AppState) {
         area,
     );
     match state.screen {
-        crate::app::Screen::Login => screens::login::render(frame, area, state),
+        crate::app::Screen::Login => screens::login::render(frame, area, state, &theme),
         crate::app::Screen::Home => {
-            shell::render_shell(frame, area, state);
-            overlays::render_overlays(frame, area, state);
+            shell::render_shell(frame, area, state, &theme);
+            overlays::render_overlays(frame, area, state, &theme);
         }
     }
 }

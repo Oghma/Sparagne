@@ -11,8 +11,7 @@ use crate::{
     ui::{forms::FormFieldRenderer, theme::Theme},
 };
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -22,9 +21,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         ])
         .split(area);
 
-    render_list(frame, layout[0], state, &theme);
-    render_form(frame, layout[1], state, &theme);
-    render_footer(frame, layout[2], state, &theme);
+    render_list(frame, layout[0], state, theme);
+    render_form(frame, layout[1], state, theme);
+    render_footer(frame, layout[2], state, theme);
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {

@@ -3,7 +3,7 @@ use ratatui::{Frame, layout::Rect};
 
 use crate::app::AppState;
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &crate::ui::Theme) {
     // Reuse the existing stats rendering logic
-    super::stats::render(frame, area, state);
+    super::stats::render(frame, area, state, theme);
 }

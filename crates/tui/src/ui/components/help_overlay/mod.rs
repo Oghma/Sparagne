@@ -14,12 +14,10 @@ use crate::{
     ui::{components::centered_rect, theme::Theme},
 };
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     if !state.help.active {
         return;
     }
-
-    let theme = Theme::default();
     let locale = state.locale;
     let popup = centered_rect(75, 70, area);
 
@@ -35,7 +33,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         ])
         .split(popup);
 
-    header::render_header(frame, layout[0], state, locale, &theme);
-    content::render_content(frame, layout[1], state, locale, &theme);
-    footer::render_footer(frame, layout[2], locale, &theme);
+    header::render_header(frame, layout[0], state, locale, theme);
+    content::render_content(frame, layout[1], state, locale, theme);
+    footer::render_footer(frame, layout[2], locale, theme);
 }
