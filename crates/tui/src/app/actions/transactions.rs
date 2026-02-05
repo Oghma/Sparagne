@@ -41,8 +41,6 @@ impl App {
         let res = self
             .client
             .transactions_list(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 payload,
             )
             .await;
@@ -111,8 +109,6 @@ impl App {
         let res = self
             .client
             .transaction_detail(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 TransactionGet {
                     vault_id: vault_id.to_string(),
                     id: selected.id,
@@ -157,8 +153,6 @@ impl App {
         let res = self
             .client
             .transaction_detail(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 TransactionGet {
                     vault_id: vault_id.to_string(),
                     id: transaction_id,
@@ -199,8 +193,6 @@ impl App {
         let res = self
             .client
             .transaction_void(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 detail.transaction.id,
                 TransactionVoid {
                     vault_id: vault_id.to_string(),
@@ -247,8 +239,6 @@ impl App {
                 last_flow_id = flow_id;
                 self.client
                     .income_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
                         IncomeNew {
                             vault_id: vault_id.to_string(),
                             amount_minor: detail.transaction.amount_minor,
@@ -268,8 +258,6 @@ impl App {
                 last_flow_id = flow_id;
                 self.client
                     .expense_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
                         ExpenseNew {
                             vault_id: vault_id.to_string(),
                             amount_minor: detail.transaction.amount_minor,
@@ -289,8 +277,6 @@ impl App {
                 last_flow_id = flow_id;
                 self.client
                     .refund_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
                         Refund {
                             vault_id: vault_id.to_string(),
                             amount_minor: detail.transaction.amount_minor,
@@ -309,8 +295,6 @@ impl App {
                 let (from_wallet_id, to_wallet_id) = extract_wallet_transfer(detail, self.state.locale)?;
                 self.client
                     .transfer_wallet_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
                         TransferWalletNew {
                             vault_id: vault_id.to_string(),
                             amount_minor: detail.transaction.amount_minor,
@@ -327,8 +311,6 @@ impl App {
                 let (from_flow_id, to_flow_id) = extract_flow_transfer(detail, self.state.locale)?;
                 self.client
                     .transfer_flow_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
                         TransferFlowNew {
                             vault_id: vault_id.to_string(),
                             amount_minor: detail.transaction.amount_minor,

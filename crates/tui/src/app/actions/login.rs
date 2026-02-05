@@ -23,16 +23,18 @@ impl App {
             return Ok(());
         }
 
+        self.client.set_credentials(username.to_string(), password.to_string());
+
         match self
             .client
-            .vault_get(username, password, &vault_payload)
+            .vault_get(&vault_payload)
             .await
         {
             Ok(vault) => {
                 self.state.vault = Some(vault);
                 match self
                     .client
-                    .vault_snapshot(username, password, &vault_payload)
+                    .vault_snapshot(&vault_payload)
                     .await
                 {
                     Ok(snapshot) => {

@@ -42,6 +42,7 @@ pub enum ClientError {
 pub struct Client {
     base_url: Url,
     http: reqwest::Client,
+    credentials: Option<(String, String)>,
 }
 
 impl Client {
@@ -52,7 +53,22 @@ impl Client {
         Ok(Self {
             base_url,
             http: reqwest::Client::new(),
+            credentials: None,
         })
+    }
+
+    /// Store credentials for subsequent requests
+    pub(crate) fn set_credentials(&mut self, username: String, password: String) {
+        self.credentials = Some((username, password));
+    }
+
+    /// Apply stored basic-auth credentials to a request builder
+    fn auth(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        if let Some((username, password)) = &self.credentials {
+            req.basic_auth(username, Some(password))
+        } else {
+            req
+        }
     }
 }
 

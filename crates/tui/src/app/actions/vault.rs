@@ -18,10 +18,7 @@ impl App {
     pub(crate) async fn load_vault_list(&mut self) -> Result<()> {
         let res = self
             .client
-            .vault_list(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-            )
+            .vault_list()
             .await;
 
         match res {
@@ -159,8 +156,6 @@ impl App {
         let res = self
             .client
             .vault_new(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 VaultNew {
                     name: name.to_string(),
                     currency: Some(api_types::Currency::Eur),
@@ -191,11 +186,7 @@ impl App {
         let vault_id = self.current_vault_id()?;
         let res = self
             .client
-            .vault_delete(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-                vault_id.as_str(),
-            )
+            .vault_delete(vault_id.as_str())
             .await;
 
         match res {

@@ -1,7 +1,5 @@
 use super::super::*;
 
-use std::str::FromStr;
-
 use crate::{
     app::{
         errors::login_message_for_error,
@@ -24,8 +22,7 @@ impl App {
     ) -> std::result::Result<DateTime<FixedOffset>, String> {
         let naive = chrono::NaiveDateTime::parse_from_str(input.trim(), "%Y-%m-%d %H:%M")
             .map_err(|_| t(self.state.locale, TextKey::ValidationDateInvalid).to_string())?;
-        let tz = Tz::from_str(self.config.timezone.as_str()).unwrap_or(Tz::UTC);
-        let localized = tz.from_local_datetime(&naive);
+        let localized = self.tz.from_local_datetime(&naive);
         let dt: DateTime<Tz> = match localized {
             chrono::LocalResult::Single(dt) => dt,
             chrono::LocalResult::Ambiguous(dt, _) => dt,
@@ -38,9 +35,8 @@ impl App {
     }
 
     pub(crate) fn now_in_timezone(&self) -> DateTime<FixedOffset> {
-        let tz = Tz::from_str(self.config.timezone.as_str()).unwrap_or(Tz::UTC);
         let now = Utc::now();
-        let local = tz.from_utc_datetime(&now.naive_utc());
+        let local = self.tz.from_utc_datetime(&now.naive_utc());
         let offset = local.offset().fix();
         local.with_timezone(&offset)
     }
@@ -54,11 +50,7 @@ impl App {
 
         let res = self
             .client
-            .stats_get(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-                payload,
-            )
+            .stats_get(payload)
             .await;
 
         match res {
@@ -102,11 +94,7 @@ impl App {
 
             let res = self
                 .client
-                .transactions_list(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
-                    payload,
-                )
+                .transactions_list(payload)
                 .await;
 
             match res {
@@ -139,11 +127,10 @@ impl App {
         use api_types::transaction::TransactionKind;
         use std::collections::HashMap;
 
-        let tz = Tz::from_str(self.config.timezone.as_str()).unwrap_or(Tz::UTC);
         let start_day = (to - chrono::Duration::days(29))
-            .with_timezone(&tz)
+            .with_timezone(&self.tz)
             .date_naive();
-        let end_day = to.with_timezone(&tz).date_naive();
+        let end_day = to.with_timezone(&self.tz).date_naive();
         let days_count = (end_day - start_day).num_days().max(0) as usize + 1;
         let mut daily_net = vec![0i64; days_count];
 
@@ -158,7 +145,7 @@ impl App {
                 continue;
             }
 
-            let local = tx.occurred_at.with_timezone(&tz);
+            let local = tx.occurred_at.with_timezone(&self.tz);
             let date = local.date_naive();
             let year = date.year();
             let month = date.month();
@@ -255,8 +242,7 @@ impl App {
         months
     }
     pub(crate) fn format_local_datetime(&self, dt: DateTime<FixedOffset>) -> String {
-        let tz = Tz::from_str(self.config.timezone.as_str()).unwrap_or(Tz::UTC);
-        dt.with_timezone(&tz).format("%Y-%m-%d %H:%M").to_string()
+        dt.with_timezone(&self.tz).format("%Y-%m-%d %H:%M").to_string()
     }
 
     pub(crate) fn current_currency(&self) -> engine::Currency {

@@ -35,11 +35,7 @@ impl App {
         };
         let res = self
             .client
-            .transactions_list(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-                payload,
-            )
+            .transactions_list(payload)
             .await;
 
         match res {
@@ -64,8 +60,6 @@ impl App {
         let res = self
             .client
             .cash_flow_get(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 api_types::cash_flow::CashFlowGet {
                     vault_id,
                     id: Some(flow_id),
@@ -145,8 +139,6 @@ impl App {
         let res = self
             .client
             .flow_new(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 FlowNew {
                     vault_id,
                     name,
@@ -203,8 +195,6 @@ impl App {
         let res = self
             .client
             .flow_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 flow_id,
                 FlowUpdate {
                     vault_id: self.current_vault_id()?,
@@ -245,8 +235,6 @@ impl App {
         let res = self
             .client
             .flow_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 flow.id,
                 FlowUpdate {
                     vault_id: self.current_vault_id()?,
@@ -297,8 +285,6 @@ impl App {
         let res = self
             .client
             .flow_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 flow_id,
                 FlowUpdate {
                     vault_id: self.current_vault_id()?,
@@ -331,8 +317,6 @@ impl App {
         let res = self
             .client
             .flow_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 flow_id,
                 FlowUpdate {
                     vault_id: self.current_vault_id()?,

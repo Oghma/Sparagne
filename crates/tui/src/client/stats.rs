@@ -7,8 +7,6 @@ use super::{Client, ClientError, handle_json};
 impl Client {
     pub async fn stats_get(
         &self,
-        username: &str,
-        password: &str,
         payload: Vault,
     ) -> std::result::Result<Statistic, ClientError> {
         let endpoint = self
@@ -17,9 +15,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .post(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.post(endpoint))
             .json(&payload)
             .send()
             .await

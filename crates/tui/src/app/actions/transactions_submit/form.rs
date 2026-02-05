@@ -104,8 +104,6 @@ impl App {
             let res = self
                 .client
                 .transaction_update(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
                     transaction_id,
                     TransactionUpdate {
                         vault_id: vault_id.to_string(),
@@ -145,8 +143,6 @@ impl App {
                 TransactionKind::Income => {
                     self.client
                         .income_new(
-                            self.state.login.username.as_str(),
-                            self.state.login.password.as_str(),
                             IncomeNew {
                                 vault_id: vault_id.to_string(),
                                 amount_minor,
@@ -164,8 +160,6 @@ impl App {
                 TransactionKind::Expense => {
                     self.client
                         .expense_new(
-                            self.state.login.username.as_str(),
-                            self.state.login.password.as_str(),
                             ExpenseNew {
                                 vault_id: vault_id.to_string(),
                                 amount_minor,
@@ -183,8 +177,6 @@ impl App {
                 TransactionKind::Refund => {
                     self.client
                         .refund_new(
-                            self.state.login.username.as_str(),
-                            self.state.login.password.as_str(),
                             Refund {
                                 vault_id: vault_id.to_string(),
                                 amount_minor,

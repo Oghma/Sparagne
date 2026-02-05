@@ -33,8 +33,6 @@ impl App {
             let res = self
                 .client
                 .transaction_void(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
                     transaction_id,
                     TransactionVoid {
                         vault_id: vault_id.clone(),
@@ -110,8 +108,6 @@ impl App {
             let res = self
                 .client
                 .transaction_update(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
                     transaction_id,
                     TransactionUpdate {
                         vault_id: vault_id.to_string(),

@@ -2,7 +2,7 @@ use super::super::*;
 
 use api_types::{
     flow::FlowSharedList,
-    transaction::{TransactionGet, TransactionKind, TransactionList},
+    transaction::{TransactionKind, TransactionList},
     vault::{FlowView, Vault, VaultSnapshot},
 };
 use chrono::Duration as ChronoDuration;
@@ -11,7 +11,6 @@ use crate::{
     app::{
         errors::login_message_for_error,
         ordering::push_recent_id,
-        resolve::extract_wallet_flow,
     },
     client::ClientError,
     error::{AppError, Result},
@@ -48,7 +47,7 @@ impl App {
         let from = to - ChronoDuration::days(RECENTS_WINDOW_DAYS);
 
         let payload = TransactionList {
-            vault_id: vault_id.clone(),
+            vault_id,
             flow_id: self.state.transactions.scope_flow_id,
             wallet_id: self.state.transactions.scope_wallet_id,
             limit: Some(RECENTS_FETCH_LIMIT),
@@ -66,11 +65,7 @@ impl App {
 
         let res = self
             .client
-            .transactions_list(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-                payload,
-            )
+            .transactions_list(payload)
             .await;
 
         let Ok(list) = res else {
@@ -100,25 +95,10 @@ impl App {
             if recent_wallets.len() >= RECENTS_LIMIT && recent_flows.len() >= RECENTS_LIMIT {
                 break;
             }
-            let detail = self
-                .client
-                .transaction_detail(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
-                    TransactionGet {
-                        vault_id: vault_id.clone(),
-                        id: tx.id,
-                    },
-                )
-                .await;
-            let Ok(detail) = detail else {
-                continue;
-            };
-            let (wallet_id, flow_id) = extract_wallet_flow(&detail);
-            if let Some(wallet_id) = wallet_id {
+            if let Some(wallet_id) = tx.wallet_id {
                 push_recent_id(&mut recent_wallets, wallet_id, RECENTS_LIMIT);
             }
-            if let Some(flow_id) = flow_id {
+            if let Some(flow_id) = tx.flow_id {
                 push_recent_id(&mut recent_flows, flow_id, RECENTS_LIMIT);
             }
         }
@@ -136,11 +116,7 @@ impl App {
         let vault_payload = self.current_vault_payload();
         let res = self
             .client
-            .vault_snapshot(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-                &vault_payload,
-            )
+            .vault_snapshot(&vault_payload)
             .await;
 
         match res {
@@ -250,8 +226,6 @@ impl App {
         let res = self
             .client
             .flows_shared_list(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 FlowSharedList {
                     vault_id: vault_id.to_string(),
                     include_archived: Some(true),

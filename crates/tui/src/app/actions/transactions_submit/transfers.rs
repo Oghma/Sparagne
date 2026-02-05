@@ -62,8 +62,6 @@ impl App {
             let res = self
                 .client
                 .transaction_update(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
                     transaction_id,
                     TransactionUpdate {
                         vault_id,
@@ -101,8 +99,6 @@ impl App {
             let res = self
                 .client
                 .transfer_wallet_new(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
                     TransferWalletNew {
                         vault_id,
                         amount_minor: amount,
@@ -193,8 +189,6 @@ impl App {
             let res = self
                 .client
                 .transaction_update(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
                     transaction_id,
                     TransactionUpdate {
                         vault_id,
@@ -232,8 +226,6 @@ impl App {
             let res = self
                 .client
                 .transfer_flow_new(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
                     TransferFlowNew {
                         vault_id,
                         amount_minor: amount,

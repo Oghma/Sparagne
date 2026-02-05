@@ -34,11 +34,7 @@ impl App {
         };
         let res = self
             .client
-            .transactions_list(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
-                payload,
-            )
+            .transactions_list(payload)
             .await;
 
         match res {
@@ -91,8 +87,6 @@ impl App {
         let res = self
             .client
             .wallet_new(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 WalletNew {
                     vault_id,
                     name: name.to_string(),
@@ -142,8 +136,6 @@ impl App {
         let res = self
             .client
             .wallet_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 wallet_id,
                 WalletUpdate {
                     vault_id: self.current_vault_id()?,
@@ -179,8 +171,6 @@ impl App {
         let res = self
             .client
             .wallet_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 wallet.id,
                 WalletUpdate {
                     vault_id: self.current_vault_id()?,
@@ -225,8 +215,6 @@ impl App {
         let res = self
             .client
             .wallet_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 wallet_id,
                 WalletUpdate {
                     vault_id: self.current_vault_id()?,
@@ -258,8 +246,6 @@ impl App {
         let res = self
             .client
             .wallet_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 wallet_id,
                 WalletUpdate {
                     vault_id: self.current_vault_id()?,

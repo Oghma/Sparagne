@@ -130,8 +130,6 @@ impl App {
             QuickAddKind::Income => {
                 self.client
                     .income_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
                         IncomeNew {
                             vault_id: vault_id.clone(),
                             amount_minor: parsed.amount_minor,
@@ -149,8 +147,6 @@ impl App {
             QuickAddKind::Expense => {
                 self.client
                     .expense_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
                         ExpenseNew {
                             vault_id: vault_id.clone(),
                             amount_minor: parsed.amount_minor,
@@ -168,8 +164,6 @@ impl App {
             QuickAddKind::Refund => {
                 self.client
                     .refund_new(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
                         Refund {
                             vault_id: vault_id.clone(),
                             amount_minor: parsed.amount_minor,
@@ -247,8 +241,6 @@ impl App {
         let res = self
             .client
             .transfer_wallet_new(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 TransferWalletNew {
                     vault_id: vault_id.to_string(),
                     amount_minor: parsed.amount_minor,
@@ -317,8 +309,6 @@ impl App {
         let res = self
             .client
             .transfer_flow_new(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 TransferFlowNew {
                     vault_id: vault_id.to_string(),
                     amount_minor: parsed.amount_minor,

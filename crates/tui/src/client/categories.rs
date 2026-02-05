@@ -12,8 +12,6 @@ use super::{Client, ClientError, handle_empty, handle_json};
 impl Client {
     pub async fn categories_list(
         &self,
-        username: &str,
-        password: &str,
         payload: CategoryList,
     ) -> std::result::Result<CategoryListResponse, ClientError> {
         let endpoint = self
@@ -22,9 +20,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .post(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.post(endpoint))
             .json(&payload)
             .send()
             .await
@@ -35,8 +31,6 @@ impl Client {
 
     pub async fn categories_create(
         &self,
-        username: &str,
-        password: &str,
         payload: CategoryCreate,
     ) -> std::result::Result<CategoryCreated, ClientError> {
         let endpoint = self
@@ -45,9 +39,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .post(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.post(endpoint))
             .json(&payload)
             .send()
             .await
@@ -58,8 +50,6 @@ impl Client {
 
     pub async fn categories_update(
         &self,
-        username: &str,
-        password: &str,
         category_id: uuid::Uuid,
         payload: CategoryUpdate,
     ) -> std::result::Result<CategoryView, ClientError> {
@@ -69,9 +59,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .patch(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.patch(endpoint))
             .json(&payload)
             .send()
             .await
@@ -82,8 +70,6 @@ impl Client {
 
     pub async fn category_aliases_list(
         &self,
-        username: &str,
-        password: &str,
         category_id: uuid::Uuid,
         payload: CategoryAliasList,
     ) -> std::result::Result<CategoryAliasListResponse, ClientError> {
@@ -93,9 +79,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .post(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.post(endpoint))
             .json(&payload)
             .send()
             .await
@@ -106,8 +90,6 @@ impl Client {
 
     pub async fn category_alias_create(
         &self,
-        username: &str,
-        password: &str,
         category_id: uuid::Uuid,
         payload: CategoryAliasCreate,
     ) -> std::result::Result<CategoryAliasCreated, ClientError> {
@@ -117,9 +99,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .post(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.post(endpoint))
             .json(&payload)
             .send()
             .await
@@ -130,8 +110,6 @@ impl Client {
 
     pub async fn category_alias_delete(
         &self,
-        username: &str,
-        password: &str,
         category_id: uuid::Uuid,
         alias_id: uuid::Uuid,
         payload: CategoryAliasDelete,
@@ -142,9 +120,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .delete(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.delete(endpoint))
             .json(&payload)
             .send()
             .await
@@ -155,8 +131,6 @@ impl Client {
 
     pub async fn categories_merge_preview(
         &self,
-        username: &str,
-        password: &str,
         category_id: uuid::Uuid,
         payload: CategoryMergePreview,
     ) -> std::result::Result<CategoryMergePreviewResponse, ClientError> {
@@ -166,9 +140,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .post(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.post(endpoint))
             .json(&payload)
             .send()
             .await
@@ -179,8 +151,6 @@ impl Client {
 
     pub async fn categories_merge(
         &self,
-        username: &str,
-        password: &str,
         category_id: uuid::Uuid,
         payload: CategoryMerge,
     ) -> std::result::Result<CategoryView, ClientError> {
@@ -190,9 +160,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .post(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.post(endpoint))
             .json(&payload)
             .send()
             .await

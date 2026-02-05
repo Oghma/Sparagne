@@ -9,8 +9,6 @@ impl App {
         let res = self
             .client
             .categories_list(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 api_types::category::CategoryList {
                     vault_id,
                     include_archived: Some(true),
@@ -75,8 +73,6 @@ impl App {
             let res = self
                 .client
                 .categories_merge_preview(
-                    self.state.login.username.as_str(),
-                    self.state.login.password.as_str(),
                     from_id,
                     api_types::category::CategoryMergePreview {
                         vault_id,
@@ -120,8 +116,6 @@ impl App {
         let res = self
             .client
             .categories_merge(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 from_id,
                 api_types::category::CategoryMerge {
                     vault_id,
@@ -167,8 +161,6 @@ impl App {
         let res = self
             .client
             .category_aliases_list(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 category_id,
                 api_types::category::CategoryAliasList { vault_id },
             )
@@ -217,8 +209,6 @@ impl App {
         let res = self
             .client
             .category_alias_create(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 category_id,
                 api_types::category::CategoryAliasCreate {
                     vault_id: self.current_vault_id()?,
@@ -266,8 +256,6 @@ impl App {
         let res = self
             .client
             .category_alias_delete(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 category_id,
                 alias_id,
                 api_types::category::CategoryAliasDelete {
@@ -310,8 +298,6 @@ impl App {
         let res = self
             .client
             .categories_create(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 CategoryCreate {
                     vault_id,
                     name: name.to_string(),
@@ -365,8 +351,6 @@ impl App {
         let res = self
             .client
             .categories_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 category_id,
                 CategoryUpdate {
                     vault_id: self.current_vault_id()?,
@@ -408,8 +392,6 @@ impl App {
         let res = self
             .client
             .categories_update(
-                self.state.login.username.as_str(),
-                self.state.login.password.as_str(),
                 category.id,
                 CategoryUpdate {
                     vault_id: self.current_vault_id()?,

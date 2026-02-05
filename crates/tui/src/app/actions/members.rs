@@ -27,11 +27,7 @@ impl App {
         let res = match self.state.members.scope {
             MembersScope::Vault => {
                 self.client
-                    .vault_members_list(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
-                        vault_id.as_str(),
-                    )
+                    .vault_members_list(vault_id.as_str())
                     .await
             }
             MembersScope::Flow => {
@@ -44,10 +40,7 @@ impl App {
                     return Ok(());
                 };
                 self.client
-                    .flow_members_list(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
-                        vault_id.as_str(),
+                    .flow_members_list(vault_id.as_str(),
                         flow_id,
                     )
                     .await
@@ -125,10 +118,7 @@ impl App {
         let res = match self.state.members.scope {
             MembersScope::Vault => {
                 self.client
-                    .vault_member_upsert(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
-                        vault_id.as_str(),
+                    .vault_member_upsert(vault_id.as_str(),
                         payload,
                     )
                     .await
@@ -140,10 +130,7 @@ impl App {
                     return Ok(());
                 };
                 self.client
-                    .flow_member_upsert(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
-                        vault_id.as_str(),
+                    .flow_member_upsert(vault_id.as_str(),
                         flow_id,
                         payload,
                     )
@@ -179,12 +166,7 @@ impl App {
         let res = match self.state.members.scope {
             MembersScope::Vault => {
                 self.client
-                    .vault_member_remove(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
-                        vault_id.as_str(),
-                        member.username.as_str(),
-                    )
+                    .vault_member_remove(vault_id.as_str(), member.username.as_str())
                     .await
             }
             MembersScope::Flow => {
@@ -194,10 +176,7 @@ impl App {
                     return Ok(());
                 };
                 self.client
-                    .flow_member_remove(
-                        self.state.login.username.as_str(),
-                        self.state.login.password.as_str(),
-                        vault_id.as_str(),
+                    .flow_member_remove(vault_id.as_str(),
                         flow_id,
                         member.username.as_str(),
                     )

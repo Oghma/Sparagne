@@ -7,8 +7,6 @@ use super::{Client, ClientError, handle_empty, handle_json};
 impl Client {
     pub async fn wallet_new(
         &self,
-        username: &str,
-        password: &str,
         payload: WalletNew,
     ) -> std::result::Result<WalletCreated, ClientError> {
         let endpoint = self
@@ -17,9 +15,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .post(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.post(endpoint))
             .json(&payload)
             .send()
             .await
@@ -30,8 +26,6 @@ impl Client {
 
     pub async fn wallet_update(
         &self,
-        username: &str,
-        password: &str,
         wallet_id: uuid::Uuid,
         payload: WalletUpdate,
     ) -> std::result::Result<(), ClientError> {
@@ -41,9 +35,7 @@ impl Client {
             .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
 
         let res = self
-            .http
-            .patch(endpoint)
-            .basic_auth(username, Some(password))
+            .auth(self.http.patch(endpoint))
             .json(&payload)
             .send()
             .await
