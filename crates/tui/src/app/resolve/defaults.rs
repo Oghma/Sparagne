@@ -5,6 +5,120 @@ use crate::{
     text::{Locale, TextKey, t},
 };
 
+/// Returns default wallet and flow **names** based on state preferences.
+///
+/// Priority order for wallet:
+/// 1. Scope wallet (if set in transactions state)
+/// 2. Default wallet (if set globally)
+/// 3. Most recent wallet
+/// 4. First active wallet
+///
+/// Priority order for flow:
+/// 1. Scope flow (if set in transactions state)
+/// 2. Default flow (if set globally)
+/// 3. Most recent flow
+/// 4. Last used flow (last_flow_id)
+/// 5. Unallocated flow
+pub(crate) fn default_wallet_flow_names(state: &AppState) -> (String, String) {
+    let snapshot = match state.snapshot.as_ref() {
+        Some(snapshot) => snapshot,
+        None => return ("-".to_string(), "-".to_string()),
+    };
+
+    let wallet_name = state
+        .transactions
+        .scope_wallet_id
+        .and_then(|wallet_id| {
+            snapshot
+                .wallets
+                .iter()
+                .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+                .map(|wallet| wallet.name.clone())
+        })
+        .or_else(|| {
+            state.default_wallet_id.and_then(|wallet_id| {
+                snapshot
+                    .wallets
+                    .iter()
+                    .find(|wallet| wallet.id == wallet_id && !wallet.archived)
+                    .map(|wallet| wallet.name.clone())
+            })
+        })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_wallet_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .wallets
+                        .iter()
+                        .find(|wallet| wallet.id == *recent_id && !wallet.archived)
+                        .map(|wallet| wallet.name.clone())
+                })
+        })
+        .or_else(|| {
+            snapshot
+                .wallets
+                .iter()
+                .find(|wallet| !wallet.archived)
+                .map(|wallet| wallet.name.clone())
+        })
+        .unwrap_or_else(|| "-".to_string());
+
+    let flow_name = state
+        .transactions
+        .scope_flow_id
+        .and_then(|flow_id| {
+            snapshot
+                .flows
+                .iter()
+                .find(|flow| flow.id == flow_id && !flow.archived)
+                .map(|flow| flow.name.clone())
+        })
+        .or_else(|| {
+            state.default_flow_id.and_then(|flow_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id && !flow.archived)
+                    .map(|flow| flow.name.clone())
+            })
+        })
+        .or_else(|| {
+            state
+                .transactions
+                .recent_flow_ids
+                .iter()
+                .find_map(|recent_id| {
+                    snapshot
+                        .flows
+                        .iter()
+                        .find(|flow| flow.id == *recent_id && !flow.archived)
+                        .map(|flow| flow.name.clone())
+                })
+        })
+        .or_else(|| {
+            state.last_flow_id.and_then(|flow_id| {
+                snapshot
+                    .flows
+                    .iter()
+                    .find(|flow| flow.id == flow_id && !flow.archived)
+                    .map(|flow| flow.name.clone())
+            })
+        })
+        .or_else(|| {
+            snapshot
+                .flows
+                .iter()
+                .find(|flow| flow.is_unallocated)
+                .map(|flow| flow.name.clone())
+        })
+        .unwrap_or_else(|| "Non in flow".to_string());
+
+    (wallet_name, flow_name)
+}
+
 /// Returns default wallet and flow for operations.
 ///
 /// Priority order for wallet:

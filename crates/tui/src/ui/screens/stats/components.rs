@@ -227,37 +227,8 @@ pub fn get_category_icon(category: &str) -> &'static str {
 // `get_currency` is provided by `crate::ui::common`.
 pub(crate) use crate::ui::common::get_currency;
 
-/// Calculate percentage change between last two values in a series.
-pub fn percentage_change(series: &[(String, i64)]) -> Option<f64> {
-    if series.len() < 2 {
-        return None;
-    }
-    let (_, prev) = series[series.len() - 2];
-    let (_, current) = series[series.len() - 1];
-    if prev == 0 {
-        return None;
-    }
-    Some(((current - prev) as f64 / prev.abs() as f64) * 100.0)
-}
-
-/// Calculate net change from income and expense trends.
-pub fn calculate_net_change(income_trend: &[(String, i64)], expense_trend: &[(String, i64)]) -> Option<f64> {
-    if income_trend.len() < 2 || expense_trend.len() < 2 {
-        return None;
-    }
-    let prev_income = income_trend[income_trend.len() - 2].1;
-    let curr_income = income_trend[income_trend.len() - 1].1;
-    let prev_expense = expense_trend[expense_trend.len() - 2].1;
-    let curr_expense = expense_trend[expense_trend.len() - 1].1;
-
-    let prev_net = prev_income - prev_expense;
-    let curr_net = curr_income - curr_expense;
-
-    if prev_net == 0 {
-        return None;
-    }
-    Some(((curr_net - prev_net) as f64 / prev_net.abs() as f64) * 100.0)
-}
+// Re-export from app layer where the business logic now lives.
+pub(crate) use crate::app::{calculate_net_change, percentage_change};
 
 /// Format MoM subtitle with arrow indicator.
 pub fn format_mom_subtitle(change: Option<f64>, _positive_is_good: bool) -> String {
