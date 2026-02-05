@@ -12,12 +12,15 @@ use ratatui::{
     style::{Modifier, Style},
     text::Span,
 };
-use uuid::Uuid;
 
 use crate::{
     app::{AppState, GroupingMode},
     ui::theme::Theme,
 };
+
+// Re-export consolidated functions so existing `super::common::X` imports
+// in sibling modules continue to work.
+pub(crate) use crate::ui::common::{format_date_label, map_currency, resolve_flow_name, resolve_wallet_name};
 
 /// Returns the scope label for the header (e.g., "All", "Wallet: Main", "Flow: Income")
 pub fn scope_label(state: &AppState) -> String {
@@ -124,40 +127,6 @@ pub fn group_total_span(total_minor: i64, currency: Currency, theme: &Theme) -> 
     )
 }
 
-/// Converts API currency to engine currency
-pub fn map_currency(currency: &api_types::Currency) -> Currency {
-    match currency {
-        api_types::Currency::Eur => Currency::Eur,
-    }
-}
-
-/// Resolves a wallet name from its ID
-pub fn resolve_wallet_name(state: &AppState, wallet_id: Uuid) -> String {
-    state
-        .snapshot
-        .as_ref()
-        .and_then(|snap| {
-            snap.wallets
-                .iter()
-                .find(|wallet| wallet.id == wallet_id)
-                .map(|wallet| wallet.name.clone())
-        })
-        .unwrap_or_else(|| wallet_id.to_string())
-}
-
-/// Resolves a flow name from its ID
-pub fn resolve_flow_name(state: &AppState, flow_id: Uuid) -> String {
-    state
-        .snapshot
-        .as_ref()
-        .and_then(|snap| {
-            snap.flows
-                .iter()
-                .find(|flow| flow.id == flow_id)
-                .map(|flow| flow.name.clone())
-        })
-        .unwrap_or_else(|| flow_id.to_string())
-}
 
 /// Returns recent wallet names
 pub fn recent_wallet_names(state: &AppState) -> Vec<String> {
@@ -349,23 +318,6 @@ pub fn grouping_key_label(
     }
 }
 
-/// Formats a date label with special handling for today/yesterday
-pub fn format_date_label(
-    date: chrono::NaiveDate,
-    today: chrono::NaiveDate,
-    yesterday: chrono::NaiveDate,
-) -> String {
-    use chrono::Datelike;
-    if date == today {
-        "Today".to_string()
-    } else if date == yesterday {
-        "Yesterday".to_string()
-    } else if date.year() == today.year() {
-        date.format("%A, %d %b").to_string()
-    } else {
-        date.format("%d %b %Y").to_string()
-    }
-}
 
 /// Builds a recents summary line for the form footer
 pub fn recents_line(state: &AppState) -> Option<String> {

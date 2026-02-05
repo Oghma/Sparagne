@@ -6,7 +6,10 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph},
 };
 
-use crate::{app::AppState, ui::theme::Theme};
+use crate::{
+    app::AppState,
+    ui::{common::{resolve_flow_name, resolve_wallet_name}, theme::Theme},
+};
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let vault_name = display_vault_name(state).unwrap_or_else(|| "Main".to_string());
@@ -158,28 +161,3 @@ fn display_vault_name(state: &AppState) -> Option<String> {
     }
 }
 
-fn resolve_wallet_name(state: &AppState, wallet_id: uuid::Uuid) -> String {
-    state
-        .snapshot
-        .as_ref()
-        .and_then(|snap| {
-            snap.wallets
-                .iter()
-                .find(|wallet| wallet.id == wallet_id)
-                .map(|wallet| wallet.name.clone())
-        })
-        .unwrap_or_else(|| wallet_id.to_string())
-}
-
-fn resolve_flow_name(state: &AppState, flow_id: uuid::Uuid) -> String {
-    state
-        .snapshot
-        .as_ref()
-        .and_then(|snap| {
-            snap.flows
-                .iter()
-                .find(|flow| flow.id == flow_id)
-                .map(|flow| flow.name.clone())
-        })
-        .unwrap_or_else(|| flow_id.to_string())
-}

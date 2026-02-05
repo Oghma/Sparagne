@@ -9,6 +9,7 @@ use ratatui::{
 use crate::{
     app::{AccountsTab, AppState, FlowsMode, WalletsMode},
     ui::{
+        common::inset,
         components::{card::Card, tab_bar, tab_bar::TabBarItem},
         screens,
         theme::Theme,
@@ -166,15 +167,3 @@ fn render_goals_placeholder(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     frame.render_widget(paragraph, inner);
 }
 
-fn inset(area: Rect, horizontal: u16, vertical: u16) -> Rect {
-    let x = area.x.saturating_add(horizontal);
-    let y = area.y.saturating_add(vertical);
-    let width = area.width.saturating_sub(horizontal.saturating_mul(2));
-    let height = area.height.saturating_sub(vertical.saturating_mul(2));
-    Rect {
-        x,
-        y,
-        width,
-        height,
-    }
-}

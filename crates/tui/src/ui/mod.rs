@@ -1,3 +1,4 @@
+pub(crate) mod common;
 pub mod components;
 pub mod forms;
 pub mod keymap;

@@ -13,6 +13,7 @@ use engine::{Currency, Money};
 use crate::{
     app::AppState,
     ui::{
+        common::truncate,
         components::{
             card::StatCard,
             charts::{BarStyle, ascii_bar_styled, compute_percentage, percentage_bar},
@@ -177,7 +178,7 @@ pub fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                     Style::default().fg(theme.text_muted),
                 ),
                 Span::styled(
-                    format!("{:<14}", truncate_string(category, 13)),
+                    format!("{:<14}", truncate(category, 13)),
                     Style::default().fg(theme.text),
                 ),
                 Span::styled(
@@ -223,22 +224,8 @@ pub fn get_category_icon(category: &str) -> &'static str {
     }
 }
 
-/// Get the currency from the app state.
-pub fn get_currency(state: &AppState) -> Currency {
-    state
-        .vault
-        .as_ref()
-        .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
-        .unwrap_or(Currency::Eur)
-}
-
-/// Map API currency type to engine currency type.
-pub fn map_currency(currency: &api_types::Currency) -> Currency {
-    match currency {
-        api_types::Currency::Eur => Currency::Eur,
-    }
-}
+// `get_currency` is provided by `crate::ui::common`.
+pub(crate) use crate::ui::common::get_currency;
 
 /// Calculate percentage change between last two values in a series.
 pub fn percentage_change(series: &[(String, i64)]) -> Option<f64> {
@@ -330,14 +317,6 @@ pub fn offset_month(year: i32, month: u32, offset: i32) -> (i32, u32) {
     (new_year, new_month as u32)
 }
 
-/// Truncate a string to a maximum length with ellipsis.
-pub fn truncate_string(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}…", &s[..max_len - 1])
-    }
-}
 
 /// Build a visual timeline showing recent months with the current one highlighted.
 pub fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a> {

@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, SearchResultKind},
-    ui::{components::centered_rect, theme::Theme},
+    ui::{common::highlight_matches, components::centered_rect, theme::Theme},
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
@@ -197,51 +197,3 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     );
 }
 
-/// Highlight matching characters in the label
-fn highlight_matches<'a>(label: &str, query: &str, theme: &Theme) -> Vec<Span<'a>> {
-    if query.is_empty() {
-        return vec![Span::styled(
-            label.to_string(),
-            Style::default().fg(theme.text),
-        )];
-    }
-
-    let query_lower = query.to_lowercase();
-    let label_lower = label.to_lowercase();
-
-    let mut spans = Vec::new();
-    let mut last_end = 0;
-    let mut query_chars = query_lower.chars().peekable();
-
-    for (i, c) in label_lower.char_indices() {
-        if query_chars.peek() == Some(&c) {
-            // Add non-matching prefix
-            if i > last_end {
-                spans.push(Span::styled(
-                    label[last_end..i].to_string(),
-                    Style::default().fg(theme.text),
-                ));
-            }
-            // Add matching character with highlight
-            let char_end = i + c.len_utf8();
-            spans.push(Span::styled(
-                label[i..char_end].to_string(),
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            ));
-            last_end = char_end;
-            query_chars.next();
-        }
-    }
-
-    // Add remaining non-matching suffix
-    if last_end < label.len() {
-        spans.push(Span::styled(
-            label[last_end..].to_string(),
-            Style::default().fg(theme.text),
-        ));
-    }
-
-    spans
-}

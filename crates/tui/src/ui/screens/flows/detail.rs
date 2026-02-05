@@ -11,20 +11,14 @@ use ratatui::{
 use api_types::transaction::TransactionKind;
 use engine::{Currency, Money};
 
-use super::common::map_currency;
 use crate::{
     app::AppState,
     ui::{
+        common::{ICON_EXPENSE, ICON_INCOME, ICON_REFUND, ICON_TRANSFER, map_currency},
         components::money::{flow_cap_line_gauge, styled_amount_no_sign, styled_progress_bar},
         theme::Theme,
     },
 };
-
-/// Transaction type icons
-const ICON_INCOME: &str = "▲";
-const ICON_EXPENSE: &str = "▼";
-const ICON_REFUND: &str = "↩";
-const ICON_TRANSFER: &str = "⇄";
 
 /// Render the flow detail panel.
 pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {

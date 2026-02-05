@@ -9,12 +9,13 @@ use ratatui::{
 };
 
 use api_types::transaction::TransactionKind;
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Local, NaiveDate};
 use engine::{Currency, Money};
 
 use crate::{
     app::{AppState, FlowAlertSeverity, HomeFeedItem, home_feed_items},
     ui::{
+        common::format_date_label,
         components::{card::Card, money::styled_amount_emoji},
         theme::Theme,
     },
@@ -213,14 +214,3 @@ fn home_insight(state: &AppState, currency: Currency) -> Option<String> {
     }
 }
 
-fn format_date_label(date: NaiveDate, today: NaiveDate, yesterday: NaiveDate) -> String {
-    if date == today {
-        "Today".to_string()
-    } else if date == yesterday {
-        "Yesterday".to_string()
-    } else if date.year() == today.year() {
-        date.format("%d %b").to_string()
-    } else {
-        date.format("%d %b %Y").to_string()
-    }
-}

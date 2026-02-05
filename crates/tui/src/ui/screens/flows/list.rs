@@ -10,11 +10,10 @@ use ratatui::{
 
 use engine::{Currency, Money};
 
-use super::common::map_currency;
 use super::form::render_form;
 use crate::{
     app::{AppState, FlowsMode, flows_visible_indices},
-    ui::{components::loading, theme::Theme},
+    ui::{common::{map_currency, progress_bar}, components::loading, theme::Theme},
 };
 
 /// Render the flow list view.
@@ -319,15 +318,3 @@ fn render_stats_header(
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-/// Create a simple text progress bar.
-fn progress_bar(value: i64, max: i64, width: usize) -> String {
-    if max == 0 {
-        return "░".repeat(width);
-    }
-
-    let ratio = (value.unsigned_abs() as f64 / max.unsigned_abs() as f64).clamp(0.0, 1.0);
-    let filled = ((ratio * width as f64) as usize).min(width);
-    let empty = width.saturating_sub(filled);
-
-    format!("{}{}", "█".repeat(filled), "░".repeat(empty))
-}
