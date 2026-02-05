@@ -35,7 +35,6 @@ pub fn map_key(key: KeyEvent) -> AppAction {
     }
 
     match key.code {
-        KeyCode::Char('q') => AppAction::Quit,
         KeyCode::Esc => AppAction::Cancel,
         KeyCode::Tab => AppAction::NextField,
         KeyCode::Enter => AppAction::Submit,

@@ -19,6 +19,11 @@ impl App {
     /// This is the main entry point for non-login keyboard handling.
     pub(crate) async fn handle_non_login_key(&mut self, ch: char) -> Result<()> {
         match ch {
+            // Quit
+            'q' => {
+                self.should_quit = true;
+                Ok(())
+            }
             // Main section navigation
             'h' | 'H' | 't' | 'a' | 'y' | 'Y' | 's' | 'S' => {
                 self.handle_navigation_shortcut(ch).await
