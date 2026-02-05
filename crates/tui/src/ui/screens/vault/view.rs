@@ -1,0 +1,185 @@
+use ratatui::{
+    Frame,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Paragraph},
+};
+
+use crate::{app::AppState, ui::theme::Theme};
+
+pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let vault_name = display_vault_name(state).unwrap_or_else(|| "Main".to_string());
+    let vault_id = state
+        .vault
+        .as_ref()
+        .and_then(|v| v.id.as_deref())
+        .unwrap_or("-");
+    let currency = state
+        .vault
+        .as_ref()
+        .and_then(|v| v.currency.as_ref())
+        .map(|c| format!("{c:?}"))
+        .unwrap_or_else(|| "EUR".to_string());
+    let (wallets_count, flows_count) = state
+        .snapshot
+        .as_ref()
+        .map(|snap| (snap.wallets.len(), snap.flows.len()))
+        .unwrap_or((0, 0));
+
+    let default_wallet_name = state
+        .default_wallet_id
+        .map(|id| resolve_wallet_name(state, id))
+        .unwrap_or_else(|| "None".to_string());
+    let default_flow_name = state
+        .default_flow_id
+        .map(|id| resolve_flow_name(state, id))
+        .unwrap_or_else(|| "None".to_string());
+
+    let block = Block::default()
+        .title(Span::styled(
+            format!(" 🏦 {} ", vault_name),
+            Style::default().fg(theme.accent),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.border_focused));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let info_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // ID
+            Constraint::Length(1), // Currency
+            Constraint::Length(1), // Wallets/Flows
+            Constraint::Length(1), // Spacer
+            Constraint::Length(1), // Defaults header
+            Constraint::Length(1), // Default wallet
+            Constraint::Length(1), // Default flow
+            Constraint::Min(0),    // Error/confirmation
+        ])
+        .split(inner);
+
+    // Vault ID
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  ID          ", Style::default().fg(theme.text_muted)),
+            Span::styled(vault_id.to_string(), Style::default().fg(theme.text)),
+        ])),
+        info_layout[0],
+    );
+
+    // Currency
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Currency    ", Style::default().fg(theme.text_muted)),
+            Span::styled(currency, Style::default().fg(theme.text)),
+        ])),
+        info_layout[1],
+    );
+
+    // Wallets and Flows count
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Wallets     ", Style::default().fg(theme.text_muted)),
+            Span::styled(wallets_count.to_string(), Style::default().fg(theme.text)),
+            Span::raw("    "),
+            Span::styled("Flows  ", Style::default().fg(theme.text_muted)),
+            Span::styled(flows_count.to_string(), Style::default().fg(theme.text)),
+        ])),
+        info_layout[2],
+    );
+
+    // Defaults header
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![Span::styled(
+            "  Quick Defaults",
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )])),
+        info_layout[4],
+    );
+
+    // Default wallet
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Default Wallet  ", Style::default().fg(theme.text_muted)),
+            Span::styled(
+                default_wallet_name,
+                if state.default_wallet_id.is_some() {
+                    Style::default().fg(theme.text)
+                } else {
+                    Style::default().fg(theme.text_muted)
+                },
+            ),
+        ])),
+        info_layout[5],
+    );
+
+    // Default flow
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Default Flow    ", Style::default().fg(theme.text_muted)),
+            Span::styled(
+                default_flow_name,
+                if state.default_flow_id.is_some() {
+                    Style::default().fg(theme.text)
+                } else {
+                    Style::default().fg(theme.text_muted)
+                },
+            ),
+        ])),
+        info_layout[6],
+    );
+
+    // Error or confirmation
+    if let Some(err) = state.vault_ui.error.as_ref() {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("  ✗ ", Style::default().fg(theme.negative)),
+                Span::styled(err.clone(), Style::default().fg(theme.negative)),
+            ])),
+            info_layout[7],
+        );
+    }
+}
+
+fn display_vault_name(state: &AppState) -> Option<String> {
+    let vault = state.vault.as_ref()?;
+    let name = vault.name.as_deref()?;
+    let owner = vault.owner.as_deref();
+    let username = state.login.username.trim();
+
+    match owner {
+        Some(owner) if !owner.is_empty() && owner != username => Some(format!("{name} ({owner})")),
+        _ => Some(name.to_string()),
+    }
+}
+
+fn resolve_wallet_name(state: &AppState, wallet_id: uuid::Uuid) -> String {
+    state
+        .snapshot
+        .as_ref()
+        .and_then(|snap| {
+            snap.wallets
+                .iter()
+                .find(|wallet| wallet.id == wallet_id)
+                .map(|wallet| wallet.name.clone())
+        })
+        .unwrap_or_else(|| wallet_id.to_string())
+}
+
+fn resolve_flow_name(state: &AppState, flow_id: uuid::Uuid) -> String {
+    state
+        .snapshot
+        .as_ref()
+        .and_then(|snap| {
+            snap.flows
+                .iter()
+                .find(|flow| flow.id == flow_id)
+                .map(|flow| flow.name.clone())
+        })
+        .unwrap_or_else(|| flow_id.to_string())
+}
