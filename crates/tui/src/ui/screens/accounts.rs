@@ -49,7 +49,7 @@ fn build_breadcrumb<'a>(state: &AppState, theme: &Theme) -> Vec<Span<'a>> {
 
     match state.accounts_tab {
         AccountsTab::Sources => {
-            crumbs.push(Span::styled(" Accounts", Style::default().fg(theme.dim)));
+            crumbs.push(Span::styled(" Accounts", Style::default().fg(theme.text_muted)));
             crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
             crumbs.push(Span::styled("Sources", Style::default().fg(theme.text_muted)));
 
@@ -79,7 +79,7 @@ fn build_breadcrumb<'a>(state: &AppState, theme: &Theme) -> Vec<Span<'a>> {
             }
         }
         AccountsTab::Envelopes => {
-            crumbs.push(Span::styled(" Accounts", Style::default().fg(theme.dim)));
+            crumbs.push(Span::styled(" Accounts", Style::default().fg(theme.text_muted)));
             crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
             crumbs.push(Span::styled("Envelopes", Style::default().fg(theme.text_muted)));
 
@@ -109,7 +109,7 @@ fn build_breadcrumb<'a>(state: &AppState, theme: &Theme) -> Vec<Span<'a>> {
             }
         }
         AccountsTab::Goals => {
-            crumbs.push(Span::styled(" Accounts", Style::default().fg(theme.dim)));
+            crumbs.push(Span::styled(" Accounts", Style::default().fg(theme.text_muted)));
             crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
             crumbs.push(Span::styled("Goals", Style::default().fg(theme.text_muted)));
         }

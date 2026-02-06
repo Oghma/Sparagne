@@ -185,7 +185,7 @@ fn render_bottom_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         Style::default().fg(theme.positive)
     } else {
         Style::default()
-            .fg(theme.error)
+            .fg(theme.negative)
             .add_modifier(Modifier::BOLD)
     };
     let conn_msg = state.connection.message.as_deref().unwrap_or_default();

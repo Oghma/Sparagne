@@ -31,7 +31,7 @@ pub fn render_bar_chart(
         .bar_gap(1)
         .bar_style(Style::default().fg(theme.accent))
         .value_style(Style::default().fg(theme.text).add_modifier(Modifier::BOLD))
-        .label_style(Style::default().fg(theme.dim));
+        .label_style(Style::default().fg(theme.text_muted));
 
     if title.is_empty() {
         frame.render_widget(chart, area);
@@ -66,7 +66,7 @@ pub fn render_pie_chart(
     }
 
     if total == 0 || inner.width < 4 || inner.height < 3 {
-        let empty = Paragraph::new(Span::styled("No data", Style::default().fg(theme.dim)))
+        let empty = Paragraph::new(Span::styled("No data", Style::default().fg(theme.text_muted)))
             .alignment(Alignment::Center);
         frame.render_widget(empty, inner);
         return;

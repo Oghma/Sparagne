@@ -104,7 +104,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
             frame.render_widget(
                 Paragraph::new(Span::styled(
                     message.as_str(),
-                    Style::default().fg(theme.error),
+                    Style::default().fg(theme.negative),
                 ))
                 .wrap(Wrap { trim: true })
                 .alignment(Alignment::Center),

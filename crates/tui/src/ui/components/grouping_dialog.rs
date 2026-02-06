@@ -65,7 +65,7 @@ pub fn render(
             ];
             if *mode == current {
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled("current", Style::default().fg(theme.dim)));
+                spans.push(Span::styled("current", Style::default().fg(theme.text_muted)));
             }
             ListItem::new(Line::from(spans))
         })

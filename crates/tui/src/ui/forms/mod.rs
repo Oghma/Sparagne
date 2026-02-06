@@ -47,14 +47,14 @@ impl FormFieldRenderer {
 
         // Add required indicator
         if state.required {
-            spans.insert(1, Span::styled("* ", Style::default().fg(theme.error)));
+            spans.insert(1, Span::styled("* ", Style::default().fg(theme.negative)));
         }
 
         // Add validation status indicator
         if state.touched {
             let (icon, color) = match &state.validation {
                 ValidationResult::Valid => ("✓", theme.positive),
-                ValidationResult::Invalid(_) => ("✗", theme.error),
+                ValidationResult::Invalid(_) => ("✗", theme.negative),
             };
             spans.push(Span::raw(" "));
             spans.push(Span::styled(icon.to_string(), Style::default().fg(color)));
@@ -62,7 +62,7 @@ impl FormFieldRenderer {
             // Show error message
             if let ValidationResult::Invalid(msg) = &state.validation {
                 spans.push(Span::raw(" "));
-                spans.push(Span::styled(msg.clone(), Style::default().fg(theme.error)));
+                spans.push(Span::styled(msg.clone(), Style::default().fg(theme.negative)));
             }
         }
 

@@ -12,6 +12,7 @@ use engine::{Currency, Money};
 
 use crate::{
     app::AppState,
+    text::{TextKey, t},
     ui::{
         common::truncate,
         components::{
@@ -52,7 +53,7 @@ pub fn render_stat_row(
 
     // Label
     frame.render_widget(
-        Paragraph::new(Span::styled(row.label, Style::default().fg(theme.dim))),
+        Paragraph::new(Span::styled(row.label, Style::default().fg(theme.text_muted))),
         cols[0],
     );
 
@@ -104,24 +105,26 @@ pub fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
         ])
         .split(area);
 
+    let locale = state.locale;
+
     // Income StatCard with MoM trend
     let income_formatted = Money::new(income).format(currency);
-    let income_subtitle = format_mom_subtitle(income_change, true);
-    StatCard::new("Total Income", income_formatted, theme)
+    let income_subtitle = format_mom_subtitle(income_change, true, locale);
+    StatCard::new(t(locale, TextKey::StatsTotalIncome), income_formatted, theme)
         .subtitle(&income_subtitle)
         .render(frame, cols[0]);
 
     // Expenses StatCard with MoM trend
     let expenses_formatted = Money::new(-expenses).format(currency);
-    let expense_subtitle = format_mom_subtitle(expense_change, false);
-    StatCard::new("Total Expenses", expenses_formatted, theme)
+    let expense_subtitle = format_mom_subtitle(expense_change, false, locale);
+    StatCard::new(t(locale, TextKey::StatsTotalExpenses), expenses_formatted, theme)
         .subtitle(&expense_subtitle)
         .render(frame, cols[1]);
 
     // Net Balance StatCard with MoM trend
     let net_formatted = Money::new(net).format(currency);
-    let net_subtitle = format_mom_subtitle(net_change, true);
-    StatCard::new("Net Balance", net_formatted, theme)
+    let net_subtitle = format_mom_subtitle(net_change, true, locale);
+    StatCard::new(t(locale, TextKey::StatsNetBalance), net_formatted, theme)
         .subtitle(&net_subtitle)
         .render(frame, cols[2]);
 }
@@ -130,7 +133,7 @@ pub fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
 pub fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     use crate::ui::components::card::Card;
 
-    let card = Card::new("Category Breakdown", theme);
+    let card = Card::new(t(state.locale, TextKey::StatsCategoryBreakdown), theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
@@ -171,7 +174,7 @@ pub fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState,
             Line::from(vec![
                 Span::styled(
                     format!("{}. ", idx + 1),
-                    Style::default().fg(theme.dim),
+                    Style::default().fg(theme.text_muted),
                 ),
                 Span::styled(
                     format!("{icon} "),
@@ -187,7 +190,7 @@ pub fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                 ),
                 Span::raw(" "),
                 Span::styled(bar, Style::default().fg(theme.negative)),
-                Span::styled(format!(" {:>2}%", pct), Style::default().fg(theme.dim)),
+                Span::styled(format!(" {:>2}%", pct), Style::default().fg(theme.text_muted)),
                 alert,
             ])
         })
@@ -231,14 +234,14 @@ pub(crate) use crate::ui::common::get_currency;
 pub(crate) use crate::app::{calculate_net_change, percentage_change};
 
 /// Format MoM subtitle with arrow indicator.
-pub fn format_mom_subtitle(change: Option<f64>, _positive_is_good: bool) -> String {
+pub fn format_mom_subtitle(change: Option<f64>, _positive_is_good: bool, locale: crate::text::Locale) -> String {
     match change {
         Some(pct) => {
             let arrow = if pct > 0.0 { "↑" } else if pct < 0.0 { "↓" } else { "→" };
             let sign = if pct > 0.0 { "+" } else { "" };
-            format!("{arrow} {sign}{:.0}% MoM", pct)
+            format!("{arrow} {sign}{:.0}% {}", pct, t(locale, TextKey::StatsMoM))
         }
-        None => "This month".to_string(),
+        None => t(locale, TextKey::StatsThisMonth).to_string(),
     }
 }
 
@@ -282,7 +285,7 @@ pub fn month_short_name(month: u32) -> &'static str {
 
 /// Calculate year/month with offset.
 pub fn offset_month(year: i32, month: u32, offset: i32) -> (i32, u32) {
-    let total_months = (year * 12) as i32 + (month as i32 - 1) + offset;
+    let total_months = year * 12 + (month as i32 - 1) + offset;
     let new_year = total_months / 12;
     let new_month = (total_months % 12 + 12) % 12 + 1;
     (new_year, new_month as u32)
@@ -327,7 +330,7 @@ pub fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a
         } else {
             spans.push(Span::styled(
                 format!("[{short_name}]"),
-                Style::default().fg(theme.dim),
+                Style::default().fg(theme.text_muted),
             ));
         }
     }
@@ -362,7 +365,7 @@ pub fn trend_status_badge(change: Option<f64>, positive_is_good: bool, theme: &T
                 ("GOOD", theme.positive)
             }
         }
-        None => ("N/A", theme.dim),
+        None => ("N/A", theme.text_muted),
     }
 }
 

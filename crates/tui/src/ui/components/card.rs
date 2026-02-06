@@ -101,7 +101,7 @@ impl<'a> StatCard<'a> {
         if let Some(sub) = &self.subtitle {
             lines.push(ratatui::text::Line::from(Span::styled(
                 sub.clone(),
-                Style::default().fg(self.theme.dim),
+                Style::default().fg(self.theme.text_muted),
             )));
         }
 

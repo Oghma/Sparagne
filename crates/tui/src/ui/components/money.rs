@@ -219,7 +219,7 @@ pub fn styled_progress_bar(
                 theme.negative
             }
         }
-        _ => theme.dim,
+        _ => theme.text_muted,
     };
 
     Span::styled(bar, Style::default().fg(color))

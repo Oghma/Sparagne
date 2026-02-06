@@ -23,24 +23,27 @@ use ratatui::{
 
 use crate::{
     app::AppState,
+    text::{TextKey, t},
     ui::{components::card::Card, theme::Theme},
 };
 
 /// Main render function for the stats screen.
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
 
     // Show error state if stats loading failed
     if let Some(error) = &state.stats.error {
-        let card = Card::new("Stats", theme);
+        let card = Card::new(t(locale, TextKey::StatsTitle), theme);
         let inner = card.inner(area);
         card.render_frame(frame, area);
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(error.as_str(), Style::default().fg(theme.error)),
-                Span::raw(" Press "),
+                Span::styled(error.as_str(), Style::default().fg(theme.negative)),
+                Span::raw(" "),
+                Span::styled(t(locale, TextKey::StatsNoData), Style::default().fg(theme.text)),
                 Span::styled("r", Style::default().fg(theme.accent)),
-                Span::raw(" to refresh."),
+                Span::styled(t(locale, TextKey::StatsRefreshHint), Style::default().fg(theme.text)),
             ]))
             .alignment(Alignment::Center),
             inner,
@@ -50,15 +53,15 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
 
     // Show empty state if no data
     if state.stats.data.is_none() {
-        let card = Card::new("Stats", theme);
+        let card = Card::new(t(locale, TextKey::StatsTitle), theme);
         let inner = card.inner(area);
         card.render_frame(frame, area);
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::raw("No data. Press "),
+                Span::styled(t(locale, TextKey::StatsNoData), Style::default().fg(theme.text)),
                 Span::styled("r", Style::default().fg(theme.accent)),
-                Span::raw(" to refresh."),
+                Span::styled(t(locale, TextKey::StatsRefreshHint), Style::default().fg(theme.text)),
             ]))
             .alignment(Alignment::Center),
             inner,

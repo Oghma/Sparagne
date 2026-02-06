@@ -1,11 +1,11 @@
-/// Transaction form rendering (create/edit).
-///
-/// Displays:
-/// - Form fields (amount, wallet, flow, category, note, when)
-/// - Field validation and focus states
-/// - Wallet and flow picker lists
-/// - Recent categories list
-/// - Keyboard hints
+//! Transaction form rendering (create/edit).
+//!
+//! Displays:
+//! - Form fields (amount, wallet, flow, category, note, when)
+//! - Field validation and focus states
+//! - Wallet and flow picker lists
+//! - Recent categories list
+//! - Keyboard hints
 
 use api_types::{
     transaction::TransactionKind,
@@ -71,34 +71,35 @@ pub fn render_form_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
         form.occurred_at.value.trim().to_string()
     };
 
+    let locale = state.locale;
     let is_edit = form.editing_id.is_some();
     let title = match form.kind {
         TransactionKind::Income => {
             if is_edit {
-                "Edit Income"
+                t(locale, TextKey::FormEditIncome)
             } else {
-                "New Income"
+                t(locale, TextKey::FormNewIncome)
             }
         }
         TransactionKind::Expense => {
             if is_edit {
-                "Edit Expense"
+                t(locale, TextKey::FormEditExpense)
             } else {
-                "New Expense"
+                t(locale, TextKey::FormNewExpense)
             }
         }
         TransactionKind::Refund => {
             if is_edit {
-                "Edit Refund"
+                t(locale, TextKey::FormEditRefund)
             } else {
-                "New Refund"
+                t(locale, TextKey::FormNewRefund)
             }
         }
         TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
             if is_edit {
-                "Edit Transaction"
+                t(locale, TextKey::FormEditTransaction)
             } else {
-                "New Transaction"
+                t(locale, TextKey::FormNewTransaction)
             }
         }
     };
@@ -130,66 +131,67 @@ fn render_form_fields(
 ) {
     let form = &state.transactions.form;
 
+    let locale = state.locale;
     let mut lines = vec![
         render_form_field(
-            "Amount",
+            t(locale, TextKey::FormAmount),
             form.amount.value(),
             form.focus == TransactionFormField::Amount,
-            "Enter numerical amount (required)",
+            t(locale, TextKey::FormHelperAmount),
             theme,
         ),
         render_form_field(
-            "Wallet",
+            t(locale, TextKey::FormWallet),
             wallet_name,
             form.focus == TransactionFormField::Wallet,
-            "Source/destination wallet",
+            t(locale, TextKey::FormHelperWallet),
             theme,
         ),
         render_form_field(
-            "Flow",
+            t(locale, TextKey::FormFlow),
             flow_name,
             form.focus == TransactionFormField::Flow,
-            "Envelope/budget allocation",
+            t(locale, TextKey::FormHelperFlow),
             theme,
         ),
         render_form_field(
-            "Category",
+            t(locale, TextKey::FormCategory),
             category,
             form.focus == TransactionFormField::Category,
-            "Tag for analytics",
+            t(locale, TextKey::FormHelperCategory),
             theme,
         ),
         render_form_field(
-            "Note",
+            t(locale, TextKey::FormNote),
             note,
             form.focus == TransactionFormField::Note,
-            "Optional description",
+            t(locale, TextKey::FormHelperNote),
             theme,
         ),
         render_form_field(
-            "When",
+            t(locale, TextKey::FormWhen),
             occurred_at,
             form.focus == TransactionFormField::OccurredAt,
-            "Date & time (default: now)",
+            t(locale, TextKey::FormHelperWhen),
             theme,
         ),
         Line::from(""),
         Line::from(vec![
             Span::styled("[Enter]", Style::default().fg(theme.accent)),
-            Span::styled(" Save  ", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::FormHintSave), Style::default().fg(theme.text_muted)),
             Span::styled("[Esc]", Style::default().fg(theme.accent)),
-            Span::styled(" Cancel  ", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::FormHintCancel), Style::default().fg(theme.text_muted)),
             Span::styled("[Tab]", Style::default().fg(theme.accent)),
-            Span::styled(" Next field  ", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::FormHintNextField), Style::default().fg(theme.text_muted)),
             Span::styled("[↑↓]", Style::default().fg(theme.accent)),
-            Span::styled(" Cycle choices", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::FormHintCycleChoices), Style::default().fg(theme.text_muted)),
         ]),
     ];
 
     if let Some(err) = form.error.as_ref() {
         lines.push(Line::from(Span::styled(
             err.as_str(),
-            Style::default().fg(theme.error),
+            Style::default().fg(theme.negative),
         )));
     }
 
@@ -230,7 +232,7 @@ fn render_form_bottom(
     render_picker_list(
         frame,
         list_layout[0],
-        "Wallets",
+        t(state.locale, TextKey::SectionWallets),
         wallets
             .iter()
             .map(|wallet| wallet.name.as_str())
@@ -243,7 +245,7 @@ fn render_form_bottom(
     render_picker_list(
         frame,
         list_layout[1],
-        "Flows",
+        t(state.locale, TextKey::SectionFlows),
         flows
             .iter()
             .map(|flow| flow.name.as_str())
@@ -279,11 +281,7 @@ fn render_form_field(
         Style::default().fg(theme.text)
     };
     let cursor = if focused { "▏" } else { "" };
-    let helper_style = if focused {
-        Style::default().fg(theme.text_muted)
-    } else {
-        Style::default().fg(theme.dim)
-    };
+    let helper_style = Style::default().fg(theme.text_muted);
     Line::from(vec![
         Span::styled(format!("{label:<10}"), label_style),
         Span::styled(format!("[{value}{cursor}]"), value_style),
@@ -392,6 +390,6 @@ fn render_recents_footer(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
     let Some(text) = recents_line(state) else {
         return;
     };
-    let line = Line::from(Span::styled(text, Style::default().fg(theme.dim)));
+    let line = Line::from(Span::styled(text, Style::default().fg(theme.text_muted)));
     frame.render_widget(Paragraph::new(line), area);
 }

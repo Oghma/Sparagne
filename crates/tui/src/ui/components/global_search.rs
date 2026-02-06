@@ -124,7 +124,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
                         theme.text_muted
                     }),
                 ),
-                Span::styled(format!("[{kind_label}] "), Style::default().fg(theme.dim)),
+                Span::styled(format!("[{kind_label}] "), Style::default().fg(theme.text_muted)),
             ];
 
             if is_selected {

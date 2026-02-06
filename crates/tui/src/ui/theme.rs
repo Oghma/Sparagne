@@ -13,10 +13,6 @@ pub struct Theme {
     pub text: Color,       // #ebdbb2 (fg)
     pub text_muted: Color, // #a89984 (gray)
 
-    // Legacy aliases (kept for backward compatibility)
-    pub dim: Color,   // same as text_muted
-    pub error: Color, // same as negative
-
     // Semantic colors
     pub accent: Color,   // #fe8019 (orange) - primary UI accent
     pub positive: Color, // #b8bb26 (green) - income, success
@@ -58,10 +54,6 @@ impl Default for Theme {
             // Text hierarchy
             text,
             text_muted,
-
-            // Legacy aliases
-            dim: text_muted,
-            error: red,
 
             // Semantic colors
             accent: orange,

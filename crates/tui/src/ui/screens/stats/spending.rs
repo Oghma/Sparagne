@@ -10,6 +10,7 @@ use ratatui::{
 
 use crate::{
     app::AppState,
+    text::{TextKey, t},
     ui::{
         components::{
             card::Card,
@@ -39,7 +40,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
 
 /// Render the expense sparkline showing 6-month trend.
 fn render_expense_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let card = Card::new("Expense Trend (6m)", theme);
+    let locale = state.locale;
+    let card = Card::new(t(locale, TextKey::StatsExpenseTrend), theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
@@ -54,8 +56,8 @@ fn render_expense_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     if expense_data.is_empty() {
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "No expense trend data. Press 'r' to refresh.",
-                Style::default().fg(theme.dim),
+                t(locale, TextKey::StatsNoExpenseData),
+                Style::default().fg(theme.text_muted),
             ))
             .alignment(Alignment::Center),
             inner,

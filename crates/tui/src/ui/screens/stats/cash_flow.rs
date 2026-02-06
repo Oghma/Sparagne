@@ -12,6 +12,7 @@ use engine::Money;
 
 use crate::{
     app::AppState,
+    text::{TextKey, t},
     ui::{
         components::{
             card::Card,
@@ -51,8 +52,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
 /// Render the month summary card with navigation, stats, and gauges.
 pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let (year, month) = state.stats.current_month;
+    let locale = state.locale;
 
-    let card = Card::new("Month Summary", theme).focused(true);
+    let card = Card::new(t(locale, TextKey::StatsMonthSummary), theme).focused(true);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
@@ -97,8 +99,8 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     } else {
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "No trend data yet",
-                Style::default().fg(theme.dim),
+                t(locale, TextKey::StatsNoTrendData),
+                Style::default().fg(theme.text_muted),
             )),
             change_layout[0],
         );
@@ -107,19 +109,19 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     let income_change = percentage_change(&state.stats.monthly_income);
     let expense_change = percentage_change(&state.stats.monthly_trend);
     let change_line = Line::from(vec![
-        Span::styled("MoM", Style::default().fg(theme.dim)),
+        Span::styled(t(locale, TextKey::StatsMoM), Style::default().fg(theme.text_muted)),
         Span::raw(" "),
-        Span::styled("Inc", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::StatsInc), Style::default().fg(theme.text_muted)),
         Span::raw(" "),
         income_change
             .map(|value| styled_percentage_change(value, theme))
-            .unwrap_or_else(|| Span::styled("n/a", Style::default().fg(theme.dim))),
+            .unwrap_or_else(|| Span::styled(t(locale, TextKey::StatsNa), Style::default().fg(theme.text_muted))),
         Span::raw("  "),
-        Span::styled("Exp", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::StatsExp), Style::default().fg(theme.text_muted)),
         Span::raw(" "),
         expense_change
             .map(|value| styled_percentage_change(value, theme))
-            .unwrap_or_else(|| Span::styled("n/a", Style::default().fg(theme.dim))),
+            .unwrap_or_else(|| Span::styled(t(locale, TextKey::StatsNa), Style::default().fg(theme.text_muted))),
     ]);
     frame.render_widget(Paragraph::new(change_line), change_layout[1]);
 
@@ -142,7 +144,7 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         frame,
         stats_layout[0],
         StatRow {
-            label: "Income",
+            label: t(locale, TextKey::StatsIncome),
             amount: income,
             percentage: income_pct,
             color: theme.positive,
@@ -161,7 +163,7 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         frame,
         stats_layout[1],
         StatRow {
-            label: "Expenses",
+            label: t(locale, TextKey::StatsExpenses),
             amount: -expenses,
             percentage: expense_pct,
             color: theme.negative,
@@ -170,13 +172,13 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         theme,
     );
 
-    if let Some(gauge) = flow_cap_gauge(expenses, Some(income), "Expense/Income", theme) {
+    if let Some(gauge) = flow_cap_gauge(expenses, Some(income), t(locale, TextKey::StatsExpenseOverIncome), theme) {
         frame.render_widget(gauge, stats_layout[2]);
     } else {
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "No income to compare",
-                Style::default().fg(theme.dim),
+                t(locale, TextKey::StatsNoIncomeToCompare),
+                Style::default().fg(theme.text_muted),
             )),
             stats_layout[2],
         );
@@ -190,15 +192,17 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     );
 
     // Net row
+    let net_label = format!("{:<12}", t(locale, TextKey::StatsNet));
     let net_line = Line::from(vec![
-        Span::styled("Net         ", Style::default().fg(theme.dim)),
+        Span::styled(net_label, Style::default().fg(theme.text_muted)),
         styled_amount_bold_emoji(net, currency, theme, state.emoji_mode),
     ]);
     frame.render_widget(Paragraph::new(net_line), stats_layout[4]);
 
     // Total Balance row
+    let balance_label = format!("{:<12}", t(locale, TextKey::StatsBalance));
     let balance_line = Line::from(vec![
-        Span::styled("Balance     ", Style::default().fg(theme.dim)),
+        Span::styled(balance_label, Style::default().fg(theme.text_muted)),
         Span::styled(
             Money::new(balance).format(currency),
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
@@ -214,7 +218,7 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
             ..inner
         };
         frame.render_widget(
-            Paragraph::new(Span::styled(err.as_str(), Style::default().fg(theme.error))),
+            Paragraph::new(Span::styled(err.as_str(), Style::default().fg(theme.negative))),
             error_area,
         );
     }
@@ -222,16 +226,17 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
 
 /// Render the category breakdown with pie chart and list.
 pub fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let breakdown = &state.stats.category_breakdown;
 
     if breakdown.is_empty() {
-        let card = Card::new("Category Breakdown", theme);
+        let card = Card::new(t(locale, TextKey::StatsCategoryBreakdown), theme);
         let inner = card.inner(area);
         card.render_frame(frame, area);
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "No expense data for category breakdown",
-                Style::default().fg(theme.dim),
+                t(locale, TextKey::StatsNoCategoryData),
+                Style::default().fg(theme.text_muted),
             ))
             .alignment(Alignment::Center),
             inner,
@@ -246,7 +251,7 @@ pub fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppS
         .split(area);
 
     // Render pie chart on the left
-    render_category_pie_chart(frame, cols[0], breakdown, theme);
+    render_category_pie_chart(frame, cols[0], breakdown, locale, theme);
 
     // Render category list on the right
     render_category_list(frame, cols[1], state, theme);
@@ -257,6 +262,7 @@ fn render_category_pie_chart(
     frame: &mut Frame<'_>,
     area: Rect,
     breakdown: &[(String, i64)],
+    locale: crate::text::Locale,
     theme: &Theme,
 ) {
     // Define colors for pie slices (cycling through theme-compatible colors)
@@ -266,7 +272,7 @@ fn render_category_pie_chart(
         theme.accent,     // Blue/Accent
         theme.positive,   // Green
         theme.text_muted, // Muted
-        theme.dim,        // Dim for smaller slices
+        theme.text_muted,        // Dim for smaller slices
     ];
 
     let slices: Vec<PieSlice> = breakdown
@@ -278,21 +284,23 @@ fn render_category_pie_chart(
         })
         .collect();
 
-    render_pie_chart(frame, area, "Distribution", &slices, theme);
+    render_pie_chart(frame, area, t(locale, TextKey::StatsDistribution), &slices, theme);
 }
 
 /// Render the balance sparkline.
 pub fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let card = Card::new("Balance Trend (30d)", theme);
+    let locale = state.locale;
+    let card = Card::new(t(locale, TextKey::StatsBalanceTrend), theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
     if state.stats.sparkline.is_empty() {
         frame.render_widget(
-            Paragraph::new(Span::styled(
-                "No data. Press 'r' to refresh stats.",
-                Style::default().fg(theme.dim),
-            ))
+            Paragraph::new(Line::from(vec![
+                Span::styled(t(locale, TextKey::StatsNoData), Style::default().fg(theme.text_muted)),
+                Span::styled("r", Style::default().fg(theme.accent)),
+                Span::styled(t(locale, TextKey::StatsRefreshHint), Style::default().fg(theme.text_muted)),
+            ]))
             .alignment(Alignment::Center),
             inner,
         );
@@ -304,17 +312,18 @@ pub fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 
 /// Render the monthly trend charts with income/expense comparison.
 pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let expense_trend = &state.stats.monthly_trend;
     let income_trend = &state.stats.monthly_income;
 
     if expense_trend.is_empty() && income_trend.is_empty() {
-        let card = Card::new("Monthly Trend", theme);
+        let card = Card::new(t(locale, TextKey::StatsMonthlyTrend), theme);
         let inner = card.inner(area);
         card.render_frame(frame, area);
         frame.render_widget(
             Paragraph::new(Span::styled(
-                "Monthly trend data not available. Press 'r' to refresh stats.",
-                Style::default().fg(theme.dim),
+                t(locale, TextKey::StatsMonthlyTrendNoData),
+                Style::default().fg(theme.text_muted),
             ))
             .alignment(Alignment::Center),
             inner,
@@ -323,7 +332,7 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     }
 
     // Consolidated trend view with status badges
-    let card = Card::new("Financial Trends (6 months)", theme).focused(true);
+    let card = Card::new(t(locale, TextKey::StatsFinancialTrends), theme).focused(true);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
@@ -352,7 +361,7 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     // Income trend row
     let income_status = trend_status_badge(income_change, true, theme);
     let income_line = build_trend_line(
-        "Income",
+        t(locale, TextKey::StatsIncome),
         income_change,
         current_income,
         income_status,
@@ -365,7 +374,7 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     // Expense trend row
     let expense_status = trend_status_badge(expense_change, false, theme);
     let expense_line = build_trend_line(
-        "Expenses",
+        t(locale, TextKey::StatsExpenses),
         expense_change,
         -current_expense,
         expense_status,
@@ -383,7 +392,7 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         .map(|((label, inc), (_, exp))| (label.clone(), inc - exp))
         .collect();
     let net_line = build_trend_line(
-        "Net Savings",
+        t(locale, TextKey::StatsNetSavings),
         net_change,
         current_net,
         net_status,
@@ -409,9 +418,9 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         .collect();
 
     if !income_data.is_empty() {
-        render_bar_chart(frame, chart_layout[0], "Income", &income_data, theme);
+        render_bar_chart(frame, chart_layout[0], t(locale, TextKey::StatsIncome), &income_data, theme);
     }
     if !expense_data.is_empty() {
-        render_bar_chart(frame, chart_layout[1], "Expenses", &expense_data, theme);
+        render_bar_chart(frame, chart_layout[1], t(locale, TextKey::StatsExpenses), &expense_data, theme);
     }
 }

@@ -56,7 +56,7 @@ pub fn render_tabs(
                 _ => None,
             };
             if let Some(sub) = sub_label {
-                spans.push(Span::styled(" > ", Style::default().fg(theme.dim)));
+                spans.push(Span::styled(" > ", Style::default().fg(theme.text_muted)));
                 spans.push(Span::styled(
                     sub,
                     Style::default()
