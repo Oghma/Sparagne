@@ -50,20 +50,24 @@ pub fn render_stats_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         layout[1],
         state,
         theme,
-        TextKey::HomeCardIncome,
-        ICON_INCOME,
-        income,
-        theme.income,
+        StatCardData {
+            title: TextKey::HomeCardIncome,
+            icon: ICON_INCOME,
+            amount: income,
+            color: theme.income,
+        },
     );
     render_stat_card(
         frame,
         layout[2],
         state,
         theme,
-        TextKey::HomeCardExpenses,
-        ICON_EXPENSE,
-        expenses,
-        theme.expense,
+        StatCardData {
+            title: TextKey::HomeCardExpenses,
+            icon: ICON_EXPENSE,
+            amount: expenses,
+            color: theme.expense,
+        },
     );
 }
 
@@ -182,30 +186,35 @@ fn render_net_worth_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
     }
 }
 
+/// Data for a stat card (income or expenses).
+struct StatCardData<'a> {
+    title: TextKey,
+    icon: &'a str,
+    amount: i64,
+    color: ratatui::style::Color,
+}
+
 fn render_stat_card(
     frame: &mut Frame<'_>,
     area: Rect,
     state: &AppState,
     theme: &Theme,
-    title: TextKey,
-    icon: &str,
-    amount: i64,
-    color: ratatui::style::Color,
+    data: StatCardData<'_>,
 ) {
     let currency = get_currency(state);
-    let card = Card::new(t(state.locale, title), theme);
+    let card = Card::new(t(state.locale, data.title), theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
-    let amount_str = Money::new(amount).format(currency);
+    let amount_str = Money::new(data.amount).format(currency);
 
     let lines = vec![
         Line::from(vec![
-            Span::styled(icon, Style::default().fg(color)),
+            Span::styled(data.icon, Style::default().fg(data.color)),
             Span::raw(" "),
             Span::styled(
                 amount_str,
-                Style::default().fg(color).add_modifier(Modifier::BOLD),
+                Style::default().fg(data.color).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(Span::styled(

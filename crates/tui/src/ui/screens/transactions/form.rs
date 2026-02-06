@@ -112,8 +112,31 @@ pub fn render_form_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
         .constraints([Constraint::Length(9), Constraint::Min(0)])
         .split(popup);
 
-    render_form_fields(frame, layout[0], state, title, wallet_name, flow_name, &category, &note, &occurred_at, theme);
+    render_form_fields(
+        frame,
+        layout[0],
+        state,
+        &FormDisplayValues {
+            title,
+            wallet_name,
+            flow_name,
+            category: &category,
+            note: &note,
+            occurred_at: &occurred_at,
+        },
+        theme,
+    );
     render_form_bottom(frame, layout[1], state, &wallets, &flows, theme);
+}
+
+/// Display values for the transaction form fields.
+struct FormDisplayValues<'a> {
+    title: &'a str,
+    wallet_name: &'a str,
+    flow_name: &'a str,
+    category: &'a str,
+    note: &'a str,
+    occurred_at: &'a str,
 }
 
 /// Renders the form fields section
@@ -121,12 +144,7 @@ fn render_form_fields(
     frame: &mut Frame<'_>,
     area: Rect,
     state: &AppState,
-    title: &str,
-    wallet_name: &str,
-    flow_name: &str,
-    category: &str,
-    note: &str,
-    occurred_at: &str,
+    values: &FormDisplayValues<'_>,
     theme: &Theme,
 ) {
     let form = &state.transactions.form;
@@ -142,35 +160,35 @@ fn render_form_fields(
         ),
         render_form_field(
             t(locale, TextKey::FormWallet),
-            wallet_name,
+            values.wallet_name,
             form.focus == TransactionFormField::Wallet,
             t(locale, TextKey::FormHelperWallet),
             theme,
         ),
         render_form_field(
             t(locale, TextKey::FormFlow),
-            flow_name,
+            values.flow_name,
             form.focus == TransactionFormField::Flow,
             t(locale, TextKey::FormHelperFlow),
             theme,
         ),
         render_form_field(
             t(locale, TextKey::FormCategory),
-            category,
+            values.category,
             form.focus == TransactionFormField::Category,
             t(locale, TextKey::FormHelperCategory),
             theme,
         ),
         render_form_field(
             t(locale, TextKey::FormNote),
-            note,
+            values.note,
             form.focus == TransactionFormField::Note,
             t(locale, TextKey::FormHelperNote),
             theme,
         ),
         render_form_field(
             t(locale, TextKey::FormWhen),
-            occurred_at,
+            values.occurred_at,
             form.focus == TransactionFormField::OccurredAt,
             t(locale, TextKey::FormHelperWhen),
             theme,
@@ -196,7 +214,7 @@ fn render_form_fields(
     }
 
     let block = Block::default()
-        .title(title)
+        .title(values.title)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent))
@@ -232,28 +250,32 @@ fn render_form_bottom(
     render_picker_list(
         frame,
         list_layout[0],
-        t(state.locale, TextKey::SectionWallets),
-        wallets
-            .iter()
-            .map(|wallet| wallet.name.as_str())
-            .collect::<Vec<_>>(),
-        form.wallet_index,
-        form.focus == TransactionFormField::Wallet,
+        PickerListConfig {
+            title: t(state.locale, TextKey::SectionWallets),
+            items: wallets
+                .iter()
+                .map(|wallet| wallet.name.as_str())
+                .collect(),
+            selected: form.wallet_index,
+            focused: form.focus == TransactionFormField::Wallet,
+            empty_text: t(state.locale, TextKey::UiNoElement),
+        },
         theme,
-        t(state.locale, TextKey::UiNoElement),
     );
     render_picker_list(
         frame,
         list_layout[1],
-        t(state.locale, TextKey::SectionFlows),
-        flows
-            .iter()
-            .map(|flow| flow.name.as_str())
-            .collect::<Vec<_>>(),
-        form.flow_index,
-        form.focus == TransactionFormField::Flow,
+        PickerListConfig {
+            title: t(state.locale, TextKey::SectionFlows),
+            items: flows
+                .iter()
+                .map(|flow| flow.name.as_str())
+                .collect(),
+            selected: form.flow_index,
+            focused: form.focus == TransactionFormField::Flow,
+            empty_text: t(state.locale, TextKey::UiNoElement),
+        },
         theme,
-        t(state.locale, TextKey::UiNoElement),
     );
 
     render_category_list(frame, bottom_layout[1], state, theme);
@@ -290,26 +312,31 @@ fn render_form_field(
     ])
 }
 
+/// Configuration for a picker list widget.
+struct PickerListConfig<'a> {
+    title: &'a str,
+    items: Vec<&'a str>,
+    selected: usize,
+    focused: bool,
+    empty_text: &'a str,
+}
+
 /// Renders a picker list (wallets or flows)
 fn render_picker_list(
     frame: &mut Frame<'_>,
     area: Rect,
-    title: &str,
-    items: Vec<&str>,
-    selected: usize,
-    focused: bool,
+    config: PickerListConfig<'_>,
     theme: &Theme,
-    no_element_text: &str,
 ) {
     let block = Block::default()
-        .title(title)
+        .title(config.title)
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border))
         .style(Style::default().bg(theme.background));
-    if items.is_empty() {
+    if config.items.is_empty() {
         frame.render_widget(
-            Paragraph::new(Line::from(no_element_text))
+            Paragraph::new(Line::from(config.empty_text))
                 .alignment(ratatui::layout::Alignment::Center)
                 .block(block),
             area,
@@ -317,14 +344,15 @@ fn render_picker_list(
         return;
     }
 
-    let items = items
+    let items = config
+        .items
         .into_iter()
         .map(|name| ListItem::new(Line::from(name.to_string())))
         .collect::<Vec<_>>();
     let mut list_state = ListState::default();
-    list_state.select(Some(selected.min(items.len() - 1)));
+    list_state.select(Some(config.selected.min(items.len() - 1)));
 
-    let highlight_style = if focused {
+    let highlight_style = if config.focused {
         Style::default()
             .fg(theme.accent)
             .add_modifier(Modifier::BOLD)

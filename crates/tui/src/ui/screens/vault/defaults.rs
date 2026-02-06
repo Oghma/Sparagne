@@ -127,21 +127,25 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     render_defaults_list(
         frame,
         lists[0],
-        t(locale, TextKey::SectionWallets),
-        none_label,
-        &wallet_names,
-        defaults.wallet_index,
-        wallet_focused,
+        &DefaultsListConfig {
+            title: t(locale, TextKey::SectionWallets),
+            none_label,
+            items: &wallet_names,
+            selected: defaults.wallet_index,
+            focused: wallet_focused,
+        },
         theme,
     );
     render_defaults_list(
         frame,
         lists[1],
-        t(locale, TextKey::SectionFlows),
-        none_label,
-        &flow_names,
-        defaults.flow_index,
-        flow_focused,
+        &DefaultsListConfig {
+            title: t(locale, TextKey::SectionFlows),
+            none_label,
+            items: &flow_names,
+            selected: defaults.flow_index,
+            focused: flow_focused,
+        },
         theme,
     );
 
@@ -162,22 +166,26 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     }
 }
 
+struct DefaultsListConfig<'a> {
+    title: &'a str,
+    none_label: &'a str,
+    items: &'a [String],
+    selected: usize,
+    focused: bool,
+}
+
 fn render_defaults_list(
     frame: &mut Frame<'_>,
     area: Rect,
-    title: &str,
-    none_label: &str,
-    items: &[String],
-    selected: usize,
-    focused: bool,
+    config: &DefaultsListConfig<'_>,
     theme: &Theme,
 ) {
-    let mut list_items = Vec::with_capacity(items.len() + 1);
+    let mut list_items = Vec::with_capacity(config.items.len() + 1);
     list_items.push(ListItem::new(Line::from(vec![
         Span::raw("  "),
-        Span::styled(none_label, Style::default().fg(theme.text_muted)),
+        Span::styled(config.none_label, Style::default().fg(theme.text_muted)),
     ])));
-    list_items.extend(items.iter().map(|name| {
+    list_items.extend(config.items.iter().map(|name| {
         ListItem::new(Line::from(vec![
             Span::raw("  "),
             Span::styled(name.clone(), Style::default().fg(theme.text)),
@@ -186,10 +194,10 @@ fn render_defaults_list(
 
     let mut list_state = ListState::default();
     if !list_items.is_empty() {
-        list_state.select(Some(selected.min(list_items.len() - 1)));
+        list_state.select(Some(config.selected.min(list_items.len() - 1)));
     }
 
-    let highlight_style = if focused {
+    let highlight_style = if config.focused {
         Style::default()
             .fg(theme.accent)
             .add_modifier(Modifier::BOLD)
@@ -197,14 +205,14 @@ fn render_defaults_list(
         Style::default().fg(theme.text)
     };
 
-    let border_color = if focused {
+    let border_color = if config.focused {
         theme.border_focused
     } else {
         theme.border
     };
 
     let list = List::new(list_items)
-        .block(themed_block(title, border_color, theme))
+        .block(themed_block(config.title, border_color, theme))
         .highlight_style(highlight_style)
         .highlight_symbol("» ");
     frame.render_stateful_widget(list, area, &mut list_state);
