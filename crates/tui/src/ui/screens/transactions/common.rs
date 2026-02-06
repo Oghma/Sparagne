@@ -1,10 +1,10 @@
-/// Common utilities and helpers shared across transaction screen modules.
-///
-/// This module contains:
-/// - Display formatting helpers (amounts, dates, currencies)
-/// - Color and style utilities
-/// - Name resolution functions (wallet, flow)
-/// - Shared constants and theme values
+//! Common utilities and helpers shared across transaction screen modules.
+//!
+//! This module contains:
+//! - Display formatting helpers (amounts, dates, currencies)
+//! - Color and style utilities
+//! - Name resolution functions (wallet, flow)
+//! - Shared constants and theme values
 
 use api_types::transaction::TransactionKind;
 use engine::{Currency, Money};
@@ -15,15 +15,17 @@ use ratatui::{
 
 use crate::{
     app::{AppState, GroupingMode},
+    text::{TextKey, t},
     ui::theme::Theme,
 };
 
 // Re-export consolidated functions so existing `super::common::X` imports
 // in sibling modules continue to work.
-pub(crate) use crate::ui::common::{format_date_label, map_currency, resolve_flow_name, resolve_wallet_name};
+pub(crate) use crate::ui::common::{format_date_label, resolve_flow_name, resolve_wallet_name};
 
 /// Returns the scope label for the header (e.g., "All", "Wallet: Main", "Flow: Income")
 pub fn scope_label(state: &AppState) -> String {
+    let locale = state.locale;
     if let Some(flow_id) = state.transactions.scope_flow_id {
         return state
             .snapshot
@@ -50,17 +52,12 @@ pub fn scope_label(state: &AppState) -> String {
             .unwrap_or_else(|| "Wallet: ?".to_string());
     }
 
-    "All".to_string()
+    t(locale, TextKey::TxnScopeAll).to_string()
 }
 
 /// Returns a colored kind chip (icon) for the transaction kind
 pub fn kind_chip(kind: TransactionKind, theme: &Theme) -> Span<'static> {
-    let (icon, color) = match kind {
-        TransactionKind::Income => ("▲", theme.income),
-        TransactionKind::Expense => ("▼", theme.expense),
-        TransactionKind::Refund => ("↩", theme.refund),
-        TransactionKind::TransferWallet | TransactionKind::TransferFlow => ("⇄", theme.transfer),
-    };
+    let (icon, color) = crate::ui::common::tx_icon_color(kind, theme);
     Span::styled(icon.to_string(), Style::default().fg(color))
 }
 
@@ -70,7 +67,7 @@ pub fn void_chip(voided: bool, theme: &Theme) -> Option<Span<'static>> {
         Some(Span::styled(
             "[VOID]",
             Style::default()
-                .fg(theme.error)
+                .fg(theme.negative)
                 .add_modifier(Modifier::BOLD),
         ))
     } else {
@@ -95,7 +92,7 @@ pub fn amount_span(
     } else if signed > 0 {
         theme.positive
     } else {
-        theme.dim
+        theme.text_muted
     };
     let amount = Money::new(signed).format(currency);
     Span::styled(format!("{amount:<14}"), Style::default().fg(color))
@@ -108,7 +105,7 @@ pub fn leg_amount_span(amount_minor: i64, currency: Currency, theme: &Theme) -> 
     } else if amount_minor > 0 {
         theme.positive
     } else {
-        theme.dim
+        theme.text_muted
     };
     let amount = Money::new(amount_minor).format(currency);
     Span::styled(amount, Style::default().fg(color))
@@ -199,7 +196,7 @@ pub fn grouping_key_label(
                 .category
                 .as_deref()
                 .filter(|name| !name.trim().is_empty())
-                .unwrap_or("Uncategorized")
+                .unwrap_or(t(state.locale, TextKey::TxnUncategorized))
                 .to_string();
             (label.clone(), label)
         }
@@ -207,14 +204,14 @@ pub fn grouping_key_label(
             if let Some(id) = tx.wallet_id {
                 (format!("wallet:{id}"), resolve_wallet_name(state, id))
             } else {
-                ("wallet:none".to_string(), "No wallet".to_string())
+                ("wallet:none".to_string(), t(state.locale, TextKey::TxnNoWallet).to_string())
             }
         }
         GroupingMode::Envelope => {
             if let Some(id) = tx.flow_id {
                 (format!("flow:{id}"), resolve_flow_name(state, id))
             } else {
-                ("flow:none".to_string(), "No envelope".to_string())
+                ("flow:none".to_string(), t(state.locale, TextKey::TxnNoEnvelope).to_string())
             }
         }
     }
@@ -223,6 +220,7 @@ pub fn grouping_key_label(
 
 /// Builds a recents summary line for the form footer
 pub fn recents_line(state: &AppState) -> Option<String> {
+    let locale = state.locale;
     let mut parts = Vec::new();
     let categories = state
         .transactions
@@ -232,7 +230,7 @@ pub fn recents_line(state: &AppState) -> Option<String> {
         .map(|cat| format!("#{cat}"))
         .collect::<Vec<_>>();
     if !categories.is_empty() {
-        parts.push(format!("Categorie: {}", categories.join(" ")));
+        parts.push(format!("{}{}", t(locale, TextKey::TxnRecentsCategories), categories.join(" ")));
     }
 
     let wallets = recent_wallet_names(state)
@@ -240,17 +238,17 @@ pub fn recents_line(state: &AppState) -> Option<String> {
         .take(3)
         .collect::<Vec<_>>();
     if !wallets.is_empty() {
-        parts.push(format!("Wallet: {}", wallets.join(", ")));
+        parts.push(format!("{}{}", t(locale, TextKey::TxnRecentsWallet), wallets.join(", ")));
     }
 
     let flows = recent_flow_names(state).into_iter().take(3).collect::<Vec<_>>();
     if !flows.is_empty() {
-        parts.push(format!("Flow: {}", flows.join(", ")));
+        parts.push(format!("{}{}", t(locale, TextKey::TxnRecentsFlow), flows.join(", ")));
     }
 
     if parts.is_empty() {
         None
     } else {
-        Some(format!("Recenti: {}", parts.join(" • ")))
+        Some(format!("{}{}", t(locale, TextKey::TxnRecentsPrefix), parts.join(" • ")))
     }
 }

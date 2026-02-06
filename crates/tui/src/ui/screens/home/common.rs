@@ -14,9 +14,7 @@ use ratatui::{
 use crate::ui::theme::Theme;
 
 // Re-exports from the consolidated common module.
-pub(crate) use crate::ui::common::{
-    ICON_EXPENSE, ICON_INCOME, ICON_REFUND, ICON_TRANSFER, get_currency, truncate,
-};
+pub(crate) use crate::ui::common::{ICON_EXPENSE, ICON_INCOME, get_currency, truncate};
 
 /// Renders an empty state message with hint.
 pub fn render_empty_state(frame: &mut Frame<'_>, area: Rect, message: &str, hint: &str, theme: &Theme) {

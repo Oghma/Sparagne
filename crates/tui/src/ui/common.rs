@@ -11,11 +11,12 @@
 //! - Date label formatting
 //! - Transaction type icon constants
 
+use api_types::transaction::TransactionKind;
 use engine::Currency;
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
-    text::Span,
+    text::{Line, Span},
 };
 use uuid::Uuid;
 
@@ -38,20 +39,15 @@ pub(crate) const ICON_TRANSFER: &str = "\u{21c4}";
 // Currency helpers
 // ---------------------------------------------------------------------------
 
-/// Converts an [`api_types::Currency`] to an [`engine::Currency`].
-pub(crate) fn map_currency(currency: &api_types::Currency) -> Currency {
-    match currency {
-        api_types::Currency::Eur => Currency::Eur,
-    }
-}
-
 /// Resolves the currency for the current vault, falling back to EUR.
 pub(crate) fn get_currency(state: &AppState) -> Currency {
     state
         .vault
         .as_ref()
         .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
+        .map(|c| match c {
+            api_types::Currency::Eur => Currency::Eur,
+        })
         .unwrap_or(Currency::Eur)
 }
 
@@ -223,4 +219,59 @@ pub(crate) fn inset(area: Rect, horizontal: u16, vertical: u16) -> Rect {
         width,
         height,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Transaction display helpers
+// ---------------------------------------------------------------------------
+
+/// Returns the icon string and color for a transaction kind.
+pub(crate) fn tx_icon_color(kind: TransactionKind, theme: &Theme) -> (&'static str, ratatui::style::Color) {
+    match kind {
+        TransactionKind::Income => (ICON_INCOME, theme.income),
+        TransactionKind::Expense => (ICON_EXPENSE, theme.expense),
+        TransactionKind::Refund => (ICON_REFUND, theme.refund),
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
+            (ICON_TRANSFER, theme.transfer)
+        }
+    }
+}
+
+/// Returns the color to use for a transaction amount based on its kind.
+pub(crate) fn tx_amount_color(kind: TransactionKind, theme: &Theme) -> ratatui::style::Color {
+    match kind {
+        TransactionKind::Income | TransactionKind::Refund => theme.positive,
+        TransactionKind::Expense => theme.negative,
+        _ => theme.text,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Label-value field
+// ---------------------------------------------------------------------------
+
+/// Renders a label-value pair as a styled line, with bold highlighting when focused.
+pub(crate) fn render_label_value_field(
+    label: &str,
+    value: &str,
+    focused: bool,
+    theme: &Theme,
+) -> Line<'static> {
+    let label_style = if focused {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+    let value_style = if focused {
+        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+    Line::from(vec![
+        Span::styled(format!("{label:<8}"), label_style),
+        Span::raw(": "),
+        Span::styled(value.to_string(), value_style),
+    ])
 }

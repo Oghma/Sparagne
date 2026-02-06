@@ -1,9 +1,9 @@
-/// Transaction detail view rendering.
-///
-/// Displays:
-/// - Transaction metadata (kind, date, amount, category, note, voided status)
-/// - Legs breakdown (wallet/flow targets with amounts)
-/// - Available actions (shown in context)
+//! Transaction detail view rendering.
+//!
+//! Displays:
+//! - Transaction metadata (kind, date, amount, category, note, voided status)
+//! - Legs breakdown (wallet/flow targets with amounts)
+//! - Available actions (shown in context)
 
 use api_types::transaction::{LegTarget, TransactionDetailResponse};
 use engine::Money;
@@ -21,7 +21,8 @@ use crate::{
     ui::theme::Theme,
 };
 
-use super::common::{kind_chip, leg_amount_span, map_currency, resolve_flow_name, resolve_wallet_name};
+use super::common::{kind_chip, leg_amount_span, resolve_flow_name, resolve_wallet_name};
+use crate::ui::common::get_currency;
 
 /// Renders the transaction detail panel (right side)
 pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -57,12 +58,7 @@ fn render_transaction_info(
     detail: &TransactionDetailResponse,
     theme: &Theme,
 ) {
-    let currency = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
-        .unwrap_or(engine::Currency::Eur);
+    let currency = get_currency(state);
 
     let header = &detail.transaction;
     let occurred_at = header.occurred_at.format("%d %b %Y %H:%M").to_string();
@@ -77,35 +73,35 @@ fn render_transaction_info(
 
     let lines = vec![
         Line::from(vec![
-            Span::styled("Kind", Style::default().fg(theme.dim)),
+            Span::styled("Kind", Style::default().fg(theme.text_muted)),
             Span::raw(": "),
             kind_chip(header.kind, theme),
             Span::raw("   "),
-            Span::styled("Voided", Style::default().fg(theme.dim)),
+            Span::styled("Voided", Style::default().fg(theme.text_muted)),
             Span::raw(": "),
             Span::styled(
                 voided.to_string(),
                 Style::default().fg(if header.voided {
-                    theme.error
+                    theme.negative
                 } else {
                     theme.text
                 }),
             ),
         ]),
         Line::from(vec![
-            Span::styled("When", Style::default().fg(theme.dim)),
+            Span::styled("When", Style::default().fg(theme.text_muted)),
             Span::raw(format!(": {occurred_at}")),
         ]),
         Line::from(vec![
-            Span::styled("Amount", Style::default().fg(theme.dim)),
+            Span::styled("Amount", Style::default().fg(theme.text_muted)),
             Span::raw(format!(": {amount}")),
         ]),
         Line::from(vec![
-            Span::styled("Category", Style::default().fg(theme.dim)),
+            Span::styled("Category", Style::default().fg(theme.text_muted)),
             Span::raw(format!(": {category}")),
         ]),
         Line::from(vec![
-            Span::styled("Note", Style::default().fg(theme.dim)),
+            Span::styled("Note", Style::default().fg(theme.text_muted)),
             Span::raw(format!(": {note}")),
         ]),
     ];
@@ -126,12 +122,7 @@ fn render_legs(
     detail: &TransactionDetailResponse,
     theme: &Theme,
 ) {
-    let currency = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
-        .unwrap_or(engine::Currency::Eur);
+    let currency = get_currency(state);
 
     let legs = detail
         .legs
@@ -147,7 +138,7 @@ fn render_legs(
             };
             let amount = leg_amount_span(leg.amount_minor, currency, theme);
             ListItem::new(Line::from(vec![
-                Span::styled(format!("{label:<6}"), Style::default().fg(theme.dim)),
+                Span::styled(format!("{label:<6}"), Style::default().fg(theme.text_muted)),
                 Span::raw(": "),
                 Span::raw(name),
                 Span::raw("  "),

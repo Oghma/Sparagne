@@ -5,17 +5,19 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
-use api_types::transaction::TransactionKind;
 use engine::{Currency, Money};
 
 use crate::{
     app::AppState,
     ui::{
-        common::{ICON_EXPENSE, ICON_INCOME, ICON_REFUND, ICON_TRANSFER, map_currency},
-        components::money::{flow_cap_line_gauge, styled_amount_no_sign, styled_progress_bar},
+        common::get_currency,
+        components::{
+            money::{flow_cap_line_gauge, styled_amount_no_sign, styled_progress_bar},
+            recent_transactions::render_recent_transactions,
+        },
         theme::Theme,
     },
 };
@@ -35,12 +37,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         return;
     };
 
-    let currency = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
-        .unwrap_or(Currency::Eur);
+    let currency = get_currency(state);
 
     let cap_line = state
         .flows
@@ -145,103 +142,15 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     }
 
     // Recent transactions
-    if let Some(err) = state.flows.detail.error.as_ref() {
-        let block = Block::default()
-            .title(Span::styled(
-                " Recent Transactions ",
-                Style::default().fg(theme.accent),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.negative));
-        frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                format!("⚠ {err}"),
-                Style::default().fg(theme.negative),
-            )))
-            .alignment(Alignment::Center)
-            .block(block),
-            layout[1],
-        );
-        return;
-    }
-
-    let items = state
-        .flows
-        .detail
-        .transactions
-        .iter()
-        .map(|tx| {
-            let when = tx.occurred_at.format("%d %b %H:%M").to_string();
-            let note = tx.note.as_deref().unwrap_or("-");
-
-            let (icon, icon_color) = match tx.kind {
-                TransactionKind::Income => (ICON_INCOME, theme.income),
-                TransactionKind::Expense => (ICON_EXPENSE, theme.expense),
-                TransactionKind::Refund => (ICON_REFUND, theme.refund),
-                TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                    (ICON_TRANSFER, theme.transfer)
-                }
-            };
-
-            let amount_color = match tx.kind {
-                TransactionKind::Income | TransactionKind::Refund => theme.positive,
-                TransactionKind::Expense => theme.negative,
-                _ => theme.text,
-            };
-
-            let line = Line::from(vec![
-                Span::raw("  "),
-                Span::styled(when, Style::default().fg(theme.text_muted)),
-                Span::raw("  "),
-                Span::styled(icon, Style::default().fg(icon_color)),
-                Span::raw(" "),
-                Span::styled(
-                    format!("{:>10}", Money::new(tx.amount_minor).format(currency)),
-                    Style::default().fg(amount_color),
-                ),
-                Span::raw("  "),
-                Span::styled(note, Style::default().fg(theme.text)),
-            ]);
-            ListItem::new(line)
-        })
-        .collect::<Vec<_>>();
-
-    if items.is_empty() {
-        let block = Block::default()
-            .title(Span::styled(
-                " Recent Transactions ",
-                Style::default().fg(theme.accent),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.border));
-        frame.render_widget(
-            Paragraph::new(vec![
-                Line::from(""),
-                Line::from(Span::styled(
-                    "No transactions for this flow",
-                    Style::default().fg(theme.text_muted),
-                )),
-            ])
-            .alignment(Alignment::Center)
-            .block(block),
-            layout[1],
-        );
-        return;
-    }
-
-    let list = List::new(items).block(
-        Block::default()
-            .title(Span::styled(
-                " Recent Transactions ",
-                Style::default().fg(theme.accent),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.border)),
+    render_recent_transactions(
+        frame,
+        layout[1],
+        &state.flows.detail.transactions,
+        state.flows.detail.error.as_deref(),
+        "No transactions for this flow",
+        currency,
+        theme,
     );
-    frame.render_widget(list, layout[1]);
 }
 
 /// Render an empty detail panel with a message.

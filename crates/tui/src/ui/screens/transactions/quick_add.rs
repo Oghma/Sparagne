@@ -1,13 +1,13 @@
-/// Quick-add input bar rendering.
-///
-/// Displays:
-/// - Input field with cursor
-/// - Live preview of parsed transaction
-/// - Ambiguous field disambiguation UI
-/// - Syntax hints and examples
-/// - Envelope suggestions
+//! Quick-add input bar rendering.
+//!
+//! Displays:
+//! - Input field with cursor
+//! - Live preview of parsed transaction
+//! - Ambiguous field disambiguation UI
+//! - Syntax hints and examples
+//! - Envelope suggestions
 
-use engine::{Currency, Money};
+use engine::Money;
 use ratatui::{
     Frame,
     layout::Rect,
@@ -23,20 +23,17 @@ use crate::{
         resolve_flow_matches, resolve_wallet_matches,
     },
     quick_add::{QuickAddKind, parse},
+    text::{TextKey, t},
     ui::theme::Theme,
 };
 
-use super::common::{default_wallet_flow_names, map_currency};
+use super::common::default_wallet_flow_names;
+use crate::ui::common::get_currency;
 
 /// Renders the quick-add input bar at the top of the transaction list
 pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let (default_wallet_name, default_flow_name) = default_wallet_flow_names(state);
-    let currency = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
-        .unwrap_or(Currency::Eur);
+    let currency = get_currency(state);
 
     let input = state.transactions.quick_input.as_str();
 
@@ -53,7 +50,8 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         Style::default().fg(theme.border)
     };
 
-    let placeholder = "Press [a] to add transaction...";
+    let locale = state.locale;
+    let placeholder = t(locale, TextKey::QuickAddPlaceholder);
     let (input_text, input_style) = if input.is_empty() {
         (placeholder, Style::default().fg(theme.text_muted))
     } else {
@@ -164,7 +162,7 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 Span::raw("  │  "),
                 Span::styled(format!("@{from} → @{to}"), Style::default().fg(theme.transfer)),
                 Span::raw("  │  "),
-                Span::styled("Today", Style::default().fg(theme.text_muted)),
+                Span::styled(t(locale, TextKey::QuickAddToday), Style::default().fg(theme.text_muted)),
             ]));
         } else if p.kind == QuickAddKind::TransferFlow {
             let from = p.from_flow.as_deref().unwrap_or("-");
@@ -178,7 +176,7 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 Span::raw("  │  "),
                 Span::styled(format!(">{from} → >{to}"), Style::default().fg(theme.transfer)),
                 Span::raw("  │  "),
-                Span::styled("Today", Style::default().fg(theme.text_muted)),
+                Span::styled(t(locale, TextKey::QuickAddToday), Style::default().fg(theme.text_muted)),
             ]));
         } else {
             lines.push(Line::from(vec![
@@ -194,7 +192,7 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 Span::raw("  │  "),
                 Span::styled(wallet_display, wallet_style),
                 Span::raw("  │  "),
-                Span::styled("Today", Style::default().fg(theme.text_muted)),
+                Span::styled(t(locale, TextKey::QuickAddToday), Style::default().fg(theme.text_muted)),
             ]));
         }
 
@@ -228,7 +226,7 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                     Span::styled(options_str, Style::default().fg(theme.text_muted)),
                     Span::raw("  "),
                     Span::styled("[Ctrl+R]", Style::default().fg(theme.accent)),
-                    Span::styled(" cycle", Style::default().fg(theme.text_muted)),
+                    Span::styled(t(locale, TextKey::QuickAddCycle), Style::default().fg(theme.text_muted)),
                 ]));
             } else {
                 // Build ambiguous hint for fields with multiple matches
@@ -262,7 +260,7 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                         Span::styled(hints.join("  "), Style::default().fg(theme.warning)),
                         Span::raw("  "),
                         Span::styled("[Ctrl+R]", Style::default().fg(theme.accent)),
-                        Span::styled(" cycle", Style::default().fg(theme.text_muted)),
+                        Span::styled(t(locale, TextKey::QuickAddCycle), Style::default().fg(theme.text_muted)),
                     ]));
                 }
             }
@@ -276,14 +274,14 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             let suggestions = flow_name_suggestions(state, flow_query, 3);
             if !suggestions.is_empty() {
                 lines.push(Line::from(Span::styled(
-                    format!("Envelope suggestions: {}", suggestions.join(", ")),
+                    format!("{}{}", t(locale, TextKey::QuickAddEnvelopeSuggestions), suggestions.join(", ")),
                     Style::default().fg(theme.text_muted),
                 )));
             }
         }
     } else if state.transactions.quick_active {
         lines.push(Line::from(Span::styled(
-            "Syntax: [+]amount note [#cat] [@wallet] [>envelope]  |  + income, r refund",
+            t(locale, TextKey::QuickAddSyntaxHint),
             Style::default().fg(theme.text_muted),
         )));
     } else {
@@ -292,17 +290,17 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             Span::styled("⚡ ", Style::default().fg(theme.warning)),
             Span::styled("Syntax: ", Style::default().fg(theme.text_muted)),
             Span::styled(
-                "[+]amount note [#category] [@wallet] [>envelope]",
-                Style::default().fg(theme.dim),
+                t(locale, TextKey::QuickAddSyntaxShort),
+                Style::default().fg(theme.text_muted),
             ),
         ]));
         lines.push(Line::from(vec![
-            Span::styled("   Examples: ", Style::default().fg(theme.text_muted)),
-            Span::styled("50 lunch #food @main", Style::default().fg(theme.dim)),
+            Span::styled(t(locale, TextKey::QuickAddExamples), Style::default().fg(theme.text_muted)),
+            Span::styled("50 lunch #food @main", Style::default().fg(theme.text_muted)),
             Span::styled("  |  ", Style::default().fg(theme.border)),
-            Span::styled("+100 salary >income", Style::default().fg(theme.dim)),
+            Span::styled("+100 salary >income", Style::default().fg(theme.text_muted)),
             Span::styled("  |  ", Style::default().fg(theme.border)),
-            Span::styled("r30 refund", Style::default().fg(theme.dim)),
+            Span::styled("r30 refund", Style::default().fg(theme.text_muted)),
         ]));
         lines.push(Line::from(vec![
             Span::styled("   [a]", Style::default().fg(theme.accent)),
@@ -323,7 +321,7 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         .border_type(BorderType::Rounded)
         .border_style(border_style)
         .title(Span::styled(
-            " Quick Add ",
+            t(locale, TextKey::QuickAddTitle),
             Style::default().fg(theme.accent),
         ));
     let widget = Paragraph::new(lines).block(block);

@@ -1,9 +1,9 @@
-/// Filter modal rendering.
-///
-/// Displays:
-/// - Date range filters (from/to)
-/// - Transaction kind checkboxes (income, expense, refund, transfers)
-/// - Apply/cancel hints
+//! Filter modal rendering.
+//!
+//! Displays:
+//! - Date range filters (from/to)
+//! - Transaction kind checkboxes (income, expense, refund, transfers)
+//! - Apply/cancel hints
 
 use ratatui::{
     Frame,
@@ -15,7 +15,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, FilterField},
-    ui::{components::centered_rect, theme::Theme},
+    ui::{common::render_label_value_field, components::centered_rect, theme::Theme},
 };
 
 /// Renders the filter modal overlay
@@ -39,13 +39,13 @@ pub fn render_filter_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState
     };
 
     let mut lines = vec![
-        render_date_filter_field(
+        render_label_value_field(
             "From",
             filter.from_input.as_str(),
             filter.focus == FilterField::From,
             theme,
         ),
-        render_date_filter_field(
+        render_label_value_field(
             "To",
             filter.to_input.as_str(),
             filter.focus == FilterField::To,
@@ -54,7 +54,7 @@ pub fn render_filter_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState
         Line::from(""),
         Line::from(vec![
             Span::styled("Transaction Types ", kinds_label_style),
-            Span::styled("(press key to toggle)", Style::default().fg(theme.dim)),
+            Span::styled("(press key to toggle)", Style::default().fg(theme.text_muted)),
         ]),
         // Row 1: Income, Expense, Refund
         Line::from(vec![
@@ -86,7 +86,7 @@ pub fn render_filter_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState
     if let Some(err) = filter.error.as_ref() {
         lines.push(Line::from(Span::styled(
             err.as_str(),
-            Style::default().fg(theme.error),
+            Style::default().fg(theme.negative),
         )));
     }
 
@@ -97,27 +97,6 @@ pub fn render_filter_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState
         .border_style(Style::default().fg(theme.accent))
         .style(Style::default().bg(theme.background));
     frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
-}
-
-/// Renders a date filter field (from/to)
-fn render_date_filter_field(label: &str, value: &str, focused: bool, theme: &Theme) -> Line<'static> {
-    let label_style = if focused {
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text)
-    };
-    let value_style = if focused {
-        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text)
-    };
-    Line::from(vec![
-        Span::styled(format!("{label:<8}"), label_style),
-        Span::raw(": "),
-        Span::styled(value.to_string(), value_style),
-    ])
 }
 
 /// Renders a filter toggle with icon, label, and key hint
@@ -131,7 +110,7 @@ fn filter_toggle_with_icon(
     let (checkbox, style) = if enabled {
         ("[✓]", Style::default().fg(theme.positive))
     } else {
-        ("[✗]", Style::default().fg(theme.dim))
+        ("[✗]", Style::default().fg(theme.text_muted))
     };
     let text = format!("{checkbox} {icon} {label} ({key})");
     Span::styled(text, style)

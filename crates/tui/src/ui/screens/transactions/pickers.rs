@@ -1,10 +1,10 @@
-/// Wallet/Flow/Transfer pickers rendering.
-///
-/// Displays:
-/// - Wallet scope picker (for filtering transactions by wallet)
-/// - Flow scope picker (for filtering transactions by flow)
-/// - Transfer type picker (wallet vs flow transfer)
-/// - Transfer form overlay (from/to/amount/note/when)
+//! Wallet/Flow/Transfer pickers rendering.
+//!
+//! Displays:
+//! - Wallet scope picker (for filtering transactions by wallet)
+//! - Flow scope picker (for filtering transactions by flow)
+//! - Transfer type picker (wallet vs flow transfer)
+//! - Transfer form overlay (from/to/amount/note/when)
 
 use ratatui::{
     Frame,
@@ -16,7 +16,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, TransactionsMode, TransferField},
-    ui::{components::centered_rect, theme::Theme},
+    ui::{common::render_label_value_field, components::centered_rect, theme::Theme},
 };
 
 /// Renders the wallet/flow scope picker overlay
@@ -169,21 +169,21 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         .split(popup);
 
     let mut lines = vec![
-        render_transfer_field("From", from, transfer.focus == TransferField::From, theme),
-        render_transfer_field("To", to, transfer.focus == TransferField::To, theme),
-        render_transfer_field(
+        render_label_value_field("From", from, transfer.focus == TransferField::From, theme),
+        render_label_value_field("To", to, transfer.focus == TransferField::To, theme),
+        render_label_value_field(
             "Amount",
             transfer.amount.value(),
             transfer.focus == TransferField::Amount,
             theme,
         ),
-        render_transfer_field(
+        render_label_value_field(
             "Note",
             transfer.note.value(),
             transfer.focus == TransferField::Note,
             theme,
         ),
-        render_transfer_field(
+        render_label_value_field(
             "When",
             if transfer.occurred_at.value.trim().is_empty() {
                 "-"
@@ -195,14 +195,14 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         ),
         Line::from(Span::styled(
             "Tab: next • ↑/↓: change • Enter: save • Esc: cancel",
-            Style::default().fg(theme.dim),
+            Style::default().fg(theme.text_muted),
         )),
     ];
 
     if let Some(err) = transfer.error.as_ref() {
         lines.push(Line::from(Span::styled(
             err.as_str(),
-            Style::default().fg(theme.error),
+            Style::default().fg(theme.negative),
         )));
     }
 
@@ -237,25 +237,4 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
 
     let list = List::new(list_items).block(hint_block);
     frame.render_widget(list, layout[1]);
-}
-
-/// Renders a single transfer form field
-fn render_transfer_field(label: &str, value: &str, focused: bool, theme: &Theme) -> Line<'static> {
-    let label_style = if focused {
-        Style::default()
-            .fg(theme.accent)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text)
-    };
-    let value_style = if focused {
-        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text)
-    };
-    Line::from(vec![
-        Span::styled(format!("{label:<8}"), label_style),
-        Span::raw(": "),
-        Span::styled(value.to_string(), value_style),
-    ])
 }

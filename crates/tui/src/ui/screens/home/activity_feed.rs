@@ -21,7 +21,9 @@ use crate::{
     },
 };
 
-use super::common::{get_currency, render_empty_state, truncate, ICON_EXPENSE, ICON_INCOME, ICON_REFUND, ICON_TRANSFER};
+use crate::ui::common::tx_icon_color;
+
+use super::common::{get_currency, render_empty_state, truncate};
 
 /// Renders the activity feed showing recent transactions and alerts.
 pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -113,14 +115,7 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                     }
                 }
 
-                let (icon, icon_color) = match tx.kind {
-                    TransactionKind::Income => (ICON_INCOME, theme.income),
-                    TransactionKind::Expense => (ICON_EXPENSE, theme.expense),
-                    TransactionKind::Refund => (ICON_REFUND, theme.refund),
-                    TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                        (ICON_TRANSFER, theme.transfer)
-                    }
-                };
+                let (icon, icon_color) = tx_icon_color(tx.kind, theme);
 
                 let amount = if tx.kind == TransactionKind::Expense {
                     -tx.amount_minor.abs()
@@ -155,14 +150,12 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                     Style::default().fg(theme.text),
                 ));
 
-                if show_meta {
-                    if let Some(category) = category {
-                        line.push(Span::raw("  "));
-                        line.push(Span::styled(
-                            format!("🏷{}", truncate(category, cat_width)),
-                            Style::default().fg(theme.accent),
-                        ));
-                    }
+                if show_meta && let Some(category) = category {
+                    line.push(Span::raw("  "));
+                    line.push(Span::styled(
+                        format!("🏷{}", truncate(category, cat_width)),
+                        Style::default().fg(theme.accent),
+                    ));
                 }
 
                 items.push(ListItem::new(Line::from(line)));
