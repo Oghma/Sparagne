@@ -169,9 +169,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessVaultCreated), ToastLevel::Success);
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorCreateVault) else { return Ok(()); };
                 self.state.vault_ui.form.error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorCreateVault), ToastLevel::Error);
             }
         }
 

@@ -44,9 +44,8 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
                 self.state.wallets.detail.error = Some(msg);
-                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -103,9 +102,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessWalletCreated), ToastLevel::Success);
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorCreateWallet) else { return Ok(()); };
                 self.state.wallets.error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorCreateWallet), ToastLevel::Error);
             }
         }
 
@@ -149,9 +147,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessWalletUpdated), ToastLevel::Success);
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorUpdateWallet) else { return Ok(()); };
                 self.state.wallets.error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorUpdateWallet), ToastLevel::Error);
             }
         }
 
@@ -180,9 +177,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessWalletUpdated), ToastLevel::Success);
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorArchiveWallet) else { return Ok(()); };
                 self.state.wallets.error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorArchiveWallet), ToastLevel::Error);
             }
         }
 
@@ -223,9 +219,8 @@ impl App {
                 self.set_undo_toast(&message, UndoAction::WalletArchive { id: wallet_id });
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorArchiveWallet) else { return Ok(()); };
                 self.state.wallets.error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorArchiveWallet), ToastLevel::Error);
             }
         }
 
@@ -251,9 +246,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessWalletRestored), ToastLevel::Success);
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorRestoreWallet) else { return Ok(()); };
                 self.state.wallets.error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorRestoreWallet), ToastLevel::Error);
             }
         }
 

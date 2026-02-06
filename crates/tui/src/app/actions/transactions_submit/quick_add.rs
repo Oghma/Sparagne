@@ -232,9 +232,8 @@ impl App {
                 self.load_transactions(true).await?;
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else { return Ok(()); };
                 self.state.transactions.quick_error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorSaving), ToastLevel::Error);
             }
         }
 
@@ -298,9 +297,8 @@ impl App {
                 self.load_transactions(true).await?;
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else { return Ok(()); };
                 self.state.transactions.quick_error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorSaving), ToastLevel::Error);
             }
         }
 
@@ -364,9 +362,8 @@ impl App {
                 self.load_transactions(true).await?;
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else { return Ok(()); };
                 self.state.transactions.quick_error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorSaving), ToastLevel::Error);
             }
         }
 

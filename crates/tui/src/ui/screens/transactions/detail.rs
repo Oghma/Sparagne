@@ -26,9 +26,11 @@ use crate::ui::common::get_currency;
 
 /// Renders the transaction detail panel (right side)
 pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
+
     let Some(detail) = &state.transactions.detail else {
         let block = Block::default()
-            .title("Transaction")
+            .title(t(locale, TextKey::DialogTransaction))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(theme.accent));
@@ -69,15 +71,20 @@ fn render_transaction_info(
         .map(|c| format!("#{c}"))
         .unwrap_or_else(|| "-".to_string());
     let note = header.note.as_deref().unwrap_or("-");
-    let voided = if header.voided { "YES" } else { "NO" };
+    let locale = state.locale;
+    let voided = if header.voided {
+        t(locale, TextKey::TxnDetailVoidedYes)
+    } else {
+        t(locale, TextKey::TxnDetailVoidedNo)
+    };
 
     let lines = vec![
         Line::from(vec![
-            Span::styled("Kind", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::TxnDetailKind), Style::default().fg(theme.text_muted)),
             Span::raw(": "),
             kind_chip(header.kind, theme),
             Span::raw("   "),
-            Span::styled("Voided", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::TxnDetailVoided), Style::default().fg(theme.text_muted)),
             Span::raw(": "),
             Span::styled(
                 voided.to_string(),
@@ -89,25 +96,25 @@ fn render_transaction_info(
             ),
         ]),
         Line::from(vec![
-            Span::styled("When", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::TxnDetailWhen), Style::default().fg(theme.text_muted)),
             Span::raw(format!(": {occurred_at}")),
         ]),
         Line::from(vec![
-            Span::styled("Amount", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::TxnDetailAmount), Style::default().fg(theme.text_muted)),
             Span::raw(format!(": {amount}")),
         ]),
         Line::from(vec![
-            Span::styled("Category", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::TxnDetailCategory), Style::default().fg(theme.text_muted)),
             Span::raw(format!(": {category}")),
         ]),
         Line::from(vec![
-            Span::styled("Note", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::TxnDetailNote), Style::default().fg(theme.text_muted)),
             Span::raw(format!(": {note}")),
         ]),
     ];
 
     let header_block = Block::default()
-        .title("Transaction Detail")
+        .title(t(locale, TextKey::TxnDetailTitle))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));
@@ -123,6 +130,7 @@ fn render_legs(
     theme: &Theme,
 ) {
     let currency = get_currency(state);
+    let locale = state.locale;
 
     let legs = detail
         .legs
@@ -133,8 +141,8 @@ fn render_legs(
                 LegTarget::Flow { flow_id } => resolve_flow_name(state, flow_id),
             };
             let label = match leg.target {
-                LegTarget::Wallet { .. } => "Wallet",
-                LegTarget::Flow { .. } => "Flow",
+                LegTarget::Wallet { .. } => t(locale, TextKey::TxnDetailLegWallet),
+                LegTarget::Flow { .. } => t(locale, TextKey::TxnDetailLegFlow),
             };
             let amount = leg_amount_span(leg.amount_minor, currency, theme);
             ListItem::new(Line::from(vec![
@@ -148,7 +156,7 @@ fn render_legs(
         .collect::<Vec<_>>();
 
     let legs_block = Block::default()
-        .title("Legs")
+        .title(t(locale, TextKey::TxnDetailLegsTitle))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent));

@@ -75,9 +75,8 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
                 self.state.members.error = Some(msg);
-                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
         Ok(())

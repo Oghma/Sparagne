@@ -8,11 +8,14 @@ use ratatui::{
 
 use crate::{
     app::AppState,
+    text::{TextKey, t},
     ui::{common::{resolve_flow_name, resolve_wallet_name}, theme::Theme},
 };
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let vault_name = display_vault_name(state).unwrap_or_else(|| "Main".to_string());
+    let locale = state.locale;
+    let vault_name = display_vault_name(state)
+        .unwrap_or_else(|| t(locale, TextKey::VaultDefaultName).to_string());
     let vault_id = state
         .vault
         .as_ref()
@@ -30,14 +33,15 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .map(|snap| (snap.wallets.len(), snap.flows.len()))
         .unwrap_or((0, 0));
 
+    let none_label = t(locale, TextKey::UiNone);
     let default_wallet_name = state
         .default_wallet_id
         .map(|id| resolve_wallet_name(state, id))
-        .unwrap_or_else(|| "None".to_string());
+        .unwrap_or_else(|| none_label.to_string());
     let default_flow_name = state
         .default_flow_id
         .map(|id| resolve_flow_name(state, id))
-        .unwrap_or_else(|| "None".to_string());
+        .unwrap_or_else(|| none_label.to_string());
 
     let block = Block::default()
         .title(Span::styled(
@@ -67,7 +71,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Vault ID
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("  ID          ", Style::default().fg(theme.text_muted)),
+            Span::styled(format!("  {:<14}", t(locale, TextKey::VaultIdLabel)), Style::default().fg(theme.text_muted)),
             Span::styled(vault_id.to_string(), Style::default().fg(theme.text)),
         ])),
         info_layout[0],
@@ -76,7 +80,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Currency
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("  Currency    ", Style::default().fg(theme.text_muted)),
+            Span::styled(format!("  {:<14}", t(locale, TextKey::VaultCurrencyLabel)), Style::default().fg(theme.text_muted)),
             Span::styled(currency, Style::default().fg(theme.text)),
         ])),
         info_layout[1],
@@ -85,10 +89,10 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Wallets and Flows count
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("  Wallets     ", Style::default().fg(theme.text_muted)),
+            Span::styled(format!("  {:<14}", t(locale, TextKey::SectionWallets)), Style::default().fg(theme.text_muted)),
             Span::styled(wallets_count.to_string(), Style::default().fg(theme.text)),
             Span::raw("    "),
-            Span::styled("Flows  ", Style::default().fg(theme.text_muted)),
+            Span::styled(format!("{:<7}", t(locale, TextKey::SectionFlows)), Style::default().fg(theme.text_muted)),
             Span::styled(flows_count.to_string(), Style::default().fg(theme.text)),
         ])),
         info_layout[2],
@@ -97,7 +101,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Defaults header
     frame.render_widget(
         Paragraph::new(Line::from(vec![Span::styled(
-            "  Quick Defaults",
+            format!("  {}", t(locale, TextKey::VaultQuickDefaults)),
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
@@ -108,7 +112,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Default wallet
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("  Default Wallet  ", Style::default().fg(theme.text_muted)),
+            Span::styled(format!("  {}  ", t(locale, TextKey::VaultDefaultWallet)), Style::default().fg(theme.text_muted)),
             Span::styled(
                 default_wallet_name,
                 if state.default_wallet_id.is_some() {
@@ -124,7 +128,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Default flow
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("  Default Flow    ", Style::default().fg(theme.text_muted)),
+            Span::styled(format!("  {}  ", t(locale, TextKey::VaultDefaultFlow)), Style::default().fg(theme.text_muted)),
             Span::styled(
                 default_flow_name,
                 if state.default_flow_id.is_some() {

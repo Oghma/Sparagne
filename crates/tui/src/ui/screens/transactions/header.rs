@@ -18,6 +18,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, GroupingMode},
+    text::{TextKey, t},
     ui::theme::Theme,
 };
 
@@ -26,12 +27,14 @@ use super::common::scope_label;
 /// Renders the header area with filters, search, and hints
 pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
+    let locale = state.locale;
+
     // Determine grouping mode label
     let grouping_label = match state.transactions.grouping_mode {
-        GroupingMode::Date => "Date",
-        GroupingMode::Category => "Category",
-        GroupingMode::Wallet => "Wallet",
-        GroupingMode::Envelope => "Envelope",
+        GroupingMode::Date => t(locale, TextKey::TxnGroupDate),
+        GroupingMode::Category => t(locale, TextKey::TxnGroupCategory),
+        GroupingMode::Wallet => t(locale, TextKey::TxnGroupWallet),
+        GroupingMode::Envelope => t(locale, TextKey::TxnGroupEnvelope),
     };
 
     let scope = scope_label(state);
@@ -52,10 +55,10 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     };
 
     let mut line1 = vec![
-        Span::styled("Voided ", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::TxnHeaderVoided), Style::default().fg(theme.text_muted)),
         voided_status,
         Span::raw("  "),
-        Span::styled("Transfers ", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::TxnHeaderTransfers), Style::default().fg(theme.text_muted)),
         transfers_status,
         Span::raw("     │     "),
     ];
@@ -67,7 +70,7 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             Style::default().fg(theme.warning),
         ));
     } else {
-        line1.push(Span::styled("Filters [off]", Style::default().fg(theme.text_muted)));
+        line1.push(Span::styled(t(locale, TextKey::TxnHeaderFiltersOff), Style::default().fg(theme.text_muted)));
     }
 
     // Row 2: Search field and hints
@@ -75,7 +78,7 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     let mut line2 = vec![];
 
     if !search_query.is_empty() || state.transactions.search.active {
-        line2.push(Span::styled("Search: ", Style::default().fg(theme.text_muted)));
+        line2.push(Span::styled(t(locale, TextKey::TxnHeaderSearch), Style::default().fg(theme.text_muted)));
         let shown = if search_query.is_empty() {
             "…"
         } else {
@@ -90,7 +93,7 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     }
 
     line2.push(Span::styled(
-        "[Ctrl+F] search  [g] group  [f] filters  [w/W] scope",
+        t(locale, TextKey::TxnHeaderHints),
         Style::default().fg(theme.text_muted),
     ));
 

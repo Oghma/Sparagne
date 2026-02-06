@@ -163,9 +163,8 @@ impl App {
                 self.refresh_transactions_search().await?;
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
                 self.state.transactions.error = Some(msg);
-                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -223,9 +222,8 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
                 self.state.transactions.error = Some(msg);
-                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -265,9 +263,8 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
                 self.state.transactions.error = Some(msg);
-                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -303,9 +300,8 @@ impl App {
                 self.load_transactions(true).await?;
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorVoiding) else { return Ok(()); };
                 self.state.transactions.error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorVoiding), ToastLevel::Error);
             }
         }
 
@@ -344,9 +340,8 @@ impl App {
                 self.load_transactions(true).await?;
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorRepeating) else { return Ok(()); };
                 self.state.transactions.error = Some(msg);
-                self.set_toast(t(self.state.locale, TextKey::ErrorRepeating), ToastLevel::Error);
             }
         }
 

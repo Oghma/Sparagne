@@ -8,14 +8,18 @@ use ratatui::{
 
 use crate::{
     app::{AppState, DefaultsField},
+    text::{TextKey, t},
     ui::theme::Theme,
 };
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
+    let defaults_title = format!(" {} ", t(locale, TextKey::VaultQuickDefaults));
+
     let Some(snapshot) = state.snapshot.as_ref() else {
         let block = Block::default()
             .title(Span::styled(
-                " Quick Defaults ",
+                defaults_title,
                 Style::default().fg(theme.accent),
             ))
             .borders(Borders::ALL)
@@ -23,7 +27,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             .border_style(Style::default().fg(theme.border_focused));
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
-                "Snapshot not available",
+                t(locale, TextKey::StateSnapshotUnavailable),
                 Style::default().fg(theme.text_muted),
             )))
             .alignment(Alignment::Center)
@@ -47,21 +51,22 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .collect();
 
     let defaults = &state.vault_ui.defaults;
+    let none_label = t(locale, TextKey::UiNone);
     let wallet_label = if defaults.wallet_index == 0 {
-        "None"
+        none_label
     } else {
         wallet_names
             .get(defaults.wallet_index - 1)
             .map(|name| name.as_str())
-            .unwrap_or("None")
+            .unwrap_or(none_label)
     };
     let flow_label = if defaults.flow_index == 0 {
-        "None"
+        none_label
     } else {
         flow_names
             .get(defaults.flow_index - 1)
             .map(|name| name.as_str())
-            .unwrap_or("None")
+            .unwrap_or(none_label)
     };
 
     let layout = Layout::default()
@@ -72,7 +77,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Form section
     let form_block = Block::default()
         .title(Span::styled(
-            " Quick Defaults ",
+            defaults_title,
             Style::default().fg(theme.accent),
         ))
         .borders(Borders::ALL)
@@ -94,7 +99,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(
-                "  Default Wallet  ",
+                format!("  {}  ", t(locale, TextKey::VaultDefaultWallet)),
                 if wallet_focused {
                     Style::default()
                         .fg(theme.accent)
@@ -118,7 +123,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(
-                "  Default Flow    ",
+                format!("  {}  ", t(locale, TextKey::VaultDefaultFlow)),
                 if flow_focused {
                     Style::default()
                         .fg(theme.accent)
@@ -146,7 +151,8 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     render_defaults_list(
         frame,
         lists[0],
-        "Wallets",
+        t(locale, TextKey::SectionWallets),
+        none_label,
         &wallet_names,
         defaults.wallet_index,
         wallet_focused,
@@ -155,7 +161,8 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     render_defaults_list(
         frame,
         lists[1],
-        "Flows",
+        t(locale, TextKey::SectionFlows),
+        none_label,
         &flow_names,
         defaults.flow_index,
         flow_focused,
@@ -183,6 +190,7 @@ fn render_defaults_list(
     frame: &mut Frame<'_>,
     area: Rect,
     title: &str,
+    none_label: &str,
     items: &[String],
     selected: usize,
     focused: bool,
@@ -191,7 +199,7 @@ fn render_defaults_list(
     let mut list_items = Vec::with_capacity(items.len() + 1);
     list_items.push(ListItem::new(Line::from(vec![
         Span::raw("  "),
-        Span::styled("None", Style::default().fg(theme.text_muted)),
+        Span::styled(none_label, Style::default().fg(theme.text_muted)),
     ])));
     list_items.extend(items.iter().map(|name| {
         ListItem::new(Line::from(vec![

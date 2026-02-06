@@ -447,5 +447,42 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::CatHintRename => " rename  ",
         TextKey::CatHintAliases => " aliases  ",
         TextKey::CatHintMerge => " merge",
+
+        // Transaction header / grouping
+        TextKey::TxnGroupDate => "Date",
+        TextKey::TxnGroupCategory => "Category",
+        TextKey::TxnGroupWallet => "Wallet",
+        TextKey::TxnGroupEnvelope => "Envelope",
+        TextKey::TxnHeaderVoided => "Voided ",
+        TextKey::TxnHeaderTransfers => "Transfers ",
+        TextKey::TxnHeaderFiltersOff => "Filters [off]",
+        TextKey::TxnHeaderSearch => "Search: ",
+        TextKey::TxnHeaderHints => "[Ctrl+F] search  [g] group  [f] filters  [w/W] scope",
+
+        // Transaction detail
+        TextKey::TxnDetailTitle => "Transaction Detail",
+        TextKey::TxnDetailKind => "Kind",
+        TextKey::TxnDetailVoided => "Voided",
+        TextKey::TxnDetailVoidedYes => "YES",
+        TextKey::TxnDetailVoidedNo => "NO",
+        TextKey::TxnDetailWhen => "When",
+        TextKey::TxnDetailAmount => "Amount",
+        TextKey::TxnDetailCategory => "Category",
+        TextKey::TxnDetailNote => "Note",
+        TextKey::TxnDetailLegsTitle => "Legs",
+        TextKey::TxnDetailLegWallet => "Wallet",
+        TextKey::TxnDetailLegFlow => "Flow",
+
+        // Vault view / defaults
+        TextKey::VaultDefaultName => "Main",
+        TextKey::VaultQuickDefaults => "Quick Defaults",
+        TextKey::VaultDefaultWallet => "Default Wallet",
+        TextKey::VaultDefaultFlow => "Default Flow",
+        TextKey::VaultIdLabel => "ID",
+        TextKey::VaultCurrencyLabel => "Currency",
+
+        // General UI
+        TextKey::UiNone => "None",
+        TextKey::UiUndoApplied => "Undo applied.",
     }
 }

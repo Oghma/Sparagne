@@ -63,7 +63,7 @@ impl App {
 
         self.state.screen = Screen::Login;
         self.state.login.password.clear();
-        self.state.login.message = Some("Credenziali errate o pairing mancante.".to_string());
+        self.state.login.message = Some(t(self.state.locale, TextKey::ErrorInvalidCredentials).to_string());
         self.state.vault = None;
         self.state.snapshot = None;
         self.state.section = Section::Home;
@@ -82,6 +82,24 @@ impl App {
             return None;
         }
         Some(login_message_for_error(err, self.state.locale))
+    }
+
+    /// Handle an API error for data-loading calls: checks auth, shows connection
+    /// error indicator. Returns `Some(msg)` for the caller to assign to an error
+    /// field, or `None` if it was an auth error (already handled).
+    pub(crate) fn on_api_error_connection(&mut self, err: ClientError) -> Option<String> {
+        let msg = self.client_error_message(err)?;
+        self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
+        Some(msg)
+    }
+
+    /// Handle an API error for mutation calls: checks auth, shows an error toast
+    /// with the given key. Returns `Some(msg)` for the caller to assign to an
+    /// error field, or `None` if it was an auth error (already handled).
+    pub(crate) fn on_api_error_toast(&mut self, err: ClientError, toast_key: TextKey) -> Option<String> {
+        let msg = self.client_error_message(err)?;
+        self.set_toast(t(self.state.locale, toast_key), ToastLevel::Error);
+        Some(msg)
     }
 
     pub(crate) async fn finalize_pending_undo(&mut self) -> Result<()> {
@@ -122,7 +140,7 @@ impl App {
                 for id in ids {
                     self.state.transactions.pending_delete_ids.remove(&id);
                 }
-                self.set_toast("Undo applied.", ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::UiUndoApplied), ToastLevel::Success);
             }
             UndoAction::WalletArchive { id } => {
                 self.undo_wallet_archive(id).await?;

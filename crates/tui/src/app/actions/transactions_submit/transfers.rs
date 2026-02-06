@@ -87,9 +87,8 @@ impl App {
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
                 Err(err) => {
-                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorTransferWallet) else { return Ok(()); };
                     self.state.transactions.transfer.error = Some(msg);
-                    self.set_toast(t(self.state.locale, TextKey::ErrorTransferWallet), ToastLevel::Error);
                 }
             }
         } else {
@@ -121,9 +120,8 @@ impl App {
                     self.load_transactions(true).await?;
                 }
                 Err(err) => {
-                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorTransferWallet) else { return Ok(()); };
                     self.state.transactions.transfer.error = Some(msg);
-                    self.set_toast(t(self.state.locale, TextKey::ErrorTransferWallet), ToastLevel::Error);
                 }
             }
         }
@@ -210,9 +208,8 @@ impl App {
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
                 Err(err) => {
-                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorTransferFlow) else { return Ok(()); };
                     self.state.transactions.transfer.error = Some(msg);
-                    self.set_toast(t(self.state.locale, TextKey::ErrorTransferFlow), ToastLevel::Error);
                 }
             }
         } else {
@@ -244,9 +241,8 @@ impl App {
                     self.load_transactions(true).await?;
                 }
                 Err(err) => {
-                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorTransferFlow) else { return Ok(()); };
                     self.state.transactions.transfer.error = Some(msg);
-                    self.set_toast(t(self.state.locale, TextKey::ErrorTransferFlow), ToastLevel::Error);
                 }
             }
         }

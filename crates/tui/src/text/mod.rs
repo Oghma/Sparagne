@@ -469,6 +469,43 @@ pub enum TextKey {
     CatHintRename,
     CatHintAliases,
     CatHintMerge,
+
+    // Transaction header / grouping
+    TxnGroupDate,
+    TxnGroupCategory,
+    TxnGroupWallet,
+    TxnGroupEnvelope,
+    TxnHeaderVoided,
+    TxnHeaderTransfers,
+    TxnHeaderFiltersOff,
+    TxnHeaderSearch,
+    TxnHeaderHints,
+
+    // Transaction detail
+    TxnDetailTitle,
+    TxnDetailKind,
+    TxnDetailVoided,
+    TxnDetailVoidedYes,
+    TxnDetailVoidedNo,
+    TxnDetailWhen,
+    TxnDetailAmount,
+    TxnDetailCategory,
+    TxnDetailNote,
+    TxnDetailLegsTitle,
+    TxnDetailLegWallet,
+    TxnDetailLegFlow,
+
+    // Vault view / defaults
+    VaultDefaultName,
+    VaultQuickDefaults,
+    VaultDefaultWallet,
+    VaultDefaultFlow,
+    VaultIdLabel,
+    VaultCurrencyLabel,
+
+    // General UI
+    UiNone,
+    UiUndoApplied,
 }
 
 /// Returns the localized string for a text key.
