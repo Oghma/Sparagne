@@ -1,19 +1,9 @@
-mod app;
-mod client;
-mod config;
-mod error;
-mod local_state;
-mod quick_add;
-mod text;
-mod ui;
-mod validation;
-
-use crate::error::Result;
+use sparagne_tui::{Result, app::App, config};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let config = config::load()?;
-    let mut app = app::App::new(config)?;
+    let mut app = App::new(config)?;
     app.run().await?;
     Ok(())
 }

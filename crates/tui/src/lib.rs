@@ -1,5 +1,9 @@
+//! Sparagne TUI — terminal interface for personal finance tracking.
+
 pub mod app;
 pub mod config;
+
+pub use error::Result;
 
 mod client;
 mod error;
