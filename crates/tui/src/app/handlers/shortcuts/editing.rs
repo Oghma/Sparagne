@@ -16,10 +16,10 @@ impl App {
                     self.start_transaction_edit().await?;
                 } else if self.state.section == Section::Accounts {
                     match self.state.accounts_tab {
-                        AccountsTab::Sources if self.state.wallets.mode == WalletsMode::List => {
+                        AccountsTab::Sources if self.state.wallets.mode == EntityListMode::List => {
                             self.start_wallet_rename();
                         }
-                        AccountsTab::Envelopes if self.state.flows.mode == FlowsMode::List => {
+                        AccountsTab::Envelopes if self.state.flows.mode == EntityListMode::List => {
                             self.start_flow_rename();
                         }
                         AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
@@ -46,10 +46,10 @@ impl App {
                     self.clear_filters().await?;
                 } else if self.state.section == Section::Accounts {
                     match self.state.accounts_tab {
-                        AccountsTab::Sources if self.state.wallets.mode == WalletsMode::List => {
+                        AccountsTab::Sources if self.state.wallets.mode == EntityListMode::List => {
                             self.start_wallet_create();
                         }
-                        AccountsTab::Envelopes if self.state.flows.mode == FlowsMode::List => {
+                        AccountsTab::Envelopes if self.state.flows.mode == EntityListMode::List => {
                             self.start_flow_create();
                         }
                         AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
@@ -99,7 +99,7 @@ impl App {
             'm' | 'M' => {
                 if self.state.section == Section::Accounts
                     && self.state.accounts_tab == AccountsTab::Envelopes
-                    && self.state.flows.mode == FlowsMode::Create
+                    && self.state.flows.mode == EntityListMode::Create
                     && self.state.flows.form.focus == FlowFormField::Mode
                 {
                     self.cycle_flow_mode();
@@ -164,13 +164,13 @@ impl App {
             }
         } else if self.state.section == Section::Accounts {
             match self.state.accounts_tab {
-                AccountsTab::Sources if self.state.wallets.mode != WalletsMode::List => {
-                    self.state.wallets.mode = WalletsMode::List;
+                AccountsTab::Sources if self.state.wallets.mode != EntityListMode::List => {
+                    self.state.wallets.mode = EntityListMode::List;
                     self.state.wallets.detail = WalletDetailState::default();
                     self.reset_wallet_form();
                 }
-                AccountsTab::Envelopes if self.state.flows.mode != FlowsMode::List => {
-                    self.state.flows.mode = FlowsMode::List;
+                AccountsTab::Envelopes if self.state.flows.mode != EntityListMode::List => {
+                    self.state.flows.mode = EntityListMode::List;
                     self.state.flows.detail = FlowDetailState::default();
                     self.reset_flow_form();
                 }
@@ -199,7 +199,7 @@ impl App {
         }
         if self.state.section == Section::Accounts {
             match self.state.accounts_tab {
-                AccountsTab::Sources if self.state.wallets.mode == WalletsMode::List => {
+                AccountsTab::Sources if self.state.wallets.mode == EntityListMode::List => {
                     if let Some(wallet) = self.selected_wallet()
                         && !wallet.archived
                     {
@@ -209,7 +209,7 @@ impl App {
                     }
                     return Ok(());
                 }
-                AccountsTab::Envelopes if self.state.flows.mode == FlowsMode::List => {
+                AccountsTab::Envelopes if self.state.flows.mode == EntityListMode::List => {
                     if let Some(flow) = self.selected_flow()
                         && !flow.archived
                     {

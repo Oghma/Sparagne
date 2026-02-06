@@ -33,10 +33,10 @@ impl App {
             'A' => {
                 if self.state.section == Section::Accounts {
                     match self.state.accounts_tab {
-                        AccountsTab::Sources if self.state.wallets.mode == WalletsMode::List => {
+                        AccountsTab::Sources if self.state.wallets.mode == EntityListMode::List => {
                             self.toggle_wallets_show_archived();
                         }
-                        AccountsTab::Envelopes if self.state.flows.mode == FlowsMode::List => {
+                        AccountsTab::Envelopes if self.state.flows.mode == EntityListMode::List => {
                             self.toggle_flows_show_archived();
                         }
                         AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}

@@ -14,7 +14,7 @@ impl App {
             return Ok(());
         };
         self.state.wallets.detail.wallet_id = Some(wallet_id);
-        self.state.wallets.mode = WalletsMode::Detail;
+        self.state.wallets.mode = EntityListMode::Detail;
         self.load_wallet_transactions(wallet_id).await?;
         Ok(())
     }
@@ -96,7 +96,7 @@ impl App {
         match res {
             Ok(created) => {
                 self.reset_wallet_form();
-                self.state.wallets.mode = WalletsMode::List;
+                self.state.wallets.mode = EntityListMode::List;
                 self.refresh_snapshot().await?;
                 self.select_wallet_by_id(created.id);
                 self.set_toast(t(self.state.locale, TextKey::SuccessWalletCreated), ToastLevel::Success);
@@ -142,7 +142,7 @@ impl App {
         match res {
             Ok(()) => {
                 self.reset_wallet_form();
-                self.state.wallets.mode = WalletsMode::List;
+                self.state.wallets.mode = EntityListMode::List;
                 self.refresh_snapshot().await?;
                 self.set_toast(t(self.state.locale, TextKey::SuccessWalletUpdated), ToastLevel::Success);
             }

@@ -99,7 +99,7 @@ pub fn render_stats_bar_compact(frame: &mut Frame<'_>, area: Rect, state: &AppSt
     let expenses_str = Money::new(expenses).format(currency);
 
     let line = Line::from(vec![
-        Span::styled("Net Worth: ", Style::default().fg(theme.text_muted)),
+        Span::styled(format!("{}: ", t(state.locale, TextKey::HomeNetWorth)), Style::default().fg(theme.text_muted)),
         Span::styled(
             net_worth,
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
@@ -117,7 +117,7 @@ pub fn render_stats_bar_compact(frame: &mut Frame<'_>, area: Rect, state: &AppSt
 
 fn render_net_worth_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
-    let card = Card::new("Net Worth", theme);
+    let card = Card::new(t(state.locale, TextKey::HomeNetWorth), theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 

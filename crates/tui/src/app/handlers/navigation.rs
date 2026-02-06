@@ -19,27 +19,27 @@ impl App {
             TransactionsMode::PickWallet => self.apply_wallet_picker().await,
             TransactionsMode::PickFlow => self.apply_flow_picker().await,
             TransactionsMode::TransferPicker => self.apply_transfer_picker(),
-            TransactionsMode::TransferWallet => self.submit_transfer_wallet().await,
-            TransactionsMode::TransferFlow => self.submit_transfer_flow().await,
+            TransactionsMode::TransferWallet => self.submit_transfer(TransferType::Wallet).await,
+            TransactionsMode::TransferFlow => self.submit_transfer(TransferType::Flow).await,
             TransactionsMode::Filter => self.apply_filter().await,
         }
     }
 
     pub(crate) async fn handle_wallets_submit(&mut self) -> Result<()> {
         match self.state.wallets.mode {
-            WalletsMode::List => self.open_wallet_detail().await,
-            WalletsMode::Detail => Ok(()),
-            WalletsMode::Create => self.submit_wallet_create().await,
-            WalletsMode::Rename => self.submit_wallet_rename().await,
+            EntityListMode::List => self.open_wallet_detail().await,
+            EntityListMode::Detail => Ok(()),
+            EntityListMode::Create => self.submit_wallet_create().await,
+            EntityListMode::Rename => self.submit_wallet_rename().await,
         }
     }
 
     pub(crate) async fn handle_flows_submit(&mut self) -> Result<()> {
         match self.state.flows.mode {
-            FlowsMode::List => self.open_flow_detail().await,
-            FlowsMode::Detail => Ok(()),
-            FlowsMode::Create => self.submit_flow_create().await,
-            FlowsMode::Rename => self.submit_flow_rename().await,
+            EntityListMode::List => self.open_flow_detail().await,
+            EntityListMode::Detail => Ok(()),
+            EntityListMode::Create => self.submit_flow_create().await,
+            EntityListMode::Rename => self.submit_flow_rename().await,
         }
     }
 

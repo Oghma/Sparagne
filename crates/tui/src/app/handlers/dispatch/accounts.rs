@@ -1,6 +1,6 @@
 //! Accounts section dispatch handling (wallets and flows).
 
-use crate::app::state::{AccountsTab, FlowsMode, WalletsMode};
+use crate::app::state::{AccountsTab, EntityListMode};
 use crate::app::App;
 use crate::error::Result;
 use crate::ui::keymap::AppAction;
@@ -51,11 +51,11 @@ impl App {
             AccountsTab::Sources
                 if matches!(
                     self.state.wallets.mode,
-                    WalletsMode::List | WalletsMode::Detail
+                    EntityListMode::List | EntityListMode::Detail
                 ) =>
             {
                 self.wallets_select_prev();
-                if self.state.wallets.mode == WalletsMode::Detail {
+                if self.state.wallets.mode == EntityListMode::Detail {
                     self.open_wallet_detail().await?;
                 }
                 Ok(true)
@@ -63,11 +63,11 @@ impl App {
             AccountsTab::Envelopes
                 if matches!(
                     self.state.flows.mode,
-                    FlowsMode::List | FlowsMode::Detail
+                    EntityListMode::List | EntityListMode::Detail
                 ) =>
             {
                 self.flows_select_prev();
-                if self.state.flows.mode == FlowsMode::Detail {
+                if self.state.flows.mode == EntityListMode::Detail {
                     self.open_flow_detail().await?;
                 }
                 Ok(true)
@@ -81,11 +81,11 @@ impl App {
             AccountsTab::Sources
                 if matches!(
                     self.state.wallets.mode,
-                    WalletsMode::List | WalletsMode::Detail
+                    EntityListMode::List | EntityListMode::Detail
                 ) =>
             {
                 self.wallets_select_next();
-                if self.state.wallets.mode == WalletsMode::Detail {
+                if self.state.wallets.mode == EntityListMode::Detail {
                     self.open_wallet_detail().await?;
                 }
                 Ok(true)
@@ -93,11 +93,11 @@ impl App {
             AccountsTab::Envelopes
                 if matches!(
                     self.state.flows.mode,
-                    FlowsMode::List | FlowsMode::Detail
+                    EntityListMode::List | EntityListMode::Detail
                 ) =>
             {
                 self.flows_select_next();
-                if self.state.flows.mode == FlowsMode::Detail {
+                if self.state.flows.mode == EntityListMode::Detail {
                     self.open_flow_detail().await?;
                 }
                 Ok(true)

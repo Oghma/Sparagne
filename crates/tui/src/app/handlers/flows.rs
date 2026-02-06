@@ -14,7 +14,7 @@ impl App {
     }
     pub(crate) fn start_flow_create(&mut self) {
         self.reset_flow_form();
-        self.state.flows.mode = FlowsMode::Create;
+        self.state.flows.mode = EntityListMode::Create;
     }
 
     pub(crate) fn start_flow_rename(&mut self) {
@@ -31,7 +31,7 @@ impl App {
         }
         self.reset_flow_form();
         self.state.flows.form.name.set_value(name);
-        self.state.flows.mode = FlowsMode::Rename;
+        self.state.flows.mode = EntityListMode::Rename;
         self.state.flows.form.focus = FlowFormField::Name;
         self.state.flows.form.update_focus();
     }

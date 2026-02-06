@@ -34,9 +34,9 @@ pub fn scope_label(state: &AppState) -> String {
                 snap.flows
                     .iter()
                     .find(|flow| flow.id == flow_id)
-                    .map(|flow| format!("Flow: {}", flow.name))
+                    .map(|flow| format!("{}{}", t(locale, TextKey::ScopeFlowLabel), flow.name))
             })
-            .unwrap_or_else(|| "Flow: ?".to_string());
+            .unwrap_or_else(|| t(locale, TextKey::ScopeFlowUnknown).to_string());
     }
 
     if let Some(wallet_id) = state.transactions.scope_wallet_id {
@@ -47,9 +47,9 @@ pub fn scope_label(state: &AppState) -> String {
                 snap.wallets
                     .iter()
                     .find(|wallet| wallet.id == wallet_id)
-                    .map(|wallet| format!("Wallet: {}", wallet.name))
+                    .map(|wallet| format!("{}{}", t(locale, TextKey::ScopeWalletLabel), wallet.name))
             })
-            .unwrap_or_else(|| "Wallet: ?".to_string());
+            .unwrap_or_else(|| t(locale, TextKey::ScopeWalletUnknown).to_string());
     }
 
     t(locale, TextKey::TxnScopeAll).to_string()
@@ -188,7 +188,7 @@ pub fn grouping_key_label(
             let date = tx.occurred_at.date_naive();
             (
                 date.format("%Y-%m-%d").to_string(),
-                format_date_label(date, today, yesterday),
+                format_date_label(date, today, yesterday, state.locale),
             )
         }
         GroupingMode::Category => {

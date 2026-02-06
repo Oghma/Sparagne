@@ -107,7 +107,7 @@ impl App {
             SearchResultKind::Wallet => {
                 self.state.section = Section::Accounts;
                 self.state.accounts_tab = AccountsTab::Sources;
-                self.state.wallets.mode = WalletsMode::List;
+                self.state.wallets.mode = EntityListMode::List;
 
                 if let Some(snapshot) = &self.state.snapshot
                     && let Some(idx) = snapshot.wallets.iter().position(|w| w.id == result.id)
@@ -119,7 +119,7 @@ impl App {
             SearchResultKind::Flow => {
                 self.state.section = Section::Accounts;
                 self.state.accounts_tab = AccountsTab::Envelopes;
-                self.state.flows.mode = FlowsMode::List;
+                self.state.flows.mode = EntityListMode::List;
 
                 if let Some(snapshot) = &self.state.snapshot
                     && let Some(idx) = snapshot.flows.iter().position(|f| f.id == result.id)

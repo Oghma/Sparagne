@@ -2,13 +2,13 @@ use api_types::transaction::TransactionView;
 use engine::CashFlow;
 
 use super::search::ListSearchState;
-use super::selectable::{HasArchiveToggle, HasSelection, Resettable, UpdateFocus};
+use super::selectable::{EntityListMode, HasArchiveToggle, HasSelection, Resettable, UpdateFocus};
 use crate::ui::forms::{AmountField, TextField};
 
 #[derive(Debug)]
 pub struct FlowsState {
     pub selected: usize,
-    pub mode: FlowsMode,
+    pub mode: EntityListMode,
     pub error: Option<String>,
     pub detail: FlowDetailState,
     pub form: FlowFormState,
@@ -40,7 +40,7 @@ impl Default for FlowsState {
     fn default() -> Self {
         Self {
             selected: 0,
-            mode: FlowsMode::List,
+            mode: EntityListMode::List,
             error: None,
             detail: FlowDetailState::default(),
             form: FlowFormState::default(),
@@ -48,14 +48,6 @@ impl Default for FlowsState {
             show_archived: false,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FlowsMode {
-    List,
-    Detail,
-    Create,
-    Rename,
 }
 
 #[derive(Debug, Default)]

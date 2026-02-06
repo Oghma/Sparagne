@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod analytics;
 pub mod categories;
+pub(crate) mod entity_list;
 pub mod flows;
 pub mod home;
 pub mod login;

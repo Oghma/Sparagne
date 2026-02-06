@@ -503,6 +503,152 @@ pub enum TextKey {
     VaultIdLabel,
     VaultCurrencyLabel,
 
+    // Loading & empty states
+    LoadingGeneric,
+    LoadingVaultData,
+    SearchLabel,
+    SearchNoResults,
+    SearchClearHint,
+    SearchClearShort,
+
+    // Date labels
+    DateToday,
+    DateYesterday,
+
+    // Entity list shared
+    EntityArchivedOn,
+    EntityArchivedCount,
+    EntityBadgeArchived,
+    EntityBadgeDefault,
+
+    // Wallet screen
+    WalletTitle,
+    WalletStatsLabel,
+    WalletEntityLabel,
+    WalletDetailTitle,
+    WalletNotFound,
+    WalletSelectPrompt,
+    WalletNoTransactions,
+    WalletWelcomeTitle,
+    WalletWelcomeDesc1,
+    WalletWelcomeDesc2,
+    WalletHintQuickCreate,
+    WalletHintCreateDetails,
+    FormTitleRenameWallet,
+    FormTitleNewWallet,
+
+    // Flow screen
+    FlowTitle,
+    FlowStatsLabel,
+    FlowEntityLabel,
+    FlowDetailTitle,
+    FlowNotFound,
+    FlowSelectPrompt,
+    FlowNoTransactions,
+    FlowWelcomeTitle,
+    FlowWelcomeDesc1,
+    FlowWelcomeDesc2,
+    FlowHintQuickCreate,
+    FlowHintCreateCap,
+    FormTitleRenameFlow,
+    FormTitleNewFlow,
+
+    // Home screen
+    HomeActivityFeed,
+    HomeNetWorth,
+    HomeQuickBalances,
+    HomeNoDataYet,
+    HomeAddFirstTxn,
+    HomeWallets,
+    HomeBudgets,
+    HomeNoActivityYet,
+
+    // Accounts breadcrumbs
+    BreadcrumbAccounts,
+    BreadcrumbSources,
+    BreadcrumbEnvelopes,
+    BreadcrumbGoals,
+    BreadcrumbDetail,
+    BreadcrumbCreate,
+    BreadcrumbRename,
+
+    // Accounts tabs
+    AccountsCardTitle,
+    AccountsGoalsPlaceholder,
+    AccountsGoalsHint,
+
+    // Settings
+    SettingsCardTitle,
+    PreferencesTitle,
+
+    // Members
+    MembersVaultTitle,
+    MembersEditTitle,
+    MembersAddTitle,
+
+    // Vault
+    VaultCreateTitle,
+
+    // Transfers & pickers
+    TransferWalletTitle,
+    TransferFlowTitle,
+    TransferEditWalletTitle,
+    TransferEditFlowTitle,
+    TransferTypeTitle,
+    TransferFrom,
+    TransferTo,
+    TransferAvailable,
+    TransferBadgeFrom,
+    TransferBadgeTo,
+    TransferFormHints,
+
+    // Filters
+    FilterTitle,
+    FilterFrom,
+    FilterTo,
+    FilterTransactionTypes,
+    FilterToggleHint,
+    FilterKindIncome,
+    FilterKindExpense,
+    FilterKindRefund,
+    FilterKindWalletTransfer,
+    FilterKindFlowTransfer,
+
+    // Pickers
+    PickerAllWallets,
+    PickerAllFlows,
+    PickerSelectWallet,
+    PickerSelectFlow,
+    PickerBadgeUnallocated,
+    PickerSuffixArchived,
+
+    // Grouping dialog
+    GroupingTitle,
+    GroupingDate,
+    GroupingCategory,
+    GroupingWallet,
+    GroupingEnvelope,
+    GroupingCurrent,
+
+    // Transactions list
+    TxnNoTransactionsYet,
+    TxnAddOneHint,
+    TxnSearchEditClearHint,
+
+    // Scope labels (transaction common)
+    ScopeFlowLabel,
+    ScopeFlowUnknown,
+    ScopeWalletLabel,
+    ScopeWalletUnknown,
+
+    // Shell / Status
+    ShellVaultLabel,
+    ShellUserLabel,
+    ShellVaultFallback,
+
+    // Error dialog
+    ErrorTechnicalDetails,
+
     // General UI
     UiNone,
     UiUndoApplied,

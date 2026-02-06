@@ -22,7 +22,7 @@ use ratatui::{
 };
 use uuid::Uuid;
 
-use crate::{app::AppState, ui::theme::Theme};
+use crate::{app::AppState, text::{Locale, TextKey, t}, ui::theme::Theme};
 
 // ---------------------------------------------------------------------------
 // Block helpers
@@ -249,12 +249,13 @@ pub(crate) fn format_date_label(
     date: chrono::NaiveDate,
     today: chrono::NaiveDate,
     yesterday: chrono::NaiveDate,
+    locale: Locale,
 ) -> String {
     use chrono::Datelike;
     if date == today {
-        "Today".to_string()
+        t(locale, TextKey::DateToday).to_string()
     } else if date == yesterday {
-        "Yesterday".to_string()
+        t(locale, TextKey::DateYesterday).to_string()
     } else if date.year() == today.year() {
         date.format("%A, %d %b").to_string()
     } else {

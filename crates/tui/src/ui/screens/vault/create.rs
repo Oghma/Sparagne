@@ -6,12 +6,12 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{app::AppState, ui::{common::themed_block, theme::Theme}};
+use crate::{app::AppState, text::{TextKey, t}, ui::{common::themed_block, theme::Theme}};
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let form = &state.vault_ui.form;
 
-    let block = themed_block("Create Vault", theme.border_focused, theme);
+    let block = themed_block(t(state.locale, TextKey::VaultCreateTitle), theme.border_focused, theme);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

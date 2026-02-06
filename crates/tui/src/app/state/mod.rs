@@ -25,6 +25,7 @@ pub use overlays::{
 };
 pub use palette::{CommandPaletteState, PaletteCommand, MRU_LIMIT};
 pub use search::{GlobalSearchState, SearchResult, SearchResultKind};
+pub use selectable::EntityListMode;
 pub(crate) use selectable::{
     HasArchiveToggle, Resettable, SelectableList, SelectableWithCount, UpdateFocus,
 };

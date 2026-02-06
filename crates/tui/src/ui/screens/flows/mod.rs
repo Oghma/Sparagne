@@ -7,7 +7,7 @@
 //! - `form`: Create flow form overlay
 //! - `dialogs`: Rename dialog and other modals
 //!
-//! The main `render()` function routes to the appropriate view based on `FlowsMode`.
+//! The main `render()` function routes to the appropriate view based on `EntityListMode`.
 
 mod common;
 mod detail;
@@ -26,14 +26,14 @@ use detail::render_detail;
 use dialogs::render_rename_dialog;
 use list::render_list;
 
-use crate::app::FlowsMode;
+use crate::app::EntityListMode;
 
 /// Main entry point for flows screen rendering.
 /// Routes to appropriate sub-views based on mode.
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     match state.flows.mode {
-        FlowsMode::Detail => {
+        EntityListMode::Detail => {
             let columns = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -41,12 +41,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
             render_list(frame, columns[0], state, theme);
             render_detail(frame, columns[1], state, theme);
         }
-        FlowsMode::Create | FlowsMode::Rename | FlowsMode::List => {
+        EntityListMode::Create | EntityListMode::Rename | EntityListMode::List => {
             render_list(frame, area, state, theme)
         }
     }
 
-    if state.flows.mode == FlowsMode::Rename {
+    if state.flows.mode == EntityListMode::Rename {
         render_rename_dialog(frame, area, state, theme);
     }
 }

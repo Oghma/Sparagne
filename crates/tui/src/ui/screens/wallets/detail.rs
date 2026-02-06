@@ -12,6 +12,7 @@ use engine::Money;
 
 use crate::{
     app::AppState,
+    text::{TextKey, t},
     ui::{
         common::{get_currency, render_empty_state, themed_block},
         components::recent_transactions::render_recent_transactions,
@@ -21,12 +22,13 @@ use crate::{
 
 /// Renders the wallet detail panel.
 pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let title = t(state.locale, TextKey::WalletDetailTitle);
     let Some(snapshot) = state.snapshot.as_ref() else {
-        render_empty(frame, area, theme, "Loading...");
+        render_empty(frame, area, theme, title, t(state.locale, TextKey::LoadingGeneric));
         return;
     };
     let Some(detail_id) = state.wallets.detail.wallet_id else {
-        render_empty(frame, area, theme, "Select a wallet to view details");
+        render_empty(frame, area, theme, title, t(state.locale, TextKey::WalletSelectPrompt));
         return;
     };
     let Some(wallet) = snapshot
@@ -34,7 +36,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .iter()
         .find(|wallet| wallet.id == detail_id)
     else {
-        render_empty(frame, area, theme, "Wallet not found");
+        render_empty(frame, area, theme, title, t(state.locale, TextKey::WalletNotFound));
         return;
     };
 
@@ -81,7 +83,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         Line::from(""),
     ];
 
-    frame.render_widget(Paragraph::new(header_lines).block(themed_block("Wallet Detail", theme.accent, theme)), layout[0]);
+    frame.render_widget(Paragraph::new(header_lines).block(themed_block(title, theme.accent, theme)), layout[0]);
 
     // Recent transactions
     render_recent_transactions(
@@ -89,12 +91,12 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         layout[1],
         &state.wallets.detail.transactions,
         state.wallets.detail.error.as_deref(),
-        "No transactions for this wallet",
+        t(state.locale, TextKey::WalletNoTransactions),
         currency,
         theme,
     );
 }
 
-fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str) {
-    render_empty_state(frame, area, "Wallet Detail", message, theme);
+fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, title: &str, message: &str) {
+    render_empty_state(frame, area, title, message, theme);
 }

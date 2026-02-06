@@ -481,6 +481,152 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::VaultIdLabel => "ID",
         TextKey::VaultCurrencyLabel => "Currency",
 
+        // Loading & empty states
+        TextKey::LoadingGeneric => "Loading...",
+        TextKey::LoadingVaultData => "Fetching vault data",
+        TextKey::SearchLabel => "Search: ",
+        TextKey::SearchNoResults => "No results for ",
+        TextKey::SearchClearHint => "[Esc] to clear search",
+        TextKey::SearchClearShort => "[Esc] clear",
+
+        // Date labels
+        TextKey::DateToday => "Today",
+        TextKey::DateYesterday => "Yesterday",
+
+        // Entity list shared
+        TextKey::EntityArchivedOn => "Archived: On",
+        TextKey::EntityArchivedCount => "Archived: ",
+        TextKey::EntityBadgeArchived => "[archived]",
+        TextKey::EntityBadgeDefault => "[default]",
+
+        // Wallet screen
+        TextKey::WalletTitle => " Wallets ",
+        TextKey::WalletStatsLabel => "Total:",
+        TextKey::WalletEntityLabel => "wallets",
+        TextKey::WalletDetailTitle => "Wallet Detail",
+        TextKey::WalletNotFound => "Wallet not found",
+        TextKey::WalletSelectPrompt => "Select a wallet to view details",
+        TextKey::WalletNoTransactions => "No transactions for this wallet",
+        TextKey::WalletWelcomeTitle => "\u{1f4b0} Welcome!",
+        TextKey::WalletWelcomeDesc1 => "Let's create your first wallet to start",
+        TextKey::WalletWelcomeDesc2 => "tracking your finances.",
+        TextKey::WalletHintQuickCreate => " Quick create  ",
+        TextKey::WalletHintCreateDetails => " Create with details",
+        TextKey::FormTitleRenameWallet => "Rename Wallet",
+        TextKey::FormTitleNewWallet => "New Wallet",
+
+        // Flow screen
+        TextKey::FlowTitle => " Budgets & Goals ",
+        TextKey::FlowStatsLabel => "Allocated:",
+        TextKey::FlowEntityLabel => "envelopes",
+        TextKey::FlowDetailTitle => "Flow Detail",
+        TextKey::FlowNotFound => "Flow not found",
+        TextKey::FlowSelectPrompt => "Select a flow to view details",
+        TextKey::FlowNoTransactions => "No transactions for this flow",
+        TextKey::FlowWelcomeTitle => "\u{1f4e6} Budget with Envelopes",
+        TextKey::FlowWelcomeDesc1 => "Create envelopes to organize and track",
+        TextKey::FlowWelcomeDesc2 => "spending by category or goal.",
+        TextKey::FlowHintQuickCreate => " Quick create  ",
+        TextKey::FlowHintCreateCap => " Create with cap",
+        TextKey::FormTitleRenameFlow => "Rename Flow",
+        TextKey::FormTitleNewFlow => "New Budget/Goal",
+
+        // Home screen
+        TextKey::HomeActivityFeed => "Activity Feed",
+        TextKey::HomeNetWorth => "Net Worth",
+        TextKey::HomeQuickBalances => "Quick Balances",
+        TextKey::HomeNoDataYet => "No data yet",
+        TextKey::HomeAddFirstTxn => "[n] to add your first transaction",
+        TextKey::HomeWallets => "Wallets",
+        TextKey::HomeBudgets => "Budgets",
+        TextKey::HomeNoActivityYet => "No activity yet",
+
+        // Accounts breadcrumbs
+        TextKey::BreadcrumbAccounts => " Accounts",
+        TextKey::BreadcrumbSources => "Sources",
+        TextKey::BreadcrumbEnvelopes => "Envelopes",
+        TextKey::BreadcrumbGoals => "Goals",
+        TextKey::BreadcrumbDetail => "Detail",
+        TextKey::BreadcrumbCreate => "Create",
+        TextKey::BreadcrumbRename => "Rename",
+
+        // Accounts tabs
+        TextKey::AccountsCardTitle => "Accounts",
+        TextKey::AccountsGoalsPlaceholder => "Goals view is coming soon.",
+        TextKey::AccountsGoalsHint => "Use Sources for wallets and Envelopes for budgets.",
+
+        // Settings
+        TextKey::SettingsCardTitle => "Settings",
+        TextKey::PreferencesTitle => "Preferences",
+
+        // Members
+        TextKey::MembersVaultTitle => "Vault Members",
+        TextKey::MembersEditTitle => "Edit Member",
+        TextKey::MembersAddTitle => "Add Member",
+
+        // Vault
+        TextKey::VaultCreateTitle => "Create Vault",
+
+        // Transfers & pickers
+        TextKey::TransferWalletTitle => "Transfer Wallet",
+        TextKey::TransferFlowTitle => "Transfer Flow",
+        TextKey::TransferEditWalletTitle => "Edit Transfer Wallet",
+        TextKey::TransferEditFlowTitle => "Edit Transfer Flow",
+        TextKey::TransferTypeTitle => "Transfer Type",
+        TextKey::TransferFrom => "From",
+        TextKey::TransferTo => "To",
+        TextKey::TransferAvailable => "Available",
+        TextKey::TransferBadgeFrom => " [from]",
+        TextKey::TransferBadgeTo => " [to]",
+        TextKey::TransferFormHints => "Tab: next \u{2022} \u{2191}/\u{2193}: change \u{2022} Enter: save \u{2022} Esc: cancel",
+
+        // Filters
+        TextKey::FilterTitle => " Filters ",
+        TextKey::FilterFrom => "From",
+        TextKey::FilterTo => "To",
+        TextKey::FilterTransactionTypes => "Transaction Types ",
+        TextKey::FilterToggleHint => "(press key to toggle)",
+        TextKey::FilterKindIncome => "Income",
+        TextKey::FilterKindExpense => "Expense",
+        TextKey::FilterKindRefund => "Refund",
+        TextKey::FilterKindWalletTransfer => "Wallet Transfer",
+        TextKey::FilterKindFlowTransfer => "Flow Transfer",
+
+        // Pickers
+        TextKey::PickerAllWallets => "All wallets",
+        TextKey::PickerAllFlows => "All flows",
+        TextKey::PickerSelectWallet => "Select wallet scope",
+        TextKey::PickerSelectFlow => "Select flow scope",
+        TextKey::PickerBadgeUnallocated => " [Unallocated]",
+        TextKey::PickerSuffixArchived => " (archived)",
+
+        // Grouping dialog
+        TextKey::GroupingTitle => " Group Transactions ",
+        TextKey::GroupingDate => "Date",
+        TextKey::GroupingCategory => "Category",
+        TextKey::GroupingWallet => "Wallet",
+        TextKey::GroupingEnvelope => "Envelope",
+        TextKey::GroupingCurrent => "current",
+
+        // Transactions list
+        TextKey::TxnNoTransactionsYet => "No transactions yet. Press ",
+        TextKey::TxnAddOneHint => " to add one.",
+        TextKey::TxnSearchEditClearHint => "Ctrl+F to edit \u{2022} Esc to clear",
+
+        // Scope labels (transaction common)
+        TextKey::ScopeFlowLabel => "Flow: ",
+        TextKey::ScopeFlowUnknown => "Flow: ?",
+        TextKey::ScopeWalletLabel => "Wallet: ",
+        TextKey::ScopeWalletUnknown => "Wallet: ?",
+
+        // Shell / Status
+        TextKey::ShellVaultLabel => "Vault",
+        TextKey::ShellUserLabel => "User",
+        TextKey::ShellVaultFallback => "Main",
+
+        // Error dialog
+        TextKey::ErrorTechnicalDetails => "Technical details:",
+
         // General UI
         TextKey::UiNone => "None",
         TextKey::UiUndoApplied => "Undo applied.",

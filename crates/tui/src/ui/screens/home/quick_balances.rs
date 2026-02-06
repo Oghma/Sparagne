@@ -10,14 +10,14 @@ use ratatui::{
 
 use engine::Money;
 
-use crate::{app::AppState, ui::{components::card::Card, theme::Theme}};
+use crate::{app::AppState, text::{TextKey, t}, ui::{components::card::Card, theme::Theme}};
 
 use super::common::{get_currency, render_empty_state, truncate};
 
 /// Renders the quick balances card showing wallet and flow summaries.
 pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
-    let card = Card::new("Quick Balances", theme);
+    let card = Card::new(t(state.locale, TextKey::HomeQuickBalances), theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
@@ -25,8 +25,8 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
         render_empty_state(
             frame,
             inner,
-            "No data yet",
-            "[n] to add your first transaction",
+            t(state.locale, TextKey::HomeNoDataYet),
+            t(state.locale, TextKey::HomeAddFirstTxn),
             theme,
         );
         return;
@@ -40,7 +40,7 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
 
     if !wallets.is_empty() {
         lines.push(Line::from(Span::styled(
-            "Wallets",
+            t(state.locale, TextKey::HomeWallets),
             Style::default()
                 .fg(theme.text_muted)
                 .add_modifier(Modifier::BOLD),
@@ -82,7 +82,7 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
         if remaining > 2 {
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
-                "Budgets",
+                t(state.locale, TextKey::HomeBudgets),
                 Style::default()
                     .fg(theme.text_muted)
                     .add_modifier(Modifier::BOLD),

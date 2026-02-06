@@ -9,6 +9,7 @@ use ratatui::{
 use crate::{
     app::{AppState, PreferencesField, SettingsTab},
     config::Density,
+    text::{TextKey, t},
     ui::{
         common::{inset, themed_block},
         components::{card::Card, tab_bar, tab_bar::TabBarItem},
@@ -38,7 +39,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
 }
 
 fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let card = Card::new("Settings", theme);
+    let card = Card::new(t(state.locale, TextKey::SettingsCardTitle), theme);
     let inner = inset(card.inner(area), 1, 0);
     card.render_frame(frame, area);
 
@@ -58,7 +59,7 @@ fn render_preferences(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         .constraints([Constraint::Min(0), Constraint::Length(2)])
         .split(area);
 
-    let block = themed_block("Preferences", theme.border_focused, theme);
+    let block = themed_block(t(state.locale, TextKey::PreferencesTitle), theme.border_focused, theme);
     let inner = block.inner(layout[0]);
     frame.render_widget(block, layout[0]);
 

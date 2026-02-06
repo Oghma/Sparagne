@@ -77,12 +77,12 @@ impl App {
     pub(crate) fn advance_wallet_focus(&mut self) {
         if !matches!(
             self.state.wallets.mode,
-            WalletsMode::Create | WalletsMode::Rename
+            EntityListMode::Create | EntityListMode::Rename
         ) {
             return;
         }
 
-        if self.state.wallets.mode == WalletsMode::Rename {
+        if self.state.wallets.mode == EntityListMode::Rename {
             self.state.wallets.form.focus = WalletFormField::Name;
             self.state.wallets.form.update_focus();
             return;
@@ -96,11 +96,11 @@ impl App {
     }
 
     pub(crate) fn advance_flow_focus(&mut self) {
-        if !matches!(self.state.flows.mode, FlowsMode::Create | FlowsMode::Rename) {
+        if !matches!(self.state.flows.mode, EntityListMode::Create | EntityListMode::Rename) {
             return;
         }
 
-        if self.state.flows.mode == FlowsMode::Rename {
+        if self.state.flows.mode == EntityListMode::Rename {
             self.state.flows.form.focus = FlowFormField::Name;
             self.state.flows.form.update_focus();
             return;
@@ -148,7 +148,7 @@ impl App {
                 AccountsTab::Sources => {
                     if matches!(
                         self.state.wallets.mode,
-                        WalletsMode::Create | WalletsMode::Rename
+                        EntityListMode::Create | EntityListMode::Rename
                     ) {
                         match self.state.wallets.form.focus {
                             WalletFormField::Name => self.state.wallets.form.name.push(ch),
@@ -158,7 +158,7 @@ impl App {
                     }
                 }
                 AccountsTab::Envelopes => {
-                    if matches!(self.state.flows.mode, FlowsMode::Create | FlowsMode::Rename) {
+                    if matches!(self.state.flows.mode, EntityListMode::Create | EntityListMode::Rename) {
                         match self.state.flows.form.focus {
                             FlowFormField::Name => self.state.flows.form.name.push(ch),
                             FlowFormField::Cap => self.state.flows.form.cap.push(ch),
@@ -244,7 +244,7 @@ impl App {
     pub(crate) fn backspace_wallet_form(&mut self) {
         if !matches!(
             self.state.wallets.mode,
-            WalletsMode::Create | WalletsMode::Rename
+            EntityListMode::Create | EntityListMode::Rename
         ) {
             return;
         }
@@ -259,7 +259,7 @@ impl App {
     }
 
     pub(crate) fn backspace_flow_form(&mut self) {
-        if !matches!(self.state.flows.mode, FlowsMode::Create | FlowsMode::Rename) {
+        if !matches!(self.state.flows.mode, EntityListMode::Create | EntityListMode::Rename) {
             return;
         }
         match self.state.flows.form.focus {

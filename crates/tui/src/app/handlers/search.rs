@@ -121,7 +121,7 @@ impl App {
         if self.state.wallets.selected >= visible_len {
             self.state.wallets.selected = 0;
         }
-        if self.state.wallets.mode == WalletsMode::Detail {
+        if self.state.wallets.mode == EntityListMode::Detail {
             self.open_wallet_detail().await?;
         }
         Ok(())
@@ -137,7 +137,7 @@ impl App {
         if self.state.flows.selected >= visible_len {
             self.state.flows.selected = 0;
         }
-        if self.state.flows.mode == FlowsMode::Detail {
+        if self.state.flows.mode == EntityListMode::Detail {
             self.open_flow_detail().await?;
         }
         Ok(())

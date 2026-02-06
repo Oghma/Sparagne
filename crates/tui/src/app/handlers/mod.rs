@@ -32,7 +32,7 @@ use crossterm::event::KeyEvent;
 use crate::error::Result;
 use crate::ui::keymap::AppAction;
 
-use super::state::{AccountsTab, Screen, Section, SettingsTab, TransactionsMode, WalletsMode, FlowsMode};
+use super::state::{AccountsTab, EntityListMode, Screen, Section, SettingsTab, TransactionsMode};
 use super::App;
 
 impl App {
@@ -118,11 +118,11 @@ impl App {
                 self.start_search();
             }
             Section::Accounts => match self.state.accounts_tab {
-                AccountsTab::Sources if self.state.wallets.mode == WalletsMode::List => {
+                AccountsTab::Sources if self.state.wallets.mode == EntityListMode::List => {
                     self.start_search();
                 }
                 AccountsTab::Envelopes | AccountsTab::Goals
-                    if self.state.flows.mode == FlowsMode::List =>
+                    if self.state.flows.mode == EntityListMode::List =>
                 {
                     self.start_search();
                 }

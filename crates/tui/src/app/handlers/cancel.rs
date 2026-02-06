@@ -107,28 +107,28 @@ impl App {
     fn cancel_accounts(&mut self) {
         match self.state.accounts_tab {
             AccountsTab::Sources => match self.state.wallets.mode {
-                WalletsMode::Create | WalletsMode::Rename => {
+                EntityListMode::Create | EntityListMode::Rename => {
                     self.reset_wallet_form();
-                    self.state.wallets.mode = WalletsMode::List;
+                    self.state.wallets.mode = EntityListMode::List;
                 }
-                WalletsMode::Detail => {
-                    self.state.wallets.mode = WalletsMode::List;
+                EntityListMode::Detail => {
+                    self.state.wallets.mode = EntityListMode::List;
                     self.state.wallets.detail = WalletDetailState::default();
                 }
-                WalletsMode::List => {
+                EntityListMode::List => {
                     self.state.section = Section::Home;
                 }
             },
             AccountsTab::Envelopes | AccountsTab::Goals => match self.state.flows.mode {
-                FlowsMode::Create | FlowsMode::Rename => {
+                EntityListMode::Create | EntityListMode::Rename => {
                     self.reset_flow_form();
-                    self.state.flows.mode = FlowsMode::List;
+                    self.state.flows.mode = EntityListMode::List;
                 }
-                FlowsMode::Detail => {
-                    self.state.flows.mode = FlowsMode::List;
+                EntityListMode::Detail => {
+                    self.state.flows.mode = EntityListMode::List;
                     self.state.flows.detail = FlowDetailState::default();
                 }
-                FlowsMode::List => {
+                EntityListMode::List => {
                     self.state.section = Section::Home;
                 }
             },

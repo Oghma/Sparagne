@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{GroupingDialogState, GroupingMode},
+    text::{Locale, TextKey, t},
     ui::{components::centered_rect, theme::Theme},
 };
 
@@ -17,6 +18,7 @@ pub fn render(
     dialog: Option<&GroupingDialogState>,
     current: GroupingMode,
     theme: &Theme,
+    locale: Locale,
 ) {
     let Some(dialog) = dialog else {
         return;
@@ -26,7 +28,7 @@ pub fn render(
 
     let block = Block::default()
         .title(Span::styled(
-            " Group Transactions ",
+            t(locale, TextKey::GroupingTitle),
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
@@ -58,14 +60,14 @@ pub fn render(
     let items: Vec<ListItem> = GroupingMode::ALL
         .iter()
         .map(|mode| {
-            let (key, label) = mode_meta(*mode);
+            let (key, label) = mode_meta(*mode, locale);
             let mut spans = vec![
                 Span::styled(format!("[{key}]"), Style::default().fg(theme.accent)),
                 Span::raw(format!(" {label}")),
             ];
             if *mode == current {
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled("current", Style::default().fg(theme.text_muted)));
+                spans.push(Span::styled(t(locale, TextKey::GroupingCurrent), Style::default().fg(theme.text_muted)));
             }
             ListItem::new(Line::from(spans))
         })
@@ -85,11 +87,11 @@ pub fn render(
     frame.render_stateful_widget(list, layout[1], &mut state);
 }
 
-fn mode_meta(mode: GroupingMode) -> (char, &'static str) {
+fn mode_meta(mode: GroupingMode, locale: Locale) -> (char, &'static str) {
     match mode {
-        GroupingMode::Date => ('d', "Date"),
-        GroupingMode::Category => ('c', "Category"),
-        GroupingMode::Wallet => ('w', "Wallet"),
-        GroupingMode::Envelope => ('e', "Envelope"),
+        GroupingMode::Date => ('d', t(locale, TextKey::GroupingDate)),
+        GroupingMode::Category => ('c', t(locale, TextKey::GroupingCategory)),
+        GroupingMode::Wallet => ('w', t(locale, TextKey::GroupingWallet)),
+        GroupingMode::Envelope => ('e', t(locale, TextKey::GroupingEnvelope)),
     }
 }

@@ -9,19 +9,20 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, FlowFormField, FlowModeChoice, FlowsMode},
+    app::{AppState, EntityListMode, FlowFormField, FlowModeChoice},
+    text::{TextKey, t},
     ui::{common::themed_block, forms::FormFieldRenderer, theme::Theme},
 };
 
 /// Render the flow creation/edit form.
 pub fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let form = &state.flows.form;
-    let is_rename = state.flows.mode == FlowsMode::Rename;
+    let is_rename = state.flows.mode == EntityListMode::Rename;
 
     let title = if is_rename {
-        "Rename Flow"
+        t(state.locale, TextKey::FormTitleRenameFlow)
     } else {
-        "New Budget/Goal"
+        t(state.locale, TextKey::FormTitleNewFlow)
     };
 
     let mut lines = vec![

@@ -15,6 +15,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, FilterField},
+    text::{TextKey, t},
     ui::{common::render_label_value_field, components::centered_rect, theme::Theme},
 };
 
@@ -40,37 +41,37 @@ pub fn render_filter_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState
 
     let mut lines = vec![
         render_label_value_field(
-            "From",
+            t(state.locale, TextKey::FilterFrom),
             filter.from_input.as_str(),
             filter.focus == FilterField::From,
             theme,
         ),
         render_label_value_field(
-            "To",
+            t(state.locale, TextKey::FilterTo),
             filter.to_input.as_str(),
             filter.focus == FilterField::To,
             theme,
         ),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Transaction Types ", kinds_label_style),
-            Span::styled("(press key to toggle)", Style::default().fg(theme.text_muted)),
+            Span::styled(t(state.locale, TextKey::FilterTransactionTypes), kinds_label_style),
+            Span::styled(t(state.locale, TextKey::FilterToggleHint), Style::default().fg(theme.text_muted)),
         ]),
         // Row 1: Income, Expense, Refund
         Line::from(vec![
             Span::raw("  "),
-            filter_toggle_with_icon("▲", "Income", "i", filter.kind_income, theme),
+            filter_toggle_with_icon("▲", t(state.locale, TextKey::FilterKindIncome), "i", filter.kind_income, theme),
             Span::raw("    "),
-            filter_toggle_with_icon("▼", "Expense", "e", filter.kind_expense, theme),
+            filter_toggle_with_icon("▼", t(state.locale, TextKey::FilterKindExpense), "e", filter.kind_expense, theme),
             Span::raw("    "),
-            filter_toggle_with_icon("↩", "Refund", "r", filter.kind_refund, theme),
+            filter_toggle_with_icon("↩", t(state.locale, TextKey::FilterKindRefund), "r", filter.kind_refund, theme),
         ]),
         // Row 2: Transfers
         Line::from(vec![
             Span::raw("  "),
-            filter_toggle_with_icon("⇄", "Wallet Transfer", "w", filter.kind_transfer_wallet, theme),
+            filter_toggle_with_icon("⇄", t(state.locale, TextKey::FilterKindWalletTransfer), "w", filter.kind_transfer_wallet, theme),
             Span::raw("    "),
-            filter_toggle_with_icon("⇄", "Flow Transfer", "f", filter.kind_transfer_flow, theme),
+            filter_toggle_with_icon("⇄", t(state.locale, TextKey::FilterKindFlowTransfer), "f", filter.kind_transfer_flow, theme),
         ]),
         Line::from(""),
         Line::from(vec![
@@ -91,7 +92,7 @@ pub fn render_filter_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState
     }
 
     let block = Block::default()
-        .title(Span::styled(" Filters ", Style::default().fg(theme.accent)))
+        .title(Span::styled(t(state.locale, TextKey::FilterTitle), Style::default().fg(theme.accent)))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent))

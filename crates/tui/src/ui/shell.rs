@@ -76,16 +76,17 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
 }
 
 fn render_status_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let vault = state
         .vault
         .as_ref()
         .and_then(|v| v.name.as_deref())
-        .unwrap_or("Main");
+        .unwrap_or(t(locale, TextKey::ShellVaultFallback));
     let user = state.login.username.as_str();
     let line = Line::from(vec![
-        Span::styled("Vault", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::ShellVaultLabel), Style::default().fg(theme.text_muted)),
         Span::raw(format!(": {vault} | ")),
-        Span::styled("User", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::ShellUserLabel), Style::default().fg(theme.text_muted)),
         Span::raw(format!(": {user}")),
     ]);
 
@@ -252,26 +253,26 @@ fn get_accounts_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     let locale = state.locale;
     match state.accounts_tab {
         crate::app::AccountsTab::Sources => match state.wallets.mode {
-            crate::app::WalletsMode::List => {
+            crate::app::EntityListMode::List => {
                 vec![components::hints::KeyHint::new(
                     "c",
                     t(locale, TextKey::HintCreate),
                 )]
             }
-            crate::app::WalletsMode::Detail => components::hints::common::detail_view(locale),
-            crate::app::WalletsMode::Create | crate::app::WalletsMode::Rename => {
+            crate::app::EntityListMode::Detail => components::hints::common::detail_view(locale),
+            crate::app::EntityListMode::Create | crate::app::EntityListMode::Rename => {
                 components::hints::common::form_editing(locale)
             }
         },
         crate::app::AccountsTab::Envelopes => match state.flows.mode {
-            crate::app::FlowsMode::List => {
+            crate::app::EntityListMode::List => {
                 vec![components::hints::KeyHint::new(
                     "c",
                     t(locale, TextKey::HintCreate),
                 )]
             }
-            crate::app::FlowsMode::Detail => components::hints::common::detail_view(locale),
-            crate::app::FlowsMode::Create | crate::app::FlowsMode::Rename => {
+            crate::app::EntityListMode::Detail => components::hints::common::detail_view(locale),
+            crate::app::EntityListMode::Create | crate::app::EntityListMode::Rename => {
                 components::hints::common::form_editing(locale)
             }
         },

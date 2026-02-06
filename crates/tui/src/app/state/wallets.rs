@@ -1,13 +1,13 @@
 use api_types::transaction::TransactionView;
 
 use super::search::ListSearchState;
-use super::selectable::{HasArchiveToggle, HasSelection, Resettable, UpdateFocus};
+use super::selectable::{EntityListMode, HasArchiveToggle, HasSelection, Resettable, UpdateFocus};
 use crate::ui::forms::{AmountField, TextField};
 
 #[derive(Debug)]
 pub struct WalletsState {
     pub selected: usize,
-    pub mode: WalletsMode,
+    pub mode: EntityListMode,
     pub error: Option<String>,
     pub detail: WalletDetailState,
     pub form: WalletFormState,
@@ -39,7 +39,7 @@ impl Default for WalletsState {
     fn default() -> Self {
         Self {
             selected: 0,
-            mode: WalletsMode::List,
+            mode: EntityListMode::List,
             error: None,
             detail: WalletDetailState::default(),
             form: WalletFormState::default(),
@@ -47,14 +47,6 @@ impl Default for WalletsState {
             show_archived: false,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WalletsMode {
-    List,
-    Detail,
-    Create,
-    Rename,
 }
 
 #[derive(Debug, Default)]

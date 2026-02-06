@@ -7,7 +7,8 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AccountsTab, AppState, FlowsMode, WalletsMode},
+    app::{AccountsTab, AppState, EntityListMode},
+    text::{TextKey, t},
     ui::{
         common::inset,
         components::{card::Card, tab_bar, tab_bar::TabBarItem},
@@ -40,78 +41,79 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
     match state.accounts_tab {
         AccountsTab::Sources => screens::wallets::render(frame, layout[2], state, theme),
         AccountsTab::Envelopes => screens::flows::render(frame, layout[2], state, theme),
-        AccountsTab::Goals => render_goals_placeholder(frame, layout[2], theme),
+        AccountsTab::Goals => render_goals_placeholder(frame, layout[2], state, theme),
     }
 }
 
 fn build_breadcrumb<'a>(state: &AppState, theme: &Theme) -> Vec<Span<'a>> {
+    let locale = state.locale;
     let mut crumbs = Vec::new();
 
     match state.accounts_tab {
         AccountsTab::Sources => {
-            crumbs.push(Span::styled(" Accounts", Style::default().fg(theme.text_muted)));
+            crumbs.push(Span::styled(t(locale, TextKey::BreadcrumbAccounts), Style::default().fg(theme.text_muted)));
             crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
-            crumbs.push(Span::styled("Sources", Style::default().fg(theme.text_muted)));
+            crumbs.push(Span::styled(t(locale, TextKey::BreadcrumbSources), Style::default().fg(theme.text_muted)));
 
             match state.wallets.mode {
-                WalletsMode::List => {}
-                WalletsMode::Detail => {
+                EntityListMode::List => {}
+                EntityListMode::Detail => {
                     crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
                     crumbs.push(Span::styled(
-                        "Detail",
+                        t(locale, TextKey::BreadcrumbDetail),
                         Style::default().fg(theme.accent),
                     ));
                 }
-                WalletsMode::Create => {
+                EntityListMode::Create => {
                     crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
                     crumbs.push(Span::styled(
-                        "Create",
+                        t(locale, TextKey::BreadcrumbCreate),
                         Style::default().fg(theme.positive),
                     ));
                 }
-                WalletsMode::Rename => {
+                EntityListMode::Rename => {
                     crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
                     crumbs.push(Span::styled(
-                        "Rename",
+                        t(locale, TextKey::BreadcrumbRename),
                         Style::default().fg(theme.warning),
                     ));
                 }
             }
         }
         AccountsTab::Envelopes => {
-            crumbs.push(Span::styled(" Accounts", Style::default().fg(theme.text_muted)));
+            crumbs.push(Span::styled(t(locale, TextKey::BreadcrumbAccounts), Style::default().fg(theme.text_muted)));
             crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
-            crumbs.push(Span::styled("Envelopes", Style::default().fg(theme.text_muted)));
+            crumbs.push(Span::styled(t(locale, TextKey::BreadcrumbEnvelopes), Style::default().fg(theme.text_muted)));
 
             match state.flows.mode {
-                FlowsMode::List => {}
-                FlowsMode::Detail => {
+                EntityListMode::List => {}
+                EntityListMode::Detail => {
                     crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
                     crumbs.push(Span::styled(
-                        "Detail",
+                        t(locale, TextKey::BreadcrumbDetail),
                         Style::default().fg(theme.accent),
                     ));
                 }
-                FlowsMode::Create => {
+                EntityListMode::Create => {
                     crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
                     crumbs.push(Span::styled(
-                        "Create",
+                        t(locale, TextKey::BreadcrumbCreate),
                         Style::default().fg(theme.positive),
                     ));
                 }
-                FlowsMode::Rename => {
+                EntityListMode::Rename => {
                     crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
                     crumbs.push(Span::styled(
-                        "Rename",
+                        t(locale, TextKey::BreadcrumbRename),
                         Style::default().fg(theme.warning),
                     ));
                 }
             }
         }
         AccountsTab::Goals => {
-            crumbs.push(Span::styled(" Accounts", Style::default().fg(theme.text_muted)));
+            crumbs.push(Span::styled(t(locale, TextKey::BreadcrumbAccounts), Style::default().fg(theme.text_muted)));
             crumbs.push(Span::styled(" > ", Style::default().fg(theme.border)));
-            crumbs.push(Span::styled("Goals", Style::default().fg(theme.text_muted)));
+            crumbs.push(Span::styled(t(locale, TextKey::BreadcrumbGoals), Style::default().fg(theme.text_muted)));
         }
     }
 
@@ -119,7 +121,7 @@ fn build_breadcrumb<'a>(state: &AppState, theme: &Theme) -> Vec<Span<'a>> {
 }
 
 fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let card = Card::new("Accounts", theme);
+    let card = Card::new(t(state.locale, TextKey::AccountsCardTitle), theme);
     let inner = inset(card.inner(area), 1, 0);
     card.render_frame(frame, area);
 
@@ -143,19 +145,20 @@ fn render_tab_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &T
     tab_bar::render(frame, inner, &items, state.accounts_tab.index(), theme);
 }
 
-fn render_goals_placeholder(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-    let card = Card::new("Goals", theme);
+fn render_goals_placeholder(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
+    let card = Card::new(t(locale, TextKey::BreadcrumbGoals), theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
     let lines = vec![
         Line::from(Span::styled(
-            "Goals view is coming soon.",
+            t(locale, TextKey::AccountsGoalsPlaceholder),
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(Span::styled(
-            "Use Sources for wallets and Envelopes for budgets.",
+            t(locale, TextKey::AccountsGoalsHint),
             Style::default().fg(theme.text_muted),
         )),
     ];

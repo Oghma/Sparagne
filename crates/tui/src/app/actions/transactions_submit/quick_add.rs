@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        App, AppState, QuickAddAmbiguousKind, ToastLevel,
+        App, AppState, QuickAddAmbiguousKind, ToastLevel, TransferType,
         resolve::{default_wallet_flow, resolve_flow_name, resolve_wallet_name},
     },
     error::{AppError, Result},
@@ -148,12 +148,12 @@ impl App {
         // Handle transfers separately (they resolve their own targets)
         if parsed.kind == QuickAddKind::TransferWallet {
             return self
-                .submit_quick_add_transfer_wallet(&vault_id, &parsed, self.now_in_timezone())
+                .submit_quick_add_transfer(&vault_id, &parsed, self.now_in_timezone(), TransferType::Wallet)
                 .await;
         }
         if parsed.kind == QuickAddKind::TransferFlow {
             return self
-                .submit_quick_add_transfer_flow(&vault_id, &parsed, self.now_in_timezone())
+                .submit_quick_add_transfer(&vault_id, &parsed, self.now_in_timezone(), TransferType::Flow)
                 .await;
         }
 
@@ -240,52 +240,94 @@ impl App {
         Ok(())
     }
 
-    async fn submit_quick_add_transfer_wallet(
+    async fn submit_quick_add_transfer(
         &mut self,
         vault_id: &str,
         parsed: &crate::quick_add::QuickAddParsed,
         occurred_at: chrono::DateTime<chrono::FixedOffset>,
+        kind: TransferType,
     ) -> Result<()> {
-        let from_query = parsed.from_wallet.as_deref().unwrap_or("");
-        let to_query = parsed.to_wallet.as_deref().unwrap_or("");
+        let (from_query, to_query) = match kind {
+            TransferType::Wallet => (
+                parsed.from_wallet.as_deref().unwrap_or(""),
+                parsed.to_wallet.as_deref().unwrap_or(""),
+            ),
+            TransferType::Flow => (
+                parsed.from_flow.as_deref().unwrap_or(""),
+                parsed.to_flow.as_deref().unwrap_or(""),
+            ),
+        };
 
-        let from_id = match resolve_wallet_name(&self.state, from_query) {
+        type ResolveFn = fn(&AppState, &str) -> Option<(Uuid, String, bool)>;
+        let resolve_fn: ResolveFn = match kind {
+            TransferType::Wallet => resolve_wallet_name,
+            TransferType::Flow => resolve_flow_name,
+        };
+        let not_found_key = match kind {
+            TransferType::Wallet => TextKey::QuickAddWalletNotFound,
+            TransferType::Flow => TextKey::QuickAddFlowNotFound,
+        };
+
+        let from_id = match resolve_fn(&self.state, from_query) {
             Some((id, _, _)) => id,
             None => {
                 self.state.transactions.quick_error =
-                    Some(crate::text::format(self.state.locale, TextKey::QuickAddWalletNotFound, &[("query", from_query)]));
+                    Some(crate::text::format(self.state.locale, not_found_key, &[("query", from_query)]));
                 return Ok(());
             }
         };
-        let to_id = match resolve_wallet_name(&self.state, to_query) {
+        let to_id = match resolve_fn(&self.state, to_query) {
             Some((id, _, _)) => id,
             None => {
                 self.state.transactions.quick_error =
-                    Some(crate::text::format(self.state.locale, TextKey::QuickAddWalletNotFound, &[("query", to_query)]));
+                    Some(crate::text::format(self.state.locale, not_found_key, &[("query", to_query)]));
                 return Ok(());
             }
         };
 
         if from_id == to_id {
+            let same_key = match kind {
+                TransferType::Wallet => TextKey::QuickAddWalletsMustBeDifferent,
+                TransferType::Flow => TextKey::QuickAddFlowsMustBeDifferent,
+            };
             self.state.transactions.quick_error =
-                Some(t(self.state.locale, TextKey::QuickAddWalletsMustBeDifferent).to_string());
+                Some(t(self.state.locale, same_key).to_string());
             return Ok(());
         }
 
-        let res = self
-            .client
-            .transfer_wallet_new(
-                TransferWalletNew {
-                    vault_id: vault_id.to_string(),
-                    amount_minor: parsed.amount_minor,
-                    from_wallet_id: from_id,
-                    to_wallet_id: to_id,
-                    note: parsed.note.clone(),
-                    idempotency_key: None,
-                    occurred_at,
-                },
-            )
-            .await;
+        let res = match kind {
+            TransferType::Wallet => {
+                self.client
+                    .transfer_wallet_new(TransferWalletNew {
+                        vault_id: vault_id.to_string(),
+                        amount_minor: parsed.amount_minor,
+                        from_wallet_id: from_id,
+                        to_wallet_id: to_id,
+                        note: parsed.note.clone(),
+                        idempotency_key: None,
+                        occurred_at,
+                    })
+                    .await
+            }
+            TransferType::Flow => {
+                self.client
+                    .transfer_flow_new(TransferFlowNew {
+                        vault_id: vault_id.to_string(),
+                        amount_minor: parsed.amount_minor,
+                        from_flow_id: from_id,
+                        to_flow_id: to_id,
+                        note: parsed.note.clone(),
+                        idempotency_key: None,
+                        occurred_at,
+                    })
+                    .await
+            }
+        };
+
+        let success_key = match kind {
+            TransferType::Wallet => TextKey::SuccessTransferWalletSaved,
+            TransferType::Flow => TextKey::SuccessTransferFlowSaved,
+        };
 
         match res {
             Ok(created) => {
@@ -293,72 +335,7 @@ impl App {
                 self.state.transactions.quick_input.clear();
                 self.state.transactions.quick_error = None;
                 self.state.transactions.quick_ambiguous = None;
-                self.set_toast(t(self.state.locale, TextKey::SuccessTransferWalletSaved), ToastLevel::Success);
-                self.load_transactions(true).await?;
-            }
-            Err(err) => {
-                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else { return Ok(()); };
-                self.state.transactions.quick_error = Some(msg);
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn submit_quick_add_transfer_flow(
-        &mut self,
-        vault_id: &str,
-        parsed: &crate::quick_add::QuickAddParsed,
-        occurred_at: chrono::DateTime<chrono::FixedOffset>,
-    ) -> Result<()> {
-        let from_query = parsed.from_flow.as_deref().unwrap_or("");
-        let to_query = parsed.to_flow.as_deref().unwrap_or("");
-
-        let from_id = match resolve_flow_name(&self.state, from_query) {
-            Some((id, _, _)) => id,
-            None => {
-                self.state.transactions.quick_error =
-                    Some(crate::text::format(self.state.locale, TextKey::QuickAddFlowNotFound, &[("query", from_query)]));
-                return Ok(());
-            }
-        };
-        let to_id = match resolve_flow_name(&self.state, to_query) {
-            Some((id, _, _)) => id,
-            None => {
-                self.state.transactions.quick_error =
-                    Some(crate::text::format(self.state.locale, TextKey::QuickAddFlowNotFound, &[("query", to_query)]));
-                return Ok(());
-            }
-        };
-
-        if from_id == to_id {
-            self.state.transactions.quick_error =
-                Some(t(self.state.locale, TextKey::QuickAddFlowsMustBeDifferent).to_string());
-            return Ok(());
-        }
-
-        let res = self
-            .client
-            .transfer_flow_new(
-                TransferFlowNew {
-                    vault_id: vault_id.to_string(),
-                    amount_minor: parsed.amount_minor,
-                    from_flow_id: from_id,
-                    to_flow_id: to_id,
-                    note: parsed.note.clone(),
-                    idempotency_key: None,
-                    occurred_at,
-                },
-            )
-            .await;
-
-        match res {
-            Ok(created) => {
-                self.state.transactions.last_created_id = Some(created.id);
-                self.state.transactions.quick_input.clear();
-                self.state.transactions.quick_error = None;
-                self.state.transactions.quick_ambiguous = None;
-                self.set_toast(t(self.state.locale, TextKey::SuccessTransferFlowSaved), ToastLevel::Success);
+                self.set_toast(t(self.state.locale, success_key), ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {

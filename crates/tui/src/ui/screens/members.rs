@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, MemberFormField, MembersMode, MembersScope},
+    text::{TextKey, t},
     ui::{common::themed_block, forms::FormFieldRenderer, theme::Theme},
 };
 
@@ -29,7 +30,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     // Build title with scope info
     let scope_label = match state.members.scope {
-        MembersScope::Vault => "Vault Members".to_string(),
+        MembersScope::Vault => t(state.locale, TextKey::MembersVaultTitle).to_string(),
         MembersScope::Flow => {
             let flow_name = member_flow_name(state).unwrap_or_else(|| "Flow".to_string());
             format!("👥 {} Members", flow_name)
@@ -101,9 +102,9 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     };
 
     let title = if state.members.form.editing {
-        "Edit Member"
+        t(state.locale, TextKey::MembersEditTitle)
     } else {
-        "Add Member"
+        t(state.locale, TextKey::MembersAddTitle)
     };
 
     let block = themed_block(title, border_color, theme);

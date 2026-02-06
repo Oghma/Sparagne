@@ -18,6 +18,7 @@ use std::collections::HashMap;
 
 use crate::{
     app::{AppState, GroupingMode, transactions_visible_indices},
+    text::{TextKey, t},
     ui::theme::Theme,
 };
 
@@ -109,6 +110,7 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
             group.label.as_str(),
             group.total_minor,
             currency,
+            state.locale,
             theme,
         ));
 
@@ -151,19 +153,19 @@ fn render_empty_state(
     let mut lines = Vec::new();
     if !query.is_empty() {
         lines.push(Line::from(vec![
-            Span::raw("No results for "),
+            Span::raw(t(state.locale, TextKey::SearchNoResults)),
             Span::styled(format!("\"{query}\""), Style::default().fg(theme.accent)),
             Span::raw("."),
         ]));
         lines.push(Line::from(Span::styled(
-            "Ctrl+F to edit • Esc to clear",
+            t(state.locale, TextKey::TxnSearchEditClearHint),
             Style::default().fg(theme.text_muted),
         )));
     } else {
         lines.push(Line::from(vec![
-            Span::raw("No transactions yet. Press "),
+            Span::raw(t(state.locale, TextKey::TxnNoTransactionsYet)),
             Span::styled("n", Style::default().fg(theme.accent)),
-            Span::raw(" to add one."),
+            Span::raw(t(state.locale, TextKey::TxnAddOneHint)),
         ]));
     }
     let empty_msg = Paragraph::new(lines)
@@ -178,13 +180,14 @@ fn render_group_header(
     label: &str,
     total_minor: i64,
     currency: engine::Currency,
+    locale: crate::text::Locale,
     theme: &Theme,
 ) -> ListItem<'static> {
     let title = match mode {
         GroupingMode::Date => label.to_string(),
-        GroupingMode::Category => format!("Category: {label}"),
-        GroupingMode::Wallet => format!("Wallet: {label}"),
-        GroupingMode::Envelope => format!("Envelope: {label}"),
+        GroupingMode::Category => format!("{}: {label}", t(locale, TextKey::TxnGroupCategory)),
+        GroupingMode::Wallet => format!("{}: {label}", t(locale, TextKey::TxnGroupWallet)),
+        GroupingMode::Envelope => format!("{}: {label}", t(locale, TextKey::TxnGroupEnvelope)),
     };
 
     let spans = vec![

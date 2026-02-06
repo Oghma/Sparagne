@@ -6,7 +6,7 @@
 //! - `detail`: Wallet detail panel
 //! - `form`: Wallet creation/rename form
 //!
-//! The main `render()` function routes to the appropriate view based on `WalletsMode`.
+//! The main `render()` function routes to the appropriate view based on `EntityListMode`.
 
 mod common;
 mod detail;
@@ -19,7 +19,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, WalletsMode},
+    app::{AppState, EntityListMode},
     ui::theme::Theme,
 };
 
@@ -32,7 +32,7 @@ use list::render_list;
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
 
     match state.wallets.mode {
-        WalletsMode::Detail => {
+        EntityListMode::Detail => {
             let columns = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -40,12 +40,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
             render_list(frame, columns[0], state, theme);
             render_detail(frame, columns[1], state, theme);
         }
-        WalletsMode::Create | WalletsMode::Rename | WalletsMode::List => {
+        EntityListMode::Create | EntityListMode::Rename | EntityListMode::List => {
             render_list(frame, area, state, theme)
         }
     }
 
-    if state.wallets.mode == WalletsMode::Rename {
+    if state.wallets.mode == EntityListMode::Rename {
         render_rename_dialog(frame, area, state, theme);
     }
 }

@@ -2,6 +2,7 @@ use ratatui::{Frame, layout::Rect};
 
 use crate::{
     app::{AppState, Screen},
+    text::{TextKey, t},
     ui::{components, Theme},
 };
 
@@ -10,7 +11,7 @@ pub(crate) fn render_overlays(frame: &mut Frame<'_>, area: Rect, state: &AppStat
     components::command_palette::render(frame, area, state, theme);
     components::global_search::render(frame, area, state, theme);
     components::confirm_dialog::render(frame, area, state.overlays.confirm.as_ref(), theme);
-    components::error_dialog::render(frame, area, state.overlays.error.as_ref(), theme);
+    components::error_dialog::render(frame, area, state.overlays.error.as_ref(), theme, state.locale);
     components::bulk_category_dialog::render(
         frame,
         area,
@@ -23,6 +24,7 @@ pub(crate) fn render_overlays(frame: &mut Frame<'_>, area: Rect, state: &AppStat
         state.overlays.grouping.as_ref(),
         state.transactions.grouping_mode,
         theme,
+        state.locale,
     );
     components::toast::render(frame, area, state.toast.as_ref(), theme);
 
@@ -34,8 +36,8 @@ pub(crate) fn render_overlays(frame: &mut Frame<'_>, area: Rect, state: &AppStat
             frame,
             area,
             components::loading::spinner_frame(state.spinner.index()),
-            "Loading...",
-            Some("Fetching vault data"),
+            t(state.locale, TextKey::LoadingGeneric),
+            Some(t(state.locale, TextKey::LoadingVaultData)),
             theme,
         );
     }

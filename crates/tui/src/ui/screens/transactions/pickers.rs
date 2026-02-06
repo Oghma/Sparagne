@@ -16,6 +16,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, TransactionsMode, TransferField},
+    text::{TextKey, t},
     ui::{common::render_label_value_field, components::centered_rect, theme::Theme},
 };
 
@@ -27,22 +28,22 @@ pub fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
 
     let (title, items) = match state.transactions.mode {
         TransactionsMode::PickWallet => {
-            let mut list = vec![ListItem::new(Line::from("All wallets"))];
+            let mut list = vec![ListItem::new(Line::from(t(state.locale, TextKey::PickerAllWallets)))];
             for wallet in &snapshot.wallets {
-                let archived = if wallet.archived { " (archived)" } else { "" };
+                let archived = if wallet.archived { t(state.locale, TextKey::PickerSuffixArchived) } else { "" };
                 list.push(ListItem::new(Line::from(format!(
                     "{}{archived}",
                     wallet.name
                 ))));
             }
-            ("Select wallet scope", list)
+            (t(state.locale, TextKey::PickerSelectWallet), list)
         }
         TransactionsMode::PickFlow => {
-            let mut list = vec![ListItem::new(Line::from("All flows"))];
+            let mut list = vec![ListItem::new(Line::from(t(state.locale, TextKey::PickerAllFlows)))];
             for flow in &snapshot.flows {
-                let archived = if flow.archived { " (archived)" } else { "" };
+                let archived = if flow.archived { t(state.locale, TextKey::PickerSuffixArchived) } else { "" };
                 let marker = if flow.is_unallocated {
-                    " [Unallocated]"
+                    t(state.locale, TextKey::PickerBadgeUnallocated)
                 } else {
                     ""
                 };
@@ -51,7 +52,7 @@ pub fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
                     flow.name
                 ))));
             }
-            ("Select flow scope", list)
+            (t(state.locale, TextKey::PickerSelectFlow), list)
         }
         _ => return,
     };
@@ -86,8 +87,8 @@ pub fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
 /// Renders the transfer type picker (wallet vs flow transfer)
 pub fn render_transfer_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let items = vec![
-        ListItem::new(Line::from("Wallet Transfer")),
-        ListItem::new(Line::from("Flow Transfer")),
+        ListItem::new(Line::from(t(state.locale, TextKey::TransferWalletTitle))),
+        ListItem::new(Line::from(t(state.locale, TextKey::TransferFlowTitle))),
     ];
 
     let popup_area = centered_rect(40, 25, area);
@@ -99,7 +100,7 @@ pub fn render_transfer_picker(frame: &mut Frame<'_>, area: Rect, state: &AppStat
     let list = List::new(items)
         .block(
             Block::default()
-                .title("Transfer Type")
+                .title(t(state.locale, TextKey::TransferTypeTitle))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(theme.accent))
@@ -129,9 +130,9 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                 .map(|wallet| wallet.name.clone())
                 .collect::<Vec<_>>();
             if state.transactions.transfer.editing_id.is_some() {
-                ("Edit Transfer Wallet", list)
+                (t(state.locale, TextKey::TransferEditWalletTitle), list)
             } else {
-                ("Transfer Wallet", list)
+                (t(state.locale, TextKey::TransferWalletTitle), list)
             }
         }
         TransactionsMode::TransferFlow => {
@@ -142,9 +143,9 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                 .map(|flow| flow.name.clone())
                 .collect::<Vec<_>>();
             if state.transactions.transfer.editing_id.is_some() {
-                ("Edit Transfer Flow", list)
+                (t(state.locale, TextKey::TransferEditFlowTitle), list)
             } else {
-                ("Transfer Flow", list)
+                (t(state.locale, TextKey::TransferFlowTitle), list)
             }
         }
         _ => return,
@@ -169,8 +170,8 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         .split(popup);
 
     let mut lines = vec![
-        render_label_value_field("From", from, transfer.focus == TransferField::From, theme),
-        render_label_value_field("To", to, transfer.focus == TransferField::To, theme),
+        render_label_value_field(t(state.locale, TextKey::TransferFrom), from, transfer.focus == TransferField::From, theme),
+        render_label_value_field(t(state.locale, TextKey::TransferTo), to, transfer.focus == TransferField::To, theme),
         render_label_value_field(
             "Amount",
             transfer.amount.value(),
@@ -194,7 +195,7 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
             theme,
         ),
         Line::from(Span::styled(
-            "Tab: next • ↑/↓: change • Enter: save • Esc: cancel",
+            t(state.locale, TextKey::TransferFormHints),
             Style::default().fg(theme.text_muted),
         )),
     ];
@@ -215,7 +216,7 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     frame.render_widget(Paragraph::new(lines).block(block), layout[0]);
 
     let hint_block = Block::default()
-        .title("Available")
+        .title(t(state.locale, TextKey::TransferAvailable))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent))
@@ -225,9 +226,9 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         .enumerate()
         .map(|(idx, name)| {
             let marker = if idx == transfer.from_index {
-                " [from]"
+                t(state.locale, TextKey::TransferBadgeFrom)
             } else if idx == transfer.to_index {
-                " [to]"
+                t(state.locale, TextKey::TransferBadgeTo)
             } else {
                 ""
             };

@@ -12,6 +12,7 @@ use engine::{Currency, Money};
 
 use crate::{
     app::AppState,
+    text::{TextKey, t},
     ui::{
         common::{get_currency, render_empty_state, themed_block},
         components::{
@@ -24,16 +25,17 @@ use crate::{
 
 /// Render the flow detail panel.
 pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let title = t(state.locale, TextKey::FlowDetailTitle);
     let Some(snapshot) = state.snapshot.as_ref() else {
-        render_empty(frame, area, theme, "Loading...");
+        render_empty(frame, area, theme, title, t(state.locale, TextKey::LoadingGeneric));
         return;
     };
     let Some(detail_id) = state.flows.detail.flow_id else {
-        render_empty(frame, area, theme, "Select a flow to view details");
+        render_empty(frame, area, theme, title, t(state.locale, TextKey::FlowSelectPrompt));
         return;
     };
     let Some(flow) = snapshot.flows.iter().find(|flow| flow.id == detail_id) else {
-        render_empty(frame, area, theme, "Flow not found");
+        render_empty(frame, area, theme, title, t(state.locale, TextKey::FlowNotFound));
         return;
     };
 
@@ -119,7 +121,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         header_lines.push(line);
     }
 
-    let header_block = themed_block("Flow Detail", theme.accent, theme);
+    let header_block = themed_block(title, theme.accent, theme);
     let header_inner = header_block.inner(layout[0]);
     frame.render_widget(header_block, layout[0]);
 
@@ -140,15 +142,15 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         layout[1],
         &state.flows.detail.transactions,
         state.flows.detail.error.as_deref(),
-        "No transactions for this flow",
+        t(state.locale, TextKey::FlowNoTransactions),
         currency,
         theme,
     );
 }
 
 /// Render an empty detail panel with a message.
-fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str) {
-    render_empty_state(frame, area, "Flow Detail", message, theme);
+fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, title: &str, message: &str) {
+    render_empty_state(frame, area, title, message, theme);
 }
 
 /// Create a cap progress line showing current vs cap.

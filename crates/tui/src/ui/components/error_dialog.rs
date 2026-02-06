@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{ErrorDialogKind, ErrorDialogState},
+    text::{Locale, TextKey, t},
     ui::{components::centered_rect, theme::Theme},
 };
 
@@ -17,6 +18,7 @@ pub fn render(
     area: Rect,
     dialog: Option<&ErrorDialogState>,
     theme: &Theme,
+    locale: Locale,
 ) {
     let Some(dialog) = dialog else {
         return;
@@ -59,7 +61,7 @@ pub fn render(
     if let Some(detail) = dialog.detail.as_ref() {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "Technical details:",
+            t(locale, TextKey::ErrorTechnicalDetails),
             Style::default().fg(theme.text_muted),
         )));
         lines.push(Line::from(Span::styled(

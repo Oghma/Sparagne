@@ -14,7 +14,7 @@ pub(crate) use ordering::{
     transactions_visible_indices, wallets_visible_indices,
 };
 pub(crate) use query::filter_commands;
-pub(crate) use actions::{calculate_net_change, percentage_change};
+pub(crate) use actions::{TransferType, calculate_net_change, percentage_change};
 pub(crate) use resolve::{default_wallet_flow_names, resolve_category_matches, resolve_flow_matches, resolve_wallet_matches};
 pub use state::*;
 

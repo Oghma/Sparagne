@@ -9,7 +9,8 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, WalletFormField, WalletsMode, wallets_visible_indices},
+    app::{AppState, EntityListMode, WalletFormField, wallets_visible_indices},
+    text::{TextKey, t},
     ui::{
         common::themed_block,
         components::input_dialog::InputDialog,
@@ -34,7 +35,7 @@ pub fn render_rename_dialog(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     let error = state.wallets.form.name.state.validation.error_message();
 
     let dialog = InputDialog {
-        title: "Rename Wallet",
+        title: t(state.locale, TextKey::FormTitleRenameWallet),
         current_label: Some("Current:"),
         current_value: Some(wallet.name.as_str()),
         prompt: "New name:",
@@ -51,12 +52,12 @@ pub fn render_rename_dialog(frame: &mut Frame<'_>, area: Rect, state: &AppState,
 /// Renders the inline create form.
 pub fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let form = &state.wallets.form;
-    let is_rename = state.wallets.mode == WalletsMode::Rename;
+    let is_rename = state.wallets.mode == EntityListMode::Rename;
 
     let title = if is_rename {
-        "Rename Wallet"
+        t(state.locale, TextKey::FormTitleRenameWallet)
     } else {
-        "New Wallet"
+        t(state.locale, TextKey::FormTitleNewWallet)
     };
 
     let mut lines = vec![

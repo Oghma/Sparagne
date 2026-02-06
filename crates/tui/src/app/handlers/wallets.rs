@@ -15,7 +15,7 @@ impl App {
 
     pub(crate) fn start_wallet_create(&mut self) {
         self.reset_wallet_form();
-        self.state.wallets.mode = WalletsMode::Create;
+        self.state.wallets.mode = EntityListMode::Create;
     }
 
     pub(crate) fn start_wallet_rename(&mut self) {
@@ -25,7 +25,7 @@ impl App {
         };
         self.reset_wallet_form();
         self.state.wallets.form.name.set_value(name);
-        self.state.wallets.mode = WalletsMode::Rename;
+        self.state.wallets.mode = EntityListMode::Rename;
         self.state.wallets.form.focus = WalletFormField::Name;
         self.state.wallets.form.update_focus();
     }

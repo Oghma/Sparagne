@@ -14,6 +14,7 @@ use engine::{Currency, Money};
 
 use crate::{
     app::{AppState, FlowAlertSeverity, HomeFeedItem, home_feed_items},
+    text::{TextKey, t},
     ui::{
         common::format_date_label,
         components::{card::Card, money::styled_amount_emoji},
@@ -28,7 +29,7 @@ use super::common::{get_currency, render_empty_state, truncate};
 /// Renders the activity feed showing recent transactions and alerts.
 pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
-    let card = Card::new("Activity Feed", theme);
+    let card = Card::new(t(state.locale, TextKey::HomeActivityFeed), theme);
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
@@ -37,8 +38,8 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         render_empty_state(
             frame,
             inner,
-            "No activity yet",
-            "[n] to add your first transaction",
+            t(state.locale, TextKey::HomeNoActivityYet),
+            t(state.locale, TextKey::HomeAddFirstTxn),
             theme,
         );
         return;
@@ -98,7 +99,7 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                 };
                 let tx_date = tx.occurred_at.date_naive();
                 if last_date != Some(tx_date) {
-                    let date_label = format_date_label(tx_date, today, yesterday);
+                    let date_label = format_date_label(tx_date, today, yesterday, state.locale);
                     items.push(ListItem::new(Line::from(Span::styled(
                         format!("  {date_label}"),
                         Style::default()

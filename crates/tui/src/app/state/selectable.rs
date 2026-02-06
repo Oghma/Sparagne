@@ -75,6 +75,15 @@ impl<T: HasSelection> SelectableList for SelectableWithCount<'_, T> {
     }
 }
 
+/// Shared mode for wallets and flows list screens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntityListMode {
+    List,
+    Detail,
+    Create,
+    Rename,
+}
+
 /// Trait for types that have selection state but may need external count.
 pub(crate) trait HasSelection {
     fn selected(&self) -> usize;

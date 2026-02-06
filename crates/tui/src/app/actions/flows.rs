@@ -14,7 +14,7 @@ impl App {
             return Ok(());
         };
         self.state.flows.detail.flow_id = Some(flow_id);
-        self.state.flows.mode = FlowsMode::Detail;
+        self.state.flows.mode = EntityListMode::Detail;
         self.load_flow_transactions(flow_id).await?;
         self.load_flow_detail(flow_id).await?;
         Ok(())
@@ -146,7 +146,7 @@ impl App {
         match res {
             Ok(created) => {
                 self.reset_flow_form();
-                self.state.flows.mode = FlowsMode::List;
+                self.state.flows.mode = EntityListMode::List;
                 self.refresh_snapshot().await?;
                 self.select_flow_by_id(created.id);
                 self.set_toast(t(self.state.locale, TextKey::SuccessFlowCreated), ToastLevel::Success);
@@ -199,7 +199,7 @@ impl App {
         match res {
             Ok(()) => {
                 self.reset_flow_form();
-                self.state.flows.mode = FlowsMode::List;
+                self.state.flows.mode = EntityListMode::List;
                 self.refresh_snapshot().await?;
                 self.set_toast(t(self.state.locale, TextKey::SuccessFlowUpdated), ToastLevel::Success);
             }
