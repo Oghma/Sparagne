@@ -2,10 +2,10 @@
 
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::Paragraph,
 };
 
 use engine::Money;
@@ -13,7 +13,7 @@ use engine::Money;
 use crate::{
     app::AppState,
     ui::{
-        common::get_currency,
+        common::{get_currency, render_empty_state, themed_block},
         components::recent_transactions::render_recent_transactions,
         theme::Theme,
     },
@@ -81,15 +81,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         Line::from(""),
     ];
 
-    let header_block = Block::default()
-        .title(Span::styled(
-            " Wallet Detail ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
-    frame.render_widget(Paragraph::new(header_lines).block(header_block), layout[0]);
+    frame.render_widget(Paragraph::new(header_lines).block(themed_block("Wallet Detail", theme.accent, theme)), layout[0]);
 
     // Recent transactions
     render_recent_transactions(
@@ -104,21 +96,5 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 }
 
 fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str) {
-    let block = Block::default()
-        .title(Span::styled(
-            " Wallet Detail ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-    frame.render_widget(
-        Paragraph::new(vec![
-            Line::from(""),
-            Line::from(Span::styled(message, Style::default().fg(theme.text_muted))),
-        ])
-        .alignment(Alignment::Center)
-        .block(block),
-        area,
-    );
+    render_empty_state(frame, area, "Wallet Detail", message, theme);
 }

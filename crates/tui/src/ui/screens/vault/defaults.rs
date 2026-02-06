@@ -1,39 +1,22 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{List, ListItem, ListState, Paragraph},
 };
 
 use crate::{
     app::{AppState, DefaultsField},
     text::{TextKey, t},
-    ui::theme::Theme,
+    ui::{common::{render_empty_state, themed_block}, theme::Theme},
 };
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let locale = state.locale;
-    let defaults_title = format!(" {} ", t(locale, TextKey::VaultQuickDefaults));
 
     let Some(snapshot) = state.snapshot.as_ref() else {
-        let block = Block::default()
-            .title(Span::styled(
-                defaults_title,
-                Style::default().fg(theme.accent),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.border_focused));
-        frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                t(locale, TextKey::StateSnapshotUnavailable),
-                Style::default().fg(theme.text_muted),
-            )))
-            .alignment(Alignment::Center)
-            .block(block),
-            area,
-        );
+        render_empty_state(frame, area, t(locale, TextKey::VaultQuickDefaults), t(locale, TextKey::StateSnapshotUnavailable), theme);
         return;
     };
 
@@ -75,14 +58,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .split(area);
 
     // Form section
-    let form_block = Block::default()
-        .title(Span::styled(
-            defaults_title,
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border_focused));
+    let form_block = themed_block(t(locale, TextKey::VaultQuickDefaults), theme.border_focused, theme);
     let form_inner = form_block.inner(layout[0]);
     frame.render_widget(form_block, layout[0]);
 
@@ -227,16 +203,8 @@ fn render_defaults_list(
         theme.border
     };
 
-    let block = Block::default()
-        .title(Span::styled(
-            format!(" {title} "),
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(border_color));
     let list = List::new(list_items)
-        .block(block)
+        .block(themed_block(title, border_color, theme))
         .highlight_style(highlight_style)
         .highlight_symbol("» ");
     frame.render_stateful_widget(list, area, &mut list_state);

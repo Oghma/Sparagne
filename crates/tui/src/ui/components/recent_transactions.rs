@@ -2,16 +2,16 @@
 
 use ratatui::{
     Frame,
-    layout::{Alignment, Rect},
+    layout::Rect,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph},
+    widgets::{List, ListItem},
 };
 
 use engine::{Currency, Money};
 
 use crate::ui::{
-    common::{tx_amount_color, tx_icon_color},
+    common::{render_empty_state, render_error_state, themed_block, tx_amount_color, tx_icon_color},
     theme::Theme,
 };
 
@@ -31,23 +31,7 @@ pub(crate) fn render_recent_transactions(
     theme: &Theme,
 ) {
     if let Some(err) = error {
-        let block = Block::default()
-            .title(Span::styled(
-                " Recent Transactions ",
-                Style::default().fg(theme.accent),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.negative));
-        frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                format!("\u{26a0} {err}"),
-                Style::default().fg(theme.negative),
-            )))
-            .alignment(Alignment::Center)
-            .block(block),
-            area,
-        );
+        render_error_state(frame, area, "Recent Transactions", err, theme);
         return;
     }
 
@@ -78,38 +62,10 @@ pub(crate) fn render_recent_transactions(
         .collect::<Vec<_>>();
 
     if items.is_empty() {
-        let block = Block::default()
-            .title(Span::styled(
-                " Recent Transactions ",
-                Style::default().fg(theme.accent),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.border));
-        frame.render_widget(
-            Paragraph::new(vec![
-                Line::from(""),
-                Line::from(Span::styled(
-                    empty_message.to_string(),
-                    Style::default().fg(theme.text_muted),
-                )),
-            ])
-            .alignment(Alignment::Center)
-            .block(block),
-            area,
-        );
+        render_empty_state(frame, area, "Recent Transactions", empty_message, theme);
         return;
     }
 
-    let list = List::new(items).block(
-        Block::default()
-            .title(Span::styled(
-                " Recent Transactions ",
-                Style::default().fg(theme.accent),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.border)),
-    );
+    let list = List::new(items).block(themed_block("Recent Transactions", theme.border, theme));
     frame.render_widget(list, area);
 }

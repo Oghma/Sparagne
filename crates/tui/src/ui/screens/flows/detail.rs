@@ -2,10 +2,10 @@
 
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::Paragraph,
 };
 
 use engine::{Currency, Money};
@@ -13,7 +13,7 @@ use engine::{Currency, Money};
 use crate::{
     app::AppState,
     ui::{
-        common::get_currency,
+        common::{get_currency, render_empty_state, themed_block},
         components::{
             money::{flow_cap_line_gauge, styled_amount_no_sign, styled_progress_bar},
             recent_transactions::render_recent_transactions,
@@ -119,14 +119,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         header_lines.push(line);
     }
 
-    let header_block = Block::default()
-        .title(Span::styled(
-            " Flow Detail ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
+    let header_block = themed_block("Flow Detail", theme.accent, theme);
     let header_inner = header_block.inner(layout[0]);
     frame.render_widget(header_block, layout[0]);
 
@@ -155,23 +148,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 
 /// Render an empty detail panel with a message.
 fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, message: &str) {
-    let block = Block::default()
-        .title(Span::styled(
-            " Flow Detail ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
-    frame.render_widget(
-        Paragraph::new(vec![
-            Line::from(""),
-            Line::from(Span::styled(message, Style::default().fg(theme.text_muted))),
-        ])
-        .alignment(Alignment::Center)
-        .block(block),
-        area,
-    );
+    render_empty_state(frame, area, "Flow Detail", message, theme);
 }
 
 /// Create a cap progress line showing current vs cap.

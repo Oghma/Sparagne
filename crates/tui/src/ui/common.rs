@@ -14,13 +14,72 @@
 use api_types::transaction::TransactionKind;
 use engine::Currency;
 use ratatui::{
-    layout::Rect,
-    style::{Modifier, Style},
+    Frame,
+    layout::{Alignment, Rect},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 use uuid::Uuid;
 
 use crate::{app::AppState, ui::theme::Theme};
+
+// ---------------------------------------------------------------------------
+// Block helpers
+// ---------------------------------------------------------------------------
+
+/// Creates a rounded-border block with an accent-coloured title.
+pub(crate) fn themed_block<'a>(title: &str, border_color: Color, theme: &Theme) -> Block<'a> {
+    Block::default()
+        .title(Span::styled(
+            format!(" {title} "),
+            Style::default().fg(theme.accent),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border_color))
+}
+
+/// Renders a block with a centered empty-state message (muted text).
+pub(crate) fn render_empty_state(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    title: &str,
+    message: &str,
+    theme: &Theme,
+) {
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                message.to_string(),
+                Style::default().fg(theme.text_muted),
+            )),
+        ])
+        .alignment(Alignment::Center)
+        .block(themed_block(title, theme.border, theme)),
+        area,
+    );
+}
+
+/// Renders a block with a centered error message (negative/red styling).
+pub(crate) fn render_error_state(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    title: &str,
+    error: &str,
+    theme: &Theme,
+) {
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            format!("\u{26a0} {error}"),
+            Style::default().fg(theme.negative),
+        )))
+        .alignment(Alignment::Center)
+        .block(themed_block(title, theme.negative, theme)),
+        area,
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Icon constants
