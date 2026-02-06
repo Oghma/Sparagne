@@ -133,11 +133,6 @@ impl App {
         &mut self.state
     }
 
-    /// Read access to the application state (for integration tests).
-    pub fn state(&self) -> &AppState {
-        &self.state
-    }
-
     fn tick_spinner(&mut self) {
         self.state.spinner.tick();
     }

@@ -1,7 +1,6 @@
 use crate::{
     app::{
         App, ToastLevel, TransactionsMode, TransferFormState,
-        errors::login_message_for_error,
     },
     error::Result,
     text::{TextKey, t},
@@ -83,16 +82,14 @@ impl App {
             match res {
                 Ok(()) => {
                     self.state.transactions.transfer = TransferFormState::default();
-                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransferWalletUpdated), ToastLevel::Success);
+                    self.set_toast(t(self.state.locale, TextKey::SuccessTransferWalletUpdated), ToastLevel::Success);
                     self.load_transactions(true).await?;
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
                 Err(err) => {
-                    if self.handle_auth_error(&err) {
-                        return Ok(());
-                    }
-                    self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast(&t(self.state.locale, TextKey::ErrorTransferWallet), ToastLevel::Error);
+                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    self.state.transactions.transfer.error = Some(msg);
+                    self.set_toast(t(self.state.locale, TextKey::ErrorTransferWallet), ToastLevel::Error);
                 }
             }
         } else {
@@ -120,15 +117,13 @@ impl App {
                     self.state.transactions.mode = TransactionsMode::List;
                     self.state.transactions.transfer = TransferFormState::default();
                     self.state.transactions.last_created_id = Some(created.id);
-                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransferWalletSaved), ToastLevel::Success);
+                    self.set_toast(t(self.state.locale, TextKey::SuccessTransferWalletSaved), ToastLevel::Success);
                     self.load_transactions(true).await?;
                 }
                 Err(err) => {
-                    if self.handle_auth_error(&err) {
-                        return Ok(());
-                    }
-                    self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast(&t(self.state.locale, TextKey::ErrorTransferWallet), ToastLevel::Error);
+                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    self.state.transactions.transfer.error = Some(msg);
+                    self.set_toast(t(self.state.locale, TextKey::ErrorTransferWallet), ToastLevel::Error);
                 }
             }
         }
@@ -210,16 +205,14 @@ impl App {
             match res {
                 Ok(()) => {
                     self.state.transactions.transfer = TransferFormState::default();
-                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransferFlowUpdated), ToastLevel::Success);
+                    self.set_toast(t(self.state.locale, TextKey::SuccessTransferFlowUpdated), ToastLevel::Success);
                     self.load_transactions(true).await?;
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
                 Err(err) => {
-                    if self.handle_auth_error(&err) {
-                        return Ok(());
-                    }
-                    self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast(&t(self.state.locale, TextKey::ErrorTransferFlow), ToastLevel::Error);
+                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    self.state.transactions.transfer.error = Some(msg);
+                    self.set_toast(t(self.state.locale, TextKey::ErrorTransferFlow), ToastLevel::Error);
                 }
             }
         } else {
@@ -247,15 +240,13 @@ impl App {
                     self.state.transactions.mode = TransactionsMode::List;
                     self.state.transactions.transfer = TransferFormState::default();
                     self.state.transactions.last_created_id = Some(created.id);
-                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransferFlowSaved), ToastLevel::Success);
+                    self.set_toast(t(self.state.locale, TextKey::SuccessTransferFlowSaved), ToastLevel::Success);
                     self.load_transactions(true).await?;
                 }
                 Err(err) => {
-                    if self.handle_auth_error(&err) {
-                        return Ok(());
-                    }
-                    self.state.transactions.transfer.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast(&t(self.state.locale, TextKey::ErrorTransferFlow), ToastLevel::Error);
+                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    self.state.transactions.transfer.error = Some(msg);
+                    self.set_toast(t(self.state.locale, TextKey::ErrorTransferFlow), ToastLevel::Error);
                 }
             }
         }

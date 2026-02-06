@@ -42,8 +42,8 @@ impl App {
             HomeFeedItem::Transaction { index } => {
                 self.state.section = Section::Transactions;
                 self.state.transactions.mode = TransactionsMode::List;
-                self.state.transactions.search_query.clear();
-                self.state.transactions.search_active = false;
+                self.state.transactions.search.query.clear();
+                self.state.transactions.search.active = false;
 
                 let visible = transactions_visible_indices(&self.state);
                 if let Some(pos) = visible.iter().position(|idx| idx == index) {
@@ -54,8 +54,8 @@ impl App {
             HomeFeedItem::FlowAlert(alert) => {
                 self.state.section = Section::Accounts;
                 self.accounts_set_tab(1);
-                self.state.flows.search_query.clear();
-                self.state.flows.search_active = false;
+                self.state.flows.search.query.clear();
+                self.state.flows.search.active = false;
                 if self.state.snapshot.is_none() {
                     self.refresh_snapshot().await?;
                 }

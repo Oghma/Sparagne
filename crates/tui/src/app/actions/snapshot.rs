@@ -9,11 +9,11 @@ use chrono::Duration as ChronoDuration;
 
 use crate::{
     app::{
-        errors::login_message_for_error,
         ordering::push_recent_id,
     },
     client::ClientError,
     error::{AppError, Result},
+    text::{TextKey, t},
 };
 
 impl App {
@@ -128,14 +128,15 @@ impl App {
                 self.state.overlays.error = None;
             }
             Err(ClientError::NotFound(_)) => {
+                let locale = self.state.locale;
                 if let Err(err) = self.refresh_shared_flows_snapshot().await {
                     self.state.wallets.error = Some(err.to_string());
                     self.state.flows.error = Some(err.to_string());
                     self.state.stats.error = Some(err.to_string());
-                    self.connection_error("Errore connessione");
+                    self.connection_error(t(locale, TextKey::ErrorConnection));
                     self.state.overlays.error = Some(ErrorDialogState::connection(
-                        "Connection Error",
-                        "Unable to connect to server.",
+                        t(locale, TextKey::DialogConnectionErrorTitle),
+                        t(locale, TextKey::DialogConnectionErrorMessage),
                         Some(err.to_string()),
                         ErrorAction::RetrySnapshot,
                     ));
@@ -145,16 +146,14 @@ impl App {
                 }
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                let message = login_message_for_error(err, self.state.locale);
+                let Some(message) = self.client_error_message(err) else { return Ok(()); };
+                let locale = self.state.locale;
                 self.state.wallets.error = Some(message.clone());
                 self.state.flows.error = Some(message.clone());
-                self.connection_error("Errore connessione");
+                self.connection_error(t(locale, TextKey::ErrorConnection));
                 self.state.overlays.error = Some(ErrorDialogState::connection(
-                    "Connection Error",
-                    "Unable to connect to server.",
+                    t(locale, TextKey::DialogConnectionErrorTitle),
+                    t(locale, TextKey::DialogConnectionErrorMessage),
                     Some(message.clone()),
                     ErrorAction::RetrySnapshot,
                 ));
@@ -241,10 +240,8 @@ impl App {
                 Ok(())
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                Err(AppError::Terminal(login_message_for_error(err, self.state.locale)))
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                Err(AppError::Terminal(msg))
             }
         }
     }

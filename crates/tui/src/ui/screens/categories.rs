@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{AliasFocus, AppState, CategoriesMode},
+    text::{TextKey, t},
     ui::{components::input_dialog::InputDialog, forms::FormFieldRenderer, theme::Theme},
 };
 
@@ -59,15 +60,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
 }
 
 fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let header_spans = vec![
         Span::styled("[c]", Style::default().fg(theme.accent)),
-        Span::styled(" create  ", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::CatHintCreate), Style::default().fg(theme.text_muted)),
         Span::styled("[e]", Style::default().fg(theme.accent)),
-        Span::styled(" rename  ", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::CatHintRename), Style::default().fg(theme.text_muted)),
         Span::styled("[l]", Style::default().fg(theme.accent)),
-        Span::styled(" aliases  ", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::CatHintAliases), Style::default().fg(theme.text_muted)),
         Span::styled("[m]", Style::default().fg(theme.accent)),
-        Span::styled(" merge", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::CatHintMerge), Style::default().fg(theme.text_muted)),
     ];
 
     let list_block = Block::default()
@@ -75,7 +77,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border))
         .title(Span::styled(
-            " Categories ",
+            t(locale, TextKey::CatTitle),
             Style::default().fg(theme.accent),
         ))
         .title_bottom(Line::from(header_spans).centered());
@@ -84,14 +86,14 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         let lines = vec![
             Line::from(""),
             Line::from(Span::styled(
-                "No categories yet",
+                t(locale, TextKey::CatNoCategoriesYet),
                 Style::default().fg(theme.text_muted),
             )),
             Line::from(""),
             Line::from(vec![
                 Span::styled("[c]", Style::default().fg(theme.accent)),
                 Span::styled(
-                    " to create your first category",
+                    t(locale, TextKey::CatCreateFirst),
                     Style::default().fg(theme.text_muted),
                 ),
             ]),
@@ -131,12 +133,12 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             ];
 
             if category.is_system {
-                spans.push(Span::styled("[system]", Style::default().fg(theme.info)));
+                spans.push(Span::styled(t(locale, TextKey::CatBadgeSystem), Style::default().fg(theme.info)));
                 spans.push(Span::raw(" "));
             }
             if category.archived {
                 spans.push(Span::styled(
-                    "[archived]",
+                    t(locale, TextKey::CatBadgeArchived),
                     Style::default().fg(theme.warning),
                 ));
                 spans.push(Span::raw(" "));
@@ -144,13 +146,13 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             if let Some(from_idx) = from_index
                 && idx == from_idx
             {
-                spans.push(Span::styled("[FROM]", Style::default().fg(theme.negative)));
+                spans.push(Span::styled(t(locale, TextKey::CatBadgeFrom), Style::default().fg(theme.negative)));
                 spans.push(Span::raw(" "));
             }
             if let Some(target_idx) = target_index
                 && idx == target_idx
             {
-                spans.push(Span::styled("[TO]", Style::default().fg(theme.positive)));
+                spans.push(Span::styled(t(locale, TextKey::CatBadgeTo), Style::default().fg(theme.positive)));
             }
 
             ListItem::new(Line::from(spans))
@@ -172,6 +174,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
 }
 
 fn render_rename_dialog(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let Some(category) = state.categories.items.get(state.categories.selected) else {
         return;
     };
@@ -179,21 +182,22 @@ fn render_rename_dialog(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let error = state.categories.form.name.state.validation.error_message();
 
     let dialog = InputDialog {
-        title: "Rename Category",
-        current_label: Some("Current:"),
+        title: t(locale, TextKey::CatRenameTitle),
+        current_label: Some(t(locale, TextKey::CatCurrentLabel)),
         current_value: Some(category.name.as_str()),
-        prompt: "New name:",
+        prompt: t(locale, TextKey::CatNewNameLabel),
         value: state.categories.form.name.value(),
         focused: true,
         error,
-        confirm_label: "Save",
-        cancel_label: "Cancel",
+        confirm_label: t(locale, TextKey::ActionSave),
+        cancel_label: t(locale, TextKey::HintCancel),
     };
 
     crate::ui::components::input_dialog::render(frame, area, dialog, theme);
 }
 
 fn render_alias_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let is_focused = state.categories.aliases.focus == AliasFocus::List;
     let border_color = if is_focused {
         theme.accent
@@ -213,7 +217,7 @@ fn render_alias_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
         .title(Span::styled(
-            format!(" Aliases for {} ", category_name),
+            t(locale, TextKey::CatAliasesFor).replace("{}", category_name),
             Style::default().fg(theme.accent),
         ));
 
@@ -234,12 +238,12 @@ fn render_alias_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         let lines = vec![
             Line::from(""),
             Line::from(Span::styled(
-                "No aliases for this category",
+                t(locale, TextKey::CatNoAliasesForCategory),
                 Style::default().fg(theme.text_muted),
             )),
             Line::from(""),
             Line::from(Span::styled(
-                "Type in the input below to add one",
+                t(locale, TextKey::CatTypeToAddAlias),
                 Style::default().fg(theme.text_muted),
             )),
         ];
@@ -270,6 +274,7 @@ fn render_alias_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 }
 
 fn render_alias_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let is_focused = state.categories.aliases.focus == AliasFocus::Input;
     let border_color = if is_focused {
         theme.accent
@@ -281,7 +286,7 @@ fn render_alias_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  New alias: ", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::CatNewAlias), Style::default().fg(theme.text_muted)),
             Span::styled(
                 state.categories.aliases.input.as_str(),
                 Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
@@ -291,13 +296,13 @@ fn render_alias_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         Line::from(""),
         Line::from(vec![
             Span::styled("  [Enter]", Style::default().fg(theme.accent)),
-            Span::styled(" save  ", Style::default().fg(theme.text_muted)),
+            Span::styled(format!(" {}  ", t(locale, TextKey::HintSave)), Style::default().fg(theme.text_muted)),
             Span::styled("[Tab]", Style::default().fg(theme.accent)),
-            Span::styled(" switch focus  ", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::CatSwitchFocus), Style::default().fg(theme.text_muted)),
             Span::styled("[x]", Style::default().fg(theme.accent)),
-            Span::styled(" delete  ", Style::default().fg(theme.text_muted)),
+            Span::styled(format!(" {}  ", t(locale, TextKey::HintDelete)), Style::default().fg(theme.text_muted)),
             Span::styled("[Esc]", Style::default().fg(theme.accent)),
-            Span::styled(" back", Style::default().fg(theme.text_muted)),
+            Span::styled(format!(" {}", t(locale, TextKey::HintBack)), Style::default().fg(theme.text_muted)),
         ]),
     ];
 
@@ -316,15 +321,16 @@ fn render_alias_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
 }
 
 fn render_alias_preview(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let Some(category) = state.categories.items.get(state.categories.selected) else {
         let block = Block::default()
-            .title(Span::styled(" Aliases ", Style::default().fg(theme.accent)))
+            .title(Span::styled(t(locale, TextKey::CatAliasesTitle), Style::default().fg(theme.accent)))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(theme.border));
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
-                "No category selected",
+                t(locale, TextKey::CatNoCategorySelected),
                 Style::default().fg(theme.text_muted),
             )))
             .alignment(Alignment::Center)
@@ -337,7 +343,7 @@ fn render_alias_preview(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Category: ", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::CatCategoryLabel), Style::default().fg(theme.text_muted)),
             Span::styled(&category.name, Style::default().fg(theme.text)),
         ]),
     ];
@@ -349,12 +355,12 @@ fn render_alias_preview(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         )));
     } else if state.categories.aliases.category_id != Some(category.id) {
         lines.push(Line::from(Span::styled(
-            "  Press [l] to load aliases",
+            t(locale, TextKey::CatPressToLoadAliases),
             Style::default().fg(theme.text_muted),
         )));
     } else if state.categories.aliases.items.is_empty() {
         lines.push(Line::from(Span::styled(
-            "  No aliases",
+            t(locale, TextKey::CatNoAliases),
             Style::default().fg(theme.text_muted),
         )));
     } else {
@@ -366,15 +372,16 @@ fn render_alias_preview(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             ]));
         }
         if state.categories.aliases.items.len() > 3 {
+            let remaining = state.categories.aliases.items.len() - 3;
             lines.push(Line::from(Span::styled(
-                format!("    ... +{} more", state.categories.aliases.items.len() - 3),
+                t(locale, TextKey::CatMore).replace("{}", &remaining.to_string()),
                 Style::default().fg(theme.text_muted),
             )));
         }
     }
 
     let block = Block::default()
-        .title(Span::styled(" Aliases ", Style::default().fg(theme.accent)))
+        .title(Span::styled(t(locale, TextKey::CatAliasesTitle), Style::default().fg(theme.accent)))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border));
@@ -382,13 +389,14 @@ fn render_alias_preview(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 }
 
 fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let form = &state.categories.form;
     let is_rename = state.categories.mode == CategoriesMode::Rename;
 
     let title = if is_rename {
-        " Rename Category "
+        t(locale, TextKey::CatRenameTitle)
     } else {
-        " New Category "
+        t(locale, TextKey::CatNewCategoryTitle)
     };
 
     let lines = vec![
@@ -403,11 +411,11 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         Line::from(vec![
             Span::styled("  [Enter]", Style::default().fg(theme.accent)),
             Span::styled(
-                if is_rename { " save  " } else { " create  " },
+                if is_rename { t(locale, TextKey::HintSave) } else { t(locale, TextKey::HintCreate) },
                 Style::default().fg(theme.text_muted),
             ),
-            Span::styled("[Esc]", Style::default().fg(theme.accent)),
-            Span::styled(" cancel", Style::default().fg(theme.text_muted)),
+            Span::styled("  [Esc]", Style::default().fg(theme.accent)),
+            Span::styled(format!(" {}", t(locale, TextKey::HintCancel)), Style::default().fg(theme.text_muted)),
         ]),
     ];
 
@@ -420,12 +428,13 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
 }
 
 fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+    let locale = state.locale;
     let (from_name, into_name) = merge_pair(state).unwrap_or(("-".to_string(), "-".to_string()));
 
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Merge: ", Style::default().fg(theme.text_muted)),
+            Span::styled(t(locale, TextKey::CatMergeLabel), Style::default().fg(theme.text_muted)),
             Span::styled(&from_name, Style::default().fg(theme.negative)),
             Span::styled(" → ", Style::default().fg(theme.text_muted)),
             Span::styled(&into_name, Style::default().fg(theme.positive)),
@@ -436,24 +445,24 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     if let Some(preview) = state.categories.merge.preview.as_ref() {
         if preview.ok {
             let hint = if state.categories.merge.confirming {
-                "✓ Preview OK. Press [Enter] to merge."
+                t(locale, TextKey::CatMergePreviewOkMerge)
             } else {
-                "✓ Preview OK. Press [Enter] to confirm."
+                t(locale, TextKey::CatMergePreviewOkConfirm)
             };
             lines.push(Line::from(Span::styled(
-                format!("  {hint}"),
+                format!("  ✓ {hint}"),
                 Style::default().fg(theme.positive),
             )));
         } else {
             lines.push(Line::from(Span::styled(
-                "  ⚠ Conflicts:",
+                t(locale, TextKey::CatMergeConflicts),
                 Style::default().fg(theme.negative),
             )));
             for conflict in &preview.conflicts {
                 lines.push(Line::from(Span::styled(
                     format!(
                         "    • {}",
-                        merge_conflict_label(conflict.kind.as_str(), conflict.value.as_str())
+                        merge_conflict_label(locale, conflict.kind.as_str(), conflict.value.as_str())
                     ),
                     Style::default().fg(theme.text),
                 )));
@@ -461,7 +470,7 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         }
     } else {
         lines.push(Line::from(Span::styled(
-            "  Select target and press [Enter] for preview",
+            t(locale, TextKey::CatMergeSelectTarget),
             Style::default().fg(theme.text_muted),
         )));
     }
@@ -469,9 +478,9 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::styled("  [Enter]", Style::default().fg(theme.accent)),
-        Span::styled(" preview/merge  ", Style::default().fg(theme.text_muted)),
+        Span::styled(t(locale, TextKey::CatMergePreviewAction), Style::default().fg(theme.text_muted)),
         Span::styled("[Esc]", Style::default().fg(theme.accent)),
-        Span::styled(" cancel", Style::default().fg(theme.text_muted)),
+        Span::styled(format!(" {}", t(locale, TextKey::HintCancel)), Style::default().fg(theme.text_muted)),
     ]));
 
     let block = Block::default()
@@ -479,7 +488,7 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border))
         .title(Span::styled(
-            " Merge Categories ",
+            t(locale, TextKey::CatMergeCategoriesTitle),
             Style::default().fg(theme.accent),
         ));
     frame.render_widget(Paragraph::new(lines).block(block), area);
@@ -497,13 +506,14 @@ fn merge_pair(state: &AppState) -> Option<(String, String)> {
     Some((from.name.clone(), into.name.clone()))
 }
 
-fn merge_conflict_label(kind: &str, value: &str) -> String {
+fn merge_conflict_label(locale: crate::text::Locale, kind: &str, value: &str) -> String {
+    let pairs = &[("value", value), ("kind", kind)];
     match kind {
-        "same_category" => "Cannot merge category with itself".to_string(),
-        "source_system" => format!("System category: {value}"),
-        "target_archived" => format!("Target is archived: {value}"),
-        "alias_conflict" => format!("Alias conflict: {value}"),
-        "name_conflict" => format!("Name conflict: {value}"),
-        _ => format!("Conflict: {kind} ({value})"),
+        "same_category" => t(locale, TextKey::CatConflictSameCategory).to_string(),
+        "source_system" => crate::text::format(locale, TextKey::CatConflictSourceSystem, pairs),
+        "target_archived" => crate::text::format(locale, TextKey::CatConflictTargetArchived, pairs),
+        "alias_conflict" => crate::text::format(locale, TextKey::CatConflictAliasConflict, pairs),
+        "name_conflict" => crate::text::format(locale, TextKey::CatConflictNameConflict, pairs),
+        _ => crate::text::format(locale, TextKey::CatConflictGeneric, pairs),
     }
 }

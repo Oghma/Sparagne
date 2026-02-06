@@ -90,7 +90,7 @@ pub(crate) fn push_recent_id(target: &mut Vec<Uuid>, value: Uuid, limit: usize) 
 /// Returns indices of transactions visible after filtering and hiding pending
 /// deletes.
 pub(crate) fn transactions_visible_indices(state: &AppState) -> Vec<usize> {
-    let query = normalize_query(state.transactions.search_query.as_str());
+    let query = normalize_query(state.transactions.search.query.as_str());
     let hidden_ids = &state.transactions.pending_delete_ids;
     if query.is_empty() {
         return state
@@ -151,7 +151,7 @@ pub(crate) fn wallets_visible_indices(state: &AppState) -> Vec<usize> {
     let Some(snapshot) = state.snapshot.as_ref() else {
         return Vec::new();
     };
-    let query = normalize_query(state.wallets.search_query.as_str());
+    let query = normalize_query(state.wallets.search.query.as_str());
     let show_archived = state.wallets.show_archived;
 
     snapshot
@@ -178,7 +178,7 @@ pub(crate) fn flows_visible_indices(state: &AppState) -> Vec<usize> {
     let Some(snapshot) = state.snapshot.as_ref() else {
         return Vec::new();
     };
-    let query = normalize_query(state.flows.search_query.as_str());
+    let query = normalize_query(state.flows.search.query.as_str());
     let show_archived = state.flows.show_archived;
 
     snapshot

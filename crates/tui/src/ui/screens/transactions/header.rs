@@ -1,11 +1,11 @@
-/// Transaction list header rendering.
-///
-/// Displays:
-/// - Grouping mode and scope information
-/// - Toggle states (voided, transfers)
-/// - Active filters summary
-/// - Search query
-/// - Keyboard hints
+//! Transaction list header rendering.
+//!
+//! Displays:
+//! - Grouping mode and scope information
+//! - Toggle states (voided, transfers)
+//! - Active filters summary
+//! - Search query
+//! - Keyboard hints
 
 use api_types::transaction::TransactionKind;
 use ratatui::{
@@ -43,12 +43,12 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     let voided_status = if state.transactions.include_voided {
         Span::styled("[On]", Style::default().fg(theme.positive))
     } else {
-        Span::styled("[Off]", Style::default().fg(theme.dim))
+        Span::styled("[Off]", Style::default().fg(theme.text_muted))
     };
     let transfers_status = if state.transactions.include_transfers {
         Span::styled("[On]", Style::default().fg(theme.positive))
     } else {
-        Span::styled("[Off]", Style::default().fg(theme.dim))
+        Span::styled("[Off]", Style::default().fg(theme.text_muted))
     };
 
     let mut line1 = vec![
@@ -67,14 +67,14 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             Style::default().fg(theme.warning),
         ));
     } else {
-        line1.push(Span::styled("Filters [off]", Style::default().fg(theme.dim)));
+        line1.push(Span::styled("Filters [off]", Style::default().fg(theme.text_muted)));
     }
 
     // Row 2: Search field and hints
-    let search_query = state.transactions.search_query.trim();
+    let search_query = state.transactions.search.query.trim();
     let mut line2 = vec![];
 
-    if !search_query.is_empty() || state.transactions.search_active {
+    if !search_query.is_empty() || state.transactions.search.active {
         line2.push(Span::styled("Search: ", Style::default().fg(theme.text_muted)));
         let shown = if search_query.is_empty() {
             "…"
@@ -82,7 +82,7 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             search_query
         };
         let mut style = Style::default().fg(theme.text);
-        if state.transactions.search_active {
+        if state.transactions.search.active {
             style = style.fg(theme.accent).add_modifier(Modifier::BOLD);
         }
         line2.push(Span::styled(format!("\"{shown}\""), style));
@@ -91,13 +91,13 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 
     line2.push(Span::styled(
         "[Ctrl+F] search  [g] group  [f] filters  [w/W] scope",
-        Style::default().fg(theme.dim),
+        Style::default().fg(theme.text_muted),
     ));
 
     // Add error if present
     if let Some(err) = &state.transactions.error {
         line2.push(Span::raw("  "));
-        line2.push(Span::styled(err.as_str(), Style::default().fg(theme.error)));
+        line2.push(Span::styled(err.as_str(), Style::default().fg(theme.negative)));
     }
 
     let block = Block::default()

@@ -4,7 +4,6 @@
 
 use crate::{
     app::{
-        format::map_currency,
         resolve::{resolve_category_matches, resolve_flow_matches, resolve_wallet_matches},
         App, QuickAddAmbiguous, QuickAddAmbiguousKind, Section, TransactionsMode,
     },
@@ -50,13 +49,7 @@ impl App {
             return;
         }
 
-        let currency = self
-            .state
-            .vault
-            .as_ref()
-            .and_then(|v| v.currency.as_ref())
-            .map(map_currency)
-            .unwrap_or(engine::Currency::Eur);
+        let currency = self.current_currency();
 
         let input = self.state.transactions.quick_input.as_str();
         let parsed = match parse_quick_add(input, currency, self.state.locale) {

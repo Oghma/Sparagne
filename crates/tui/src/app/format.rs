@@ -6,15 +6,6 @@
 use api_types::{membership::MembershipRole, transaction::TransactionKind};
 use engine::Currency;
 
-/// Maps an API currency type to an engine currency type.
-///
-/// This is a simple conversion function used throughout the TUI.
-pub(crate) fn map_currency(currency: &api_types::Currency) -> Currency {
-    match currency {
-        api_types::Currency::Eur => Currency::Eur,
-    }
-}
-
 /// Returns a short label for a month number (1-12).
 ///
 /// Returns "???" for invalid month numbers.

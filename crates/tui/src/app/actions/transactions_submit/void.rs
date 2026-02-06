@@ -1,5 +1,5 @@
 use crate::{
-    app::{App, ToastLevel, errors::login_message_for_error},
+    app::{App, ToastLevel},
     error::Result,
     text::{TextKey, format as t_format, t},
 };
@@ -8,10 +8,10 @@ use api_types::transaction::{TransactionUpdate, TransactionVoid};
 impl App {
     pub(crate) async fn undo_last_transaction(&mut self) -> Result<()> {
         let Some(id) = self.state.transactions.last_created_id else {
-            self.set_toast(&t(self.state.locale, TextKey::ValidationNoTransactionToVoid), ToastLevel::Info);
+            self.set_toast(t(self.state.locale, TextKey::ValidationNoTransactionToVoid), ToastLevel::Info);
             return Ok(());
         };
-        self.void_transaction_by_id(id, Some(&t(self.state.locale, TextKey::SuccessTransactionVoided)))
+        self.void_transaction_by_id(id, Some(t(self.state.locale, TextKey::SuccessTransactionVoided)))
             .await?;
         Ok(())
     }
@@ -49,11 +49,9 @@ impl App {
                     }
                 }
                 Err(err) => {
-                    if self.handle_auth_error(&err) {
-                        return Ok(());
-                    }
+                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
                     failures += 1;
-                    last_error = Some(login_message_for_error(err, self.state.locale));
+                    last_error = Some(msg);
                 }
             }
         }
@@ -95,7 +93,7 @@ impl App {
         }
         let category_clean = category.trim().trim_start_matches('#').trim();
         if category_clean.is_empty() {
-            self.set_toast(&t(self.state.locale, TextKey::ValidationCategoryInvalid), ToastLevel::Error);
+            self.set_toast(t(self.state.locale, TextKey::ValidationCategoryInvalid), ToastLevel::Error);
             return Ok(());
         }
 
@@ -131,11 +129,9 @@ impl App {
                     successes += 1;
                 }
                 Err(err) => {
-                    if self.handle_auth_error(&err) {
-                        return Ok(());
-                    }
+                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
                     failures += 1;
-                    last_error = Some(login_message_for_error(err, self.state.locale));
+                    last_error = Some(msg);
                 }
             }
         }

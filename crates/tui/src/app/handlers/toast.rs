@@ -2,7 +2,7 @@ use super::super::*;
 
 use std::time::Duration;
 
-use crate::{client::ClientError, error::Result};
+use crate::{app::errors::login_message_for_error, client::ClientError, error::Result};
 use api_types::error::ErrorCode;
 
 impl App {
@@ -70,6 +70,18 @@ impl App {
         self.state.transactions = TransactionsState::default();
         self.state.overlays = OverlayState::default();
         true
+    }
+
+    /// Handles an API client error: checks for auth errors (redirecting to
+    /// login) and returns a localized error message for non-auth errors.
+    ///
+    /// Returns `None` when the error was an auth error (already handled),
+    /// or `Some(message)` with the localized error string.
+    pub(crate) fn client_error_message(&mut self, err: ClientError) -> Option<String> {
+        if self.handle_auth_error(&err) {
+            return None;
+        }
+        Some(login_message_for_error(err, self.state.locale))
     }
 
     pub(crate) async fn finalize_pending_undo(&mut self) -> Result<()> {

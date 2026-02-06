@@ -1,11 +1,11 @@
-/// Transaction list view rendering.
-///
-/// Displays:
-/// - Grouped transaction list (by date/category/wallet/envelope)
-/// - Group headers with totals
-/// - Individual transaction rows (2 lines each)
-/// - Empty state messages
-/// - Visual selection mode markers
+//! Transaction list view rendering.
+//!
+//! Displays:
+//! - Grouped transaction list (by date/category/wallet/envelope)
+//! - Group headers with totals
+//! - Individual transaction rows (2 lines each)
+//! - Empty state messages
+//! - Visual selection mode markers
 
 use ratatui::{
     Frame,
@@ -23,11 +23,12 @@ use crate::{
 
 use super::{
     common::{
-        amount_span, group_total_span, grouping_key_label, kind_chip, map_currency,
+        amount_span, group_total_span, grouping_key_label, kind_chip,
         resolve_flow_name, resolve_wallet_name, signed_amount_minor, void_chip,
     },
     quick_add::render_quick_add,
 };
+use crate::ui::common::get_currency;
 
 /// Renders the main transaction list with grouping
 pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -48,12 +49,7 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border));
 
-    let currency = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
-        .unwrap_or(engine::Currency::Eur);
+    let currency = get_currency(state);
 
     let mut rows = Vec::new();
     let mut selected_row = None;
@@ -151,7 +147,7 @@ fn render_empty_state(
     theme: &Theme,
     list_block: Block<'_>,
 ) {
-    let query = state.transactions.search_query.trim();
+    let query = state.transactions.search.query.trim();
     let mut lines = Vec::new();
     if !query.is_empty() {
         lines.push(Line::from(vec![
@@ -161,7 +157,7 @@ fn render_empty_state(
         ]));
         lines.push(Line::from(Span::styled(
             "Ctrl+F to edit • Esc to clear",
-            Style::default().fg(theme.dim),
+            Style::default().fg(theme.text_muted),
         )));
     } else {
         lines.push(Line::from(vec![
@@ -211,12 +207,7 @@ fn render_transaction_row(
     tx: &api_types::transaction::TransactionView,
     theme: &Theme,
 ) -> ListItem<'static> {
-    let currency = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
-        .unwrap_or(engine::Currency::Eur);
+    let currency = get_currency(state);
 
     let note = tx.note.as_deref().unwrap_or("");
     let category = tx
@@ -249,13 +240,13 @@ fn render_transaction_row(
     if state.transactions.grouping_mode != GroupingMode::Date {
         line1_spans.push(Span::styled(
             tx.occurred_at.format("%d %b").to_string(),
-            Style::default().fg(theme.dim),
+            Style::default().fg(theme.text_muted),
         ));
         line1_spans.push(Span::raw(" "));
     }
     line1_spans.push(Span::styled(
         tx.occurred_at.format("%H:%M").to_string(),
-        Style::default().fg(theme.dim),
+        Style::default().fg(theme.text_muted),
     ));
     line1_spans.push(Span::raw("  "));
     line1_spans.push(kind_chip(tx.kind, theme));
@@ -278,7 +269,7 @@ fn render_transaction_row(
     if !wallet_name.is_empty() {
         line2_spans.push(Span::styled(
             format!("@{wallet_name}"),
-            Style::default().fg(theme.dim),
+            Style::default().fg(theme.text_muted),
         ));
         line2_spans.push(Span::raw("  "));
     }
@@ -293,7 +284,7 @@ fn render_transaction_row(
     let lines = vec![Line::from(line1_spans), Line::from(line2_spans)];
     let mut item = ListItem::new(lines);
     if tx.voided {
-        item = item.style(Style::default().fg(theme.dim));
+        item = item.style(Style::default().fg(theme.text_muted));
     }
     item
 }

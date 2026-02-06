@@ -4,6 +4,13 @@ use uuid::Uuid;
 
 use super::selectable::SelectableList;
 
+/// Per-list search state for in-screen filtering (transactions, wallets, flows).
+#[derive(Debug, Clone, Default)]
+pub struct ListSearchState {
+    pub query: String,
+    pub active: bool,
+}
+
 /// Global search overlay state for cross-screen search.
 #[derive(Debug, Default)]
 pub struct GlobalSearchState {

@@ -1,5 +1,6 @@
 use api_types::transaction::TransactionView;
 
+use super::search::ListSearchState;
 use super::selectable::{HasArchiveToggle, HasSelection, Resettable, UpdateFocus};
 use crate::ui::forms::{AmountField, TextField};
 
@@ -10,8 +11,7 @@ pub struct WalletsState {
     pub error: Option<String>,
     pub detail: WalletDetailState,
     pub form: WalletFormState,
-    pub search_query: String,
-    pub search_active: bool,
+    pub search: ListSearchState,
     pub show_archived: bool,
 }
 
@@ -43,8 +43,7 @@ impl Default for WalletsState {
             error: None,
             detail: WalletDetailState::default(),
             form: WalletFormState::default(),
-            search_query: String::new(),
-            search_active: false,
+            search: ListSearchState::default(),
             show_archived: false,
         }
     }

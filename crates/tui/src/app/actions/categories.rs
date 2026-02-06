@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::errors::login_message_for_error, error::Result, text::{TextKey, t}};
+use crate::{error::Result, text::{TextKey, t}};
 use api_types::category::{CategoryCreate, CategoryUpdate};
 
 impl App {
@@ -40,10 +40,8 @@ impl App {
                 }
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.categories.error = Some(msg);
                 self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
@@ -103,10 +101,8 @@ impl App {
                     }
                 }
                 Err(err) => {
-                    if self.handle_auth_error(&err) {
-                        return Ok(());
-                    }
-                    self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
+                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    self.state.categories.error = Some(msg);
                     self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
                 }
             }
@@ -131,10 +127,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessMergeCompleted), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.categories.error = Some(msg);
                 self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
@@ -180,10 +174,8 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.categories.aliases.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.categories.aliases.error = Some(msg);
                 self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
@@ -225,10 +217,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessAliasCreated), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.categories.aliases.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.categories.aliases.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorCreateAlias), ToastLevel::Error);
             }
         }
@@ -270,10 +260,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessAliasDeleted), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.categories.aliases.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.categories.aliases.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorDeleteAlias), ToastLevel::Error);
             }
         }
@@ -314,10 +302,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessCategoryCreated), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.categories.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorCreateCategory), ToastLevel::Error);
             }
         }
@@ -368,10 +354,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessCategoryUpdated), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.categories.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorUpdateCategory), ToastLevel::Error);
             }
         }
@@ -407,10 +391,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessCategoryUpdated), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.categories.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.categories.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorArchiveCategory), ToastLevel::Error);
             }
         }

@@ -1,5 +1,7 @@
 //! Application state types for the TUI.
 
+#[macro_use]
+mod cyclic;
 mod categories;
 mod flows;
 mod members;
@@ -63,41 +65,7 @@ pub enum SettingsTab {
     Preferences,
 }
 
-impl SettingsTab {
-    pub const ALL: [Self; 4] = [
-        Self::Categories,
-        Self::Vault,
-        Self::Members,
-        Self::Preferences,
-    ];
-
-    pub fn index(self) -> usize {
-        match self {
-            Self::Categories => 0,
-            Self::Vault => 1,
-            Self::Members => 2,
-            Self::Preferences => 3,
-        }
-    }
-
-    pub fn from_index(index: usize) -> Self {
-        match index {
-            1 => Self::Vault,
-            2 => Self::Members,
-            3 => Self::Preferences,
-            _ => Self::Categories,
-        }
-    }
-
-    pub fn next(self) -> Self {
-        Self::from_index((self.index() + 1) % Self::ALL.len())
-    }
-
-    pub fn prev(self) -> Self {
-        let len = Self::ALL.len();
-        Self::from_index((self.index() + len - 1) % len)
-    }
-}
+cyclic_enum!(SettingsTab { Categories => 0, Vault => 1, Members => 2, Preferences => 3 });
 
 /// Focus state for the Preferences settings screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -133,34 +101,7 @@ pub enum AccountsTab {
     Goals,
 }
 
-impl AccountsTab {
-    pub const ALL: [Self; 3] = [Self::Sources, Self::Envelopes, Self::Goals];
-
-    pub fn index(self) -> usize {
-        match self {
-            Self::Sources => 0,
-            Self::Envelopes => 1,
-            Self::Goals => 2,
-        }
-    }
-
-    pub fn from_index(index: usize) -> Self {
-        match index {
-            1 => Self::Envelopes,
-            2 => Self::Goals,
-            _ => Self::Sources,
-        }
-    }
-
-    pub fn next(self) -> Self {
-        Self::from_index((self.index() + 1) % Self::ALL.len())
-    }
-
-    pub fn prev(self) -> Self {
-        let len = Self::ALL.len();
-        Self::from_index((self.index() + len - 1) % len)
-    }
-}
+cyclic_enum!(AccountsTab { Sources => 0, Envelopes => 1, Goals => 2 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoginField {

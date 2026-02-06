@@ -8,15 +8,16 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use engine::{Currency, Money};
+use engine::Money;
 
 use crate::{
     app::{AppState, WalletsMode, wallets_visible_indices},
     ui::{components::loading, theme::Theme},
 };
 
-use super::common::{map_currency, progress_bar};
+use super::common::progress_bar;
 use super::form::render_form;
+use crate::ui::common::get_currency;
 
 /// Renders the wallet list view.
 pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -61,8 +62,8 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
     };
 
     // Search bar in header
-    let search_active = state.wallets.search_active;
-    let search_query = state.wallets.search_query.trim();
+    let search_active = state.wallets.search.active;
+    let search_query = state.wallets.search.query.trim();
     let show_archived = state.wallets.show_archived;
 
     let mut header_spans = if search_active || !search_query.is_empty() {
@@ -122,12 +123,7 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         return;
     };
 
-    let currency = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
-        .unwrap_or(Currency::Eur);
+    let currency = get_currency(state);
 
     let visible = wallets_visible_indices(state);
 
@@ -186,13 +182,13 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
                 let hints = vec![
                     Span::raw("     "),
                     Span::styled("[e]", Style::default().fg(theme.accent)),
-                    Span::styled("dit ", Style::default().fg(theme.dim)),
+                    Span::styled("dit ", Style::default().fg(theme.text_muted)),
                     Span::styled("[a]", Style::default().fg(theme.accent)),
-                    Span::styled("rchive ", Style::default().fg(theme.dim)),
+                    Span::styled("rchive ", Style::default().fg(theme.text_muted)),
                     Span::styled("[d]", Style::default().fg(theme.accent)),
-                    Span::styled("elete ", Style::default().fg(theme.dim)),
+                    Span::styled("elete ", Style::default().fg(theme.text_muted)),
                     Span::styled("[Enter]", Style::default().fg(theme.accent)),
-                    Span::styled(" details", Style::default().fg(theme.dim)),
+                    Span::styled(" details", Style::default().fg(theme.text_muted)),
                 ];
                 ListItem::new(vec![Line::from(spans), Line::from(hints)])
             } else {
@@ -229,7 +225,7 @@ fn render_empty_list(
     state: &AppState,
     theme: &Theme,
 ) {
-    let query = state.wallets.search_query.trim();
+    let query = state.wallets.search.query.trim();
     let lines = if !query.is_empty() {
         vec![
             Line::from(""),
@@ -285,12 +281,7 @@ fn render_stats_header(
     state: &AppState,
     theme: &Theme,
 ) {
-    let currency = state
-        .vault
-        .as_ref()
-        .and_then(|v| v.currency.as_ref())
-        .map(map_currency)
-        .unwrap_or(Currency::Eur);
+    let currency = get_currency(state);
 
     let balance_color = if total_balance >= 0 {
         theme.positive
@@ -306,7 +297,7 @@ fn render_stats_header(
         ),
         Span::styled(
             format!(" ({wallet_count} wallets)"),
-            Style::default().fg(theme.dim),
+            Style::default().fg(theme.text_muted),
         ),
     ];
 

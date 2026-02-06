@@ -9,34 +9,7 @@ pub enum StatsTab {
     NetWorth,
 }
 
-impl StatsTab {
-    pub const ALL: [Self; 3] = [Self::CashFlow, Self::Spending, Self::NetWorth];
-
-    pub fn index(self) -> usize {
-        match self {
-            Self::CashFlow => 0,
-            Self::Spending => 1,
-            Self::NetWorth => 2,
-        }
-    }
-
-    pub fn from_index(index: usize) -> Self {
-        match index {
-            1 => Self::Spending,
-            2 => Self::NetWorth,
-            _ => Self::CashFlow,
-        }
-    }
-
-    pub fn next(self) -> Self {
-        Self::from_index((self.index() + 1) % Self::ALL.len())
-    }
-
-    pub fn prev(self) -> Self {
-        let len = Self::ALL.len();
-        Self::from_index((self.index() + len - 1) % len)
-    }
-}
+cyclic_enum!(StatsTab { CashFlow => 0, Spending => 1, NetWorth => 2 });
 
 #[derive(Debug)]
 pub struct StatsState {

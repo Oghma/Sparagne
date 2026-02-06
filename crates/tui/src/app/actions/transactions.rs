@@ -1,16 +1,117 @@
 use super::super::*;
 
 use crate::{
-    app::{
-        errors::login_message_for_error,
-        resolve::{extract_flow_transfer, extract_wallet_flow, extract_wallet_transfer},
-    },
+    app::resolve::{extract_flow_transfer, extract_wallet_flow, extract_wallet_transfer},
     error::{AppError, Result},
 };
 use api_types::transaction::{
-    ExpenseNew, IncomeNew, Refund, TransactionGet, TransactionList, TransactionListResponse,
-    TransactionVoid, TransferFlowNew, TransferWalletNew,
+    ExpenseNew, IncomeNew, Refund, TransactionDetailResponse, TransactionGet, TransactionList,
+    TransactionListResponse, TransactionVoid, TransferFlowNew, TransferWalletNew,
 };
+use chrono::{DateTime, FixedOffset};
+
+/// Payload variants produced by [`build_repeat_payload`].
+///
+/// Each variant wraps the API DTO ready to be submitted to the server, together
+/// with an optional `flow_id` to remember as the last-used flow.
+enum RepeatPayload {
+    Income(IncomeNew, Option<uuid::Uuid>),
+    Expense(ExpenseNew, Option<uuid::Uuid>),
+    Refund(Refund, Option<uuid::Uuid>),
+    TransferWallet(TransferWalletNew),
+    TransferFlow(TransferFlowNew),
+}
+
+/// Build the API payload that repeats the given transaction detail.
+///
+/// This is a pure data-construction function: it reads the detail, extracts
+/// wallet/flow IDs, and returns the appropriate [`RepeatPayload`] variant.
+fn build_repeat_payload(
+    detail: &TransactionDetailResponse,
+    vault_id: &str,
+    occurred_at: DateTime<FixedOffset>,
+    locale: crate::text::Locale,
+) -> Result<RepeatPayload> {
+    use api_types::transaction::TransactionKind;
+
+    match detail.transaction.kind {
+        TransactionKind::Income => {
+            let (wallet_id, flow_id) = extract_wallet_flow(detail);
+            Ok(RepeatPayload::Income(
+                IncomeNew {
+                    vault_id: vault_id.to_string(),
+                    amount_minor: detail.transaction.amount_minor,
+                    flow_id,
+                    wallet_id,
+                    category_id: Some(detail.transaction.category_id),
+                    category: detail.transaction.category.clone(),
+                    note: detail.transaction.note.clone(),
+                    idempotency_key: None,
+                    occurred_at,
+                },
+                flow_id,
+            ))
+        }
+        TransactionKind::Expense => {
+            let (wallet_id, flow_id) = extract_wallet_flow(detail);
+            Ok(RepeatPayload::Expense(
+                ExpenseNew {
+                    vault_id: vault_id.to_string(),
+                    amount_minor: detail.transaction.amount_minor,
+                    flow_id,
+                    wallet_id,
+                    category_id: Some(detail.transaction.category_id),
+                    category: detail.transaction.category.clone(),
+                    note: detail.transaction.note.clone(),
+                    idempotency_key: None,
+                    occurred_at,
+                },
+                flow_id,
+            ))
+        }
+        TransactionKind::Refund => {
+            let (wallet_id, flow_id) = extract_wallet_flow(detail);
+            Ok(RepeatPayload::Refund(
+                Refund {
+                    vault_id: vault_id.to_string(),
+                    amount_minor: detail.transaction.amount_minor,
+                    flow_id,
+                    wallet_id,
+                    category_id: Some(detail.transaction.category_id),
+                    category: detail.transaction.category.clone(),
+                    note: detail.transaction.note.clone(),
+                    idempotency_key: None,
+                    occurred_at,
+                },
+                flow_id,
+            ))
+        }
+        TransactionKind::TransferWallet => {
+            let (from_wallet_id, to_wallet_id) = extract_wallet_transfer(detail, locale)?;
+            Ok(RepeatPayload::TransferWallet(TransferWalletNew {
+                vault_id: vault_id.to_string(),
+                amount_minor: detail.transaction.amount_minor,
+                from_wallet_id,
+                to_wallet_id,
+                note: detail.transaction.note.clone(),
+                idempotency_key: None,
+                occurred_at,
+            }))
+        }
+        TransactionKind::TransferFlow => {
+            let (from_flow_id, to_flow_id) = extract_flow_transfer(detail, locale)?;
+            Ok(RepeatPayload::TransferFlow(TransferFlowNew {
+                vault_id: vault_id.to_string(),
+                amount_minor: detail.transaction.amount_minor,
+                from_flow_id,
+                to_flow_id,
+                note: detail.transaction.note.clone(),
+                idempotency_key: None,
+                occurred_at,
+            }))
+        }
+    }
+}
 
 impl App {
     pub(crate) async fn load_transactions(&mut self, reset: bool) -> Result<()> {
@@ -62,11 +163,9 @@ impl App {
                 self.refresh_transactions_search().await?;
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.transactions.error = Some(msg);
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -124,11 +223,9 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.transactions.error = Some(msg);
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -168,11 +265,9 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
-                self.connection_error("Errore connessione");
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.transactions.error = Some(msg);
+                self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
 
@@ -204,15 +299,13 @@ impl App {
             Ok(()) => {
                 self.state.transactions.mode = TransactionsMode::List;
                 self.state.transactions.detail = None;
-                self.set_toast(&t(self.state.locale, TextKey::SuccessTransactionVoided), ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessTransactionVoided), ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast(&t(self.state.locale, TextKey::ErrorVoiding), ToastLevel::Error);
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.transactions.error = Some(msg);
+                self.set_toast(t(self.state.locale, TextKey::ErrorVoiding), ToastLevel::Error);
             }
         }
 
@@ -231,97 +324,14 @@ impl App {
         };
         let occurred_at = self.now_in_timezone();
 
-        let mut last_flow_id = None;
-        let res = match detail.transaction.kind {
-            api_types::transaction::TransactionKind::Income => {
-                let (wallet_id, flow_id) = extract_wallet_flow(detail);
-                last_flow_id = flow_id;
-                self.client
-                    .income_new(
-                        IncomeNew {
-                            vault_id: vault_id.to_string(),
-                            amount_minor: detail.transaction.amount_minor,
-                            flow_id,
-                            wallet_id,
-                            category_id: Some(detail.transaction.category_id),
-                            category: detail.transaction.category.clone(),
-                            note: detail.transaction.note.clone(),
-                            idempotency_key: None,
-                            occurred_at,
-                        },
-                    )
-                    .await
-            }
-            api_types::transaction::TransactionKind::Expense => {
-                let (wallet_id, flow_id) = extract_wallet_flow(detail);
-                last_flow_id = flow_id;
-                self.client
-                    .expense_new(
-                        ExpenseNew {
-                            vault_id: vault_id.to_string(),
-                            amount_minor: detail.transaction.amount_minor,
-                            flow_id,
-                            wallet_id,
-                            category_id: Some(detail.transaction.category_id),
-                            category: detail.transaction.category.clone(),
-                            note: detail.transaction.note.clone(),
-                            idempotency_key: None,
-                            occurred_at,
-                        },
-                    )
-                    .await
-            }
-            api_types::transaction::TransactionKind::Refund => {
-                let (wallet_id, flow_id) = extract_wallet_flow(detail);
-                last_flow_id = flow_id;
-                self.client
-                    .refund_new(
-                        Refund {
-                            vault_id: vault_id.to_string(),
-                            amount_minor: detail.transaction.amount_minor,
-                            flow_id,
-                            wallet_id,
-                            category_id: Some(detail.transaction.category_id),
-                            category: detail.transaction.category.clone(),
-                            note: detail.transaction.note.clone(),
-                            idempotency_key: None,
-                            occurred_at,
-                        },
-                    )
-                    .await
-            }
-            api_types::transaction::TransactionKind::TransferWallet => {
-                let (from_wallet_id, to_wallet_id) = extract_wallet_transfer(detail, self.state.locale)?;
-                self.client
-                    .transfer_wallet_new(
-                        TransferWalletNew {
-                            vault_id: vault_id.to_string(),
-                            amount_minor: detail.transaction.amount_minor,
-                            from_wallet_id,
-                            to_wallet_id,
-                            note: detail.transaction.note.clone(),
-                            idempotency_key: None,
-                            occurred_at,
-                        },
-                    )
-                    .await
-            }
-            api_types::transaction::TransactionKind::TransferFlow => {
-                let (from_flow_id, to_flow_id) = extract_flow_transfer(detail, self.state.locale)?;
-                self.client
-                    .transfer_flow_new(
-                        TransferFlowNew {
-                            vault_id: vault_id.to_string(),
-                            amount_minor: detail.transaction.amount_minor,
-                            from_flow_id,
-                            to_flow_id,
-                            note: detail.transaction.note.clone(),
-                            idempotency_key: None,
-                            occurred_at,
-                        },
-                    )
-                    .await
-            }
+        let payload = build_repeat_payload(detail, vault_id, occurred_at, self.state.locale)?;
+
+        let (res, last_flow_id) = match payload {
+            RepeatPayload::Income(p, flow_id) => (self.client.income_new(p).await, flow_id),
+            RepeatPayload::Expense(p, flow_id) => (self.client.expense_new(p).await, flow_id),
+            RepeatPayload::Refund(p, flow_id) => (self.client.refund_new(p).await, flow_id),
+            RepeatPayload::TransferWallet(p) => (self.client.transfer_wallet_new(p).await, None),
+            RepeatPayload::TransferFlow(p) => (self.client.transfer_flow_new(p).await, None),
         };
 
         match res {
@@ -330,15 +340,13 @@ impl App {
                     self.state.last_flow_id = Some(flow_id);
                 }
                 self.state.transactions.last_created_id = Some(created.id);
-                self.set_toast(&t(self.state.locale, TextKey::SuccessTransactionRepeated), ToastLevel::Success);
+                self.set_toast(t(self.state.locale, TextKey::SuccessTransactionRepeated), ToastLevel::Success);
                 self.load_transactions(true).await?;
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.transactions.error = Some(login_message_for_error(err, self.state.locale));
-                self.set_toast(&t(self.state.locale, TextKey::ErrorRepeating), ToastLevel::Error);
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.transactions.error = Some(msg);
+                self.set_toast(t(self.state.locale, TextKey::ErrorRepeating), ToastLevel::Error);
             }
         }
 

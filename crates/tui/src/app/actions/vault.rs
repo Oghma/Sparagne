@@ -1,7 +1,6 @@
 use super::super::*;
 
 use crate::{
-    app::errors::login_message_for_error,
     error::Result,
     text::{t, TextKey},
 };
@@ -42,10 +41,8 @@ impl App {
                 self.state.vault_ui.list.error = None;
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.vault_ui.list.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.vault_ui.list.error = Some(msg);
             }
         }
 
@@ -75,8 +72,8 @@ impl App {
         self.state.vault_ui.list.error = None;
         self.state.transactions.scope_wallet_id = None;
         self.state.transactions.scope_flow_id = None;
-        self.state.transactions.search_query.clear();
-        self.state.transactions.search_active = false;
+        self.state.transactions.search.query.clear();
+        self.state.transactions.search.active = false;
 
         self.refresh_snapshot().await?;
         self.apply_local_defaults();
@@ -172,10 +169,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessVaultCreated), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.vault_ui.form.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.vault_ui.form.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorCreateVault), ToastLevel::Error);
             }
         }
@@ -194,10 +189,7 @@ impl App {
                 self.reset_after_vault_delete();
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                let message = login_message_for_error(err, self.state.locale);
+                let Some(message) = self.client_error_message(err) else { return Ok(()); };
                 self.state.vault_ui.error = Some(message.clone());
                 self.state.overlays.error = Some(ErrorDialogState::error(
                     t(self.state.locale, TextKey::UiError),

@@ -1,7 +1,7 @@
 use super::super::*;
 
 use crate::{
-    app::{errors::login_message_for_error, format::member_role_rank},
+    app::format::member_role_rank,
     error::Result,
     text::{t, TextKey},
 };
@@ -75,10 +75,8 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.members.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.members.error = Some(msg);
                 self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
@@ -146,10 +144,8 @@ impl App {
                 self.select_member_by_username(username.as_str());
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.members.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.members.error = Some(msg);
             }
         }
 
@@ -189,10 +185,8 @@ impl App {
                 self.load_members().await?;
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.members.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.members.error = Some(msg);
             }
         }
 

@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::errors::login_message_for_error, error::Result, text::format as t_format};
+use crate::{error::Result, text::format as t_format};
 use api_types::{
     flow::{FlowMode, FlowNew, FlowUpdate},
     transaction::TransactionList,
@@ -45,10 +45,8 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.flows.detail.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.flows.detail.error = Some(msg);
                 self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
@@ -74,10 +72,8 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.flows.detail.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.flows.detail.error = Some(msg);
                 self.connection_error(t(self.state.locale, TextKey::ErrorConnection));
             }
         }
@@ -158,10 +154,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessFlowCreated), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.flows.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorCreateFlow), ToastLevel::Error);
             }
         }
@@ -213,10 +207,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessFlowUpdated), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.flows.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorUpdateFlow), ToastLevel::Error);
             }
         }
@@ -251,10 +243,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessFlowUpdated), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.flows.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorArchiveFlow), ToastLevel::Error);
             }
         }
@@ -302,10 +292,8 @@ impl App {
                 self.set_undo_toast(&message, UndoAction::FlowArchive { id: flow_id });
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.flows.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorArchiveFlow), ToastLevel::Error);
             }
         }
@@ -333,10 +321,8 @@ impl App {
                 self.set_toast(t(self.state.locale, TextKey::SuccessFlowRestored), ToastLevel::Success);
             }
             Err(err) => {
-                if self.handle_auth_error(&err) {
-                    return Ok(());
-                }
-                self.state.flows.error = Some(login_message_for_error(err, self.state.locale));
+                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                self.state.flows.error = Some(msg);
                 self.set_toast(t(self.state.locale, TextKey::ErrorRestoreFlow), ToastLevel::Error);
             }
         }

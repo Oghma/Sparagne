@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use api_types::transaction::{TransactionDetailResponse, TransactionKind, TransactionView};
 use uuid::Uuid;
 
+use super::search::ListSearchState;
 use crate::app::query::{normalize_query, transaction_matches_query};
 use crate::ui::forms::{AmountField, TextField};
 use crate::validation::DateField;
@@ -77,8 +78,7 @@ pub struct TransactionsState {
     pub recent_categories: Vec<String>,
     pub recent_wallet_ids: Vec<uuid::Uuid>,
     pub recent_flow_ids: Vec<uuid::Uuid>,
-    pub search_query: String,
-    pub search_active: bool,
+    pub search: ListSearchState,
 }
 
 impl Default for TransactionsState {
@@ -115,8 +115,7 @@ impl Default for TransactionsState {
             recent_categories: Vec::new(),
             recent_wallet_ids: Vec::new(),
             recent_flow_ids: Vec::new(),
-            search_query: String::new(),
-            search_active: false,
+            search: ListSearchState::default(),
         }
     }
 }
@@ -172,7 +171,7 @@ impl TransactionsState {
     }
 
     pub(crate) fn visible_len(&self) -> usize {
-        let query = normalize_query(self.search_query.as_str());
+        let query = normalize_query(self.search.query.as_str());
         self.items
             .iter()
             .filter(|tx| {
@@ -210,36 +209,7 @@ pub enum GroupingMode {
     Envelope,
 }
 
-impl GroupingMode {
-    pub const ALL: [Self; 4] = [Self::Date, Self::Category, Self::Wallet, Self::Envelope];
-
-    pub fn index(self) -> usize {
-        match self {
-            Self::Date => 0,
-            Self::Category => 1,
-            Self::Wallet => 2,
-            Self::Envelope => 3,
-        }
-    }
-
-    pub fn from_index(index: usize) -> Self {
-        match index {
-            1 => Self::Category,
-            2 => Self::Wallet,
-            3 => Self::Envelope,
-            _ => Self::Date,
-        }
-    }
-
-    pub fn next(self) -> Self {
-        Self::from_index((self.index() + 1) % Self::ALL.len())
-    }
-
-    pub fn prev(self) -> Self {
-        let len = Self::ALL.len();
-        Self::from_index((self.index() + len - 1) % len)
-    }
-}
+cyclic_enum!(GroupingMode { Date => 0, Category => 1, Wallet => 2, Envelope => 3 });
 
 #[derive(Debug, Clone)]
 pub struct TransferFormState {

@@ -3,9 +3,7 @@
 //! Contains methods for visual selection mode and bulk operations like delete.
 
 use crate::{
-    app::{
-        format::map_currency, transactions_visible_indices, App, TransactionsMode, UndoAction,
-    },
+    app::{transactions_visible_indices, App, TransactionsMode, UndoAction},
     error::Result,
     text::{TextKey, format as t_format, t},
 };
@@ -99,13 +97,7 @@ impl App {
             self.state.transactions.selected = visible_len - 1;
         }
 
-        let currency = self
-            .state
-            .vault
-            .as_ref()
-            .and_then(|v| v.currency.as_ref())
-            .map(map_currency)
-            .unwrap_or(engine::Currency::Eur);
+        let currency = self.current_currency();
         let message = if let Some((amount_minor, note)) = single_info {
             let amount = Money::new(amount_minor).format(currency);
             let label = note.as_deref().unwrap_or("Transaction");

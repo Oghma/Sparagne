@@ -1,7 +1,6 @@
 use crate::{
     app::{
         App, ToastLevel, TransactionFormState, TransactionsMode,
-        errors::login_message_for_error,
     },
     error::Result,
     text::{TextKey, t},
@@ -30,43 +29,43 @@ impl App {
 
         let amount_raw = amount_raw.as_str();
         if amount_raw.is_empty() {
-            self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationAmountRequired));
+            self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationAmountRequired));
             return Ok(());
         }
         let amount_minor = match Money::parse_major(amount_raw, currency) {
             Ok(money) => money.minor().abs(),
             Err(_) => {
-                self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationAmountInvalid));
+                self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationAmountInvalid));
                 return Ok(());
             }
         };
         if amount_minor <= 0 {
-            self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationAmountPositive));
+            self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationAmountPositive));
             return Ok(());
         }
 
         let wallet_ids = self.ordered_wallet_ids();
         if wallet_ids.is_empty() {
-            self.set_transaction_form_error(&t(self.state.locale, TextKey::StateNoWalletAvailable));
+            self.set_transaction_form_error(t(self.state.locale, TextKey::StateNoWalletAvailable));
             return Ok(());
         }
         let wallet_id = match wallet_ids.get(wallet_index) {
             Some(id) => *id,
             None => {
-                self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationWalletInvalid));
+                self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationWalletInvalid));
                 return Ok(());
             }
         };
 
         let flow_ids = self.ordered_flow_ids();
         if flow_ids.is_empty() {
-            self.set_transaction_form_error(&t(self.state.locale, TextKey::StateUnallocatedMissing));
+            self.set_transaction_form_error(t(self.state.locale, TextKey::StateUnallocatedMissing));
             return Ok(());
         }
         let flow_id = match flow_ids.get(flow_index) {
             Some(id) => *id,
             None => {
-                self.set_transaction_form_error(&t(self.state.locale, TextKey::ValidationFlowInvalid));
+                self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationFlowInvalid));
                 return Ok(());
             }
         };
@@ -126,16 +125,14 @@ impl App {
                 Ok(()) => {
                     self.state.last_flow_id = Some(flow_id);
                     self.state.transactions.form = TransactionFormState::default();
-                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransactionUpdated), ToastLevel::Success);
+                    self.set_toast(t(self.state.locale, TextKey::SuccessTransactionUpdated), ToastLevel::Success);
                     self.load_transactions(true).await?;
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
                 Err(err) => {
-                    if self.handle_auth_error(&err) {
-                        return Ok(());
-                    }
-                    self.state.transactions.form.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast(&t(self.state.locale, TextKey::ErrorUpdating), ToastLevel::Error);
+                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    self.state.transactions.form.error = Some(msg);
+                    self.set_toast(t(self.state.locale, TextKey::ErrorUpdating), ToastLevel::Error);
                 }
             }
         } else {
@@ -192,7 +189,7 @@ impl App {
                         .await
                 }
                 TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                    self.set_transaction_form_error(&t(self.state.locale, TextKey::PromptUseDedicatedTransferForm));
+                    self.set_transaction_form_error(t(self.state.locale, TextKey::PromptUseDedicatedTransferForm));
                     return Ok(());
                 }
             };
@@ -203,15 +200,13 @@ impl App {
                     self.state.transactions.last_created_id = Some(created.id);
                     self.state.transactions.mode = TransactionsMode::List;
                     self.state.transactions.form = TransactionFormState::default();
-                    self.set_toast(&t(self.state.locale, TextKey::SuccessTransactionSaved), ToastLevel::Success);
+                    self.set_toast(t(self.state.locale, TextKey::SuccessTransactionSaved), ToastLevel::Success);
                     self.load_transactions(true).await?;
                 }
                 Err(err) => {
-                    if self.handle_auth_error(&err) {
-                        return Ok(());
-                    }
-                    self.state.transactions.form.error = Some(login_message_for_error(err, self.state.locale));
-                    self.set_toast(&t(self.state.locale, TextKey::ErrorSaving), ToastLevel::Error);
+                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    self.state.transactions.form.error = Some(msg);
+                    self.set_toast(t(self.state.locale, TextKey::ErrorSaving), ToastLevel::Error);
                 }
             }
         }

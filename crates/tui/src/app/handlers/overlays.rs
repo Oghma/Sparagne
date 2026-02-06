@@ -1,6 +1,6 @@
 use super::super::*;
 
-use crate::{app::format::map_currency, error::Result, text::{TextKey, t}, ui::keymap::AppAction};
+use crate::{error::Result, text::{TextKey, format as t_format, t}, ui::keymap::AppAction};
 use engine::Money;
 
 impl App {
@@ -14,11 +14,12 @@ impl App {
                 if !self.state.transactions.form.is_dirty() {
                     return false;
                 }
+                let locale = self.state.locale;
                 self.state.overlays.confirm = Some(ConfirmDialogState::discard_changes(
-                    "Unsaved Changes",
-                    "You have unsaved changes. Discard them?",
-                    "Save",
-                    "Discard",
+                    t(locale, TextKey::DialogUnsavedChangesTitle),
+                    t(locale, TextKey::DialogUnsavedChangesMessage),
+                    t(locale, TextKey::DialogSave),
+                    t(locale, TextKey::DialogDiscard),
                     ConfirmAction::SubmitTransactionForm,
                     ConfirmAction::DiscardTransactionForm,
                 ));
@@ -28,11 +29,12 @@ impl App {
                 if !self.state.transactions.transfer.is_dirty() {
                     return false;
                 }
+                let locale = self.state.locale;
                 self.state.overlays.confirm = Some(ConfirmDialogState::discard_changes(
-                    "Unsaved Changes",
-                    "You have unsaved changes. Discard them?",
-                    "Save",
-                    "Discard",
+                    t(locale, TextKey::DialogUnsavedChangesTitle),
+                    t(locale, TextKey::DialogUnsavedChangesMessage),
+                    t(locale, TextKey::DialogSave),
+                    t(locale, TextKey::DialogDiscard),
                     ConfirmAction::SubmitTransferForm,
                     ConfirmAction::DiscardTransferForm,
                 ));
@@ -43,19 +45,20 @@ impl App {
     }
 
     pub(crate) fn open_vault_delete_dialog(&mut self) {
+        let locale = self.state.locale;
         let name = self
             .state
             .vault
             .as_ref()
             .and_then(|vault| vault.name.as_deref())
-            .unwrap_or("this vault");
+            .unwrap_or(t(locale, TextKey::DialogThisVault));
         let preview = vec![format!("🏦 {name}")];
         self.state.overlays.confirm = Some(ConfirmDialogState::delete(
-            "Delete Vault",
+            t(locale, TextKey::DialogDeleteVaultTitle),
             format!("Delete \"{name}\"?"),
-            "This action cannot be undone.",
+            t(locale, TextKey::DialogDeleteVaultWarning),
             preview,
-            "Delete",
+            t(locale, TextKey::DialogDelete),
             ConfirmAction::DeleteVault,
         ));
     }
@@ -73,15 +76,17 @@ impl App {
             Vec::new()
         };
 
+        let locale = self.state.locale;
         if visual_mode && !visual_ids.is_empty() {
             let count = visual_ids.len();
-            let preview = vec![format!("🧾 {count} transactions")];
+            let count_str = count.to_string();
+            let preview = vec![format!("🧾 {}", t_format(locale, TextKey::SuccessDeletedMultiple, &[("count", &count_str)]))];
             self.state.overlays.confirm = Some(ConfirmDialogState::delete(
-                "Delete Transactions",
+                t(locale, TextKey::DialogDeleteTransactionsTitle),
                 format!("Delete {count} transactions?"),
-                "You can undo this action for 5 seconds.",
+                t(locale, TextKey::DialogDeleteUndoHint),
                 preview,
-                "Delete",
+                t(locale, TextKey::DialogDelete),
                 ConfirmAction::DeleteTransaction,
             ));
             return;
@@ -95,22 +100,15 @@ impl App {
             return;
         };
 
-        let currency = self
-            .state
-            .vault
-            .as_ref()
-            .and_then(|v| v.currency.as_ref())
-            .map(map_currency)
-            .unwrap_or(engine::Currency::Eur);
-        let amount = Money::new(amount_minor).format(currency);
-        let note = note.as_deref().unwrap_or("Transaction");
+        let amount = Money::new(amount_minor).format(self.current_currency());
+        let note = note.as_deref().unwrap_or(t(locale, TextKey::DialogTransaction));
         let preview = vec![format!("🧾 {note}  {amount}")];
         self.state.overlays.confirm = Some(ConfirmDialogState::delete(
-            "Delete Transaction",
+            t(locale, TextKey::DialogDeleteTransactionTitle),
             format!("Delete \"{note}\"?"),
-            "You can undo this action for 5 seconds.",
+            t(locale, TextKey::DialogDeleteUndoHint),
             preview,
-            "Delete",
+            t(locale, TextKey::DialogDelete),
             ConfirmAction::DeleteTransaction,
         ));
     }
@@ -156,52 +154,55 @@ impl App {
     }
 
     pub(crate) fn open_wallet_archive_dialog(&mut self) {
+        let locale = self.state.locale;
         let Some(wallet) = self.selected_wallet() else {
-            self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationNoWalletSelected).to_string());
+            self.state.wallets.error = Some(t(locale, TextKey::ValidationNoWalletSelected).to_string());
             return;
         };
         let name = wallet.name.as_str();
         let preview = vec![format!("💰 {name}")];
         self.state.overlays.confirm = Some(ConfirmDialogState::archive(
-            "Delete Wallet",
+            t(locale, TextKey::DialogDeleteWalletTitle),
             format!("Delete \"{name}\"?"),
-            "The wallet will be hidden but can be restored later.",
+            t(locale, TextKey::DialogDeleteWalletHint),
             preview,
-            "Delete",
+            t(locale, TextKey::DialogDelete),
             ConfirmAction::ArchiveWalletWithUndo,
         ));
     }
 
     pub(crate) fn open_flow_archive_dialog(&mut self) {
+        let locale = self.state.locale;
         let Some(flow) = self.selected_flow() else {
-            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
+            self.state.flows.error = Some(t(locale, TextKey::ValidationNoFlowSelected).to_string());
             return;
         };
         let name = flow.name.as_str();
         let preview = vec![format!("📦 {name}")];
         self.state.overlays.confirm = Some(ConfirmDialogState::archive(
-            "Delete Flow",
+            t(locale, TextKey::DialogDeleteFlowTitle),
             format!("Delete \"{name}\"?"),
-            "The flow will be hidden but can be restored later.",
+            t(locale, TextKey::DialogDeleteFlowHint),
             preview,
-            "Delete",
+            t(locale, TextKey::DialogDelete),
             ConfirmAction::ArchiveFlowWithUndo,
         ));
     }
 
     pub(crate) fn open_category_archive_dialog(&mut self) {
+        let locale = self.state.locale;
         let Some(category) = self.selected_category() else {
-            self.state.categories.error = Some(t(self.state.locale, TextKey::PromptNoCategorySelected).to_string());
+            self.state.categories.error = Some(t(locale, TextKey::PromptNoCategorySelected).to_string());
             return;
         };
         let name = category.name.as_str();
         let preview = vec![format!("🏷️ {name}")];
         self.state.overlays.confirm = Some(ConfirmDialogState::archive(
-            "Delete Category",
+            t(locale, TextKey::DialogDeleteCategoryTitle),
             format!("Delete \"{name}\"?"),
-            "The category will be hidden but can be restored later.",
+            t(locale, TextKey::DialogDeleteCategoryHint),
             preview,
-            "Delete",
+            t(locale, TextKey::DialogDelete),
             ConfirmAction::ToggleCategoryArchive,
         ));
     }

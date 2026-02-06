@@ -79,24 +79,18 @@ impl App {
         }
 
         // 4. Handle global toggles (palette, search) on Home screen
-        if self.state.screen == Screen::Home {
-            if self.handle_global_toggles(action) {
-                return Ok(());
-            }
+        if self.state.screen == Screen::Home && self.handle_global_toggles(action) {
+            return Ok(());
         }
 
         // 5. Route to section-specific handlers
-        if self.state.screen == Screen::Home {
-            if self.dispatch_section_action(action).await? {
-                return Ok(());
-            }
+        if self.state.screen == Screen::Home && self.dispatch_section_action(action).await? {
+            return Ok(());
         }
 
         // 6. Handle input characters
-        if let AppAction::Input(ch) = action {
-            if !self.route_input(ch).await? {
-                self.handle_non_login_key(ch).await?;
-            }
+        if let AppAction::Input(ch) = action && !self.route_input(ch).await? {
+            self.handle_non_login_key(ch).await?;
         }
 
         Ok(())

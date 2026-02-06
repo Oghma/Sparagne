@@ -6,14 +6,14 @@ impl App {
     pub(crate) fn start_search(&mut self) {
         match self.state.section {
             Section::Transactions => {
-                self.state.transactions.search_active = true;
+                self.state.transactions.search.active = true;
             }
             Section::Accounts => match self.state.accounts_tab {
                 AccountsTab::Sources => {
-                    self.state.wallets.search_active = true;
+                    self.state.wallets.search.active = true;
                 }
                 AccountsTab::Envelopes | AccountsTab::Goals => {
-                    self.state.flows.search_active = true;
+                    self.state.flows.search.active = true;
                 }
             },
             _ => {}
@@ -21,18 +21,18 @@ impl App {
     }
 
     pub(crate) async fn stop_search_if_active(&mut self) -> Result<bool> {
-        if self.state.transactions.search_active {
-            self.state.transactions.search_active = false;
+        if self.state.transactions.search.active {
+            self.state.transactions.search.active = false;
             self.refresh_transactions_search().await?;
             return Ok(true);
         }
-        if self.state.wallets.search_active {
-            self.state.wallets.search_active = false;
+        if self.state.wallets.search.active {
+            self.state.wallets.search.active = false;
             self.refresh_wallets_search().await?;
             return Ok(true);
         }
-        if self.state.flows.search_active {
-            self.state.flows.search_active = false;
+        if self.state.flows.search.active {
+            self.state.flows.search.active = false;
             self.refresh_flows_search().await?;
             return Ok(true);
         }
@@ -41,24 +41,24 @@ impl App {
 
     pub(crate) async fn handle_search_input(&mut self, ch: char) -> Result<bool> {
         match self.state.section {
-            Section::Transactions if self.state.transactions.search_active => {
-                self.state.transactions.search_query.push(ch);
+            Section::Transactions if self.state.transactions.search.active => {
+                self.state.transactions.search.query.push(ch);
                 self.refresh_transactions_search().await?;
                 return Ok(true);
             }
             Section::Accounts
                 if self.state.accounts_tab == AccountsTab::Sources
-                    && self.state.wallets.search_active =>
+                    && self.state.wallets.search.active =>
             {
-                self.state.wallets.search_query.push(ch);
+                self.state.wallets.search.query.push(ch);
                 self.refresh_wallets_search().await?;
                 return Ok(true);
             }
             Section::Accounts
                 if self.state.accounts_tab != AccountsTab::Sources
-                    && self.state.flows.search_active =>
+                    && self.state.flows.search.active =>
             {
-                self.state.flows.search_query.push(ch);
+                self.state.flows.search.query.push(ch);
                 self.refresh_flows_search().await?;
                 return Ok(true);
             }
@@ -69,24 +69,24 @@ impl App {
 
     pub(crate) async fn handle_search_backspace(&mut self) -> Result<bool> {
         match self.state.section {
-            Section::Transactions if self.state.transactions.search_active => {
-                self.state.transactions.search_query.pop();
+            Section::Transactions if self.state.transactions.search.active => {
+                self.state.transactions.search.query.pop();
                 self.refresh_transactions_search().await?;
                 return Ok(true);
             }
             Section::Accounts
                 if self.state.accounts_tab == AccountsTab::Sources
-                    && self.state.wallets.search_active =>
+                    && self.state.wallets.search.active =>
             {
-                self.state.wallets.search_query.pop();
+                self.state.wallets.search.query.pop();
                 self.refresh_wallets_search().await?;
                 return Ok(true);
             }
             Section::Accounts
                 if self.state.accounts_tab != AccountsTab::Sources
-                    && self.state.flows.search_active =>
+                    && self.state.flows.search.active =>
             {
-                self.state.flows.search_query.pop();
+                self.state.flows.search.query.pop();
                 self.refresh_flows_search().await?;
                 return Ok(true);
             }

@@ -1,6 +1,7 @@
 use api_types::transaction::TransactionView;
 use engine::CashFlow;
 
+use super::search::ListSearchState;
 use super::selectable::{HasArchiveToggle, HasSelection, Resettable, UpdateFocus};
 use crate::ui::forms::{AmountField, TextField};
 
@@ -11,8 +12,7 @@ pub struct FlowsState {
     pub error: Option<String>,
     pub detail: FlowDetailState,
     pub form: FlowFormState,
-    pub search_query: String,
-    pub search_active: bool,
+    pub search: ListSearchState,
     pub show_archived: bool,
 }
 
@@ -44,8 +44,7 @@ impl Default for FlowsState {
             error: None,
             detail: FlowDetailState::default(),
             form: FlowFormState::default(),
-            search_query: String::new(),
-            search_active: false,
+            search: ListSearchState::default(),
             show_archived: false,
         }
     }

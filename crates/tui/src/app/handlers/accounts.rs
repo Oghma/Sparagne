@@ -10,12 +10,12 @@ impl App {
         // Switching tabs should not leave hidden forms/details active.
         self.state.wallets.mode = WalletsMode::List;
         self.state.wallets.detail = WalletDetailState::default();
-        self.state.wallets.search_active = false;
+        self.state.wallets.search.active = false;
         self.reset_wallet_form();
 
         self.state.flows.mode = FlowsMode::List;
         self.state.flows.detail = FlowDetailState::default();
-        self.state.flows.search_active = false;
+        self.state.flows.search.active = false;
         self.reset_flow_form();
 
         self.state.accounts_tab = next;

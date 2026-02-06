@@ -1,16 +1,16 @@
-/// Transaction screen - modular implementation.
-///
-/// This module is organized into sub-modules for maintainability:
-/// - `common`: Shared utilities and formatting helpers
-/// - `header`: Header rendering (filters, search, hints)
-/// - `list`: Transaction list with grouping
-/// - `detail`: Transaction detail panel
-/// - `form`: Transaction creation/edit form
-/// - `filter`: Filter modal
-/// - `quick_add`: Quick-add input bar
-/// - `pickers`: Wallet/Flow/Transfer pickers
-///
-/// The main `render()` function routes to the appropriate view based on `TransactionsMode`.
+//! Transaction screen - modular implementation.
+//!
+//! This module is organized into sub-modules for maintainability:
+//! - `common`: Shared utilities and formatting helpers
+//! - `header`: Header rendering (filters, search, hints)
+//! - `list`: Transaction list with grouping
+//! - `detail`: Transaction detail panel
+//! - `form`: Transaction creation/edit form
+//! - `filter`: Filter modal
+//! - `quick_add`: Quick-add input bar
+//! - `pickers`: Wallet/Flow/Transfer pickers
+//!
+//! The main `render()` function routes to the appropriate view based on `TransactionsMode`.
 
 mod common;
 mod detail;
