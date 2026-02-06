@@ -13,7 +13,7 @@ use ratatui::{
     layout::Rect,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::Paragraph,
 };
 use uuid::Uuid;
 
@@ -28,7 +28,7 @@ use crate::{
 };
 
 use super::common::default_wallet_flow_names;
-use crate::ui::common::get_currency;
+use crate::ui::common::{get_currency, themed_block};
 
 /// Renders the quick-add input bar at the top of the transaction list
 pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -44,10 +44,10 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         None
     };
 
-    let border_style = if state.transactions.quick_active {
-        Style::default().fg(theme.accent)
+    let border_color = if state.transactions.quick_active {
+        theme.accent
     } else {
-        Style::default().fg(theme.border)
+        theme.border
     };
 
     let locale = state.locale;
@@ -316,14 +316,7 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         ]));
     }
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(border_style)
-        .title(Span::styled(
-            t(locale, TextKey::QuickAddTitle),
-            Style::default().fg(theme.accent),
-        ));
+    let block = themed_block(t(locale, TextKey::QuickAddTitle), border_color, theme);
     let widget = Paragraph::new(lines).block(block);
     frame.render_widget(widget, area);
 }

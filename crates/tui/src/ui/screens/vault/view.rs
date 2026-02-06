@@ -3,13 +3,13 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::Paragraph,
 };
 
 use crate::{
     app::AppState,
     text::{TextKey, t},
-    ui::{common::{resolve_flow_name, resolve_wallet_name}, theme::Theme},
+    ui::{common::{resolve_flow_name, resolve_wallet_name, themed_block}, theme::Theme},
 };
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -43,14 +43,7 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .map(|id| resolve_flow_name(state, id))
         .unwrap_or_else(|| none_label.to_string());
 
-    let block = Block::default()
-        .title(Span::styled(
-            format!(" 🏦 {} ", vault_name),
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border_focused));
+    let block = themed_block(&format!("🏦 {vault_name}"), theme.border_focused, theme);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

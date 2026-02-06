@@ -16,13 +16,13 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Clear, List, ListItem, ListState, Paragraph},
 };
 
 use crate::{
     app::{AppState, TransactionFormField, ordered_flow_ids_from_state, ordered_wallet_ids_from_state},
     text::{TextKey, t},
-    ui::{components::centered_rect, theme::Theme},
+    ui::{common::themed_block, components::centered_rect, theme::Theme},
 };
 
 use super::common::recents_line;
@@ -213,11 +213,7 @@ fn render_form_fields(
         )));
     }
 
-    let block = Block::default()
-        .title(values.title)
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent))
+    let block = themed_block(values.title, theme.accent, theme)
         .style(Style::default().bg(theme.background));
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
@@ -328,11 +324,7 @@ fn render_picker_list(
     config: PickerListConfig<'_>,
     theme: &Theme,
 ) {
-    let block = Block::default()
-        .title(config.title)
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border))
+    let block = themed_block(config.title, theme.border, theme)
         .style(Style::default().bg(theme.background));
     if config.items.is_empty() {
         frame.render_widget(
@@ -369,11 +361,7 @@ fn render_picker_list(
 
 /// Renders the recent categories list
 fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let block = Block::default()
-        .title(t(state.locale, TextKey::UiRecentCategories))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border))
+    let block = themed_block(t(state.locale, TextKey::UiRecentCategories), theme.border, theme)
         .style(Style::default().bg(theme.background));
 
     if state.transactions.recent_categories.is_empty() {

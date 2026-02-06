@@ -3,10 +3,10 @@ use ratatui::{
     layout::Rect,
     style::Style,
     text::Span,
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::{Block, Paragraph},
 };
 
-use crate::ui::theme::Theme;
+use crate::ui::{common::themed_block, theme::Theme};
 
 /// A modern card widget with rounded borders and consistent styling.
 ///
@@ -40,14 +40,7 @@ impl<'a> Card<'a> {
             self.theme.border
         };
 
-        Block::default()
-            .title(Span::styled(
-                format!(" {} ", self.title),
-                Style::default().fg(self.theme.accent),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(border_color))
+        themed_block(self.title, border_color, self.theme)
     }
 
     /// Returns the inner area after accounting for borders.

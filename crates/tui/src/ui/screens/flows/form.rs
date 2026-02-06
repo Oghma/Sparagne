@@ -5,12 +5,12 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::Paragraph,
 };
 
 use crate::{
     app::{AppState, FlowFormField, FlowModeChoice, FlowsMode},
-    ui::{forms::FormFieldRenderer, theme::Theme},
+    ui::{common::themed_block, forms::FormFieldRenderer, theme::Theme},
 };
 
 /// Render the flow creation/edit form.
@@ -19,9 +19,9 @@ pub fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
     let is_rename = state.flows.mode == FlowsMode::Rename;
 
     let title = if is_rename {
-        " Rename Flow "
+        "Rename Flow"
     } else {
-        " New Budget/Goal "
+        "New Budget/Goal"
     };
 
     let mut lines = vec![
@@ -100,10 +100,5 @@ pub fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         Span::styled(" cancel", Style::default().fg(theme.text_muted)),
     ]));
 
-    let block = Block::default()
-        .title(Span::styled(title, Style::default().fg(theme.accent)))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
-    frame.render_widget(Paragraph::new(lines).block(block), area);
+    frame.render_widget(Paragraph::new(lines).block(themed_block(title, theme.accent, theme)), area);
 }

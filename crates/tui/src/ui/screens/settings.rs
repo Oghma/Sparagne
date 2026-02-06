@@ -3,14 +3,14 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::Paragraph,
 };
 
 use crate::{
     app::{AppState, PreferencesField, SettingsTab},
     config::Density,
     ui::{
-        common::inset,
+        common::{inset, themed_block},
         components::{card::Card, tab_bar, tab_bar::TabBarItem},
         screens,
         theme::Theme,
@@ -58,14 +58,7 @@ fn render_preferences(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         .constraints([Constraint::Min(0), Constraint::Length(2)])
         .split(area);
 
-    let block = Block::default()
-        .title(Span::styled(
-            " Preferences ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border_focused));
+    let block = themed_block("Preferences", theme.border_focused, theme);
     let inner = block.inner(layout[0]);
     frame.render_widget(block, layout[0]);
 

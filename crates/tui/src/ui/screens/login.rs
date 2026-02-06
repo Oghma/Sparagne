@@ -3,12 +3,12 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
     text::Span,
-    widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
+    widgets::{Clear, Paragraph, Wrap},
 };
 
 use crate::{
     app::{AppState, LoginField},
-    ui::theme::Theme,
+    ui::{common::themed_block, theme::Theme},
 };
 
 /// Calculates a centered rect for the login box
@@ -45,11 +45,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
     frame.render_widget(Clear, card_area);
 
     // Main container with rounded borders and title
-    let block = Block::default()
-        .title(" login ")
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
+    let block = themed_block("login", theme.border, theme);
 
     let inner = block.inner(card_area);
     frame.render_widget(block, card_area);

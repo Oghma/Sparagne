@@ -13,13 +13,13 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::Paragraph,
 };
 
 use crate::{
     app::{AppState, GroupingMode},
     text::{TextKey, t},
-    ui::theme::Theme,
+    ui::{common::themed_block, theme::Theme},
 };
 
 use super::common::scope_label;
@@ -40,7 +40,7 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     let scope = scope_label(state);
 
     // Build title with grouping and scope info
-    let title = format!(" Transactions (Group: {grouping_label}, Scope: {scope}) ");
+    let title = format!("Transactions (Group: {grouping_label}, Scope: {scope})");
 
     // Row 1: Voided toggle, Transfers toggle, Filters status
     let voided_status = if state.transactions.include_voided {
@@ -103,11 +103,7 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         line2.push(Span::styled(err.as_str(), Style::default().fg(theme.negative)));
     }
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border))
-        .title(Span::styled(title, Style::default().fg(theme.accent)));
+    let block = themed_block(&title, theme.border, theme);
 
     let content = Paragraph::new(vec![Line::from(line1), Line::from(line2)]).block(block);
     frame.render_widget(content, area);

@@ -12,13 +12,13 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::Style,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph},
+    widgets::{List, ListItem, Paragraph},
 };
 
 use crate::{
     app::AppState,
     text::{TextKey, t},
-    ui::theme::Theme,
+    ui::{common::themed_block, theme::Theme},
 };
 
 use super::common::{kind_chip, leg_amount_span, resolve_flow_name, resolve_wallet_name};
@@ -29,11 +29,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     let locale = state.locale;
 
     let Some(detail) = &state.transactions.detail else {
-        let block = Block::default()
-            .title(t(locale, TextKey::DialogTransaction))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.accent));
+        let block = themed_block(t(locale, TextKey::DialogTransaction), theme.accent, theme);
         frame.render_widget(
             Paragraph::new(Line::from(t(state.locale, TextKey::UiNoDetailAvailable)))
                 .block(block)
@@ -113,11 +109,7 @@ fn render_transaction_info(
         ]),
     ];
 
-    let header_block = Block::default()
-        .title(t(locale, TextKey::TxnDetailTitle))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
+    let header_block = themed_block(t(locale, TextKey::TxnDetailTitle), theme.accent, theme);
     frame.render_widget(Paragraph::new(lines).block(header_block), area);
 }
 
@@ -155,11 +147,7 @@ fn render_legs(
         })
         .collect::<Vec<_>>();
 
-    let legs_block = Block::default()
-        .title(t(locale, TextKey::TxnDetailLegsTitle))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent));
+    let legs_block = themed_block(t(locale, TextKey::TxnDetailLegsTitle), theme.accent, theme);
     let list = List::new(legs).block(legs_block);
     frame.render_widget(list, area);
 }

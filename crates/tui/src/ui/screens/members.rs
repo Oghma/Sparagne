@@ -3,12 +3,12 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{List, ListItem, ListState, Paragraph},
 };
 
 use crate::{
     app::{AppState, MemberFormField, MembersMode, MembersScope},
-    ui::{forms::FormFieldRenderer, theme::Theme},
+    ui::{common::themed_block, forms::FormFieldRenderer, theme::Theme},
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -43,14 +43,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         theme.border
     };
 
-    let list_block = Block::default()
-        .title(Span::styled(
-            format!(" {} ", scope_label),
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(border_color));
+    let list_block = themed_block(&scope_label, border_color, theme);
 
     if state.members.items.is_empty() {
         let msg = if state.members.scope == MembersScope::Flow {
@@ -108,16 +101,12 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     };
 
     let title = if state.members.form.editing {
-        " Edit Member "
+        "Edit Member"
     } else {
-        " Add Member "
+        "Add Member"
     };
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(border_color))
-        .title(Span::styled(title, Style::default().fg(theme.accent)));
+    let block = themed_block(title, border_color, theme);
 
     let mut lines = Vec::new();
 

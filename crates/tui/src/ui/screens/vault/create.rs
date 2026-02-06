@@ -3,22 +3,15 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::Paragraph,
 };
 
-use crate::{app::AppState, ui::theme::Theme};
+use crate::{app::AppState, ui::{common::themed_block, theme::Theme}};
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let form = &state.vault_ui.form;
 
-    let block = Block::default()
-        .title(Span::styled(
-            " Create Vault ",
-            Style::default().fg(theme.accent),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border_focused));
+    let block = themed_block("Create Vault", theme.border_focused, theme);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
