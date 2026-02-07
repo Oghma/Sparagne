@@ -10,7 +10,8 @@
 //! - `quick_add`: Quick-add input bar
 //! - `pickers`: Wallet/Flow/Transfer pickers
 //!
-//! The main `render()` function routes to the appropriate view based on `TransactionsMode`.
+//! The main `render()` function routes to the appropriate view based on
+//! `TransactionsMode`.
 
 mod common;
 mod detail;
@@ -43,7 +44,7 @@ use pickers::{render_scope_picker, render_transfer_form, render_transfer_picker}
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(4), Constraint::Min(0)])
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(area);
 
     render_header(frame, layout[0], state, theme);

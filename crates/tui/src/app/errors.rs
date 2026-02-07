@@ -33,25 +33,37 @@ pub(crate) fn login_message_for_error(err: crate::client::ClientError, locale: L
             ErrorCode::NotFound => t(locale, TextKey::ErrorResourceNotFound).to_string(),
             _ => payload.message,
         },
-        crate::client::ClientError::Conflict(payload) => {
-            text_format(locale, TextKey::ErrorConflict, &[("message", &payload.message)])
-        }
+        crate::client::ClientError::Conflict(payload) => text_format(
+            locale,
+            TextKey::ErrorConflict,
+            &[("message", &payload.message)],
+        ),
         crate::client::ClientError::Validation(payload) => {
             if payload.message.contains("ambiguous vault name") {
                 t(locale, TextKey::ErrorValidationAmbiguousVault).to_string()
             } else {
-                text_format(locale, TextKey::ErrorValidation, &[("message", &payload.message)])
+                text_format(
+                    locale,
+                    TextKey::ErrorValidation,
+                    &[("message", &payload.message)],
+                )
             }
         }
-        crate::client::ClientError::BadRequest(payload) => {
-            text_format(locale, TextKey::ErrorBadRequest, &[("message", &payload.message)])
-        }
-        crate::client::ClientError::Server(payload) => {
-            text_format(locale, TextKey::ErrorServerError, &[("message", &payload.message)])
-        }
+        crate::client::ClientError::BadRequest(payload) => text_format(
+            locale,
+            TextKey::ErrorBadRequest,
+            &[("message", &payload.message)],
+        ),
+        crate::client::ClientError::Server(payload) => text_format(
+            locale,
+            TextKey::ErrorServerError,
+            &[("message", &payload.message)],
+        ),
         crate::client::ClientError::Client(message) => message,
-        crate::client::ClientError::Transport(err) => {
-            text_format(locale, TextKey::ErrorServerUnreachable, &[("error", &err.to_string())])
-        }
+        crate::client::ClientError::Transport(err) => text_format(
+            locale,
+            TextKey::ErrorServerUnreachable,
+            &[("error", &err.to_string())],
+        ),
     }
 }

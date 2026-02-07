@@ -1,19 +1,22 @@
 //! Accounts section dispatch handling (wallets and flows).
 
-use crate::app::state::{AccountsTab, EntityListMode};
-use crate::app::App;
-use crate::error::Result;
-use crate::ui::keymap::AppAction;
+use crate::{
+    app::{
+        App,
+        state::{AccountsTab, EntityListMode},
+    },
+    error::Result,
+    ui::keymap::AppAction,
+};
 
 impl App {
-    /// Dispatches actions for the Accounts section (Sources/Envelopes/Goals tabs).
+    /// Dispatches actions for the Accounts section (Wallets/Budget tabs).
     pub(crate) async fn dispatch_accounts(&mut self, action: AppAction) -> Result<bool> {
         match action {
             AppAction::Submit => {
                 match self.state.accounts_tab {
-                    AccountsTab::Sources => self.handle_wallets_submit().await?,
-                    AccountsTab::Envelopes => self.handle_flows_submit().await?,
-                    AccountsTab::Goals => {}
+                    AccountsTab::Wallets => self.handle_wallets_submit().await?,
+                    AccountsTab::Budget => self.handle_flows_submit().await?,
                 }
                 Ok(true)
             }
@@ -21,11 +24,11 @@ impl App {
             AppAction::Up => self.dispatch_accounts_up().await,
             AppAction::Down => self.dispatch_accounts_down().await,
             AppAction::Left => {
-                self.accounts_prev_tab();
+                self.accounts_set_focus(AccountsTab::Wallets);
                 Ok(true)
             }
             AppAction::Right => {
-                self.accounts_next_tab();
+                self.accounts_set_focus(AccountsTab::Budget);
                 Ok(true)
             }
             _ => Ok(false),
@@ -34,21 +37,20 @@ impl App {
 
     fn dispatch_accounts_backspace(&mut self) -> Result<bool> {
         match self.state.accounts_tab {
-            AccountsTab::Sources => {
+            AccountsTab::Wallets => {
                 self.backspace_wallet_form();
                 Ok(true)
             }
-            AccountsTab::Envelopes => {
+            AccountsTab::Budget => {
                 self.backspace_flow_form();
                 Ok(true)
             }
-            AccountsTab::Goals => Ok(false),
         }
     }
 
     async fn dispatch_accounts_up(&mut self) -> Result<bool> {
         match self.state.accounts_tab {
-            AccountsTab::Sources
+            AccountsTab::Wallets
                 if matches!(
                     self.state.wallets.mode,
                     EntityListMode::List | EntityListMode::Detail
@@ -60,7 +62,7 @@ impl App {
                 }
                 Ok(true)
             }
-            AccountsTab::Envelopes
+            AccountsTab::Budget
                 if matches!(
                     self.state.flows.mode,
                     EntityListMode::List | EntityListMode::Detail
@@ -78,7 +80,7 @@ impl App {
 
     async fn dispatch_accounts_down(&mut self) -> Result<bool> {
         match self.state.accounts_tab {
-            AccountsTab::Sources
+            AccountsTab::Wallets
                 if matches!(
                     self.state.wallets.mode,
                     EntityListMode::List | EntityListMode::Detail
@@ -90,7 +92,7 @@ impl App {
                 }
                 Ok(true)
             }
-            AccountsTab::Envelopes
+            AccountsTab::Budget
                 if matches!(
                     self.state.flows.mode,
                     EntityListMode::List | EntityListMode::Detail

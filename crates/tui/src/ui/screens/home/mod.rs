@@ -6,7 +6,8 @@
 //! - `quick_balances`: Quick balances card
 //! - `activity_feed`: Activity feed with transactions and alerts
 //!
-//! The main `render()` function routes to appropriate layout based on terminal width.
+//! The main `render()` function routes to appropriate layout based on terminal
+//! width.
 
 mod activity_feed;
 mod common;
@@ -27,7 +28,6 @@ use stats_bar::{render_stats_bar, render_stats_bar_compact};
 /// Main entry point for home screen rendering.
 /// Adapts layout based on terminal width.
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-
     // Main layout based on terminal width
     if area.width >= 100 {
         render_large_layout(frame, area, state, theme);

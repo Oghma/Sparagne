@@ -1,6 +1,7 @@
 //! Cancel action handlers.
 //!
-//! This module contains handlers for the Cancel (Escape) action, organized by section.
+//! This module contains handlers for the Cancel (Escape) action, organized by
+//! section.
 
 use super::super::*;
 
@@ -9,8 +10,8 @@ use crate::error::Result;
 impl App {
     /// Handles the Cancel action for the current context.
     ///
-    /// Returns `true` if the cancel was fully handled, `false` if the caller should
-    /// continue with default behavior (going home).
+    /// Returns `true` if the cancel was fully handled, `false` if the caller
+    /// should continue with default behavior (going home).
     pub(crate) async fn handle_cancel(&mut self) -> Result<bool> {
         // Handle login screen
         if self.state.screen == Screen::Login {
@@ -106,7 +107,7 @@ impl App {
     /// Handles cancel within the Accounts section.
     fn cancel_accounts(&mut self) {
         match self.state.accounts_tab {
-            AccountsTab::Sources => match self.state.wallets.mode {
+            AccountsTab::Wallets => match self.state.wallets.mode {
                 EntityListMode::Create | EntityListMode::Rename => {
                     self.reset_wallet_form();
                     self.state.wallets.mode = EntityListMode::List;
@@ -119,7 +120,7 @@ impl App {
                     self.state.section = Section::Home;
                 }
             },
-            AccountsTab::Envelopes | AccountsTab::Goals => match self.state.flows.mode {
+            AccountsTab::Budget => match self.state.flows.mode {
                 EntityListMode::Create | EntityListMode::Rename => {
                     self.reset_flow_form();
                     self.state.flows.mode = EntityListMode::List;

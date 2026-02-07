@@ -1,8 +1,6 @@
 //! Analytics section dispatch handling.
 
-use crate::app::App;
-use crate::error::Result;
-use crate::ui::keymap::AppAction;
+use crate::{app::App, error::Result, ui::keymap::AppAction};
 
 impl App {
     /// Dispatches actions for the Analytics section.

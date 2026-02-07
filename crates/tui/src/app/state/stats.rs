@@ -28,6 +28,10 @@ pub struct StatsState {
     pub sparkline: Vec<u64>,
     pub sparkline_min: i64,
     pub sparkline_max: i64,
+    /// Current month income from the monthly series (last element).
+    pub current_month_income: i64,
+    /// Current month expenses from the monthly series (last element).
+    pub current_month_expenses: i64,
 }
 
 impl Default for StatsState {
@@ -44,6 +48,8 @@ impl Default for StatsState {
             sparkline: Vec::new(),
             sparkline_min: 0,
             sparkline_max: 0,
+            current_month_income: 0,
+            current_month_expenses: 0,
         }
     }
 }

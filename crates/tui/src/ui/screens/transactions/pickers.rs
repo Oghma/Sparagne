@@ -28,9 +28,16 @@ pub fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
 
     let (title, items) = match state.transactions.mode {
         TransactionsMode::PickWallet => {
-            let mut list = vec![ListItem::new(Line::from(t(state.locale, TextKey::PickerAllWallets)))];
+            let mut list = vec![ListItem::new(Line::from(t(
+                state.locale,
+                TextKey::PickerAllWallets,
+            )))];
             for wallet in &snapshot.wallets {
-                let archived = if wallet.archived { t(state.locale, TextKey::PickerSuffixArchived) } else { "" };
+                let archived = if wallet.archived {
+                    t(state.locale, TextKey::PickerSuffixArchived)
+                } else {
+                    ""
+                };
                 list.push(ListItem::new(Line::from(format!(
                     "{}{archived}",
                     wallet.name
@@ -39,9 +46,16 @@ pub fn render_scope_picker(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
             (t(state.locale, TextKey::PickerSelectWallet), list)
         }
         TransactionsMode::PickFlow => {
-            let mut list = vec![ListItem::new(Line::from(t(state.locale, TextKey::PickerAllFlows)))];
+            let mut list = vec![ListItem::new(Line::from(t(
+                state.locale,
+                TextKey::PickerAllFlows,
+            )))];
             for flow in &snapshot.flows {
-                let archived = if flow.archived { t(state.locale, TextKey::PickerSuffixArchived) } else { "" };
+                let archived = if flow.archived {
+                    t(state.locale, TextKey::PickerSuffixArchived)
+                } else {
+                    ""
+                };
                 let marker = if flow.is_unallocated {
                     t(state.locale, TextKey::PickerBadgeUnallocated)
                 } else {
@@ -170,8 +184,18 @@ pub fn render_transfer_form(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         .split(popup);
 
     let mut lines = vec![
-        render_label_value_field(t(state.locale, TextKey::TransferFrom), from, transfer.focus == TransferField::From, theme),
-        render_label_value_field(t(state.locale, TextKey::TransferTo), to, transfer.focus == TransferField::To, theme),
+        render_label_value_field(
+            t(state.locale, TextKey::TransferFrom),
+            from,
+            transfer.focus == TransferField::From,
+            theme,
+        ),
+        render_label_value_field(
+            t(state.locale, TextKey::TransferTo),
+            to,
+            transfer.focus == TransferField::To,
+            theme,
+        ),
         render_label_value_field(
             "Amount",
             transfer.amount.value(),

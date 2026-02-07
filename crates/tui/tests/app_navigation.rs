@@ -107,7 +107,10 @@ async fn transaction_form_flow() {
 #[tokio::test]
 async fn section_navigation_without_fetch() {
     let mut app = test_app();
-    app.state_mut().transactions.items.push(sample_transaction_view());
+    app.state_mut()
+        .transactions
+        .items
+        .push(sample_transaction_view());
 
     assert!(app.handle_key(key(KeyCode::Char('t'))).await.is_ok());
     assert_eq!(app.state_mut().section, Section::Transactions);

@@ -2,7 +2,7 @@
 //!
 //! Contains methods for transaction list selection, filtering, and navigation.
 
-use crate::app::{transactions_visible_indices, App, FilterField, TransactionsMode};
+use crate::app::{App, FilterField, TransactionsMode, transactions_visible_indices};
 
 impl App {
     pub(crate) fn selected_transaction(&self) -> Option<&api_types::transaction::TransactionView> {
@@ -42,6 +42,7 @@ impl App {
         filter.kind_refund = kind_refund;
         filter.kind_transfer_wallet = kind_transfer_wallet;
         filter.kind_transfer_flow = kind_transfer_flow;
+        filter.include_transfers = self.state.transactions.include_transfers;
 
         self.state.transactions.mode = TransactionsMode::Filter;
     }

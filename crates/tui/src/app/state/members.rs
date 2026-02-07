@@ -98,7 +98,6 @@ impl Resettable for MembersState {
 }
 
 impl MemberFormState {
-
     /// Validates all fields and returns the first error message if any.
     pub(crate) fn validate_all(&mut self) -> Option<String> {
         self.username.validate();

@@ -5,9 +5,11 @@ use api_types::transaction::{TransactionDetailResponse, TransactionKind, Transac
 use uuid::Uuid;
 
 use super::search::ListSearchState;
-use crate::app::query::{normalize_query, transaction_matches_query};
-use crate::ui::forms::{AmountField, TextField};
-use crate::validation::DateField;
+use crate::{
+    app::query::{normalize_query, transaction_matches_query},
+    ui::forms::{AmountField, TextField},
+    validation::DateField,
+};
 
 /// Represents an ambiguous match in quick-add where multiple options are
 /// available.
@@ -96,7 +98,7 @@ impl Default for TransactionsState {
             scope_flow_id: None,
             picker_index: 0,
             include_voided: false,
-            include_transfers: false,
+            include_transfers: true,
             error: None,
             mode: TransactionsMode::List,
             grouping_mode: GroupingMode::Date,
@@ -240,7 +242,9 @@ impl Default for TransferFormState {
 
 impl TransferFormState {
     pub(crate) fn is_dirty(&self) -> bool {
-        self.editing_id.is_some() || !self.amount.value().trim().is_empty() || !self.note.value().trim().is_empty()
+        self.editing_id.is_some()
+            || !self.amount.value().trim().is_empty()
+            || !self.note.value().trim().is_empty()
     }
 }
 
@@ -316,6 +320,7 @@ pub struct TransactionsFilterState {
     pub kind_refund: bool,
     pub kind_transfer_wallet: bool,
     pub kind_transfer_flow: bool,
+    pub include_transfers: bool,
 }
 
 impl Default for TransactionsFilterState {
@@ -330,6 +335,7 @@ impl Default for TransactionsFilterState {
             kind_refund: false,
             kind_transfer_wallet: false,
             kind_transfer_flow: false,
+            include_transfers: true,
         }
     }
 }
@@ -339,4 +345,5 @@ pub enum FilterField {
     From,
     To,
     Kinds,
+    Transfers,
 }

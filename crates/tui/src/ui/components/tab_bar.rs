@@ -17,11 +17,6 @@ impl<'a> TabBarItem<'a> {
     pub fn new(label: &'a str) -> Self {
         Self { label, badge: None }
     }
-
-    pub fn with_badge(mut self, count: usize) -> Self {
-        self.badge = Some(count);
-        self
-    }
 }
 
 pub fn render(

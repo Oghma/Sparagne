@@ -10,8 +10,7 @@ use api_types::vault::FlowView;
 
 use crate::app::AppState;
 
-use super::query::normalize_query;
-use super::resolve::ordered_active_flows;
+use super::{query::normalize_query, resolve::ordered_active_flows};
 
 /// Returns ordered wallet IDs, prioritizing default and recent wallets.
 ///

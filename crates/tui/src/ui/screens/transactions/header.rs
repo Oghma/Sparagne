@@ -2,16 +2,13 @@
 //!
 //! Displays:
 //! - Grouping mode and scope information
-//! - Toggle states (voided, transfers)
 //! - Active filters summary
-//! - Search query
-//! - Keyboard hints
 
 use api_types::transaction::TransactionKind;
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::Paragraph,
 };
@@ -26,7 +23,6 @@ use super::common::scope_label;
 
 /// Renders the header area with filters, search, and hints
 pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-
     let locale = state.locale;
 
     // Determine grouping mode label
@@ -42,70 +38,22 @@ pub fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Build title with grouping and scope info
     let title = format!("Transactions (Group: {grouping_label}, Scope: {scope})");
 
-    // Row 1: Voided toggle, Transfers toggle, Filters status
-    let voided_status = if state.transactions.include_voided {
-        Span::styled("[On]", Style::default().fg(theme.positive))
-    } else {
-        Span::styled("[Off]", Style::default().fg(theme.text_muted))
-    };
-    let transfers_status = if state.transactions.include_transfers {
-        Span::styled("[On]", Style::default().fg(theme.positive))
-    } else {
-        Span::styled("[Off]", Style::default().fg(theme.text_muted))
-    };
-
-    let mut line1 = vec![
-        Span::styled(t(locale, TextKey::TxnHeaderVoided), Style::default().fg(theme.text_muted)),
-        voided_status,
-        Span::raw("  "),
-        Span::styled(t(locale, TextKey::TxnHeaderTransfers), Style::default().fg(theme.text_muted)),
-        transfers_status,
-        Span::raw("     │     "),
-    ];
-
-    // Add filter status
-    if let Some(summary) = filter_summary(state) {
-        line1.push(Span::styled(
+    // Row 1: Filter summary only
+    let line1 = if let Some(summary) = filter_summary(state) {
+        vec![Span::styled(
             format!("Filters [{summary}]"),
             Style::default().fg(theme.warning),
-        ));
+        )]
     } else {
-        line1.push(Span::styled(t(locale, TextKey::TxnHeaderFiltersOff), Style::default().fg(theme.text_muted)));
-    }
-
-    // Row 2: Search field and hints
-    let search_query = state.transactions.search.query.trim();
-    let mut line2 = vec![];
-
-    if !search_query.is_empty() || state.transactions.search.active {
-        line2.push(Span::styled(t(locale, TextKey::TxnHeaderSearch), Style::default().fg(theme.text_muted)));
-        let shown = if search_query.is_empty() {
-            "…"
-        } else {
-            search_query
-        };
-        let mut style = Style::default().fg(theme.text);
-        if state.transactions.search.active {
-            style = style.fg(theme.accent).add_modifier(Modifier::BOLD);
-        }
-        line2.push(Span::styled(format!("\"{shown}\""), style));
-        line2.push(Span::raw("  "));
-    }
-
-    line2.push(Span::styled(
-        t(locale, TextKey::TxnHeaderHints),
-        Style::default().fg(theme.text_muted),
-    ));
-
-    // Add error if present
-    if let Some(err) = &state.transactions.error {
-        line2.push(Span::raw("  "));
-        line2.push(Span::styled(err.as_str(), Style::default().fg(theme.negative)));
-    }
+        vec![Span::styled(
+            t(locale, TextKey::TxnHeaderFiltersOff),
+            Style::default().fg(theme.text_muted),
+        )]
+    };
 
     let block = themed_block(&title, theme.border, theme);
 
-    let content = Paragraph::new(vec![Line::from(line1), Line::from(line2)]).block(block);
+    let content = Paragraph::new(vec![Line::from(line1)]).block(block);
     frame.render_widget(content, area);
 }
 
@@ -134,9 +82,12 @@ fn filter_summary(state: &AppState) -> Option<String> {
             .join(",");
         parts.push(format!("kinds {labels}"));
     }
+    if !state.transactions.include_transfers {
+        parts.push("transfers off".to_string());
+    }
     if parts.is_empty() {
         None
     } else {
-        Some(format!("Filters: {}", parts.join(" • ")))
+        Some(parts.join(" \u{2022} "))
     }
 }

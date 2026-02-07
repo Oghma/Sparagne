@@ -3,7 +3,7 @@ use super::super::*;
 use crate::{
     app::format::member_role_rank,
     error::Result,
-    text::{t, TextKey},
+    text::{TextKey, t},
 };
 use api_types::membership::MemberUpsert;
 
@@ -25,11 +25,7 @@ impl App {
             .map(|member| member.username.clone());
 
         let res = match self.state.members.scope {
-            MembersScope::Vault => {
-                self.client
-                    .vault_members_list(vault_id.as_str())
-                    .await
-            }
+            MembersScope::Vault => self.client.vault_members_list(vault_id.as_str()).await,
             MembersScope::Flow => {
                 self.ensure_member_flow_index();
                 let Some((flow_id, _)) = self.current_member_flow() else {
@@ -40,9 +36,7 @@ impl App {
                     return Ok(());
                 };
                 self.client
-                    .flow_members_list(vault_id.as_str(),
-                        flow_id,
-                    )
+                    .flow_members_list(vault_id.as_str(), flow_id)
                     .await
             }
         };
@@ -75,7 +69,9 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else {
+                    return Ok(());
+                };
                 self.state.members.error = Some(msg);
             }
         }
@@ -115,9 +111,7 @@ impl App {
         let res = match self.state.members.scope {
             MembersScope::Vault => {
                 self.client
-                    .vault_member_upsert(vault_id.as_str(),
-                        payload,
-                    )
+                    .vault_member_upsert(vault_id.as_str(), payload)
                     .await
             }
             MembersScope::Flow => {
@@ -127,10 +121,7 @@ impl App {
                     return Ok(());
                 };
                 self.client
-                    .flow_member_upsert(vault_id.as_str(),
-                        flow_id,
-                        payload,
-                    )
+                    .flow_member_upsert(vault_id.as_str(), flow_id, payload)
                     .await
             }
         };
@@ -143,7 +134,9 @@ impl App {
                 self.select_member_by_username(username.as_str());
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.client_error_message(err) else {
+                    return Ok(());
+                };
                 self.state.members.error = Some(msg);
             }
         }
@@ -171,10 +164,7 @@ impl App {
                     return Ok(());
                 };
                 self.client
-                    .flow_member_remove(vault_id.as_str(),
-                        flow_id,
-                        member.username.as_str(),
-                    )
+                    .flow_member_remove(vault_id.as_str(), flow_id, member.username.as_str())
                     .await
             }
         };
@@ -184,7 +174,9 @@ impl App {
                 self.load_members().await?;
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.client_error_message(err) else {
+                    return Ok(());
+                };
                 self.state.members.error = Some(msg);
             }
         }

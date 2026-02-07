@@ -1,11 +1,12 @@
 //! Category selection and cycling for transactions.
 //!
-//! Contains methods for category selection in transaction forms and quick-add ambiguous cycling.
+//! Contains methods for category selection in transaction forms and quick-add
+//! ambiguous cycling.
 
 use crate::{
     app::{
-        resolve::{resolve_category_matches, resolve_flow_matches, resolve_wallet_matches},
         App, QuickAddAmbiguous, QuickAddAmbiguousKind, Section, TransactionsMode,
+        resolve::{resolve_category_matches, resolve_flow_matches, resolve_wallet_matches},
     },
     quick_add::parse as parse_quick_add,
 };

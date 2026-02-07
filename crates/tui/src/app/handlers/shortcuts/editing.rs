@@ -16,13 +16,13 @@ impl App {
                     self.start_transaction_edit().await?;
                 } else if self.state.section == Section::Accounts {
                     match self.state.accounts_tab {
-                        AccountsTab::Sources if self.state.wallets.mode == EntityListMode::List => {
+                        AccountsTab::Wallets if self.state.wallets.mode == EntityListMode::List => {
                             self.start_wallet_rename();
                         }
-                        AccountsTab::Envelopes if self.state.flows.mode == EntityListMode::List => {
+                        AccountsTab::Budget if self.state.flows.mode == EntityListMode::List => {
                             self.start_flow_rename();
                         }
-                        AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
+                        AccountsTab::Wallets | AccountsTab::Budget => {}
                     }
                 } else if self.is_settings_tab(SettingsTab::Categories)
                     && self.state.categories.mode == CategoriesMode::List
@@ -46,13 +46,13 @@ impl App {
                     self.clear_filters().await?;
                 } else if self.state.section == Section::Accounts {
                     match self.state.accounts_tab {
-                        AccountsTab::Sources if self.state.wallets.mode == EntityListMode::List => {
+                        AccountsTab::Wallets if self.state.wallets.mode == EntityListMode::List => {
                             self.start_wallet_create();
                         }
-                        AccountsTab::Envelopes if self.state.flows.mode == EntityListMode::List => {
+                        AccountsTab::Budget if self.state.flows.mode == EntityListMode::List => {
                             self.start_flow_create();
                         }
-                        AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
+                        AccountsTab::Wallets | AccountsTab::Budget => {}
                     }
                 } else if self.is_settings_tab(SettingsTab::Categories)
                     && self.state.categories.mode == CategoriesMode::List
@@ -76,15 +76,9 @@ impl App {
                     self.start_vault_select().await?;
                 }
             }
-            // Toggle transfers / delete alias / delete vault
+            // Delete alias / delete vault
             'x' | 'X' => {
-                if self.state.section == Section::Transactions
-                    && self.state.transactions.mode == TransactionsMode::List
-                {
-                    self.state.transactions.include_transfers =
-                        !self.state.transactions.include_transfers;
-                    self.load_transactions(true).await?;
-                } else if self.is_settings_tab(SettingsTab::Categories)
+                if self.is_settings_tab(SettingsTab::Categories)
                     && self.state.categories.mode == CategoriesMode::Aliases
                     && self.state.categories.aliases.focus == AliasFocus::List
                 {
@@ -98,7 +92,7 @@ impl App {
             // Merge categories / cycle flow mode
             'm' | 'M' => {
                 if self.state.section == Section::Accounts
-                    && self.state.accounts_tab == AccountsTab::Envelopes
+                    && self.state.accounts_tab == AccountsTab::Budget
                     && self.state.flows.mode == EntityListMode::Create
                     && self.state.flows.form.focus == FlowFormField::Mode
                 {
@@ -164,17 +158,17 @@ impl App {
             }
         } else if self.state.section == Section::Accounts {
             match self.state.accounts_tab {
-                AccountsTab::Sources if self.state.wallets.mode != EntityListMode::List => {
+                AccountsTab::Wallets if self.state.wallets.mode != EntityListMode::List => {
                     self.state.wallets.mode = EntityListMode::List;
                     self.state.wallets.detail = WalletDetailState::default();
                     self.reset_wallet_form();
                 }
-                AccountsTab::Envelopes if self.state.flows.mode != EntityListMode::List => {
+                AccountsTab::Budget if self.state.flows.mode != EntityListMode::List => {
                     self.state.flows.mode = EntityListMode::List;
                     self.state.flows.detail = FlowDetailState::default();
                     self.reset_flow_form();
                 }
-                AccountsTab::Goals | AccountsTab::Sources | AccountsTab::Envelopes => {}
+                AccountsTab::Wallets | AccountsTab::Budget => {}
             }
         } else if self.is_settings_tab(SettingsTab::Vault)
             && self.state.vault_ui.mode != VaultMode::View
@@ -199,7 +193,7 @@ impl App {
         }
         if self.state.section == Section::Accounts {
             match self.state.accounts_tab {
-                AccountsTab::Sources if self.state.wallets.mode == EntityListMode::List => {
+                AccountsTab::Wallets if self.state.wallets.mode == EntityListMode::List => {
                     if let Some(wallet) = self.selected_wallet()
                         && !wallet.archived
                     {
@@ -209,7 +203,7 @@ impl App {
                     }
                     return Ok(());
                 }
-                AccountsTab::Envelopes if self.state.flows.mode == EntityListMode::List => {
+                AccountsTab::Budget if self.state.flows.mode == EntityListMode::List => {
                     if let Some(flow) = self.selected_flow()
                         && !flow.archived
                     {
@@ -219,8 +213,7 @@ impl App {
                     }
                     return Ok(());
                 }
-                AccountsTab::Goals => return Ok(()),
-                AccountsTab::Sources | AccountsTab::Envelopes => {}
+                AccountsTab::Wallets | AccountsTab::Budget => {}
             }
         }
         if self.is_settings_tab(SettingsTab::Categories)

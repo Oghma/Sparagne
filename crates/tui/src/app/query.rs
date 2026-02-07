@@ -10,7 +10,8 @@ use crate::app::PaletteCommand;
 
 use super::format::transaction_kind_label;
 
-/// Normalizes a search query by trimming whitespace and converting to lowercase.
+/// Normalizes a search query by trimming whitespace and converting to
+/// lowercase.
 pub(crate) fn normalize_query(query: &str) -> String {
     query.trim().to_lowercase()
 }

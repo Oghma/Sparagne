@@ -59,7 +59,11 @@ fn render_preferences(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         .constraints([Constraint::Min(0), Constraint::Length(2)])
         .split(area);
 
-    let block = themed_block(t(state.locale, TextKey::PreferencesTitle), theme.border_focused, theme);
+    let block = themed_block(
+        t(state.locale, TextKey::PreferencesTitle),
+        theme.border_focused,
+        theme,
+    );
     let inner = block.inner(layout[0]);
     frame.render_widget(block, layout[0]);
 
@@ -241,4 +245,3 @@ fn render_preferences(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
     ];
     frame.render_widget(Paragraph::new(Line::from(footer_spans)), layout[1]);
 }
-

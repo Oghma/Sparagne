@@ -9,14 +9,23 @@ use ratatui::{
 use crate::{
     app::{AppState, DefaultsField},
     text::{TextKey, t},
-    ui::{common::{render_empty_state, themed_block}, theme::Theme},
+    ui::{
+        common::{render_empty_state, themed_block},
+        theme::Theme,
+    },
 };
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let locale = state.locale;
 
     let Some(snapshot) = state.snapshot.as_ref() else {
-        render_empty_state(frame, area, t(locale, TextKey::VaultQuickDefaults), t(locale, TextKey::StateSnapshotUnavailable), theme);
+        render_empty_state(
+            frame,
+            area,
+            t(locale, TextKey::VaultQuickDefaults),
+            t(locale, TextKey::StateSnapshotUnavailable),
+            theme,
+        );
         return;
     };
 
@@ -58,7 +67,11 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .split(area);
 
     // Form section
-    let form_block = themed_block(t(locale, TextKey::VaultQuickDefaults), theme.border_focused, theme);
+    let form_block = themed_block(
+        t(locale, TextKey::VaultQuickDefaults),
+        theme.border_focused,
+        theme,
+    );
     let form_inner = form_block.inner(layout[0]);
     frame.render_widget(form_block, layout[0]);
 

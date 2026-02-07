@@ -67,7 +67,10 @@ pub fn render(
             ];
             if *mode == current {
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled(t(locale, TextKey::GroupingCurrent), Style::default().fg(theme.text_muted)));
+                spans.push(Span::styled(
+                    t(locale, TextKey::GroupingCurrent),
+                    Style::default().fg(theme.text_muted),
+                ));
             }
             ListItem::new(Line::from(spans))
         })

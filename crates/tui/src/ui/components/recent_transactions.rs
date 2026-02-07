@@ -11,7 +11,9 @@ use ratatui::{
 use engine::{Currency, Money};
 
 use crate::ui::{
-    common::{render_empty_state, render_error_state, themed_block, tx_amount_color, tx_icon_color},
+    common::{
+        render_empty_state, render_error_state, themed_block, tx_amount_color, tx_icon_color,
+    },
     theme::Theme,
 };
 

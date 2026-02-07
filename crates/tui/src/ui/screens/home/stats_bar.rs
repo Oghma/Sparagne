@@ -15,15 +15,13 @@ use crate::{
     text::{TextKey, t},
     ui::{
         components::{
-            card::Card,
-            charts::braille_sparkline_filled,
-            money::styled_percentage_change,
+            card::Card, charts::braille_sparkline_filled, money::styled_percentage_change,
         },
         theme::Theme,
     },
 };
 
-use super::common::{get_currency, ICON_EXPENSE, ICON_INCOME};
+use super::common::{ICON_EXPENSE, ICON_INCOME, get_currency};
 
 /// Renders the full stats bar with 3 cards.
 pub fn render_stats_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -38,12 +36,8 @@ pub fn render_stats_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 
     render_net_worth_card(frame, layout[0], state, theme);
 
-    let (income, expenses) = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| (s.total_income_minor, s.total_expenses_minor))
-        .unwrap_or((0, 0));
+    let income = state.stats.current_month_income;
+    let expenses = state.stats.current_month_expenses;
 
     render_stat_card(
         frame,
@@ -72,7 +66,12 @@ pub fn render_stats_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 }
 
 /// Renders a compact single-line stats bar.
-pub fn render_stats_bar_compact(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+pub fn render_stats_bar_compact(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    state: &AppState,
+    theme: &Theme,
+) {
     let currency = get_currency(state);
 
     let net_worth_minor: i64 = state
@@ -87,19 +86,18 @@ pub fn render_stats_bar_compact(frame: &mut Frame<'_>, area: Rect, state: &AppSt
         })
         .unwrap_or(0);
 
-    let (income, expenses) = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| (s.total_income_minor, s.total_expenses_minor))
-        .unwrap_or((0, 0));
+    let income = state.stats.current_month_income;
+    let expenses = state.stats.current_month_expenses;
 
     let net_worth = Money::new(net_worth_minor).format(currency);
     let income_str = Money::new(income).format(currency);
     let expenses_str = Money::new(expenses).format(currency);
 
     let line = Line::from(vec![
-        Span::styled(format!("{}: ", t(state.locale, TextKey::HomeNetWorth)), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            format!("{}: ", t(state.locale, TextKey::HomeNetWorth)),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::styled(
             net_worth,
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
@@ -135,12 +133,8 @@ fn render_net_worth_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
 
     let net_worth = Money::new(net_worth_minor).format(currency);
 
-    let (income, expenses) = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| (s.total_income_minor, s.total_expenses_minor))
-        .unwrap_or((0, 0));
+    let income = state.stats.current_month_income;
+    let expenses = state.stats.current_month_expenses;
 
     let net = income - expenses;
     let pct_change = if expenses > 0 {

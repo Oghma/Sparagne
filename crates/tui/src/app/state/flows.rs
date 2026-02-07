@@ -1,8 +1,10 @@
 use api_types::transaction::TransactionView;
 use engine::CashFlow;
 
-use super::search::ListSearchState;
-use super::selectable::{EntityListMode, HasArchiveToggle, HasSelection, Resettable, UpdateFocus};
+use super::{
+    search::ListSearchState,
+    selectable::{EntityListMode, HasArchiveToggle, HasSelection, Resettable, UpdateFocus},
+};
 use crate::ui::forms::{AmountField, TextField};
 
 #[derive(Debug)]
@@ -104,7 +106,6 @@ impl Resettable for FlowsState {
 }
 
 impl FlowFormState {
-
     /// Validates all fields and returns the first error message if any.
     pub(crate) fn validate_all(&mut self) -> Option<String> {
         self.name.validate();

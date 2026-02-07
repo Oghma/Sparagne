@@ -2,7 +2,7 @@ use super::super::*;
 
 use crate::{
     error::Result,
-    text::{t, TextKey},
+    text::{TextKey, t},
 };
 use api_types::vault::{Vault, VaultNew};
 
@@ -15,10 +15,7 @@ impl App {
     }
 
     pub(crate) async fn load_vault_list(&mut self) -> Result<()> {
-        let res = self
-            .client
-            .vault_list()
-            .await;
+        let res = self.client.vault_list().await;
 
         match res {
             Ok(response) => {
@@ -41,7 +38,9 @@ impl App {
                 self.state.vault_ui.list.error = None;
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.client_error_message(err) else {
+                    return Ok(());
+                };
                 self.state.vault_ui.list.error = Some(msg);
             }
         }
@@ -78,7 +77,10 @@ impl App {
         self.refresh_snapshot().await?;
         self.apply_local_defaults();
         self.load_transactions(true).await?;
-        self.set_toast(t(self.state.locale, TextKey::SuccessVaultSelected), ToastLevel::Success);
+        self.set_toast(
+            t(self.state.locale, TextKey::SuccessVaultSelected),
+            ToastLevel::Success,
+        );
         Ok(())
     }
     pub(crate) async fn save_defaults(&mut self) -> Result<()> {
@@ -133,13 +135,19 @@ impl App {
             .set_defaults(username, vault_id, wallet_id, flow_id);
         if let Err(err) = self.local_state.save(self.local_state_path.as_str()) {
             self.state.vault_ui.defaults.error = Some(err.to_string());
-            self.set_toast(t(self.state.locale, TextKey::ErrorSaveDefaults), ToastLevel::Error);
+            self.set_toast(
+                t(self.state.locale, TextKey::ErrorSaveDefaults),
+                ToastLevel::Error,
+            );
             return Ok(());
         }
 
         self.state.vault_ui.mode = VaultMode::View;
         self.state.vault_ui.defaults = DefaultsFormState::default();
-        self.set_toast(t(self.state.locale, TextKey::SuccessDefaultsSaved), ToastLevel::Success);
+        self.set_toast(
+            t(self.state.locale, TextKey::SuccessDefaultsSaved),
+            ToastLevel::Success,
+        );
         Ok(())
     }
     pub(crate) async fn submit_vault_create(&mut self) -> Result<()> {
@@ -152,12 +160,10 @@ impl App {
 
         let res = self
             .client
-            .vault_new(
-                VaultNew {
-                    name: name.to_string(),
-                    currency: Some(api_types::Currency::Eur),
-                },
-            )
+            .vault_new(VaultNew {
+                name: name.to_string(),
+                currency: Some(api_types::Currency::Eur),
+            })
             .await;
 
         match res {
@@ -166,10 +172,15 @@ impl App {
                 self.state.vault_ui.mode = VaultMode::View;
                 self.reset_vault_form();
                 self.refresh_snapshot().await?;
-                self.set_toast(t(self.state.locale, TextKey::SuccessVaultCreated), ToastLevel::Success);
+                self.set_toast(
+                    t(self.state.locale, TextKey::SuccessVaultCreated),
+                    ToastLevel::Success,
+                );
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorCreateVault) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorCreateVault) else {
+                    return Ok(());
+                };
                 self.state.vault_ui.form.error = Some(msg);
             }
         }
@@ -178,24 +189,26 @@ impl App {
     }
     pub(crate) async fn delete_vault(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
-        let res = self
-            .client
-            .vault_delete(vault_id.as_str())
-            .await;
+        let res = self.client.vault_delete(vault_id.as_str()).await;
 
         match res {
             Ok(()) => {
                 self.reset_after_vault_delete();
             }
             Err(err) => {
-                let Some(message) = self.client_error_message(err) else { return Ok(()); };
+                let Some(message) = self.client_error_message(err) else {
+                    return Ok(());
+                };
                 self.state.vault_ui.error = Some(message.clone());
                 self.state.overlays.error = Some(ErrorDialogState::error(
                     t(self.state.locale, TextKey::UiError),
                     t(self.state.locale, TextKey::UiFailedToDeleteVault),
                     Some(message),
                 ));
-                self.set_toast(t(self.state.locale, TextKey::ErrorDeleteVault), ToastLevel::Error);
+                self.set_toast(
+                    t(self.state.locale, TextKey::ErrorDeleteVault),
+                    ToastLevel::Error,
+                );
             }
         }
 

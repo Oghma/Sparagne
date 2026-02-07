@@ -124,10 +124,9 @@ pub enum TextKey {
     HelpCreateEnvelope,
     HelpRenameEnvelope,
     HelpChangeMode,
-    HelpGoals,
-    HelpComingSoon,
     HelpRefreshData,
     HelpSwitchView,
+    HelpSwitchPanel,
     HelpCashSpendWorth,
     HelpChangePeriod,
     HelpCreateCategory,
@@ -475,11 +474,8 @@ pub enum TextKey {
     TxnGroupCategory,
     TxnGroupWallet,
     TxnGroupEnvelope,
-    TxnHeaderVoided,
-    TxnHeaderTransfers,
     TxnHeaderFiltersOff,
     TxnHeaderSearch,
-    TxnHeaderHints,
 
     // Transaction detail
     TxnDetailTitle,
@@ -517,14 +513,11 @@ pub enum TextKey {
 
     // Entity list shared
     EntityArchivedOn,
-    EntityArchivedCount,
     EntityBadgeArchived,
     EntityBadgeDefault,
 
     // Wallet screen
     WalletTitle,
-    WalletStatsLabel,
-    WalletEntityLabel,
     WalletDetailTitle,
     WalletNotFound,
     WalletSelectPrompt,
@@ -539,8 +532,6 @@ pub enum TextKey {
 
     // Flow screen
     FlowTitle,
-    FlowStatsLabel,
-    FlowEntityLabel,
     FlowDetailTitle,
     FlowNotFound,
     FlowSelectPrompt,
@@ -562,20 +553,6 @@ pub enum TextKey {
     HomeWallets,
     HomeBudgets,
     HomeNoActivityYet,
-
-    // Accounts breadcrumbs
-    BreadcrumbAccounts,
-    BreadcrumbSources,
-    BreadcrumbEnvelopes,
-    BreadcrumbGoals,
-    BreadcrumbDetail,
-    BreadcrumbCreate,
-    BreadcrumbRename,
-
-    // Accounts tabs
-    AccountsCardTitle,
-    AccountsGoalsPlaceholder,
-    AccountsGoalsHint,
 
     // Settings
     SettingsCardTitle,

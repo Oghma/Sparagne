@@ -53,7 +53,7 @@ impl App {
             }
             HomeFeedItem::FlowAlert(alert) => {
                 self.state.section = Section::Accounts;
-                self.accounts_set_tab(1);
+                self.accounts_set_focus(AccountsTab::Budget);
                 self.state.flows.search.query.clear();
                 self.state.flows.search.active = false;
                 if self.state.snapshot.is_none() {

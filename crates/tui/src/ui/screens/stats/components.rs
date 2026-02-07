@@ -53,7 +53,10 @@ pub fn render_stat_row(
 
     // Label
     frame.render_widget(
-        Paragraph::new(Span::styled(row.label, Style::default().fg(theme.text_muted))),
+        Paragraph::new(Span::styled(
+            row.label,
+            Style::default().fg(theme.text_muted),
+        )),
         cols[0],
     );
 
@@ -63,10 +66,14 @@ pub fn render_stat_row(
         cols[1],
     );
 
-    let bar_width = cols[2].width.saturating_sub(4).max(1) as usize;
+    let bar_width = cols[2].width.saturating_sub(8).max(1) as usize;
     let bar = percentage_bar(row.percentage, bar_width);
+    let label = format!(" {:>3}%", row.percentage);
     frame.render_widget(
-        Paragraph::new(Span::styled(bar, Style::default().fg(row.color))),
+        Paragraph::new(Line::from(vec![
+            Span::styled(bar, Style::default().fg(row.color)),
+            Span::styled(label, Style::default().fg(theme.text_muted)),
+        ])),
         cols[2],
     );
 }
@@ -110,16 +117,24 @@ pub fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
     // Income StatCard with MoM trend
     let income_formatted = Money::new(income).format(currency);
     let income_subtitle = format_mom_subtitle(income_change, true, locale);
-    StatCard::new(t(locale, TextKey::StatsTotalIncome), income_formatted, theme)
-        .subtitle(&income_subtitle)
-        .render(frame, cols[0]);
+    StatCard::new(
+        t(locale, TextKey::StatsTotalIncome),
+        income_formatted,
+        theme,
+    )
+    .subtitle(&income_subtitle)
+    .render(frame, cols[0]);
 
     // Expenses StatCard with MoM trend
     let expenses_formatted = Money::new(-expenses).format(currency);
     let expense_subtitle = format_mom_subtitle(expense_change, false, locale);
-    StatCard::new(t(locale, TextKey::StatsTotalExpenses), expenses_formatted, theme)
-        .subtitle(&expense_subtitle)
-        .render(frame, cols[1]);
+    StatCard::new(
+        t(locale, TextKey::StatsTotalExpenses),
+        expenses_formatted,
+        theme,
+    )
+    .subtitle(&expense_subtitle)
+    .render(frame, cols[1]);
 
     // Net Balance StatCard with MoM trend
     let net_formatted = Money::new(net).format(currency);
@@ -176,10 +191,7 @@ pub fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                     format!("{}. ", idx + 1),
                     Style::default().fg(theme.text_muted),
                 ),
-                Span::styled(
-                    format!("{icon} "),
-                    Style::default().fg(theme.text_muted),
-                ),
+                Span::styled(format!("{icon} "), Style::default().fg(theme.text_muted)),
                 Span::styled(
                     format!("{:<14}", truncate(category, 13)),
                     Style::default().fg(theme.text),
@@ -190,7 +202,10 @@ pub fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                 ),
                 Span::raw(" "),
                 Span::styled(bar, Style::default().fg(theme.negative)),
-                Span::styled(format!(" {:>2}%", pct), Style::default().fg(theme.text_muted)),
+                Span::styled(
+                    format!(" {:>2}%", pct),
+                    Style::default().fg(theme.text_muted),
+                ),
                 alert,
             ])
         })
@@ -202,11 +217,23 @@ pub fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState,
 /// Get an emoji icon for a category based on common patterns.
 pub fn get_category_icon(category: &str) -> &'static str {
     let lower = category.to_lowercase();
-    if lower.contains("food") || lower.contains("grocer") || lower.contains("restaurant") || lower.contains("cibo") {
+    if lower.contains("food")
+        || lower.contains("grocer")
+        || lower.contains("restaurant")
+        || lower.contains("cibo")
+    {
         "🍽️"
-    } else if lower.contains("house") || lower.contains("rent") || lower.contains("home") || lower.contains("casa") {
+    } else if lower.contains("house")
+        || lower.contains("rent")
+        || lower.contains("home")
+        || lower.contains("casa")
+    {
         "🏠"
-    } else if lower.contains("transport") || lower.contains("car") || lower.contains("gas") || lower.contains("auto") {
+    } else if lower.contains("transport")
+        || lower.contains("car")
+        || lower.contains("gas")
+        || lower.contains("auto")
+    {
         "🚗"
     } else if lower.contains("health") || lower.contains("medical") || lower.contains("salute") {
         "🏥"
@@ -234,10 +261,20 @@ pub(crate) use crate::ui::common::get_currency;
 pub(crate) use crate::app::{calculate_net_change, percentage_change};
 
 /// Format MoM subtitle with arrow indicator.
-pub fn format_mom_subtitle(change: Option<f64>, _positive_is_good: bool, locale: crate::text::Locale) -> String {
+pub fn format_mom_subtitle(
+    change: Option<f64>,
+    _positive_is_good: bool,
+    locale: crate::text::Locale,
+) -> String {
     match change {
         Some(pct) => {
-            let arrow = if pct > 0.0 { "↑" } else if pct < 0.0 { "↓" } else { "→" };
+            let arrow = if pct > 0.0 {
+                "↑"
+            } else if pct < 0.0 {
+                "↓"
+            } else {
+                "→"
+            };
             let sign = if pct > 0.0 { "+" } else { "" };
             format!("{arrow} {sign}{:.0}% {}", pct, t(locale, TextKey::StatsMoM))
         }
@@ -291,8 +328,8 @@ pub fn offset_month(year: i32, month: u32, offset: i32) -> (i32, u32) {
     (new_year, new_month as u32)
 }
 
-
-/// Build a visual timeline showing recent months with the current one highlighted.
+/// Build a visual timeline showing recent months with the current one
+/// highlighted.
 pub fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a> {
     let mut spans = Vec::new();
 
@@ -305,7 +342,10 @@ pub fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a
         offset_month(year, month, 2),
     ];
 
-    spans.push(Span::styled("Month: ", Style::default().fg(theme.text_muted)));
+    spans.push(Span::styled(
+        "Month: ",
+        Style::default().fg(theme.text_muted),
+    ));
     spans.push(Span::styled(
         format!("{} {}", month_name(month), year),
         Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
@@ -325,7 +365,9 @@ pub fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a
             // Current month - highlighted
             spans.push(Span::styled(
                 format!("[{short_name}]*"),
-                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
             ));
         } else {
             spans.push(Span::styled(
@@ -341,7 +383,11 @@ pub fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a
 }
 
 /// Get status badge based on trend.
-pub fn trend_status_badge(change: Option<f64>, positive_is_good: bool, theme: &Theme) -> (&'static str, ratatui::style::Color) {
+pub fn trend_status_badge(
+    change: Option<f64>,
+    positive_is_good: bool,
+    theme: &Theme,
+) -> (&'static str, ratatui::style::Color) {
     match change {
         Some(pct) if pct > 10.0 => {
             if positive_is_good {
@@ -389,16 +435,26 @@ pub fn build_trend_line<'a>(
         .map(|pct| format!("{:+.0}%", pct))
         .unwrap_or_else(|| "n/a".to_string());
 
-    let amount_color = if amount >= 0 { theme.positive } else { theme.negative };
+    let amount_color = if amount >= 0 {
+        theme.positive
+    } else {
+        theme.negative
+    };
 
     Line::from(vec![
         Span::styled(format!("{label:<12}"), Style::default().fg(theme.text)),
-        Span::styled(format!("({arrow} {change_str}) "), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            format!("({arrow} {change_str}) "),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::styled(
             format!("{:>12}", Money::new(amount).format(currency)),
             Style::default().fg(amount_color),
         ),
         Span::raw("  "),
-        Span::styled(format!("Status: {status_label}"), Style::default().fg(status_color)),
+        Span::styled(
+            format!("Status: {status_label}"),
+            Style::default().fg(status_color),
+        ),
     ])
 }

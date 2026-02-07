@@ -56,9 +56,8 @@ impl App {
 
         match self.state.section {
             Section::Accounts => match self.state.accounts_tab {
-                AccountsTab::Sources => self.advance_wallet_focus(),
-                AccountsTab::Envelopes => self.advance_flow_focus(),
-                AccountsTab::Goals => {}
+                AccountsTab::Wallets => self.advance_wallet_focus(),
+                AccountsTab::Budget => self.advance_flow_focus(),
             },
             Section::Settings if self.state.settings_tab == SettingsTab::Vault => {
                 self.advance_vault_focus()
@@ -96,7 +95,10 @@ impl App {
     }
 
     pub(crate) fn advance_flow_focus(&mut self) {
-        if !matches!(self.state.flows.mode, EntityListMode::Create | EntityListMode::Rename) {
+        if !matches!(
+            self.state.flows.mode,
+            EntityListMode::Create | EntityListMode::Rename
+        ) {
             return;
         }
 
@@ -145,7 +147,7 @@ impl App {
     pub(crate) fn handle_form_input(&mut self, ch: char) -> bool {
         match self.state.section {
             Section::Accounts => match self.state.accounts_tab {
-                AccountsTab::Sources => {
+                AccountsTab::Wallets => {
                     if matches!(
                         self.state.wallets.mode,
                         EntityListMode::Create | EntityListMode::Rename
@@ -157,8 +159,11 @@ impl App {
                         return true;
                     }
                 }
-                AccountsTab::Envelopes => {
-                    if matches!(self.state.flows.mode, EntityListMode::Create | EntityListMode::Rename) {
+                AccountsTab::Budget => {
+                    if matches!(
+                        self.state.flows.mode,
+                        EntityListMode::Create | EntityListMode::Rename
+                    ) {
                         match self.state.flows.form.focus {
                             FlowFormField::Name => self.state.flows.form.name.push(ch),
                             FlowFormField::Cap => self.state.flows.form.cap.push(ch),
@@ -173,7 +178,6 @@ impl App {
                         return true;
                     }
                 }
-                AccountsTab::Goals => {}
             },
             Section::Settings => match self.state.settings_tab {
                 SettingsTab::Categories => {
@@ -218,7 +222,8 @@ impl App {
         filter.focus = match filter.focus {
             FilterField::From => FilterField::To,
             FilterField::To => FilterField::Kinds,
-            FilterField::Kinds => FilterField::From,
+            FilterField::Kinds => FilterField::Transfers,
+            FilterField::Transfers => FilterField::From,
         };
     }
 
@@ -239,6 +244,11 @@ impl App {
                 'f' | 'F' => filter.kind_transfer_flow = !filter.kind_transfer_flow,
                 _ => {}
             },
+            FilterField::Transfers => {
+                if matches!(ch, ' ' | 't' | 'T') {
+                    filter.include_transfers = !filter.include_transfers;
+                }
+            }
         }
     }
     pub(crate) fn backspace_wallet_form(&mut self) {
@@ -259,7 +269,10 @@ impl App {
     }
 
     pub(crate) fn backspace_flow_form(&mut self) {
-        if !matches!(self.state.flows.mode, EntityListMode::Create | EntityListMode::Rename) {
+        if !matches!(
+            self.state.flows.mode,
+            EntityListMode::Create | EntityListMode::Rename
+        ) {
             return;
         }
         match self.state.flows.form.focus {

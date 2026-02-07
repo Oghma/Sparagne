@@ -13,7 +13,6 @@ use crate::{
 };
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-
     match state.categories.mode {
         CategoriesMode::Merge => {
             let body = Layout::default()
@@ -63,13 +62,25 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     let locale = state.locale;
     let header_spans = vec![
         Span::styled("[c]", Style::default().fg(theme.accent)),
-        Span::styled(t(locale, TextKey::CatHintCreate), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::CatHintCreate),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::styled("[e]", Style::default().fg(theme.accent)),
-        Span::styled(t(locale, TextKey::CatHintRename), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::CatHintRename),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::styled("[l]", Style::default().fg(theme.accent)),
-        Span::styled(t(locale, TextKey::CatHintAliases), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::CatHintAliases),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::styled("[m]", Style::default().fg(theme.accent)),
-        Span::styled(t(locale, TextKey::CatHintMerge), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::CatHintMerge),
+            Style::default().fg(theme.text_muted),
+        ),
     ];
 
     let list_block = Block::default()
@@ -133,7 +144,10 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             ];
 
             if category.is_system {
-                spans.push(Span::styled(t(locale, TextKey::CatBadgeSystem), Style::default().fg(theme.info)));
+                spans.push(Span::styled(
+                    t(locale, TextKey::CatBadgeSystem),
+                    Style::default().fg(theme.info),
+                ));
                 spans.push(Span::raw(" "));
             }
             if category.archived {
@@ -146,13 +160,19 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
             if let Some(from_idx) = from_index
                 && idx == from_idx
             {
-                spans.push(Span::styled(t(locale, TextKey::CatBadgeFrom), Style::default().fg(theme.negative)));
+                spans.push(Span::styled(
+                    t(locale, TextKey::CatBadgeFrom),
+                    Style::default().fg(theme.negative),
+                ));
                 spans.push(Span::raw(" "));
             }
             if let Some(target_idx) = target_index
                 && idx == target_idx
             {
-                spans.push(Span::styled(t(locale, TextKey::CatBadgeTo), Style::default().fg(theme.positive)));
+                spans.push(Span::styled(
+                    t(locale, TextKey::CatBadgeTo),
+                    Style::default().fg(theme.positive),
+                ));
             }
 
             ListItem::new(Line::from(spans))
@@ -286,7 +306,10 @@ fn render_alias_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled(t(locale, TextKey::CatNewAlias), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::CatNewAlias),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled(
                 state.categories.aliases.input.as_str(),
                 Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
@@ -296,13 +319,25 @@ fn render_alias_input(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         Line::from(""),
         Line::from(vec![
             Span::styled("  [Enter]", Style::default().fg(theme.accent)),
-            Span::styled(format!(" {}  ", t(locale, TextKey::HintSave)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!(" {}  ", t(locale, TextKey::HintSave)),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled("[Tab]", Style::default().fg(theme.accent)),
-            Span::styled(t(locale, TextKey::CatSwitchFocus), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::CatSwitchFocus),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled("[x]", Style::default().fg(theme.accent)),
-            Span::styled(format!(" {}  ", t(locale, TextKey::HintDelete)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!(" {}  ", t(locale, TextKey::HintDelete)),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled("[Esc]", Style::default().fg(theme.accent)),
-            Span::styled(format!(" {}", t(locale, TextKey::HintBack)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!(" {}", t(locale, TextKey::HintBack)),
+                Style::default().fg(theme.text_muted),
+            ),
         ]),
     ];
 
@@ -324,7 +359,10 @@ fn render_alias_preview(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let locale = state.locale;
     let Some(category) = state.categories.items.get(state.categories.selected) else {
         let block = Block::default()
-            .title(Span::styled(t(locale, TextKey::CatAliasesTitle), Style::default().fg(theme.accent)))
+            .title(Span::styled(
+                t(locale, TextKey::CatAliasesTitle),
+                Style::default().fg(theme.accent),
+            ))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(theme.border));
@@ -343,7 +381,10 @@ fn render_alias_preview(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled(t(locale, TextKey::CatCategoryLabel), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::CatCategoryLabel),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled(&category.name, Style::default().fg(theme.text)),
         ]),
     ];
@@ -381,7 +422,10 @@ fn render_alias_preview(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     }
 
     let block = Block::default()
-        .title(Span::styled(t(locale, TextKey::CatAliasesTitle), Style::default().fg(theme.accent)))
+        .title(Span::styled(
+            t(locale, TextKey::CatAliasesTitle),
+            Style::default().fg(theme.accent),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.border));
@@ -411,11 +455,18 @@ fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
         Line::from(vec![
             Span::styled("  [Enter]", Style::default().fg(theme.accent)),
             Span::styled(
-                if is_rename { t(locale, TextKey::HintSave) } else { t(locale, TextKey::HintCreate) },
+                if is_rename {
+                    t(locale, TextKey::HintSave)
+                } else {
+                    t(locale, TextKey::HintCreate)
+                },
                 Style::default().fg(theme.text_muted),
             ),
             Span::styled("  [Esc]", Style::default().fg(theme.accent)),
-            Span::styled(format!(" {}", t(locale, TextKey::HintCancel)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!(" {}", t(locale, TextKey::HintCancel)),
+                Style::default().fg(theme.text_muted),
+            ),
         ]),
     ];
 
@@ -434,7 +485,10 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled(t(locale, TextKey::CatMergeLabel), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::CatMergeLabel),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled(&from_name, Style::default().fg(theme.negative)),
             Span::styled(" → ", Style::default().fg(theme.text_muted)),
             Span::styled(&into_name, Style::default().fg(theme.positive)),
@@ -462,7 +516,11 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
                 lines.push(Line::from(Span::styled(
                     format!(
                         "    • {}",
-                        merge_conflict_label(locale, conflict.kind.as_str(), conflict.value.as_str())
+                        merge_conflict_label(
+                            locale,
+                            conflict.kind.as_str(),
+                            conflict.value.as_str()
+                        )
                     ),
                     Style::default().fg(theme.text),
                 )));
@@ -478,9 +536,15 @@ fn render_merge_info(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::styled("  [Enter]", Style::default().fg(theme.accent)),
-        Span::styled(t(locale, TextKey::CatMergePreviewAction), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::CatMergePreviewAction),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::styled("[Esc]", Style::default().fg(theme.accent)),
-        Span::styled(format!(" {}", t(locale, TextKey::HintCancel)), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            format!(" {}", t(locale, TextKey::HintCancel)),
+            Style::default().fg(theme.text_muted),
+        ),
     ]));
 
     let block = Block::default()

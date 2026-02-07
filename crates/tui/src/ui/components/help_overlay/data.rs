@@ -68,11 +68,7 @@ fn home_shortcuts(locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     ]
 }
 
-fn transactions_shortcuts(
-    state: &AppState,
-    locale: Locale,
-    theme: &Theme,
-) -> Vec<Line<'static>> {
+fn transactions_shortcuts(state: &AppState, locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     let mut lines = vec![
         section_header(t(locale, TextKey::SectionTransactions), theme),
         Line::from(""),
@@ -164,22 +160,16 @@ fn transactions_shortcuts(
     lines
 }
 
-fn accounts_shortcuts(
-    state: &AppState,
-    locale: Locale,
-    theme: &Theme,
-) -> Vec<Line<'static>> {
+fn accounts_shortcuts(state: &AppState, locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     let mut lines = vec![
         section_header(t(locale, TextKey::HintAccounts), theme),
         Line::from(""),
-        shortcut_line("Tab", t(locale, TextKey::HelpNextSubTab), theme),
-        shortcut_line("Shift+Tab", t(locale, TextKey::HelpPrevSubTab), theme),
-        shortcut_line("1/2/3", t(locale, TextKey::HelpJumpSubTab), theme),
+        shortcut_line("←/→", t(locale, TextKey::HelpSwitchPanel), theme),
         Line::from(""),
     ];
 
     match state.accounts_tab {
-        AccountsTab::Sources => {
+        AccountsTab::Wallets => {
             lines.push(section_header(
                 t(locale, TextKey::HelpSourcesWallets),
                 theme,
@@ -206,7 +196,7 @@ fn accounts_shortcuts(
                 theme,
             ));
         }
-        AccountsTab::Envelopes => {
+        AccountsTab::Budget => {
             lines.push(section_header(
                 t(locale, TextKey::HelpEnvelopesFlows),
                 theme,
@@ -238,11 +228,6 @@ fn accounts_shortcuts(
                 theme,
             ));
         }
-        AccountsTab::Goals => {
-            lines.push(section_header(t(locale, TextKey::HelpGoals), theme));
-            lines.push(Line::from(""));
-            lines.push(shortcut_line(t(locale, TextKey::HelpComingSoon), "", theme));
-        }
     }
 
     lines
@@ -259,11 +244,7 @@ fn analytics_shortcuts(locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     ]
 }
 
-fn settings_shortcuts(
-    state: &AppState,
-    locale: Locale,
-    theme: &Theme,
-) -> Vec<Line<'static>> {
+fn settings_shortcuts(state: &AppState, locale: Locale, theme: &Theme) -> Vec<Line<'static>> {
     let mut lines = vec![
         section_header(t(locale, TextKey::HintSettings), theme),
         Line::from(""),

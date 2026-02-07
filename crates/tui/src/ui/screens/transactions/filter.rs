@@ -27,11 +27,20 @@ pub fn render_filter_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState
 
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(11), Constraint::Min(0)])
+        .constraints([Constraint::Length(13), Constraint::Min(0)])
         .split(popup);
 
     let kinds_focused = filter.focus == FilterField::Kinds;
     let kinds_label_style = if kinds_focused {
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.text)
+    };
+
+    let transfers_focused = filter.focus == FilterField::Transfers;
+    let transfers_label_style = if transfers_focused {
         Style::default()
             .fg(theme.accent)
             .add_modifier(Modifier::BOLD)
@@ -54,26 +63,72 @@ pub fn render_filter_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState
         ),
         Line::from(""),
         Line::from(vec![
-            Span::styled(t(state.locale, TextKey::FilterTransactionTypes), kinds_label_style),
-            Span::styled(t(state.locale, TextKey::FilterToggleHint), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(state.locale, TextKey::FilterTransactionTypes),
+                kinds_label_style,
+            ),
+            Span::styled(
+                t(state.locale, TextKey::FilterToggleHint),
+                Style::default().fg(theme.text_muted),
+            ),
         ]),
         // Row 1: Income, Expense, Refund
         Line::from(vec![
             Span::raw("  "),
-            filter_toggle_with_icon("▲", t(state.locale, TextKey::FilterKindIncome), "i", filter.kind_income, theme),
+            filter_toggle_with_icon(
+                "▲",
+                t(state.locale, TextKey::FilterKindIncome),
+                "i",
+                filter.kind_income,
+                theme,
+            ),
             Span::raw("    "),
-            filter_toggle_with_icon("▼", t(state.locale, TextKey::FilterKindExpense), "e", filter.kind_expense, theme),
+            filter_toggle_with_icon(
+                "▼",
+                t(state.locale, TextKey::FilterKindExpense),
+                "e",
+                filter.kind_expense,
+                theme,
+            ),
             Span::raw("    "),
-            filter_toggle_with_icon("↩", t(state.locale, TextKey::FilterKindRefund), "r", filter.kind_refund, theme),
+            filter_toggle_with_icon(
+                "↩",
+                t(state.locale, TextKey::FilterKindRefund),
+                "r",
+                filter.kind_refund,
+                theme,
+            ),
         ]),
         // Row 2: Transfers
         Line::from(vec![
             Span::raw("  "),
-            filter_toggle_with_icon("⇄", t(state.locale, TextKey::FilterKindWalletTransfer), "w", filter.kind_transfer_wallet, theme),
+            filter_toggle_with_icon(
+                "⇄",
+                t(state.locale, TextKey::FilterKindWalletTransfer),
+                "w",
+                filter.kind_transfer_wallet,
+                theme,
+            ),
             Span::raw("    "),
-            filter_toggle_with_icon("⇄", t(state.locale, TextKey::FilterKindFlowTransfer), "f", filter.kind_transfer_flow, theme),
+            filter_toggle_with_icon(
+                "⇄",
+                t(state.locale, TextKey::FilterKindFlowTransfer),
+                "f",
+                filter.kind_transfer_flow,
+                theme,
+            ),
         ]),
         Line::from(""),
+        // Transfers visibility toggle
+        Line::from(vec![
+            Span::styled("  Show Transfers ", transfers_label_style),
+            if filter.include_transfers {
+                Span::styled("[On]", Style::default().fg(theme.positive))
+            } else {
+                Span::styled("[Off]", Style::default().fg(theme.text_muted))
+            },
+            Span::styled("  (t to toggle)", Style::default().fg(theme.text_muted)),
+        ]),
         Line::from(vec![
             Span::styled("[Tab]", Style::default().fg(theme.accent)),
             Span::styled(" next  ", Style::default().fg(theme.text_muted)),
@@ -92,7 +147,10 @@ pub fn render_filter_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState
     }
 
     let block = Block::default()
-        .title(Span::styled(t(state.locale, TextKey::FilterTitle), Style::default().fg(theme.accent)))
+        .title(Span::styled(
+            t(state.locale, TextKey::FilterTitle),
+            Style::default().fg(theme.accent),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent))

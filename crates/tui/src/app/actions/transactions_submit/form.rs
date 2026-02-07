@@ -1,7 +1,5 @@
 use crate::{
-    app::{
-        App, ToastLevel, TransactionFormState, TransactionsMode,
-    },
+    app::{App, ToastLevel, TransactionFormState, TransactionsMode},
     error::Result,
     text::{TextKey, t},
 };
@@ -29,18 +27,27 @@ impl App {
 
         let amount_raw = amount_raw.as_str();
         if amount_raw.is_empty() {
-            self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationAmountRequired));
+            self.set_transaction_form_error(t(
+                self.state.locale,
+                TextKey::ValidationAmountRequired,
+            ));
             return Ok(());
         }
         let amount_minor = match Money::parse_major(amount_raw, currency) {
             Ok(money) => money.minor().abs(),
             Err(_) => {
-                self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationAmountInvalid));
+                self.set_transaction_form_error(t(
+                    self.state.locale,
+                    TextKey::ValidationAmountInvalid,
+                ));
                 return Ok(());
             }
         };
         if amount_minor <= 0 {
-            self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationAmountPositive));
+            self.set_transaction_form_error(t(
+                self.state.locale,
+                TextKey::ValidationAmountPositive,
+            ));
             return Ok(());
         }
 
@@ -52,7 +59,10 @@ impl App {
         let wallet_id = match wallet_ids.get(wallet_index) {
             Some(id) => *id,
             None => {
-                self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationWalletInvalid));
+                self.set_transaction_form_error(t(
+                    self.state.locale,
+                    TextKey::ValidationWalletInvalid,
+                ));
                 return Ok(());
             }
         };
@@ -65,7 +75,10 @@ impl App {
         let flow_id = match flow_ids.get(flow_index) {
             Some(id) => *id,
             None => {
-                self.set_transaction_form_error(t(self.state.locale, TextKey::ValidationFlowInvalid));
+                self.set_transaction_form_error(t(
+                    self.state.locale,
+                    TextKey::ValidationFlowInvalid,
+                ));
                 return Ok(());
             }
         };
@@ -125,12 +138,17 @@ impl App {
                 Ok(()) => {
                     self.state.last_flow_id = Some(flow_id);
                     self.state.transactions.form = TransactionFormState::default();
-                    self.set_toast(t(self.state.locale, TextKey::SuccessTransactionUpdated), ToastLevel::Success);
-                    self.load_transactions(true).await?;
+                    self.set_toast(
+                        t(self.state.locale, TextKey::SuccessTransactionUpdated),
+                        ToastLevel::Success,
+                    );
+                    self.refresh_after_transaction_mutation().await?;
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
                 Err(err) => {
-                    let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorUpdating) else { return Ok(()); };
+                    let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorUpdating) else {
+                        return Ok(());
+                    };
                     self.state.transactions.form.error = Some(msg);
                 }
             }
@@ -138,57 +156,54 @@ impl App {
             let res = match kind {
                 TransactionKind::Income => {
                     self.client
-                        .income_new(
-                            IncomeNew {
-                                vault_id: vault_id.to_string(),
-                                amount_minor,
-                                flow_id: Some(flow_id),
-                                wallet_id: Some(wallet_id),
-                                category_id: None,
-                                category,
-                                note,
-                                idempotency_key: None,
-                                occurred_at: occurred_at_new,
-                            },
-                        )
+                        .income_new(IncomeNew {
+                            vault_id: vault_id.to_string(),
+                            amount_minor,
+                            flow_id: Some(flow_id),
+                            wallet_id: Some(wallet_id),
+                            category_id: None,
+                            category,
+                            note,
+                            idempotency_key: None,
+                            occurred_at: occurred_at_new,
+                        })
                         .await
                 }
                 TransactionKind::Expense => {
                     self.client
-                        .expense_new(
-                            ExpenseNew {
-                                vault_id: vault_id.to_string(),
-                                amount_minor,
-                                flow_id: Some(flow_id),
-                                wallet_id: Some(wallet_id),
-                                category_id: None,
-                                category,
-                                note,
-                                idempotency_key: None,
-                                occurred_at: occurred_at_new,
-                            },
-                        )
+                        .expense_new(ExpenseNew {
+                            vault_id: vault_id.to_string(),
+                            amount_minor,
+                            flow_id: Some(flow_id),
+                            wallet_id: Some(wallet_id),
+                            category_id: None,
+                            category,
+                            note,
+                            idempotency_key: None,
+                            occurred_at: occurred_at_new,
+                        })
                         .await
                 }
                 TransactionKind::Refund => {
                     self.client
-                        .refund_new(
-                            Refund {
-                                vault_id: vault_id.to_string(),
-                                amount_minor,
-                                flow_id: Some(flow_id),
-                                wallet_id: Some(wallet_id),
-                                category_id: None,
-                                category,
-                                note,
-                                idempotency_key: None,
-                                occurred_at: occurred_at_new,
-                            },
-                        )
+                        .refund_new(Refund {
+                            vault_id: vault_id.to_string(),
+                            amount_minor,
+                            flow_id: Some(flow_id),
+                            wallet_id: Some(wallet_id),
+                            category_id: None,
+                            category,
+                            note,
+                            idempotency_key: None,
+                            occurred_at: occurred_at_new,
+                        })
                         .await
                 }
                 TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
-                    self.set_transaction_form_error(t(self.state.locale, TextKey::PromptUseDedicatedTransferForm));
+                    self.set_transaction_form_error(t(
+                        self.state.locale,
+                        TextKey::PromptUseDedicatedTransferForm,
+                    ));
                     return Ok(());
                 }
             };
@@ -199,11 +214,16 @@ impl App {
                     self.state.transactions.last_created_id = Some(created.id);
                     self.state.transactions.mode = TransactionsMode::List;
                     self.state.transactions.form = TransactionFormState::default();
-                    self.set_toast(t(self.state.locale, TextKey::SuccessTransactionSaved), ToastLevel::Success);
-                    self.load_transactions(true).await?;
+                    self.set_toast(
+                        t(self.state.locale, TextKey::SuccessTransactionSaved),
+                        ToastLevel::Success,
+                    );
+                    self.refresh_after_transaction_mutation().await?;
                 }
                 Err(err) => {
-                    let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else { return Ok(()); };
+                    let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else {
+                        return Ok(());
+                    };
                     self.state.transactions.form.error = Some(msg);
                 }
             }

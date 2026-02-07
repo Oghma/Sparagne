@@ -101,5 +101,8 @@ pub fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         Span::styled(" cancel", Style::default().fg(theme.text_muted)),
     ]));
 
-    frame.render_widget(Paragraph::new(lines).block(themed_block(title, theme.accent, theme)), area);
+    frame.render_widget(
+        Paragraph::new(lines).block(themed_block(title, theme.accent, theme)),
+        area,
+    );
 }

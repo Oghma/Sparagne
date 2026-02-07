@@ -22,7 +22,11 @@ use ratatui::{
 };
 use uuid::Uuid;
 
-use crate::{app::AppState, text::{Locale, TextKey, t}, ui::theme::Theme};
+use crate::{
+    app::AppState,
+    text::{Locale, TextKey, t},
+    ui::theme::Theme,
+};
 
 // ---------------------------------------------------------------------------
 // Block helpers
@@ -114,16 +118,20 @@ pub(crate) fn get_currency(state: &AppState) -> Currency {
 // String helpers
 // ---------------------------------------------------------------------------
 
-/// Truncates a string to the given maximum length, adding an ellipsis if needed.
+/// Truncates a string to the given maximum length, adding an ellipsis if
+/// needed.
 ///
-/// Uses character-level counting so multi-byte characters are handled correctly.
+/// Uses character-level counting so multi-byte characters are handled
+/// correctly.
 pub(crate) fn truncate(s: &str, max_len: usize) -> String {
     if s.chars().count() <= max_len {
         s.to_string()
     } else {
         format!(
             "{}\u{2026}",
-            s.chars().take(max_len.saturating_sub(1)).collect::<String>()
+            s.chars()
+                .take(max_len.saturating_sub(1))
+                .collect::<String>()
         )
     }
 }
@@ -222,7 +230,8 @@ pub(crate) fn resolve_flow_name(state: &AppState, flow_id: Uuid) -> String {
 // Progress bar
 // ---------------------------------------------------------------------------
 
-/// Renders a text-based progress bar with filled (`\u{2588}`) and empty (`\u{2591}`) blocks.
+/// Renders a text-based progress bar with filled (`\u{2588}`) and empty
+/// (`\u{2591}`) blocks.
 pub(crate) fn progress_bar(value: i64, max: i64, width: usize) -> String {
     if max == 0 {
         return "\u{2591}".repeat(width);
@@ -286,7 +295,10 @@ pub(crate) fn inset(area: Rect, horizontal: u16, vertical: u16) -> Rect {
 // ---------------------------------------------------------------------------
 
 /// Returns the icon string and color for a transaction kind.
-pub(crate) fn tx_icon_color(kind: TransactionKind, theme: &Theme) -> (&'static str, ratatui::style::Color) {
+pub(crate) fn tx_icon_color(
+    kind: TransactionKind,
+    theme: &Theme,
+) -> (&'static str, ratatui::style::Color) {
     match kind {
         TransactionKind::Income => (ICON_INCOME, theme.income),
         TransactionKind::Expense => (ICON_EXPENSE, theme.expense),
@@ -310,7 +322,8 @@ pub(crate) fn tx_amount_color(kind: TransactionKind, theme: &Theme) -> ratatui::
 // Label-value field
 // ---------------------------------------------------------------------------
 
-/// Renders a label-value pair as a styled line, with bold highlighting when focused.
+/// Renders a label-value pair as a styled line, with bold highlighting when
+/// focused.
 pub(crate) fn render_label_value_field(
     label: &str,
     value: &str,

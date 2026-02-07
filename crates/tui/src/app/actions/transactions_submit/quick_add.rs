@@ -148,12 +148,22 @@ impl App {
         // Handle transfers separately (they resolve their own targets)
         if parsed.kind == QuickAddKind::TransferWallet {
             return self
-                .submit_quick_add_transfer(&vault_id, &parsed, self.now_in_timezone(), TransferType::Wallet)
+                .submit_quick_add_transfer(
+                    &vault_id,
+                    &parsed,
+                    self.now_in_timezone(),
+                    TransferType::Wallet,
+                )
                 .await;
         }
         if parsed.kind == QuickAddKind::TransferFlow {
             return self
-                .submit_quick_add_transfer(&vault_id, &parsed, self.now_in_timezone(), TransferType::Flow)
+                .submit_quick_add_transfer(
+                    &vault_id,
+                    &parsed,
+                    self.now_in_timezone(),
+                    TransferType::Flow,
+                )
                 .await;
         }
 
@@ -228,11 +238,16 @@ impl App {
                 self.state.transactions.quick_input.clear();
                 self.state.transactions.quick_error = None;
                 self.state.transactions.quick_ambiguous = None;
-                self.set_toast(t(self.state.locale, TextKey::SuccessTransactionSaved), ToastLevel::Success);
-                self.load_transactions(true).await?;
+                self.set_toast(
+                    t(self.state.locale, TextKey::SuccessTransactionSaved),
+                    ToastLevel::Success,
+                );
+                self.refresh_after_transaction_mutation().await?;
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else {
+                    return Ok(());
+                };
                 self.state.transactions.quick_error = Some(msg);
             }
         }
@@ -271,16 +286,22 @@ impl App {
         let from_id = match resolve_fn(&self.state, from_query) {
             Some((id, _, _)) => id,
             None => {
-                self.state.transactions.quick_error =
-                    Some(crate::text::format(self.state.locale, not_found_key, &[("query", from_query)]));
+                self.state.transactions.quick_error = Some(crate::text::format(
+                    self.state.locale,
+                    not_found_key,
+                    &[("query", from_query)],
+                ));
                 return Ok(());
             }
         };
         let to_id = match resolve_fn(&self.state, to_query) {
             Some((id, _, _)) => id,
             None => {
-                self.state.transactions.quick_error =
-                    Some(crate::text::format(self.state.locale, not_found_key, &[("query", to_query)]));
+                self.state.transactions.quick_error = Some(crate::text::format(
+                    self.state.locale,
+                    not_found_key,
+                    &[("query", to_query)],
+                ));
                 return Ok(());
             }
         };
@@ -290,8 +311,7 @@ impl App {
                 TransferType::Wallet => TextKey::QuickAddWalletsMustBeDifferent,
                 TransferType::Flow => TextKey::QuickAddFlowsMustBeDifferent,
             };
-            self.state.transactions.quick_error =
-                Some(t(self.state.locale, same_key).to_string());
+            self.state.transactions.quick_error = Some(t(self.state.locale, same_key).to_string());
             return Ok(());
         }
 
@@ -336,10 +356,12 @@ impl App {
                 self.state.transactions.quick_error = None;
                 self.state.transactions.quick_ambiguous = None;
                 self.set_toast(t(self.state.locale, success_key), ToastLevel::Success);
-                self.load_transactions(true).await?;
+                self.refresh_after_transaction_mutation().await?;
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorSaving) else {
+                    return Ok(());
+                };
                 self.state.transactions.quick_error = Some(msg);
             }
         }

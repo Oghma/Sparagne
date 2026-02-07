@@ -1,14 +1,18 @@
 //! Transaction form input handling.
 //!
-//! Contains methods for transaction form input, focus management, and form initialization.
+//! Contains methods for transaction form input, focus management, and form
+//! initialization.
 
 use crate::{
     app::{
-        format::format_amount_input,
-        ordering::ordered_ids,
-        resolve::{default_wallet_flow, extract_flow_transfer, extract_wallet_flow, extract_wallet_transfer},
         App, Section, ToastLevel, TransactionFormField, TransactionFormState, TransactionsMode,
         TransferField, TransferFormState,
+        format::format_amount_input,
+        ordering::ordered_ids,
+        resolve::{
+            default_wallet_flow, extract_flow_transfer, extract_wallet_flow,
+            extract_wallet_transfer,
+        },
     },
     error::Result,
     text::{TextKey, t},
@@ -78,7 +82,10 @@ impl App {
             TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
                 let (wallet_id, flow_id) = extract_wallet_flow(detail);
                 let (Some(wallet_id), Some(flow_id)) = (wallet_id, flow_id) else {
-                    self.set_toast(t(self.state.locale, TextKey::ValidationTransactionInvalid), ToastLevel::Error);
+                    self.set_toast(
+                        t(self.state.locale, TextKey::ValidationTransactionInvalid),
+                        ToastLevel::Error,
+                    );
                     return Ok(());
                 };
 
@@ -123,7 +130,10 @@ impl App {
                 let (from_id, to_id) = match extract_wallet_transfer(detail, self.state.locale) {
                     Ok(values) => values,
                     Err(_) => {
-                        self.set_toast(t(self.state.locale, TextKey::ValidationTransferWalletInvalid), ToastLevel::Error);
+                        self.set_toast(
+                            t(self.state.locale, TextKey::ValidationTransferWalletInvalid),
+                            ToastLevel::Error,
+                        );
                         return Ok(());
                     }
                 };
@@ -163,7 +173,10 @@ impl App {
                 let (from_id, to_id) = match extract_flow_transfer(detail, self.state.locale) {
                     Ok(values) => values,
                     Err(_) => {
-                        self.set_toast(t(self.state.locale, TextKey::ValidationTransferFlowInvalid), ToastLevel::Error);
+                        self.set_toast(
+                            t(self.state.locale, TextKey::ValidationTransferFlowInvalid),
+                            ToastLevel::Error,
+                        );
                         return Ok(());
                     }
                 };

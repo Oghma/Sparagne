@@ -12,9 +12,7 @@ use crate::{
     app::{AppState, EntityListMode, WalletFormField, wallets_visible_indices},
     text::{TextKey, t},
     ui::{
-        common::themed_block,
-        components::input_dialog::InputDialog,
-        forms::FormFieldRenderer,
+        common::themed_block, components::input_dialog::InputDialog, forms::FormFieldRenderer,
         theme::Theme,
     },
 };
@@ -92,5 +90,8 @@ pub fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         Span::styled(" cancel", Style::default().fg(theme.text_muted)),
     ]));
 
-    frame.render_widget(Paragraph::new(lines).block(themed_block(title, theme.accent, theme)), area);
+    frame.render_widget(
+        Paragraph::new(lines).block(themed_block(title, theme.accent, theme)),
+        area,
+    );
 }

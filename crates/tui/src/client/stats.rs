@@ -5,10 +5,7 @@ use api_types::{stats::Statistic, vault::Vault};
 use super::{Client, ClientError, handle_json};
 
 impl Client {
-    pub async fn stats_get(
-        &self,
-        payload: Vault,
-    ) -> std::result::Result<Statistic, ClientError> {
+    pub async fn stats_get(&self, payload: Vault) -> std::result::Result<Statistic, ClientError> {
         let endpoint = self
             .base_url
             .join("stats/get")

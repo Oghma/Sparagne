@@ -12,7 +12,9 @@ mod wallets;
 
 // Re-export transfer validation functions for use in this module
 pub(crate) use transfer_common::TransferType;
-pub(super) use transfer_common::{validate_different_ids, validate_minimum_count, validate_transfer_amount};
+pub(super) use transfer_common::{
+    validate_different_ids, validate_minimum_count, validate_transfer_amount,
+};
 
 // Re-export stats computation helpers for the UI layer
 pub(crate) use stats::{calculate_net_change, percentage_change};

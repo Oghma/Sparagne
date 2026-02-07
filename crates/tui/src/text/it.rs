@@ -102,10 +102,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::HelpCreateEnvelope => "Crea busta",
         TextKey::HelpRenameEnvelope => "Rinomina busta",
         TextKey::HelpChangeMode => "Cambia modalita'",
-        TextKey::HelpGoals => "Obiettivi",
-        TextKey::HelpComingSoon => "(in arrivo)",
         TextKey::HelpRefreshData => "Aggiorna dati",
         TextKey::HelpSwitchView => "Cambia vista",
+        TextKey::HelpSwitchPanel => "Cambia pannello",
         TextKey::HelpCashSpendWorth => "Cassa/Spese/Patrimonio",
         TextKey::HelpChangePeriod => "Cambia periodo",
         TextKey::HelpCreateCategory => "Crea categoria",
@@ -158,7 +157,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::SuccessMergePreviewOk => "Preview ok. Premi Enter per confermare.",
         TextKey::SuccessDeletedItem => "Eliminato \"{label}\" ({amount})",
         TextKey::SuccessDeletedMultiple => "Eliminate {count} transazioni",
-        TextKey::SuccessCategorizedTransactions => "Categorizzate {count} transazioni come #{category}",
+        TextKey::SuccessCategorizedTransactions => {
+            "Categorizzate {count} transazioni come #{category}"
+        }
         TextKey::SuccessDeletedWallet => "Eliminato \"{name}\"",
         TextKey::SuccessDeletedFlow => "Eliminato \"{name}\"",
 
@@ -188,13 +189,17 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::ErrorSaveDefaults => "Errore salvataggio default.",
         TextKey::ErrorInvalidCredentials => "Credenziali errate o pairing mancante.",
         TextKey::ErrorMembershipLastOwner => "Non puoi rimuovere l'ultimo owner del flow.",
-        TextKey::ErrorMembershipOwnerImmutable => "Non puoi cambiare il ruolo dell'owner del vault.",
+        TextKey::ErrorMembershipOwnerImmutable => {
+            "Non puoi cambiare il ruolo dell'owner del vault."
+        }
         TextKey::ErrorMembershipOwnerRemoveForbidden => "Non puoi rimuovere l'owner del vault.",
         TextKey::ErrorOperationForbidden => "Operazione non permessa.",
         TextKey::ErrorResourceNotFound => "Risorsa non trovata.",
         TextKey::ErrorConflict => "Conflitto: {message}",
         TextKey::ErrorValidation => "Errore di validazione: {message}",
-        TextKey::ErrorValidationAmbiguousVault => "Nome vault ambiguo. Usa \"Main (owner)\" o un vault id.",
+        TextKey::ErrorValidationAmbiguousVault => {
+            "Nome vault ambiguo. Usa \"Main (owner)\" o un vault id."
+        }
         TextKey::ErrorBadRequest => "Richiesta non valida: {message}",
         TextKey::ErrorServerError => "Errore server: {message}",
         TextKey::ErrorServerUnreachable => "Server non raggiungibile: {error}",
@@ -205,7 +210,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::StateUserUnavailable => "Utente non disponibile.",
         TextKey::StateNoWalletAvailable => "Nessun wallet disponibile.",
         TextKey::StateUnallocatedMissing => "Flow Unallocated mancante.",
-        TextKey::StateCannotDetermineWalletTransfer => "Impossibile determinare i wallet del transfer.",
+        TextKey::StateCannotDetermineWalletTransfer => {
+            "Impossibile determinare i wallet del transfer."
+        }
         TextKey::StateCannotDetermineFlowTransfer => "Impossibile determinare i flow del transfer.",
 
         // UI Labels
@@ -307,11 +314,15 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::DialogDeleteTransactionTitle => "Elimina Transazione",
         TextKey::DialogDeleteUndoHint => "Puoi annullare questa azione per 5 secondi.",
         TextKey::DialogDeleteWalletTitle => "Elimina Wallet",
-        TextKey::DialogDeleteWalletHint => "Il wallet sara' nascosto ma potra' essere ripristinato.",
+        TextKey::DialogDeleteWalletHint => {
+            "Il wallet sara' nascosto ma potra' essere ripristinato."
+        }
         TextKey::DialogDeleteFlowTitle => "Elimina Flow",
         TextKey::DialogDeleteFlowHint => "Il flow sara' nascosto ma potra' essere ripristinato.",
         TextKey::DialogDeleteCategoryTitle => "Elimina Categoria",
-        TextKey::DialogDeleteCategoryHint => "La categoria sara' nascosta ma potra' essere ripristinata.",
+        TextKey::DialogDeleteCategoryHint => {
+            "La categoria sara' nascosta ma potra' essere ripristinata."
+        }
         TextKey::DialogThisVault => "questo vault",
         TextKey::DialogTransaction => "Transazione",
         TextKey::DialogConnectionErrorTitle => "Errore Connessione",
@@ -361,9 +372,11 @@ pub fn get(key: TextKey) -> &'static str {
 
         // Quick add
         TextKey::QuickAddTitle => " Quick Add ",
-        TextKey::QuickAddPlaceholder => "Premi [a] per aggiungere una transazione...",
+        TextKey::QuickAddPlaceholder => "Premi [n] per aggiungere una transazione...",
         TextKey::QuickAddToday => "Oggi",
-        TextKey::QuickAddSyntaxHint => "Sintassi: [+]importo nota [#cat] [@wallet] [>busta]  |  + entrata, r rimborso",
+        TextKey::QuickAddSyntaxHint => {
+            "Sintassi: [+]importo nota [#cat] [@wallet] [>busta]  |  + entrata, r rimborso"
+        }
         TextKey::QuickAddSyntaxShort => "[+]importo nota [#categoria] [@wallet] [>busta]",
         TextKey::QuickAddExamples => "   Esempi: ",
         TextKey::QuickAddEnvelopeSuggestions => "Suggerimenti busta: ",
@@ -390,7 +403,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::StatsDistribution => "Distribuzione",
         TextKey::StatsBalanceTrend => "Trend Saldo (30gg)",
         TextKey::StatsMonthlyTrend => "Trend Mensile",
-        TextKey::StatsMonthlyTrendNoData => "Trend mensile non disponibile. Premi 'r' per aggiornare.",
+        TextKey::StatsMonthlyTrendNoData => {
+            "Trend mensile non disponibile. Premi 'r' per aggiornare."
+        }
         TextKey::StatsFinancialTrends => "Trend Finanziari (6 mesi)",
         TextKey::StatsNetSavings => "Risparmio",
         TextKey::StatsTotalIncome => "Entrate Totali",
@@ -427,7 +442,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::CatMergePreviewOkMerge => "Preview OK. Premi [Enter] per unire.",
         TextKey::CatMergePreviewOkConfirm => "Preview OK. Premi [Enter] per confermare.",
         TextKey::CatMergeConflicts => "  Conflitti:",
-        TextKey::CatMergeSelectTarget => "  Seleziona la destinazione e premi [Enter] per l'anteprima",
+        TextKey::CatMergeSelectTarget => {
+            "  Seleziona la destinazione e premi [Enter] per l'anteprima"
+        }
         TextKey::CatMergePreviewAction => " preview/unisci  ",
         TextKey::CatConflictSameCategory => "Non puoi unire una categoria con se stessa",
         TextKey::CatConflictSourceSystem => "Categoria di sistema: {value}",
@@ -453,11 +470,8 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::TxnGroupCategory => "Categoria",
         TextKey::TxnGroupWallet => "Wallet",
         TextKey::TxnGroupEnvelope => "Busta",
-        TextKey::TxnHeaderVoided => "Annullate ",
-        TextKey::TxnHeaderTransfers => "Trasferimenti ",
         TextKey::TxnHeaderFiltersOff => "Filtri [off]",
         TextKey::TxnHeaderSearch => "Cerca: ",
-        TextKey::TxnHeaderHints => "[Ctrl+F] cerca  [g] raggruppa  [f] filtri  [w/W] ambito",
 
         // Transaction detail
         TextKey::TxnDetailTitle => "Dettaglio Transazione",
@@ -495,14 +509,11 @@ pub fn get(key: TextKey) -> &'static str {
 
         // Entity list shared
         TextKey::EntityArchivedOn => "Archiviati: S\u{00ec}",
-        TextKey::EntityArchivedCount => "Archiviati: ",
         TextKey::EntityBadgeArchived => "[archiviato]",
         TextKey::EntityBadgeDefault => "[predefinito]",
 
         // Wallet screen
         TextKey::WalletTitle => " Wallet ",
-        TextKey::WalletStatsLabel => "Totale:",
-        TextKey::WalletEntityLabel => "wallet",
         TextKey::WalletDetailTitle => "Dettaglio Wallet",
         TextKey::WalletNotFound => "Wallet non trovato",
         TextKey::WalletSelectPrompt => "Seleziona un wallet per i dettagli",
@@ -517,8 +528,6 @@ pub fn get(key: TextKey) -> &'static str {
 
         // Flow screen
         TextKey::FlowTitle => " Budget e Obiettivi ",
-        TextKey::FlowStatsLabel => "Allocato:",
-        TextKey::FlowEntityLabel => "buste",
         TextKey::FlowDetailTitle => "Dettaglio Flow",
         TextKey::FlowNotFound => "Flow non trovato",
         TextKey::FlowSelectPrompt => "Seleziona un flow per i dettagli",
@@ -534,26 +543,12 @@ pub fn get(key: TextKey) -> &'static str {
         // Home screen
         TextKey::HomeActivityFeed => "Attivit\u{00e0} Recente",
         TextKey::HomeNetWorth => "Patrimonio Netto",
-        TextKey::HomeQuickBalances => "Saldi Rapidi",
+        TextKey::HomeQuickBalances => "Saldi",
         TextKey::HomeNoDataYet => "Nessun dato",
         TextKey::HomeAddFirstTxn => "[n] per aggiungere la prima transazione",
         TextKey::HomeWallets => "Wallet",
         TextKey::HomeBudgets => "Budget",
         TextKey::HomeNoActivityYet => "Nessuna attivit\u{00e0}",
-
-        // Accounts breadcrumbs
-        TextKey::BreadcrumbAccounts => " Conti",
-        TextKey::BreadcrumbSources => "Fonti",
-        TextKey::BreadcrumbEnvelopes => "Buste",
-        TextKey::BreadcrumbGoals => "Obiettivi",
-        TextKey::BreadcrumbDetail => "Dettaglio",
-        TextKey::BreadcrumbCreate => "Crea",
-        TextKey::BreadcrumbRename => "Rinomina",
-
-        // Accounts tabs
-        TextKey::AccountsCardTitle => "Conti",
-        TextKey::AccountsGoalsPlaceholder => "La vista obiettivi \u{00e8} in arrivo.",
-        TextKey::AccountsGoalsHint => "Usa Fonti per i wallet e Buste per i budget.",
 
         // Settings
         TextKey::SettingsCardTitle => "Impostazioni",
@@ -578,7 +573,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::TransferAvailable => "Disponibili",
         TextKey::TransferBadgeFrom => " [da]",
         TextKey::TransferBadgeTo => " [a]",
-        TextKey::TransferFormHints => "Tab: avanti \u{2022} \u{2191}/\u{2193}: cambia \u{2022} Invio: salva \u{2022} Esc: annulla",
+        TextKey::TransferFormHints => {
+            "Tab: avanti \u{2022} \u{2191}/\u{2193}: cambia \u{2022} Invio: salva \u{2022} Esc: annulla"
+        }
 
         // Filters
         TextKey::FilterTitle => " Filtri ",

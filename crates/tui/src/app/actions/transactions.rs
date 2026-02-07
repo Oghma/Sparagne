@@ -139,12 +139,7 @@ impl App {
             include_transfers: Some(self.state.transactions.include_transfers),
         };
 
-        let res = self
-            .client
-            .transactions_list(
-                payload,
-            )
-            .await;
+        let res = self.client.transactions_list(payload).await;
 
         match res {
             Ok(TransactionListResponse {
@@ -163,7 +158,9 @@ impl App {
                 self.refresh_transactions_search().await?;
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else {
+                    return Ok(());
+                };
                 self.state.transactions.error = Some(msg);
             }
         }
@@ -205,12 +202,10 @@ impl App {
 
         let res = self
             .client
-            .transaction_detail(
-                TransactionGet {
-                    vault_id: vault_id.to_string(),
-                    id: selected.id,
-                },
-            )
+            .transaction_detail(TransactionGet {
+                vault_id: vault_id.to_string(),
+                id: selected.id,
+            })
             .await;
 
         match res {
@@ -222,7 +217,9 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else {
+                    return Ok(());
+                };
                 self.state.transactions.error = Some(msg);
             }
         }
@@ -246,12 +243,10 @@ impl App {
             .ok_or_else(|| AppError::Terminal("missing vault id".to_string()))?;
         let res = self
             .client
-            .transaction_detail(
-                TransactionGet {
-                    vault_id: vault_id.to_string(),
-                    id: transaction_id,
-                },
-            )
+            .transaction_detail(TransactionGet {
+                vault_id: vault_id.to_string(),
+                id: transaction_id,
+            })
             .await;
 
         match res {
@@ -263,7 +258,9 @@ impl App {
                 self.connection_ok(None);
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else {
+                    return Ok(());
+                };
                 self.state.transactions.error = Some(msg);
             }
         }
@@ -296,11 +293,16 @@ impl App {
             Ok(()) => {
                 self.state.transactions.mode = TransactionsMode::List;
                 self.state.transactions.detail = None;
-                self.set_toast(t(self.state.locale, TextKey::SuccessTransactionVoided), ToastLevel::Success);
+                self.set_toast(
+                    t(self.state.locale, TextKey::SuccessTransactionVoided),
+                    ToastLevel::Success,
+                );
                 self.load_transactions(true).await?;
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorVoiding) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorVoiding) else {
+                    return Ok(());
+                };
                 self.state.transactions.error = Some(msg);
             }
         }
@@ -336,11 +338,16 @@ impl App {
                     self.state.last_flow_id = Some(flow_id);
                 }
                 self.state.transactions.last_created_id = Some(created.id);
-                self.set_toast(t(self.state.locale, TextKey::SuccessTransactionRepeated), ToastLevel::Success);
+                self.set_toast(
+                    t(self.state.locale, TextKey::SuccessTransactionRepeated),
+                    ToastLevel::Success,
+                );
                 self.load_transactions(true).await?;
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorRepeating) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorRepeating) else {
+                    return Ok(());
+                };
                 self.state.transactions.error = Some(msg);
             }
         }

@@ -19,9 +19,7 @@ impl App {
         }
 
         // Members section input
-        if self.is_settings_tab(SettingsTab::Members)
-            && self.handle_members_input(ch).await?
-        {
+        if self.is_settings_tab(SettingsTab::Members) && self.handle_members_input(ch).await? {
             return Ok(true);
         }
 

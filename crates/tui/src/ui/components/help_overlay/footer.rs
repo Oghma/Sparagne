@@ -6,7 +6,10 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph},
 };
 
-use crate::{text::{Locale, TextKey, t}, ui::theme::Theme};
+use crate::{
+    text::{Locale, TextKey, t},
+    ui::theme::Theme,
+};
 
 pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, locale: Locale, theme: &Theme) {
     let block = Block::default()

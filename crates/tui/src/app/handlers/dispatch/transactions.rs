@@ -1,9 +1,13 @@
 //! Transactions section dispatch handling.
 
-use crate::app::state::{TransactionsMode, TransferField, FilterField};
-use crate::app::App;
-use crate::error::Result;
-use crate::ui::keymap::AppAction;
+use crate::{
+    app::{
+        App,
+        state::{FilterField, TransactionsMode, TransferField},
+    },
+    error::Result,
+    ui::keymap::AppAction,
+};
 
 impl App {
     /// Dispatches actions for the Transactions section.
@@ -54,7 +58,7 @@ impl App {
                     FilterField::To => {
                         self.state.transactions.filter.to_input.pop();
                     }
-                    FilterField::Kinds => {}
+                    FilterField::Kinds | FilterField::Transfers => {}
                 }
                 Ok(true)
             }

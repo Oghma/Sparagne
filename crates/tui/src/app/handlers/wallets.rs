@@ -20,7 +20,8 @@ impl App {
 
     pub(crate) fn start_wallet_rename(&mut self) {
         let Some(name) = self.selected_wallet().map(|wallet| wallet.name.clone()) else {
-            self.state.wallets.error = Some(t(self.state.locale, TextKey::ValidationNoWalletSelected).to_string());
+            self.state.wallets.error =
+                Some(t(self.state.locale, TextKey::ValidationNoWalletSelected).to_string());
             return;
         };
         self.reset_wallet_form();

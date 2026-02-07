@@ -23,7 +23,8 @@ use crate::{
 // in sibling modules continue to work.
 pub(crate) use crate::ui::common::{format_date_label, resolve_flow_name, resolve_wallet_name};
 
-/// Returns the scope label for the header (e.g., "All", "Wallet: Main", "Flow: Income")
+/// Returns the scope label for the header (e.g., "All", "Wallet: Main", "Flow:
+/// Income")
 pub fn scope_label(state: &AppState) -> String {
     let locale = state.locale;
     if let Some(flow_id) = state.transactions.scope_flow_id {
@@ -47,7 +48,9 @@ pub fn scope_label(state: &AppState) -> String {
                 snap.wallets
                     .iter()
                     .find(|wallet| wallet.id == wallet_id)
-                    .map(|wallet| format!("{}{}", t(locale, TextKey::ScopeWalletLabel), wallet.name))
+                    .map(|wallet| {
+                        format!("{}{}", t(locale, TextKey::ScopeWalletLabel), wallet.name)
+                    })
             })
             .unwrap_or_else(|| t(locale, TextKey::ScopeWalletUnknown).to_string());
     }
@@ -123,7 +126,6 @@ pub fn group_total_span(total_minor: i64, currency: Currency, theme: &Theme) -> 
         Style::default().fg(color).add_modifier(Modifier::BOLD),
     )
 }
-
 
 /// Returns recent wallet names
 pub fn recent_wallet_names(state: &AppState) -> Vec<String> {
@@ -204,19 +206,24 @@ pub fn grouping_key_label(
             if let Some(id) = tx.wallet_id {
                 (format!("wallet:{id}"), resolve_wallet_name(state, id))
             } else {
-                ("wallet:none".to_string(), t(state.locale, TextKey::TxnNoWallet).to_string())
+                (
+                    "wallet:none".to_string(),
+                    t(state.locale, TextKey::TxnNoWallet).to_string(),
+                )
             }
         }
         GroupingMode::Envelope => {
             if let Some(id) = tx.flow_id {
                 (format!("flow:{id}"), resolve_flow_name(state, id))
             } else {
-                ("flow:none".to_string(), t(state.locale, TextKey::TxnNoEnvelope).to_string())
+                (
+                    "flow:none".to_string(),
+                    t(state.locale, TextKey::TxnNoEnvelope).to_string(),
+                )
             }
         }
     }
 }
-
 
 /// Builds a recents summary line for the form footer
 pub fn recents_line(state: &AppState) -> Option<String> {
@@ -230,7 +237,11 @@ pub fn recents_line(state: &AppState) -> Option<String> {
         .map(|cat| format!("#{cat}"))
         .collect::<Vec<_>>();
     if !categories.is_empty() {
-        parts.push(format!("{}{}", t(locale, TextKey::TxnRecentsCategories), categories.join(" ")));
+        parts.push(format!(
+            "{}{}",
+            t(locale, TextKey::TxnRecentsCategories),
+            categories.join(" ")
+        ));
     }
 
     let wallets = recent_wallet_names(state)
@@ -238,17 +249,32 @@ pub fn recents_line(state: &AppState) -> Option<String> {
         .take(3)
         .collect::<Vec<_>>();
     if !wallets.is_empty() {
-        parts.push(format!("{}{}", t(locale, TextKey::TxnRecentsWallet), wallets.join(", ")));
+        parts.push(format!(
+            "{}{}",
+            t(locale, TextKey::TxnRecentsWallet),
+            wallets.join(", ")
+        ));
     }
 
-    let flows = recent_flow_names(state).into_iter().take(3).collect::<Vec<_>>();
+    let flows = recent_flow_names(state)
+        .into_iter()
+        .take(3)
+        .collect::<Vec<_>>();
     if !flows.is_empty() {
-        parts.push(format!("{}{}", t(locale, TextKey::TxnRecentsFlow), flows.join(", ")));
+        parts.push(format!(
+            "{}{}",
+            t(locale, TextKey::TxnRecentsFlow),
+            flows.join(", ")
+        ));
     }
 
     if parts.is_empty() {
         None
     } else {
-        Some(format!("{}{}", t(locale, TextKey::TxnRecentsPrefix), parts.join(" • ")))
+        Some(format!(
+            "{}{}",
+            t(locale, TextKey::TxnRecentsPrefix),
+            parts.join(" • ")
+        ))
     }
 }

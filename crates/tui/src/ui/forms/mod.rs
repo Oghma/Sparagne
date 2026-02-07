@@ -62,7 +62,10 @@ impl FormFieldRenderer {
             // Show error message
             if let ValidationResult::Invalid(msg) = &state.validation {
                 spans.push(Span::raw(" "));
-                spans.push(Span::styled(msg.clone(), Style::default().fg(theme.negative)));
+                spans.push(Span::styled(
+                    msg.clone(),
+                    Style::default().fg(theme.negative),
+                ));
             }
         }
 

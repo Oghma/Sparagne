@@ -35,7 +35,6 @@ fn centered_box(width: u16, height: u16, area: Rect) -> Rect {
 }
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-
     // Centered login box - compact
     let box_width = 32;
     let box_height = 6;

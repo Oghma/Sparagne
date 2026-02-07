@@ -25,7 +25,11 @@ pub(crate) fn validate_transfer_amount(
 }
 
 /// Validates that two IDs are different
-pub(crate) fn validate_different_ids<T: Eq>(from: T, to: T, locale: Locale) -> std::result::Result<(), String> {
+pub(crate) fn validate_different_ids<T: Eq>(
+    from: T,
+    to: T,
+    locale: Locale,
+) -> std::result::Result<(), String> {
     if from == to {
         Err(t(locale, TextKey::ValidationTransferSameElements).to_string())
     } else {

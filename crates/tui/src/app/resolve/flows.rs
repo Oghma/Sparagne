@@ -6,8 +6,7 @@ use api_types::vault::FlowView;
 
 use crate::app::AppState;
 
-use super::super::query::normalize_query;
-use super::super::ordering::ordered_flow_ids_from_state;
+use super::super::{ordering::ordered_flow_ids_from_state, query::normalize_query};
 
 /// Resolves a flow name query to a flow ID and name.
 ///

@@ -1,8 +1,5 @@
 use crate::{
-    app::{
-        App, ToastLevel, TransactionsMode, TransferFormState,
-        actions::TransferType,
-    },
+    app::{App, ToastLevel, TransactionsMode, TransferFormState, actions::TransferType},
     error::Result,
     text::{TextKey, t},
 };
@@ -18,7 +15,9 @@ impl App {
             TransferType::Wallet => self.active_wallet_ids(),
             TransferType::Flow => self.active_flow_ids(),
         };
-        if let Err(message) = super::super::validate_minimum_count(ids.len(), kind, self.state.locale) {
+        if let Err(message) =
+            super::super::validate_minimum_count(ids.len(), kind, self.state.locale)
+        {
             self.state.transactions.transfer.error = Some(message);
             return Ok(());
         }
@@ -115,12 +114,17 @@ impl App {
             match res {
                 Ok(()) => {
                     self.state.transactions.transfer = TransferFormState::default();
-                    self.set_toast(t(self.state.locale, success_update_key), ToastLevel::Success);
-                    self.load_transactions(true).await?;
+                    self.set_toast(
+                        t(self.state.locale, success_update_key),
+                        ToastLevel::Success,
+                    );
+                    self.refresh_after_transaction_mutation().await?;
                     self.open_transaction_detail_by_id(transaction_id).await?;
                 }
                 Err(err) => {
-                    let Some(msg) = self.on_api_error_toast(err, error_key) else { return Ok(()); };
+                    let Some(msg) = self.on_api_error_toast(err, error_key) else {
+                        return Ok(());
+                    };
                     self.state.transactions.transfer.error = Some(msg);
                 }
             }
@@ -165,11 +169,16 @@ impl App {
                     self.state.transactions.mode = TransactionsMode::List;
                     self.state.transactions.transfer = TransferFormState::default();
                     self.state.transactions.last_created_id = Some(created.id);
-                    self.set_toast(t(self.state.locale, success_create_key), ToastLevel::Success);
-                    self.load_transactions(true).await?;
+                    self.set_toast(
+                        t(self.state.locale, success_create_key),
+                        ToastLevel::Success,
+                    );
+                    self.refresh_after_transaction_mutation().await?;
                 }
                 Err(err) => {
-                    let Some(msg) = self.on_api_error_toast(err, error_key) else { return Ok(()); };
+                    let Some(msg) = self.on_api_error_toast(err, error_key) else {
+                        return Ok(());
+                    };
                     self.state.transactions.transfer.error = Some(msg);
                 }
             }

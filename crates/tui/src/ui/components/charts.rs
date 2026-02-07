@@ -66,8 +66,11 @@ pub fn render_pie_chart(
     }
 
     if total == 0 || inner.width < 4 || inner.height < 3 {
-        let empty = Paragraph::new(Span::styled("No data", Style::default().fg(theme.text_muted)))
-            .alignment(Alignment::Center);
+        let empty = Paragraph::new(Span::styled(
+            "No data",
+            Style::default().fg(theme.text_muted),
+        ))
+        .alignment(Alignment::Center);
         frame.render_widget(empty, inner);
         return;
     }

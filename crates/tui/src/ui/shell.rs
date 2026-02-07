@@ -9,11 +9,10 @@ use ratatui::{
 use crate::{
     app::{AppState, Section, SettingsTab},
     text::{TextKey, t},
-    ui::{components, screens, Theme},
+    ui::{Theme, components, screens},
 };
 
 pub(crate) fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-
     // Main layout: header, content, bottom bar
     let layout = Layout::default()
         .direction(Direction::Vertical)
@@ -52,11 +51,6 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         .split(area);
 
     // Pass sub-tabs for breadcrumb display
-    let accounts_tab = if state.section == Section::Accounts {
-        Some(state.accounts_tab)
-    } else {
-        None
-    };
     let settings_tab = if state.section == Section::Settings {
         Some(state.settings_tab)
     } else {
@@ -67,7 +61,6 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Th
         frame,
         layout[0],
         state.section,
-        accounts_tab,
         settings_tab,
         state.locale,
         theme,
@@ -84,9 +77,15 @@ fn render_status_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .unwrap_or(t(locale, TextKey::ShellVaultFallback));
     let user = state.login.username.as_str();
     let line = Line::from(vec![
-        Span::styled(t(locale, TextKey::ShellVaultLabel), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::ShellVaultLabel),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::raw(format!(": {vault} | ")),
-        Span::styled(t(locale, TextKey::ShellUserLabel), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::ShellUserLabel),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::raw(format!(": {user}")),
     ]);
 
@@ -252,7 +251,7 @@ fn get_transactions_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
 fn get_accounts_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     let locale = state.locale;
     match state.accounts_tab {
-        crate::app::AccountsTab::Sources => match state.wallets.mode {
+        crate::app::AccountsTab::Wallets => match state.wallets.mode {
             crate::app::EntityListMode::List => {
                 vec![components::hints::KeyHint::new(
                     "c",
@@ -264,7 +263,7 @@ fn get_accounts_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
                 components::hints::common::form_editing(locale)
             }
         },
-        crate::app::AccountsTab::Envelopes => match state.flows.mode {
+        crate::app::AccountsTab::Budget => match state.flows.mode {
             crate::app::EntityListMode::List => {
                 vec![components::hints::KeyHint::new(
                     "c",
@@ -276,7 +275,6 @@ fn get_accounts_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
                 components::hints::common::form_editing(locale)
             }
         },
-        crate::app::AccountsTab::Goals => vec![],
     }
 }
 

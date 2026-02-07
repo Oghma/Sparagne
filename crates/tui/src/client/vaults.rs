@@ -5,10 +5,7 @@ use api_types::vault::{Vault, VaultList, VaultListResponse, VaultNew, VaultSnaps
 use super::{Client, ClientError, handle_empty, handle_json};
 
 impl Client {
-    pub async fn vault_get(
-        &self,
-        payload: &Vault,
-    ) -> std::result::Result<Vault, ClientError> {
+    pub async fn vault_get(&self, payload: &Vault) -> std::result::Result<Vault, ClientError> {
         let endpoint = self
             .base_url
             .join("vault/get")
@@ -43,9 +40,7 @@ impl Client {
         handle_json(res).await
     }
 
-    pub async fn vault_list(
-        &self,
-    ) -> std::result::Result<VaultListResponse, ClientError> {
+    pub async fn vault_list(&self) -> std::result::Result<VaultListResponse, ClientError> {
         let endpoint = self
             .base_url
             .join("vault/list")
@@ -61,10 +56,7 @@ impl Client {
         handle_json(res).await
     }
 
-    pub async fn vault_new(
-        &self,
-        payload: VaultNew,
-    ) -> std::result::Result<Vault, ClientError> {
+    pub async fn vault_new(&self, payload: VaultNew) -> std::result::Result<Vault, ClientError> {
         let endpoint = self
             .base_url
             .join("vault/new")
@@ -80,10 +72,7 @@ impl Client {
         handle_json(res).await
     }
 
-    pub async fn vault_delete(
-        &self,
-        vault_id: &str,
-    ) -> std::result::Result<(), ClientError> {
+    pub async fn vault_delete(&self, vault_id: &str) -> std::result::Result<(), ClientError> {
         let endpoint = self
             .base_url
             .join(&format!("vault/{vault_id}"))

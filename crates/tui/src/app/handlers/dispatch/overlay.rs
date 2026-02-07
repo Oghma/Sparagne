@@ -1,16 +1,15 @@
 //! Overlay dispatch handling.
 //!
-//! Handles actions when modal overlays are active (confirm dialogs, error dialogs,
-//! bulk category, grouping, help, palette, global search).
+//! Handles actions when modal overlays are active (confirm dialogs, error
+//! dialogs, bulk category, grouping, help, palette, global search).
 
-use crate::app::App;
-use crate::error::Result;
-use crate::ui::keymap::AppAction;
+use crate::{app::App, error::Result, ui::keymap::AppAction};
 
 impl App {
     /// Checks if an overlay is active and handles the action if so.
     ///
-    /// Returns `Ok(true)` if an overlay consumed the action, `Ok(false)` otherwise.
+    /// Returns `Ok(true)` if an overlay consumed the action, `Ok(false)`
+    /// otherwise.
     pub(crate) async fn dispatch_overlay(&mut self, action: AppAction) -> Result<bool> {
         // Modal dialogs take priority
         if self.state.overlays.has_confirm_dialog() {

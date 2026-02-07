@@ -10,7 +10,11 @@ use ratatui::{
 
 use engine::Money;
 
-use crate::{app::AppState, text::{TextKey, t}, ui::{components::card::Card, theme::Theme}};
+use crate::{
+    app::AppState,
+    text::{TextKey, t},
+    ui::{components::card::Card, theme::Theme},
+};
 
 use super::common::{get_currency, render_empty_state, truncate};
 
@@ -34,6 +38,14 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
 
     let mut lines: Vec<Line> = Vec::new();
 
+    // Dynamic name width: reserve space for prefix, padding, and amount
+    let amount_reserve = 15; // e.g. "+12,345.67 EUR"
+    let prefix_width = 5; // "  💰 " or "  📦 "
+    let min_pad = 2;
+    let max_name_width = (inner.width as usize)
+        .saturating_sub(prefix_width + min_pad + amount_reserve)
+        .max(8);
+
     // Wallets section
     let mut wallets: Vec<_> = snapshot.wallets.iter().filter(|w| !w.archived).collect();
     wallets.sort_by(|a, b| b.balance_minor.cmp(&a.balance_minor));
@@ -56,16 +68,20 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
             } else {
                 theme.negative
             };
+            let amount_str = Money::new(wallet.balance_minor).format(currency);
+            let name_len = prefix_width + max_name_width;
+            let pad = (inner.width as usize).saturating_sub(name_len + amount_str.len());
             lines.push(Line::from(vec![
                 Span::raw("  💰 "),
                 Span::styled(
-                    format!("{:<12}", truncate(&wallet.name, 12)),
+                    format!(
+                        "{:<max_name_width$}",
+                        truncate(&wallet.name, max_name_width)
+                    ),
                     Style::default().fg(theme.text),
                 ),
-                Span::styled(
-                    Money::new(wallet.balance_minor).format(currency),
-                    Style::default().fg(balance_color),
-                ),
+                Span::raw(" ".repeat(pad)),
+                Span::styled(amount_str, Style::default().fg(balance_color)),
             ]));
         }
     }
@@ -96,16 +112,17 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
                 } else {
                     theme.negative
                 };
+                let amount_str = Money::new(flow.balance_minor).format(currency);
+                let name_len = prefix_width + max_name_width;
+                let pad = (inner.width as usize).saturating_sub(name_len + amount_str.len());
                 lines.push(Line::from(vec![
                     Span::raw("  📦 "),
                     Span::styled(
-                        format!("{:<12}", truncate(&flow.name, 12)),
+                        format!("{:<max_name_width$}", truncate(&flow.name, max_name_width)),
                         Style::default().fg(theme.text),
                     ),
-                    Span::styled(
-                        Money::new(flow.balance_minor).format(currency),
-                        Style::default().fg(balance_color),
-                    ),
+                    Span::raw(" ".repeat(pad)),
+                    Span::styled(amount_str, Style::default().fg(balance_color)),
                 ]));
             }
         }

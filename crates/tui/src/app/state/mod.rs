@@ -23,7 +23,7 @@ pub use overlays::{
     BulkCategoryDialogState, ConfirmAction, ConfirmDialogKind, ConfirmDialogState, ErrorAction,
     ErrorDialogKind, ErrorDialogState, GroupingDialogState, OverlayState,
 };
-pub use palette::{CommandPaletteState, PaletteCommand, MRU_LIMIT};
+pub use palette::{CommandPaletteState, MRU_LIMIT, PaletteCommand};
 pub use search::{GlobalSearchState, SearchResult, SearchResultKind};
 pub use selectable::EntityListMode;
 pub(crate) use selectable::{
@@ -97,12 +97,11 @@ pub struct PreferencesState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccountsTab {
-    Sources,
-    Envelopes,
-    Goals,
+    Wallets,
+    Budget,
 }
 
-cyclic_enum!(AccountsTab { Sources => 0, Envelopes => 1, Goals => 2 });
+cyclic_enum!(AccountsTab { Wallets => 0, Budget => 1 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoginField {

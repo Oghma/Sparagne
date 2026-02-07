@@ -20,7 +20,9 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, TransactionFormField, ordered_flow_ids_from_state, ordered_wallet_ids_from_state},
+    app::{
+        AppState, TransactionFormField, ordered_flow_ids_from_state, ordered_wallet_ids_from_state,
+    },
     text::{TextKey, t},
     ui::{common::themed_block, components::centered_rect, theme::Theme},
 };
@@ -196,13 +198,25 @@ fn render_form_fields(
         Line::from(""),
         Line::from(vec![
             Span::styled("[Enter]", Style::default().fg(theme.accent)),
-            Span::styled(t(locale, TextKey::FormHintSave), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::FormHintSave),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled("[Esc]", Style::default().fg(theme.accent)),
-            Span::styled(t(locale, TextKey::FormHintCancel), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::FormHintCancel),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled("[Tab]", Style::default().fg(theme.accent)),
-            Span::styled(t(locale, TextKey::FormHintNextField), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::FormHintNextField),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled("[↑↓]", Style::default().fg(theme.accent)),
-            Span::styled(t(locale, TextKey::FormHintCycleChoices), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::FormHintCycleChoices),
+                Style::default().fg(theme.text_muted),
+            ),
         ]),
     ];
 
@@ -248,10 +262,7 @@ fn render_form_bottom(
         list_layout[0],
         PickerListConfig {
             title: t(state.locale, TextKey::SectionWallets),
-            items: wallets
-                .iter()
-                .map(|wallet| wallet.name.as_str())
-                .collect(),
+            items: wallets.iter().map(|wallet| wallet.name.as_str()).collect(),
             selected: form.wallet_index,
             focused: form.focus == TransactionFormField::Wallet,
             empty_text: t(state.locale, TextKey::UiNoElement),
@@ -263,10 +274,7 @@ fn render_form_bottom(
         list_layout[1],
         PickerListConfig {
             title: t(state.locale, TextKey::SectionFlows),
-            items: flows
-                .iter()
-                .map(|flow| flow.name.as_str())
-                .collect(),
+            items: flows.iter().map(|flow| flow.name.as_str()).collect(),
             selected: form.flow_index,
             focused: form.focus == TransactionFormField::Flow,
             empty_text: t(state.locale, TextKey::UiNoElement),
@@ -361,8 +369,12 @@ fn render_picker_list(
 
 /// Renders the recent categories list
 fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let block = themed_block(t(state.locale, TextKey::UiRecentCategories), theme.border, theme)
-        .style(Style::default().bg(theme.background));
+    let block = themed_block(
+        t(state.locale, TextKey::UiRecentCategories),
+        theme.border,
+        theme,
+    )
+    .style(Style::default().bg(theme.background));
 
     if state.transactions.recent_categories.is_empty() {
         frame.render_widget(

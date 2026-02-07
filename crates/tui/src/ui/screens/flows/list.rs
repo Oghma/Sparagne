@@ -7,7 +7,7 @@ use crate::{
     text::{TextKey, t},
     ui::{
         common::get_currency,
-        screens::entity_list::{EntityItem, EntityListConfig, EntityListStats, render_entity_list},
+        screens::entity_list::{EntityItem, EntityListConfig, render_entity_list},
         theme::Theme,
     },
 };
@@ -15,40 +15,32 @@ use crate::{
 use super::form::render_form;
 
 /// Render the flow list view.
-pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+pub fn render_list(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    state: &AppState,
+    theme: &Theme,
+    focused: bool,
+) {
     let show_form = state.flows.mode == EntityListMode::Create;
 
-    let (total_balance, flow_count, archived_count) = state
-        .snapshot
-        .as_ref()
-        .map(|snap| {
-            let balance: i64 = snap
-                .flows
-                .iter()
-                .filter(|f| !f.archived)
-                .map(|f| f.balance_minor)
-                .sum();
-            let count = snap.flows.iter().filter(|f| !f.archived).count();
-            let archived = snap.flows.iter().filter(|f| f.archived).count();
-            (balance, count, archived)
-        })
-        .unwrap_or((0, 0, 0));
-
-    let currency = get_currency(state);
-    let visible = flows_visible_indices(state);
-    let has_snapshot = state.snapshot.is_some();
-
-    let max_balance = state
+    let total_balance: i64 = state
         .snapshot
         .as_ref()
         .map(|snap| {
             snap.flows
                 .iter()
-                .map(|f| f.balance_minor.unsigned_abs())
-                .max()
-                .unwrap_or(1) as i64
+                .filter(|f| !f.archived)
+                .map(|f| f.balance_minor)
+                .sum()
         })
-        .unwrap_or(1);
+        .unwrap_or(0);
+
+    let currency = get_currency(state);
+    let visible = flows_visible_indices(state);
+    let has_snapshot = state.snapshot.is_some();
+
+    let max_balance = total_balance.unsigned_abs().max(1) as i64;
 
     let items: Vec<EntityItem<'_>> = if let Some(snap) = state.snapshot.as_ref() {
         visible
@@ -79,15 +71,7 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
     let locale = state.locale;
     let config = EntityListConfig {
         title: t(locale, TextKey::FlowTitle),
-        stats_label: t(locale, TextKey::FlowStatsLabel),
-        entity_label: t(locale, TextKey::FlowEntityLabel),
         form_height: 8,
-        item_hints: &[
-            ("[e]", "dit "),
-            ("[m]", "ode "),
-            ("[a]", "rchive "),
-            ("[Enter]", " details"),
-        ],
         welcome_title: t(locale, TextKey::FlowWelcomeTitle),
         welcome_desc: &[
             t(locale, TextKey::FlowWelcomeDesc1),
@@ -97,12 +81,7 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
             ("[c]", t(locale, TextKey::FlowHintQuickCreate)),
             ("[n]", t(locale, TextKey::FlowHintCreateCap)),
         ],
-    };
-
-    let stats = EntityListStats {
-        total_balance,
-        count: flow_count,
-        archived_count,
+        border_color: if focused { theme.accent } else { theme.border },
     };
 
     render_entity_list(
@@ -114,9 +93,7 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         state.flows.search.active,
         state.flows.search.query.trim(),
         state.flows.show_archived,
-        &stats,
         state.flows.selected,
-        state.flows.mode == EntityListMode::List,
         &items,
         max_balance,
         currency,

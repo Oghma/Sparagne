@@ -30,36 +30,26 @@ pub(crate) struct EntityItem<'a> {
     pub emoji: &'static str,
 }
 
-/// Aggregated stats for the entity list header.
-pub(crate) struct EntityListStats {
-    pub total_balance: i64,
-    pub count: usize,
-    pub archived_count: usize,
-}
-
 /// Configuration for an entity list screen.
 pub(crate) struct EntityListConfig<'a> {
     /// Block title (e.g. " Wallets ", " Budgets & Goals ").
     pub title: &'a str,
-    /// Stats header label (e.g. "Total:", "Allocated:").
-    pub stats_label: &'a str,
-    /// Entity count label (e.g. "wallets", "envelopes").
-    pub entity_label: &'a str,
     /// Form height when showing the create form.
     pub form_height: u16,
-    /// Action hints shown on the selected item line.
-    pub item_hints: &'a [(&'static str, &'static str)],
     /// Welcome empty state icon (e.g. "💰 Welcome!").
     pub welcome_title: &'a str,
     /// Welcome empty state description lines.
     pub welcome_desc: &'a [&'a str],
     /// Welcome create hints (pairs of key + label).
     pub welcome_hints: &'a [(&'static str, &'static str)],
+    /// Border color for the list block (accent when focused, dim when not).
+    pub border_color: ratatui::style::Color,
 }
 
 /// Renders the full entity list screen.
 ///
-/// This is the shared implementation called by both wallets/list.rs and flows/list.rs.
+/// This is the shared implementation called by both wallets/list.rs and
+/// flows/list.rs.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_entity_list(
     frame: &mut Frame<'_>,
@@ -70,9 +60,7 @@ pub(crate) fn render_entity_list(
     search_active: bool,
     search_query: &str,
     show_archived: bool,
-    stats: &EntityListStats,
     selected: usize,
-    is_list_mode: bool,
     items: &[EntityItem<'_>],
     max_balance: i64,
     currency: Currency,
@@ -82,13 +70,9 @@ pub(crate) fn render_entity_list(
     theme: &Theme,
 ) {
     let constraints = if show_form {
-        vec![
-            Constraint::Length(2),
-            Constraint::Length(config.form_height),
-            Constraint::Min(0),
-        ]
+        vec![Constraint::Length(config.form_height), Constraint::Min(0)]
     } else {
-        vec![Constraint::Length(2), Constraint::Min(0)]
+        vec![Constraint::Min(0)]
     };
 
     let layout = Layout::default()
@@ -96,21 +80,18 @@ pub(crate) fn render_entity_list(
         .constraints(constraints)
         .split(area);
 
-    // Render stats header
-    render_stats_header(frame, layout[0], config, stats, currency, locale, theme);
-
     let list_area = if show_form {
-        render_form_fn(frame, layout[1]);
-        layout[2]
-    } else {
+        render_form_fn(frame, layout[0]);
         layout[1]
+    } else {
+        layout[0]
     };
 
     // Search bar in footer
     let mut header_spans = render_search_header_spans(search_active, search_query, locale, theme);
 
     if show_archived {
-        header_spans.push(Span::styled("  ", Style::default()));
+        header_spans.push(Span::raw("  "));
         header_spans.push(Span::styled(
             t(locale, TextKey::EntityArchivedOn),
             Style::default().fg(theme.warning),
@@ -120,8 +101,11 @@ pub(crate) fn render_entity_list(
     let list_block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border))
-        .title(Span::styled(config.title, Style::default().fg(theme.accent)))
+        .border_style(Style::default().fg(config.border_color))
+        .title(Span::styled(
+            config.title,
+            Style::default().fg(theme.accent),
+        ))
         .title_bottom(Line::from(header_spans).centered());
 
     if !has_snapshot {
@@ -140,9 +124,7 @@ pub(crate) fn render_entity_list(
     // Build list items
     let list_items: Vec<ListItem<'_>> = items
         .iter()
-        .enumerate()
-        .map(|(list_idx, item)| {
-            let is_selected = list_idx == selected;
+        .map(|item| {
             let name_style = if item.archived {
                 Style::default().fg(theme.text_muted)
             } else {
@@ -185,21 +167,20 @@ pub(crate) fn render_entity_list(
                 ));
             }
 
-            if is_selected && is_list_mode {
-                let mut hints = vec![Span::raw("     ")];
-                for (key, label) in config.item_hints {
-                    hints.push(Span::styled(*key, Style::default().fg(theme.accent)));
-                    hints.push(Span::styled(*label, Style::default().fg(theme.text_muted)));
-                }
-                ListItem::new(vec![Line::from(spans), Line::from(hints)])
-            } else {
-                ListItem::new(Line::from(spans))
-            }
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
     if list_items.is_empty() {
-        render_empty_state(frame, list_area, list_block, search_query, config, locale, theme);
+        render_empty_state(
+            frame,
+            list_area,
+            list_block,
+            search_query,
+            config,
+            locale,
+            theme,
+        );
         return;
     }
 
@@ -250,57 +231,14 @@ fn render_search_header_spans<'a>(
         vec![
             Span::styled("[c]", Style::default().fg(theme.accent)),
             Span::styled(" create  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[e]", Style::default().fg(theme.accent)),
+            Span::styled(" edit  ", Style::default().fg(theme.text_muted)),
             Span::styled("[Ctrl+F]", Style::default().fg(theme.accent)),
             Span::styled(" search  ", Style::default().fg(theme.text_muted)),
             Span::styled("[Enter]", Style::default().fg(theme.accent)),
             Span::styled(" details", Style::default().fg(theme.text_muted)),
         ]
     }
-}
-
-fn render_stats_header(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    config: &EntityListConfig<'_>,
-    stats: &EntityListStats,
-    currency: Currency,
-    locale: Locale,
-    theme: &Theme,
-) {
-    let total_balance = stats.total_balance;
-    let count = stats.count;
-    let archived_count = stats.archived_count;
-    let balance_color = if total_balance >= 0 {
-        theme.positive
-    } else {
-        theme.negative
-    };
-
-    let label = config.stats_label;
-    let entity_label = config.entity_label;
-    let mut spans = vec![
-        Span::styled(format!(" {label} "), Style::default().fg(theme.text_muted)),
-        Span::styled(
-            Money::new(total_balance).format(currency),
-            Style::default()
-                .fg(balance_color)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            format!(" ({count} {entity_label})"),
-            Style::default().fg(theme.text_muted),
-        ),
-    ];
-
-    if archived_count > 0 {
-        spans.push(Span::styled("  │  ", Style::default().fg(theme.border)));
-        spans.push(Span::styled(
-            format!("{}{archived_count}", t(locale, TextKey::EntityArchivedCount)),
-            Style::default().fg(theme.warning),
-        ));
-    }
-
-    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn render_empty_state(

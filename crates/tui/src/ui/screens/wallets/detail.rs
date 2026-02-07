@@ -24,11 +24,23 @@ use crate::{
 pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let title = t(state.locale, TextKey::WalletDetailTitle);
     let Some(snapshot) = state.snapshot.as_ref() else {
-        render_empty(frame, area, theme, title, t(state.locale, TextKey::LoadingGeneric));
+        render_empty_state(
+            frame,
+            area,
+            title,
+            t(state.locale, TextKey::LoadingGeneric),
+            theme,
+        );
         return;
     };
     let Some(detail_id) = state.wallets.detail.wallet_id else {
-        render_empty(frame, area, theme, title, t(state.locale, TextKey::WalletSelectPrompt));
+        render_empty_state(
+            frame,
+            area,
+            title,
+            t(state.locale, TextKey::WalletSelectPrompt),
+            theme,
+        );
         return;
     };
     let Some(wallet) = snapshot
@@ -36,7 +48,13 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .iter()
         .find(|wallet| wallet.id == detail_id)
     else {
-        render_empty(frame, area, theme, title, t(state.locale, TextKey::WalletNotFound));
+        render_empty_state(
+            frame,
+            area,
+            title,
+            t(state.locale, TextKey::WalletNotFound),
+            theme,
+        );
         return;
     };
 
@@ -83,7 +101,10 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         Line::from(""),
     ];
 
-    frame.render_widget(Paragraph::new(header_lines).block(themed_block(title, theme.accent, theme)), layout[0]);
+    frame.render_widget(
+        Paragraph::new(header_lines).block(themed_block(title, theme.accent, theme)),
+        layout[0],
+    );
 
     // Recent transactions
     render_recent_transactions(
@@ -95,8 +116,4 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         currency,
         theme,
     );
-}
-
-fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, title: &str, message: &str) {
-    render_empty_state(frame, area, title, message, theme);
 }

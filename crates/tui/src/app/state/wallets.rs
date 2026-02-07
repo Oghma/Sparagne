@@ -1,7 +1,9 @@
 use api_types::transaction::TransactionView;
 
-use super::search::ListSearchState;
-use super::selectable::{EntityListMode, HasArchiveToggle, HasSelection, Resettable, UpdateFocus};
+use super::{
+    search::ListSearchState,
+    selectable::{EntityListMode, HasArchiveToggle, HasSelection, Resettable, UpdateFocus},
+};
 use crate::ui::forms::{AmountField, TextField};
 
 #[derive(Debug)]
@@ -95,7 +97,6 @@ impl Resettable for WalletsState {
 }
 
 impl WalletFormState {
-
     /// Validates all fields and returns the first error message if any.
     pub(crate) fn validate_all(&mut self) -> Option<String> {
         self.name.validate();

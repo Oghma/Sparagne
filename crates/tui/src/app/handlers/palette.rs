@@ -120,12 +120,12 @@ impl App {
             }
             PaletteCommand::WalletNew => {
                 self.state.section = Section::Accounts;
-                self.state.accounts_tab = AccountsTab::Sources;
+                self.state.accounts_tab = AccountsTab::Wallets;
                 self.start_wallet_create();
             }
             PaletteCommand::FlowNew => {
                 self.state.section = Section::Accounts;
-                self.accounts_set_tab(1);
+                self.accounts_set_focus(AccountsTab::Budget);
                 if self.state.snapshot.is_none() {
                     self.refresh_snapshot().await?;
                 }

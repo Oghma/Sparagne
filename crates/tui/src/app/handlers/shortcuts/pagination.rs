@@ -30,8 +30,6 @@ impl App {
                     && self.state.transactions.mode == TransactionsMode::List
                 {
                     self.open_wallet_picker();
-                } else if self.state.section == Section::Accounts {
-                    self.accounts_set_tab(0);
                 } else if self.state.section == Section::Analytics {
                     self.stats_set_tab(0);
                 } else if self.state.section == Section::Settings {
@@ -44,8 +42,6 @@ impl App {
                     && self.state.transactions.mode == TransactionsMode::List
                 {
                     self.open_flow_picker();
-                } else if self.state.section == Section::Accounts {
-                    self.accounts_set_tab(1);
                 } else if self.state.section == Section::Analytics {
                     self.stats_set_tab(1);
                 } else if self.state.section == Section::Settings {
@@ -54,9 +50,7 @@ impl App {
             }
             // Tab 3
             '3' => {
-                if self.state.section == Section::Accounts {
-                    self.accounts_set_tab(2);
-                } else if self.state.section == Section::Analytics {
+                if self.state.section == Section::Analytics {
                     self.stats_set_tab(2);
                 } else if self.state.section == Section::Settings {
                     self.settings_set_tab(2);

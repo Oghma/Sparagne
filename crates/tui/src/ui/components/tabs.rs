@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AccountsTab, Section, SettingsTab},
+    app::{Section, SettingsTab},
     text::{Locale, TextKey, t},
     ui::theme::Theme,
 };
@@ -17,7 +17,6 @@ pub fn render_tabs(
     frame: &mut Frame<'_>,
     area: Rect,
     active: Section,
-    accounts_tab: Option<AccountsTab>,
     settings_tab: Option<SettingsTab>,
     locale: Locale,
     theme: &Theme,
@@ -51,7 +50,6 @@ pub fn render_tabs(
 
             // Add breadcrumb for sub-tab
             let sub_label = match *section {
-                Section::Accounts => accounts_tab.map(|tab| accounts_tab_label(tab, locale)),
                 Section::Settings => settings_tab.map(|tab| settings_tab_label(tab, locale)),
                 _ => None,
             };
@@ -81,14 +79,6 @@ fn section_label(section: Section, locale: Locale) -> &'static str {
         Section::Accounts => t(locale, TextKey::SectionAccounts),
         Section::Analytics => t(locale, TextKey::SectionAnalytics),
         Section::Settings => t(locale, TextKey::SectionSettings),
-    }
-}
-
-fn accounts_tab_label(tab: AccountsTab, locale: Locale) -> &'static str {
-    match tab {
-        AccountsTab::Sources => t(locale, TextKey::SectionWallets),
-        AccountsTab::Envelopes => t(locale, TextKey::SectionFlows),
-        AccountsTab::Goals => t(locale, TextKey::HelpGoals),
     }
 }
 

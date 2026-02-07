@@ -1,9 +1,11 @@
 //! Input handling for the TUI application.
 //!
-//! This module coordinates keyboard input routing through a layered dispatch system:
+//! This module coordinates keyboard input routing through a layered dispatch
+//! system:
 //! 1. Overlays (modals, dialogs) - highest priority
 //! 2. Global actions (quit, palette, search)
-//! 3. Section-specific handlers (home, transactions, accounts, settings, analytics)
+//! 3. Section-specific handlers (home, transactions, accounts, settings,
+//!    analytics)
 //! 4. Input routing for forms and search
 
 mod accounts;
@@ -29,11 +31,12 @@ mod wallets;
 
 use crossterm::event::KeyEvent;
 
-use crate::error::Result;
-use crate::ui::keymap::AppAction;
+use crate::{error::Result, ui::keymap::AppAction};
 
-use super::state::{AccountsTab, EntityListMode, Screen, Section, SettingsTab, TransactionsMode};
-use super::App;
+use super::{
+    App,
+    state::{AccountsTab, EntityListMode, Screen, Section, SettingsTab, TransactionsMode},
+};
 
 impl App {
     /// Checks if we are in Settings section showing a specific sub-tab.
@@ -89,7 +92,9 @@ impl App {
         }
 
         // 6. Handle input characters
-        if let AppAction::Input(ch) = action && !self.route_input(ch).await? {
+        if let AppAction::Input(ch) = action
+            && !self.route_input(ch).await?
+        {
             self.handle_non_login_key(ch).await?;
         }
 
@@ -118,12 +123,10 @@ impl App {
                 self.start_search();
             }
             Section::Accounts => match self.state.accounts_tab {
-                AccountsTab::Sources if self.state.wallets.mode == EntityListMode::List => {
+                AccountsTab::Wallets if self.state.wallets.mode == EntityListMode::List => {
                     self.start_search();
                 }
-                AccountsTab::Envelopes | AccountsTab::Goals
-                    if self.state.flows.mode == EntityListMode::List =>
-                {
+                AccountsTab::Budget if self.state.flows.mode == EntityListMode::List => {
                     self.start_search();
                 }
                 _ => self.open_global_search(),

@@ -9,7 +9,10 @@ use ratatui::{
 use crate::{
     app::AppState,
     text::{TextKey, t},
-    ui::{common::{resolve_flow_name, resolve_wallet_name, themed_block}, theme::Theme},
+    ui::{
+        common::{resolve_flow_name, resolve_wallet_name, themed_block},
+        theme::Theme,
+    },
 };
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
@@ -64,7 +67,10 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Vault ID
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(format!("  {:<14}", t(locale, TextKey::VaultIdLabel)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!("  {:<14}", t(locale, TextKey::VaultIdLabel)),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled(vault_id.to_string(), Style::default().fg(theme.text)),
         ])),
         info_layout[0],
@@ -73,7 +79,10 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Currency
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(format!("  {:<14}", t(locale, TextKey::VaultCurrencyLabel)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!("  {:<14}", t(locale, TextKey::VaultCurrencyLabel)),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled(currency, Style::default().fg(theme.text)),
         ])),
         info_layout[1],
@@ -82,10 +91,16 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Wallets and Flows count
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(format!("  {:<14}", t(locale, TextKey::SectionWallets)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!("  {:<14}", t(locale, TextKey::SectionWallets)),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled(wallets_count.to_string(), Style::default().fg(theme.text)),
             Span::raw("    "),
-            Span::styled(format!("{:<7}", t(locale, TextKey::SectionFlows)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!("{:<7}", t(locale, TextKey::SectionFlows)),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled(flows_count.to_string(), Style::default().fg(theme.text)),
         ])),
         info_layout[2],
@@ -105,7 +120,10 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Default wallet
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(format!("  {}  ", t(locale, TextKey::VaultDefaultWallet)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!("  {}  ", t(locale, TextKey::VaultDefaultWallet)),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled(
                 default_wallet_name,
                 if state.default_wallet_id.is_some() {
@@ -121,7 +139,10 @@ pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     // Default flow
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(format!("  {}  ", t(locale, TextKey::VaultDefaultFlow)), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                format!("  {}  ", t(locale, TextKey::VaultDefaultFlow)),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled(
                 default_flow_name,
                 if state.default_flow_id.is_some() {
@@ -157,4 +178,3 @@ fn display_vault_name(state: &AppState) -> Option<String> {
         _ => Some(name.to_string()),
     }
 }
-

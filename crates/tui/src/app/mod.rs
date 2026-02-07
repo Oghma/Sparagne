@@ -8,14 +8,17 @@ mod resolve;
 mod state;
 
 // Re-export commonly used items for UI
+pub(crate) use actions::{TransferType, calculate_net_change, percentage_change};
 pub(crate) use ordering::{
-    FlowAlertSeverity, HomeFeedItem, flow_name_suggestions, flows_visible_indices,
-    home_feed_items, ordered_flow_ids_from_state, ordered_wallet_ids_from_state,
-    transactions_visible_indices, wallets_visible_indices,
+    FlowAlertSeverity, HomeFeedItem, flow_name_suggestions, flows_visible_indices, home_feed_items,
+    ordered_flow_ids_from_state, ordered_wallet_ids_from_state, transactions_visible_indices,
+    wallets_visible_indices,
 };
 pub(crate) use query::filter_commands;
-pub(crate) use actions::{TransferType, calculate_net_change, percentage_change};
-pub(crate) use resolve::{default_wallet_flow_names, resolve_category_matches, resolve_flow_matches, resolve_wallet_matches};
+pub(crate) use resolve::{
+    default_wallet_flow_names, resolve_category_matches, resolve_flow_matches,
+    resolve_wallet_matches,
+};
 pub use state::*;
 
 use std::time::Duration;
@@ -59,7 +62,7 @@ impl App {
             vault: None,
             snapshot: None,
             section: Section::Home,
-            accounts_tab: AccountsTab::Sources,
+            accounts_tab: AccountsTab::Wallets,
             settings_tab: SettingsTab::default(),
             home_feed_selected: 0,
             home_low_balance_minor: config.low_balance_minor,

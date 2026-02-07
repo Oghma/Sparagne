@@ -1,4 +1,5 @@
-//! Cash flow tab rendering: stat cards, month summary, sparklines, category breakdown, trends.
+//! Cash flow tab rendering: stat cards, month summary, sparklines, category
+//! breakdown, trends.
 
 use ratatui::{
     Frame,
@@ -16,7 +17,10 @@ use crate::{
     ui::{
         components::{
             card::Card,
-            charts::{PieSlice, compute_percentage, render_bar_chart, render_braille_sparkline, render_inline_sparkline, render_pie_chart},
+            charts::{
+                PieSlice, compute_percentage, render_bar_chart, render_braille_sparkline,
+                render_inline_sparkline, render_pie_chart,
+            },
             money::{flow_cap_gauge, styled_amount_bold_emoji, styled_percentage_change},
         },
         theme::Theme,
@@ -109,19 +113,38 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     let income_change = percentage_change(&state.stats.monthly_income);
     let expense_change = percentage_change(&state.stats.monthly_trend);
     let change_line = Line::from(vec![
-        Span::styled(t(locale, TextKey::StatsMoM), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::StatsMoM),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::raw(" "),
-        Span::styled(t(locale, TextKey::StatsInc), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::StatsInc),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::raw(" "),
         income_change
             .map(|value| styled_percentage_change(value, theme))
-            .unwrap_or_else(|| Span::styled(t(locale, TextKey::StatsNa), Style::default().fg(theme.text_muted))),
+            .unwrap_or_else(|| {
+                Span::styled(
+                    t(locale, TextKey::StatsNa),
+                    Style::default().fg(theme.text_muted),
+                )
+            }),
         Span::raw("  "),
-        Span::styled(t(locale, TextKey::StatsExp), Style::default().fg(theme.text_muted)),
+        Span::styled(
+            t(locale, TextKey::StatsExp),
+            Style::default().fg(theme.text_muted),
+        ),
         Span::raw(" "),
         expense_change
             .map(|value| styled_percentage_change(value, theme))
-            .unwrap_or_else(|| Span::styled(t(locale, TextKey::StatsNa), Style::default().fg(theme.text_muted))),
+            .unwrap_or_else(|| {
+                Span::styled(
+                    t(locale, TextKey::StatsNa),
+                    Style::default().fg(theme.text_muted),
+                )
+            }),
     ]);
     frame.render_widget(Paragraph::new(change_line), change_layout[1]);
 
@@ -172,7 +195,12 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         theme,
     );
 
-    if let Some(gauge) = flow_cap_gauge(expenses, Some(income), t(locale, TextKey::StatsExpenseOverIncome), theme) {
+    if let Some(gauge) = flow_cap_gauge(
+        expenses,
+        Some(income),
+        t(locale, TextKey::StatsExpenseOverIncome),
+        theme,
+    ) {
         frame.render_widget(gauge, stats_layout[2]);
     } else {
         frame.render_widget(
@@ -218,14 +246,22 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
             ..inner
         };
         frame.render_widget(
-            Paragraph::new(Span::styled(err.as_str(), Style::default().fg(theme.negative))),
+            Paragraph::new(Span::styled(
+                err.as_str(),
+                Style::default().fg(theme.negative),
+            )),
             error_area,
         );
     }
 }
 
 /// Render the category breakdown with pie chart and list.
-pub fn render_category_breakdown(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+pub fn render_category_breakdown(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    state: &AppState,
+    theme: &Theme,
+) {
     let locale = state.locale;
     let breakdown = &state.stats.category_breakdown;
 
@@ -272,7 +308,7 @@ fn render_category_pie_chart(
         theme.accent,     // Blue/Accent
         theme.positive,   // Green
         theme.text_muted, // Muted
-        theme.text_muted,        // Dim for smaller slices
+        theme.text_muted, // Dim for smaller slices
     ];
 
     let slices: Vec<PieSlice> = breakdown
@@ -284,7 +320,13 @@ fn render_category_pie_chart(
         })
         .collect();
 
-    render_pie_chart(frame, area, t(locale, TextKey::StatsDistribution), &slices, theme);
+    render_pie_chart(
+        frame,
+        area,
+        t(locale, TextKey::StatsDistribution),
+        &slices,
+        theme,
+    );
 }
 
 /// Render the balance sparkline.
@@ -297,9 +339,15 @@ pub fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     if state.stats.sparkline.is_empty() {
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(t(locale, TextKey::StatsNoData), Style::default().fg(theme.text_muted)),
+                Span::styled(
+                    t(locale, TextKey::StatsNoData),
+                    Style::default().fg(theme.text_muted),
+                ),
                 Span::styled("r", Style::default().fg(theme.accent)),
-                Span::styled(t(locale, TextKey::StatsRefreshHint), Style::default().fg(theme.text_muted)),
+                Span::styled(
+                    t(locale, TextKey::StatsRefreshHint),
+                    Style::default().fg(theme.text_muted),
+                ),
             ]))
             .alignment(Alignment::Center),
             inner,
@@ -418,9 +466,21 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         .collect();
 
     if !income_data.is_empty() {
-        render_bar_chart(frame, chart_layout[0], t(locale, TextKey::StatsIncome), &income_data, theme);
+        render_bar_chart(
+            frame,
+            chart_layout[0],
+            t(locale, TextKey::StatsIncome),
+            &income_data,
+            theme,
+        );
     }
     if !expense_data.is_empty() {
-        render_bar_chart(frame, chart_layout[1], t(locale, TextKey::StatsExpenses), &expense_data, theme);
+        render_bar_chart(
+            frame,
+            chart_layout[1],
+            t(locale, TextKey::StatsExpenses),
+            &expense_data,
+            theme,
+        );
     }
 }

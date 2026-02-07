@@ -6,7 +6,10 @@ use ratatui::{
     widgets::{List, ListItem, ListState, Paragraph},
 };
 
-use crate::{app::AppState, ui::{common::themed_block, theme::Theme}};
+use crate::{
+    app::AppState,
+    ui::{common::themed_block, theme::Theme},
+};
 
 pub(super) fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let block = themed_block("🏦 Vaults", theme.border_focused, theme);

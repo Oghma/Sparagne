@@ -102,10 +102,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::HelpCreateEnvelope => "Create envelope",
         TextKey::HelpRenameEnvelope => "Rename envelope",
         TextKey::HelpChangeMode => "Change mode",
-        TextKey::HelpGoals => "Goals",
-        TextKey::HelpComingSoon => "(coming soon)",
         TextKey::HelpRefreshData => "Refresh data",
         TextKey::HelpSwitchView => "Switch view",
+        TextKey::HelpSwitchPanel => "Switch panel",
         TextKey::HelpCashSpendWorth => "Cash/Spend/Worth",
         TextKey::HelpChangePeriod => "Change period",
         TextKey::HelpCreateCategory => "Create category",
@@ -158,7 +157,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::SuccessMergePreviewOk => "Preview ok. Press Enter to confirm.",
         TextKey::SuccessDeletedItem => "Deleted \"{label}\" ({amount})",
         TextKey::SuccessDeletedMultiple => "Deleted {count} transactions",
-        TextKey::SuccessCategorizedTransactions => "Categorized {count} transactions as #{category}",
+        TextKey::SuccessCategorizedTransactions => {
+            "Categorized {count} transactions as #{category}"
+        }
         TextKey::SuccessDeletedWallet => "Deleted \"{name}\"",
         TextKey::SuccessDeletedFlow => "Deleted \"{name}\"",
 
@@ -194,7 +195,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::ErrorResourceNotFound => "Resource not found.",
         TextKey::ErrorConflict => "Conflict: {message}",
         TextKey::ErrorValidation => "Validation error: {message}",
-        TextKey::ErrorValidationAmbiguousVault => "Vault name is ambiguous. Use \"Main (owner)\" or a vault id.",
+        TextKey::ErrorValidationAmbiguousVault => {
+            "Vault name is ambiguous. Use \"Main (owner)\" or a vault id."
+        }
         TextKey::ErrorBadRequest => "Bad request: {message}",
         TextKey::ErrorServerError => "Server error: {message}",
         TextKey::ErrorServerUnreachable => "Server unreachable: {error}",
@@ -311,7 +314,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::DialogDeleteFlowTitle => "Delete Flow",
         TextKey::DialogDeleteFlowHint => "The flow will be hidden but can be restored later.",
         TextKey::DialogDeleteCategoryTitle => "Delete Category",
-        TextKey::DialogDeleteCategoryHint => "The category will be hidden but can be restored later.",
+        TextKey::DialogDeleteCategoryHint => {
+            "The category will be hidden but can be restored later."
+        }
         TextKey::DialogThisVault => "this vault",
         TextKey::DialogTransaction => "Transaction",
         TextKey::DialogConnectionErrorTitle => "Connection Error",
@@ -361,9 +366,11 @@ pub fn get(key: TextKey) -> &'static str {
 
         // Quick add
         TextKey::QuickAddTitle => " Quick Add ",
-        TextKey::QuickAddPlaceholder => "Press [a] to add transaction...",
+        TextKey::QuickAddPlaceholder => "Press [n] to add transaction...",
         TextKey::QuickAddToday => "Today",
-        TextKey::QuickAddSyntaxHint => "Syntax: [+]amount note [#cat] [@wallet] [>envelope]  |  + income, r refund",
+        TextKey::QuickAddSyntaxHint => {
+            "Syntax: [+]amount note [#cat] [@wallet] [>envelope]  |  + income, r refund"
+        }
         TextKey::QuickAddSyntaxShort => "[+]amount note [#category] [@wallet] [>envelope]",
         TextKey::QuickAddExamples => "   Examples: ",
         TextKey::QuickAddEnvelopeSuggestions => "Envelope suggestions: ",
@@ -390,7 +397,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::StatsDistribution => "Distribution",
         TextKey::StatsBalanceTrend => "Balance Trend (30d)",
         TextKey::StatsMonthlyTrend => "Monthly Trend",
-        TextKey::StatsMonthlyTrendNoData => "Monthly trend data not available. Press 'r' to refresh stats.",
+        TextKey::StatsMonthlyTrendNoData => {
+            "Monthly trend data not available. Press 'r' to refresh stats."
+        }
         TextKey::StatsFinancialTrends => "Financial Trends (6 months)",
         TextKey::StatsNetSavings => "Net Savings",
         TextKey::StatsTotalIncome => "Total Income",
@@ -453,11 +462,8 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::TxnGroupCategory => "Category",
         TextKey::TxnGroupWallet => "Wallet",
         TextKey::TxnGroupEnvelope => "Envelope",
-        TextKey::TxnHeaderVoided => "Voided ",
-        TextKey::TxnHeaderTransfers => "Transfers ",
         TextKey::TxnHeaderFiltersOff => "Filters [off]",
         TextKey::TxnHeaderSearch => "Search: ",
-        TextKey::TxnHeaderHints => "[Ctrl+F] search  [g] group  [f] filters  [w/W] scope",
 
         // Transaction detail
         TextKey::TxnDetailTitle => "Transaction Detail",
@@ -495,14 +501,11 @@ pub fn get(key: TextKey) -> &'static str {
 
         // Entity list shared
         TextKey::EntityArchivedOn => "Archived: On",
-        TextKey::EntityArchivedCount => "Archived: ",
         TextKey::EntityBadgeArchived => "[archived]",
         TextKey::EntityBadgeDefault => "[default]",
 
         // Wallet screen
         TextKey::WalletTitle => " Wallets ",
-        TextKey::WalletStatsLabel => "Total:",
-        TextKey::WalletEntityLabel => "wallets",
         TextKey::WalletDetailTitle => "Wallet Detail",
         TextKey::WalletNotFound => "Wallet not found",
         TextKey::WalletSelectPrompt => "Select a wallet to view details",
@@ -517,8 +520,6 @@ pub fn get(key: TextKey) -> &'static str {
 
         // Flow screen
         TextKey::FlowTitle => " Budgets & Goals ",
-        TextKey::FlowStatsLabel => "Allocated:",
-        TextKey::FlowEntityLabel => "envelopes",
         TextKey::FlowDetailTitle => "Flow Detail",
         TextKey::FlowNotFound => "Flow not found",
         TextKey::FlowSelectPrompt => "Select a flow to view details",
@@ -534,26 +535,12 @@ pub fn get(key: TextKey) -> &'static str {
         // Home screen
         TextKey::HomeActivityFeed => "Activity Feed",
         TextKey::HomeNetWorth => "Net Worth",
-        TextKey::HomeQuickBalances => "Quick Balances",
+        TextKey::HomeQuickBalances => "Balances",
         TextKey::HomeNoDataYet => "No data yet",
         TextKey::HomeAddFirstTxn => "[n] to add your first transaction",
         TextKey::HomeWallets => "Wallets",
         TextKey::HomeBudgets => "Budgets",
         TextKey::HomeNoActivityYet => "No activity yet",
-
-        // Accounts breadcrumbs
-        TextKey::BreadcrumbAccounts => " Accounts",
-        TextKey::BreadcrumbSources => "Sources",
-        TextKey::BreadcrumbEnvelopes => "Envelopes",
-        TextKey::BreadcrumbGoals => "Goals",
-        TextKey::BreadcrumbDetail => "Detail",
-        TextKey::BreadcrumbCreate => "Create",
-        TextKey::BreadcrumbRename => "Rename",
-
-        // Accounts tabs
-        TextKey::AccountsCardTitle => "Accounts",
-        TextKey::AccountsGoalsPlaceholder => "Goals view is coming soon.",
-        TextKey::AccountsGoalsHint => "Use Sources for wallets and Envelopes for budgets.",
 
         // Settings
         TextKey::SettingsCardTitle => "Settings",
@@ -578,7 +565,9 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::TransferAvailable => "Available",
         TextKey::TransferBadgeFrom => " [from]",
         TextKey::TransferBadgeTo => " [to]",
-        TextKey::TransferFormHints => "Tab: next \u{2022} \u{2191}/\u{2193}: change \u{2022} Enter: save \u{2022} Esc: cancel",
+        TextKey::TransferFormHints => {
+            "Tab: next \u{2022} \u{2191}/\u{2193}: change \u{2022} Enter: save \u{2022} Esc: cancel"
+        }
 
         // Filters
         TextKey::FilterTitle => " Filters ",

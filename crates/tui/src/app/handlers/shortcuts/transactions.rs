@@ -2,8 +2,8 @@
 
 use super::super::super::*;
 
-use api_types::transaction::TransactionKind;
 use crate::error::Result;
+use api_types::transaction::TransactionKind;
 
 impl App {
     /// Handles transaction-related shortcuts.
@@ -69,14 +69,16 @@ impl App {
                 if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::List
                 {
-                    self.start_transaction_form(TransactionKind::Expense).await?;
+                    self.start_transaction_form(TransactionKind::Expense)
+                        .await?;
                 } else if self.state.section == Section::Home {
                     self.state.section = Section::Transactions;
                     self.state.transactions.mode = TransactionsMode::List;
                     if self.state.transactions.items.is_empty() {
                         self.load_transactions(true).await?;
                     }
-                    self.start_transaction_form(TransactionKind::Expense).await?;
+                    self.start_transaction_form(TransactionKind::Expense)
+                        .await?;
                 }
             }
             // Visual mode / void transaction

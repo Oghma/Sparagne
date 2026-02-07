@@ -1,6 +1,10 @@
 use super::super::*;
 
-use crate::{error::Result, text::{TextKey, format as t_format, t}, ui::keymap::AppAction};
+use crate::{
+    error::Result,
+    text::{TextKey, format as t_format, t},
+    ui::keymap::AppAction,
+};
 use engine::Money;
 
 impl App {
@@ -80,7 +84,14 @@ impl App {
         if visual_mode && !visual_ids.is_empty() {
             let count = visual_ids.len();
             let count_str = count.to_string();
-            let preview = vec![format!("🧾 {}", t_format(locale, TextKey::SuccessDeletedMultiple, &[("count", &count_str)]))];
+            let preview = vec![format!(
+                "🧾 {}",
+                t_format(
+                    locale,
+                    TextKey::SuccessDeletedMultiple,
+                    &[("count", &count_str)]
+                )
+            )];
             self.state.overlays.confirm = Some(ConfirmDialogState::delete(
                 t(locale, TextKey::DialogDeleteTransactionsTitle),
                 format!("Delete {count} transactions?"),
@@ -96,12 +107,15 @@ impl App {
             .selected_transaction()
             .map(|tx| (tx.amount_minor, tx.note.clone()))
         else {
-            self.state.transactions.error = Some(t(self.state.locale, TextKey::ValidationNoTransactionSelected).to_string());
+            self.state.transactions.error =
+                Some(t(self.state.locale, TextKey::ValidationNoTransactionSelected).to_string());
             return;
         };
 
         let amount = Money::new(amount_minor).format(self.current_currency());
-        let note = note.as_deref().unwrap_or(t(locale, TextKey::DialogTransaction));
+        let note = note
+            .as_deref()
+            .unwrap_or(t(locale, TextKey::DialogTransaction));
         let preview = vec![format!("🧾 {note}  {amount}")];
         self.state.overlays.confirm = Some(ConfirmDialogState::delete(
             t(locale, TextKey::DialogDeleteTransactionTitle),
@@ -129,7 +143,8 @@ impl App {
         };
 
         if ids.is_empty() {
-            self.state.transactions.error = Some(t(self.state.locale, TextKey::ValidationNoTransactionSelected).to_string());
+            self.state.transactions.error =
+                Some(t(self.state.locale, TextKey::ValidationNoTransactionSelected).to_string());
             return;
         }
 
@@ -156,7 +171,8 @@ impl App {
     pub(crate) fn open_wallet_archive_dialog(&mut self) {
         let locale = self.state.locale;
         let Some(wallet) = self.selected_wallet() else {
-            self.state.wallets.error = Some(t(locale, TextKey::ValidationNoWalletSelected).to_string());
+            self.state.wallets.error =
+                Some(t(locale, TextKey::ValidationNoWalletSelected).to_string());
             return;
         };
         let name = wallet.name.as_str();
@@ -192,7 +208,8 @@ impl App {
     pub(crate) fn open_category_archive_dialog(&mut self) {
         let locale = self.state.locale;
         let Some(category) = self.selected_category() else {
-            self.state.categories.error = Some(t(locale, TextKey::PromptNoCategorySelected).to_string());
+            self.state.categories.error =
+                Some(t(locale, TextKey::PromptNoCategorySelected).to_string());
             return;
         };
         let name = category.name.as_str();

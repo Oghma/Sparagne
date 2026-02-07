@@ -161,4 +161,3 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         area,
     );
 }
-

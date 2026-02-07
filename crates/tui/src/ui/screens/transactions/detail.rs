@@ -76,11 +76,17 @@ fn render_transaction_info(
 
     let lines = vec![
         Line::from(vec![
-            Span::styled(t(locale, TextKey::TxnDetailKind), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::TxnDetailKind),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::raw(": "),
             kind_chip(header.kind, theme),
             Span::raw("   "),
-            Span::styled(t(locale, TextKey::TxnDetailVoided), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::TxnDetailVoided),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::raw(": "),
             Span::styled(
                 voided.to_string(),
@@ -92,19 +98,31 @@ fn render_transaction_info(
             ),
         ]),
         Line::from(vec![
-            Span::styled(t(locale, TextKey::TxnDetailWhen), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::TxnDetailWhen),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::raw(format!(": {occurred_at}")),
         ]),
         Line::from(vec![
-            Span::styled(t(locale, TextKey::TxnDetailAmount), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::TxnDetailAmount),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::raw(format!(": {amount}")),
         ]),
         Line::from(vec![
-            Span::styled(t(locale, TextKey::TxnDetailCategory), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::TxnDetailCategory),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::raw(format!(": {category}")),
         ]),
         Line::from(vec![
-            Span::styled(t(locale, TextKey::TxnDetailNote), Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::TxnDetailNote),
+                Style::default().fg(theme.text_muted),
+            ),
             Span::raw(format!(": {note}")),
         ]),
     ];

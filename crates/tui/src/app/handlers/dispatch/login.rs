@@ -1,8 +1,6 @@
 //! Login screen dispatch handling.
 
-use crate::app::App;
-use crate::error::Result;
-use crate::ui::keymap::AppAction;
+use crate::{app::App, error::Result, ui::keymap::AppAction};
 
 impl App {
     /// Handles actions on the login screen.

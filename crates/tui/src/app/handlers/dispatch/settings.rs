@@ -1,12 +1,17 @@
-//! Settings section dispatch handling (Categories, Vault, Members, Preferences tabs).
+//! Settings section dispatch handling (Categories, Vault, Members, Preferences
+//! tabs).
 
-use crate::app::state::{
-    AliasFocus, CategoriesMode, MemberFormField, MembersMode, PreferencesField, SettingsTab,
-    VaultMode,
+use crate::{
+    app::{
+        App,
+        state::{
+            AliasFocus, CategoriesMode, MemberFormField, MembersMode, PreferencesField,
+            SettingsTab, VaultMode,
+        },
+    },
+    error::Result,
+    ui::keymap::AppAction,
 };
-use crate::app::App;
-use crate::error::Result;
-use crate::ui::keymap::AppAction;
 
 impl App {
     /// Dispatches actions for the Settings section.

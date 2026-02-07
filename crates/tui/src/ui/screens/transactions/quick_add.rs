@@ -160,9 +160,15 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 Span::raw("  "),
                 Span::styled(note, Style::default().fg(theme.text)),
                 Span::raw("  │  "),
-                Span::styled(format!("@{from} → @{to}"), Style::default().fg(theme.transfer)),
+                Span::styled(
+                    format!("@{from} → @{to}"),
+                    Style::default().fg(theme.transfer),
+                ),
                 Span::raw("  │  "),
-                Span::styled(t(locale, TextKey::QuickAddToday), Style::default().fg(theme.text_muted)),
+                Span::styled(
+                    t(locale, TextKey::QuickAddToday),
+                    Style::default().fg(theme.text_muted),
+                ),
             ]));
         } else if p.kind == QuickAddKind::TransferFlow {
             let from = p.from_flow.as_deref().unwrap_or("-");
@@ -174,9 +180,15 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 Span::raw("  "),
                 Span::styled(note, Style::default().fg(theme.text)),
                 Span::raw("  │  "),
-                Span::styled(format!(">{from} → >{to}"), Style::default().fg(theme.transfer)),
+                Span::styled(
+                    format!(">{from} → >{to}"),
+                    Style::default().fg(theme.transfer),
+                ),
                 Span::raw("  │  "),
-                Span::styled(t(locale, TextKey::QuickAddToday), Style::default().fg(theme.text_muted)),
+                Span::styled(
+                    t(locale, TextKey::QuickAddToday),
+                    Style::default().fg(theme.text_muted),
+                ),
             ]));
         } else {
             lines.push(Line::from(vec![
@@ -192,7 +204,10 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                 Span::raw("  │  "),
                 Span::styled(wallet_display, wallet_style),
                 Span::raw("  │  "),
-                Span::styled(t(locale, TextKey::QuickAddToday), Style::default().fg(theme.text_muted)),
+                Span::styled(
+                    t(locale, TextKey::QuickAddToday),
+                    Style::default().fg(theme.text_muted),
+                ),
             ]));
         }
 
@@ -226,7 +241,10 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                     Span::styled(options_str, Style::default().fg(theme.text_muted)),
                     Span::raw("  "),
                     Span::styled("[Ctrl+R]", Style::default().fg(theme.accent)),
-                    Span::styled(t(locale, TextKey::QuickAddCycle), Style::default().fg(theme.text_muted)),
+                    Span::styled(
+                        t(locale, TextKey::QuickAddCycle),
+                        Style::default().fg(theme.text_muted),
+                    ),
                 ]));
             } else {
                 // Build ambiguous hint for fields with multiple matches
@@ -260,7 +278,10 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
                         Span::styled(hints.join("  "), Style::default().fg(theme.warning)),
                         Span::raw("  "),
                         Span::styled("[Ctrl+R]", Style::default().fg(theme.accent)),
-                        Span::styled(t(locale, TextKey::QuickAddCycle), Style::default().fg(theme.text_muted)),
+                        Span::styled(
+                            t(locale, TextKey::QuickAddCycle),
+                            Style::default().fg(theme.text_muted),
+                        ),
                     ]));
                 }
             }
@@ -274,7 +295,11 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             let suggestions = flow_name_suggestions(state, flow_query, 3);
             if !suggestions.is_empty() {
                 lines.push(Line::from(Span::styled(
-                    format!("{}{}", t(locale, TextKey::QuickAddEnvelopeSuggestions), suggestions.join(", ")),
+                    format!(
+                        "{}{}",
+                        t(locale, TextKey::QuickAddEnvelopeSuggestions),
+                        suggestions.join(", ")
+                    ),
                     Style::default().fg(theme.text_muted),
                 )));
             }
@@ -295,15 +320,21 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             ),
         ]));
         lines.push(Line::from(vec![
-            Span::styled(t(locale, TextKey::QuickAddExamples), Style::default().fg(theme.text_muted)),
-            Span::styled("50 lunch #food @main", Style::default().fg(theme.text_muted)),
+            Span::styled(
+                t(locale, TextKey::QuickAddExamples),
+                Style::default().fg(theme.text_muted),
+            ),
+            Span::styled(
+                "50 lunch #food @main",
+                Style::default().fg(theme.text_muted),
+            ),
             Span::styled("  |  ", Style::default().fg(theme.border)),
             Span::styled("+100 salary >income", Style::default().fg(theme.text_muted)),
             Span::styled("  |  ", Style::default().fg(theme.border)),
             Span::styled("r30 refund", Style::default().fg(theme.text_muted)),
         ]));
         lines.push(Line::from(vec![
-            Span::styled("   [a]", Style::default().fg(theme.accent)),
+            Span::styled("   [n]", Style::default().fg(theme.accent)),
             Span::styled(" quick add  ", Style::default().fg(theme.text_muted)),
             Span::styled("[i]", Style::default().fg(theme.accent)),
             Span::styled(" income  ", Style::default().fg(theme.text_muted)),

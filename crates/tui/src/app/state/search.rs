@@ -4,7 +4,8 @@ use uuid::Uuid;
 
 use super::selectable::SelectableList;
 
-/// Per-list search state for in-screen filtering (transactions, wallets, flows).
+/// Per-list search state for in-screen filtering (transactions, wallets,
+/// flows).
 #[derive(Debug, Clone, Default)]
 pub struct ListSearchState {
     pub query: String,

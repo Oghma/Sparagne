@@ -12,10 +12,7 @@ use crate::{
     app::AppState,
     text::{TextKey, t},
     ui::{
-        components::{
-            card::Card,
-            charts::render_braille_sparkline,
-        },
+        components::{card::Card, charts::render_braille_sparkline},
         theme::Theme,
     },
 };

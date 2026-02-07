@@ -106,7 +106,7 @@ impl App {
             }
             SearchResultKind::Wallet => {
                 self.state.section = Section::Accounts;
-                self.state.accounts_tab = AccountsTab::Sources;
+                self.state.accounts_tab = AccountsTab::Wallets;
                 self.state.wallets.mode = EntityListMode::List;
 
                 if let Some(snapshot) = &self.state.snapshot
@@ -118,7 +118,7 @@ impl App {
             }
             SearchResultKind::Flow => {
                 self.state.section = Section::Accounts;
-                self.state.accounts_tab = AccountsTab::Envelopes;
+                self.state.accounts_tab = AccountsTab::Budget;
                 self.state.flows.mode = EntityListMode::List;
 
                 if let Some(snapshot) = &self.state.snapshot

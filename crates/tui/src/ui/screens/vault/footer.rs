@@ -6,7 +6,10 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{app::{AppState, VaultMode}, ui::theme::Theme};
+use crate::{
+    app::{AppState, VaultMode},
+    ui::theme::Theme,
+};
 
 pub(super) fn render_footer(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let hints = match state.vault_ui.mode {

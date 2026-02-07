@@ -214,8 +214,9 @@ impl DateField {
         let trimmed = self.value.trim();
         if trimmed.is_empty() {
             if self.required {
-                self.validation =
-                    ValidationResult::Invalid(t(self.locale, TextKey::ValidationDateRequired).to_string());
+                self.validation = ValidationResult::Invalid(
+                    t(self.locale, TextKey::ValidationDateRequired).to_string(),
+                );
             } else {
                 self.validation = ValidationResult::Valid;
             }
@@ -300,5 +301,4 @@ mod tests {
         assert!(validate_date("", DateFormat::all(), rome(), Locale::It).is_valid());
         assert!(validate_date("   ", DateFormat::all(), rome(), Locale::It).is_valid());
     }
-
 }

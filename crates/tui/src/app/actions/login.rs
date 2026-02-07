@@ -1,6 +1,11 @@
 use super::super::*;
 
-use crate::{app::errors::login_message_for_error, client::ClientError, error::Result, text::{TextKey, t}};
+use crate::{
+    app::errors::login_message_for_error,
+    client::ClientError,
+    error::Result,
+    text::{TextKey, t},
+};
 
 impl App {
     pub(crate) async fn attempt_login(&mut self) -> Result<()> {
@@ -19,30 +24,27 @@ impl App {
                 .unwrap_or(false);
 
         if username.is_empty() || password.is_empty() || !has_vault {
-            self.state.login.message = Some(t(self.state.locale, TextKey::PromptFillAllFields).to_string());
+            self.state.login.message =
+                Some(t(self.state.locale, TextKey::PromptFillAllFields).to_string());
             return Ok(());
         }
 
-        self.client.set_credentials(username.to_string(), password.to_string());
+        self.client
+            .set_credentials(username.to_string(), password.to_string());
 
-        match self
-            .client
-            .vault_get(&vault_payload)
-            .await
-        {
+        match self.client.vault_get(&vault_payload).await {
             Ok(vault) => {
                 self.state.vault = Some(vault);
-                match self
-                    .client
-                    .vault_snapshot(&vault_payload)
-                    .await
-                {
+                match self.client.vault_snapshot(&vault_payload).await {
                     Ok(snapshot) => {
                         self.apply_snapshot(snapshot);
                         self.apply_local_defaults();
                         self.state.screen = Screen::Home;
                         self.state.login.message = None;
                         self.load_transactions(true).await?;
+                        if let Err(err) = self.load_stats().await {
+                            self.state.stats.error = Some(err.to_string());
+                        }
                     }
                     Err(ClientError::NotFound(_)) => {
                         if let Err(err) = self.refresh_shared_flows_snapshot().await {
@@ -53,6 +55,9 @@ impl App {
                         self.state.screen = Screen::Home;
                         self.state.login.message = None;
                         self.load_transactions(true).await?;
+                        if let Err(err) = self.load_stats().await {
+                            self.state.stats.error = Some(err.to_string());
+                        }
                     }
                     Err(err) => {
                         self.state.login.message =

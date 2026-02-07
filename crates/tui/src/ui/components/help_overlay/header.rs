@@ -23,20 +23,15 @@ pub(super) fn render_header(
         Section::Home => t(locale, TextKey::SectionHome).to_string(),
         Section::Transactions => t(locale, TextKey::SectionTransactions).to_string(),
         Section::Accounts => match state.accounts_tab {
-            AccountsTab::Sources => format!(
+            AccountsTab::Wallets => format!(
                 "{} > {}",
                 t(locale, TextKey::HintAccounts),
                 t(locale, TextKey::HelpSourcesWallets)
             ),
-            AccountsTab::Envelopes => format!(
+            AccountsTab::Budget => format!(
                 "{} > {}",
                 t(locale, TextKey::HintAccounts),
                 t(locale, TextKey::HelpEnvelopesFlows)
-            ),
-            AccountsTab::Goals => format!(
-                "{} > {}",
-                t(locale, TextKey::HintAccounts),
-                t(locale, TextKey::HelpGoals)
             ),
         },
         Section::Analytics => t(locale, TextKey::HintAnalytics).to_string(),

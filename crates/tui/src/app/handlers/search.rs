@@ -9,10 +9,10 @@ impl App {
                 self.state.transactions.search.active = true;
             }
             Section::Accounts => match self.state.accounts_tab {
-                AccountsTab::Sources => {
+                AccountsTab::Wallets => {
                     self.state.wallets.search.active = true;
                 }
-                AccountsTab::Envelopes | AccountsTab::Goals => {
+                AccountsTab::Budget => {
                     self.state.flows.search.active = true;
                 }
             },
@@ -47,7 +47,7 @@ impl App {
                 return Ok(true);
             }
             Section::Accounts
-                if self.state.accounts_tab == AccountsTab::Sources
+                if self.state.accounts_tab == AccountsTab::Wallets
                     && self.state.wallets.search.active =>
             {
                 self.state.wallets.search.query.push(ch);
@@ -55,7 +55,7 @@ impl App {
                 return Ok(true);
             }
             Section::Accounts
-                if self.state.accounts_tab != AccountsTab::Sources
+                if self.state.accounts_tab == AccountsTab::Budget
                     && self.state.flows.search.active =>
             {
                 self.state.flows.search.query.push(ch);
@@ -75,7 +75,7 @@ impl App {
                 return Ok(true);
             }
             Section::Accounts
-                if self.state.accounts_tab == AccountsTab::Sources
+                if self.state.accounts_tab == AccountsTab::Wallets
                     && self.state.wallets.search.active =>
             {
                 self.state.wallets.search.query.pop();
@@ -83,7 +83,7 @@ impl App {
                 return Ok(true);
             }
             Section::Accounts
-                if self.state.accounts_tab != AccountsTab::Sources
+                if self.state.accounts_tab == AccountsTab::Budget
                     && self.state.flows.search.active =>
             {
                 self.state.flows.search.query.pop();

@@ -1,6 +1,7 @@
 //! Picker-related transaction handlers.
 //!
-//! Contains methods for wallet picker, flow picker, and transfer picker operations.
+//! Contains methods for wallet picker, flow picker, and transfer picker
+//! operations.
 
 use crate::{
     app::{App, TransactionsMode, TransferField, TransferFormState},
@@ -76,7 +77,8 @@ impl App {
 
     pub(crate) async fn apply_wallet_picker(&mut self) -> Result<()> {
         let Some(snapshot) = self.state.snapshot.as_ref() else {
-            self.state.transactions.error = Some(t(self.state.locale, TextKey::ValidationSnapshotUnavailable).to_string());
+            self.state.transactions.error =
+                Some(t(self.state.locale, TextKey::ValidationSnapshotUnavailable).to_string());
             self.state.transactions.mode = TransactionsMode::List;
             return Ok(());
         };
@@ -99,7 +101,8 @@ impl App {
 
     pub(crate) async fn apply_flow_picker(&mut self) -> Result<()> {
         let Some(snapshot) = self.state.snapshot.as_ref() else {
-            self.state.transactions.error = Some(t(self.state.locale, TextKey::ValidationSnapshotUnavailable).to_string());
+            self.state.transactions.error =
+                Some(t(self.state.locale, TextKey::ValidationSnapshotUnavailable).to_string());
             self.state.transactions.mode = TransactionsMode::List;
             return Ok(());
         };

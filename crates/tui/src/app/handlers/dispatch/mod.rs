@@ -1,7 +1,8 @@
 //! Handler dispatch coordination.
 //!
-//! This module coordinates input handling by routing actions to section-specific handlers.
-//! The main dispatcher in `handlers/mod.rs` now delegates here for cleaner separation.
+//! This module coordinates input handling by routing actions to
+//! section-specific handlers. The main dispatcher in `handlers/mod.rs` now
+//! delegates here for cleaner separation.
 
 mod accounts;
 mod analytics;
@@ -11,10 +12,11 @@ mod overlay;
 mod settings;
 mod transactions;
 
-use crate::app::App;
-use crate::app::state::Section;
-use crate::error::Result;
-use crate::ui::keymap::AppAction;
+use crate::{
+    app::{App, state::Section},
+    error::Result,
+    ui::keymap::AppAction,
+};
 
 impl App {
     /// Routes an action to the appropriate section handler.

@@ -7,7 +7,7 @@ use crate::{
     text::{TextKey, t},
     ui::{
         common::get_currency,
-        screens::entity_list::{EntityItem, EntityListConfig, EntityListStats, render_entity_list},
+        screens::entity_list::{EntityItem, EntityListConfig, render_entity_list},
         theme::Theme,
     },
 };
@@ -15,40 +15,32 @@ use crate::{
 use super::form::render_form;
 
 /// Renders the wallet list view.
-pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
+pub fn render_list(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    state: &AppState,
+    theme: &Theme,
+    focused: bool,
+) {
     let show_form = state.wallets.mode == EntityListMode::Create;
 
-    let (total_balance, wallet_count, archived_count) = state
-        .snapshot
-        .as_ref()
-        .map(|snap| {
-            let active: i64 = snap
-                .wallets
-                .iter()
-                .filter(|w| !w.archived)
-                .map(|w| w.balance_minor)
-                .sum();
-            let count = snap.wallets.iter().filter(|w| !w.archived).count();
-            let archived = snap.wallets.iter().filter(|w| w.archived).count();
-            (active, count, archived)
-        })
-        .unwrap_or((0, 0, 0));
-
-    let currency = get_currency(state);
-    let visible = wallets_visible_indices(state);
-    let has_snapshot = state.snapshot.is_some();
-
-    let max_balance = state
+    let total_balance: i64 = state
         .snapshot
         .as_ref()
         .map(|snap| {
             snap.wallets
                 .iter()
-                .map(|w| w.balance_minor.unsigned_abs())
-                .max()
-                .unwrap_or(1) as i64
+                .filter(|w| !w.archived)
+                .map(|w| w.balance_minor)
+                .sum()
         })
-        .unwrap_or(1);
+        .unwrap_or(0);
+
+    let currency = get_currency(state);
+    let visible = wallets_visible_indices(state);
+    let has_snapshot = state.snapshot.is_some();
+
+    let max_balance = total_balance.unsigned_abs().max(1) as i64;
 
     let items: Vec<EntityItem<'_>> = if let Some(snap) = state.snapshot.as_ref() {
         visible
@@ -69,15 +61,7 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
     let locale = state.locale;
     let config = EntityListConfig {
         title: t(locale, TextKey::WalletTitle),
-        stats_label: t(locale, TextKey::WalletStatsLabel),
-        entity_label: t(locale, TextKey::WalletEntityLabel),
         form_height: 7,
-        item_hints: &[
-            ("[e]", "dit "),
-            ("[a]", "rchive "),
-            ("[d]", "elete "),
-            ("[Enter]", " details"),
-        ],
         welcome_title: t(locale, TextKey::WalletWelcomeTitle),
         welcome_desc: &[
             t(locale, TextKey::WalletWelcomeDesc1),
@@ -87,12 +71,7 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
             ("[c]", t(locale, TextKey::WalletHintQuickCreate)),
             ("[n]", t(locale, TextKey::WalletHintCreateDetails)),
         ],
-    };
-
-    let stats = EntityListStats {
-        total_balance,
-        count: wallet_count,
-        archived_count,
+        border_color: if focused { theme.accent } else { theme.border },
     };
 
     render_entity_list(
@@ -104,9 +83,7 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         state.wallets.search.active,
         state.wallets.search.query.trim(),
         state.wallets.show_archived,
-        &stats,
         state.wallets.selected,
-        state.wallets.mode == EntityListMode::List,
         &items,
         max_balance,
         currency,

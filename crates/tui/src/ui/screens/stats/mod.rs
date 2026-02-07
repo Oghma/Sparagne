@@ -41,9 +41,15 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
             Paragraph::new(Line::from(vec![
                 Span::styled(error.as_str(), Style::default().fg(theme.negative)),
                 Span::raw(" "),
-                Span::styled(t(locale, TextKey::StatsNoData), Style::default().fg(theme.text)),
+                Span::styled(
+                    t(locale, TextKey::StatsNoData),
+                    Style::default().fg(theme.text),
+                ),
                 Span::styled("r", Style::default().fg(theme.accent)),
-                Span::styled(t(locale, TextKey::StatsRefreshHint), Style::default().fg(theme.text)),
+                Span::styled(
+                    t(locale, TextKey::StatsRefreshHint),
+                    Style::default().fg(theme.text),
+                ),
             ]))
             .alignment(Alignment::Center),
             inner,
@@ -59,9 +65,15 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(t(locale, TextKey::StatsNoData), Style::default().fg(theme.text)),
+                Span::styled(
+                    t(locale, TextKey::StatsNoData),
+                    Style::default().fg(theme.text),
+                ),
                 Span::styled("r", Style::default().fg(theme.accent)),
-                Span::styled(t(locale, TextKey::StatsRefreshHint), Style::default().fg(theme.text)),
+                Span::styled(
+                    t(locale, TextKey::StatsRefreshHint),
+                    Style::default().fg(theme.text),
+                ),
             ]))
             .alignment(Alignment::Center),
             inner,

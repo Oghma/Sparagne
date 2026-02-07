@@ -24,8 +24,8 @@ use crate::{
 
 use super::{
     common::{
-        amount_span, group_total_span, grouping_key_label, kind_chip,
-        resolve_flow_name, resolve_wallet_name, signed_amount_minor, void_chip,
+        amount_span, group_total_span, grouping_key_label, kind_chip, resolve_flow_name,
+        resolve_wallet_name, signed_amount_minor, void_chip,
     },
     quick_add::render_quick_add,
 };
@@ -45,10 +45,53 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
 
     render_quick_add(frame, layout[0], state, theme);
 
+    let locale = state.locale;
+    let search_query = state.transactions.search.query.trim();
+    let search_active = state.transactions.search.active;
+
+    let footer_spans = if search_active || !search_query.is_empty() {
+        let shown = if search_query.is_empty() {
+            "..."
+        } else {
+            search_query
+        };
+        let search_style = if search_active {
+            Style::default().fg(theme.accent)
+        } else {
+            Style::default().fg(theme.text)
+        };
+        vec![
+            Span::styled(
+                t(locale, TextKey::TxnHeaderSearch),
+                Style::default().fg(theme.text_muted),
+            ),
+            Span::styled(format!("\"{shown}\""), search_style),
+            Span::raw("  "),
+            Span::styled("[Esc]", Style::default().fg(theme.accent)),
+            Span::styled(" clear", Style::default().fg(theme.text_muted)),
+        ]
+    } else {
+        vec![
+            Span::styled("[Ctrl+F]", Style::default().fg(theme.accent)),
+            Span::styled(" search  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[g]", Style::default().fg(theme.accent)),
+            Span::styled(" group  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[/]", Style::default().fg(theme.accent)),
+            Span::styled(" filter  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[w]", Style::default().fg(theme.accent)),
+            Span::styled(" wallet  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[f]", Style::default().fg(theme.accent)),
+            Span::styled(" flow  ", Style::default().fg(theme.text_muted)),
+            Span::styled("[z]", Style::default().fg(theme.accent)),
+            Span::styled(" voided", Style::default().fg(theme.text_muted)),
+        ]
+    };
+
     let list_block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
+        .border_style(Style::default().fg(theme.border))
+        .title_bottom(Line::from(footer_spans).centered());
 
     let currency = get_currency(state);
 
@@ -260,7 +303,10 @@ fn render_transaction_row(
     }
     line1_spans.push(amount_span(tx.kind, tx.amount_minor, currency, theme));
     line1_spans.push(Span::raw(" "));
-    line1_spans.push(Span::styled(note.to_string(), Style::default().fg(theme.text)));
+    line1_spans.push(Span::styled(
+        note.to_string(),
+        Style::default().fg(theme.text),
+    ));
 
     // Line 2: category, wallet, envelope (indented)
     let mut line2_spans = Vec::new();

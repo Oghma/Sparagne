@@ -8,11 +8,17 @@ use api_types::transaction::{TransactionUpdate, TransactionVoid};
 impl App {
     pub(crate) async fn undo_last_transaction(&mut self) -> Result<()> {
         let Some(id) = self.state.transactions.last_created_id else {
-            self.set_toast(t(self.state.locale, TextKey::ValidationNoTransactionToVoid), ToastLevel::Info);
+            self.set_toast(
+                t(self.state.locale, TextKey::ValidationNoTransactionToVoid),
+                ToastLevel::Info,
+            );
             return Ok(());
         };
-        self.void_transaction_by_id(id, Some(t(self.state.locale, TextKey::SuccessTransactionVoided)))
-            .await?;
+        self.void_transaction_by_id(
+            id,
+            Some(t(self.state.locale, TextKey::SuccessTransactionVoided)),
+        )
+        .await?;
         Ok(())
     }
 
@@ -49,7 +55,9 @@ impl App {
                     }
                 }
                 Err(err) => {
-                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    let Some(msg) = self.client_error_message(err) else {
+                        return Ok(());
+                    };
                     failures += 1;
                     last_error = Some(msg);
                 }
@@ -57,7 +65,7 @@ impl App {
         }
 
         if any_success {
-            self.load_transactions(true).await?;
+            self.refresh_after_transaction_mutation().await?;
         }
 
         if failures == 0 {
@@ -93,7 +101,10 @@ impl App {
         }
         let category_clean = category.trim().trim_start_matches('#').trim();
         if category_clean.is_empty() {
-            self.set_toast(t(self.state.locale, TextKey::ValidationCategoryInvalid), ToastLevel::Error);
+            self.set_toast(
+                t(self.state.locale, TextKey::ValidationCategoryInvalid),
+                ToastLevel::Error,
+            );
             return Ok(());
         }
 
@@ -129,7 +140,9 @@ impl App {
                     successes += 1;
                 }
                 Err(err) => {
-                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    let Some(msg) = self.client_error_message(err) else {
+                        return Ok(());
+                    };
                     failures += 1;
                     last_error = Some(msg);
                 }
@@ -138,15 +151,23 @@ impl App {
 
         if successes > 0 {
             self.exit_visual_mode();
-            self.load_transactions(true).await?;
+            self.refresh_after_transaction_mutation().await?;
             self.set_toast(
-                &t_format(self.state.locale, TextKey::SuccessCategorizedTransactions, &[("count", &successes.to_string()), ("category", category_clean)]),
+                &t_format(
+                    self.state.locale,
+                    TextKey::SuccessCategorizedTransactions,
+                    &[
+                        ("count", &successes.to_string()),
+                        ("category", category_clean),
+                    ],
+                ),
                 ToastLevel::Success,
             );
         }
 
         if failures > 0 {
-            let base = last_error.unwrap_or_else(|| t(self.state.locale, TextKey::ErrorUpdating).to_string());
+            let base = last_error
+                .unwrap_or_else(|| t(self.state.locale, TextKey::ErrorUpdating).to_string());
             self.set_toast(
                 format!("{base} ({failures}/{total})", total = transaction_ids.len()).as_str(),
                 ToastLevel::Error,

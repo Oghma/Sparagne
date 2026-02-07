@@ -22,11 +22,18 @@ impl App {
             .selected_flow()
             .map(|flow| (flow.name.clone(), flow.is_unallocated))
         else {
-            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
+            self.state.flows.error =
+                Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
             return;
         };
         if is_unallocated {
-            self.state.flows.error = Some(t(self.state.locale, TextKey::ValidationUnallocatedCannotRename).to_string());
+            self.state.flows.error = Some(
+                t(
+                    self.state.locale,
+                    TextKey::ValidationUnallocatedCannotRename,
+                )
+                .to_string(),
+            );
             return;
         }
         self.reset_flow_form();

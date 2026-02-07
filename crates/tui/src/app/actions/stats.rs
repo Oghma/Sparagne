@@ -30,11 +30,15 @@ pub(crate) fn percentage_change(series: &[(String, i64)]) -> Option<f64> {
     Some(((current - prev) as f64 / prev.abs() as f64) * 100.0)
 }
 
-/// Calculate net (income minus expense) percentage change from two trend series.
+/// Calculate net (income minus expense) percentage change from two trend
+/// series.
 ///
 /// Returns `None` when either series has fewer than two data points or when
 /// the previous net value is zero.
-pub(crate) fn calculate_net_change(income_trend: &[(String, i64)], expense_trend: &[(String, i64)]) -> Option<f64> {
+pub(crate) fn calculate_net_change(
+    income_trend: &[(String, i64)],
+    expense_trend: &[(String, i64)],
+) -> Option<f64> {
     if income_trend.len() < 2 || expense_trend.len() < 2 {
         return None;
     }
@@ -123,8 +127,10 @@ fn accumulate_daily_totals(
                 entry.0 += tx.amount_minor.abs();
 
                 if year == current_year && month == current_month {
-                    let category =
-                        tx.category.clone().unwrap_or_else(|| t(locale, TextKey::UiOther).to_string());
+                    let category = tx
+                        .category
+                        .clone()
+                        .unwrap_or_else(|| t(locale, TextKey::UiOther).to_string());
                     *category_breakdown.entry(category).or_insert(0) += tx.amount_minor.abs();
                 }
             }
@@ -218,7 +224,9 @@ impl App {
             chrono::LocalResult::Single(dt) => dt,
             chrono::LocalResult::Ambiguous(dt, _) => dt,
             chrono::LocalResult::None => {
-                return Err(t(self.state.locale, TextKey::ValidationDateInvalidTimezone).to_string());
+                return Err(
+                    t(self.state.locale, TextKey::ValidationDateInvalidTimezone).to_string()
+                );
             }
         };
         let offset = dt.offset().fix();
@@ -239,10 +247,7 @@ impl App {
             owner: None,
         };
 
-        let res = self
-            .client
-            .stats_get(payload)
-            .await;
+        let res = self.client.stats_get(payload).await;
 
         match res {
             Ok(stat) => {
@@ -252,7 +257,9 @@ impl App {
                 self.load_stats_series().await?;
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_connection(err) else { return Ok(()); };
+                let Some(msg) = self.on_api_error_connection(err) else {
+                    return Ok(());
+                };
                 self.state.stats.error = Some(msg);
             }
         }
@@ -280,10 +287,7 @@ impl App {
                 include_transfers: Some(false),
             };
 
-            let res = self
-                .client
-                .transactions_list(payload)
-                .await;
+            let res = self.client.transactions_list(payload).await;
 
             match res {
                 Ok(list) => {
@@ -295,7 +299,9 @@ impl App {
                     }
                 }
                 Err(err) => {
-                    let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                    let Some(msg) = self.client_error_message(err) else {
+                        return Ok(());
+                    };
                     self.state.stats.error = Some(msg);
                     return Ok(());
                 }
@@ -331,8 +337,12 @@ impl App {
         let rollup = build_monthly_rollup(to, 6, &acc.monthly_income, &acc.monthly_expense);
 
         self.state.stats.category_breakdown = acc.category_breakdown;
+        let current_income = rollup.income.last().map(|(_, v)| *v).unwrap_or(0);
+        let current_expenses = rollup.expenses.last().map(|(_, v)| *v).unwrap_or(0);
         self.state.stats.monthly_trend = rollup.expenses;
         self.state.stats.monthly_income = rollup.income;
+        self.state.stats.current_month_income = current_income;
+        self.state.stats.current_month_expenses = current_expenses;
         self.state.stats.sparkline = spark.values;
         self.state.stats.sparkline_min = spark.min;
         self.state.stats.sparkline_max = spark.max;
@@ -357,7 +367,9 @@ impl App {
         months
     }
     pub(crate) fn format_local_datetime(&self, dt: DateTime<FixedOffset>) -> String {
-        dt.with_timezone(&self.tz).format("%Y-%m-%d %H:%M").to_string()
+        dt.with_timezone(&self.tz)
+            .format("%Y-%m-%d %H:%M")
+            .to_string()
     }
 
     pub(crate) fn current_currency(&self) -> engine::Currency {

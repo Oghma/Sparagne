@@ -26,40 +26,6 @@ pub fn money_emoji(amount: i64) -> &'static str {
     }
 }
 
-/// Creates a styled span for a money amount with semantic coloring and optional
-/// emoji.
-///
-/// - Positive amounts: green with `+` prefix (and 💰 if emoji_mode)
-/// - Negative amounts: red (no prefix, negative sign shown, and 💸 if
-///   emoji_mode)
-/// - Zero: neutral text color (and 💰 if emoji_mode)
-#[must_use]
-pub fn styled_amount_emoji(
-    amount: i64,
-    currency: Currency,
-    theme: &Theme,
-    emoji_mode: bool,
-) -> Span<'static> {
-    let money = Money::new(amount);
-    let formatted = money.format(currency);
-
-    let (color, prefix) = if amount > 0 {
-        (theme.positive, "+")
-    } else if amount < 0 {
-        (theme.negative, "")
-    } else {
-        (theme.text, "")
-    };
-
-    let text = if emoji_mode {
-        format!("{} {prefix}{formatted}", money_emoji(amount))
-    } else {
-        format!("{prefix}{formatted}")
-    };
-
-    Span::styled(text, Style::default().fg(color))
-}
-
 /// Creates a styled span for a money amount without the +/- prefix.
 /// Used when the context already makes the sign clear (e.g., "Income: €1,234").
 #[must_use]
@@ -103,7 +69,10 @@ pub fn styled_amount_bold_emoji(
         format!("{prefix}{formatted}")
     };
 
-    Span::styled(text, Style::default().fg(color).add_modifier(Modifier::BOLD))
+    Span::styled(
+        text,
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
 }
 
 /// Creates a progress gauge for flow cap usage.

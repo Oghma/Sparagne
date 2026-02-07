@@ -1,6 +1,8 @@
 //! Text form field with length validation.
 
-use crate::validation::{FieldState, LengthValidator, RequiredValidator, ValidationResult, Validator};
+use crate::validation::{
+    FieldState, LengthValidator, RequiredValidator, ValidationResult, Validator,
+};
 
 /// A form field for entering text with optional length constraints.
 #[derive(Debug, Clone)]

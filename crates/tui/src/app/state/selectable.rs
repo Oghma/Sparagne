@@ -49,7 +49,8 @@ pub(crate) trait SelectableList {
 
 /// Wrapper that provides visible count to types that need external context.
 ///
-/// Used for wallets and flows where visible indices depend on the full app state.
+/// Used for wallets and flows where visible indices depend on the full app
+/// state.
 pub(crate) struct SelectableWithCount<'a, T> {
     inner: &'a mut T,
     count: usize,

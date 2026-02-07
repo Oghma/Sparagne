@@ -17,7 +17,7 @@ use crate::{
     text::{TextKey, t},
     ui::{
         common::format_date_label,
-        components::{card::Card, money::styled_amount_emoji},
+        components::{card::Card, money::money_emoji},
         theme::Theme,
     },
 };
@@ -54,10 +54,20 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     let insight = home_insight(state, currency);
     let mut insight_inserted = false;
 
-    let note_width = (inner.width as usize).saturating_sub(30).clamp(14, 32);
-    let cat_width = 12usize.min(inner.width as usize);
+    let cat_col_width: usize = 14; // 2 for 🏷 + 12 for text
+    let amount_col: usize = 14; // fits "+18277.22 EUR" right-aligned
+    let emoji_col: usize = if state.emoji_mode { 3 } else { 0 }; // emoji(2) + space(1)
+    let time_col: usize = if inner.width >= 50 { 7 } else { 0 }; // 2 space + 5 HH:MM
     let show_time = inner.width >= 50;
     let show_meta = inner.width >= 70;
+    let left_fixed: usize = 2 + 1 + 1 + emoji_col + amount_col + time_col + 2; // indent + icon(1) + space + emoji + amount + time + space
+    let note_width = if show_meta {
+        (inner.width as usize)
+            .saturating_sub(left_fixed + cat_col_width)
+            .max(8)
+    } else {
+        (inner.width as usize).saturating_sub(left_fixed).max(8)
+    };
 
     for (feed_idx, item) in feed_items.iter().enumerate() {
         match item {
@@ -99,6 +109,9 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                 };
                 let tx_date = tx.occurred_at.date_naive();
                 if last_date != Some(tx_date) {
+                    if last_date.is_some() {
+                        items.push(ListItem::new(Line::from("")));
+                    }
                     let date_label = format_date_label(tx_date, today, yesterday, state.locale);
                     items.push(ListItem::new(Line::from(Span::styled(
                         format!("  {date_label}"),
@@ -132,13 +145,33 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                     selected_row = Some(items.len());
                 }
 
-                // Layout: icon → amount → time → note → [category]
+                // Layout: icon → [emoji] → amount (fixed-width) → time → note → [category]
+                let money = Money::new(amount);
+                let formatted = money.format(currency);
+                let (amount_color, prefix) = if amount > 0 {
+                    (theme.positive, "+")
+                } else if amount < 0 {
+                    (theme.negative, "")
+                } else {
+                    (theme.text, "")
+                };
+                let amount_text = format!("{:>amount_col$}", format!("{prefix}{formatted}"));
+
                 let mut line = vec![
                     Span::raw("  "),
                     Span::styled(icon, Style::default().fg(icon_color)),
                     Span::raw(" "),
-                    styled_amount_emoji(amount, currency, theme, state.emoji_mode),
                 ];
+                if state.emoji_mode {
+                    line.push(Span::styled(
+                        format!("{} ", money_emoji(amount)),
+                        Style::default().fg(amount_color),
+                    ));
+                }
+                line.push(Span::styled(
+                    amount_text,
+                    Style::default().fg(amount_color),
+                ));
 
                 if show_time {
                     line.push(Span::raw("  "));
@@ -151,12 +184,16 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                     Style::default().fg(theme.text),
                 ));
 
-                if show_meta && let Some(category) = category {
-                    line.push(Span::raw("  "));
-                    line.push(Span::styled(
-                        format!("🏷{}", truncate(category, cat_width)),
-                        Style::default().fg(theme.accent),
-                    ));
+                if show_meta {
+                    let used_left = left_fixed + note_width;
+                    let pad = (inner.width as usize).saturating_sub(used_left + cat_col_width);
+                    line.push(Span::raw(" ".repeat(pad)));
+                    if let Some(category) = category {
+                        line.push(Span::styled(
+                            format!("🏷{}", truncate(category, cat_col_width.saturating_sub(2))),
+                            Style::default().fg(theme.accent),
+                        ));
+                    }
                 }
 
                 items.push(ListItem::new(Line::from(line)));
@@ -181,9 +218,8 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
 }
 
 fn home_insight(state: &AppState, currency: Currency) -> Option<String> {
-    let stats = state.stats.data.as_ref()?;
-    let income = stats.total_income_minor;
-    let expenses = stats.total_expenses_minor;
+    let income = state.stats.current_month_income;
+    let expenses = state.stats.current_month_expenses;
     if income == 0 && expenses == 0 {
         return None;
     }
@@ -207,4 +243,3 @@ fn home_insight(state: &AppState, currency: Currency) -> Option<String> {
         None
     }
 }
-

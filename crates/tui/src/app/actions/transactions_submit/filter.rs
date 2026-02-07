@@ -5,7 +5,16 @@ use crate::{
 
 impl App {
     pub(crate) async fn apply_filter(&mut self) -> Result<()> {
-        let (from_input, to_input, kind_income, kind_expense, kind_refund, kind_tw, kind_tf) = {
+        let (
+            from_input,
+            to_input,
+            kind_income,
+            kind_expense,
+            kind_refund,
+            kind_tw,
+            kind_tf,
+            include_transfers,
+        ) = {
             let filter = &self.state.transactions.filter;
             (
                 filter.from_input.clone(),
@@ -15,6 +24,7 @@ impl App {
                 filter.kind_refund,
                 filter.kind_transfer_wallet,
                 filter.kind_transfer_flow,
+                filter.include_transfers,
             )
         };
 
@@ -62,6 +72,7 @@ impl App {
         self.state.transactions.filter_from = from;
         self.state.transactions.filter_to = to;
         self.state.transactions.filter_kinds = if kinds.is_empty() { None } else { Some(kinds) };
+        self.state.transactions.include_transfers = include_transfers;
 
         self.state.transactions.filter.error = None;
         self.state.transactions.mode = TransactionsMode::List;

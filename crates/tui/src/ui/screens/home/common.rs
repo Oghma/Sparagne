@@ -17,7 +17,13 @@ use crate::ui::theme::Theme;
 pub(crate) use crate::ui::common::{ICON_EXPENSE, ICON_INCOME, get_currency, truncate};
 
 /// Renders an empty state message with hint.
-pub fn render_empty_state(frame: &mut Frame<'_>, area: Rect, message: &str, hint: &str, theme: &Theme) {
+pub fn render_empty_state(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    message: &str,
+    hint: &str,
+    theme: &Theme,
+) {
     let lines = vec![
         Line::from(""),
         Line::from(Span::styled(message, Style::default().fg(theme.text_muted))),

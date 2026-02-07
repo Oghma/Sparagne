@@ -13,5 +13,7 @@ mod wallets;
 pub(crate) use categories::resolve_category_matches;
 pub(crate) use defaults::{default_wallet_flow, default_wallet_flow_names};
 pub(crate) use flows::{ordered_active_flows, resolve_flow_matches, resolve_flow_name};
-pub(crate) use transactions::{extract_flow_transfer, extract_wallet_flow, extract_wallet_transfer};
+pub(crate) use transactions::{
+    extract_flow_transfer, extract_wallet_flow, extract_wallet_transfer,
+};
 pub(crate) use wallets::{resolve_wallet_matches, resolve_wallet_name};

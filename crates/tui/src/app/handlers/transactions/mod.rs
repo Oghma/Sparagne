@@ -1,6 +1,7 @@
 //! Transaction handler module.
 //!
-//! This module contains all transaction-related handlers split into focused submodules:
+//! This module contains all transaction-related handlers split into focused
+//! submodules:
 //! - `categories`: Category selection and cycling
 //! - `form_input`: Form input handling and focus management
 //! - `list`: List operations (selection, filtering)

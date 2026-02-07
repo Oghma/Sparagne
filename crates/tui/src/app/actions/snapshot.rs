@@ -8,9 +8,7 @@ use api_types::{
 use chrono::Duration as ChronoDuration;
 
 use crate::{
-    app::{
-        ordering::push_recent_id,
-    },
+    app::ordering::push_recent_id,
     client::ClientError,
     error::{AppError, Result},
     text::{TextKey, t},
@@ -63,10 +61,7 @@ impl App {
             include_transfers: Some(false),
         };
 
-        let res = self
-            .client
-            .transactions_list(payload)
-            .await;
+        let res = self.client.transactions_list(payload).await;
 
         let Ok(list) = res else {
             return Ok(());
@@ -114,10 +109,7 @@ impl App {
     }
     pub(crate) async fn refresh_snapshot(&mut self) -> Result<()> {
         let vault_payload = self.current_vault_payload();
-        let res = self
-            .client
-            .vault_snapshot(&vault_payload)
-            .await;
+        let res = self.client.vault_snapshot(&vault_payload).await;
 
         match res {
             Ok(snapshot) => {
@@ -126,6 +118,9 @@ impl App {
                 self.refresh_flows_search().await?;
                 self.connection_ok(None);
                 self.state.overlays.error = None;
+                if let Err(err) = self.load_stats().await {
+                    self.state.stats.error = Some(err.to_string());
+                }
             }
             Err(ClientError::NotFound(_)) => {
                 let locale = self.state.locale;
@@ -143,10 +138,15 @@ impl App {
                 } else {
                     self.connection_ok(None);
                     self.state.overlays.error = None;
+                    if let Err(err) = self.load_stats().await {
+                        self.state.stats.error = Some(err.to_string());
+                    }
                 }
             }
             Err(err) => {
-                let Some(message) = self.client_error_message(err) else { return Ok(()); };
+                let Some(message) = self.client_error_message(err) else {
+                    return Ok(());
+                };
                 let locale = self.state.locale;
                 self.state.wallets.error = Some(message.clone());
                 self.state.flows.error = Some(message.clone());
@@ -223,12 +223,10 @@ impl App {
 
         let res = self
             .client
-            .flows_shared_list(
-                FlowSharedList {
-                    vault_id: vault_id.to_string(),
-                    include_archived: Some(true),
-                },
-            )
+            .flows_shared_list(FlowSharedList {
+                vault_id: vault_id.to_string(),
+                include_archived: Some(true),
+            })
             .await;
 
         match res {
@@ -240,7 +238,9 @@ impl App {
                 Ok(())
             }
             Err(err) => {
-                let Some(msg) = self.client_error_message(err) else { return Ok(()); };
+                let Some(msg) = self.client_error_message(err) else {
+                    return Ok(());
+                };
                 Err(AppError::Terminal(msg))
             }
         }

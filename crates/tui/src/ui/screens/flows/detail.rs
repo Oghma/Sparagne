@@ -27,15 +27,33 @@ use crate::{
 pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let title = t(state.locale, TextKey::FlowDetailTitle);
     let Some(snapshot) = state.snapshot.as_ref() else {
-        render_empty(frame, area, theme, title, t(state.locale, TextKey::LoadingGeneric));
+        render_empty_state(
+            frame,
+            area,
+            title,
+            t(state.locale, TextKey::LoadingGeneric),
+            theme,
+        );
         return;
     };
     let Some(detail_id) = state.flows.detail.flow_id else {
-        render_empty(frame, area, theme, title, t(state.locale, TextKey::FlowSelectPrompt));
+        render_empty_state(
+            frame,
+            area,
+            title,
+            t(state.locale, TextKey::FlowSelectPrompt),
+            theme,
+        );
         return;
     };
     let Some(flow) = snapshot.flows.iter().find(|flow| flow.id == detail_id) else {
-        render_empty(frame, area, theme, title, t(state.locale, TextKey::FlowNotFound));
+        render_empty_state(
+            frame,
+            area,
+            title,
+            t(state.locale, TextKey::FlowNotFound),
+            theme,
+        );
         return;
     };
 
@@ -146,11 +164,6 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         currency,
         theme,
     );
-}
-
-/// Render an empty detail panel with a message.
-fn render_empty(frame: &mut Frame<'_>, area: Rect, theme: &Theme, title: &str, message: &str) {
-    render_empty_state(frame, area, title, message, theme);
 }
 
 /// Create a cap progress line showing current vs cap.
