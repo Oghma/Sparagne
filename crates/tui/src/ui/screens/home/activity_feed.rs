@@ -168,10 +168,7 @@ pub fn render_activity_feed(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                         Style::default().fg(amount_color),
                     ));
                 }
-                line.push(Span::styled(
-                    amount_text,
-                    Style::default().fg(amount_color),
-                ));
+                line.push(Span::styled(amount_text, Style::default().fg(amount_color)));
 
                 if show_time {
                     line.push(Span::raw("  "));
