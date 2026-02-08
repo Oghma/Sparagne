@@ -230,18 +230,12 @@ pub(crate) fn resolve_flow_name(state: &AppState, flow_id: Uuid) -> String {
 // Progress bar
 // ---------------------------------------------------------------------------
 
-/// Renders a text-based progress bar with filled (`\u{2588}`) and empty
-/// (`\u{2591}`) blocks.
+/// Renders a text-based progress bar with filled and empty blocks.
+///
+/// Delegates to [`ascii_bar`](crate::ui::components::charts::ascii_bar)
+/// after converting signed values to their absolute magnitudes.
 pub(crate) fn progress_bar(value: i64, max: i64, width: usize) -> String {
-    if max == 0 {
-        return "\u{2591}".repeat(width);
-    }
-
-    let ratio = (value.unsigned_abs() as f64 / max.unsigned_abs() as f64).clamp(0.0, 1.0);
-    let filled = ((ratio * width as f64) as usize).min(width);
-    let empty = width.saturating_sub(filled);
-
-    format!("{}{}", "\u{2588}".repeat(filled), "\u{2591}".repeat(empty))
+    crate::ui::components::charts::ascii_bar(value.unsigned_abs(), max.unsigned_abs(), width)
 }
 
 // ---------------------------------------------------------------------------

@@ -33,6 +33,22 @@ use super::components::{
     trend_status_badge,
 };
 
+/// Renders an optional percentage change, falling back to "N/A" when absent.
+fn change_span(
+    change: Option<f64>,
+    locale: crate::text::Locale,
+    theme: &Theme,
+) -> Span<'static> {
+    change
+        .map(|value| styled_percentage_change(value, theme))
+        .unwrap_or_else(|| {
+            Span::styled(
+                t(locale, TextKey::StatsNa),
+                Style::default().fg(theme.text_muted),
+            )
+        })
+}
+
 /// Render the cash flow tab.
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let layout = Layout::default()
@@ -91,39 +107,17 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     // MoM change line at full width (no inline sparkline)
     let income_change = percentage_change(&state.stats.monthly_income);
     let expense_change = percentage_change(&state.stats.monthly_trend);
+    let muted = |key| Span::styled(t(locale, key), Style::default().fg(theme.text_muted));
     let change_line = Line::from(vec![
-        Span::styled(
-            t(locale, TextKey::StatsMoM),
-            Style::default().fg(theme.text_muted),
-        ),
+        muted(TextKey::StatsMoM),
         Span::raw(" "),
-        Span::styled(
-            t(locale, TextKey::StatsInc),
-            Style::default().fg(theme.text_muted),
-        ),
+        muted(TextKey::StatsInc),
         Span::raw(" "),
-        income_change
-            .map(|value| styled_percentage_change(value, theme))
-            .unwrap_or_else(|| {
-                Span::styled(
-                    t(locale, TextKey::StatsNa),
-                    Style::default().fg(theme.text_muted),
-                )
-            }),
+        change_span(income_change, locale, theme),
         Span::raw("  "),
-        Span::styled(
-            t(locale, TextKey::StatsExp),
-            Style::default().fg(theme.text_muted),
-        ),
+        muted(TextKey::StatsExp),
         Span::raw(" "),
-        expense_change
-            .map(|value| styled_percentage_change(value, theme))
-            .unwrap_or_else(|| {
-                Span::styled(
-                    t(locale, TextKey::StatsNa),
-                    Style::default().fg(theme.text_muted),
-                )
-            }),
+        change_span(expense_change, locale, theme),
     ]);
     frame.render_widget(Paragraph::new(change_line), inner_layout[1]);
 

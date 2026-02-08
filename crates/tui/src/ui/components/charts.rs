@@ -97,21 +97,6 @@ pub fn ascii_bar(value: u64, max: u64, width: usize) -> String {
     format!("{}{}", "█".repeat(filled), "░".repeat(empty))
 }
 
-/// Creates a percentage bar with label.
-///
-/// Returns something like `████████░░ 80%`
-#[must_use]
-pub fn percentage_bar(percentage: u16, width: usize) -> String {
-    let filled = ((percentage as usize * width) / 100).min(width);
-    let empty = width.saturating_sub(filled);
-    format!(
-        "{}{} {:>3}%",
-        "█".repeat(filled),
-        "░".repeat(empty),
-        percentage
-    )
-}
-
 /// Computes the percentage of value relative to max.
 #[must_use]
 pub fn compute_percentage(value: i64, max: i64) -> u16 {

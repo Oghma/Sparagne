@@ -17,7 +17,7 @@ use crate::{
         common::truncate,
         components::{
             card::StatCard,
-            charts::{ascii_bar, compute_percentage, percentage_bar},
+            charts::{ascii_bar, compute_percentage},
         },
         theme::Theme,
     },
@@ -67,7 +67,7 @@ pub fn render_stat_row(
     );
 
     let bar_width = cols[2].width.saturating_sub(8).max(1) as usize;
-    let bar = percentage_bar(row.percentage, bar_width);
+    let bar = ascii_bar(row.percentage as u64, 100, bar_width);
     let label = format!(" {:>3}%", row.percentage);
     frame.render_widget(
         Paragraph::new(Line::from(vec![
@@ -318,23 +318,11 @@ pub fn month_name(month: u32) -> &'static str {
     }
 }
 
-/// Get short month name (3 letters).
-///
-/// Re-exports from the canonical `app::month_label` function.
-pub fn month_short_name(month: u32) -> &'static str {
-    crate::app::month_label(month)
-}
-
-/// Calculate year/month with offset.
-///
-/// Re-exports from the canonical `app::offset_month` function.
-pub fn offset_month(year: i32, month: u32, offset: i32) -> (i32, u32) {
-    crate::app::offset_month(year, month, offset)
-}
-
 /// Build a visual timeline showing recent months with the current one
 /// highlighted.
 pub fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a> {
+    use crate::app::{month_label, offset_month};
+
     let mut spans = Vec::new();
 
     // Show 5 months: 2 before, current, 2 after
@@ -360,7 +348,7 @@ pub fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a
     spans.push(Span::styled("[◀", Style::default().fg(theme.accent)));
 
     for (i, (y, m)) in months_to_show.iter().enumerate() {
-        let short_name = month_short_name(*m);
+        let short_name = month_label(*m);
         if i > 0 {
             spans.push(Span::raw("  "));
         }

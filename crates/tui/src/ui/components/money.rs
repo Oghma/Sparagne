@@ -7,6 +7,21 @@ use ratatui::{
 
 use crate::ui::theme::Theme;
 
+/// Returns the appropriate color for a gauge based on usage ratio.
+///
+/// - Green (`positive`) below 70%
+/// - Warning (`warning`) between 70% and 90%
+/// - Red (`negative`) above 90%
+fn gauge_color(ratio: f64, theme: &Theme) -> ratatui::style::Color {
+    if ratio < 0.7 {
+        theme.positive
+    } else if ratio < 0.9 {
+        theme.warning
+    } else {
+        theme.negative
+    }
+}
+
 /// Money emoji for positive amounts (income, balance).
 const EMOJI_MONEY_BAG: &str = "\u{1F4B0}"; // 💰
 /// Money emoji for negative amounts (expenses, outflow).
@@ -93,18 +108,9 @@ pub fn flow_cap_gauge(
     let ratio = (current as f64 / cap_value as f64).clamp(0.0, 1.0);
     let percentage = (ratio * 100.0) as u16;
 
-    // Color based on usage: green < 70%, warning 70-90%, red > 90%
-    let gauge_color = if ratio < 0.7 {
-        theme.positive
-    } else if ratio < 0.9 {
-        theme.warning
-    } else {
-        theme.negative
-    };
-
     Some(
         Gauge::default()
-            .gauge_style(Style::default().fg(gauge_color))
+            .gauge_style(Style::default().fg(gauge_color(ratio, theme)))
             .percent(percentage)
             .label(label.to_string()),
     )
@@ -126,18 +132,9 @@ pub fn flow_cap_line_gauge(
 
     let ratio = (current as f64 / cap_value as f64).clamp(0.0, 1.0);
 
-    // Color based on usage
-    let gauge_color = if ratio < 0.7 {
-        theme.positive
-    } else if ratio < 0.9 {
-        theme.warning
-    } else {
-        theme.negative
-    };
-
     Some(
         LineGauge::default()
-            .filled_style(Style::default().fg(gauge_color))
+            .filled_style(Style::default().fg(gauge_color(ratio, theme)))
             .filled_symbol(ratatui::symbols::line::THICK_HORIZONTAL)
             .unfilled_symbol(ratatui::symbols::line::THICK_HORIZONTAL)
             .ratio(ratio),
@@ -178,16 +175,7 @@ pub fn styled_progress_bar(
     let bar = inline_progress_bar(current, cap, width);
 
     let color = match cap {
-        Some(cap_value) if cap_value > 0 => {
-            let ratio = current as f64 / cap_value as f64;
-            if ratio < 0.7 {
-                theme.positive
-            } else if ratio < 0.9 {
-                theme.warning
-            } else {
-                theme.negative
-            }
-        }
+        Some(cap_value) if cap_value > 0 => gauge_color(current as f64 / cap_value as f64, theme),
         _ => theme.text_muted,
     };
 
