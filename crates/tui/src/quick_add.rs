@@ -249,6 +249,7 @@ fn parse_tags(note_raw: &str, locale: Locale) -> Result<ParsedTags, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
