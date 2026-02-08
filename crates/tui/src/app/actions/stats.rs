@@ -1,7 +1,6 @@
 use super::super::*;
 
 use crate::{
-    app::format::month_label,
     error::Result,
     text::{Locale, TextKey, t},
     ui::common::get_currency,
@@ -63,7 +62,8 @@ pub(crate) fn calculate_net_change(
 struct DailyAccumulation {
     /// Net daily deltas (income - expense) over the sparkline window.
     daily_net: Vec<i64>,
-    /// Per-month category breakdowns, keyed by (year, month), sorted descending.
+    /// Per-month category breakdowns, keyed by (year, month), sorted
+    /// descending.
     monthly_category_breakdowns: HashMap<(i32, u32), Vec<(String, i64)>>,
     /// Monthly income totals keyed by (year, month).
     monthly_income: HashMap<(i32, u32), i64>,
@@ -341,41 +341,16 @@ impl App {
         let rollup = build_monthly_rollup(to, 6, &acc.monthly_income, &acc.monthly_expense);
 
         // Store per-month maps for month navigation
-        let mut income_map = HashMap::new();
-        let mut expense_map = HashMap::new();
-        for (&key, &val) in &acc.monthly_income {
-            income_map.insert(key, val);
-        }
-        for (&key, &(expense, refund)) in &acc.monthly_expense {
-            expense_map.insert(key, (expense - refund).max(0));
-        }
         self.state.stats.monthly_category_breakdowns = acc.monthly_category_breakdowns;
-        self.state.stats.monthly_income_map = income_map;
-        self.state.stats.monthly_expense_map = expense_map;
+        self.state.stats.monthly_income_map = acc.monthly_income;
+        self.state.stats.monthly_expense_map = acc
+            .monthly_expense
+            .into_iter()
+            .map(|(key, (expense, refund))| (key, (expense - refund).max(0)))
+            .collect();
 
-        // Set current month data from maps
-        let current = self.state.stats.current_month;
-        self.state.stats.category_breakdown = self
-            .state
-            .stats
-            .monthly_category_breakdowns
-            .get(&current)
-            .cloned()
-            .unwrap_or_default();
-        self.state.stats.current_month_income = self
-            .state
-            .stats
-            .monthly_income_map
-            .get(&current)
-            .copied()
-            .unwrap_or(0);
-        self.state.stats.current_month_expenses = self
-            .state
-            .stats
-            .monthly_expense_map
-            .get(&current)
-            .copied()
-            .unwrap_or(0);
+        // Refresh derived fields for the currently selected month
+        self.stats_refresh_month_data();
 
         self.state.stats.monthly_trend = rollup.expenses;
         self.state.stats.monthly_income = rollup.income;
@@ -391,7 +366,7 @@ impl App {
         let mut year = to.year();
         let mut month = to.month();
         for _ in 0..count {
-            months.push((year, month, month_label(month)));
+            months.push((year, month, month_label(month).to_string()));
             if month == 1 {
                 month = 12;
                 year -= 1;

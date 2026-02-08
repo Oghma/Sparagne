@@ -9,6 +9,7 @@ mod state;
 
 // Re-export commonly used items for UI
 pub(crate) use actions::{TransferType, calculate_net_change, percentage_change};
+pub(crate) use format::{month_label, offset_month};
 pub(crate) use ordering::{
     FlowAlertSeverity, HomeFeedItem, flow_name_suggestions, flows_visible_indices, home_feed_items,
     ordered_flow_ids_from_state, ordered_wallet_ids_from_state, transactions_visible_indices,

@@ -1,5 +1,7 @@
 use super::super::*;
 
+use crate::app::offset_month;
+
 impl App {
     pub(crate) fn stats_next_tab(&mut self) {
         self.state.stats.tab = self.state.stats.tab.next();
@@ -15,28 +17,20 @@ impl App {
 
     pub(crate) fn stats_next_month(&mut self) {
         let (year, month) = self.state.stats.current_month;
-        if month == 12 {
-            self.state.stats.current_month = (year + 1, 1);
-        } else {
-            self.state.stats.current_month = (year, month + 1);
-        }
+        self.state.stats.current_month = offset_month(year, month, 1);
         self.stats_refresh_month_data();
     }
 
-    /// Navigate to previous month in stats view
+    /// Navigate to previous month in stats view.
     pub(crate) fn stats_prev_month(&mut self) {
         let (year, month) = self.state.stats.current_month;
-        if month == 1 {
-            self.state.stats.current_month = (year - 1, 12);
-        } else {
-            self.state.stats.current_month = (year, month - 1);
-        }
+        self.state.stats.current_month = offset_month(year, month, -1);
         self.stats_refresh_month_data();
     }
 
     /// Refresh category breakdown, income, and expenses from cached per-month
     /// maps after navigating to a different month.
-    fn stats_refresh_month_data(&mut self) {
+    pub(crate) fn stats_refresh_month_data(&mut self) {
         let key = self.state.stats.current_month;
         self.state.stats.category_breakdown = self
             .state

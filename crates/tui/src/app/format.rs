@@ -9,8 +9,8 @@ use engine::Currency;
 /// Returns a short label for a month number (1-12).
 ///
 /// Returns "???" for invalid month numbers.
-pub(crate) fn month_label(month: u32) -> String {
-    let label = match month {
+pub(crate) fn month_label(month: u32) -> &'static str {
+    match month {
         1 => "Jan",
         2 => "Feb",
         3 => "Mar",
@@ -24,8 +24,7 @@ pub(crate) fn month_label(month: u32) -> String {
         11 => "Nov",
         12 => "Dec",
         _ => "???",
-    };
-    label.to_string()
+    }
 }
 
 /// Formats an amount in minor units as a decimal string suitable for input
@@ -48,6 +47,17 @@ pub(crate) fn format_amount_input(amount_minor: i64, currency: Currency) -> Stri
         "{sign}{major}.{minor:0width$}",
         width = currency.minor_units() as usize
     )
+}
+
+/// Calculates year/month with a signed month offset.
+///
+/// Handles year wraparound correctly (e.g. January - 1 = December of the
+/// previous year).
+pub(crate) fn offset_month(year: i32, month: u32, offset: i32) -> (i32, u32) {
+    let total_months = year * 12 + (month as i32 - 1) + offset;
+    let new_year = total_months / 12;
+    let new_month = (total_months % 12 + 12) % 12 + 1;
+    (new_year, new_month as u32)
 }
 
 /// Returns a lowercase label for a transaction kind.

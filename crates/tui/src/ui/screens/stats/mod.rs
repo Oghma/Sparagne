@@ -27,6 +27,21 @@ use crate::{
     ui::{components::card::Card, theme::Theme},
 };
 
+/// Builds the "press r to refresh" hint spans used across stats screens.
+fn refresh_hint_spans(locale: crate::text::Locale, theme: &Theme) -> Vec<Span<'static>> {
+    vec![
+        Span::styled(
+            t(locale, TextKey::StatsNoData),
+            Style::default().fg(theme.text_muted),
+        ),
+        Span::styled("r", Style::default().fg(theme.accent)),
+        Span::styled(
+            t(locale, TextKey::StatsRefreshHint),
+            Style::default().fg(theme.text_muted),
+        ),
+    ]
+}
+
 /// Main render function for the stats screen.
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let locale = state.locale;
@@ -37,21 +52,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
         let inner = card.inner(area);
         card.render_frame(frame, area);
 
+        let mut spans = vec![
+            Span::styled(
+                error.as_str().to_string(),
+                Style::default().fg(theme.negative),
+            ),
+            Span::raw(" "),
+        ];
+        spans.extend(refresh_hint_spans(locale, theme));
         frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled(error.as_str(), Style::default().fg(theme.negative)),
-                Span::raw(" "),
-                Span::styled(
-                    t(locale, TextKey::StatsNoData),
-                    Style::default().fg(theme.text),
-                ),
-                Span::styled("r", Style::default().fg(theme.accent)),
-                Span::styled(
-                    t(locale, TextKey::StatsRefreshHint),
-                    Style::default().fg(theme.text),
-                ),
-            ]))
-            .alignment(Alignment::Center),
+            Paragraph::new(Line::from(spans)).alignment(Alignment::Center),
             inner,
         );
         return;
@@ -64,18 +74,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
         card.render_frame(frame, area);
 
         frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled(
-                    t(locale, TextKey::StatsNoData),
-                    Style::default().fg(theme.text),
-                ),
-                Span::styled("r", Style::default().fg(theme.accent)),
-                Span::styled(
-                    t(locale, TextKey::StatsRefreshHint),
-                    Style::default().fg(theme.text),
-                ),
-            ]))
-            .alignment(Alignment::Center),
+            Paragraph::new(Line::from(refresh_hint_spans(locale, theme)))
+                .alignment(Alignment::Center),
             inner,
         );
         return;

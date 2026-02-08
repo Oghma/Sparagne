@@ -40,7 +40,6 @@ pub(crate) fn validate_different_ids<T: Eq>(
 /// Validates minimum count of items
 pub(crate) fn validate_minimum_count(
     count: usize,
-    _transfer_type: TransferType,
     locale: Locale,
 ) -> std::result::Result<(), String> {
     if count < 2 {

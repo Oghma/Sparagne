@@ -317,18 +317,8 @@ pub fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
 
     if state.stats.sparkline.is_empty() {
         frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled(
-                    t(locale, TextKey::StatsNoData),
-                    Style::default().fg(theme.text_muted),
-                ),
-                Span::styled("r", Style::default().fg(theme.accent)),
-                Span::styled(
-                    t(locale, TextKey::StatsRefreshHint),
-                    Style::default().fg(theme.text_muted),
-                ),
-            ]))
-            .alignment(Alignment::Center),
+            Paragraph::new(Line::from(super::refresh_hint_spans(locale, theme)))
+                .alignment(Alignment::Center),
             inner,
         );
         return;
@@ -404,7 +394,6 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         income_change,
         current_income,
         income_status,
-        income_trend,
         currency,
         theme,
     );
@@ -417,7 +406,6 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         expense_change,
         -current_expense,
         expense_status,
-        expense_trend,
         currency,
         theme,
     );
@@ -425,17 +413,11 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
 
     // Net savings row
     let net_status = trend_status_badge(net_change, true, theme);
-    let net_sparkline: Vec<(String, i64)> = income_trend
-        .iter()
-        .zip(expense_trend.iter())
-        .map(|((label, inc), (_, exp))| (label.clone(), inc - exp))
-        .collect();
     let net_line = build_trend_line(
         t(locale, TextKey::StatsNetSavings),
         net_change,
         current_net,
         net_status,
-        &net_sparkline,
         currency,
         theme,
     );

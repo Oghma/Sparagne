@@ -15,9 +15,7 @@ impl App {
             TransferType::Wallet => self.active_wallet_ids(),
             TransferType::Flow => self.active_flow_ids(),
         };
-        if let Err(message) =
-            super::super::validate_minimum_count(ids.len(), kind, self.state.locale)
-        {
+        if let Err(message) = super::super::validate_minimum_count(ids.len(), self.state.locale) {
             self.state.transactions.transfer.error = Some(message);
             return Ok(());
         }

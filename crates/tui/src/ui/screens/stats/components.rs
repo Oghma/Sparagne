@@ -107,7 +107,7 @@ pub fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
 
     // Income StatCard with MoM trend
     let income_formatted = Money::new(income).format(currency);
-    let income_subtitle = format_mom_subtitle(income_change, true, locale);
+    let income_subtitle = format_mom_subtitle(income_change, locale);
     StatCard::new(
         t(locale, TextKey::StatsTotalIncome),
         income_formatted,
@@ -118,7 +118,7 @@ pub fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
 
     // Expenses StatCard with MoM trend
     let expenses_formatted = Money::new(-expenses).format(currency);
-    let expense_subtitle = format_mom_subtitle(expense_change, false, locale);
+    let expense_subtitle = format_mom_subtitle(expense_change, locale);
     StatCard::new(
         t(locale, TextKey::StatsTotalExpenses),
         expenses_formatted,
@@ -129,7 +129,7 @@ pub fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
 
     // Net Balance StatCard with MoM trend
     let net_formatted = Money::new(net).format(currency);
-    let net_subtitle = format_mom_subtitle(net_change, true, locale);
+    let net_subtitle = format_mom_subtitle(net_change, locale);
     StatCard::new(t(locale, TextKey::StatsNetBalance), net_formatted, theme)
         .subtitle(&net_subtitle)
         .render(frame, cols[2]);
@@ -253,20 +253,14 @@ pub fn get_category_icon(category: &str) -> &'static str {
         || lower.contains("acquist")
     {
         "🛒"
-    } else if lower.contains("bill")
-        || lower.contains("utilit")
-        || lower.contains("bolletta")
-    {
+    } else if lower.contains("bill") || lower.contains("utilit") || lower.contains("bolletta") {
         "💡"
     } else if lower.contains("subscri")
         || lower.contains("streaming")
         || lower.contains("abbonament")
     {
         "📱"
-    } else if lower.contains("travel")
-        || lower.contains("vacanz")
-        || lower.contains("viaggio")
-    {
+    } else if lower.contains("travel") || lower.contains("vacanz") || lower.contains("viaggio") {
         "🛫"
     } else if lower.contains("educat")
         || lower.contains("school")
@@ -288,11 +282,7 @@ pub(crate) use crate::ui::common::get_currency;
 pub(crate) use crate::app::{calculate_net_change, percentage_change};
 
 /// Format MoM subtitle with arrow indicator.
-pub fn format_mom_subtitle(
-    change: Option<f64>,
-    _positive_is_good: bool,
-    locale: crate::text::Locale,
-) -> String {
+pub fn format_mom_subtitle(change: Option<f64>, locale: crate::text::Locale) -> String {
     match change {
         Some(pct) => {
             let arrow = if pct > 0.0 {
@@ -329,30 +319,17 @@ pub fn month_name(month: u32) -> &'static str {
 }
 
 /// Get short month name (3 letters).
+///
+/// Re-exports from the canonical `app::month_label` function.
 pub fn month_short_name(month: u32) -> &'static str {
-    match month {
-        1 => "Jan",
-        2 => "Feb",
-        3 => "Mar",
-        4 => "Apr",
-        5 => "May",
-        6 => "Jun",
-        7 => "Jul",
-        8 => "Aug",
-        9 => "Sep",
-        10 => "Oct",
-        11 => "Nov",
-        12 => "Dec",
-        _ => "???",
-    }
+    crate::app::month_label(month)
 }
 
 /// Calculate year/month with offset.
+///
+/// Re-exports from the canonical `app::offset_month` function.
 pub fn offset_month(year: i32, month: u32, offset: i32) -> (i32, u32) {
-    let total_months = year * 12 + (month as i32 - 1) + offset;
-    let new_year = total_months / 12;
-    let new_month = (total_months % 12 + 12) % 12 + 1;
-    (new_year, new_month as u32)
+    crate::app::offset_month(year, month, offset)
 }
 
 /// Build a visual timeline showing recent months with the current one
@@ -448,7 +425,6 @@ pub fn build_trend_line<'a>(
     change: Option<f64>,
     amount: i64,
     status: (&'static str, ratatui::style::Color),
-    _data: &[(String, i64)],
     currency: Currency,
     theme: &Theme,
 ) -> Line<'a> {

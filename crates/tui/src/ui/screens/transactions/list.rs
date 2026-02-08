@@ -238,7 +238,7 @@ fn render_group_header(
 
     let spans = vec![
         Span::styled(
-            title.to_string(),
+            title,
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
