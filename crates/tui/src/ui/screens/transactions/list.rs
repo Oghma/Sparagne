@@ -147,7 +147,10 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         groups[entry].tx_indices.push(idx);
     }
 
-    for group in groups {
+    for (i, group) in groups.iter().enumerate() {
+        if i > 0 {
+            rows.push(ListItem::new(Line::from("")));
+        }
         rows.push(render_group_header(
             state.transactions.grouping_mode,
             group.label.as_str(),
@@ -157,8 +160,8 @@ pub fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
             theme,
         ));
 
-        for idx in group.tx_indices {
-            let tx = &state.transactions.items[idx];
+        for idx in &group.tx_indices {
+            let tx = &state.transactions.items[*idx];
             if selected_tx_id == Some(tx.id) {
                 selected_row = Some(rows.len());
             }
@@ -235,7 +238,7 @@ fn render_group_header(
 
     let spans = vec![
         Span::styled(
-            format!("  {title}"),
+            title.to_string(),
             Style::default()
                 .fg(theme.accent)
                 .add_modifier(Modifier::BOLD),
@@ -274,6 +277,7 @@ fn render_transaction_row(
     // Build 2-line transaction display
     // Line 1: time, amount with direction indicator, note
     let mut line1_spans = Vec::new();
+    line1_spans.push(Span::raw("  "));
     if state.transactions.visual_mode {
         let marker = if state.transactions.visual_selected.contains(&tx.id) {
             "*"
@@ -310,7 +314,7 @@ fn render_transaction_row(
 
     // Line 2: category, wallet, envelope (indented)
     let mut line2_spans = Vec::new();
-    line2_spans.push(Span::raw("      ")); // Indentation to align with content
+    line2_spans.push(Span::raw("        ")); // Indentation to align with content
     if !category.is_empty() {
         line2_spans.push(Span::styled(category, Style::default().fg(theme.accent)));
         line2_spans.push(Span::raw("  "));

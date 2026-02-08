@@ -86,8 +86,8 @@ pub fn amount_span(
     theme: &Theme,
 ) -> Span<'static> {
     let signed = match kind {
-        TransactionKind::Expense => -amount_minor,
-        TransactionKind::Income | TransactionKind::Refund => amount_minor,
+        TransactionKind::Expense => -amount_minor.abs(),
+        TransactionKind::Income | TransactionKind::Refund => amount_minor.abs(),
         TransactionKind::TransferWallet | TransactionKind::TransferFlow => amount_minor,
     };
     let color = if signed < 0 {
