@@ -17,7 +17,7 @@ use crate::{
         common::truncate,
         components::{
             card::StatCard,
-            charts::{BarStyle, ascii_bar_styled, compute_percentage, percentage_bar},
+            charts::{ascii_bar, compute_percentage, percentage_bar},
         },
         theme::Theme,
     },
@@ -79,22 +79,13 @@ pub fn render_stat_row(
 }
 
 /// Render the three main stat cards (Income, Expenses, Net Balance).
+///
+/// Values reflect the currently selected month, not all-time totals.
 pub fn render_stat_cards(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let currency = get_currency(state);
 
-    let (income, expenses, _balance) = state
-        .stats
-        .data
-        .as_ref()
-        .map(|s| {
-            (
-                s.total_income_minor,
-                s.total_expenses_minor,
-                s.balance_minor,
-            )
-        })
-        .unwrap_or((0, 0, 0));
-
+    let income = state.stats.current_month_income;
+    let expenses = state.stats.current_month_expenses;
     let net = income - expenses;
 
     // Calculate MoM changes
@@ -162,28 +153,22 @@ pub fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         .take(inner.height as usize)
         .map(|(idx, (category, amount))| {
             let pct = compute_percentage(*amount, total);
-            let style = if pct >= 75 {
-                BarStyle::Block
-            } else if pct >= 25 {
-                BarStyle::Line
-            } else {
-                BarStyle::Dot
-            };
-            let bar = ascii_bar_styled(
+            let bar = ascii_bar(
                 amount.saturating_abs() as u64,
                 total.saturating_abs() as u64,
                 15,
-                style,
             );
 
             // Get category icon based on name pattern
             let icon = get_category_icon(category);
 
             // Alert indicator for high spending categories
+            // Use ❗ (U+2757, char width 2) instead of ⚠️ (U+26A0+FE0F, char
+            // width 1) to avoid ratatui width misalignment.
             let alert = if pct >= 40 {
-                Span::styled(" ⚠️", Style::default().fg(theme.warning))
+                Span::styled(" ❗", Style::default().fg(theme.warning))
             } else {
-                Span::raw("  ")
+                Span::raw("   ")
             };
 
             Line::from(vec![
@@ -215,40 +200,82 @@ pub fn render_category_list(frame: &mut Frame<'_>, area: Rect, state: &AppState,
 }
 
 /// Get an emoji icon for a category based on common patterns.
+///
+/// All returned emojis must have `UnicodeWidthChar::width() == 2` for the base
+/// codepoint so that ratatui's per-character width calculation matches terminal
+/// rendering. Avoid characters that need VS16 (U+FE0F) to reach width 2
+/// (e.g. U+1F37D, U+1F6CD, U+2708, U+1F6E1) because ratatui processes chars
+/// individually and would see width 1 for the base, causing a 1-cell offset.
 pub fn get_category_icon(category: &str) -> &'static str {
     let lower = category.to_lowercase();
     if lower.contains("food")
         || lower.contains("grocer")
         || lower.contains("restaurant")
+        || lower.contains("ristorante")
+        || lower.contains("spesa")
+        || lower.contains("alimentar")
         || lower.contains("cibo")
     {
-        "🍽️"
+        "🍴"
     } else if lower.contains("house")
         || lower.contains("rent")
         || lower.contains("home")
         || lower.contains("casa")
+        || lower.contains("affitto")
     {
         "🏠"
     } else if lower.contains("transport")
+        || lower.contains("trasport")
         || lower.contains("car")
         || lower.contains("gas")
+        || lower.contains("benzina")
         || lower.contains("auto")
     {
         "🚗"
-    } else if lower.contains("health") || lower.contains("medical") || lower.contains("salute") {
+    } else if lower.contains("health")
+        || lower.contains("medical")
+        || lower.contains("medic")
+        || lower.contains("farmac")
+        || lower.contains("salute")
+    {
         "🏥"
-    } else if lower.contains("entertain") || lower.contains("fun") || lower.contains("svago") {
+    } else if lower.contains("entertain")
+        || lower.contains("fun")
+        || lower.contains("divertiment")
+        || lower.contains("cinema")
+        || lower.contains("svago")
+    {
         "🎬"
-    } else if lower.contains("shop") || lower.contains("cloth") || lower.contains("acquist") {
-        "🛍️"
-    } else if lower.contains("bill") || lower.contains("utilit") || lower.contains("bolletta") {
+    } else if lower.contains("shop")
+        || lower.contains("cloth")
+        || lower.contains("abbigliam")
+        || lower.contains("vestit")
+        || lower.contains("acquist")
+    {
+        "🛒"
+    } else if lower.contains("bill")
+        || lower.contains("utilit")
+        || lower.contains("bolletta")
+    {
         "💡"
-    } else if lower.contains("subscri") || lower.contains("abbonament") {
+    } else if lower.contains("subscri")
+        || lower.contains("streaming")
+        || lower.contains("abbonament")
+    {
         "📱"
-    } else if lower.contains("travel") || lower.contains("viaggio") {
-        "✈️"
-    } else if lower.contains("educat") || lower.contains("school") || lower.contains("scuola") {
+    } else if lower.contains("travel")
+        || lower.contains("vacanz")
+        || lower.contains("viaggio")
+    {
+        "🛫"
+    } else if lower.contains("educat")
+        || lower.contains("school")
+        || lower.contains("universit")
+        || lower.contains("scuola")
+    {
         "📚"
+    } else if lower.contains("assicuraz") || lower.contains("insurance") {
+        "🔒"
     } else {
         "📁"
     }

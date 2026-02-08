@@ -387,7 +387,6 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::StatsNoData => "Nessun dato. Premi ",
         TextKey::StatsRefreshHint => " per aggiornare.",
         TextKey::StatsMonthSummary => "Riepilogo Mese",
-        TextKey::StatsNoTrendData => "Nessun dato di trend",
         TextKey::StatsMoM => "MoM",
         TextKey::StatsInc => "Ent",
         TextKey::StatsExp => "Spe",

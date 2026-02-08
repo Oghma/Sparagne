@@ -20,6 +20,7 @@ impl App {
         } else {
             self.state.stats.current_month = (year, month + 1);
         }
+        self.stats_refresh_month_data();
     }
 
     /// Navigate to previous month in stats view
@@ -30,5 +31,33 @@ impl App {
         } else {
             self.state.stats.current_month = (year, month - 1);
         }
+        self.stats_refresh_month_data();
+    }
+
+    /// Refresh category breakdown, income, and expenses from cached per-month
+    /// maps after navigating to a different month.
+    fn stats_refresh_month_data(&mut self) {
+        let key = self.state.stats.current_month;
+        self.state.stats.category_breakdown = self
+            .state
+            .stats
+            .monthly_category_breakdowns
+            .get(&key)
+            .cloned()
+            .unwrap_or_default();
+        self.state.stats.current_month_income = self
+            .state
+            .stats
+            .monthly_income_map
+            .get(&key)
+            .copied()
+            .unwrap_or(0);
+        self.state.stats.current_month_expenses = self
+            .state
+            .stats
+            .monthly_expense_map
+            .get(&key)
+            .copied()
+            .unwrap_or(0);
     }
 }

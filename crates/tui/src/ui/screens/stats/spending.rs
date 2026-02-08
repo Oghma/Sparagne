@@ -8,10 +8,13 @@ use ratatui::{
     widgets::Paragraph,
 };
 
+use engine::Money;
+
 use crate::{
     app::AppState,
     text::{TextKey, t},
     ui::{
+        common::get_currency,
         components::{card::Card, charts::render_braille_sparkline},
         theme::Theme,
     },
@@ -62,5 +65,25 @@ fn render_expense_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState,
         return;
     }
 
-    render_braille_sparkline(frame, inner, &expense_data, theme, true);
+    let currency = get_currency(state);
+    let min = state
+        .stats
+        .monthly_trend
+        .iter()
+        .map(|(_, v)| *v)
+        .min()
+        .unwrap_or(0);
+    let max = state
+        .stats
+        .monthly_trend
+        .iter()
+        .map(|(_, v)| *v)
+        .max()
+        .unwrap_or(0);
+    let range_label = format!(
+        "{}–{}",
+        Money::new(-min).format(currency),
+        Money::new(-max).format(currency),
+    );
+    render_braille_sparkline(frame, inner, &expense_data, theme, Some(&range_label));
 }

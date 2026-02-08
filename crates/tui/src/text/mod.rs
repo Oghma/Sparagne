@@ -395,7 +395,6 @@ pub enum TextKey {
     StatsNoData,
     StatsRefreshHint,
     StatsMonthSummary,
-    StatsNoTrendData,
     StatsMoM,
     StatsInc,
     StatsExp,

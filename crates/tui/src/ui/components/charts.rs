@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{BarChart, Paragraph, Sparkline, Wrap},
+    widgets::{BarChart, Paragraph, Wrap},
 };
 use std::f64::consts::{FRAC_PI_2, TAU};
 
@@ -23,13 +23,14 @@ pub fn render_bar_chart(
     area: Rect,
     title: &str,
     data: &[(&str, u64)],
+    bar_color: Color,
     theme: &Theme,
 ) {
     let chart = BarChart::default()
         .data(data)
         .bar_width(3)
         .bar_gap(1)
-        .bar_style(Style::default().fg(theme.accent))
+        .bar_style(Style::default().fg(bar_color))
         .value_style(Style::default().fg(theme.text).add_modifier(Modifier::BOLD))
         .label_style(Style::default().fg(theme.text_muted));
 
@@ -82,47 +83,18 @@ pub fn render_pie_chart(
     frame.render_widget(pie, inner);
 }
 
-/// Renders an inline sparkline without borders (for embedding in other
-/// widgets).
-pub fn render_inline_sparkline(frame: &mut Frame<'_>, area: Rect, data: &[u64], theme: &Theme) {
-    let sparkline = Sparkline::default()
-        .data(data)
-        .style(Style::default().fg(theme.accent));
-
-    frame.render_widget(sparkline, area);
-}
-
-/// Creates a simple ASCII-based horizontal bar with different fill styles.
+/// Creates a simple ASCII-based horizontal bar using block characters.
 #[must_use]
-pub fn ascii_bar_styled(value: u64, max: u64, width: usize, style: BarStyle) -> String {
+pub fn ascii_bar(value: u64, max: u64, width: usize) -> String {
     if max == 0 {
-        return match style {
-            BarStyle::Block => "░".repeat(width),
-            BarStyle::Line => "─".repeat(width),
-            BarStyle::Dot => "·".repeat(width),
-        };
+        return "░".repeat(width);
     }
 
     let ratio = (value as f64 / max as f64).clamp(0.0, 1.0);
     let filled = ((ratio * width as f64) as usize).min(width);
     let empty = width.saturating_sub(filled);
 
-    match style {
-        BarStyle::Block => format!("{}{}", "█".repeat(filled), "░".repeat(empty)),
-        BarStyle::Line => format!("{}{}", "━".repeat(filled), "─".repeat(empty)),
-        BarStyle::Dot => format!("{}{}", "●".repeat(filled), "○".repeat(empty)),
-    }
-}
-
-/// Style options for ASCII bars.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BarStyle {
-    /// Block characters: █ and ░
-    Block,
-    /// Line characters: ━ and ─
-    Line,
-    /// Dot characters: ● and ○
-    Dot,
+    format!("{}{}", "█".repeat(filled), "░".repeat(empty))
 }
 
 /// Creates a percentage bar with label.
@@ -309,13 +281,17 @@ fn braille_column_pair_filled(left_height: u8, right_height: u8) -> char {
     char::from_u32(BRAILLE_BASE + dots as u32).unwrap_or('?')
 }
 
-/// Renders a Braille sparkline widget with optional min/max labels.
+/// Renders a Braille sparkline widget with an optional range label.
+///
+/// When `range_label` is `Some`, the label is appended after the sparkline
+/// (e.g. `"17.50 EUR – 178.73 EUR"`). Callers are responsible for
+/// formatting the label with proper currency display.
 pub fn render_braille_sparkline(
     frame: &mut Frame<'_>,
     area: Rect,
     data: &[u64],
     theme: &Theme,
-    show_minmax: bool,
+    range_label: Option<&str>,
 ) {
     if data.is_empty() || area.width == 0 || area.height == 0 {
         return;
@@ -323,10 +299,8 @@ pub fn render_braille_sparkline(
 
     let sparkline_str = braille_sparkline_filled(data);
 
-    let text = if show_minmax {
-        let min = data.iter().copied().min().unwrap_or(0);
-        let max = data.iter().copied().max().unwrap_or(0);
-        format!("{sparkline_str} {min}-{max}")
+    let text = if let Some(label) = range_label {
+        format!("{sparkline_str} {label}")
     } else {
         sparkline_str
     };

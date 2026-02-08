@@ -63,8 +63,8 @@ pub(crate) fn calculate_net_change(
 struct DailyAccumulation {
     /// Net daily deltas (income - expense) over the sparkline window.
     daily_net: Vec<i64>,
-    /// Category breakdown for the selected month, sorted descending by amount.
-    category_breakdown: Vec<(String, i64)>,
+    /// Per-month category breakdowns, keyed by (year, month), sorted descending.
+    monthly_category_breakdowns: HashMap<(i32, u32), Vec<(String, i64)>>,
     /// Monthly income totals keyed by (year, month).
     monthly_income: HashMap<(i32, u32), i64>,
     /// Monthly (expense, refund) totals keyed by (year, month).
@@ -82,23 +82,19 @@ struct SparklineData {
 }
 
 /// Walk through transactions and accumulate daily net deltas, monthly
-/// income/expense totals, and per-category expense breakdown for the current
-/// month.
+/// income/expense totals, and per-category expense breakdowns for all months.
 fn accumulate_daily_totals(
     transactions: &[TransactionView],
     start_day: NaiveDate,
     end_day: NaiveDate,
     days_count: usize,
-    current_month: (i32, u32),
     tz: &Tz,
     locale: Locale,
 ) -> DailyAccumulation {
     let mut daily_net = vec![0i64; days_count];
-    let mut category_breakdown: HashMap<String, i64> = HashMap::new();
+    let mut per_month_categories: HashMap<(i32, u32), HashMap<String, i64>> = HashMap::new();
     let mut monthly_income: HashMap<(i32, u32), i64> = HashMap::new();
     let mut monthly_expense: HashMap<(i32, u32), (i64, i64)> = HashMap::new();
-
-    let (current_year, current_month) = current_month;
 
     for tx in transactions {
         if tx.voided {
@@ -126,13 +122,15 @@ fn accumulate_daily_totals(
                 let entry = monthly_expense.entry((year, month)).or_insert((0, 0));
                 entry.0 += tx.amount_minor.abs();
 
-                if year == current_year && month == current_month {
-                    let category = tx
-                        .category
-                        .clone()
-                        .unwrap_or_else(|| t(locale, TextKey::UiOther).to_string());
-                    *category_breakdown.entry(category).or_insert(0) += tx.amount_minor.abs();
-                }
+                let category = tx
+                    .category
+                    .clone()
+                    .unwrap_or_else(|| t(locale, TextKey::UiOther).to_string());
+                *per_month_categories
+                    .entry((year, month))
+                    .or_default()
+                    .entry(category)
+                    .or_insert(0) += tx.amount_minor.abs();
             }
             TransactionKind::Refund => {
                 if date >= start_day && date <= end_day {
@@ -146,12 +144,19 @@ fn accumulate_daily_totals(
         }
     }
 
-    let mut breakdown: Vec<_> = category_breakdown.into_iter().collect();
-    breakdown.sort_by(|a, b| b.1.cmp(&a.1));
+    // Convert per-month category maps into sorted vecs
+    let monthly_category_breakdowns: HashMap<(i32, u32), Vec<(String, i64)>> = per_month_categories
+        .into_iter()
+        .map(|(key, map)| {
+            let mut breakdown: Vec<_> = map.into_iter().collect();
+            breakdown.sort_by(|a, b| b.1.cmp(&a.1));
+            (key, breakdown)
+        })
+        .collect();
 
     DailyAccumulation {
         daily_net,
-        category_breakdown: breakdown,
+        monthly_category_breakdowns,
         monthly_income,
         monthly_expense,
     }
@@ -327,7 +332,6 @@ impl App {
             start_day,
             end_day,
             days_count,
-            self.state.stats.current_month,
             &self.tz,
             self.state.locale,
         );
@@ -336,13 +340,45 @@ impl App {
 
         let rollup = build_monthly_rollup(to, 6, &acc.monthly_income, &acc.monthly_expense);
 
-        self.state.stats.category_breakdown = acc.category_breakdown;
-        let current_income = rollup.income.last().map(|(_, v)| *v).unwrap_or(0);
-        let current_expenses = rollup.expenses.last().map(|(_, v)| *v).unwrap_or(0);
+        // Store per-month maps for month navigation
+        let mut income_map = HashMap::new();
+        let mut expense_map = HashMap::new();
+        for (&key, &val) in &acc.monthly_income {
+            income_map.insert(key, val);
+        }
+        for (&key, &(expense, refund)) in &acc.monthly_expense {
+            expense_map.insert(key, (expense - refund).max(0));
+        }
+        self.state.stats.monthly_category_breakdowns = acc.monthly_category_breakdowns;
+        self.state.stats.monthly_income_map = income_map;
+        self.state.stats.monthly_expense_map = expense_map;
+
+        // Set current month data from maps
+        let current = self.state.stats.current_month;
+        self.state.stats.category_breakdown = self
+            .state
+            .stats
+            .monthly_category_breakdowns
+            .get(&current)
+            .cloned()
+            .unwrap_or_default();
+        self.state.stats.current_month_income = self
+            .state
+            .stats
+            .monthly_income_map
+            .get(&current)
+            .copied()
+            .unwrap_or(0);
+        self.state.stats.current_month_expenses = self
+            .state
+            .stats
+            .monthly_expense_map
+            .get(&current)
+            .copied()
+            .unwrap_or(0);
+
         self.state.stats.monthly_trend = rollup.expenses;
         self.state.stats.monthly_income = rollup.income;
-        self.state.stats.current_month_income = current_income;
-        self.state.stats.current_month_expenses = current_expenses;
         self.state.stats.sparkline = spark.values;
         self.state.stats.sparkline_min = spark.min;
         self.state.stats.sparkline_max = spark.max;

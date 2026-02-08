@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{Datelike, Local};
 
 use api_types::stats::Statistic;
@@ -32,6 +34,12 @@ pub struct StatsState {
     pub current_month_income: i64,
     /// Current month expenses from the monthly series (last element).
     pub current_month_expenses: i64,
+    /// Per-month category breakdowns keyed by (year, month).
+    pub monthly_category_breakdowns: HashMap<(i32, u32), Vec<(String, i64)>>,
+    /// Per-month income totals keyed by (year, month).
+    pub monthly_income_map: HashMap<(i32, u32), i64>,
+    /// Per-month net expense totals keyed by (year, month).
+    pub monthly_expense_map: HashMap<(i32, u32), i64>,
 }
 
 impl Default for StatsState {
@@ -50,6 +58,9 @@ impl Default for StatsState {
             sparkline_max: 0,
             current_month_income: 0,
             current_month_expenses: 0,
+            monthly_category_breakdowns: HashMap::new(),
+            monthly_income_map: HashMap::new(),
+            monthly_expense_map: HashMap::new(),
         }
     }
 }

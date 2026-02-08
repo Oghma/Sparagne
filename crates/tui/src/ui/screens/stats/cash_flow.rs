@@ -19,7 +19,7 @@ use crate::{
             card::Card,
             charts::{
                 PieSlice, compute_percentage, render_bar_chart, render_braille_sparkline,
-                render_inline_sparkline, render_pie_chart,
+                render_pie_chart,
             },
             money::{flow_cap_gauge, styled_amount_bold_emoji, styled_percentage_change},
         },
@@ -64,27 +64,22 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
 
     let currency = get_currency(state);
 
-    let (income, expenses, balance) = state
+    let income = state.stats.current_month_income;
+    let expenses = state.stats.current_month_expenses;
+    let balance = state
         .stats
         .data
         .as_ref()
-        .map(|s| {
-            (
-                s.total_income_minor,
-                s.total_expenses_minor,
-                s.balance_minor,
-            )
-        })
-        .unwrap_or((0, 0, 0));
-
+        .map(|s| s.balance_minor)
+        .unwrap_or(0);
     let net = income - expenses;
 
-    // Layout: header with navigation, then stats
+    // Layout: header with navigation, then MoM, then stats
     let inner_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1), // Navigation header
-            Constraint::Length(1), // Inline trend + MoM
+            Constraint::Length(1), // MoM change line (full width)
             Constraint::Min(0),    // Stats content
         ])
         .split(inner);
@@ -93,23 +88,7 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     let nav_line = build_month_timeline(year, month, theme);
     frame.render_widget(Paragraph::new(nav_line), inner_layout[0]);
 
-    let change_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-        .split(inner_layout[1]);
-
-    if !state.stats.sparkline.is_empty() {
-        render_inline_sparkline(frame, change_layout[0], &state.stats.sparkline, theme);
-    } else {
-        frame.render_widget(
-            Paragraph::new(Span::styled(
-                t(locale, TextKey::StatsNoTrendData),
-                Style::default().fg(theme.text_muted),
-            )),
-            change_layout[0],
-        );
-    }
-
+    // MoM change line at full width (no inline sparkline)
     let income_change = percentage_change(&state.stats.monthly_income);
     let expense_change = percentage_change(&state.stats.monthly_trend);
     let change_line = Line::from(vec![
@@ -146,7 +125,7 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
                 )
             }),
     ]);
-    frame.render_widget(Paragraph::new(change_line), change_layout[1]);
+    frame.render_widget(Paragraph::new(change_line), inner_layout[1]);
 
     // Stats content
     let stats_layout = Layout::default()
@@ -227,7 +206,7 @@ pub fn render_month_summary(frame: &mut Frame<'_>, area: Rect, state: &AppState,
     ]);
     frame.render_widget(Paragraph::new(net_line), stats_layout[4]);
 
-    // Total Balance row
+    // Total Balance row (all-time vault balance)
     let balance_label = format!("{:<12}", t(locale, TextKey::StatsBalance));
     let balance_line = Line::from(vec![
         Span::styled(balance_label, Style::default().fg(theme.text_muted)),
@@ -355,7 +334,19 @@ pub fn render_sparkline(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
         return;
     }
 
-    render_braille_sparkline(frame, inner, &state.stats.sparkline, theme, true);
+    let currency = get_currency(state);
+    let range_label = format!(
+        "{}–{}",
+        Money::new(state.stats.sparkline_min).format(currency),
+        Money::new(state.stats.sparkline_max).format(currency),
+    );
+    render_braille_sparkline(
+        frame,
+        inner,
+        &state.stats.sparkline,
+        theme,
+        Some(&range_label),
+    );
 }
 
 /// Render the monthly trend charts with income/expense comparison.
@@ -471,6 +462,7 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
             chart_layout[0],
             t(locale, TextKey::StatsIncome),
             &income_data,
+            theme.positive,
             theme,
         );
     }
@@ -480,6 +472,7 @@ pub fn render_monthly_trend(frame: &mut Frame<'_>, area: Rect, state: &AppState,
             chart_layout[1],
             t(locale, TextKey::StatsExpenses),
             &expense_data,
+            theme.negative,
             theme,
         );
     }
