@@ -286,7 +286,7 @@ mod http_tests {
             .await
             .unwrap();
         let flow_id = engine
-            .new_cash_flow(&vault_id, "Shared", 0, None, None, OWNER)
+            .new_cash_flow(&vault_id, "Shared", 0, None, None, false, OWNER)
             .await
             .unwrap();
         engine
@@ -381,7 +381,7 @@ mod http_tests {
             .await
             .unwrap();
         let flow_id = engine
-            .new_cash_flow(&vault_id, "Shared", 0, None, None, OWNER)
+            .new_cash_flow(&vault_id, "Shared", 0, None, None, false, OWNER)
             .await
             .unwrap();
         engine
@@ -530,11 +530,11 @@ mod http_tests {
             .await
             .unwrap();
         let flow_a = engine
-            .new_cash_flow(&vault_id, "Shared A", 0, None, None, OWNER)
+            .new_cash_flow(&vault_id, "Shared A", 0, None, None, false, OWNER)
             .await
             .unwrap();
         let flow_b = engine
-            .new_cash_flow(&vault_id, "Shared B", 0, None, None, OWNER)
+            .new_cash_flow(&vault_id, "Shared B", 0, None, None, false, OWNER)
             .await
             .unwrap();
         engine
@@ -730,7 +730,7 @@ mod http_tests {
             .await
             .unwrap();
         let flow_id = engine
-            .new_cash_flow(&vault_id, "Shared", 0, None, None, OWNER)
+            .new_cash_flow(&vault_id, "Shared", 0, None, None, false, OWNER)
             .await
             .unwrap();
         let vault = engine
@@ -813,7 +813,7 @@ mod http_tests {
             .await
             .unwrap();
         let flow_id = engine
-            .new_cash_flow(&vault_id, "Shared", 0, None, None, OWNER)
+            .new_cash_flow(&vault_id, "Shared", 0, None, None, false, OWNER)
             .await
             .unwrap();
         let vault = engine
@@ -1178,6 +1178,7 @@ mod http_tests {
                     mode: flow::FlowMode::NetCapped { cap_minor: 10_000 },
                     opening_balance_minor: 500,
                     occurred_at,
+                    allow_negative: false,
                 })
                 .unwrap(),
             ))
@@ -1202,6 +1203,7 @@ mod http_tests {
                     name: Some("Vacanze 2026".to_string()),
                     archived: Some(true),
                     mode: Some(flow::FlowMode::IncomeCapped { cap_minor: 20_000 }),
+                    allow_negative: None,
                 })
                 .unwrap(),
             ))
