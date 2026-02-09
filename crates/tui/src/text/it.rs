@@ -636,6 +636,7 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::RecurringFreqMonthly => "Mensile",
         TextKey::RecurringFreqYearly => "Annuale",
         TextKey::RecurringFormTitle => "Nuovo Ricorrente",
+        TextKey::RecurringFormEditTitle => "Modifica Ricorrente",
         TextKey::RecurringFormKind => "Tipo",
         TextKey::RecurringFormAmount => "Importo",
         TextKey::RecurringFormFrequency => "Frequenza",
@@ -647,6 +648,7 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::RecurringEnabled => "on",
         TextKey::RecurringDisabled => "off",
         TextKey::RecurringCreated => "Modello ricorrente creato.",
+        TextKey::RecurringUpdated => "Modello ricorrente aggiornato.",
         TextKey::RecurringArchived => "Modello ricorrente archiviato.",
         TextKey::RecurringExecuted => "Transazione ricorrente eseguita.",
 

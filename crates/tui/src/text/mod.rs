@@ -638,6 +638,7 @@ pub enum TextKey {
     RecurringFreqMonthly,
     RecurringFreqYearly,
     RecurringFormTitle,
+    RecurringFormEditTitle,
     RecurringFormKind,
     RecurringFormAmount,
     RecurringFormFrequency,
@@ -649,6 +650,7 @@ pub enum TextKey {
     RecurringEnabled,
     RecurringDisabled,
     RecurringCreated,
+    RecurringUpdated,
     RecurringArchived,
     RecurringExecuted,
 
