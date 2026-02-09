@@ -35,18 +35,51 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(RecurringTemplates::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(RecurringTemplates::Id).blob().not_null().primary_key())
-                    .col(ColumnDef::new(RecurringTemplates::VaultId).blob().not_null())
+                    .col(
+                        ColumnDef::new(RecurringTemplates::Id)
+                            .blob()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(RecurringTemplates::VaultId)
+                            .blob()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(RecurringTemplates::Kind).text().not_null())
-                    .col(ColumnDef::new(RecurringTemplates::AmountMinor).big_integer().not_null())
+                    .col(
+                        ColumnDef::new(RecurringTemplates::AmountMinor)
+                            .big_integer()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(RecurringTemplates::WalletId).blob())
                     .col(ColumnDef::new(RecurringTemplates::FlowId).blob())
-                    .col(ColumnDef::new(RecurringTemplates::CategoryId).blob().not_null())
+                    .col(
+                        ColumnDef::new(RecurringTemplates::CategoryId)
+                            .blob()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(RecurringTemplates::Note).text())
-                    .col(ColumnDef::new(RecurringTemplates::CreatedBy).text().not_null())
-                    .col(ColumnDef::new(RecurringTemplates::Frequency).text().not_null())
-                    .col(ColumnDef::new(RecurringTemplates::DayOfPeriod).integer().not_null())
-                    .col(ColumnDef::new(RecurringTemplates::StartDate).text().not_null())
+                    .col(
+                        ColumnDef::new(RecurringTemplates::CreatedBy)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(RecurringTemplates::Frequency)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(RecurringTemplates::DayOfPeriod)
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(RecurringTemplates::StartDate)
+                            .text()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(RecurringTemplates::EndDate).text())
                     .col(
                         ColumnDef::new(RecurringTemplates::Enabled)
@@ -55,7 +88,11 @@ impl MigrationTrait for Migration {
                             .default(true),
                     )
                     .col(ColumnDef::new(RecurringTemplates::LastExecutedDate).text())
-                    .col(ColumnDef::new(RecurringTemplates::CreatedAt).text().not_null())
+                    .col(
+                        ColumnDef::new(RecurringTemplates::CreatedAt)
+                            .text()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(RecurringTemplates::ArchivedAt).text())
                     .to_owned(),
             )

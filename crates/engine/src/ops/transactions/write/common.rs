@@ -82,7 +82,9 @@ impl Engine {
     ) -> ResultEngine<Uuid> {
         self.with_tx(|engine, db_tx| {
             Box::pin(async move {
-                engine.create_flow_wallet_transaction_in_tx(db_tx, cmd).await
+                engine
+                    .create_flow_wallet_transaction_in_tx(db_tx, cmd)
+                    .await
             })
         })
         .await

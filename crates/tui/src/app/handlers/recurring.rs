@@ -242,7 +242,8 @@ impl App {
         // Extract template data before borrowing mutably
         let template_data = {
             let Some(template) = self.state.recurring.selected_template_for_edit() else {
-                self.state.recurring.error = Some(t(self.state.locale, TextKey::ErrorResourceNotFound).to_string());
+                self.state.recurring.error =
+                    Some(t(self.state.locale, TextKey::ErrorResourceNotFound).to_string());
                 return;
             };
 
@@ -260,7 +261,17 @@ impl App {
             )
         };
 
-        let (kind, amount_minor, wallet_id, flow_id, note, frequency, day_of_period, start_date, end_date) = template_data;
+        let (
+            kind,
+            amount_minor,
+            wallet_id,
+            flow_id,
+            note,
+            frequency,
+            day_of_period,
+            start_date,
+            end_date,
+        ) = template_data;
 
         // Reset form to defaults
         self.state.recurring.reset_form();
@@ -284,11 +295,7 @@ impl App {
                     .unwrap_or(0);
             }
             if let Some(fid) = flow_id {
-                form.flow_index = snapshot
-                    .flows
-                    .iter()
-                    .position(|f| f.id == fid)
-                    .unwrap_or(0);
+                form.flow_index = snapshot.flows.iter().position(|f| f.id == fid).unwrap_or(0);
             }
         }
 

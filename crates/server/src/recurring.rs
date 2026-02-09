@@ -1,10 +1,10 @@
 //! Recurring templates API endpoints.
 
 use api_types::recurring::{
-    PendingRecurringList, PendingRecurringListResponse, PendingRecurringView,
-    RecurringExecute, RecurringExecuteResponse, RecurringKind, RecurringTemplateArchive,
-    RecurringTemplateCreated, RecurringTemplateList, RecurringTemplateListResponse,
-    RecurringTemplateNew, RecurringTemplateUpdate, RecurringTemplateView,
+    PendingRecurringList, PendingRecurringListResponse, PendingRecurringView, RecurringExecute,
+    RecurringExecuteResponse, RecurringKind, RecurringTemplateArchive, RecurringTemplateCreated,
+    RecurringTemplateList, RecurringTemplateListResponse, RecurringTemplateNew,
+    RecurringTemplateUpdate, RecurringTemplateView,
 };
 use axum::{
     Extension, Json,
@@ -66,7 +66,9 @@ fn template_to_view(t: &engine::RecurringTemplate) -> RecurringTemplateView {
         start_date: t.start_date.format("%Y-%m-%d").to_string(),
         end_date: t.end_date.map(|d| d.format("%Y-%m-%d").to_string()),
         enabled: t.enabled,
-        last_executed_date: t.last_executed_date.map(|d| d.format("%Y-%m-%d").to_string()),
+        last_executed_date: t
+            .last_executed_date
+            .map(|d| d.format("%Y-%m-%d").to_string()),
     }
 }
 

@@ -81,7 +81,8 @@ impl RecurringState {
         }
     }
 
-    /// Returns the template for editing - either from pending item or templates list.
+    /// Returns the template for editing - either from pending item or templates
+    /// list.
     pub(crate) fn selected_template_for_edit(&self) -> Option<&RecurringTemplateView> {
         if self.selected_is_pending() {
             self.pending.get(self.selected).map(|p| &p.template)

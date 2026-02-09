@@ -1,10 +1,9 @@
 //! Recurring template CRUD operations
 
 use api_types::recurring::{
-    PendingRecurringList, PendingRecurringListResponse, RecurringExecute,
-    RecurringExecuteResponse, RecurringTemplateArchive, RecurringTemplateCreated,
-    RecurringTemplateList, RecurringTemplateListResponse, RecurringTemplateNew,
-    RecurringTemplateUpdate,
+    PendingRecurringList, PendingRecurringListResponse, RecurringExecute, RecurringExecuteResponse,
+    RecurringTemplateArchive, RecurringTemplateCreated, RecurringTemplateList,
+    RecurringTemplateListResponse, RecurringTemplateNew, RecurringTemplateUpdate,
 };
 use uuid::Uuid;
 

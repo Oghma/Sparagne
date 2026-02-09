@@ -78,6 +78,27 @@ pub(crate) fn normalize_category_key(value: &str) -> ResultEngine<String> {
     Ok(normalized.to_string())
 }
 
+/// Validates and normalizes a category name, ensuring it's not reserved.
+///
+/// This helper combines display/key normalization with reserved name checking
+/// to provide a single validation entry point for category creation and
+/// updates.
+///
+/// Returns `(display_name, normalized_key)` tuple on success.
+pub(crate) fn validate_category_name(name: &str) -> ResultEngine<(String, String)> {
+    let display = normalize_category_display(name)?;
+    let normalized = normalize_category_key(&display)?;
+
+    // Reserved name check
+    if normalized == "uncategorized" {
+        return Err(EngineError::InvalidName(
+            "category name is reserved".to_string(),
+        ));
+    }
+
+    Ok((display, normalized))
+}
+
 /// Applies an optional patch to an existing optional text field.
 pub(crate) fn apply_optional_text_patch(
     existing: Option<String>,

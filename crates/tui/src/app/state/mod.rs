@@ -20,12 +20,12 @@ mod wallets;
 pub use categories::*;
 pub use flows::*;
 pub use members::*;
-pub use recurring::{RecurringFormField, RecurringFormState, RecurringMode, RecurringState};
 pub use overlays::{
     BulkCategoryDialogState, ConfirmAction, ConfirmDialogKind, ConfirmDialogState, ErrorAction,
     ErrorDialogKind, ErrorDialogState, GroupingDialogState, OverlayState,
 };
 pub use palette::{CommandPaletteState, MRU_LIMIT, PaletteCommand};
+pub use recurring::{RecurringFormField, RecurringFormState, RecurringMode, RecurringState};
 pub use search::{GlobalSearchState, SearchResult, SearchResultKind};
 pub use selectable::EntityListMode;
 pub(crate) use selectable::{
