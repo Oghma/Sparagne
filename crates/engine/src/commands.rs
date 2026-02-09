@@ -4,8 +4,10 @@
 //! (income/expense/transfer/update), keeping call sites readable and avoiding
 //! long argument lists.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
+
+use crate::recurring_templates::RecurrenceFrequency;
 
 /// Common metadata for transaction creation.
 #[derive(Clone, Debug)]
@@ -484,6 +486,192 @@ impl UpdateTransactionCmd {
     #[must_use]
     pub fn occurred_at(mut self, occurred_at: DateTime<Utc>) -> Self {
         self.occurred_at = Some(occurred_at);
+        self
+    }
+}
+
+/// Create a recurring transaction template.
+#[derive(Clone, Debug)]
+pub struct CreateRecurringCmd {
+    pub vault_id: String,
+    pub user_id: String,
+    pub kind: crate::TransactionKind,
+    pub amount_minor: i64,
+    pub wallet_id: Option<Uuid>,
+    pub flow_id: Option<Uuid>,
+    pub category_id: Option<Uuid>,
+    pub category: Option<String>,
+    pub note: Option<String>,
+    pub frequency: RecurrenceFrequency,
+    pub day_of_period: i32,
+    pub start_date: NaiveDate,
+    pub end_date: Option<NaiveDate>,
+}
+
+impl CreateRecurringCmd {
+    #[must_use]
+    pub fn new(
+        vault_id: impl Into<String>,
+        user_id: impl Into<String>,
+        kind: crate::TransactionKind,
+        amount_minor: i64,
+        frequency: RecurrenceFrequency,
+        day_of_period: i32,
+        start_date: NaiveDate,
+    ) -> Self {
+        Self {
+            vault_id: vault_id.into(),
+            user_id: user_id.into(),
+            kind,
+            amount_minor,
+            wallet_id: None,
+            flow_id: None,
+            category_id: None,
+            category: None,
+            note: None,
+            frequency,
+            day_of_period,
+            start_date,
+            end_date: None,
+        }
+    }
+
+    #[must_use]
+    pub fn wallet_id(mut self, wallet_id: Uuid) -> Self {
+        self.wallet_id = Some(wallet_id);
+        self
+    }
+
+    #[must_use]
+    pub fn flow_id(mut self, flow_id: Uuid) -> Self {
+        self.flow_id = Some(flow_id);
+        self
+    }
+
+    #[must_use]
+    pub fn category_id(mut self, category_id: Uuid) -> Self {
+        self.category_id = Some(category_id);
+        self
+    }
+
+    #[must_use]
+    pub fn category(mut self, category: impl Into<String>) -> Self {
+        self.category = Some(category.into());
+        self
+    }
+
+    #[must_use]
+    pub fn note(mut self, note: impl Into<String>) -> Self {
+        self.note = Some(note.into());
+        self
+    }
+
+    #[must_use]
+    pub fn end_date(mut self, end_date: NaiveDate) -> Self {
+        self.end_date = Some(end_date);
+        self
+    }
+}
+
+/// Update an existing recurring template.
+#[derive(Clone, Debug)]
+pub struct UpdateRecurringCmd {
+    pub vault_id: String,
+    pub template_id: Uuid,
+    pub user_id: String,
+    pub amount_minor: Option<i64>,
+    pub wallet_id: Option<Uuid>,
+    pub flow_id: Option<Uuid>,
+    pub category_id: Option<Uuid>,
+    pub category: Option<String>,
+    pub note: Option<String>,
+    pub frequency: Option<RecurrenceFrequency>,
+    pub day_of_period: Option<i32>,
+    pub end_date: Option<Option<NaiveDate>>,
+    pub enabled: Option<bool>,
+}
+
+impl UpdateRecurringCmd {
+    #[must_use]
+    pub fn new(
+        vault_id: impl Into<String>,
+        template_id: Uuid,
+        user_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            vault_id: vault_id.into(),
+            template_id,
+            user_id: user_id.into(),
+            amount_minor: None,
+            wallet_id: None,
+            flow_id: None,
+            category_id: None,
+            category: None,
+            note: None,
+            frequency: None,
+            day_of_period: None,
+            end_date: None,
+            enabled: None,
+        }
+    }
+
+    #[must_use]
+    pub fn amount_minor(mut self, v: i64) -> Self {
+        self.amount_minor = Some(v);
+        self
+    }
+
+    #[must_use]
+    pub fn wallet_id(mut self, v: Uuid) -> Self {
+        self.wallet_id = Some(v);
+        self
+    }
+
+    #[must_use]
+    pub fn flow_id(mut self, v: Uuid) -> Self {
+        self.flow_id = Some(v);
+        self
+    }
+
+    #[must_use]
+    pub fn category_id(mut self, v: Uuid) -> Self {
+        self.category_id = Some(v);
+        self
+    }
+
+    #[must_use]
+    pub fn category(mut self, v: impl Into<String>) -> Self {
+        self.category = Some(v.into());
+        self
+    }
+
+    #[must_use]
+    pub fn note(mut self, v: impl Into<String>) -> Self {
+        self.note = Some(v.into());
+        self
+    }
+
+    #[must_use]
+    pub fn frequency(mut self, v: RecurrenceFrequency) -> Self {
+        self.frequency = Some(v);
+        self
+    }
+
+    #[must_use]
+    pub fn day_of_period(mut self, v: i32) -> Self {
+        self.day_of_period = Some(v);
+        self
+    }
+
+    #[must_use]
+    pub fn end_date(mut self, v: Option<NaiveDate>) -> Self {
+        self.end_date = Some(v);
+        self
+    }
+
+    #[must_use]
+    pub fn enabled(mut self, v: bool) -> Self {
+        self.enabled = Some(v);
         self
     }
 }
