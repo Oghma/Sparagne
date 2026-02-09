@@ -35,7 +35,13 @@ pub(crate) fn render_shell(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
 
     match state.section {
         Section::Home => screens::home::render(frame, content_inner, state, theme),
-        Section::Transactions => screens::transactions::render(frame, content_inner, state, theme),
+        Section::Transactions => {
+            if state.transactions.recurring_mode {
+                screens::recurring::render(frame, content_inner, state, theme);
+            } else {
+                screens::transactions::render(frame, content_inner, state, theme);
+            }
+        }
         Section::Accounts => screens::accounts::render(frame, content_inner, state, theme),
         Section::Analytics => screens::analytics::render(frame, content_inner, state, theme),
         Section::Settings => screens::settings::render(frame, content_inner, state, theme),
@@ -230,6 +236,9 @@ fn get_context_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
 
 fn get_transactions_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
     let locale = state.locale;
+    if state.transactions.recurring_mode {
+        return get_recurring_hints(state);
+    }
     match state.transactions.mode {
         crate::app::TransactionsMode::List => vec![components::hints::common::quick_add(locale)],
         crate::app::TransactionsMode::Detail => vec![
@@ -336,5 +345,18 @@ fn get_members_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
             )]
         }
         crate::app::MembersMode::Form => components::hints::common::form_editing(locale),
+    }
+}
+
+fn get_recurring_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
+    let locale = state.locale;
+    match state.recurring.mode {
+        crate::app::RecurringMode::List => {
+            vec![
+                components::hints::KeyHint::new("c", t(locale, TextKey::HintCreate)),
+                components::hints::KeyHint::new("Esc", t(locale, TextKey::HintBack)),
+            ]
+        }
+        crate::app::RecurringMode::Create => components::hints::common::form_editing(locale),
     }
 }
