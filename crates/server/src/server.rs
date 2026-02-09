@@ -299,14 +299,14 @@ mod http_tests {
             .unwrap();
         let flow_id = engine
             .new_cash_flow(NewCashFlowParams {
-            vault_id: &vault_id,
-            name: "Shared",
-            balance: 0,
-            max_balance: None,
-            income_bounded: None,
-            allow_negative: false,
-            user_id: OWNER,
-        })
+                vault_id: &vault_id,
+                name: "Shared",
+                balance: 0,
+                max_balance: None,
+                income_bounded: None,
+                allow_negative: false,
+                user_id: OWNER,
+            })
             .await
             .unwrap();
         engine
@@ -402,14 +402,14 @@ mod http_tests {
             .unwrap();
         let flow_id = engine
             .new_cash_flow(NewCashFlowParams {
-            vault_id: &vault_id,
-            name: "Shared",
-            balance: 0,
-            max_balance: None,
-            income_bounded: None,
-            allow_negative: false,
-            user_id: OWNER,
-        })
+                vault_id: &vault_id,
+                name: "Shared",
+                balance: 0,
+                max_balance: None,
+                income_bounded: None,
+                allow_negative: false,
+                user_id: OWNER,
+            })
             .await
             .unwrap();
         engine
@@ -559,26 +559,26 @@ mod http_tests {
             .unwrap();
         let flow_a = engine
             .new_cash_flow(NewCashFlowParams {
-            vault_id: &vault_id,
-            name: "Shared A",
-            balance: 0,
-            max_balance: None,
-            income_bounded: None,
-            allow_negative: false,
-            user_id: OWNER,
-        })
+                vault_id: &vault_id,
+                name: "Shared A",
+                balance: 0,
+                max_balance: None,
+                income_bounded: None,
+                allow_negative: false,
+                user_id: OWNER,
+            })
             .await
             .unwrap();
         let flow_b = engine
             .new_cash_flow(NewCashFlowParams {
-            vault_id: &vault_id,
-            name: "Shared B",
-            balance: 0,
-            max_balance: None,
-            income_bounded: None,
-            allow_negative: false,
-            user_id: OWNER,
-        })
+                vault_id: &vault_id,
+                name: "Shared B",
+                balance: 0,
+                max_balance: None,
+                income_bounded: None,
+                allow_negative: false,
+                user_id: OWNER,
+            })
             .await
             .unwrap();
         engine
@@ -775,14 +775,14 @@ mod http_tests {
             .unwrap();
         let flow_id = engine
             .new_cash_flow(NewCashFlowParams {
-            vault_id: &vault_id,
-            name: "Shared",
-            balance: 0,
-            max_balance: None,
-            income_bounded: None,
-            allow_negative: false,
-            user_id: OWNER,
-        })
+                vault_id: &vault_id,
+                name: "Shared",
+                balance: 0,
+                max_balance: None,
+                income_bounded: None,
+                allow_negative: false,
+                user_id: OWNER,
+            })
             .await
             .unwrap();
         let vault = engine
@@ -866,14 +866,14 @@ mod http_tests {
             .unwrap();
         let flow_id = engine
             .new_cash_flow(NewCashFlowParams {
-            vault_id: &vault_id,
-            name: "Shared",
-            balance: 0,
-            max_balance: None,
-            income_bounded: None,
-            allow_negative: false,
-            user_id: OWNER,
-        })
+                vault_id: &vault_id,
+                name: "Shared",
+                balance: 0,
+                max_balance: None,
+                income_bounded: None,
+                allow_negative: false,
+                user_id: OWNER,
+            })
             .await
             .unwrap();
         let vault = engine

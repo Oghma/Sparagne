@@ -166,7 +166,9 @@ impl Engine {
         };
 
         if !authorized {
-            return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
+            return Err(EngineError::KeyNotFound(
+                EngineError::VAULT_NOT_FOUND.to_string(),
+            ));
         }
 
         Ok(())
@@ -212,7 +214,9 @@ impl Engine {
             .await?
             .is_none()
         {
-            return Err(EngineError::KeyNotFound(EngineError::USER_NOT_FOUND.to_string()));
+            return Err(EngineError::KeyNotFound(
+                EngineError::USER_NOT_FOUND.to_string(),
+            ));
         }
         Ok(())
     }
@@ -374,7 +378,9 @@ impl Engine {
             {
                 return Ok(model);
             }
-            return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
+            return Err(EngineError::KeyNotFound(
+                EngineError::VAULT_NOT_FOUND.to_string(),
+            ));
         }
 
         if allowed.len() > 1 {
@@ -417,7 +423,8 @@ impl Engine {
         Ok(count > 0)
     }
 
-    /// Checks if a user has any access to a vault (owner, member, or flow member).
+    /// Checks if a user has any access to a vault (owner, member, or flow
+    /// member).
     async fn has_vault_or_flow_access(
         &self,
         db: &DatabaseTransaction,
@@ -449,7 +456,9 @@ impl Engine {
             .has_vault_or_flow_access(db, model.id, &model.user_id, user_id)
             .await?;
         if !has_access {
-            return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
+            return Err(EngineError::KeyNotFound(
+                EngineError::VAULT_NOT_FOUND.to_string(),
+            ));
         }
         Ok(model)
     }
@@ -486,7 +495,9 @@ impl Engine {
             {
                 return Ok(model);
             }
-            return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
+            return Err(EngineError::KeyNotFound(
+                EngineError::VAULT_NOT_FOUND.to_string(),
+            ));
         }
 
         if allowed_vaults.len() > 1 {

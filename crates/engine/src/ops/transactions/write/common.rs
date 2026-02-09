@@ -268,7 +268,9 @@ impl Engine {
             .filter(cash_flows::Column::VaultId.eq(vault_uuid))
             .one(input.db_tx)
             .await?
-            .ok_or_else(|| EngineError::KeyNotFound("cash_EngineError::FLOW_NOT_FOUND".to_string()))?;
+            .ok_or_else(|| {
+                EngineError::KeyNotFound("cash_EngineError::FLOW_NOT_FOUND".to_string())
+            })?;
         validate_flow_mode_fields(
             &flow_model.name,
             flow_model.max_balance,

@@ -4,8 +4,7 @@ use chrono::{TimeZone, Utc};
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Statement};
 
 use engine::{
-    NewCashFlowParams,
-    CategoryMergeConflictKind, Currency, Engine, EngineError, TransactionKind,
+    CategoryMergeConflictKind, Currency, Engine, EngineError, NewCashFlowParams, TransactionKind,
     TransactionListFilter,
 };
 use migration::MigratorTrait;

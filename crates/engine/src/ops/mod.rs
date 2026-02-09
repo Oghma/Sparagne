@@ -100,7 +100,8 @@ fn build_transaction(input: TransactionBuildInput<'_>) -> ResultEngine<Transacti
 }
 
 /// Creates a pair of balanced legs for transfers between two targets.
-/// The `from_target` leg has negative amount, the `to_target` leg has positive amount.
+/// The `from_target` leg has negative amount, the `to_target` leg has positive
+/// amount.
 fn build_balanced_legs(
     tx_id: Uuid,
     from_target: LegTarget,
@@ -115,7 +116,8 @@ fn build_balanced_legs(
 }
 
 /// Creates legs for flow-wallet transactions (income/expense).
-/// Both legs use the same signed amount (positive for income, negative for expense).
+/// Both legs use the same signed amount (positive for income, negative for
+/// expense).
 fn flow_wallet_legs(
     tx_id: Uuid,
     wallet_id: Uuid,

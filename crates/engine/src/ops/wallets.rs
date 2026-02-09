@@ -33,7 +33,9 @@ impl Engine {
                     .filter(wallets::Column::VaultId.eq(vault_uuid))
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::WALLET_NOT_FOUND.to_string()))?;
+                    .ok_or_else(|| {
+                        EngineError::KeyNotFound(EngineError::WALLET_NOT_FOUND.to_string())
+                    })?;
 
                 let wallet = Wallet::try_from((model, vault_currency))?;
                 Ok(wallet)

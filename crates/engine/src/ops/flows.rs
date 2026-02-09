@@ -41,7 +41,9 @@ impl Engine {
                 let vault_model = vault::Entity::find_by_id(vault_uuid)
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
+                    .ok_or_else(|| {
+                        EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string())
+                    })?;
                 let vault_currency = vault_model.currency;
                 let flow = CashFlow::try_from((model, vault_currency))?;
                 Ok(flow)
@@ -66,7 +68,9 @@ impl Engine {
                 let vault_model = vault::Entity::find_by_id(vault_uuid)
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
+                    .ok_or_else(|| {
+                        EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string())
+                    })?;
                 let vault_currency = vault_model.currency;
 
                 let model = cash_flows::Entity::find()
@@ -74,7 +78,9 @@ impl Engine {
                     .filter(Expr::cust("LOWER(name)").eq(name_lower))
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string()))?;
+                    .ok_or_else(|| {
+                        EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string())
+                    })?;
 
                 if !engine
                     .has_vault_read_access(db_tx, vault_id.as_str(), user_id.as_str())
@@ -115,7 +121,9 @@ impl Engine {
                 let vault_model = vault::Entity::find_by_id(vault_uuid)
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
+                    .ok_or_else(|| {
+                        EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string())
+                    })?;
                 let vault_currency = vault_model.currency;
 
                 let has_vault_access = if vault_model.user_id == user_id {
@@ -156,7 +164,9 @@ impl Engine {
                         models.push(flow);
                     }
                     if models.is_empty() {
-                        return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
+                        return Err(EngineError::KeyNotFound(
+                            EngineError::VAULT_NOT_FOUND.to_string(),
+                        ));
                     }
                     models
                 };
@@ -192,7 +202,9 @@ impl Engine {
                     .filter(cash_flows::Column::VaultId.eq(vault_uuid))
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string()))?;
+                    .ok_or_else(|| {
+                        EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string())
+                    })?;
 
                 if flow_model.system_kind == Some(cash_flows::SystemFlowKind::Unallocated)
                     || flow_model

@@ -97,7 +97,9 @@ impl Engine {
                 let vault_model = vault::Entity::find_by_id(vault_uuid)
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
+                    .ok_or_else(|| {
+                        EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string())
+                    })?;
                 let currency = vault_model.currency;
                 // AuthZ:
                 // - Vault owner/editor can transfer between any flows in the vault.

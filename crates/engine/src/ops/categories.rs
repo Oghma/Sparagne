@@ -182,7 +182,9 @@ impl Engine {
                     .filter(categories::Column::VaultId.eq(vault_uuid))
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::CATEGORY_NOT_FOUND.to_string()))?;
+                    .ok_or_else(|| {
+                        EngineError::KeyNotFound(EngineError::CATEGORY_NOT_FOUND.to_string())
+                    })?;
                 if model.is_system {
                     return Err(EngineError::InvalidName(
                         "system categories cannot be modified".to_string(),
