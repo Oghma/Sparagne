@@ -77,5 +77,4 @@ impl EngineError {
     pub(crate) const WALLET_NOT_FOUND: &'static str = "wallet not exists";
     pub(crate) const CATEGORY_NOT_FOUND: &'static str = "category not exists";
     pub(crate) const USER_NOT_FOUND: &'static str = "user not exists";
-    pub(crate) const RECURRING_NOT_FOUND: &'static str = "recurring template not exists";
 }
