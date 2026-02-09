@@ -22,7 +22,7 @@ use crate::{
 pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     match state.recurring.mode {
         RecurringMode::List => render_list(frame, area, state, theme),
-        RecurringMode::Create => {
+        RecurringMode::Create | RecurringMode::Edit => {
             render_list(frame, area, state, theme);
             render_form_overlay(frame, area, state, theme);
         }
@@ -205,9 +205,16 @@ fn render_form_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState, them
 
     frame.render_widget(Clear, popup);
 
+    // Use different title for Create vs Edit mode
+    let title_key = match state.recurring.mode {
+        RecurringMode::Create => TextKey::RecurringFormTitle,
+        RecurringMode::Edit => TextKey::RecurringFormEditTitle,
+        RecurringMode::List => TextKey::RecurringFormTitle, // Shouldn't happen
+    };
+
     let block = Block::default()
         .title(Span::styled(
-            format!(" {} ", t(locale, TextKey::RecurringFormTitle)),
+            format!(" {} ", t(locale, title_key)),
             Style::default().fg(theme.accent),
         ))
         .borders(Borders::ALL)

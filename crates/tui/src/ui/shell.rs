@@ -354,9 +354,12 @@ fn get_recurring_hints(state: &AppState) -> Vec<components::hints::KeyHint> {
         crate::app::RecurringMode::List => {
             vec![
                 components::hints::KeyHint::new("c", t(locale, TextKey::HintCreate)),
+                components::hints::KeyHint::new("e", t(locale, TextKey::HintEdit)),
                 components::hints::KeyHint::new("Esc", t(locale, TextKey::HintBack)),
             ]
         }
-        crate::app::RecurringMode::Create => components::hints::common::form_editing(locale),
+        crate::app::RecurringMode::Create | crate::app::RecurringMode::Edit => {
+            components::hints::common::form_editing(locale)
+        }
     }
 }
