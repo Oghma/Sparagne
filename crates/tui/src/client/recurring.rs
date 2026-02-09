@@ -4,7 +4,7 @@ use api_types::recurring::{
     PendingRecurringList, PendingRecurringListResponse, RecurringExecute,
     RecurringExecuteResponse, RecurringTemplateArchive, RecurringTemplateCreated,
     RecurringTemplateList, RecurringTemplateListResponse, RecurringTemplateNew,
-    RecurringTemplateUpdate, RecurringTemplateView,
+    RecurringTemplateUpdate,
 };
 use uuid::Uuid;
 
@@ -41,26 +41,6 @@ impl Client {
 
         let res = self
             .auth(self.http.post(endpoint))
-            .json(&payload)
-            .send()
-            .await
-            .map_err(ClientError::Transport)?;
-
-        handle_json(res).await
-    }
-
-    pub async fn recurring_get(
-        &self,
-        id: Uuid,
-        payload: RecurringTemplateList,
-    ) -> std::result::Result<RecurringTemplateView, ClientError> {
-        let endpoint = self
-            .base_url
-            .join(&format!("recurring/{id}"))
-            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
-
-        let res = self
-            .auth(self.http.get(endpoint))
             .json(&payload)
             .send()
             .await
