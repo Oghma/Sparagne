@@ -325,6 +325,7 @@ pub mod error {
         InvalidFlow,
         InvalidId,
         InvalidName,
+        InvalidRecurring,
         InvalidRole,
         MembershipLastOwner,
         MembershipOwnerImmutable,
@@ -424,6 +425,140 @@ pub mod stats {
         pub balance_minor: i64,
         pub total_income_minor: i64,
         pub total_expenses_minor: i64,
+    }
+}
+
+pub mod recurring {
+    use super::*;
+
+    /// How often a recurring template repeats.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum RecurrenceFrequency {
+        Daily,
+        Weekly,
+        Monthly,
+        Yearly,
+    }
+
+    /// Transaction kind limited to recurring-supported types.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum RecurringKind {
+        Income,
+        Expense,
+    }
+
+    /// Create a new recurring template.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct RecurringTemplateNew {
+        pub vault_id: String,
+        pub kind: RecurringKind,
+        pub amount_minor: i64,
+        pub wallet_id: Option<Uuid>,
+        pub flow_id: Option<Uuid>,
+        pub category_id: Option<Uuid>,
+        pub category: Option<String>,
+        pub note: Option<String>,
+        pub frequency: RecurrenceFrequency,
+        pub day_of_period: i32,
+        /// ISO date YYYY-MM-DD.
+        pub start_date: String,
+        /// Optional ISO date YYYY-MM-DD.
+        pub end_date: Option<String>,
+    }
+
+    /// Response body for recurring template creation.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct RecurringTemplateCreated {
+        pub id: Uuid,
+    }
+
+    /// A recurring template view for API clients.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct RecurringTemplateView {
+        pub id: Uuid,
+        pub kind: RecurringKind,
+        pub amount_minor: i64,
+        pub wallet_id: Option<Uuid>,
+        pub flow_id: Option<Uuid>,
+        pub category_id: Uuid,
+        pub note: Option<String>,
+        pub frequency: RecurrenceFrequency,
+        pub day_of_period: i32,
+        pub start_date: String,
+        pub end_date: Option<String>,
+        pub enabled: bool,
+        pub last_executed_date: Option<String>,
+    }
+
+    /// Update an existing recurring template.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct RecurringTemplateUpdate {
+        pub vault_id: String,
+        pub amount_minor: Option<i64>,
+        pub wallet_id: Option<Uuid>,
+        pub flow_id: Option<Uuid>,
+        pub category_id: Option<Uuid>,
+        pub category: Option<String>,
+        pub note: Option<String>,
+        pub frequency: Option<RecurrenceFrequency>,
+        pub day_of_period: Option<i32>,
+        /// `null` clears end_date; absent field means no change.
+        pub end_date: Option<Option<String>>,
+        pub enabled: Option<bool>,
+    }
+
+    /// List recurring templates for a vault.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct RecurringTemplateList {
+        pub vault_id: String,
+        #[serde(default)]
+        pub include_archived: bool,
+    }
+
+    /// Response body for recurring template listing.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct RecurringTemplateListResponse {
+        pub templates: Vec<RecurringTemplateView>,
+    }
+
+    /// Archive a recurring template.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct RecurringTemplateArchive {
+        pub vault_id: String,
+    }
+
+    /// List pending (due) recurring templates.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct PendingRecurringList {
+        pub vault_id: String,
+    }
+
+    /// A pending recurring template due for approval.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct PendingRecurringView {
+        pub template: RecurringTemplateView,
+        /// ISO date YYYY-MM-DD for this occurrence.
+        pub period_date: String,
+    }
+
+    /// Response body for pending recurring listing.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct PendingRecurringListResponse {
+        pub pending: Vec<PendingRecurringView>,
+    }
+
+    /// Execute (confirm) a pending recurring template.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct RecurringExecute {
+        pub vault_id: String,
+    }
+
+    /// Response body for recurring execution.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct RecurringExecuteResponse {
+        pub transaction_id: Uuid,
     }
 }
 
