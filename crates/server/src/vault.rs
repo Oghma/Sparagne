@@ -124,6 +124,8 @@ pub async fn snapshot(
                 archived: flow.archived,
                 is_unallocated,
                 allow_negative: flow.allow_negative,
+                max_balance: flow.max_balance,
+                income_balance: flow.income_balance,
             }
         })
         .collect::<Vec<_>>();

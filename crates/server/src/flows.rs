@@ -155,6 +155,8 @@ pub async fn shared_list(
             name: flow.name,
             balance_minor: flow.balance,
             archived: flow.archived,
+            max_balance: flow.max_balance,
+            income_balance: flow.income_balance,
         })
         .collect::<Vec<_>>();
 

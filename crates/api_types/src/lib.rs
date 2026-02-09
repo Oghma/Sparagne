@@ -191,6 +191,16 @@ pub mod vault {
         pub is_unallocated: bool,
         #[serde(default)]
         pub allow_negative: bool,
+
+        /// Maximum balance allowed (NetCapped) or maximum income total (IncomeCapped).
+        /// None means Unlimited mode.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub max_balance: Option<i64>,
+
+        /// Cumulative income total for IncomeCapped flows.
+        /// None for Unlimited or NetCapped flows.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub income_balance: Option<i64>,
     }
 }
 
