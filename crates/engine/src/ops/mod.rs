@@ -13,6 +13,7 @@ mod balances;
 mod categories;
 mod flows;
 mod memberships;
+mod recurring;
 mod transactions;
 mod vaults;
 mod wallets;
