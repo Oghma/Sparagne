@@ -36,6 +36,17 @@ impl MembershipRole {
     }
 }
 
+/// Vault access level for authorization checks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AccessLevel {
+    /// Read access: vault owner or any member (Owner/Editor/Viewer)
+    Read,
+    /// Write access: vault owner or Editor
+    Write,
+    /// Owner-only access
+    Owner,
+}
+
 impl TryFrom<&str> for MembershipRole {
     type Error = EngineError;
 
@@ -127,6 +138,40 @@ impl Engine {
             .transpose()
     }
 
+    /// Core authorization helper: checks vault access for a given level.
+    ///
+    /// Returns the vault model if authorized, or KeyNotFound error otherwise.
+    async fn check_vault_access(
+        &self,
+        db: &DatabaseTransaction,
+        model: &vault::Model,
+        user_id: &str,
+        level: AccessLevel,
+    ) -> ResultEngine<()> {
+        // Vault owner always has full access
+        if model.user_id == user_id {
+            return Ok(());
+        }
+
+        // Check membership for non-owners
+        let role = self
+            .vault_membership_role(db, model.id, user_id)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
+
+        let authorized = match level {
+            AccessLevel::Read => true, // Any member can read
+            AccessLevel::Write => role.can_write(),
+            AccessLevel::Owner => role.is_owner(),
+        };
+
+        if !authorized {
+            return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
+        }
+
+        Ok(())
+    }
+
     pub(super) async fn require_vault_by_id_write(
         &self,
         db: &DatabaseTransaction,
@@ -136,17 +181,9 @@ impl Engine {
         let model = self
             .find_vault_by_id(db, vault_id)
             .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if model.user_id == user_id {
-            return Ok(model);
-        }
-        let role = self
-            .vault_membership_role(db, model.id, user_id)
-            .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if !role.can_write() {
-            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
-        }
+            .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
+        self.check_vault_access(db, &model, user_id, AccessLevel::Write)
+            .await?;
         Ok(model)
     }
 
@@ -159,17 +196,9 @@ impl Engine {
         let model = self
             .find_vault_by_id(db, vault_id)
             .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if model.user_id == user_id {
-            return Ok(model);
-        }
-        let role = self
-            .vault_membership_role(db, model.id, user_id)
-            .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if !role.is_owner() {
-            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
-        }
+            .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
+        self.check_vault_access(db, &model, user_id, AccessLevel::Owner)
+            .await?;
         Ok(model)
     }
 
@@ -183,7 +212,7 @@ impl Engine {
             .await?
             .is_none()
         {
-            return Err(EngineError::KeyNotFound("user not exists".to_string()));
+            return Err(EngineError::KeyNotFound(EngineError::USER_NOT_FOUND.to_string()));
         }
         Ok(())
     }
@@ -291,10 +320,9 @@ impl Engine {
         let model = self
             .find_vault_by_id(db, vault_id)
             .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if !self.is_owner_or_member(db, &model, user_id).await? {
-            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
-        }
+            .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
+        self.check_vault_access(db, &model, user_id, AccessLevel::Read)
+            .await?;
         Ok(model)
     }
 
@@ -346,7 +374,7 @@ impl Engine {
             {
                 return Ok(model);
             }
-            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+            return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
         }
 
         if allowed.len() > 1 {
@@ -389,6 +417,24 @@ impl Engine {
         Ok(count > 0)
     }
 
+    /// Checks if a user has any access to a vault (owner, member, or flow member).
+    async fn has_vault_or_flow_access(
+        &self,
+        db: &DatabaseTransaction,
+        vault_id: Uuid,
+        vault_owner_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<bool> {
+        Ok(vault_owner_id == user_id
+            || self
+                .vault_membership_role(db, vault_id, user_id)
+                .await?
+                .is_some()
+            || self
+                .has_flow_membership_in_vault(db, vault_id, user_id)
+                .await?)
+    }
+
     pub(super) async fn require_vault_header_by_id(
         &self,
         db: &DatabaseTransaction,
@@ -398,17 +444,12 @@ impl Engine {
         let model = self
             .find_vault_by_id(db, vault_id)
             .await?
-            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        let has_access = model.user_id == user_id
-            || self
-                .vault_membership_role(db, model.id, user_id)
-                .await?
-                .is_some()
-            || self
-                .has_flow_membership_in_vault(db, model.id, user_id)
-                .await?;
+            .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
+        let has_access = self
+            .has_vault_or_flow_access(db, model.id, &model.user_id, user_id)
+            .await?;
         if !has_access {
-            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+            return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
         }
         Ok(model)
     }
@@ -429,14 +470,9 @@ impl Engine {
 
         let mut allowed_vaults = Vec::new();
         for model in models {
-            let has_access = model.user_id == user_id
-                || self
-                    .vault_membership_role(db, model.id, user_id)
-                    .await?
-                    .is_some()
-                || self
-                    .has_flow_membership_in_vault(db, model.id, user_id)
-                    .await?;
+            let has_access = self
+                .has_vault_or_flow_access(db, model.id, &model.user_id, user_id)
+                .await?;
             if has_access {
                 allowed_vaults.push(model);
             }
@@ -450,7 +486,7 @@ impl Engine {
             {
                 return Ok(model);
             }
-            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+            return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
         }
 
         if allowed_vaults.len() > 1 {
@@ -497,14 +533,9 @@ impl Engine {
             return Ok(None);
         };
 
-        let allowed = model.user_id == user_id
-            || self
-                .vault_membership_role(db, model.id, user_id)
-                .await?
-                .is_some()
-            || self
-                .has_flow_membership_in_vault(db, model.id, user_id)
-                .await?;
+        let allowed = self
+            .has_vault_or_flow_access(db, model.id, &model.user_id, user_id)
+            .await?;
 
         Ok(if allowed { Some(model) } else { None })
     }

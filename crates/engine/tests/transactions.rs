@@ -4,6 +4,7 @@ use chrono::{TimeZone, Utc};
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Statement};
 
 use engine::{
+    NewCashFlowParams,
     CategoryMergeConflictKind, Currency, Engine, EngineError, TransactionKind,
     TransactionListFilter,
 };
@@ -101,7 +102,15 @@ async fn income_expense_void_reverts_balances() {
         .unwrap();
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "Vacanze",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -165,7 +174,15 @@ async fn refund_increases_balances() {
         .unwrap();
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "Vacanze",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -306,15 +323,15 @@ async fn income_capped_counts_transfers_in() {
         unallocated_flow_id(&vault)
     };
     let capped_flow = engine
-        .new_cash_flow(
-            &vault_id,
-            "Capped",
-            0,
-            Some(500),
-            Some(true),
-            false,
-            "alice",
-        )
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "Capped",
+            balance: 0,
+            max_balance: Some(500),
+            income_bounded: Some(true),
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -354,7 +371,15 @@ async fn update_transaction_updates_balances() {
         .unwrap();
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "Vacanze",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
     let wallet_id = {
@@ -409,11 +434,27 @@ async fn update_income_can_retarget_wallet_and_flow_and_keeps_metadata_when_omit
         .unwrap();
 
     let flow1 = engine
-        .new_cash_flow(&vault_id, "F1", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "F1",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
     let flow2 = engine
-        .new_cash_flow(&vault_id, "F2", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "F2",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -487,11 +528,27 @@ async fn update_expense_retarget_flow_fails_if_insufficient_and_is_atomic() {
         .unwrap();
 
     let flow1 = engine
-        .new_cash_flow(&vault_id, "F1", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "F1",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
     let flow2 = engine
-        .new_cash_flow(&vault_id, "F2", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "F2",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -649,15 +706,39 @@ async fn update_transfer_flow_can_change_endpoints_and_amount() {
         .unwrap();
 
     let f1 = engine
-        .new_cash_flow(&vault_id, "F1", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "F1",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
     let f2 = engine
-        .new_cash_flow(&vault_id, "F2", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "F2",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
     let f3 = engine
-        .new_cash_flow(&vault_id, "F3", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "F3",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -728,15 +809,15 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
 
     // Flow allocation (no wallets involved).
     let capped_flow = engine
-        .new_cash_flow(
-            &vault_id,
-            "Capped",
-            0,
-            Some(1000),
-            Some(true),
-            false,
-            "alice",
-        )
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "Capped",
+            balance: 0,
+            max_balance: Some(1000),
+            income_bounded: Some(true),
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
     engine
@@ -756,7 +837,15 @@ async fn recompute_balances_restores_denormalized_state_and_ignores_voided() {
 
     // Normal spend+void path (should be ignored by recompute).
     let vacanze_flow = engine
-        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "Vacanze",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
     engine
@@ -873,7 +962,15 @@ async fn expense_on_flow_without_balance_fails() {
         .unwrap();
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "Vacanze", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "Vacanze",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
     let wallet_id = {
@@ -1170,12 +1267,28 @@ async fn names_are_trimmed_and_unique_case_insensitive() {
     assert_eq!(wallet.name, "Bank");
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "  Vacanze  ", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "  Vacanze  ",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
     let err = engine
-        .new_cash_flow(&vault_id, "vacanze", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "vacanze",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap_err();
     assert_eq!(err, EngineError::ExistingKey("vacanze".to_string()));
@@ -1194,7 +1307,15 @@ async fn names_are_trimmed_and_unique_case_insensitive() {
     );
 
     let err = engine
-        .new_cash_flow(&vault_id, "   ", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "   ",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap_err();
     assert_eq!(
@@ -1854,7 +1975,15 @@ async fn flow_membership_allows_reading_flow_without_vault_access() {
         .unwrap();
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "Shared", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "Shared",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -1895,7 +2024,15 @@ async fn flow_member_cannot_access_transaction_detail() {
         .unwrap();
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "Shared", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "Shared",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -1947,11 +2084,27 @@ async fn flow_membership_editor_can_transfer_between_shared_flows_without_vault_
         .unwrap();
 
     let f1 = engine
-        .new_cash_flow(&vault_id, "F1", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "F1",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
     let f2 = engine
-        .new_cash_flow(&vault_id, "F2", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "F2",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -2106,7 +2259,15 @@ async fn vault_owner_can_manage_flow_members_and_unallocated_is_not_shareable() 
         .unwrap();
 
     let flow_id = engine
-        .new_cash_flow(&vault_id, "SharedFlow", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "SharedFlow",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -2184,7 +2345,15 @@ async fn flow_last_owner_cannot_be_demoted() {
         .await
         .unwrap();
     let flow_id = engine
-        .new_cash_flow(&vault_id, "SharedFlow", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "SharedFlow",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 
@@ -2220,7 +2389,15 @@ async fn flow_last_owner_cannot_be_removed() {
         .await
         .unwrap();
     let flow_id = engine
-        .new_cash_flow(&vault_id, "SharedFlow", 0, None, None, false, "alice")
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &vault_id,
+            name: "SharedFlow",
+            balance: 0,
+            max_balance: None,
+            income_bounded: None,
+            allow_negative: false,
+            user_id: "alice",
+        })
         .await
         .unwrap();
 

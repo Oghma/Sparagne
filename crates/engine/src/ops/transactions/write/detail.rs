@@ -26,7 +26,7 @@ impl Engine {
                 let vault_model = vault::Entity::find_by_id(vault_uuid)
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
                 if vault_model.user_id != user_id {
                     let member =
                         vault_memberships::Entity::find_by_id((vault_uuid, user_id.clone()))

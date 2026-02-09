@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     Category, CategoryAlias, EngineError, ResultEngine, categories, category_aliases, transactions,
-    util::{normalize_category_display, normalize_category_key},
+    util::{normalize_category_display, normalize_category_key, validate_category_name},
 };
 
 use super::{Engine, parse_vault_uuid};
@@ -128,13 +128,7 @@ impl Engine {
                     .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
                     .await?;
 
-                let display = normalize_category_display(&name)?;
-                let normalized = normalize_category_key(&display)?;
-                if normalized == UNCATEGORIZED_NAME_NORM {
-                    return Err(EngineError::InvalidName(
-                        "category name is reserved".to_string(),
-                    ));
-                }
+                let (display, normalized) = validate_category_name(&name)?;
 
                 let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
                 if name_norm_conflict_exists(db_tx, vault_uuid, &normalized, None).await? {
@@ -188,23 +182,15 @@ impl Engine {
                     .filter(categories::Column::VaultId.eq(vault_uuid))
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound("category not exists".to_string()))?;
+                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::CATEGORY_NOT_FOUND.to_string()))?;
                 if model.is_system {
                     return Err(EngineError::InvalidName(
                         "system categories cannot be modified".to_string(),
                     ));
                 }
 
-                let mut name_norm = model.name_norm.clone();
-                let mut name_display = model.name.clone();
-                if let Some(new_name) = name.as_deref() {
-                    let display = normalize_category_display(new_name)?;
-                    let normalized = normalize_category_key(&display)?;
-                    if normalized == UNCATEGORIZED_NAME_NORM {
-                        return Err(EngineError::InvalidName(
-                            "category name is reserved".to_string(),
-                        ));
-                    }
+                let (name_display, name_norm) = if let Some(new_name) = name.as_deref() {
+                    let (display, normalized) = validate_category_name(new_name)?;
 
                     if name_norm_conflict_exists(db_tx, vault_uuid, &normalized, Some(category_id))
                         .await?
@@ -212,11 +198,15 @@ impl Engine {
                         return Err(EngineError::ExistingKey(display));
                     }
 
-                    name_norm = normalized;
-                    name_display = display;
-                }
+                    (display, normalized)
+                } else {
+                    // Avoid clones when name is not being updated - borrow from model
+                    (model.name.clone(), model.name_norm.clone())
+                };
 
                 let archived = archived.unwrap_or(model.archived);
+                let name_changed = name_display != model.name;
+
                 let active = categories::ActiveModel {
                     id: ActiveValue::Set(category_id),
                     name: ActiveValue::Set(name_display.clone()),
@@ -226,7 +216,7 @@ impl Engine {
                 };
                 active.update(db_tx).await?;
 
-                if name_display != model.name {
+                if name_changed {
                     transactions::Entity::update_many()
                         .col_expr(
                             transactions::Column::Category,
@@ -311,13 +301,7 @@ impl Engine {
                     ));
                 }
 
-                let display = normalize_category_display(&alias)?;
-                let normalized = normalize_category_key(&display)?;
-                if normalized == UNCATEGORIZED_NAME_NORM {
-                    return Err(EngineError::InvalidName(
-                        "alias name is reserved".to_string(),
-                    ));
-                }
+                let (display, normalized) = validate_category_name(&alias)?;
                 if normalized == category.name_norm {
                     return Err(EngineError::ExistingKey(display));
                 }
@@ -706,7 +690,7 @@ impl Engine {
             .filter(categories::Column::VaultId.eq(vault_uuid))
             .one(db_tx)
             .await?
-            .ok_or_else(|| EngineError::KeyNotFound("category not exists".to_string()))?;
+            .ok_or_else(|| EngineError::KeyNotFound(EngineError::CATEGORY_NOT_FOUND.to_string()))?;
         if model.archived {
             return Err(EngineError::InvalidName("category is archived".to_string()));
         }
@@ -723,7 +707,7 @@ impl Engine {
             .filter(categories::Column::VaultId.eq(vault_uuid))
             .one(db_tx)
             .await?
-            .ok_or_else(|| EngineError::KeyNotFound("category not exists".to_string()))
+            .ok_or_else(|| EngineError::KeyNotFound(EngineError::CATEGORY_NOT_FOUND.to_string()))
     }
 
     fn category_selection(model: &categories::Model) -> CategorySelection {

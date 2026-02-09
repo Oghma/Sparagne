@@ -25,7 +25,7 @@ pub use money::Money;
 /// Merge preview conflicts for category operations.
 pub use ops::{CategoryMergeConflict, CategoryMergeConflictKind, CategoryMergePreview};
 /// Engine facade, builder, and transaction listing filters.
-pub use ops::{Engine, EngineBuilder, TransactionListFilter};
+pub use ops::{Engine, EngineBuilder, NewCashFlowParams, TransactionListFilter};
 /// Recurring template types.
 pub use recurring_templates::{PendingRecurring, RecurrenceFrequency, RecurringTemplate};
 /// Transaction models and kinds.

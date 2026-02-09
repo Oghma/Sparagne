@@ -69,3 +69,13 @@ impl PartialEq for EngineError {
         }
     }
 }
+
+impl EngineError {
+    /// Common error message constants to avoid duplication across the codebase.
+    pub(crate) const VAULT_NOT_FOUND: &'static str = "vault not exists";
+    pub(crate) const FLOW_NOT_FOUND: &'static str = "flow not exists";
+    pub(crate) const WALLET_NOT_FOUND: &'static str = "wallet not exists";
+    pub(crate) const CATEGORY_NOT_FOUND: &'static str = "category not exists";
+    pub(crate) const USER_NOT_FOUND: &'static str = "user not exists";
+    pub(crate) const RECURRING_NOT_FOUND: &'static str = "recurring template not exists";
+}

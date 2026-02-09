@@ -74,7 +74,7 @@ impl Engine {
                     match leg.target {
                         LegTarget::Wallet { wallet_id } => {
                             let wallet = wallets_by_id.get_mut(&wallet_id).ok_or_else(|| {
-                                EngineError::KeyNotFound("wallet not exists".to_string())
+                                EngineError::KeyNotFound(EngineError::WALLET_NOT_FOUND.to_string())
                             })?;
                             wallet.balance += leg.amount_minor;
                         }
