@@ -28,14 +28,14 @@ pub(super) enum TransferTargetKind {
     Flow,
 }
 
-pub(super) struct FlowWalletCmd {
-    pub(super) vault_id: String,
-    pub(super) amount_minor: i64,
-    pub(super) flow_id: Option<Uuid>,
-    pub(super) wallet_id: Option<Uuid>,
-    pub(super) meta: TxMeta,
-    pub(super) user_id: String,
-    pub(super) kind: TransactionKind,
+pub(crate) struct FlowWalletCmd {
+    pub(crate) vault_id: String,
+    pub(crate) amount_minor: i64,
+    pub(crate) flow_id: Option<Uuid>,
+    pub(crate) wallet_id: Option<Uuid>,
+    pub(crate) meta: TxMeta,
+    pub(crate) user_id: String,
+    pub(crate) kind: TransactionKind,
 }
 
 pub(super) struct TransferTransactionInput<'a> {
@@ -82,54 +82,64 @@ impl Engine {
     ) -> ResultEngine<Uuid> {
         self.with_tx(|engine, db_tx| {
             Box::pin(async move {
-                let note = normalize_tx_note(&cmd.meta);
-                let vault_model = engine
-                    .require_vault_by_id_write(db_tx, &cmd.vault_id, &cmd.user_id)
-                    .await?;
-                let currency = vault_model.currency;
-                let category = engine
-                    .resolve_category_input(
-                        db_tx,
-                        &cmd.vault_id,
-                        cmd.meta.category_id,
-                        cmd.meta.category.as_deref(),
-                    )
-                    .await?;
-                let resolved_flow_id = engine
-                    .resolve_flow_id(db_tx, &cmd.vault_id, cmd.flow_id)
-                    .await?;
-                let resolved_wallet_id = engine
-                    .resolve_wallet_id(db_tx, &cmd.vault_id, cmd.wallet_id)
-                    .await?;
-                let leg_amount_minor = flow_wallet_signed_amount(cmd.kind, cmd.amount_minor)?;
-
-                let tx = build_transaction(TransactionBuildInput {
-                    vault_id: &cmd.vault_id,
-                    kind: cmd.kind,
-                    occurred_at: cmd.meta.occurred_at,
-                    amount_minor: cmd.amount_minor,
-                    currency,
-                    category_id: category.id,
-                    category: category.name,
-                    note,
-                    created_by: &cmd.user_id,
-                    idempotency_key: cmd.meta.idempotency_key.clone(),
-                    refunded_transaction_id: None,
-                })?;
-                let legs = flow_wallet_legs(
-                    tx.id,
-                    resolved_wallet_id,
-                    resolved_flow_id,
-                    leg_amount_minor,
-                    currency,
-                );
-
-                engine
-                    .create_transaction_with_legs(db_tx, &cmd.vault_id, currency, &tx, &legs)
-                    .await
+                engine.create_flow_wallet_transaction_in_tx(db_tx, cmd).await
             })
         })
         .await
+    }
+
+    /// Inner helper that creates a flow+wallet transaction within an existing
+    /// database transaction. Used by `execute_recurring` to avoid nested
+    /// `with_tx` calls.
+    pub(crate) async fn create_flow_wallet_transaction_in_tx(
+        &self,
+        db_tx: &DatabaseTransaction,
+        cmd: FlowWalletCmd,
+    ) -> ResultEngine<Uuid> {
+        let note = normalize_tx_note(&cmd.meta);
+        let vault_model = self
+            .require_vault_by_id_write(db_tx, &cmd.vault_id, &cmd.user_id)
+            .await?;
+        let currency = vault_model.currency;
+        let category = self
+            .resolve_category_input(
+                db_tx,
+                &cmd.vault_id,
+                cmd.meta.category_id,
+                cmd.meta.category.as_deref(),
+            )
+            .await?;
+        let resolved_flow_id = self
+            .resolve_flow_id(db_tx, &cmd.vault_id, cmd.flow_id)
+            .await?;
+        let resolved_wallet_id = self
+            .resolve_wallet_id(db_tx, &cmd.vault_id, cmd.wallet_id)
+            .await?;
+        let leg_amount_minor = flow_wallet_signed_amount(cmd.kind, cmd.amount_minor)?;
+
+        let tx = build_transaction(TransactionBuildInput {
+            vault_id: &cmd.vault_id,
+            kind: cmd.kind,
+            occurred_at: cmd.meta.occurred_at,
+            amount_minor: cmd.amount_minor,
+            currency,
+            category_id: category.id,
+            category: category.name,
+            note,
+            created_by: &cmd.user_id,
+            idempotency_key: cmd.meta.idempotency_key.clone(),
+            refunded_transaction_id: None,
+        })?;
+        let legs = flow_wallet_legs(
+            tx.id,
+            resolved_wallet_id,
+            resolved_flow_id,
+            leg_amount_minor,
+            currency,
+        );
+
+        self.create_transaction_with_legs(db_tx, &cmd.vault_id, currency, &tx, &legs)
+            .await
     }
 
     pub(super) async fn create_transfer_transaction(
