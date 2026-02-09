@@ -2,6 +2,8 @@
 
 use ratatui::{Frame, layout::Rect};
 
+use engine::Money;
+
 use crate::{
     app::{AppState, EntityListMode, flows_visible_indices},
     text::{TextKey, t},
@@ -57,6 +59,20 @@ pub fn render_list(
                         theme.warning,
                     ));
                 }
+
+                // Cap badge
+                if let Some(cap) = f.max_balance {
+                    let cap_text = if f.income_balance.is_some() {
+                        format!("Income cap: {}", Money::new(cap).format(currency))
+                    } else {
+                        format!("Cap: {}", Money::new(cap).format(currency))
+                    };
+                    extra_badges.push((
+                        Box::leak(cap_text.into_boxed_str()),
+                        theme.accent,
+                    ));
+                }
+
                 EntityItem {
                     name: &f.name,
                     balance_minor: f.balance_minor,
