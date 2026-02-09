@@ -12,8 +12,7 @@ use crate::{
     },
 };
 
-use super::{Engine, parse_vault_uuid};
-use super::transactions::write::common::FlowWalletCmd;
+use super::{Engine, parse_vault_uuid, transactions::write::common::FlowWalletCmd};
 
 impl Engine {
     /// Create a new recurring template.
@@ -27,9 +26,7 @@ impl Engine {
             }
         }
         if cmd.amount_minor <= 0 {
-            return Err(EngineError::InvalidAmount(
-                "amount must be > 0".to_string(),
-            ));
+            return Err(EngineError::InvalidAmount("amount must be > 0".to_string()));
         }
         validate_day_of_period(cmd.frequency, cmd.day_of_period)?;
 
@@ -88,9 +85,7 @@ impl Engine {
         if let Some(amount) = cmd.amount_minor
             && amount <= 0
         {
-            return Err(EngineError::InvalidAmount(
-                "amount must be > 0".to_string(),
-            ));
+            return Err(EngineError::InvalidAmount("amount must be > 0".to_string()));
         }
         if let (Some(freq), Some(dop)) = (cmd.frequency, cmd.day_of_period) {
             validate_day_of_period(freq, dop)?;
@@ -382,11 +377,8 @@ impl Engine {
                 })?;
                 let occurred_at = Utc.from_utc_datetime(&period_date.and_time(midnight));
 
-                let idempotency_key = format!(
-                    "recurring:{}:{}",
-                    template_id,
-                    period_date.format("%Y%m%d")
-                );
+                let idempotency_key =
+                    format!("recurring:{}:{}", template_id, period_date.format("%Y%m%d"));
 
                 let mut meta = TxMeta::new(occurred_at)
                     .category_id(template.category_id)

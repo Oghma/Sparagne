@@ -128,8 +128,7 @@ pub fn compute_current_period_date(
             let month = (day_of_period / 100) as u32;
             let day = (day_of_period % 100).min(28) as u32;
             let year = as_of_date.year();
-            let this_year_date =
-                NaiveDate::from_ymd_opt(year, month, day).unwrap_or(as_of_date);
+            let this_year_date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or(as_of_date);
             if as_of_date >= this_year_date {
                 this_year_date
             } else {
@@ -293,7 +292,8 @@ mod tests {
 
     #[test]
     fn weekly_later_weekday_wraps() {
-        // 2026-02-10 is Tuesday (2), asking for Friday (5) => previous Friday = 2026-02-06.
+        // 2026-02-10 is Tuesday (2), asking for Friday (5) => previous Friday =
+        // 2026-02-06.
         let date = NaiveDate::from_ymd_opt(2026, 2, 10).unwrap();
         assert_eq!(
             compute_current_period_date(RecurrenceFrequency::Weekly, 5, date),

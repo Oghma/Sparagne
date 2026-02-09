@@ -206,13 +206,8 @@ impl Engine {
                         ));
                     }
 
-                    if name_norm_conflict_exists(
-                        db_tx,
-                        vault_uuid,
-                        &normalized,
-                        Some(category_id),
-                    )
-                    .await?
+                    if name_norm_conflict_exists(db_tx, vault_uuid, &normalized, Some(category_id))
+                        .await?
                     {
                         return Err(EngineError::ExistingKey(display));
                     }

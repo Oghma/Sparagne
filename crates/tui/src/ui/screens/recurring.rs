@@ -53,7 +53,11 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     if has_pending {
         let pending_block = Block::default()
             .title(Span::styled(
-                format!(" {} ({}) ", t(locale, TextKey::RecurringPending), state.recurring.pending.len()),
+                format!(
+                    " {} ({}) ",
+                    t(locale, TextKey::RecurringPending),
+                    state.recurring.pending.len()
+                ),
                 Style::default()
                     .fg(theme.warning)
                     .add_modifier(Modifier::BOLD),
@@ -111,11 +115,7 @@ fn render_list(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Them
     }
 
     // Templates section
-    let templates_block = themed_block(
-        t(locale, TextKey::RecurringTitle),
-        theme.border,
-        theme,
-    );
+    let templates_block = themed_block(t(locale, TextKey::RecurringTitle), theme.border, theme);
 
     if state.recurring.templates.is_empty() && !has_pending {
         let empty = Paragraph::new(vec![
@@ -241,16 +241,56 @@ fn render_form_overlay(frame: &mut Frame<'_>, area: Rect, state: &AppState, them
     let flow_name = resolve_flow_name(state, form.flow_index);
 
     let fields_data = [
-        (t(locale, TextKey::RecurringFormKind), kind_label, RecurringFormField::Kind),
-        (t(locale, TextKey::RecurringFormAmount), form.amount.value(), RecurringFormField::Amount),
-        (t(locale, TextKey::FormWallet), wallet_name.as_str(), RecurringFormField::Wallet),
-        (t(locale, TextKey::FormFlow), flow_name.as_str(), RecurringFormField::Flow),
-        (t(locale, TextKey::FormCategory), form.category.value(), RecurringFormField::Category),
-        (t(locale, TextKey::FormNote), form.note.value(), RecurringFormField::Note),
-        (t(locale, TextKey::RecurringFormFrequency), freq_label, RecurringFormField::Frequency),
-        (t(locale, TextKey::RecurringFormDay), form.day_of_period.value(), RecurringFormField::DayOfPeriod),
-        (t(locale, TextKey::RecurringFormStartDate), form.start_date.value(), RecurringFormField::StartDate),
-        (t(locale, TextKey::RecurringFormEndDate), form.end_date.value(), RecurringFormField::EndDate),
+        (
+            t(locale, TextKey::RecurringFormKind),
+            kind_label,
+            RecurringFormField::Kind,
+        ),
+        (
+            t(locale, TextKey::RecurringFormAmount),
+            form.amount.value(),
+            RecurringFormField::Amount,
+        ),
+        (
+            t(locale, TextKey::FormWallet),
+            wallet_name.as_str(),
+            RecurringFormField::Wallet,
+        ),
+        (
+            t(locale, TextKey::FormFlow),
+            flow_name.as_str(),
+            RecurringFormField::Flow,
+        ),
+        (
+            t(locale, TextKey::FormCategory),
+            form.category.value(),
+            RecurringFormField::Category,
+        ),
+        (
+            t(locale, TextKey::FormNote),
+            form.note.value(),
+            RecurringFormField::Note,
+        ),
+        (
+            t(locale, TextKey::RecurringFormFrequency),
+            freq_label,
+            RecurringFormField::Frequency,
+        ),
+        (
+            t(locale, TextKey::RecurringFormDay),
+            form.day_of_period.value(),
+            RecurringFormField::DayOfPeriod,
+        ),
+        (
+            t(locale, TextKey::RecurringFormStartDate),
+            form.start_date.value(),
+            RecurringFormField::StartDate,
+        ),
+        (
+            t(locale, TextKey::RecurringFormEndDate),
+            form.end_date.value(),
+            RecurringFormField::EndDate,
+        ),
     ];
 
     for (i, (label, value, field)) in fields_data.iter().enumerate() {

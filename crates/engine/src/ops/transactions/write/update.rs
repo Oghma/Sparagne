@@ -2,8 +2,7 @@ use sea_orm::{ActiveValue, QueryFilter, prelude::*};
 
 use crate::{
     EngineError, Leg, LegTarget, ResultEngine, TransactionKind, UpdateTransactionCmd, legs,
-    transactions,
-    util::apply_optional_text_patch,
+    transactions, util::apply_optional_text_patch,
 };
 
 use uuid::Uuid;

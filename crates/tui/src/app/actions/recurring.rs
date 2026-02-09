@@ -45,7 +45,6 @@ impl App {
         Ok(())
     }
 
-
     pub(crate) async fn create_recurring(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
         let form = &self.state.recurring.form;
@@ -302,7 +301,8 @@ impl App {
         let day: i32 = day_str.parse().unwrap_or(1);
 
         // Parse end_date (optional)
-        // Double Option: Some(Some(date)) = set date, Some(None) = clear date, None = no change
+        // Double Option: Some(Some(date)) = set date, Some(None) = clear date, None =
+        // no change
         let end_date = if end_date_raw.is_empty() {
             Some(None) // Clear the end date
         } else {

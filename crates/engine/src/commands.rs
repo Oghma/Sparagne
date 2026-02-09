@@ -593,11 +593,7 @@ pub struct UpdateRecurringCmd {
 
 impl UpdateRecurringCmd {
     #[must_use]
-    pub fn new(
-        vault_id: impl Into<String>,
-        template_id: Uuid,
-        user_id: impl Into<String>,
-    ) -> Self {
+    pub fn new(vault_id: impl Into<String>, template_id: Uuid, user_id: impl Into<String>) -> Self {
         Self {
             vault_id: vault_id.into(),
             template_id,
