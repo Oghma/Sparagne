@@ -12,6 +12,7 @@
 mod categories;
 mod flows;
 mod members;
+mod recurring;
 mod stats;
 mod transactions;
 mod vaults;
