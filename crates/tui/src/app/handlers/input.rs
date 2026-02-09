@@ -29,6 +29,11 @@ impl App {
             return Ok(true);
         }
 
+        // Recurring mode input
+        if self.state.section == Section::Transactions && self.state.transactions.recurring_mode {
+            return self.handle_recurring_input(ch).await;
+        }
+
         // Search input
         if self.handle_search_input(ch).await? {
             return Ok(true);

@@ -21,6 +21,7 @@ mod members;
 mod navigation;
 mod overlays;
 mod palette;
+mod recurring;
 mod search;
 mod shortcuts;
 mod stats;
