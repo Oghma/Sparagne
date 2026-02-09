@@ -9,6 +9,7 @@ mod cash_flow;
 mod categories;
 mod flows;
 mod memberships;
+mod recurring;
 mod server;
 mod statistics;
 mod transactions;
@@ -79,6 +80,7 @@ fn status_for_engine_error(err: &EngineError) -> StatusCode {
         | EngineError::InvalidId(_)
         | EngineError::InvalidCursor(_)
         | EngineError::InvalidFlow(_)
+        | EngineError::InvalidRecurring(_)
         | EngineError::InvalidRole(_)
         | EngineError::CurrencyMismatch(_) => StatusCode::UNPROCESSABLE_ENTITY,
     }
@@ -102,6 +104,7 @@ fn code_for_engine_error(err: &EngineError) -> ErrorCode {
         EngineError::InvalidId(_) => ErrorCode::InvalidId,
         EngineError::InvalidCursor(_) => ErrorCode::InvalidCursor,
         EngineError::InvalidFlow(_) => ErrorCode::InvalidFlow,
+        EngineError::InvalidRecurring(_) => ErrorCode::InvalidRecurring,
         EngineError::InvalidRole(_) => ErrorCode::InvalidRole,
         EngineError::CurrencyMismatch(_) => ErrorCode::CurrencyMismatch,
     }
