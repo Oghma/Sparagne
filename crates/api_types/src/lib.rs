@@ -192,8 +192,8 @@ pub mod vault {
         #[serde(default)]
         pub allow_negative: bool,
 
-        /// Maximum balance allowed (NetCapped) or maximum income total (IncomeCapped).
-        /// None means Unlimited mode.
+        /// Maximum balance allowed (NetCapped) or maximum income total
+        /// (IncomeCapped). None means Unlimited mode.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub max_balance: Option<i64>,
 

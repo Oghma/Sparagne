@@ -67,10 +67,7 @@ pub fn render_list(
                     } else {
                         format!("Cap: {}", Money::new(cap).format(currency))
                     };
-                    extra_badges.push((
-                        Box::leak(cap_text.into_boxed_str()),
-                        theme.accent,
-                    ));
+                    extra_badges.push((Box::leak(cap_text.into_boxed_str()), theme.accent));
                 }
 
                 EntityItem {
