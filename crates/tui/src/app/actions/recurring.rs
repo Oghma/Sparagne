@@ -265,4 +265,117 @@ impl App {
         let idx = self.state.recurring.form.flow_index;
         snapshot.flows.get(idx).map(|f| f.id)
     }
+
+    pub(crate) async fn update_recurring(&mut self) -> Result<()> {
+        let vault_id = self.current_vault_id()?;
+
+        // Get selected template ID
+        let template_id = self
+            .state
+            .recurring
+            .selected_template_for_edit()
+            .map(|t| t.id)
+            .ok_or_else(|| AppError::Terminal("no template selected".to_string()))?;
+
+        // Extract form data
+        let form = &self.state.recurring.form;
+        let amount_str = form.amount.value().trim().to_string();
+        let day_str = form.day_of_period.value().trim().to_string();
+        let start_date = form.start_date.value().trim().to_string();
+        let end_date_raw = form.end_date.value().trim().to_string();
+        let category_raw = form.category.value().trim().to_string();
+        let note_raw = form.note.value().trim().to_string();
+        let frequency = form.frequency;
+
+        // Parse amount
+        let amount_f: f64 = match amount_str.parse() {
+            Ok(v) => v,
+            Err(_) => {
+                self.state.recurring.form.error =
+                    Some(t(self.state.locale, TextKey::ValidationAmountInvalid).to_string());
+                return Ok(());
+            }
+        };
+        let amount_minor = (amount_f * 100.0) as i64;
+
+        if amount_minor <= 0 {
+            self.state.recurring.form.error =
+                Some(t(self.state.locale, TextKey::ValidationAmountPositive).to_string());
+            return Ok(());
+        }
+
+        // Validate start_date
+        if start_date.is_empty() {
+            self.state.recurring.form.error =
+                Some(t(self.state.locale, TextKey::ValidationDateRequired).to_string());
+            return Ok(());
+        }
+
+        // Get wallet/flow IDs from form indices
+        let wallet_id = self.resolve_recurring_wallet_id();
+        let flow_id = self.resolve_recurring_flow_id();
+
+        // Parse day_of_period
+        let day: i32 = day_str.parse().unwrap_or(1);
+
+        // Parse end_date (optional)
+        // Double Option: Some(Some(date)) = set date, Some(None) = clear date, None = no change
+        let end_date = if end_date_raw.is_empty() {
+            Some(None) // Clear the end date
+        } else {
+            Some(Some(end_date_raw))
+        };
+
+        // Get category string
+        let category = if category_raw.is_empty() {
+            None
+        } else {
+            Some(category_raw)
+        };
+
+        // Get note
+        let note = if note_raw.is_empty() {
+            None
+        } else {
+            Some(note_raw)
+        };
+
+        // Build update payload
+        let payload = RecurringTemplateUpdate {
+            vault_id,
+            amount_minor: Some(amount_minor),
+            wallet_id,
+            flow_id,
+            category_id: None,
+            category,
+            note,
+            frequency: Some(frequency),
+            day_of_period: Some(day),
+            end_date,
+            enabled: None, // Don't change enabled status during edit
+        };
+
+        // API call
+        let res = self.client.recurring_update(template_id, payload).await;
+
+        match res {
+            Ok(()) => {
+                self.state.recurring.form = RecurringFormState::default();
+                self.state.recurring.mode = RecurringMode::List;
+                self.set_toast(
+                    t(self.state.locale, TextKey::RecurringUpdated),
+                    ToastLevel::Success,
+                );
+                self.load_recurring().await?;
+            }
+            Err(err) => {
+                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorUpdating) else {
+                    return Ok(());
+                };
+                self.state.recurring.form.error = Some(msg);
+            }
+        }
+
+        Ok(())
+    }
 }
