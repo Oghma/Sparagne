@@ -51,6 +51,12 @@ pub fn render_list(
                 if f.is_unallocated {
                     extra_badges.push((t(state.locale, TextKey::EntityBadgeDefault), theme.info));
                 }
+                if f.allow_negative {
+                    extra_badges.push((
+                        t(state.locale, TextKey::FlowBadgeAllowNegative),
+                        theme.warning,
+                    ));
+                }
                 EntityItem {
                     name: &f.name,
                     balance_minor: f.balance_minor,
@@ -71,7 +77,7 @@ pub fn render_list(
     let locale = state.locale;
     let config = EntityListConfig {
         title: t(locale, TextKey::FlowTitle),
-        form_height: 8,
+        form_height: 9,
         welcome_title: t(locale, TextKey::FlowWelcomeTitle),
         welcome_desc: &[
             t(locale, TextKey::FlowWelcomeDesc1),

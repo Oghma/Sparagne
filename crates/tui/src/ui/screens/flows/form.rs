@@ -76,6 +76,33 @@ pub fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
             &form.opening.state,
             theme,
         ));
+
+        // Allow negative toggle
+        let neg_focused = form.focus == FlowFormField::AllowNegative;
+        let neg_label_style = if neg_focused {
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.text)
+        };
+        let neg_value_style = if neg_focused {
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.text)
+        };
+        let neg_cursor = if neg_focused { "▏" } else { "" };
+        let neg_label = t(state.locale, TextKey::FormLabelAllowNegative);
+        let neg_value = if form.allow_negative {
+            t(state.locale, TextKey::UiYes)
+        } else {
+            t(state.locale, TextKey::UiNo)
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!("{neg_label}: "), neg_label_style),
+            Span::styled(neg_value.to_string(), neg_value_style),
+            Span::styled(neg_cursor.to_string(), Style::default().fg(theme.accent)),
+        ]));
     }
 
     lines.push(Line::from(""));

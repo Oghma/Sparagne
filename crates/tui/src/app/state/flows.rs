@@ -66,6 +66,7 @@ pub struct FlowFormState {
     pub mode: FlowModeChoice,
     pub cap: AmountField,
     pub opening: AmountField,
+    pub allow_negative: bool,
     pub focus: FlowFormField,
 }
 
@@ -80,6 +81,7 @@ impl Default for FlowFormState {
             opening: AmountField::new("Opening")
                 .required(false)
                 .require_positive(false),
+            allow_negative: false,
             focus: FlowFormField::Name,
         }
     }
@@ -136,6 +138,7 @@ pub enum FlowFormField {
     Mode,
     Cap,
     Opening,
+    AllowNegative,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
