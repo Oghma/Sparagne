@@ -76,9 +76,11 @@ fn income_contribution_minor(amount_minor: i64) -> i64 {
 /// - `IncomeCapped`: cumulative incomes must not exceed `cap_minor`.
 ///
 /// **Non-negativity**
-/// For normal flows, `balance` must never go below 0. The only exception is the
-/// special “Unallocated” flow, identified by internal name `unallocated`, which
-/// is allowed to go negative.
+/// For normal flows, `balance` must never go below 0. Exceptions:
+/// - The special "Unallocated" flow (identified by internal name `unallocated`)
+///   is always allowed to go negative.
+/// - Flows with `allow_negative = true` can carry a negative balance (e.g. for
+///   tracking travel advances that will be reimbursed later).
 ///
 /// ** Examples
 ///
@@ -109,6 +111,7 @@ pub struct CashFlow {
     pub income_balance: Option<i64>,
     pub currency: Currency,
     pub archived: bool,
+    pub allow_negative: bool,
 }
 
 impl CashFlow {
@@ -134,8 +137,9 @@ impl CashFlow {
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
         currency: Currency,
+        allow_negative: bool,
     ) -> ResultEngine<Self> {
-        if balance < 0 && !name.eq_ignore_ascii_case(UNALLOCATED_INTERNAL_NAME) {
+        if balance < 0 && !name.eq_ignore_ascii_case(UNALLOCATED_INTERNAL_NAME) && !allow_negative {
             return Err(EngineError::InvalidFlow(
                 "flow balance must be >= 0 (except Unallocated)".to_string(),
             ));
@@ -162,6 +166,7 @@ impl CashFlow {
             income_balance,
             currency,
             archived: false,
+            allow_negative,
         })
     }
 
@@ -174,7 +179,7 @@ impl CashFlow {
         let is_unallocated = self.is_unallocated();
         let new_balance = self.balance - old_amount_minor + new_amount_minor;
 
-        if !is_unallocated && new_balance < 0 {
+        if !is_unallocated && !self.allow_negative && new_balance < 0 {
             return Err(EngineError::InsufficientFunds(self.name.clone()));
         }
 
@@ -216,6 +221,7 @@ pub struct Model {
     pub income_balance: Option<i64>,
     pub currency: Currency,
     pub archived: bool,
+    pub allow_negative: bool,
     pub vault_id: Uuid,
 }
 
@@ -255,6 +261,7 @@ impl TryFrom<(Model, Currency)> for CashFlow {
             income_balance: model.income_balance,
             currency: model.currency,
             archived: model.archived,
+            allow_negative: model.allow_negative,
         })
     }
 }
@@ -270,6 +277,7 @@ impl From<&CashFlow> for ActiveModel {
             income_balance: ActiveValue::Set(flow.income_balance),
             currency: ActiveValue::Set(flow.currency),
             archived: ActiveValue::Set(flow.archived),
+            allow_negative: ActiveValue::Set(flow.allow_negative),
             vault_id: ActiveValue::NotSet,
         }
     }
@@ -282,7 +290,15 @@ mod tests {
     use super::*;
 
     fn net_capped() -> CashFlow {
-        CashFlow::new(String::from("Cash"), 0, Some(1000), None, Currency::Eur).unwrap()
+        CashFlow::new(
+            String::from("Cash"),
+            0,
+            Some(1000),
+            None,
+            Currency::Eur,
+            false,
+        )
+        .unwrap()
     }
 
     fn income_capped() -> CashFlow {
@@ -292,12 +308,13 @@ mod tests {
             Some(1000),
             Some(true),
             Currency::Eur,
+            false,
         )
         .unwrap()
     }
 
     fn unbounded() -> CashFlow {
-        CashFlow::new(String::from("Cash"), 0, None, None, Currency::Eur).unwrap()
+        CashFlow::new(String::from("Cash"), 0, None, None, Currency::Eur, false).unwrap()
     }
 
     fn unallocated() -> CashFlow {
@@ -307,6 +324,19 @@ mod tests {
             None,
             None,
             Currency::Eur,
+            false,
+        )
+        .unwrap()
+    }
+
+    fn allow_negative() -> CashFlow {
+        CashFlow::new(
+            String::from("Travel Advances"),
+            0,
+            None,
+            None,
+            Currency::Eur,
+            true,
         )
         .unwrap()
     }
@@ -375,5 +405,54 @@ mod tests {
 
         flow.apply_leg_change(-50, 0).unwrap();
         assert_eq!(flow.income_balance, Some(100));
+    }
+
+    #[test]
+    fn allow_negative_flow_can_go_below_zero() {
+        let mut flow = allow_negative();
+        flow.apply_leg_change(0, -500).unwrap();
+        assert_eq!(flow.balance, -500);
+    }
+
+    #[test]
+    fn allow_negative_flow_still_respects_cap() {
+        let mut flow = CashFlow::new(
+            String::from("Travel"),
+            0,
+            Some(1000),
+            None,
+            Currency::Eur,
+            true,
+        )
+        .unwrap();
+        let err = flow.apply_leg_change(0, 2000).unwrap_err();
+        assert_eq!(err, EngineError::MaxBalanceReached("Travel".to_string()));
+    }
+
+    #[test]
+    fn allow_negative_new_with_negative_balance() {
+        let flow = CashFlow::new(
+            String::from("Travel"),
+            -100,
+            None,
+            None,
+            Currency::Eur,
+            true,
+        );
+        assert!(flow.is_ok());
+        assert_eq!(flow.unwrap().balance, -100);
+    }
+
+    #[test]
+    fn normal_flow_rejects_negative_balance_on_new() {
+        let flow = CashFlow::new(
+            String::from("Normal"),
+            -100,
+            None,
+            None,
+            Currency::Eur,
+            false,
+        );
+        assert!(flow.is_err());
     }
 }
