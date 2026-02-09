@@ -14,6 +14,8 @@ use uuid::Uuid;
 
 use crate::{ServerError, server::ServerState, user};
 
+use engine::NewCashFlowParams;
+
 fn map_mode(mode: FlowMode) -> Result<(Option<i64>, Option<bool>), ServerError> {
     match mode {
         FlowMode::Unlimited => Ok((None, None)),
@@ -38,15 +40,15 @@ pub async fn flow_new(
 
     let flow_id = state
         .engine
-        .new_cash_flow(
-            &payload.vault_id,
-            name_trimmed,
-            0,
+        .new_cash_flow(NewCashFlowParams {
+            vault_id: &payload.vault_id,
+            name: name_trimmed,
+            balance: 0,
             max_balance,
             income_bounded,
-            payload.allow_negative,
-            &user.username,
-        )
+            allow_negative: payload.allow_negative,
+            user_id: &user.username,
+        })
         .await?;
 
     if payload.opening_balance_minor > 0 {

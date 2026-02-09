@@ -19,6 +19,7 @@ mod vaults;
 mod wallets;
 
 pub use categories::{CategoryMergeConflict, CategoryMergeConflictKind, CategoryMergePreview};
+pub use flows::NewCashFlowParams;
 pub use transactions::TransactionListFilter;
 
 /// Parse a vault_id string into Uuid for DB queries.
@@ -98,6 +99,23 @@ fn build_transaction(input: TransactionBuildInput<'_>) -> ResultEngine<Transacti
     })
 }
 
+/// Creates a pair of balanced legs for transfers between two targets.
+/// The `from_target` leg has negative amount, the `to_target` leg has positive amount.
+fn build_balanced_legs(
+    tx_id: Uuid,
+    from_target: LegTarget,
+    to_target: LegTarget,
+    amount_minor: i64,
+    currency: Currency,
+) -> Vec<Leg> {
+    vec![
+        Leg::new(tx_id, from_target, -amount_minor, currency),
+        Leg::new(tx_id, to_target, amount_minor, currency),
+    ]
+}
+
+/// Creates legs for flow-wallet transactions (income/expense).
+/// Both legs use the same signed amount (positive for income, negative for expense).
 fn flow_wallet_legs(
     tx_id: Uuid,
     wallet_id: Uuid,
@@ -121,6 +139,7 @@ fn flow_wallet_legs(
     ]
 }
 
+/// Creates legs for wallet-to-wallet transfers.
 fn transfer_wallet_legs(
     tx_id: Uuid,
     from_wallet_id: Uuid,
@@ -128,26 +147,20 @@ fn transfer_wallet_legs(
     amount_minor: i64,
     currency: Currency,
 ) -> Vec<Leg> {
-    vec![
-        Leg::new(
-            tx_id,
-            LegTarget::Wallet {
-                wallet_id: from_wallet_id,
-            },
-            -amount_minor,
-            currency,
-        ),
-        Leg::new(
-            tx_id,
-            LegTarget::Wallet {
-                wallet_id: to_wallet_id,
-            },
-            amount_minor,
-            currency,
-        ),
-    ]
+    build_balanced_legs(
+        tx_id,
+        LegTarget::Wallet {
+            wallet_id: from_wallet_id,
+        },
+        LegTarget::Wallet {
+            wallet_id: to_wallet_id,
+        },
+        amount_minor,
+        currency,
+    )
 }
 
+/// Creates legs for flow-to-flow transfers.
 fn transfer_flow_legs(
     tx_id: Uuid,
     from_flow_id: Uuid,
@@ -155,24 +168,17 @@ fn transfer_flow_legs(
     amount_minor: i64,
     currency: Currency,
 ) -> Vec<Leg> {
-    vec![
-        Leg::new(
-            tx_id,
-            LegTarget::Flow {
-                flow_id: from_flow_id,
-            },
-            -amount_minor,
-            currency,
-        ),
-        Leg::new(
-            tx_id,
-            LegTarget::Flow {
-                flow_id: to_flow_id,
-            },
-            amount_minor,
-            currency,
-        ),
-    ]
+    build_balanced_legs(
+        tx_id,
+        LegTarget::Flow {
+            flow_id: from_flow_id,
+        },
+        LegTarget::Flow {
+            flow_id: to_flow_id,
+        },
+        amount_minor,
+        currency,
+    )
 }
 
 /// The builder for `Engine`

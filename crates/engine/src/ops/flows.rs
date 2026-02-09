@@ -11,6 +11,17 @@ use crate::{
 
 use super::{Engine, build_transaction, parse_vault_uuid, transfer_flow_legs};
 
+/// Parameters for creating a new cash flow.
+pub struct NewCashFlowParams<'a> {
+    pub vault_id: &'a str,
+    pub name: &'a str,
+    pub balance: i64,
+    pub max_balance: Option<i64>,
+    pub income_bounded: Option<bool>,
+    pub allow_negative: bool,
+    pub user_id: &'a str,
+}
+
 impl Engine {
     /// Return a [`CashFlow`] (snapshot from DB).
     pub async fn cash_flow(
@@ -30,7 +41,7 @@ impl Engine {
                 let vault_model = vault::Entity::find_by_id(vault_uuid)
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
                 let vault_currency = vault_model.currency;
                 let flow = CashFlow::try_from((model, vault_currency))?;
                 Ok(flow)
@@ -55,7 +66,7 @@ impl Engine {
                 let vault_model = vault::Entity::find_by_id(vault_uuid)
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
                 let vault_currency = vault_model.currency;
 
                 let model = cash_flows::Entity::find()
@@ -63,7 +74,7 @@ impl Engine {
                     .filter(Expr::cust("LOWER(name)").eq(name_lower))
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string()))?;
 
                 if !engine
                     .has_vault_read_access(db_tx, vault_id.as_str(), user_id.as_str())
@@ -73,7 +84,7 @@ impl Engine {
                         .flow_membership_role(db_tx, model.id, user_id.as_str())
                         .await?
                         .ok_or_else(|| {
-                            EngineError::KeyNotFound("cash_flow not exists".to_string())
+                            EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string())
                         })?;
                     let _ = role;
                 }
@@ -104,7 +115,7 @@ impl Engine {
                 let vault_model = vault::Entity::find_by_id(vault_uuid)
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
+                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()))?;
                 let vault_currency = vault_model.currency;
 
                 let has_vault_access = if vault_model.user_id == user_id {
@@ -145,7 +156,7 @@ impl Engine {
                         models.push(flow);
                     }
                     if models.is_empty() {
-                        return Err(EngineError::KeyNotFound("vault not exists".to_string()));
+                        return Err(EngineError::KeyNotFound(EngineError::VAULT_NOT_FOUND.to_string()));
                     }
                     models
                 };
@@ -181,7 +192,7 @@ impl Engine {
                     .filter(cash_flows::Column::VaultId.eq(vault_uuid))
                     .one(db_tx)
                     .await?
-                    .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+                    .ok_or_else(|| EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string()))?;
 
                 if flow_model.system_kind == Some(cash_flows::SystemFlowKind::Unallocated)
                     || flow_model
@@ -221,20 +232,16 @@ impl Engine {
     /// transfers do not inflate income/expense stats).
     ///
     /// The opening transfer uses `Utc::now()` as `occurred_at`.
-    pub async fn new_cash_flow(
-        &self,
-        vault_id: &str,
-        name: &str,
-        balance: i64,
-        max_balance: Option<i64>,
-        income_bounded: Option<bool>,
-        allow_negative: bool,
-        user_id: &str,
-    ) -> ResultEngine<Uuid> {
+    pub async fn new_cash_flow(&self, params: NewCashFlowParams<'_>) -> ResultEngine<Uuid> {
         let occurred_at = Utc::now();
-        let name = normalize_required_name(name, "flow")?;
-        let vault_id = vault_id.to_string();
-        let user_id = user_id.to_string();
+        let name = normalize_required_name(params.name, "flow")?;
+        let vault_id = params.vault_id.to_string();
+        let user_id = params.user_id.to_string();
+        let balance = params.balance;
+        let max_balance = params.max_balance;
+        let income_bounded = params.income_bounded;
+        let allow_negative = params.allow_negative;
+
         if balance < 0 && !allow_negative {
             return Err(EngineError::InvalidAmount(
                 "flow balance must be >= 0".to_string(),
