@@ -80,12 +80,23 @@ impl RecurringState {
             self.templates.get(idx)
         }
     }
+
+    /// Returns the template for editing - either from pending item or templates list.
+    pub(crate) fn selected_template_for_edit(&self) -> Option<&RecurringTemplateView> {
+        if self.selected_is_pending() {
+            self.pending.get(self.selected).map(|p| &p.template)
+        } else {
+            let idx = self.selected - self.pending.len();
+            self.templates.get(idx)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecurringMode {
     List,
     Create,
+    Edit,
 }
 
 #[derive(Debug, Clone)]
@@ -170,5 +181,30 @@ impl RecurringFormField {
             Self::StartDate => Self::DayOfPeriod,
             Self::EndDate => Self::StartDate,
         }
+    }
+}
+
+use super::selectable::{Resettable, UpdateFocus};
+
+impl UpdateFocus for RecurringFormState {
+    fn update_focus(&mut self) {
+        self.amount.state.focused = self.focus == RecurringFormField::Amount;
+        self.category.state.focused = self.focus == RecurringFormField::Category;
+        self.note.state.focused = self.focus == RecurringFormField::Note;
+        self.day_of_period.state.focused = self.focus == RecurringFormField::DayOfPeriod;
+        self.start_date.state.focused = self.focus == RecurringFormField::StartDate;
+        self.end_date.state.focused = self.focus == RecurringFormField::EndDate;
+    }
+}
+
+impl Resettable for RecurringState {
+    type Form = RecurringFormState;
+
+    fn form_mut(&mut self) -> &mut Self::Form {
+        &mut self.form
+    }
+
+    fn error_mut(&mut self) -> &mut Option<String> {
+        &mut self.error
     }
 }
