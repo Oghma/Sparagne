@@ -81,6 +81,7 @@ pub struct TransactionsState {
     pub recent_wallet_ids: Vec<uuid::Uuid>,
     pub recent_flow_ids: Vec<uuid::Uuid>,
     pub search: ListSearchState,
+    pub recurring_mode: bool,
 }
 
 impl Default for TransactionsState {
@@ -118,6 +119,7 @@ impl Default for TransactionsState {
             recent_wallet_ids: Vec::new(),
             recent_flow_ids: Vec::new(),
             search: ListSearchState::default(),
+            recurring_mode: false,
         }
     }
 }
@@ -146,6 +148,7 @@ impl TransactionsState {
         self.recent_categories.clear();
         self.recent_wallet_ids.clear();
         self.recent_flow_ids.clear();
+        self.recurring_mode = false;
     }
 
     pub(crate) fn push_cursor(&mut self, cursor: Option<String>) {

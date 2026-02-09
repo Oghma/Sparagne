@@ -7,6 +7,7 @@ mod flows;
 mod members;
 mod overlays;
 mod palette;
+pub(crate) mod recurring;
 mod search;
 mod selectable;
 mod stats;
@@ -19,6 +20,7 @@ mod wallets;
 pub use categories::*;
 pub use flows::*;
 pub use members::*;
+pub use recurring::{RecurringFormField, RecurringFormState, RecurringMode, RecurringState};
 pub use overlays::{
     BulkCategoryDialogState, ConfirmAction, ConfirmDialogKind, ConfirmDialogState, ErrorAction,
     ErrorDialogKind, ErrorDialogState, GroupingDialogState, OverlayState,
@@ -154,4 +156,5 @@ pub struct AppState {
     pub default_wallet_id: Option<Uuid>,
     pub default_flow_id: Option<Uuid>,
     pub preferences: PreferencesState,
+    pub recurring: RecurringState,
 }
