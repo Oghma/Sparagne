@@ -149,67 +149,46 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             )
         };
 
-        // Build preview line based on transaction type
+        // Build preview line: shared prefix + type-specific details + today suffix
+        let sep = Span::raw("  │  ");
+        let today = Span::styled(
+            t(locale, TextKey::QuickAddToday),
+            Style::default().fg(theme.text_muted),
+        );
+        let mut preview = vec![
+            Span::styled(type_icon, Style::default().fg(type_color)),
+            Span::raw(" "),
+            Span::styled(amount_str, Style::default().fg(type_color)),
+            Span::raw("  "),
+            Span::styled(note, Style::default().fg(theme.text)),
+            sep.clone(),
+        ];
+
         if p.kind == QuickAddKind::TransferWallet {
             let from = p.from_wallet.as_deref().unwrap_or("-");
             let to = p.to_wallet.as_deref().unwrap_or("-");
-            lines.push(Line::from(vec![
-                Span::styled(type_icon, Style::default().fg(type_color)),
-                Span::raw(" "),
-                Span::styled(amount_str, Style::default().fg(type_color)),
-                Span::raw("  "),
-                Span::styled(note, Style::default().fg(theme.text)),
-                Span::raw("  │  "),
-                Span::styled(
-                    format!("@{from} → @{to}"),
-                    Style::default().fg(theme.transfer),
-                ),
-                Span::raw("  │  "),
-                Span::styled(
-                    t(locale, TextKey::QuickAddToday),
-                    Style::default().fg(theme.text_muted),
-                ),
-            ]));
+            preview.push(Span::styled(
+                format!("@{from} → @{to}"),
+                Style::default().fg(theme.transfer),
+            ));
         } else if p.kind == QuickAddKind::TransferFlow {
             let from = p.from_flow.as_deref().unwrap_or("-");
             let to = p.to_flow.as_deref().unwrap_or("-");
-            lines.push(Line::from(vec![
-                Span::styled(type_icon, Style::default().fg(type_color)),
-                Span::raw(" "),
-                Span::styled(amount_str, Style::default().fg(type_color)),
-                Span::raw("  "),
-                Span::styled(note, Style::default().fg(theme.text)),
-                Span::raw("  │  "),
-                Span::styled(
-                    format!(">{from} → >{to}"),
-                    Style::default().fg(theme.transfer),
-                ),
-                Span::raw("  │  "),
-                Span::styled(
-                    t(locale, TextKey::QuickAddToday),
-                    Style::default().fg(theme.text_muted),
-                ),
-            ]));
+            preview.push(Span::styled(
+                format!(">{from} → >{to}"),
+                Style::default().fg(theme.transfer),
+            ));
         } else {
-            lines.push(Line::from(vec![
-                Span::styled(type_icon, Style::default().fg(type_color)),
-                Span::raw(" "),
-                Span::styled(amount_str, Style::default().fg(type_color)),
-                Span::raw("  "),
-                Span::styled(note, Style::default().fg(theme.text)),
-                Span::raw("  │  "),
-                Span::styled(category_display, category_style),
-                Span::raw("  │  "),
-                Span::styled(flow_display, flow_style),
-                Span::raw("  │  "),
-                Span::styled(wallet_display, wallet_style),
-                Span::raw("  │  "),
-                Span::styled(
-                    t(locale, TextKey::QuickAddToday),
-                    Style::default().fg(theme.text_muted),
-                ),
-            ]));
+            preview.push(Span::styled(category_display, category_style));
+            preview.push(sep.clone());
+            preview.push(Span::styled(flow_display, flow_style));
+            preview.push(sep.clone());
+            preview.push(Span::styled(wallet_display, wallet_style));
         }
+
+        preview.push(sep);
+        preview.push(today);
+        lines.push(Line::from(preview));
 
         // Show ambiguous options if any
         let has_ambiguous = category_ambiguous || wallet_ambiguous || flow_ambiguous;
@@ -249,29 +228,14 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
             } else {
                 // Build ambiguous hint for fields with multiple matches
                 let mut hints = Vec::new();
-                if category_matches.len() > 1 {
-                    let names: Vec<&str> = category_matches
-                        .iter()
-                        .take(3)
-                        .map(|(_id, name)| name.as_str())
-                        .collect();
-                    hints.push(format!("#? {}", names.join(" | ")));
-                }
-                if wallet_matches.len() > 1 {
-                    let names: Vec<&str> = wallet_matches
-                        .iter()
-                        .take(3)
-                        .map(|(_id, name)| name.as_str())
-                        .collect();
-                    hints.push(format!("@? {}", names.join(" | ")));
-                }
-                if flow_matches.len() > 1 {
-                    let names: Vec<&str> = flow_matches
-                        .iter()
-                        .take(3)
-                        .map(|(_id, name)| name.as_str())
-                        .collect();
-                    hints.push(format!(">? {}", names.join(" | ")));
+                for (prefix, matches) in [
+                    ("#", &category_matches),
+                    ("@", &wallet_matches),
+                    (">", &flow_matches),
+                ] {
+                    if matches.len() > 1 {
+                        hints.push(ambiguous_hint(prefix, matches));
+                    }
                 }
                 if !hints.is_empty() {
                     lines.push(Line::from(vec![
@@ -350,6 +314,16 @@ pub fn render_quick_add(frame: &mut Frame<'_>, area: Rect, state: &AppState, the
     let block = themed_block(t(locale, TextKey::QuickAddTitle), border_color, theme);
     let widget = Paragraph::new(lines).block(block);
     frame.render_widget(widget, area);
+}
+
+/// Formats an ambiguous match hint like `#? food | grocery | restaurant`.
+fn ambiguous_hint(prefix: &str, matches: &[(Uuid, String)]) -> String {
+    let names: Vec<&str> = matches
+        .iter()
+        .take(3)
+        .map(|(_, name)| name.as_str())
+        .collect();
+    format!("{prefix}? {}", names.join(" | "))
 }
 
 /// Helper to resolve display value for potentially ambiguous fields.

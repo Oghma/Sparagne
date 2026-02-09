@@ -14,7 +14,7 @@ use crate::{
     app::AppState,
     text::{TextKey, t},
     ui::{
-        common::{get_currency, render_empty_state, themed_block},
+        common::{balance_color, get_currency, render_empty_state, themed_block},
         components::recent_transactions::render_recent_transactions,
         theme::Theme,
     },
@@ -65,11 +65,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
 
     let currency = get_currency(state);
 
-    let balance_color = if wallet.balance_minor >= 0 {
-        theme.positive
-    } else {
-        theme.negative
-    };
+    let bal_color = balance_color(wallet.balance_minor, theme);
 
     let status = if wallet.archived {
         Span::styled("[archived]", Style::default().fg(theme.warning))
@@ -93,9 +89,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             Span::styled("  Balance: ", Style::default().fg(theme.text_muted)),
             Span::styled(
                 Money::new(wallet.balance_minor).format(currency),
-                Style::default()
-                    .fg(balance_color)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(bal_color).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(""),

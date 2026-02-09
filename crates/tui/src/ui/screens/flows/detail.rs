@@ -14,7 +14,7 @@ use crate::{
     app::AppState,
     text::{TextKey, t},
     ui::{
-        common::{get_currency, render_empty_state, themed_block},
+        common::{balance_color, get_currency, render_empty_state, themed_block},
         components::{
             money::{flow_cap_line_gauge, styled_amount_no_sign, styled_progress_bar},
             recent_transactions::render_recent_transactions,
@@ -82,11 +82,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
         .constraints([Constraint::Length(header_height), Constraint::Min(0)])
         .split(area);
 
-    let balance_color = if flow.balance_minor >= 0 {
-        theme.positive
-    } else {
-        theme.negative
-    };
+    let bal_color = balance_color(flow.balance_minor, theme);
 
     let emoji = if flow.is_unallocated { "📦" } else { "🎯" };
 
@@ -127,9 +123,7 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
             Span::styled("  Balance: ", Style::default().fg(theme.text_muted)),
             Span::styled(
                 Money::new(flow.balance_minor).format(currency),
-                Style::default()
-                    .fg(balance_color)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(bal_color).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(""),
@@ -166,24 +160,28 @@ pub fn render_detail(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme:
     );
 }
 
+/// Extracts the cap label, current usage, and cap value from a flow detail.
+///
+/// Returns `None` when the flow has no cap or the cap is non-positive.
+fn cap_values(detail: &engine::CashFlow) -> Option<(&'static str, i64, i64)> {
+    let cap = detail.max_balance?;
+    if cap <= 0 {
+        return None;
+    }
+    let (label, current) = match detail.income_balance {
+        Some(income) => ("Income cap", income),
+        None => ("Net cap", detail.balance),
+    };
+    Some((label, current.max(0), cap))
+}
+
 /// Create a cap progress line showing current vs cap.
 fn cap_progress_line(
     detail: &engine::CashFlow,
     currency: Currency,
     theme: &Theme,
 ) -> Option<Line<'static>> {
-    let cap = detail.max_balance?;
-    if cap <= 0 {
-        return None;
-    }
-
-    let (label, current) = if let Some(income_total_minor) = detail.income_balance {
-        ("Income cap", income_total_minor)
-    } else {
-        ("Net cap", detail.balance)
-    };
-
-    let current = current.max(0);
+    let (label, current, cap) = cap_values(detail)?;
     let bar = styled_progress_bar(current, Some(cap), 20, theme);
     let current_fmt = styled_amount_no_sign(current, currency, theme);
     let cap_fmt = styled_amount_no_sign(cap, currency, theme);
@@ -204,14 +202,6 @@ fn cap_line_gauge(
     detail: &engine::CashFlow,
     theme: &Theme,
 ) -> Option<ratatui::widgets::LineGauge<'static>> {
-    let cap = detail.max_balance?;
-    if cap <= 0 {
-        return None;
-    }
-    let current = if let Some(income_total_minor) = detail.income_balance {
-        income_total_minor
-    } else {
-        detail.balance
-    };
-    flow_cap_line_gauge(current.max(0), Some(cap), theme)
+    let (_, current, cap) = cap_values(detail)?;
+    flow_cap_line_gauge(current, Some(cap), theme)
 }

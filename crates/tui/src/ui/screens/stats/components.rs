@@ -299,24 +299,22 @@ pub fn format_mom_subtitle(change: Option<f64>, locale: crate::text::Locale) -> 
     }
 }
 
-/// Get full month name.
-pub fn month_name(month: u32) -> &'static str {
-    match month {
-        1 => "January",
-        2 => "February",
-        3 => "March",
-        4 => "April",
-        5 => "May",
-        6 => "June",
-        7 => "July",
-        8 => "August",
-        9 => "September",
-        10 => "October",
-        11 => "November",
-        12 => "December",
-        _ => "Unknown",
-    }
-}
+/// Full month names indexed by month number (1-12).
+const MONTH_NAMES: [&str; 13] = [
+    "Unknown",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
 
 /// Build a visual timeline showing recent months with the current one
 /// highlighted.
@@ -339,7 +337,11 @@ pub fn build_month_timeline<'a>(year: i32, month: u32, theme: &Theme) -> Line<'a
         Style::default().fg(theme.text_muted),
     ));
     spans.push(Span::styled(
-        format!("{} {}", month_name(month), year),
+        format!(
+            "{} {}",
+            MONTH_NAMES.get(month as usize).unwrap_or(&"Unknown"),
+            year
+        ),
         Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
     ));
     spans.push(Span::raw("  "));

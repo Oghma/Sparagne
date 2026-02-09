@@ -34,11 +34,7 @@ use super::components::{
 };
 
 /// Renders an optional percentage change, falling back to "N/A" when absent.
-fn change_span(
-    change: Option<f64>,
-    locale: crate::text::Locale,
-    theme: &Theme,
-) -> Span<'static> {
+fn change_span(change: Option<f64>, locale: crate::text::Locale, theme: &Theme) -> Span<'static> {
     change
         .map(|value| styled_percentage_change(value, theme))
         .unwrap_or_else(|| {

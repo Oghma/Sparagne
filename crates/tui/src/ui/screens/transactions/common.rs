@@ -127,42 +127,39 @@ pub fn group_total_span(total_minor: i64, currency: Currency, theme: &Theme) -> 
     )
 }
 
-/// Returns recent wallet names
-pub fn recent_wallet_names(state: &AppState) -> Vec<String> {
+/// Resolves recent entity IDs into names by looking up active (non-archived)
+/// entities in the snapshot.
+///
+/// `ids` are the recent IDs to resolve, and `lookup` maps each ID to an
+/// optional name (returning `None` when the entity is missing or archived).
+fn recent_entity_names<F>(state: &AppState, ids: &[uuid::Uuid], lookup: F) -> Vec<String>
+where
+    F: Fn(&api_types::vault::VaultSnapshot, &uuid::Uuid) -> Option<String>,
+{
     let Some(snapshot) = state.snapshot.as_ref() else {
         return Vec::new();
     };
-    state
-        .transactions
-        .recent_wallet_ids
-        .iter()
-        .filter_map(|wallet_id| {
-            snapshot
-                .wallets
-                .iter()
-                .find(|wallet| wallet.id == *wallet_id && !wallet.archived)
-                .map(|wallet| wallet.name.clone())
-        })
-        .collect()
+    ids.iter().filter_map(|id| lookup(snapshot, id)).collect()
 }
 
-/// Returns recent flow names
+/// Returns recent wallet names.
+pub fn recent_wallet_names(state: &AppState) -> Vec<String> {
+    recent_entity_names(state, &state.transactions.recent_wallet_ids, |snap, id| {
+        snap.wallets
+            .iter()
+            .find(|w| w.id == *id && !w.archived)
+            .map(|w| w.name.clone())
+    })
+}
+
+/// Returns recent flow names.
 pub fn recent_flow_names(state: &AppState) -> Vec<String> {
-    let Some(snapshot) = state.snapshot.as_ref() else {
-        return Vec::new();
-    };
-    state
-        .transactions
-        .recent_flow_ids
-        .iter()
-        .filter_map(|flow_id| {
-            snapshot
-                .flows
-                .iter()
-                .find(|flow| flow.id == *flow_id && !flow.archived)
-                .map(|flow| flow.name.clone())
-        })
-        .collect()
+    recent_entity_names(state, &state.transactions.recent_flow_ids, |snap, id| {
+        snap.flows
+            .iter()
+            .find(|f| f.id == *id && !f.archived)
+            .map(|f| f.name.clone())
+    })
 }
 
 // Re-export from app layer where the business logic now lives.

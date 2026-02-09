@@ -16,7 +16,7 @@ use ratatui::{
 
 use crate::{
     text::{Locale, TextKey, t},
-    ui::{components::loading, theme::Theme},
+    ui::{common::balance_color, components::loading, theme::Theme},
 };
 
 /// An entity item extracted from the snapshot for rendering.
@@ -131,11 +131,7 @@ pub(crate) fn render_entity_list(
                 Style::default().fg(theme.text)
             };
 
-            let balance_color = if item.balance_minor >= 0 {
-                theme.positive
-            } else {
-                theme.negative
-            };
+            let bal_color = balance_color(item.balance_minor, theme);
 
             let bar = crate::ui::common::progress_bar(
                 item.balance_minor.unsigned_abs() as i64,
@@ -148,7 +144,7 @@ pub(crate) fn render_entity_list(
                 Span::styled(format!("{:<16}", item.name), name_style),
                 Span::styled(
                     format!("{:>12}", Money::new(item.balance_minor).format(currency)),
-                    Style::default().fg(balance_color),
+                    Style::default().fg(bal_color),
                 ),
                 Span::raw("  "),
                 Span::styled(bar, Style::default().fg(theme.accent)),

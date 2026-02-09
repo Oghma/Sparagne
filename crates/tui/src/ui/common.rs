@@ -285,6 +285,22 @@ pub(crate) fn inset(area: Rect, horizontal: u16, vertical: u16) -> Rect {
 }
 
 // ---------------------------------------------------------------------------
+// Color helpers
+// ---------------------------------------------------------------------------
+
+/// Returns a positive or negative color based on the sign of the amount.
+///
+/// Non-negative values use `theme.positive`; negative values use
+/// `theme.negative`. This is the standard pattern for balance display.
+pub(crate) fn balance_color(amount: i64, theme: &Theme) -> ratatui::style::Color {
+    if amount >= 0 {
+        theme.positive
+    } else {
+        theme.negative
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Transaction display helpers
 // ---------------------------------------------------------------------------
 

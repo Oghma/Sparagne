@@ -23,6 +23,21 @@ use crate::{
 
 use super::common::{ICON_EXPENSE, ICON_INCOME, get_currency};
 
+/// Computes total net worth from active (non-archived) wallet balances.
+fn net_worth_minor(state: &AppState) -> i64 {
+    state
+        .snapshot
+        .as_ref()
+        .map(|snap| {
+            snap.wallets
+                .iter()
+                .filter(|w| !w.archived)
+                .map(|w| w.balance_minor)
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
 /// Renders the full stats bar with 3 cards.
 pub fn render_stats_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     let layout = Layout::default()
@@ -73,23 +88,12 @@ pub fn render_stats_bar_compact(
     theme: &Theme,
 ) {
     let currency = get_currency(state);
-
-    let net_worth_minor: i64 = state
-        .snapshot
-        .as_ref()
-        .map(|snap| {
-            snap.wallets
-                .iter()
-                .filter(|w| !w.archived)
-                .map(|w| w.balance_minor)
-                .sum()
-        })
-        .unwrap_or(0);
+    let nw = net_worth_minor(state);
 
     let income = state.stats.current_month_income;
     let expenses = state.stats.current_month_expenses;
 
-    let net_worth = Money::new(net_worth_minor).format(currency);
+    let net_worth_str = Money::new(nw).format(currency);
     let income_str = Money::new(income).format(currency);
     let expenses_str = Money::new(expenses).format(currency);
 
@@ -99,7 +103,7 @@ pub fn render_stats_bar_compact(
             Style::default().fg(theme.text_muted),
         ),
         Span::styled(
-            net_worth,
+            net_worth_str,
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ),
         Span::styled("  │  ", Style::default().fg(theme.border)),
@@ -119,19 +123,8 @@ fn render_net_worth_card(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
     let inner = card.inner(area);
     card.render_frame(frame, area);
 
-    let net_worth_minor: i64 = state
-        .snapshot
-        .as_ref()
-        .map(|snap| {
-            snap.wallets
-                .iter()
-                .filter(|w| !w.archived)
-                .map(|w| w.balance_minor)
-                .sum()
-        })
-        .unwrap_or(0);
-
-    let net_worth = Money::new(net_worth_minor).format(currency);
+    let nw = net_worth_minor(state);
+    let net_worth = Money::new(nw).format(currency);
 
     let income = state.stats.current_month_income;
     let expenses = state.stats.current_month_expenses;

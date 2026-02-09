@@ -16,6 +16,8 @@ use crate::{
     ui::{components::card::Card, theme::Theme},
 };
 
+use crate::ui::common::balance_color;
+
 use super::common::{get_currency, render_empty_state, truncate};
 
 /// Renders the quick balances card showing wallet and flow summaries.
@@ -63,11 +65,7 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
         let max_wallets = (available_height / 2).max(2).min(wallets.len());
 
         for wallet in wallets.iter().take(max_wallets) {
-            let balance_color = if wallet.balance_minor >= 0 {
-                theme.positive
-            } else {
-                theme.negative
-            };
+            let bal_color = balance_color(wallet.balance_minor, theme);
             let amount_str = Money::new(wallet.balance_minor).format(currency);
             let name_len = prefix_width + max_name_width;
             let pad = (inner.width as usize).saturating_sub(name_len + amount_str.len());
@@ -81,7 +79,7 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
                     Style::default().fg(theme.text),
                 ),
                 Span::raw(" ".repeat(pad)),
-                Span::styled(amount_str, Style::default().fg(balance_color)),
+                Span::styled(amount_str, Style::default().fg(bal_color)),
             ]));
         }
     }
@@ -107,11 +105,7 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
             let max_flows = (remaining - 3).max(1).min(flows.len());
 
             for flow in flows.iter().take(max_flows) {
-                let balance_color = if flow.balance_minor >= 0 {
-                    theme.positive
-                } else {
-                    theme.negative
-                };
+                let bal_color = balance_color(flow.balance_minor, theme);
                 let amount_str = Money::new(flow.balance_minor).format(currency);
                 let name_len = prefix_width + max_name_width;
                 let pad = (inner.width as usize).saturating_sub(name_len + amount_str.len());
@@ -122,7 +116,7 @@ pub fn render_quick_balances(frame: &mut Frame<'_>, area: Rect, state: &AppState
                         Style::default().fg(theme.text),
                     ),
                     Span::raw(" ".repeat(pad)),
-                    Span::styled(amount_str, Style::default().fg(balance_color)),
+                    Span::styled(amount_str, Style::default().fg(bal_color)),
                 ]));
             }
         }

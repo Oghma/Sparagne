@@ -158,12 +158,6 @@ fn render_preferences(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme
         content_layout[3],
     );
 
-    let _density_value_style = if density_focused {
-        Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme.text)
-    };
-
     // Show all density options with current highlighted
     let density_options = [
         ("Compact", Density::Compact),
