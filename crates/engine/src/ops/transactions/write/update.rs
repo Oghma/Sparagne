@@ -2,8 +2,7 @@ use sea_orm::{ActiveValue, QueryFilter, prelude::*};
 
 use crate::{
     EngineError, Leg, LegTarget, ResultEngine, TransactionKind, UpdateTransactionCmd, legs,
-    transactions,
-    util::{apply_optional_datetime_patch, apply_optional_text_patch},
+    transactions, util::apply_optional_text_patch,
 };
 
 use uuid::Uuid;
@@ -76,8 +75,7 @@ impl Engine {
                     ));
                 }
 
-                let new_occurred_at =
-                    apply_optional_datetime_patch(tx_model.occurred_at, occurred_at);
+                let new_occurred_at = occurred_at.unwrap_or(tx_model.occurred_at);
                 let (new_category_id, new_category) = if category_id.is_some()
                     || category.as_deref().is_some()
                 {

@@ -119,7 +119,26 @@ impl App {
                     self.open_grouping_dialog();
                 }
             }
+            // Recurring templates
+            'P' => {
+                if self.state.section == Section::Transactions
+                    && self.state.transactions.mode == TransactionsMode::List
+                {
+                    self.toggle_recurring_mode().await?;
+                }
+            }
             _ => {}
+        }
+        Ok(())
+    }
+
+    /// Toggle between normal transaction list and recurring sub-mode.
+    async fn toggle_recurring_mode(&mut self) -> crate::error::Result<()> {
+        if self.state.transactions.recurring_mode {
+            self.state.transactions.recurring_mode = false;
+        } else {
+            self.state.transactions.recurring_mode = true;
+            self.load_recurring().await?;
         }
         Ok(())
     }

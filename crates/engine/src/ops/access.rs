@@ -133,13 +133,15 @@ impl Engine {
         vault_id: &str,
         user_id: &str,
     ) -> ResultEngine<vault::Model> {
-        let model = self.require_vault_by_id(db, vault_id, user_id).await?;
+        let model = self
+            .find_vault_by_id(db, vault_id)
+            .await?
+            .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         if model.user_id == user_id {
             return Ok(model);
         }
-        let vault_uuid = parse_vault_uuid(vault_id)?;
         let role = self
-            .vault_membership_role(db, vault_uuid, user_id)
+            .vault_membership_role(db, model.id, user_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
         if !role.can_write() {
@@ -176,11 +178,11 @@ impl Engine {
         db: &DatabaseTransaction,
         username: &str,
     ) -> ResultEngine<()> {
-        let exists = users::Entity::find_by_id(username.to_string())
+        if users::Entity::find_by_id(username.to_string())
             .one(db)
             .await?
-            .is_some();
-        if !exists {
+            .is_none()
+        {
             return Err(EngineError::KeyNotFound("user not exists".to_string()));
         }
         Ok(())
@@ -242,22 +244,18 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<cash_flows::Model> {
         let vault_uuid = parse_vault_uuid(vault_id)?;
-        let Some(model) = cash_flows::Entity::find_by_id(flow_id)
+        let model = cash_flows::Entity::find_by_id(flow_id)
             .filter(cash_flows::Column::VaultId.eq(vault_uuid))
             .one(db)
             .await?
-        else {
-            return Err(EngineError::KeyNotFound("cash_flow not exists".to_string()));
-        };
+            .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
 
         if self.has_vault_read_access(db, vault_id, user_id).await? {
             return Ok(model);
         }
-        let role = self
-            .flow_membership_role(db, model.id, user_id)
+        self.flow_membership_role(db, model.id, user_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
-        let _ = role;
         Ok(model)
     }
 
@@ -294,15 +292,26 @@ impl Engine {
             .find_vault_by_id(db, vault_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if model.user_id != user_id
-            && self
-                .vault_membership_role(db, model.id, user_id)
-                .await?
-                .is_none()
-        {
+        if !self.is_owner_or_member(db, &model, user_id).await? {
             return Err(EngineError::KeyNotFound("vault not exists".to_string()));
         }
         Ok(model)
+    }
+
+    /// Checks if a user is the vault owner or has a vault membership.
+    async fn is_owner_or_member(
+        &self,
+        db: &DatabaseTransaction,
+        model: &vault::Model,
+        user_id: &str,
+    ) -> ResultEngine<bool> {
+        if model.user_id == user_id {
+            return Ok(true);
+        }
+        Ok(self
+            .vault_membership_role(db, model.id, user_id)
+            .await?
+            .is_some())
     }
 
     pub(super) async fn require_vault_by_name(
@@ -321,14 +330,7 @@ impl Engine {
 
         let mut allowed = Vec::new();
         for model in models {
-            let has_access = if model.user_id == user_id {
-                true
-            } else {
-                self.vault_membership_role(db, model.id, user_id)
-                    .await?
-                    .is_some()
-            };
-            if has_access {
+            if self.is_owner_or_member(db, &model, user_id).await? {
                 allowed.push(model);
             }
         }
@@ -340,17 +342,9 @@ impl Engine {
                     .filter(vault::Column::UserId.eq(owner.as_str()))
                     .one(db)
                     .await?
+                && self.is_owner_or_member(db, &model, user_id).await?
             {
-                let has_access = if model.user_id == user_id {
-                    true
-                } else {
-                    self.vault_membership_role(db, model.id, user_id)
-                        .await?
-                        .is_some()
-                };
-                if has_access {
-                    return Ok(model);
-                }
+                return Ok(model);
             }
             return Err(EngineError::KeyNotFound("vault not exists".to_string()));
         }
@@ -365,17 +359,9 @@ impl Engine {
                     .filter(vault::Column::UserId.eq(owner.as_str()))
                     .one(db)
                     .await?
+                && self.is_owner_or_member(db, &model, user_id).await?
             {
-                let has_access = if model.user_id == user_id {
-                    true
-                } else {
-                    self.vault_membership_role(db, model.id, user_id)
-                        .await?
-                        .is_some()
-                };
-                if has_access {
-                    return Ok(model);
-                }
+                return Ok(model);
             }
             return Err(EngineError::InvalidAmount(
                 "ambiguous vault name".to_string(),
@@ -413,23 +399,18 @@ impl Engine {
             .find_vault_by_id(db, vault_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("vault not exists".to_string()))?;
-        if model.user_id == user_id {
-            return Ok(model);
+        let has_access = model.user_id == user_id
+            || self
+                .vault_membership_role(db, model.id, user_id)
+                .await?
+                .is_some()
+            || self
+                .has_flow_membership_in_vault(db, model.id, user_id)
+                .await?;
+        if !has_access {
+            return Err(EngineError::KeyNotFound("vault not exists".to_string()));
         }
-        if self
-            .vault_membership_role(db, model.id, user_id)
-            .await?
-            .is_some()
-        {
-            return Ok(model);
-        }
-        if self
-            .has_flow_membership_in_vault(db, model.id, user_id)
-            .await?
-        {
-            return Ok(model);
-        }
-        Err(EngineError::KeyNotFound("vault not exists".to_string()))
+        Ok(model)
     }
 
     pub(super) async fn require_vault_header_by_name(

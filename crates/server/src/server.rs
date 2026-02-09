@@ -15,7 +15,8 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::sync::Arc;
 
 use crate::{
-    cash_flow, categories, flows, memberships, statistics, transactions, user, vault, wallets,
+    cash_flow, categories, flows, memberships, recurring, statistics, transactions, user, vault,
+    wallets,
 };
 use engine::Engine;
 
@@ -165,6 +166,15 @@ fn router(state: ServerState) -> Router {
         )
         .route("/user/pair", post(user::pair).delete(user::unpair))
         .route("/stats/get", post(statistics::get_stats))
+        .route("/recurring", post(recurring::create))
+        .route("/recurring/list", post(recurring::list))
+        .route("/recurring/pending", post(recurring::pending))
+        .route(
+            "/recurring/{id}",
+            get(recurring::get).patch(recurring::update),
+        )
+        .route("/recurring/{id}/archive", post(recurring::archive))
+        .route("/recurring/{id}/execute", post(recurring::execute))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth))
         .with_state(state)
 }

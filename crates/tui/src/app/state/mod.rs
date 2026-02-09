@@ -7,6 +7,7 @@ mod flows;
 mod members;
 mod overlays;
 mod palette;
+pub(crate) mod recurring;
 mod search;
 mod selectable;
 mod stats;
@@ -24,6 +25,7 @@ pub use overlays::{
     ErrorDialogKind, ErrorDialogState, GroupingDialogState, OverlayState,
 };
 pub use palette::{CommandPaletteState, MRU_LIMIT, PaletteCommand};
+pub use recurring::{RecurringFormField, RecurringFormState, RecurringMode, RecurringState};
 pub use search::{GlobalSearchState, SearchResult, SearchResultKind};
 pub use selectable::EntityListMode;
 pub(crate) use selectable::{
@@ -154,4 +156,5 @@ pub struct AppState {
     pub default_wallet_id: Option<Uuid>,
     pub default_flow_id: Option<Uuid>,
     pub preferences: PreferencesState,
+    pub recurring: RecurringState,
 }

@@ -6,6 +6,7 @@ pub mod flows;
 pub mod home;
 pub mod login;
 pub mod members;
+pub mod recurring;
 pub mod settings;
 pub mod stats; // Now a directory module: stats/
 pub mod transactions;

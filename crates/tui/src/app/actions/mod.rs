@@ -2,6 +2,7 @@ mod categories;
 mod flows;
 mod login;
 mod members;
+mod recurring;
 mod snapshot;
 mod stats;
 mod transactions;

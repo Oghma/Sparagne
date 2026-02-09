@@ -40,6 +40,8 @@ pub enum EngineError {
     InvalidRole(String),
     #[error("Currency mismatch: {0}")]
     CurrencyMismatch(String),
+    #[error("Invalid recurring template: {0}")]
+    InvalidRecurring(String),
     #[error("Forbidden: {0}")]
     Forbidden(String),
     #[error(transparent)]
@@ -60,6 +62,7 @@ impl PartialEq for EngineError {
             (Self::InvalidFlow(a), Self::InvalidFlow(b)) => a == b,
             (Self::InvalidRole(a), Self::InvalidRole(b)) => a == b,
             (Self::CurrencyMismatch(a), Self::CurrencyMismatch(b)) => a == b,
+            (Self::InvalidRecurring(a), Self::InvalidRecurring(b)) => a == b,
             (Self::Forbidden(a), Self::Forbidden(b)) => a == b,
             (Self::Database(a), Self::Database(b)) => a.to_string() == b.to_string(),
             _ => false,

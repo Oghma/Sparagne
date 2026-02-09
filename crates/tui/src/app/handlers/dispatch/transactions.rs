@@ -12,6 +12,11 @@ use crate::{
 impl App {
     /// Dispatches actions for the Transactions section.
     pub(crate) async fn dispatch_transactions(&mut self, action: AppAction) -> Result<bool> {
+        // Route to recurring sub-mode when active
+        if self.state.transactions.recurring_mode {
+            return self.dispatch_recurring(action).await;
+        }
+
         match action {
             AppAction::Submit => {
                 self.handle_transactions_submit().await?;
@@ -20,6 +25,40 @@ impl App {
             AppAction::Backspace => self.dispatch_transactions_backspace().await,
             AppAction::Up => self.dispatch_transactions_up().await,
             AppAction::Down => self.dispatch_transactions_down().await,
+            _ => Ok(false),
+        }
+    }
+
+    async fn dispatch_recurring(&mut self, action: AppAction) -> Result<bool> {
+        match action {
+            AppAction::Submit => {
+                self.handle_recurring_submit().await?;
+                Ok(true)
+            }
+            AppAction::Up => {
+                self.handle_recurring_up();
+                Ok(true)
+            }
+            AppAction::Down => {
+                self.handle_recurring_down();
+                Ok(true)
+            }
+            AppAction::Backspace => {
+                if self.state.recurring.mode == crate::app::RecurringMode::Create {
+                    self.handle_recurring_backspace();
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            AppAction::NextField => {
+                if self.state.recurring.mode == crate::app::RecurringMode::Create {
+                    self.recurring_form_next_field();
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
             _ => Ok(false),
         }
     }

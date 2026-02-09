@@ -117,10 +117,7 @@ impl Money {
         let major: i64 = major_str.parse().map_err(|_| invalid())?;
 
         let allowed = currency.minor_units() as usize;
-        let frac_raw = match frac_str {
-            None | Some("") => "",
-            Some(frac) => frac,
-        };
+        let frac_raw = frac_str.unwrap_or("");
 
         if !frac_raw.chars().all(|c| c.is_ascii_digit()) {
             return Err(invalid());
@@ -129,16 +126,13 @@ impl Money {
             return Err(EngineError::InvalidAmount("too many decimals".to_string()));
         }
 
-        let mut frac = frac_raw.to_string();
-        while frac.len() < allowed {
-            frac.push('0');
-        }
-
         let scale: i64 = 10i64.pow(currency.minor_units() as u32);
-        let frac_val: i64 = if frac.is_empty() {
+        let frac_val: i64 = if frac_raw.is_empty() {
             0
         } else {
-            frac.parse().map_err(|_| invalid())?
+            // Right-pad with zeros to fill the minor units width, then parse.
+            let padded = format!("{frac_raw:0<width$}", width = allowed);
+            padded.parse().map_err(|_| invalid())?
         };
 
         let total = major

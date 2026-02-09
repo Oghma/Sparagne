@@ -90,6 +90,7 @@ impl App {
             default_wallet_id: None,
             default_flow_id: None,
             preferences: PreferencesState::default(),
+            recurring: RecurringState::default(),
         };
 
         Ok(Self {

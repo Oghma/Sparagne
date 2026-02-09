@@ -3,8 +3,6 @@
 //! These utilities are **not** part of the public API. They centralize
 //! validation and mapping logic so the engine enforces consistent invariants.
 
-use chrono::{DateTime, Utc};
-
 use unicode_normalization::{UnicodeNormalization, char::is_combining_mark};
 
 use crate::{Currency, EngineError, ResultEngine};
@@ -36,18 +34,7 @@ pub(crate) fn normalize_category_display(value: &str) -> ResultEngine<String> {
             "category name must not be empty".to_string(),
         ));
     }
-    let mut out = String::new();
-    for token in trimmed.split_whitespace() {
-        if !out.is_empty() {
-            out.push(' ');
-        }
-        out.push_str(token);
-    }
-    if out.is_empty() {
-        return Err(EngineError::InvalidName(
-            "category name must not be empty".to_string(),
-        ));
-    }
+    let out: String = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
     Ok(out)
 }
 
@@ -100,14 +87,6 @@ pub(crate) fn apply_optional_text_patch(
         None => existing,
         Some(value) => normalize_optional_text(Some(value)),
     }
-}
-
-/// Applies an optional patch to an existing datetime field.
-pub(crate) fn apply_optional_datetime_patch(
-    existing: DateTime<Utc>,
-    patch: Option<DateTime<Utc>>,
-) -> DateTime<Utc> {
-    patch.unwrap_or(existing)
 }
 
 /// Validate flow cap/income fields for consistency and invariant safety.

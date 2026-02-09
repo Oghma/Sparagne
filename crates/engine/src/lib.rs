@@ -11,8 +11,8 @@ pub use categories::Category;
 pub use category_aliases::CategoryAlias;
 /// Command inputs for transaction operations.
 pub use commands::{
-    ExpenseCmd, IncomeCmd, RefundCmd, TransferFlowCmd, TransferWalletCmd, TxMeta,
-    UpdateTransactionCmd,
+    CreateRecurringCmd, ExpenseCmd, IncomeCmd, RefundCmd, TransferFlowCmd, TransferWalletCmd,
+    TxMeta, UpdateRecurringCmd, UpdateTransactionCmd,
 };
 /// Currency codes and helpers.
 pub use currency::Currency;
@@ -26,6 +26,8 @@ pub use money::Money;
 pub use ops::{CategoryMergeConflict, CategoryMergeConflictKind, CategoryMergePreview};
 /// Engine facade, builder, and transaction listing filters.
 pub use ops::{Engine, EngineBuilder, TransactionListFilter};
+/// Recurring template types.
+pub use recurring_templates::{PendingRecurring, RecurrenceFrequency, RecurringTemplate};
 /// Transaction models and kinds.
 pub use transactions::{Transaction, TransactionKind, TransactionNew};
 /// Vault aggregate model.
@@ -43,6 +45,7 @@ mod flow_memberships;
 mod legs;
 mod money;
 mod ops;
+mod recurring_templates;
 mod transactions;
 mod users;
 mod util;

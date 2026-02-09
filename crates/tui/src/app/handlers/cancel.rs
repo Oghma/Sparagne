@@ -33,6 +33,12 @@ impl App {
             return Ok(true);
         }
 
+        // Handle recurring mode cancel
+        if self.state.section == Section::Transactions && self.state.transactions.recurring_mode {
+            self.handle_recurring_cancel();
+            return Ok(true);
+        }
+
         // Handle section-specific cancel
         match self.state.section {
             Section::Transactions => {
