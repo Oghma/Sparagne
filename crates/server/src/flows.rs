@@ -44,6 +44,7 @@ pub async fn flow_new(
             0,
             max_balance,
             income_bounded,
+            payload.allow_negative,
             &user.username,
         )
         .await?;
@@ -84,9 +85,13 @@ pub async fn flow_update(
     Path(flow_id): Path<Uuid>,
     Json(payload): Json<FlowUpdate>,
 ) -> Result<StatusCode, ServerError> {
-    if payload.name.is_none() && payload.archived.is_none() && payload.mode.is_none() {
+    if payload.name.is_none()
+        && payload.archived.is_none()
+        && payload.mode.is_none()
+        && payload.allow_negative.is_none()
+    {
         return Err(ServerError::Generic(
-            "provide at least one of name, archived, or mode".to_string(),
+            "provide at least one of name, archived, mode, or allow_negative".to_string(),
         ));
     }
 
@@ -115,6 +120,17 @@ pub async fn flow_update(
             )
             .await?;
     }
+    if let Some(allow_negative) = payload.allow_negative {
+        state
+            .engine
+            .set_cash_flow_allow_negative(
+                &payload.vault_id,
+                flow_id,
+                allow_negative,
+                &user.username,
+            )
+            .await?;
+    }
 
     Ok(StatusCode::OK)
 }
@@ -134,6 +150,7 @@ pub async fn shared_list(
         .into_iter()
         .map(|flow| FlowView {
             is_unallocated: flow.is_unallocated(),
+            allow_negative: flow.allow_negative,
             id: flow.id,
             name: flow.name,
             balance_minor: flow.balance,
