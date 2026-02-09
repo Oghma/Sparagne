@@ -133,6 +133,7 @@ impl Engine {
                     None,
                     None,
                     new_vault.currency,
+                    false,
                 )?;
                 unallocated.system_kind = Some(cash_flows::SystemFlowKind::Unallocated);
                 let new_vault_uuid = Uuid::parse_str(&new_vault_id)
