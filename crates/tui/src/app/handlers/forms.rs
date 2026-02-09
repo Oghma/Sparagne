@@ -112,7 +112,8 @@ impl App {
             FlowFormField::Name => FlowFormField::Mode,
             FlowFormField::Mode => FlowFormField::Cap,
             FlowFormField::Cap => FlowFormField::Opening,
-            FlowFormField::Opening => FlowFormField::Name,
+            FlowFormField::Opening => FlowFormField::AllowNegative,
+            FlowFormField::AllowNegative => FlowFormField::Name,
         };
         self.state.flows.form.update_focus();
     }
@@ -171,6 +172,13 @@ impl App {
                             FlowFormField::Mode => {
                                 if matches!(ch, 'm' | 'M' | ' ') {
                                     self.cycle_flow_mode();
+                                }
+                                return true;
+                            }
+                            FlowFormField::AllowNegative => {
+                                if matches!(ch, 'n' | 'N' | ' ') {
+                                    self.state.flows.form.allow_negative =
+                                        !self.state.flows.form.allow_negative;
                                 }
                                 return true;
                             }
@@ -285,7 +293,7 @@ impl App {
             FlowFormField::Opening => {
                 self.state.flows.form.opening.pop();
             }
-            FlowFormField::Mode => {}
+            FlowFormField::Mode | FlowFormField::AllowNegative => {}
         }
     }
 

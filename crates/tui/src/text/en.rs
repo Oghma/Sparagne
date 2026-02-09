@@ -615,8 +615,14 @@ pub fn get(key: TextKey) -> &'static str {
         // Error dialog
         TextKey::ErrorTechnicalDetails => "Technical details:",
 
+        // Flow form
+        TextKey::FormLabelAllowNegative => "Allow negative",
+        TextKey::FlowBadgeAllowNegative => "[allow neg.]",
+
         // General UI
         TextKey::UiNone => "None",
         TextKey::UiUndoApplied => "Undo applied.",
+        TextKey::UiYes => "Yes",
+        TextKey::UiNo => "No",
     }
 }

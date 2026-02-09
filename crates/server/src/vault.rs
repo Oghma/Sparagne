@@ -123,6 +123,7 @@ pub async fn snapshot(
                 balance_minor: flow.balance,
                 archived: flow.archived,
                 is_unallocated,
+                allow_negative: flow.allow_negative,
             }
         })
         .collect::<Vec<_>>();

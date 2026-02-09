@@ -275,6 +275,7 @@ impl Engine {
                 income_balance: flow_model.income_balance,
                 currency: flow_model.currency,
                 archived: flow_model.archived,
+                allow_negative: flow_model.allow_negative,
             });
         entry.apply_leg_change(input.old_amount_minor, input.new_amount_minor)?;
         Ok(())

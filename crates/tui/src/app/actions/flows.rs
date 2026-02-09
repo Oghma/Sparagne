@@ -147,6 +147,7 @@ impl App {
                 mode,
                 opening_balance_minor: opening,
                 occurred_at: self.now_in_timezone(),
+                allow_negative: self.state.flows.form.allow_negative,
             })
             .await;
 
@@ -212,6 +213,7 @@ impl App {
                     name: Some(name.to_string()),
                     archived: None,
                     mode: None,
+                    allow_negative: None,
                 },
             )
             .await;
@@ -261,6 +263,7 @@ impl App {
                     name: None,
                     archived: Some(!flow.archived),
                     mode: None,
+                    allow_negative: None,
                 },
             )
             .await;
@@ -321,6 +324,7 @@ impl App {
                     name: None,
                     archived: Some(true),
                     mode: None,
+                    allow_negative: None,
                 },
             )
             .await;
@@ -356,6 +360,7 @@ impl App {
                     name: None,
                     archived: Some(false),
                     mode: None,
+                    allow_negative: None,
                 },
             )
             .await;

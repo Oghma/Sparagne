@@ -228,13 +228,14 @@ impl Engine {
         balance: i64,
         max_balance: Option<i64>,
         income_bounded: Option<bool>,
+        allow_negative: bool,
         user_id: &str,
     ) -> ResultEngine<Uuid> {
         let occurred_at = Utc::now();
         let name = normalize_required_name(name, "flow")?;
         let vault_id = vault_id.to_string();
         let user_id = user_id.to_string();
-        if balance < 0 {
+        if balance < 0 && !allow_negative {
             return Err(EngineError::InvalidAmount(
                 "flow balance must be >= 0".to_string(),
             ));
@@ -270,6 +271,7 @@ impl Engine {
                     max_balance,
                     income_bounded,
                     vault_currency,
+                    allow_negative,
                 )?;
                 let flow_id = flow.id;
                 let mut flow_model: cash_flows::ActiveModel = (&flow).into();
@@ -398,6 +400,49 @@ impl Engine {
                 let active = cash_flows::ActiveModel {
                     id: ActiveValue::Set(flow_id),
                     archived: ActiveValue::Set(archived),
+                    ..Default::default()
+                };
+                active.update(db_tx).await?;
+                Ok(())
+            })
+        })
+        .await
+    }
+
+    /// Sets or clears the `allow_negative` flag on a cash flow.
+    ///
+    /// Turning off `allow_negative` while the balance is negative is rejected
+    /// to avoid violating the non-negativity invariant.
+    ///
+    /// Authorization: requires flow write access.
+    pub async fn set_cash_flow_allow_negative(
+        &self,
+        vault_id: &str,
+        flow_id: Uuid,
+        allow_negative: bool,
+        user_id: &str,
+    ) -> ResultEngine<()> {
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                let flow_model = engine
+                    .require_flow_write(db_tx, vault_id.as_str(), flow_id, user_id.as_str())
+                    .await?;
+                if flow_model.system_kind.is_some() {
+                    return Err(EngineError::InvalidFlow(
+                        "cannot change allow_negative for system flow".to_string(),
+                    ));
+                }
+                if !allow_negative && flow_model.balance < 0 {
+                    return Err(EngineError::InvalidFlow(
+                        "cannot disable allow_negative while balance is negative".to_string(),
+                    ));
+                }
+
+                let active = cash_flows::ActiveModel {
+                    id: ActiveValue::Set(flow_id),
+                    allow_negative: ActiveValue::Set(allow_negative),
                     ..Default::default()
                 };
                 active.update(db_tx).await?;

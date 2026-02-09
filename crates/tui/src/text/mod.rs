@@ -625,9 +625,15 @@ pub enum TextKey {
     // Error dialog
     ErrorTechnicalDetails,
 
+    // Flow form
+    FormLabelAllowNegative,
+    FlowBadgeAllowNegative,
+
     // General UI
     UiNone,
     UiUndoApplied,
+    UiYes,
+    UiNo,
 }
 
 /// Returns the localized string for a text key.

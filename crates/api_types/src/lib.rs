@@ -83,6 +83,9 @@ pub mod flow {
         pub opening_balance_minor: i64,
         /// RFC3339 timestamp, including timezone offset (local user time).
         pub occurred_at: DateTime<FixedOffset>,
+        /// When true, the flow balance can go negative (e.g. travel advances).
+        #[serde(default)]
+        pub allow_negative: bool,
     }
 
     /// Response body for flow creation.
@@ -98,6 +101,7 @@ pub mod flow {
         pub name: Option<String>,
         pub archived: Option<bool>,
         pub mode: Option<FlowMode>,
+        pub allow_negative: Option<bool>,
     }
 
     /// List flows accessible to the current user within a vault.
@@ -185,6 +189,8 @@ pub mod vault {
         pub balance_minor: i64,
         pub archived: bool,
         pub is_unallocated: bool,
+        #[serde(default)]
+        pub allow_negative: bool,
     }
 }
 
