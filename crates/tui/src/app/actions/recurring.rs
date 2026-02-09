@@ -45,23 +45,6 @@ impl App {
         Ok(())
     }
 
-    pub(crate) async fn load_pending_count(&mut self) -> Result<()> {
-        let vault_id = match self.current_vault_id() {
-            Ok(id) => id,
-            Err(_) => return Ok(()),
-        };
-
-        let res = self
-            .client
-            .recurring_pending(PendingRecurringList { vault_id })
-            .await;
-
-        if let Ok(pending) = res {
-            self.state.recurring.pending_count = pending.pending.len();
-        }
-
-        Ok(())
-    }
 
     pub(crate) async fn create_recurring(&mut self) -> Result<()> {
         let vault_id = self.current_vault_id()?;
