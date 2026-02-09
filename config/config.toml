@@ -16,6 +16,10 @@ base_url = "http://127.0.0.1:3000"
 username = ""
 vault = "Main"
 timezone = "Europe/Rome"
+# Low-balance warning threshold in minor units (e.g. 2500 = 25.00).
+#low_balance_minor = 2500
+# Undo toast duration in seconds.
+#undo_toast_secs = 5
 
 # Uncomment to start the telegram bot
 # [telegram]

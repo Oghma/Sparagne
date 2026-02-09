@@ -14,6 +14,38 @@ pub struct AppConfig {
     pub username: String,
     pub vault: String,
     pub timezone: String,
+    /// Home feed low-balance warning threshold in minor units.
+    pub low_balance_minor: i64,
+    /// Undo toast duration in seconds.
+    pub undo_toast_secs: u64,
+    /// Enable emoji icons in the UI.
+    pub emoji_mode: bool,
+    /// UI density: "compact", "normal", or "comfortable".
+    pub density: Density,
+    /// UI locale: "it" or "en".
+    pub locale: String,
+}
+
+/// UI density setting controlling spacing and padding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Density {
+    Compact,
+    #[default]
+    Normal,
+    Comfortable,
+}
+
+impl std::str::FromStr for Density {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
+            "compact" => Self::Compact,
+            "comfortable" => Self::Comfortable,
+            _ => Self::Normal,
+        })
+    }
 }
 
 impl Default for AppConfig {
@@ -23,6 +55,11 @@ impl Default for AppConfig {
             username: String::new(),
             vault: "Main".to_string(),
             timezone: "Europe/Rome".to_string(),
+            low_balance_minor: 25_00,
+            undo_toast_secs: 5,
+            emoji_mode: true,
+            density: Density::default(),
+            locale: "it".to_string(),
         }
     }
 }
@@ -45,6 +82,21 @@ struct Args {
     /// Override timezone (IANA name).
     #[arg(long)]
     timezone: Option<String>,
+    /// Override low-balance warning threshold (minor units, e.g. 2500 = 25.00).
+    #[arg(long)]
+    low_balance_minor: Option<i64>,
+    /// Override undo toast duration in seconds.
+    #[arg(long)]
+    undo_toast_secs: Option<u64>,
+    /// Enable or disable emoji icons (true/false).
+    #[arg(long)]
+    emoji_mode: Option<bool>,
+    /// UI density: compact, normal, or comfortable.
+    #[arg(long)]
+    density: Option<String>,
+    /// UI locale: it or en.
+    #[arg(long)]
+    locale: Option<String>,
 }
 
 pub fn load() -> Result<AppConfig> {
@@ -80,6 +132,25 @@ pub fn load() -> Result<AppConfig> {
     if let Ok(timezone) = env::var("SPARAGNE_TIMEZONE") {
         settings.timezone = timezone;
     }
+    if let Ok(low_balance_minor) = env::var("SPARAGNE_LOW_BALANCE_MINOR")
+        && let Ok(parsed) = low_balance_minor.parse::<i64>()
+    {
+        settings.low_balance_minor = parsed;
+    }
+    if let Ok(undo_toast_secs) = env::var("SPARAGNE_UNDO_TOAST_SECS")
+        && let Ok(parsed) = undo_toast_secs.parse::<u64>()
+    {
+        settings.undo_toast_secs = parsed.max(1);
+    }
+    if let Ok(emoji_mode) = env::var("SPARAGNE_EMOJI_MODE") {
+        settings.emoji_mode = emoji_mode.to_lowercase() == "true" || emoji_mode == "1";
+    }
+    if let Ok(density) = env::var("SPARAGNE_DENSITY") {
+        settings.density = density.parse().unwrap_or_default();
+    }
+    if let Ok(locale) = env::var("SPARAGNE_LOCALE") {
+        settings.locale = locale;
+    }
 
     if let Some(base_url) = args.base_url {
         settings.base_url = base_url;
@@ -92,6 +163,21 @@ pub fn load() -> Result<AppConfig> {
     }
     if let Some(timezone) = args.timezone {
         settings.timezone = timezone;
+    }
+    if let Some(low_balance_minor) = args.low_balance_minor {
+        settings.low_balance_minor = low_balance_minor;
+    }
+    if let Some(undo_toast_secs) = args.undo_toast_secs {
+        settings.undo_toast_secs = undo_toast_secs.max(1);
+    }
+    if let Some(emoji_mode) = args.emoji_mode {
+        settings.emoji_mode = emoji_mode;
+    }
+    if let Some(density) = args.density {
+        settings.density = density.parse().unwrap_or_default();
+    }
+    if let Some(locale) = args.locale {
+        settings.locale = locale;
     }
 
     Ok(settings)

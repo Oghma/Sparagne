@@ -3,12 +3,12 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
     text::Span,
-    widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
+    widgets::{Clear, Paragraph, Wrap},
 };
 
 use crate::{
     app::{AppState, LoginField},
-    ui::theme::Theme,
+    ui::{common::themed_block, theme::Theme},
 };
 
 /// Calculates a centered rect for the login box
@@ -34,9 +34,7 @@ fn centered_box(width: u16, height: u16, area: Rect) -> Rect {
     horizontal[1]
 }
 
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
-    let theme = Theme::default();
-
+pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
     // Centered login box - compact
     let box_width = 32;
     let box_height = 6;
@@ -46,11 +44,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
     frame.render_widget(Clear, card_area);
 
     // Main container with rounded borders and title
-    let block = Block::default()
-        .title(" login ")
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.border));
+    let block = themed_block("login", theme.border, theme);
 
     let inner = block.inner(card_area);
     frame.render_widget(block, card_area);
@@ -76,7 +70,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         &login.username,
         false,
         username_focused,
-        &theme,
+        theme,
     );
 
     // Password field (no label)
@@ -87,7 +81,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
         &login.password,
         true,
         password_focused,
-        &theme,
+        theme,
     );
 
     // Error message below the box (only shown when there's an error)
@@ -105,7 +99,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState) {
             frame.render_widget(
                 Paragraph::new(Span::styled(
                     message.as_str(),
-                    Style::default().fg(theme.error),
+                    Style::default().fg(theme.negative),
                 ))
                 .wrap(Wrap { trim: true })
                 .alignment(Alignment::Center),

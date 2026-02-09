@@ -39,6 +39,29 @@ fn map_leg_target(target: engine::LegTarget) -> LegTarget {
     }
 }
 
+/// Extracts primary wallet_id and flow_id from transaction legs.
+/// Returns the first wallet and first flow found in the legs.
+fn extract_wallet_flow_from_legs(legs: &[engine::Leg]) -> (Option<Uuid>, Option<Uuid>) {
+    let mut wallet_id = None;
+    let mut flow_id = None;
+    for leg in legs {
+        match leg.target {
+            engine::LegTarget::Wallet { wallet_id: id } if wallet_id.is_none() => {
+                wallet_id = Some(id);
+            }
+            engine::LegTarget::Flow { flow_id: id } if flow_id.is_none() => {
+                flow_id = Some(id);
+            }
+            _ => {}
+        }
+        // Early exit if both found
+        if wallet_id.is_some() && flow_id.is_some() {
+            break;
+        }
+    }
+    (wallet_id, flow_id)
+}
+
 pub async fn list(
     Extension(user): Extension<user::Model>,
     State(state): State<ServerState>,
@@ -136,15 +159,21 @@ pub async fn list(
         .ok_or_else(|| ServerError::Generic("invalid UTC offset".to_string()))?;
     let transactions = txs
         .into_iter()
-        .map(|(tx, amount_minor)| TransactionView {
-            id: tx.id,
-            kind: map_kind(tx.kind),
-            occurred_at: tx.occurred_at.with_timezone(&utc),
-            amount_minor,
-            category_id: tx.category_id,
-            category: tx.category,
-            note: tx.note,
-            voided: tx.voided_at.is_some(),
+        .map(|(tx, amount_minor)| {
+            // Extract primary wallet_id and flow_id from legs
+            let (wallet_id, flow_id) = extract_wallet_flow_from_legs(&tx.legs);
+            TransactionView {
+                id: tx.id,
+                kind: map_kind(tx.kind),
+                occurred_at: tx.occurred_at.with_timezone(&utc),
+                amount_minor,
+                category_id: tx.category_id,
+                category: tx.category,
+                note: tx.note,
+                voided: tx.voided_at.is_some(),
+                wallet_id,
+                flow_id,
+            }
         })
         .collect();
 

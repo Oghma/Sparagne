@@ -6,19 +6,27 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{app::Section, ui::theme::Theme};
+use crate::{
+    app::{Section, SettingsTab},
+    text::{Locale, TextKey, t},
+    ui::theme::Theme,
+};
 
 /// Renders a horizontal tab bar for section navigation.
-pub fn render_tabs(frame: &mut Frame<'_>, area: Rect, active: Section, theme: &Theme) {
+pub fn render_tabs(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    active: Section,
+    settings_tab: Option<SettingsTab>,
+    locale: Locale,
+    theme: &Theme,
+) {
     let sections = [
         Section::Home,
         Section::Transactions,
-        Section::Wallets,
-        Section::Flows,
-        Section::Categories,
-        Section::Members,
-        Section::Vault,
-        Section::Stats,
+        Section::Accounts,
+        Section::Analytics,
+        Section::Settings,
     ];
 
     // Build the tab labels
@@ -30,7 +38,7 @@ pub fn render_tabs(frame: &mut Frame<'_>, area: Rect, active: Section, theme: &T
             spans.push(Span::raw("  ")); // Gap between tabs
         }
 
-        let label = section.label();
+        let label = section_label(*section, locale);
         if *section == active {
             spans.push(Span::styled("[", Style::default().fg(theme.accent)));
             spans.push(Span::styled(
@@ -39,6 +47,22 @@ pub fn render_tabs(frame: &mut Frame<'_>, area: Rect, active: Section, theme: &T
                     .fg(theme.accent)
                     .add_modifier(Modifier::BOLD),
             ));
+
+            // Add breadcrumb for sub-tab
+            let sub_label = match *section {
+                Section::Settings => settings_tab.map(|tab| settings_tab_label(tab, locale)),
+                _ => None,
+            };
+            if let Some(sub) = sub_label {
+                spans.push(Span::styled(" > ", Style::default().fg(theme.text_muted)));
+                spans.push(Span::styled(
+                    sub,
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                ));
+            }
+
             spans.push(Span::styled("]", Style::default().fg(theme.accent)));
         } else {
             spans.push(Span::styled(label, Style::default().fg(theme.text_muted)));
@@ -48,24 +72,21 @@ pub fn render_tabs(frame: &mut Frame<'_>, area: Rect, active: Section, theme: &T
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-/// Returns the shortcut hint for tab navigation.
-pub fn tab_shortcuts(theme: &Theme) -> Vec<Span<'static>> {
-    vec![
-        Span::styled("h", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("t", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("w", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("f", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("g", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("m", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("v", Style::default().fg(theme.accent)),
-        Span::raw("/"),
-        Span::styled("s", Style::default().fg(theme.accent)),
-        Span::raw(" nav"),
-    ]
+fn section_label(section: Section, locale: Locale) -> &'static str {
+    match section {
+        Section::Home => t(locale, TextKey::SectionHome),
+        Section::Transactions => t(locale, TextKey::SectionTransactions),
+        Section::Accounts => t(locale, TextKey::SectionAccounts),
+        Section::Analytics => t(locale, TextKey::SectionAnalytics),
+        Section::Settings => t(locale, TextKey::SectionSettings),
+    }
+}
+
+fn settings_tab_label(tab: SettingsTab, locale: Locale) -> &'static str {
+    match tab {
+        SettingsTab::Categories => t(locale, TextKey::SectionCategories),
+        SettingsTab::Vault => t(locale, TextKey::SectionVault),
+        SettingsTab::Members => t(locale, TextKey::SectionMembers),
+        SettingsTab::Preferences => t(locale, TextKey::SectionPreferences),
+    }
 }

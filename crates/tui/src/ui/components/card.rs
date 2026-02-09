@@ -3,10 +3,10 @@ use ratatui::{
     layout::Rect,
     style::Style,
     text::Span,
-    widgets::{Block, BorderType, Borders, Paragraph, Widget},
+    widgets::{Block, Paragraph},
 };
 
-use crate::ui::theme::Theme;
+use crate::ui::{common::themed_block, theme::Theme};
 
 /// A modern card widget with rounded borders and consistent styling.
 ///
@@ -40,15 +40,7 @@ impl<'a> Card<'a> {
             self.theme.border
         };
 
-        Block::default()
-            .title(Span::styled(
-                format!(" {} ", self.title),
-                Style::default().fg(self.theme.accent),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(border_color))
-            .style(Style::default().bg(self.theme.surface_bright))
+        themed_block(self.title, border_color, self.theme)
     }
 
     /// Returns the inner area after accounting for borders.
@@ -59,13 +51,6 @@ impl<'a> Card<'a> {
     /// Renders the card border/frame without content.
     pub fn render_frame(&self, frame: &mut Frame<'_>, area: Rect) {
         frame.render_widget(self.block(), area);
-    }
-
-    /// Renders the card with the given widget as content.
-    pub fn render_with<W: Widget>(&self, frame: &mut Frame<'_>, area: Rect, content: W) {
-        let inner = self.inner(area);
-        frame.render_widget(self.block(), area);
-        frame.render_widget(content, inner);
     }
 }
 
@@ -109,7 +94,7 @@ impl<'a> StatCard<'a> {
         if let Some(sub) = &self.subtitle {
             lines.push(ratatui::text::Line::from(Span::styled(
                 sub.clone(),
-                Style::default().fg(self.theme.dim),
+                Style::default().fg(self.theme.text_muted),
             )));
         }
 

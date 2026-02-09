@@ -72,6 +72,8 @@ fn sample_transaction(id: Uuid, kind: TransactionKind) -> TransactionView {
         category: Some("Food".to_string()),
         note: Some("Lunch".to_string()),
         voided: false,
+        wallet_id: None,
+        flow_id: None,
     }
 }
 
