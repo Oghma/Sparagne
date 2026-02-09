@@ -53,6 +53,32 @@ pub(super) struct CategorySelection {
     pub(super) name: Option<String>,
 }
 
+/// Checks whether a normalized category name conflicts with an existing
+/// category or alias in the vault, optionally excluding a specific category id.
+async fn name_norm_conflict_exists(
+    db_tx: &sea_orm::DatabaseTransaction,
+    vault_uuid: Uuid,
+    normalized: &str,
+    exclude_category_id: Option<Uuid>,
+) -> ResultEngine<bool> {
+    let mut cat_query = categories::Entity::find()
+        .filter(categories::Column::VaultId.eq(vault_uuid))
+        .filter(categories::Column::NameNorm.eq(normalized));
+    if let Some(exclude) = exclude_category_id {
+        cat_query = cat_query.filter(categories::Column::Id.ne(exclude));
+    }
+    if cat_query.one(db_tx).await?.is_some() {
+        return Ok(true);
+    }
+    let alias_exists = category_aliases::Entity::find()
+        .filter(category_aliases::Column::VaultId.eq(vault_uuid))
+        .filter(category_aliases::Column::AliasNorm.eq(normalized))
+        .one(db_tx)
+        .await?
+        .is_some();
+    Ok(alias_exists)
+}
+
 impl Engine {
     pub async fn list_categories(
         &self,
@@ -111,22 +137,7 @@ impl Engine {
                 }
 
                 let vault_uuid = parse_vault_uuid(vault_id.as_str())?;
-                if categories::Entity::find()
-                    .filter(categories::Column::VaultId.eq(vault_uuid))
-                    .filter(categories::Column::NameNorm.eq(normalized.clone()))
-                    .one(db_tx)
-                    .await?
-                    .is_some()
-                {
-                    return Err(EngineError::ExistingKey(display));
-                }
-                if category_aliases::Entity::find()
-                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
-                    .filter(category_aliases::Column::AliasNorm.eq(normalized.clone()))
-                    .one(db_tx)
-                    .await?
-                    .is_some()
-                {
+                if name_norm_conflict_exists(db_tx, vault_uuid, &normalized, None).await? {
                     return Err(EngineError::ExistingKey(display));
                 }
 
@@ -195,23 +206,14 @@ impl Engine {
                         ));
                     }
 
-                    let conflict = categories::Entity::find()
-                        .filter(categories::Column::VaultId.eq(vault_uuid))
-                        .filter(categories::Column::NameNorm.eq(normalized.clone()))
-                        .filter(categories::Column::Id.ne(category_id))
-                        .one(db_tx)
-                        .await?
-                        .is_some();
-                    if conflict {
-                        return Err(EngineError::ExistingKey(display));
-                    }
-                    let alias_conflict = category_aliases::Entity::find()
-                        .filter(category_aliases::Column::VaultId.eq(vault_uuid))
-                        .filter(category_aliases::Column::AliasNorm.eq(normalized.clone()))
-                        .one(db_tx)
-                        .await?
-                        .is_some();
-                    if alias_conflict {
+                    if name_norm_conflict_exists(
+                        db_tx,
+                        vault_uuid,
+                        &normalized,
+                        Some(category_id),
+                    )
+                    .await?
+                    {
                         return Err(EngineError::ExistingKey(display));
                     }
 
@@ -325,22 +327,7 @@ impl Engine {
                     return Err(EngineError::ExistingKey(display));
                 }
 
-                if categories::Entity::find()
-                    .filter(categories::Column::VaultId.eq(vault_uuid))
-                    .filter(categories::Column::NameNorm.eq(normalized.clone()))
-                    .one(db_tx)
-                    .await?
-                    .is_some()
-                {
-                    return Err(EngineError::ExistingKey(display));
-                }
-                if category_aliases::Entity::find()
-                    .filter(category_aliases::Column::VaultId.eq(vault_uuid))
-                    .filter(category_aliases::Column::AliasNorm.eq(normalized.clone()))
-                    .one(db_tx)
-                    .await?
-                    .is_some()
-                {
+                if name_norm_conflict_exists(db_tx, vault_uuid, &normalized, None).await? {
                     return Err(EngineError::ExistingKey(display));
                 }
 

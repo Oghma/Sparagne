@@ -186,29 +186,26 @@ impl Related<super::vault::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
+/// Parses a `%Y-%m-%d` string into `NaiveDate`, mapping errors to
+/// `InvalidRecurring` with the given field label.
+fn parse_date(value: &str, field: &str) -> ResultEngine<NaiveDate> {
+    NaiveDate::parse_from_str(value, "%Y-%m-%d")
+        .map_err(|e| EngineError::InvalidRecurring(format!("bad {field}: {e}")))
+}
+
+/// Parses an optional `%Y-%m-%d` string.
+fn parse_optional_date(value: Option<&str>, field: &str) -> ResultEngine<Option<NaiveDate>> {
+    value.map(|s| parse_date(s, field)).transpose()
+}
+
 impl TryFrom<Model> for RecurringTemplate {
     type Error = EngineError;
 
     fn try_from(model: Model) -> ResultEngine<Self> {
-        let start_date = NaiveDate::parse_from_str(&model.start_date, "%Y-%m-%d")
-            .map_err(|e| EngineError::InvalidRecurring(format!("bad start_date: {e}")))?;
-        let end_date = model
-            .end_date
-            .as_deref()
-            .map(|s| {
-                NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                    .map_err(|e| EngineError::InvalidRecurring(format!("bad end_date: {e}")))
-            })
-            .transpose()?;
-        let last_executed_date = model
-            .last_executed_date
-            .as_deref()
-            .map(|s| {
-                NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|e| {
-                    EngineError::InvalidRecurring(format!("bad last_executed_date: {e}"))
-                })
-            })
-            .transpose()?;
+        let start_date = parse_date(&model.start_date, "start_date")?;
+        let end_date = parse_optional_date(model.end_date.as_deref(), "end_date")?;
+        let last_executed_date =
+            parse_optional_date(model.last_executed_date.as_deref(), "last_executed_date")?;
 
         Ok(Self {
             id: model.id,

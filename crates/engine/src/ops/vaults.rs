@@ -29,67 +29,26 @@ impl Engine {
             // (FKs currently don't declare ON DELETE CASCADE everywhere, and some
             // relationships are not FK-backed, so we do it explicitly.)
             let backend = engine.database.get_database_backend();
-
             let vault_db_id_bytes: Vec<u8> = vault_db_id.as_bytes().to_vec();
 
-            // 1) legs for transactions in this vault
-            db_tx
-                .execute(Statement::from_sql_and_values(
-                    backend,
-                    "DELETE FROM legs WHERE transaction_id IN (SELECT id FROM transactions WHERE vault_id = ?);",
-                    vec![vault_db_id_bytes.clone().into()],
-                ))
-                .await?;
-
-            // 2) transactions
-            db_tx
-                .execute(Statement::from_sql_and_values(
-                    backend,
-                    "DELETE FROM transactions WHERE vault_id = ?;",
-                    vec![vault_db_id_bytes.clone().into()],
-                ))
-                .await?;
-
-            // 3) category aliases and categories
-            db_tx
-                .execute(Statement::from_sql_and_values(
-                    backend,
-                    "DELETE FROM category_aliases WHERE vault_id = ?;",
-                    vec![vault_db_id_bytes.clone().into()],
-                ))
-                .await?;
-            db_tx
-                .execute(Statement::from_sql_and_values(
-                    backend,
-                    "DELETE FROM categories WHERE vault_id = ?;",
-                    vec![vault_db_id_bytes.clone().into()],
-                ))
-                .await?;
-
-            // 4) flows and wallets (no more entries table)
-            db_tx
-                .execute(Statement::from_sql_and_values(
-                    backend,
-                    "DELETE FROM cash_flows WHERE vault_id = ?;",
-                    vec![vault_db_id_bytes.clone().into()],
-                ))
-                .await?;
-            db_tx
-                .execute(Statement::from_sql_and_values(
-                    backend,
-                    "DELETE FROM wallets WHERE vault_id = ?;",
-                    vec![vault_db_id_bytes.clone().into()],
-                ))
-                .await?;
-
-            // 5) vault
-            db_tx
-                .execute(Statement::from_sql_and_values(
-                    backend,
-                    "DELETE FROM vaults WHERE id = ?;",
-                    vec![vault_db_id_bytes.clone().into()],
-                ))
-                .await?;
+            let delete_stmts = [
+                "DELETE FROM legs WHERE transaction_id IN (SELECT id FROM transactions WHERE vault_id = ?);",
+                "DELETE FROM transactions WHERE vault_id = ?;",
+                "DELETE FROM category_aliases WHERE vault_id = ?;",
+                "DELETE FROM categories WHERE vault_id = ?;",
+                "DELETE FROM cash_flows WHERE vault_id = ?;",
+                "DELETE FROM wallets WHERE vault_id = ?;",
+                "DELETE FROM vaults WHERE id = ?;",
+            ];
+            for sql in delete_stmts {
+                db_tx
+                    .execute(Statement::from_sql_and_values(
+                        backend,
+                        sql,
+                        vec![vault_db_id_bytes.clone().into()],
+                    ))
+                    .await?;
+            }
 
             Ok(())
         }))
@@ -382,58 +341,46 @@ impl Engine {
                 " AND voided_at IS NULL"
             };
 
+            /// Queries `SUM(amount_minor)` for a given transaction kind within a vault.
+            async fn sum_by_kind(
+                db_tx: &sea_orm::DatabaseTransaction,
+                backend: sea_orm::DatabaseBackend,
+                vault_bytes: &[u8],
+                void_cond: &str,
+                kind: TransactionKind,
+            ) -> ResultEngine<i64> {
+                let stmt = Statement::from_sql_and_values(
+                    backend,
+                    format!(
+                        "SELECT COALESCE(SUM(amount_minor), 0) AS sum \
+                         FROM transactions \
+                         WHERE vault_id = ? AND kind = ?{void_cond}"
+                    ),
+                    vec![vault_bytes.to_vec().into(), kind.as_str().into()],
+                );
+                let row = db_tx.query_one(stmt).await?;
+                Ok(row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0))
+            }
+
             let balance_minor: i64 = {
                 let stmt = Statement::from_sql_and_values(
                     backend,
-                    "SELECT COALESCE(SUM(balance), 0) AS sum FROM wallets WHERE vault_id = ? AND archived = 0;"
-                        .to_string(),
+                    "SELECT COALESCE(SUM(balance), 0) AS sum FROM wallets WHERE vault_id = ? AND archived = 0;",
                     vec![vault_bytes.clone().into()],
                 );
                 let row = db_tx.query_one(stmt).await?;
                 row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)
             };
 
-            let total_income_minor: i64 = {
-                let stmt = Statement::from_sql_and_values(
-                    backend,
-                    format!(
-                        "SELECT COALESCE(SUM(amount_minor), 0) AS sum \
-                         FROM transactions \
-                         WHERE vault_id = ? AND kind = ?{void_cond}"
-                    ),
-                    vec![vault_bytes.clone().into(), TransactionKind::Income.as_str().into()],
-                );
-                let row = db_tx.query_one(stmt).await?;
-                row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)
-            };
-
-            let total_expenses_minor: i64 = {
-                let stmt = Statement::from_sql_and_values(
-                    backend,
-                    format!(
-                        "SELECT COALESCE(SUM(amount_minor), 0) AS sum \
-                         FROM transactions \
-                         WHERE vault_id = ? AND kind = ?{void_cond}"
-                    ),
-                    vec![vault_bytes.clone().into(), TransactionKind::Expense.as_str().into()],
-                );
-                let row = db_tx.query_one(stmt).await?;
-                row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)
-            };
-
-            let total_refunds_minor: i64 = {
-                let stmt = Statement::from_sql_and_values(
-                    backend,
-                    format!(
-                        "SELECT COALESCE(SUM(amount_minor), 0) AS sum \
-                         FROM transactions \
-                         WHERE vault_id = ? AND kind = ?{void_cond}"
-                    ),
-                    vec![vault_bytes.clone().into(), TransactionKind::Refund.as_str().into()],
-                );
-                let row = db_tx.query_one(stmt).await?;
-                row.and_then(|r| r.try_get("", "sum").ok()).unwrap_or(0)
-            };
+            let total_income_minor = sum_by_kind(
+                db_tx, backend, &vault_bytes, void_cond, TransactionKind::Income,
+            ).await?;
+            let total_expenses_minor = sum_by_kind(
+                db_tx, backend, &vault_bytes, void_cond, TransactionKind::Expense,
+            ).await?;
+            let total_refunds_minor = sum_by_kind(
+                db_tx, backend, &vault_bytes, void_cond, TransactionKind::Refund,
+            ).await?;
 
             Ok((
                 currency,
