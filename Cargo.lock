@@ -101,7 +101,7 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "api_types"
-version = "0.90.0"
+version = "0.92.0"
 dependencies = [
  "chrono",
  "serde",
@@ -1052,7 +1052,7 @@ dependencies = [
 
 [[package]]
 name = "engine"
-version = "0.90.0"
+version = "0.92.0"
 dependencies = [
  "base64",
  "chrono",
@@ -2079,7 +2079,7 @@ dependencies = [
 
 [[package]]
 name = "migration"
-version = "0.90.0"
+version = "0.92.0"
 dependencies = [
  "sea-orm",
  "sea-orm-migration",
@@ -3626,7 +3626,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.90.0"
+version = "0.92.0"
 dependencies = [
  "api_types",
  "axum",
@@ -3762,7 +3762,7 @@ dependencies = [
 
 [[package]]
 name = "sparagne"
-version = "0.90.0"
+version = "0.92.0"
 dependencies = [
  "config",
  "engine",
@@ -3780,7 +3780,7 @@ dependencies = [
 
 [[package]]
 name = "sparagne_admin"
-version = "0.90.0"
+version = "0.92.0"
 dependencies = [
  "clap",
  "crossterm",
@@ -3792,7 +3792,7 @@ dependencies = [
 
 [[package]]
 name = "sparagne_tui"
-version = "0.90.0"
+version = "0.92.0"
 dependencies = [
  "api_types",
  "chrono",
@@ -4176,7 +4176,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "telegram_bot"
-version = "0.90.0"
+version = "0.92.0"
 dependencies = [
  "api_types",
  "async-trait",
