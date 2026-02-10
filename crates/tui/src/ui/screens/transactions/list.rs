@@ -3,7 +3,7 @@
 //! Displays:
 //! - Grouped transaction list (by date/category/wallet/envelope)
 //! - Group headers with totals
-//! - Individual transaction rows (2 lines each)
+//! - Individual transaction rows (single line each)
 //! - Empty state messages
 //! - Visual selection mode markers
 
@@ -250,7 +250,7 @@ fn render_group_header(
     ListItem::new(Line::from(spans))
 }
 
-/// Renders a single transaction row (2 lines)
+/// Renders a single transaction row (single line)
 fn render_transaction_row(
     state: &AppState,
     tx: &api_types::transaction::TransactionView,
@@ -333,9 +333,15 @@ fn render_transaction_row(
         ));
     }
 
-    // Create 2-line list item
-    let lines = vec![Line::from(line1_spans), Line::from(line2_spans)];
-    let mut item = ListItem::new(lines);
+    // Merge line2 content into line1 (single line display)
+    if !line2_spans.is_empty() && line2_spans.len() > 1 {
+        // Remove the indentation from line2 (first span is "        ")
+        line1_spans.push(Span::raw("  "));
+        line1_spans.extend(line2_spans.into_iter().skip(1));
+    }
+
+    // Create single-line list item
+    let mut item = ListItem::new(Line::from(line1_spans));
     if tx.voided {
         item = item.style(Style::default().fg(theme.text_muted));
     }
