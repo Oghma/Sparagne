@@ -51,6 +51,8 @@ fn sample_snapshot(wallet_id: Uuid, flow_id: Uuid) -> VaultSnapshot {
             archived: false,
             is_unallocated: false,
             allow_negative: false,
+            max_balance: None,
+            is_shared: false,
         }],
         unallocated_flow_id: flow_id,
     }
