@@ -153,10 +153,12 @@ pub async fn shared_list(
         .map(|flow| FlowView {
             is_unallocated: flow.is_unallocated(),
             allow_negative: flow.allow_negative,
+            max_balance: flow.max_balance,
             id: flow.id,
             name: flow.name,
             balance_minor: flow.balance,
             archived: flow.archived,
+            is_shared: true,
         })
         .collect::<Vec<_>>();
 

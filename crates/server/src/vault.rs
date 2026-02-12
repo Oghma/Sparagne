@@ -100,6 +100,12 @@ pub async fn snapshot(
         .vault_snapshot(payload.id.as_deref(), payload.name, &user.username)
         .await?;
 
+    let shared_ids = state
+        .engine
+        .shared_flow_ids(&vault.id, &user.username)
+        .await
+        .unwrap_or_default();
+
     let mut wallets = vault
         .wallet
         .into_iter()
@@ -124,6 +130,8 @@ pub async fn snapshot(
                 archived: flow.archived,
                 is_unallocated,
                 allow_negative: flow.allow_negative,
+                max_balance: flow.max_balance,
+                is_shared: shared_ids.contains(&id),
             }
         })
         .collect::<Vec<_>>();
