@@ -289,6 +289,39 @@ impl App {
         Ok(())
     }
 
+    pub(crate) async fn unshare_flow(&mut self) -> Result<()> {
+        let Some(flow) = self.selected_flow() else {
+            self.state.flows.error =
+                Some(t(self.state.locale, TextKey::ValidationNoFlowSelected).to_string());
+            return Ok(());
+        };
+        if !flow.is_reference {
+            // Can only unshare referenced flows
+            return Ok(());
+        }
+        let vault_id = self.current_vault_id()?;
+        let res = self.client.flow_unshare(&vault_id, flow.id).await;
+
+        match res {
+            Ok(()) => {
+                self.refresh_snapshot().await?;
+                self.set_toast(
+                    t(self.state.locale, TextKey::SuccessFlowUnshared),
+                    ToastLevel::Success,
+                );
+            }
+            Err(err) => {
+                let Some(msg) = self.client_error_message(err) else {
+                    return Ok(());
+                };
+                self.set_toast(&msg, ToastLevel::Error);
+                self.state.flows.error = Some(msg);
+            }
+        }
+
+        Ok(())
+    }
+
     pub(crate) async fn archive_flow_with_undo(&mut self) -> Result<()> {
         self.finalize_pending_undo().await?;
         let Some(flow) = self.selected_flow() else {

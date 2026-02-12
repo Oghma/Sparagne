@@ -107,6 +107,19 @@ impl App {
             'd' | 'D' => {
                 self.handle_delete_archive_shortcut().await?;
             }
+            // Unshare flow (remove flow reference)
+            'u' | 'U' => {
+                if self.state.section == Section::Accounts
+                    && self.state.accounts_tab == AccountsTab::Budget
+                    && self.state.flows.mode == EntityListMode::List
+                {
+                    if let Some(flow) = self.selected_flow()
+                        && flow.is_reference
+                    {
+                        self.open_flow_unshare_dialog();
+                    }
+                }
+            }
             _ => {}
         }
         Ok(())

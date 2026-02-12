@@ -205,6 +205,26 @@ impl App {
         ));
     }
 
+    pub(crate) fn open_flow_unshare_dialog(&mut self) {
+        let locale = self.state.locale;
+        let Some(flow) = self.selected_flow() else {
+            self.state.flows.error = Some(t(locale, TextKey::ValidationNoFlowSelected).to_string());
+            return;
+        };
+        if !flow.is_reference {
+            // Only allow unsharing for referenced flows
+            return;
+        }
+        let name = flow.name.as_str();
+        let preview = vec![format!("🔗 {name}")];
+        self.state.overlays.confirm = Some(ConfirmDialogState::unshare(
+            t(locale, TextKey::DialogUnshareFlowTitle),
+            t(locale, TextKey::DialogUnshareFlowMessage),
+            preview,
+            t(locale, TextKey::DialogDelete),
+        ));
+    }
+
     pub(crate) fn open_category_archive_dialog(&mut self) {
         let locale = self.state.locale;
         let Some(category) = self.selected_category() else {
@@ -407,6 +427,9 @@ impl App {
             }
             ConfirmAction::SubmitTransactionForm | ConfirmAction::SubmitTransferForm => {
                 self.handle_transactions_submit().await?;
+            }
+            ConfirmAction::UnshareFlow => {
+                self.unshare_flow().await?;
             }
         }
 

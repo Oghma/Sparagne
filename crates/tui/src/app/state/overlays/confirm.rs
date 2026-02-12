@@ -93,6 +93,27 @@ impl ConfirmDialogState {
             extra_action: Some(discard_action),
         }
     }
+
+    pub(crate) fn unshare(
+        title: impl Into<String>,
+        message: impl Into<String>,
+        preview: Vec<String>,
+        confirm_label: impl Into<String>,
+    ) -> Self {
+        Self {
+            kind: ConfirmDialogKind::Delete,
+            title: title.into(),
+            message: message.into(),
+            detail: None,
+            warning: None,
+            preview,
+            confirm_label: confirm_label.into(),
+            cancel_label: "Cancel".to_string(),
+            extra_label: None,
+            confirm_action: ConfirmAction::UnshareFlow,
+            extra_action: None,
+        }
+    }
 }
 
 /// Actions executed when a confirmation dialog is accepted.
@@ -107,4 +128,5 @@ pub enum ConfirmAction {
     DiscardTransferForm,
     SubmitTransactionForm,
     SubmitTransferForm,
+    UnshareFlow,
 }

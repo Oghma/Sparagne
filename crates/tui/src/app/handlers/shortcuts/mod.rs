@@ -35,7 +35,7 @@ impl App {
                 self.handle_transaction_shortcut(ch).await
             }
             // Editing and creation shortcuts
-            'e' | 'E' | 'b' | 'B' | 'c' | 'C' | 'l' | 'L' | 'x' | 'X' | 'm' | 'M' | 'd' | 'D' => {
+            'e' | 'E' | 'b' | 'B' | 'c' | 'C' | 'l' | 'L' | 'x' | 'X' | 'm' | 'M' | 'd' | 'D' | 'u' | 'U' => {
                 self.handle_editing_shortcut(ch).await
             }
             // Pagination and tab selection
@@ -43,7 +43,7 @@ impl App {
                 self.handle_pagination_shortcut(ch).await
             }
             // Other shortcuts (filter, help, undo, etc.)
-            '/' | '?' | 'u' | 'U' | ' ' | 'w' | 'W' | 'f' | 'F' => {
+            '/' | '?' | ' ' | 'w' | 'W' | 'f' | 'F' => {
                 self.handle_other_shortcut(ch).await
             }
             _ => Ok(()),
