@@ -110,7 +110,13 @@ impl App {
 
         self.state.flows.form.focus = match self.state.flows.form.focus {
             FlowFormField::Name => FlowFormField::Mode,
-            FlowFormField::Mode => FlowFormField::Cap,
+            FlowFormField::Mode => {
+                if matches!(self.state.flows.form.mode, FlowModeChoice::Unlimited) {
+                    FlowFormField::Opening
+                } else {
+                    FlowFormField::Cap
+                }
+            }
             FlowFormField::Cap => FlowFormField::Opening,
             FlowFormField::Opening => FlowFormField::AllowNegative,
             FlowFormField::AllowNegative => FlowFormField::Name,
@@ -167,11 +173,18 @@ impl App {
                     ) {
                         match self.state.flows.form.focus {
                             FlowFormField::Name => self.state.flows.form.name.push(ch),
-                            FlowFormField::Cap => self.state.flows.form.cap.push(ch),
+                            FlowFormField::Cap => {
+                                if !matches!(
+                                    self.state.flows.form.mode,
+                                    FlowModeChoice::Unlimited
+                                ) {
+                                    self.state.flows.form.cap.push(ch);
+                                }
+                            }
                             FlowFormField::Opening => self.state.flows.form.opening.push(ch),
                             FlowFormField::Mode => {
                                 if matches!(ch, 'm' | 'M' | ' ') {
-                                    self.cycle_flow_mode();
+                                    self.cycle_flow_mode_next();
                                 }
                                 return true;
                             }
@@ -288,7 +301,9 @@ impl App {
                 self.state.flows.form.name.pop();
             }
             FlowFormField::Cap => {
-                self.state.flows.form.cap.pop();
+                if !matches!(self.state.flows.form.mode, FlowModeChoice::Unlimited) {
+                    self.state.flows.form.cap.pop();
+                }
             }
             FlowFormField::Opening => {
                 self.state.flows.form.opening.pop();
