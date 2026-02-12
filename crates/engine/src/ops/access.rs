@@ -603,9 +603,33 @@ impl Engine {
         flow_id: Option<Uuid>,
     ) -> ResultEngine<Uuid> {
         if let Some(id) = flow_id {
-            // Ensure it exists and belongs to the vault.
-            self.require_flow_in_vault(db, vault_id, id).await?;
-            return Ok(id);
+            // Check if flow exists directly in vault OR via flow_reference
+            let vault_uuid = parse_vault_uuid(vault_id)?;
+
+            // Try direct flow
+            let direct_exists = cash_flows::Entity::find_by_id(id)
+                .filter(cash_flows::Column::VaultId.eq(vault_uuid))
+                .one(db)
+                .await?
+                .is_some();
+
+            if direct_exists {
+                return Ok(id);
+            }
+
+            // Try flow_reference
+            let ref_exists = flow_references::Entity::find()
+                .filter(flow_references::Column::VaultId.eq(vault_uuid))
+                .filter(flow_references::Column::TargetFlowId.eq(id))
+                .one(db)
+                .await?
+                .is_some();
+
+            if ref_exists {
+                return Ok(id);
+            }
+
+            return Err(EngineError::KeyNotFound("cash_flow not exists".to_string()));
         }
         self.unallocated_flow_id(db, vault_id).await
     }
