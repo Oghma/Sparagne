@@ -191,6 +191,10 @@ pub mod vault {
         pub is_unallocated: bool,
         #[serde(default)]
         pub allow_negative: bool,
+        #[serde(default)]
+        pub max_balance: Option<i64>,
+        #[serde(default)]
+        pub is_shared: bool,
     }
 }
 

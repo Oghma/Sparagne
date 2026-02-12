@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use uuid::Uuid;
 
 use sea_orm::{ActiveValue, QueryFilter, prelude::*};
@@ -262,6 +264,34 @@ impl Engine {
                     .all(db_tx)
                     .await?;
                 Ok(rows.into_iter().map(|m| (m.user_id, m.role)).collect())
+            })
+        })
+        .await
+    }
+
+    /// Returns the set of flow IDs that have at least one member in
+    /// `flow_memberships`, filtered by vault.
+    pub async fn shared_flow_ids(
+        &self,
+        vault_id: &str,
+        user_id: &str,
+    ) -> ResultEngine<HashSet<Uuid>> {
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                engine
+                    .require_vault_by_id(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+
+                let parse_vault_uuid = super::parse_vault_uuid(vault_id.as_str())?;
+                let rows: Vec<flow_memberships::Model> = flow_memberships::Entity::find()
+                    .inner_join(cash_flows::Entity)
+                    .filter(cash_flows::Column::VaultId.eq(parse_vault_uuid))
+                    .all(db_tx)
+                    .await?;
+
+                Ok(rows.into_iter().map(|m| m.flow_id).collect())
             })
         })
         .await
