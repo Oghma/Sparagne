@@ -158,7 +158,8 @@ pub async fn shared_list(
             name: flow.name,
             balance_minor: flow.balance,
             archived: flow.archived,
-            is_shared: true,
+            is_shared: flow.is_shared,
+            is_reference: flow.is_reference,
         })
         .collect::<Vec<_>>();
 

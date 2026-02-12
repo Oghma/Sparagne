@@ -195,6 +195,8 @@ pub mod vault {
         pub max_balance: Option<i64>,
         #[serde(default)]
         pub is_shared: bool,
+        #[serde(default)]
+        pub is_reference: bool,
     }
 }
 

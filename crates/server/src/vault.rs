@@ -100,11 +100,8 @@ pub async fn snapshot(
         .vault_snapshot(payload.id.as_deref(), payload.name, &user.username)
         .await?;
 
-    let shared_ids = state
-        .engine
-        .shared_flow_ids(&vault.id, &user.username)
-        .await
-        .unwrap_or_default();
+    // Shared flow IDs are now embedded in CashFlow.is_shared by vault_snapshot()
+    // No need to query separately
 
     let mut wallets = vault
         .wallet
@@ -131,7 +128,8 @@ pub async fn snapshot(
                 is_unallocated,
                 allow_negative: flow.allow_negative,
                 max_balance: flow.max_balance,
-                is_shared: shared_ids.contains(&id),
+                is_shared: flow.is_shared,
+                is_reference: flow.is_reference,
             }
         })
         .collect::<Vec<_>>();
