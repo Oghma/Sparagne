@@ -279,8 +279,10 @@ impl Engine {
                 let vault_currency = vault_model.currency;
 
                 // Load direct flows (flows that belong to this vault)
+                // By default, exclude archived flows
                 let direct_flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
                     .filter(cash_flows::Column::VaultId.eq(vault_model.id))
+                    .filter(cash_flows::Column::Archived.eq(false))
                     .all(db_tx)
                     .await?;
 
@@ -295,9 +297,11 @@ impl Engine {
                     .map(|r| r.target_flow_id)
                     .collect();
 
+                // Load referenced flows, excluding archived ones
                 let referenced_flow_models = if !referenced_flow_ids.is_empty() {
                     cash_flows::Entity::find()
                         .filter(cash_flows::Column::Id.is_in(referenced_flow_ids))
+                        .filter(cash_flows::Column::Archived.eq(false))
                         .all(db_tx)
                         .await?
                 } else {
