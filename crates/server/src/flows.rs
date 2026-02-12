@@ -1,7 +1,10 @@
 //! Flows API endpoints.
 
 use api_types::{
-    flow::{FlowCreated, FlowMode, FlowNew, FlowSharedList, FlowSharedListResponse, FlowUpdate},
+    flow::{
+        FlowCreated, FlowMode, FlowNew, FlowShareRequest, FlowShareResponse, FlowSharedList,
+        FlowSharedListResponse, FlowUpdate,
+    },
     vault::FlowView,
 };
 use axum::{
@@ -170,4 +173,50 @@ pub async fn shared_list(
     });
 
     Ok(Json(FlowSharedListResponse { flows: views }))
+}
+
+/// Share a flow with another user (cross-vault).
+///
+/// POST /vaults/:vault_id/flows/:flow_id/share
+///
+/// Creates a flow_membership and flow_reference, making the flow appear
+/// in the target user's vault.
+pub async fn flow_share(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Path((vault_id, flow_id)): Path<(String, Uuid)>,
+    Json(payload): Json<FlowShareRequest>,
+) -> Result<Json<FlowShareResponse>, ServerError> {
+    state
+        .engine
+        .share_flow_with_user(
+            &vault_id,
+            flow_id,
+            &payload.target_user_id,
+            payload.target_vault_name.as_deref(),
+            &payload.role,
+            &user.username,
+        )
+        .await?;
+
+    Ok(Json(FlowShareResponse { success: true }))
+}
+
+/// Remove a flow reference from a vault (unshare).
+///
+/// DELETE /vaults/:vault_id/flow-references/:flow_id
+///
+/// Removes the flow_reference, making the shared flow no longer visible
+/// in this vault. Does not affect the flow itself or other users' access.
+pub async fn flow_unshare(
+    Extension(user): Extension<user::Model>,
+    State(state): State<ServerState>,
+    Path((vault_id, flow_id)): Path<(String, Uuid)>,
+) -> Result<StatusCode, ServerError> {
+    state
+        .engine
+        .remove_flow_reference(&vault_id, flow_id, &user.username)
+        .await?;
+
+    Ok(StatusCode::NO_CONTENT)
 }

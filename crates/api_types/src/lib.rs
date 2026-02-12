@@ -116,6 +116,23 @@ pub mod flow {
     pub struct FlowSharedListResponse {
         pub flows: Vec<super::vault::FlowView>,
     }
+
+    /// Share a flow with another user (cross-vault sharing).
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowShareRequest {
+        /// The username of the user to share with.
+        pub target_user_id: String,
+        /// Optional vault name for the target user (defaults to primary vault).
+        pub target_vault_name: Option<String>,
+        /// Role to grant: "owner", "editor", or "viewer".
+        pub role: String,
+    }
+
+    /// Response body for flow sharing.
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct FlowShareResponse {
+        pub success: bool,
+    }
 }
 
 pub mod vault {
