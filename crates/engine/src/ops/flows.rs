@@ -134,7 +134,8 @@ impl Engine {
                         .is_some()
                 };
 
-                let flow_models = if has_vault_access {
+                // Get direct flows (owned by this vault)
+                let mut direct_flow_models = if has_vault_access {
                     let mut query = cash_flows::Entity::find()
                         .filter(cash_flows::Column::VaultId.eq(vault_uuid));
                     if !include_archived {
@@ -162,13 +163,34 @@ impl Engine {
                         }
                         models.push(flow);
                     }
-                    if models.is_empty() {
-                        return Err(EngineError::KeyNotFound(
-                            EngineError::VAULT_NOT_FOUND.to_string(),
-                        ));
-                    }
                     models
                 };
+
+                // Get referenced flows (from other vaults, appearing here via flow_references)
+                let flow_refs = flow_references::Entity::find()
+                    .filter(flow_references::Column::VaultId.eq(vault_uuid))
+                    .all(db_tx)
+                    .await?;
+
+                let referenced_flow_ids: Vec<Uuid> = flow_refs
+                    .iter()
+                    .map(|r| r.target_flow_id)
+                    .collect();
+
+                let mut referenced_flow_models = if !referenced_flow_ids.is_empty() {
+                    let mut query = cash_flows::Entity::find()
+                        .filter(cash_flows::Column::Id.is_in(referenced_flow_ids));
+                    if !include_archived {
+                        query = query.filter(cash_flows::Column::Archived.eq(false));
+                    }
+                    query.all(db_tx).await?
+                } else {
+                    vec![]
+                };
+
+                // Combine direct and referenced flows
+                direct_flow_models.append(&mut referenced_flow_models);
+                let flow_models = direct_flow_models;
 
                 let mut flows = Vec::with_capacity(flow_models.len());
                 for model in flow_models {
