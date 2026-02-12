@@ -163,9 +163,10 @@ impl App {
                 );
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorCreateFlow) else {
+                let Some(msg) = self.client_error_message(err) else {
                     return Ok(());
                 };
+                self.set_toast(&msg, ToastLevel::Error);
                 self.state.flows.error = Some(msg);
             }
         }
@@ -229,9 +230,10 @@ impl App {
                 );
             }
             Err(err) => {
-                let Some(msg) = self.on_api_error_toast(err, TextKey::ErrorUpdateFlow) else {
+                let Some(msg) = self.client_error_message(err) else {
                     return Ok(());
                 };
+                self.set_toast(&msg, ToastLevel::Error);
                 self.state.flows.error = Some(msg);
             }
         }
