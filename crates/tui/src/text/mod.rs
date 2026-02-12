@@ -628,6 +628,13 @@ pub enum TextKey {
     FlowBadgeAllowNegative,
     FlowBadgeCapped,
     FlowBadgeShared,
+    FlowBadgeSharedFrom,
+    FlowBadgeSharing,
+    FlowDetailOwner,
+    FlowDetailYourAccess,
+    FlowDetailSharedWith,
+    FlowActionUnshare,
+    FlowActionManageSharing,
 
     // Recurring
     RecurringTitle,

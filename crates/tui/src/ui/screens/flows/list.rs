@@ -61,9 +61,19 @@ pub fn render_list(
                         theme.warning,
                     ));
                 }
-                if f.is_shared {
-                    extra_badges
-                        .push((t(state.locale, TextKey::FlowBadgeShared), theme.info));
+                // Distinguish between:
+                // - is_reference=true: flow shared FROM another vault (show "condiviso da")
+                // - is_shared=true but is_reference=false: flow being shared TO others (show "in condivisione")
+                if f.is_reference {
+                    extra_badges.push((
+                        t(state.locale, TextKey::FlowBadgeSharedFrom),
+                        theme.info,
+                    ));
+                } else if f.is_shared {
+                    extra_badges.push((
+                        t(state.locale, TextKey::FlowBadgeSharing),
+                        theme.positive,
+                    ));
                 }
                 EntityItem {
                     name: &f.name,

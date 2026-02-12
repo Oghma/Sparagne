@@ -626,6 +626,13 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::FlowBadgeAllowNegative => "[neg. ok]",
         TextKey::FlowBadgeCapped => "[limitato]",
         TextKey::FlowBadgeShared => "[condiviso]",
+        TextKey::FlowBadgeSharedFrom => "[condiviso da]",
+        TextKey::FlowBadgeSharing => "[in condivisione]",
+        TextKey::FlowDetailOwner => "Proprietario",
+        TextKey::FlowDetailYourAccess => "Tuo accesso",
+        TextKey::FlowDetailSharedWith => "Condiviso con",
+        TextKey::FlowActionUnshare => "Rimuovi condivisione",
+        TextKey::FlowActionManageSharing => "Gestisci condivisione",
 
         // Recurring
         TextKey::RecurringTitle => "Ricorrenti",
