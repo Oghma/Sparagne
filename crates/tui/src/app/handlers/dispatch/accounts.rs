@@ -3,7 +3,7 @@
 use crate::{
     app::{
         App,
-        state::{AccountsTab, EntityListMode},
+        state::{AccountsTab, EntityListMode, FlowFormField},
     },
     error::Result,
     ui::keymap::AppAction,
@@ -24,10 +24,42 @@ impl App {
             AppAction::Up => self.dispatch_accounts_up().await,
             AppAction::Down => self.dispatch_accounts_down().await,
             AppAction::Left => {
+                if self.state.accounts_tab == AccountsTab::Budget
+                    && self.state.flows.mode == EntityListMode::Create
+                    && self.state.flows.form.focus == FlowFormField::Mode
+                {
+                    self.cycle_flow_mode_prev();
+                    return Ok(true);
+                }
+                if matches!(
+                    self.state.wallets.mode,
+                    EntityListMode::Create | EntityListMode::Rename
+                ) || matches!(
+                    self.state.flows.mode,
+                    EntityListMode::Create | EntityListMode::Rename
+                ) {
+                    return Ok(true);
+                }
                 self.accounts_set_focus(AccountsTab::Wallets);
                 Ok(true)
             }
             AppAction::Right => {
+                if self.state.accounts_tab == AccountsTab::Budget
+                    && self.state.flows.mode == EntityListMode::Create
+                    && self.state.flows.form.focus == FlowFormField::Mode
+                {
+                    self.cycle_flow_mode_next();
+                    return Ok(true);
+                }
+                if matches!(
+                    self.state.wallets.mode,
+                    EntityListMode::Create | EntityListMode::Rename
+                ) || matches!(
+                    self.state.flows.mode,
+                    EntityListMode::Create | EntityListMode::Rename
+                ) {
+                    return Ok(true);
+                }
                 self.accounts_set_focus(AccountsTab::Budget);
                 Ok(true)
             }

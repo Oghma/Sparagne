@@ -115,12 +115,12 @@ pub fn render_form(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &
         Span::styled("[Tab]", Style::default().fg(theme.accent)),
         Span::styled(" next  ", Style::default().fg(theme.text_muted)),
         if !is_rename {
-            Span::styled("[M]", Style::default().fg(theme.accent))
+            Span::styled("[←→]", Style::default().fg(theme.accent))
         } else {
             Span::raw("")
         },
         if !is_rename {
-            Span::styled(" toggle type  ", Style::default().fg(theme.text_muted))
+            Span::styled(" type  ", Style::default().fg(theme.text_muted))
         } else {
             Span::raw("")
         },

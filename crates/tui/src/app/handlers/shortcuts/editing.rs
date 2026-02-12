@@ -96,7 +96,7 @@ impl App {
                     && self.state.flows.mode == EntityListMode::Create
                     && self.state.flows.form.focus == FlowFormField::Mode
                 {
-                    self.cycle_flow_mode();
+                    self.cycle_flow_mode_next();
                 } else if self.is_settings_tab(SettingsTab::Categories)
                     && self.state.categories.mode == CategoriesMode::List
                 {

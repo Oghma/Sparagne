@@ -42,11 +42,19 @@ impl App {
         self.state.flows.form.focus = FlowFormField::Name;
         self.state.flows.form.update_focus();
     }
-    pub(crate) fn cycle_flow_mode(&mut self) {
+    pub(crate) fn cycle_flow_mode_next(&mut self) {
         self.state.flows.form.mode = match self.state.flows.form.mode {
             FlowModeChoice::Unlimited => FlowModeChoice::NetCapped,
             FlowModeChoice::NetCapped => FlowModeChoice::IncomeCapped,
             FlowModeChoice::IncomeCapped => FlowModeChoice::Unlimited,
+        };
+    }
+
+    pub(crate) fn cycle_flow_mode_prev(&mut self) {
+        self.state.flows.form.mode = match self.state.flows.form.mode {
+            FlowModeChoice::Unlimited => FlowModeChoice::IncomeCapped,
+            FlowModeChoice::NetCapped => FlowModeChoice::Unlimited,
+            FlowModeChoice::IncomeCapped => FlowModeChoice::NetCapped,
         };
     }
     pub(crate) fn selected_flow(&self) -> Option<&api_types::vault::FlowView> {
