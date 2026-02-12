@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     CashFlow, Currency, EngineError, ResultEngine, TransactionKind, Vault, VaultHeader, Wallet,
-    cash_flows, categories, flow_memberships,
+    cash_flows, categories, flow_memberships, flow_references,
     util::{normalize_category_key, normalize_required_name},
     vault, vault_memberships, wallets,
 };
@@ -278,18 +278,76 @@ impl Engine {
                 };
                 let vault_currency = vault_model.currency;
 
-                let flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
+                // Load direct flows (flows that belong to this vault)
+                let direct_flow_models: Vec<cash_flows::Model> = cash_flows::Entity::find()
                     .filter(cash_flows::Column::VaultId.eq(vault_model.id))
                     .all(db_tx)
                     .await?;
+
+                // Load flow references (flows from other vaults that appear in this vault)
+                let flow_refs = flow_references::Entity::find()
+                    .filter(flow_references::Column::VaultId.eq(vault_model.id))
+                    .all(db_tx)
+                    .await?;
+
+                let referenced_flow_ids: Vec<Uuid> = flow_refs
+                    .iter()
+                    .map(|r| r.target_flow_id)
+                    .collect();
+
+                let referenced_flow_models = if !referenced_flow_ids.is_empty() {
+                    cash_flows::Entity::find()
+                        .filter(cash_flows::Column::Id.is_in(referenced_flow_ids))
+                        .all(db_tx)
+                        .await?
+                } else {
+                    vec![]
+                };
+
+                // Build map of flow_id -> display_name override
+                let display_name_overrides: HashMap<Uuid, String> = flow_refs
+                    .into_iter()
+                    .filter_map(|r| r.display_name.map(|name| (r.target_flow_id, name)))
+                    .collect();
+
+                // Get IDs of flows that have memberships (are shared)
+                let shared_flow_ids: std::collections::HashSet<Uuid> =
+                    flow_memberships::Entity::find()
+                        .inner_join(cash_flows::Entity)
+                        .filter(cash_flows::Column::VaultId.eq(vault_model.id))
+                        .all(db_tx)
+                        .await?
+                        .into_iter()
+                        .map(|m| m.flow_id)
+                        .collect();
+
                 let wallet_models: Vec<wallets::Model> = wallets::Entity::find()
                     .filter(wallets::Column::VaultId.eq(vault_model.id))
                     .all(db_tx)
                     .await?;
 
+                // Build flows map: combine direct flows and referenced flows
                 let mut flows = HashMap::new();
-                for flow_model in flow_models {
-                    let flow = CashFlow::try_from((flow_model, vault_currency))?;
+
+                // Add direct flows (owned by this vault)
+                for flow_model in direct_flow_models {
+                    let mut flow = CashFlow::try_from((flow_model, vault_currency))?;
+                    flow.is_shared = shared_flow_ids.contains(&flow.id);
+                    flow.is_reference = false;
+                    flows.insert(flow.id, flow);
+                }
+
+                // Add referenced flows (from other vaults, appearing here via flow_references)
+                for flow_model in referenced_flow_models {
+                    let mut flow = CashFlow::try_from((flow_model, vault_currency))?;
+
+                    // Apply display name override if exists
+                    if let Some(override_name) = display_name_overrides.get(&flow.id) {
+                        flow.name = override_name.clone();
+                    }
+
+                    flow.is_shared = true; // Always true for referenced flows
+                    flow.is_reference = true;
                     flows.insert(flow.id, flow);
                 }
 
