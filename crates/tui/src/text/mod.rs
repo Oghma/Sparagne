@@ -148,6 +148,7 @@ pub enum TextKey {
     HelpFlowSharing,
     HelpChangeFlow,
     HelpChangeRole,
+    HelpUnshareFlow,
 
     // Status bar
     StatusOnline,
@@ -182,6 +183,7 @@ pub enum TextKey {
     SuccessCategorizedTransactions,
     SuccessDeletedWallet,
     SuccessDeletedFlow,
+    SuccessFlowUnshared,
 
     // Error Messages
     ErrorSaving,
@@ -335,6 +337,8 @@ pub enum TextKey {
     DialogTransaction,
     DialogConnectionErrorTitle,
     DialogConnectionErrorMessage,
+    DialogUnshareFlowTitle,
+    DialogUnshareFlowMessage,
 
     // Form field labels
     FormAmount,

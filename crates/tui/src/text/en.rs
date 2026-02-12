@@ -126,6 +126,7 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::HelpFlowSharing => "Flow sharing",
         TextKey::HelpChangeFlow => "Change flow",
         TextKey::HelpChangeRole => "Change role",
+        TextKey::HelpUnshareFlow => "Remove sharing",
 
         // Status bar
         TextKey::StatusOnline => "online",
@@ -162,6 +163,7 @@ pub fn get(key: TextKey) -> &'static str {
         }
         TextKey::SuccessDeletedWallet => "Deleted \"{name}\"",
         TextKey::SuccessDeletedFlow => "Deleted \"{name}\"",
+        TextKey::SuccessFlowUnshared => "Removed shared flow from your vault.",
 
         // Error Messages
         TextKey::ErrorSaving => "Error saving.",
@@ -319,6 +321,10 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::DialogTransaction => "Transaction",
         TextKey::DialogConnectionErrorTitle => "Connection Error",
         TextKey::DialogConnectionErrorMessage => "Unable to connect to server.",
+        TextKey::DialogUnshareFlowTitle => "Remove Shared Flow",
+        TextKey::DialogUnshareFlowMessage => {
+            "Do you want to remove this shared flow from your vault? The flow will continue to exist in the owner's vault."
+        }
 
         // Form field labels
         TextKey::FormAmount => "Amount",

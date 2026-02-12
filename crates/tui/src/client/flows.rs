@@ -84,4 +84,24 @@ impl Client {
 
         handle_json(res).await
     }
+
+    /// Removes a flow reference from a vault (unshares a flow that was shared with the user).
+    pub async fn flow_unshare(
+        &self,
+        vault_id: &str,
+        flow_id: uuid::Uuid,
+    ) -> std::result::Result<(), ClientError> {
+        let endpoint = self
+            .base_url
+            .join(&format!("vault/{vault_id}/flow-references/{flow_id}"))
+            .map_err(|err| ClientError::Client(format!("invalid base_url: {err}")))?;
+
+        let res = self
+            .auth(self.http.delete(endpoint))
+            .send()
+            .await
+            .map_err(ClientError::Transport)?;
+
+        handle_empty(res).await
+    }
 }
