@@ -175,8 +175,6 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::ErrorUpdateWallet => "Errore aggiornamento wallet.",
         TextKey::ErrorArchiveWallet => "Errore archivio wallet.",
         TextKey::ErrorRestoreWallet => "Errore ripristino wallet.",
-        TextKey::ErrorCreateFlow => "Errore creazione flow.",
-        TextKey::ErrorUpdateFlow => "Errore aggiornamento flow.",
         TextKey::ErrorArchiveFlow => "Errore archiviazione flow.",
         TextKey::ErrorRestoreFlow => "Errore ripristino flow.",
         TextKey::ErrorCreateCategory => "Errore creazione categoria.",
@@ -626,6 +624,8 @@ pub fn get(key: TextKey) -> &'static str {
         // Flow form
         TextKey::FormLabelAllowNegative => "Consenti negativo",
         TextKey::FlowBadgeAllowNegative => "[neg. ok]",
+        TextKey::FlowBadgeCapped => "[limitato]",
+        TextKey::FlowBadgeShared => "[condiviso]",
 
         // Recurring
         TextKey::RecurringTitle => "Ricorrenti",

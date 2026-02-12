@@ -195,8 +195,6 @@ pub enum TextKey {
     ErrorUpdateWallet,
     ErrorArchiveWallet,
     ErrorRestoreWallet,
-    ErrorCreateFlow,
-    ErrorUpdateFlow,
     ErrorArchiveFlow,
     ErrorRestoreFlow,
     ErrorCreateCategory,
@@ -628,6 +626,8 @@ pub enum TextKey {
     // Flow form
     FormLabelAllowNegative,
     FlowBadgeAllowNegative,
+    FlowBadgeCapped,
+    FlowBadgeShared,
 
     // Recurring
     RecurringTitle,
