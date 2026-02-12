@@ -51,11 +51,19 @@ pub fn render_list(
                 if f.is_unallocated {
                     extra_badges.push((t(state.locale, TextKey::EntityBadgeDefault), theme.info));
                 }
+                if f.max_balance.is_some() {
+                    extra_badges
+                        .push((t(state.locale, TextKey::FlowBadgeCapped), theme.accent));
+                }
                 if f.allow_negative {
                     extra_badges.push((
                         t(state.locale, TextKey::FlowBadgeAllowNegative),
                         theme.warning,
                     ));
+                }
+                if f.is_shared {
+                    extra_badges
+                        .push((t(state.locale, TextKey::FlowBadgeShared), theme.info));
                 }
                 EntityItem {
                     name: &f.name,
