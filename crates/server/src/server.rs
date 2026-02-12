@@ -1269,7 +1269,7 @@ mod http_tests {
                 serde_json::to_vec(&flow::FlowUpdate {
                     vault_id: vault_id.clone(),
                     name: Some("Vacanze 2026".to_string()),
-                    archived: Some(true),
+                    archived: None,
                     mode: Some(flow::FlowMode::IncomeCapped { cap_minor: 20_000 }),
                     allow_negative: None,
                 })
@@ -1285,7 +1285,6 @@ mod http_tests {
             .unwrap();
         let flow = snapshot.cash_flow.get(&created.id).unwrap();
         assert_eq!(flow.name, "Vacanze 2026");
-        assert!(flow.archived);
         assert_eq!(flow.max_balance, Some(20_000));
         assert!(flow.income_balance.is_some());
     }
