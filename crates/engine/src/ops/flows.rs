@@ -5,8 +5,7 @@ use sea_orm::{ActiveValue, QueryFilter, Statement, prelude::*, sea_query::Expr};
 
 use crate::{
     CashFlow, EngineError, ResultEngine, TransactionKind, cash_flows, flow_memberships,
-    util::{normalize_required_name, validate_flow_mode_fields},
-    vault,
+    flow_references, util::{normalize_required_name, validate_flow_mode_fields}, vault,
 };
 
 use super::{Engine, build_transaction, parse_vault_uuid, transfer_flow_legs};
@@ -561,6 +560,161 @@ impl Engine {
                     ..Default::default()
                 };
                 active.update(db_tx).await?;
+                Ok(())
+            })
+        })
+        .await
+    }
+
+    /// Shares a flow with another user cross-vault.
+    ///
+    /// This creates:
+    /// - A flow_membership for the target user (granting permissions)
+    /// - A flow_reference in the target user's vault (making the flow visible there)
+    ///
+    /// If `target_vault_name` is provided, uses that vault; otherwise uses the
+    /// target user's primary vault (first vault owned by user).
+    ///
+    /// If a flow with the same name already exists in the target vault, the
+    /// reference will use an override `display_name` with format "{name} ({owner})".
+    ///
+    /// Authorization: requires vault owner permission for the source vault.
+    pub async fn share_flow_with_user(
+        &self,
+        vault_id: &str,
+        flow_id: Uuid,
+        target_user_id: &str,
+        target_vault_name: Option<&str>,
+        role: &str,
+        user_id: &str,
+    ) -> ResultEngine<()> {
+        let vault_id = vault_id.to_string();
+        let target_user_id = target_user_id.to_string();
+        let target_vault_name = target_vault_name.map(|s| s.to_string());
+        let role = role.to_string();
+        let user_id = user_id.to_string();
+
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                // Verify caller is vault owner
+                let vault_model = engine
+                    .require_vault_owner(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+                let vault_uuid = vault_model.id;
+
+                // Verify target user exists
+                engine
+                    .require_user_exists(db_tx, target_user_id.as_str())
+                    .await?;
+
+                // Verify flow exists and belongs to this vault
+                let flow_model = cash_flows::Entity::find_by_id(flow_id)
+                    .filter(cash_flows::Column::VaultId.eq(vault_uuid))
+                    .one(db_tx)
+                    .await?
+                    .ok_or_else(|| {
+                        EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string())
+                    })?;
+
+                // Cannot share Unallocated
+                if flow_model.system_kind == Some(cash_flows::SystemFlowKind::Unallocated) {
+                    return Err(EngineError::InvalidFlow(
+                        "cannot share Unallocated".to_string(),
+                    ));
+                }
+
+                // Get or find target vault
+                let target_vault_model = if let Some(ref name) = target_vault_name {
+                    engine
+                        .require_vault_by_name(db_tx, name.as_str(), target_user_id.as_str())
+                        .await?
+                } else {
+                    // Use target user's primary vault (first vault owned by them)
+                    vault::Entity::find()
+                        .filter(vault::Column::UserId.eq(target_user_id.clone()))
+                        .one(db_tx)
+                        .await?
+                        .ok_or_else(|| {
+                            EngineError::KeyNotFound(format!(
+                                "no vault found for user '{}'",
+                                target_user_id
+                            ))
+                        })?
+                };
+
+                // Create or update flow membership
+                let role_validated = super::access::MembershipRole::try_from(role.as_str())?;
+                let membership_active = flow_memberships::ActiveModel {
+                    flow_id: ActiveValue::Set(flow_id),
+                    user_id: ActiveValue::Set(target_user_id.clone()),
+                    role: ActiveValue::Set(role_validated.as_str().to_string()),
+                };
+
+                match flow_memberships::Entity::find_by_id((flow_id, target_user_id.clone()))
+                    .one(db_tx)
+                    .await?
+                {
+                    Some(_) => {
+                        membership_active.update(db_tx).await?;
+                    }
+                    None => {
+                        membership_active.insert(db_tx).await?;
+                    }
+                }
+
+                // Check if flow_reference already exists
+                let existing_ref = flow_references::Entity::find()
+                    .filter(flow_references::Column::VaultId.eq(target_vault_model.id))
+                    .filter(flow_references::Column::TargetFlowId.eq(flow_id))
+                    .one(db_tx)
+                    .await?;
+
+                if existing_ref.is_some() {
+                    // Reference already exists, nothing more to do
+                    return Ok(());
+                }
+
+                // Check for name conflicts in target vault
+                let flow_name_lower = flow_model.name.to_lowercase();
+                let name_conflict_exists = cash_flows::Entity::find()
+                    .filter(cash_flows::Column::VaultId.eq(target_vault_model.id))
+                    .filter(Expr::cust("LOWER(name)").eq(&flow_name_lower))
+                    .one(db_tx)
+                    .await?
+                    .is_some()
+                    || flow_references::Entity::find()
+                        .filter(flow_references::Column::VaultId.eq(target_vault_model.id))
+                        .find_also_related(cash_flows::Entity)
+                        .all(db_tx)
+                        .await?
+                        .iter()
+                        .any(|(ref_model, flow_opt)| {
+                            if let Some(override_name) = &ref_model.display_name {
+                                override_name.to_lowercase() == flow_name_lower
+                            } else if let Some(flow) = flow_opt {
+                                flow.name.to_lowercase() == flow_name_lower
+                            } else {
+                                false
+                            }
+                        });
+
+                let display_name_override = if name_conflict_exists {
+                    // Generate "{name} ({owner})" format
+                    Some(format!("{} ({})", flow_model.name, vault_model.user_id))
+                } else {
+                    None
+                };
+
+                // Create flow_reference
+                let reference_active = flow_references::ActiveModel {
+                    id: ActiveValue::Set(Uuid::new_v4()),
+                    vault_id: ActiveValue::Set(target_vault_model.id),
+                    target_flow_id: ActiveValue::Set(flow_id),
+                    display_name: ActiveValue::Set(display_name_override),
+                    created_at: ActiveValue::Set(Utc::now()),
+                };
+                reference_active.insert(db_tx).await?;
+
                 Ok(())
             })
         })
