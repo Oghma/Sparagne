@@ -4,6 +4,7 @@ mod m20251230_000000_init;
 mod m20260115_000001_categories;
 mod m20260209_000003_allow_negative_flows;
 mod m20260210_000004_recurring_templates;
+mod m20260212_000005_flow_references;
 
 pub struct Migrator;
 
@@ -15,6 +16,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260115_000001_categories::Migration),
             Box::new(m20260209_000003_allow_negative_flows::Migration),
             Box::new(m20260210_000004_recurring_templates::Migration),
+            Box::new(m20260212_000005_flow_references::Migration),
         ]
     }
 }

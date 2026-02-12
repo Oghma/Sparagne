@@ -42,6 +42,7 @@ mod commands;
 mod currency;
 mod error;
 mod flow_memberships;
+mod flow_references;
 mod legs;
 mod money;
 mod ops;
