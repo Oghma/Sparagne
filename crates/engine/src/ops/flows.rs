@@ -720,4 +720,51 @@ impl Engine {
         })
         .await
     }
+
+    /// Removes a flow reference from a vault, making the shared flow no longer
+    /// visible in that vault.
+    ///
+    /// This allows a member to "unshare" a flow from their own vault without
+    /// affecting the flow itself or other members' access.
+    ///
+    /// - Removes the flow_reference entry from the specified vault
+    /// - Does NOT remove the flow_membership (user still has permission if re-shared)
+    /// - Does NOT affect the flow data itself (remains in owner's vault)
+    /// - Does NOT affect other users' references to the same flow
+    ///
+    /// Authorization: user must have write access to the vault (owner or editor).
+    pub async fn remove_flow_reference(
+        &self,
+        vault_id: &str,
+        flow_id: Uuid,
+        user_id: &str,
+    ) -> ResultEngine<()> {
+        let vault_id = vault_id.to_string();
+        let user_id = user_id.to_string();
+
+        self.with_tx(|engine, db_tx| {
+            Box::pin(async move {
+                // Verify user has write access to the vault
+                let vault_model = engine
+                    .require_vault_by_id_write(db_tx, vault_id.as_str(), user_id.as_str())
+                    .await?;
+
+                // Remove flow_reference
+                let deleted = flow_references::Entity::delete_many()
+                    .filter(flow_references::Column::VaultId.eq(vault_model.id))
+                    .filter(flow_references::Column::TargetFlowId.eq(flow_id))
+                    .exec(db_tx)
+                    .await?;
+
+                if deleted.rows_affected == 0 {
+                    return Err(EngineError::KeyNotFound(
+                        "flow reference not found in this vault".to_string(),
+                    ));
+                }
+
+                Ok(())
+            })
+        })
+        .await
+    }
 }

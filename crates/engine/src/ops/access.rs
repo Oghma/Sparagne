@@ -5,8 +5,8 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::{
-    EngineError, ResultEngine, cash_flows, flow_memberships, users, util::normalize_required_name,
-    vault, vault_memberships, wallets,
+    EngineError, ResultEngine, cash_flows, flow_memberships, flow_references, users,
+    util::normalize_required_name, vault, vault_memberships, wallets,
 };
 
 use super::{Engine, parse_vault_uuid};
@@ -277,18 +277,46 @@ impl Engine {
         user_id: &str,
     ) -> ResultEngine<cash_flows::Model> {
         let vault_uuid = parse_vault_uuid(vault_id)?;
+
+        // Try to find flow directly in this vault
         let model = cash_flows::Entity::find_by_id(flow_id)
             .filter(cash_flows::Column::VaultId.eq(vault_uuid))
+            .one(db)
+            .await?;
+
+        if let Some(model) = model {
+            // Flow is direct in this vault - check vault access or flow membership
+            if self.has_vault_read_access(db, vault_id, user_id).await? {
+                return Ok(model);
+            }
+            self.flow_membership_role(db, model.id, user_id)
+                .await?
+                .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+            return Ok(model);
+        }
+
+        // Flow not direct - check if accessed via flow_reference
+        let flow_ref = flow_references::Entity::find()
+            .filter(flow_references::Column::VaultId.eq(vault_uuid))
+            .filter(flow_references::Column::TargetFlowId.eq(flow_id))
+            .one(db)
+            .await?;
+
+        if flow_ref.is_none() {
+            return Err(EngineError::KeyNotFound("cash_flow not exists".to_string()));
+        }
+
+        // Flow is referenced - load the actual flow and check membership
+        let model = cash_flows::Entity::find_by_id(flow_id)
             .one(db)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
 
-        if self.has_vault_read_access(db, vault_id, user_id).await? {
-            return Ok(model);
-        }
+        // For referenced flows, user must have flow_membership (cannot rely on vault access alone)
         self.flow_membership_role(db, model.id, user_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
+
         Ok(model)
     }
 
