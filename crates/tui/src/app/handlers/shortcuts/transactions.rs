@@ -47,7 +47,7 @@ impl App {
                     self.load_members().await?;
                 }
             }
-            // Quick add (inline)
+            // Quick add (inline) / flow create with cap
             'n' => {
                 if self.state.section == Section::Transactions
                     && self.state.transactions.mode == TransactionsMode::List
@@ -62,6 +62,12 @@ impl App {
                     }
                     self.state.transactions.quick_active = true;
                     self.state.transactions.quick_error = None;
+                } else if self.state.section == Section::Accounts
+                    && self.state.accounts_tab == AccountsTab::Budget
+                    && self.state.flows.mode == EntityListMode::List
+                {
+                    self.start_flow_create();
+                    self.state.flows.form.mode = FlowModeChoice::NetCapped;
                 }
             }
             // New expense form (modal)
