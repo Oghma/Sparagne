@@ -6,7 +6,7 @@ use sea_orm::{ActiveValue, DatabaseTransaction, QueryFilter, prelude::*};
 
 use crate::{
     Currency, EngineError, Leg, LegTarget, ResultEngine, Transaction, TransactionKind, TxMeta,
-    cash_flows, legs, transactions,
+    cash_flows, flow_references, legs, transactions,
     util::{ensure_vault_currency, validate_flow_mode_fields},
     wallets,
 };
@@ -263,9 +263,15 @@ impl Engine {
     }
 
     async fn apply_flow_change(&self, input: FlowChangeInput<'_>) -> ResultEngine<()> {
-        let vault_uuid = parse_vault_uuid(input.vault_id)?;
+        let user_vault_uuid = parse_vault_uuid(input.vault_id)?;
+
+        // Resolve the actual vault where the flow lives (supports cross-vault via flow_references)
+        let flow_vault_uuid = self
+            .resolve_flow_vault(input.db_tx, user_vault_uuid, input.flow_id)
+            .await?;
+
         let flow_model = cash_flows::Entity::find_by_id(input.flow_id)
-            .filter(cash_flows::Column::VaultId.eq(vault_uuid))
+            .filter(cash_flows::Column::VaultId.eq(flow_vault_uuid))
             .one(input.db_tx)
             .await?
             .ok_or_else(|| {
@@ -290,9 +296,57 @@ impl Engine {
                 currency: flow_model.currency,
                 archived: flow_model.archived,
                 allow_negative: flow_model.allow_negative,
+                is_shared: false,
+                is_reference: false,
             });
         entry.apply_leg_change(input.old_amount_minor, input.new_amount_minor)?;
         Ok(())
+    }
+
+    /// Resolves the actual vault ID where a flow's data lives.
+    ///
+    /// If the flow is directly in `user_vault_id`, returns that vault ID.
+    /// If the flow is accessed via a flow_reference in `user_vault_id`, returns
+    /// the vault ID where the flow actually belongs.
+    ///
+    /// This enables cross-vault transactions: a user can add money from their wallet
+    /// to a flow that lives in a different vault.
+    async fn resolve_flow_vault(
+        &self,
+        db_tx: &DatabaseTransaction,
+        user_vault_id: Uuid,
+        flow_id: Uuid,
+    ) -> ResultEngine<Uuid> {
+        // Check if flow is directly in the user's vault
+        if let Some(flow) = cash_flows::Entity::find_by_id(flow_id)
+            .filter(cash_flows::Column::VaultId.eq(user_vault_id))
+            .one(db_tx)
+            .await?
+        {
+            return Ok(flow.vault_id);
+        }
+
+        // Check if flow is referenced in the user's vault
+        if flow_references::Entity::find()
+            .filter(flow_references::Column::VaultId.eq(user_vault_id))
+            .filter(flow_references::Column::TargetFlowId.eq(flow_id))
+            .one(db_tx)
+            .await?
+            .is_some()
+        {
+            // Flow is referenced - get the actual vault where it lives
+            let flow = cash_flows::Entity::find_by_id(flow_id)
+                .one(db_tx)
+                .await?
+                .ok_or_else(|| {
+                    EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string())
+                })?;
+            return Ok(flow.vault_id);
+        }
+
+        Err(EngineError::KeyNotFound(
+            "flow not accessible in this vault".to_string(),
+        ))
     }
 
     pub(in crate::ops) async fn create_transaction_with_legs(
