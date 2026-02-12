@@ -166,6 +166,14 @@ fn router(state: ServerState) -> Router {
             "/vault/{vault_id}/flows/{flow_id}/members/{username}",
             axum::routing::delete(memberships::remove_flow_member),
         )
+        .route(
+            "/vault/{vault_id}/flows/{flow_id}/share",
+            post(flows::flow_share),
+        )
+        .route(
+            "/vault/{vault_id}/flow-references/{flow_id}",
+            delete(flows::flow_unshare),
+        )
         .route("/user/pair", post(user::pair).delete(user::unpair))
         .route("/stats/get", post(statistics::get_stats))
         .route("/recurring", post(recurring::create))
