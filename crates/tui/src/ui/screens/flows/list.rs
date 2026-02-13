@@ -51,9 +51,12 @@ pub fn render_list(
                 if f.is_unallocated {
                     extra_badges.push((t(state.locale, TextKey::EntityBadgeDefault).to_string(), theme.info));
                 }
-                if f.max_balance.is_some() {
-                    extra_badges
-                        .push((t(state.locale, TextKey::FlowBadgeCapped).to_string(), theme.accent));
+                if let Some(cap) = f.max_balance {
+                    // Show current balance / cap instead of just "[limitato]"
+                    let balance = f.balance_minor as f64 / 100.0;
+                    let cap_value = cap as f64 / 100.0;
+                    let badge_text = format!("{:.2} / {:.2} EUR", balance, cap_value);
+                    extra_badges.push((badge_text, theme.accent));
                 }
                 if f.allow_negative {
                     extra_badges.push((
