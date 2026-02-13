@@ -120,6 +120,10 @@ pub struct CashFlow {
     /// but actually belongs to a different vault). Set by vault_snapshot().
     #[serde(default)]
     pub is_reference: bool,
+    /// Owner user ID for referenced flows. Only set when is_reference=true.
+    /// Indicates which user owns the vault where this flow physically lives.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_user_id: Option<String>,
 }
 
 impl CashFlow {
@@ -177,6 +181,7 @@ impl CashFlow {
             allow_negative,
             is_shared: false,
             is_reference: false,
+            owner_user_id: None,
         })
     }
 
@@ -274,6 +279,7 @@ impl TryFrom<(Model, Currency)> for CashFlow {
             allow_negative: model.allow_negative,
             is_shared: false,       // Set by vault_snapshot() based on membership data
             is_reference: false,     // Set by vault_snapshot() when loaded via flow_reference
+            owner_user_id: None,     // Set by vault_snapshot() for referenced flows
         })
     }
 }

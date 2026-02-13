@@ -298,6 +298,7 @@ impl Engine {
                 allow_negative: flow_model.allow_negative,
                 is_shared: false,
                 is_reference: false,
+                owner_user_id: None,
             });
         entry.apply_leg_change(input.old_amount_minor, input.new_amount_minor)?;
         Ok(())
