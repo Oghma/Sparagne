@@ -343,15 +343,21 @@ impl Engine {
 
                 // Add referenced flows (from other vaults, appearing here via flow_references)
                 for flow_model in referenced_flow_models {
-                    let mut flow = CashFlow::try_from((flow_model, vault_currency))?;
+                    let mut flow = CashFlow::try_from((flow_model.clone(), vault_currency))?;
 
                     // Apply display name override if exists
                     if let Some(override_name) = display_name_overrides.get(&flow.id) {
                         flow.name = override_name.clone();
                     }
 
+                    // Get owner user_id from the vault where this flow lives
+                    let owner_vault = vault::Entity::find_by_id(flow_model.vault_id)
+                        .one(db_tx)
+                        .await?;
+
                     flow.is_shared = true; // Always true for referenced flows
                     flow.is_reference = true;
+                    flow.owner_user_id = owner_vault.map(|v| v.user_id);
                     flows.insert(flow.id, flow);
                 }
 
