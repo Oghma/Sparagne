@@ -85,7 +85,8 @@ impl Client {
         handle_json(res).await
     }
 
-    /// Removes a flow reference from a vault (unshares a flow that was shared with the user).
+    /// Removes a flow reference from a vault (unshares a flow that was shared
+    /// with the user).
     pub async fn flow_unshare(
         &self,
         vault_id: &str,

@@ -312,7 +312,8 @@ impl Engine {
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;
 
-        // For referenced flows, user must have flow_membership (cannot rely on vault access alone)
+        // For referenced flows, user must have flow_membership (cannot rely on vault
+        // access alone)
         self.flow_membership_role(db, model.id, user_id)
             .await?
             .ok_or_else(|| EngineError::KeyNotFound("cash_flow not exists".to_string()))?;

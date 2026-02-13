@@ -112,12 +112,13 @@ pub struct CashFlow {
     pub currency: Currency,
     pub archived: bool,
     pub allow_negative: bool,
-    /// Indicates whether this flow has been shared with other users (has flow_memberships).
-    /// Set by vault_snapshot() based on membership data.
+    /// Indicates whether this flow has been shared with other users (has
+    /// flow_memberships). Set by vault_snapshot() based on membership data.
     #[serde(default)]
     pub is_shared: bool,
-    /// Indicates whether this flow is accessed via a flow_reference (appears in this vault
-    /// but actually belongs to a different vault). Set by vault_snapshot().
+    /// Indicates whether this flow is accessed via a flow_reference (appears in
+    /// this vault but actually belongs to a different vault). Set by
+    /// vault_snapshot().
     #[serde(default)]
     pub is_reference: bool,
     /// Owner user ID for referenced flows. Only set when is_reference=true.
@@ -277,9 +278,9 @@ impl TryFrom<(Model, Currency)> for CashFlow {
             currency: model.currency,
             archived: model.archived,
             allow_negative: model.allow_negative,
-            is_shared: false,       // Set by vault_snapshot() based on membership data
-            is_reference: false,     // Set by vault_snapshot() when loaded via flow_reference
-            owner_user_id: None,     // Set by vault_snapshot() for referenced flows
+            is_shared: false,    // Set by vault_snapshot() based on membership data
+            is_reference: false, // Set by vault_snapshot() when loaded via flow_reference
+            owner_user_id: None, // Set by vault_snapshot() for referenced flows
         })
     }
 }

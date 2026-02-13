@@ -292,10 +292,8 @@ impl Engine {
                     .all(db_tx)
                     .await?;
 
-                let referenced_flow_ids: Vec<Uuid> = flow_refs
-                    .iter()
-                    .map(|r| r.target_flow_id)
-                    .collect();
+                let referenced_flow_ids: Vec<Uuid> =
+                    flow_refs.iter().map(|r| r.target_flow_id).collect();
 
                 // Load referenced flows, excluding archived ones
                 let referenced_flow_models = if !referenced_flow_ids.is_empty() {

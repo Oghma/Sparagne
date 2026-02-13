@@ -141,7 +141,8 @@ async fn test_cross_vault_transaction() {
         .await
         .expect("share flow");
 
-    // B records income to the shared flow (standard income semantics: both wallet and flow increase)
+    // B records income to the shared flow (standard income semantics: both wallet
+    // and flow increase)
     let _tx_id = engine
         .income(engine::IncomeCmd {
             vault_id: vault_b.clone(),
@@ -174,7 +175,8 @@ async fn test_cross_vault_transaction() {
         "flow balance should reflect B's income"
     );
 
-    // Verify wallet balance also increased in vault B (income increases both wallet and flow)
+    // Verify wallet balance also increased in vault B (income increases both wallet
+    // and flow)
     let snapshot_b_after = engine
         .vault_snapshot(Some(&vault_b), None, "bob")
         .await
@@ -295,10 +297,7 @@ async fn test_shared_flow_archival() {
         .find(|f| f.id == flow_id)
         .expect("archived flow should be accessible");
 
-    assert!(
-        archived_flow.archived,
-        "flow should be marked as archived"
-    );
+    assert!(archived_flow.archived, "flow should be marked as archived");
 }
 
 #[tokio::test]
@@ -324,7 +323,14 @@ async fn test_name_conflict_handling() {
 
     // Share A's "Casa" with B (should auto-rename to avoid conflict)
     engine
-        .share_flow_with_user(&vault_a, flow_a_id, "bob", Some("VaultB"), "editor", "alice")
+        .share_flow_with_user(
+            &vault_a,
+            flow_a_id,
+            "bob",
+            Some("VaultB"),
+            "editor",
+            "alice",
+        )
         .await
         .expect("share flow with name conflict");
 

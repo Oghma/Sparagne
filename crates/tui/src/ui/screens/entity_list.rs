@@ -152,7 +152,10 @@ pub(crate) fn render_entity_list(
 
             for (badge_text, badge_color) in &item.extra_badges {
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled(badge_text.as_str(), Style::default().fg(*badge_color)));
+                spans.push(Span::styled(
+                    badge_text.as_str(),
+                    Style::default().fg(*badge_color),
+                ));
             }
 
             if item.archived {

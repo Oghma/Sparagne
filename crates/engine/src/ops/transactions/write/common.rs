@@ -265,7 +265,8 @@ impl Engine {
     async fn apply_flow_change(&self, input: FlowChangeInput<'_>) -> ResultEngine<()> {
         let user_vault_uuid = parse_vault_uuid(input.vault_id)?;
 
-        // Resolve the actual vault where the flow lives (supports cross-vault via flow_references)
+        // Resolve the actual vault where the flow lives (supports cross-vault via
+        // flow_references)
         let flow_vault_uuid = self
             .resolve_flow_vault(input.db_tx, user_vault_uuid, input.flow_id)
             .await?;
@@ -310,8 +311,8 @@ impl Engine {
     /// If the flow is accessed via a flow_reference in `user_vault_id`, returns
     /// the vault ID where the flow actually belongs.
     ///
-    /// This enables cross-vault transactions: a user can add money from their wallet
-    /// to a flow that lives in a different vault.
+    /// This enables cross-vault transactions: a user can add money from their
+    /// wallet to a flow that lives in a different vault.
     async fn resolve_flow_vault(
         &self,
         db_tx: &DatabaseTransaction,
@@ -339,9 +340,7 @@ impl Engine {
             let flow = cash_flows::Entity::find_by_id(flow_id)
                 .one(db_tx)
                 .await?
-                .ok_or_else(|| {
-                    EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string())
-                })?;
+                .ok_or_else(|| EngineError::KeyNotFound(EngineError::FLOW_NOT_FOUND.to_string()))?;
             return Ok(flow.vault_id);
         }
 

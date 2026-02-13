@@ -1,7 +1,8 @@
 //! Create `flow_references` table for cross-vault flow sharing.
 //!
-//! This migration enables flows to appear in multiple vaults via virtual references,
-//! supporting the cross-vault sharing use case (e.g., family budgets).
+//! This migration enables flows to appear in multiple vaults via virtual
+//! references, supporting the cross-vault sharing use case (e.g., family
+//! budgets).
 
 use sea_orm_migration::prelude::*;
 
@@ -45,22 +46,14 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .primary_key(),
                     )
-                    .col(
-                        ColumnDef::new(FlowReferences::VaultId)
-                            .blob()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(FlowReferences::VaultId).blob().not_null())
                     .col(
                         ColumnDef::new(FlowReferences::TargetFlowId)
                             .blob()
                             .not_null(),
                     )
                     .col(ColumnDef::new(FlowReferences::DisplayName).text())
-                    .col(
-                        ColumnDef::new(FlowReferences::CreatedAt)
-                            .text()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(FlowReferences::CreatedAt).text().not_null())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_flow_references_vault_id")

@@ -5,7 +5,9 @@ use sea_orm::{ActiveValue, QueryFilter, QueryOrder, Statement, prelude::*, sea_q
 
 use crate::{
     CashFlow, EngineError, ResultEngine, TransactionKind, cash_flows, flow_memberships,
-    flow_references, util::{normalize_required_name, validate_flow_mode_fields}, vault,
+    flow_references,
+    util::{normalize_required_name, validate_flow_mode_fields},
+    vault,
 };
 
 use super::{Engine, build_transaction, parse_vault_uuid, transfer_flow_legs};
@@ -172,10 +174,8 @@ impl Engine {
                     .all(db_tx)
                     .await?;
 
-                let referenced_flow_ids: Vec<Uuid> = flow_refs
-                    .iter()
-                    .map(|r| r.target_flow_id)
-                    .collect();
+                let referenced_flow_ids: Vec<Uuid> =
+                    flow_refs.iter().map(|r| r.target_flow_id).collect();
 
                 let mut referenced_flow_models = if !referenced_flow_ids.is_empty() {
                     let mut query = cash_flows::Entity::find()
@@ -592,13 +592,15 @@ impl Engine {
     ///
     /// This creates:
     /// - A flow_membership for the target user (granting permissions)
-    /// - A flow_reference in the target user's vault (making the flow visible there)
+    /// - A flow_reference in the target user's vault (making the flow visible
+    ///   there)
     ///
     /// If `target_vault_name` is provided, uses that vault; otherwise uses the
     /// target user's primary vault (first vault owned by user).
     ///
     /// If a flow with the same name already exists in the target vault, the
-    /// reference will use an override `display_name` with format "{name} ({owner})".
+    /// reference will use an override `display_name` with format "{name}
+    /// ({owner})".
     ///
     /// Authorization: requires vault owner permission for the source vault.
     pub async fn share_flow_with_user(
@@ -751,11 +753,13 @@ impl Engine {
     /// affecting the flow itself or other members' access.
     ///
     /// - Removes the flow_reference entry from the specified vault
-    /// - Does NOT remove the flow_membership (user still has permission if re-shared)
+    /// - Does NOT remove the flow_membership (user still has permission if
+    ///   re-shared)
     /// - Does NOT affect the flow data itself (remains in owner's vault)
     /// - Does NOT affect other users' references to the same flow
     ///
-    /// Authorization: user must have write access to the vault (owner or editor).
+    /// Authorization: user must have write access to the vault (owner or
+    /// editor).
     pub async fn remove_flow_reference(
         &self,
         vault_id: &str,

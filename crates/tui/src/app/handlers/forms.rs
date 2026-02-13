@@ -174,10 +174,8 @@ impl App {
                         match self.state.flows.form.focus {
                             FlowFormField::Name => self.state.flows.form.name.push(ch),
                             FlowFormField::Cap => {
-                                if !matches!(
-                                    self.state.flows.form.mode,
-                                    FlowModeChoice::Unlimited
-                                ) {
+                                if !matches!(self.state.flows.form.mode, FlowModeChoice::Unlimited)
+                                {
                                     self.state.flows.form.cap.push(ch);
                                 }
                             }

@@ -49,7 +49,10 @@ pub fn render_list(
             .map(|f| {
                 let mut extra_badges = Vec::new();
                 if f.is_unallocated {
-                    extra_badges.push((t(state.locale, TextKey::EntityBadgeDefault).to_string(), theme.info));
+                    extra_badges.push((
+                        t(state.locale, TextKey::EntityBadgeDefault).to_string(),
+                        theme.info,
+                    ));
                 }
                 if let Some(cap) = f.max_balance {
                     // Show current balance / cap instead of just "[limitato]"
@@ -65,11 +68,17 @@ pub fn render_list(
                     ));
                 }
                 // Distinguish between:
-                // - is_reference=true: flow shared FROM another vault (show "condiviso da [user]")
-                // - is_shared=true but is_reference=false: flow being shared TO others (show "in condivisione")
+                // - is_reference=true: flow shared FROM another vault (show "condiviso da
+                //   [user]")
+                // - is_shared=true but is_reference=false: flow being shared TO others (show
+                //   "in condivisione")
                 if f.is_reference {
                     let badge_text = if let Some(ref owner) = f.owner_user_id {
-                        format!("[{} {}]", t(state.locale, TextKey::FlowBadgeSharedFrom).trim_matches(&['[', ']']), owner)
+                        format!(
+                            "[{} {}]",
+                            t(state.locale, TextKey::FlowBadgeSharedFrom).trim_matches(&['[', ']']),
+                            owner
+                        )
                     } else {
                         t(state.locale, TextKey::FlowBadgeSharedFrom).to_string()
                     };
