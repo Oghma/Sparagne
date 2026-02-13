@@ -1,7 +1,7 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use sea_orm::{ActiveValue, QueryFilter, Statement, prelude::*, sea_query::Expr};
+use sea_orm::{ActiveValue, QueryFilter, QueryOrder, Statement, prelude::*, sea_query::Expr};
 
 use crate::{
     CashFlow, EngineError, ResultEngine, TransactionKind, cash_flows, flow_memberships,
@@ -651,9 +651,10 @@ impl Engine {
                         .require_vault_by_name(db_tx, name.as_str(), target_user_id.as_str())
                         .await?
                 } else {
-                    // Use target user's primary vault (first vault owned by them)
+                    // Use target user's primary vault (first vault by name)
                     vault::Entity::find()
                         .filter(vault::Column::UserId.eq(target_user_id.clone()))
+                        .order_by_asc(vault::Column::Name)
                         .one(db_tx)
                         .await?
                         .ok_or_else(|| {
