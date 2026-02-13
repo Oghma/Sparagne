@@ -25,7 +25,7 @@ pub(crate) struct EntityItem<'a> {
     pub balance_minor: i64,
     pub archived: bool,
     /// Extra badges to render after the progress bar (e.g. "[default]").
-    pub extra_badges: Vec<(&'static str, ratatui::style::Color)>,
+    pub extra_badges: Vec<(String, ratatui::style::Color)>,
     /// Emoji icon for this item.
     pub emoji: &'static str,
 }
@@ -152,7 +152,7 @@ pub(crate) fn render_entity_list(
 
             for (badge_text, badge_color) in &item.extra_badges {
                 spans.push(Span::raw("  "));
-                spans.push(Span::styled(*badge_text, Style::default().fg(*badge_color)));
+                spans.push(Span::styled(badge_text.as_str(), Style::default().fg(*badge_color)));
             }
 
             if item.archived {
