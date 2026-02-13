@@ -148,7 +148,6 @@ pub enum TextKey {
     HelpFlowSharing,
     HelpChangeFlow,
     HelpChangeRole,
-    HelpUnshareFlow,
 
     // Status bar
     StatusOnline,
@@ -630,15 +629,8 @@ pub enum TextKey {
     // Flow form
     FormLabelAllowNegative,
     FlowBadgeAllowNegative,
-    FlowBadgeCapped,
-    FlowBadgeShared,
     FlowBadgeSharedFrom,
     FlowBadgeSharing,
-    FlowDetailOwner,
-    FlowDetailYourAccess,
-    FlowDetailSharedWith,
-    FlowActionUnshare,
-    FlowActionManageSharing,
 
     // Recurring
     RecurringTitle,

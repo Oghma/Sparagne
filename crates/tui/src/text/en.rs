@@ -126,7 +126,6 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::HelpFlowSharing => "Flow sharing",
         TextKey::HelpChangeFlow => "Change flow",
         TextKey::HelpChangeRole => "Change role",
-        TextKey::HelpUnshareFlow => "Remove sharing",
 
         // Status bar
         TextKey::StatusOnline => "online",
@@ -622,15 +621,8 @@ pub fn get(key: TextKey) -> &'static str {
         // Flow form
         TextKey::FormLabelAllowNegative => "Allow negative",
         TextKey::FlowBadgeAllowNegative => "[allow neg.]",
-        TextKey::FlowBadgeCapped => "[capped]",
-        TextKey::FlowBadgeShared => "[shared]",
         TextKey::FlowBadgeSharedFrom => "[shared from]",
         TextKey::FlowBadgeSharing => "[sharing]",
-        TextKey::FlowDetailOwner => "Owner",
-        TextKey::FlowDetailYourAccess => "Your access",
-        TextKey::FlowDetailSharedWith => "Shared with",
-        TextKey::FlowActionUnshare => "Remove sharing",
-        TextKey::FlowActionManageSharing => "Manage sharing",
 
         // Recurring
         TextKey::RecurringTitle => "Recurring",

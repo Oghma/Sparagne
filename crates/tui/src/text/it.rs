@@ -126,7 +126,6 @@ pub fn get(key: TextKey) -> &'static str {
         TextKey::HelpFlowSharing => "Condivisione flusso",
         TextKey::HelpChangeFlow => "Cambia flusso",
         TextKey::HelpChangeRole => "Cambia ruolo",
-        TextKey::HelpUnshareFlow => "Rimuovi condivisione",
 
         // Status bar
         TextKey::StatusOnline => "online",
@@ -630,15 +629,8 @@ pub fn get(key: TextKey) -> &'static str {
         // Flow form
         TextKey::FormLabelAllowNegative => "Consenti negativo",
         TextKey::FlowBadgeAllowNegative => "[neg. ok]",
-        TextKey::FlowBadgeCapped => "[limitato]",
-        TextKey::FlowBadgeShared => "[condiviso]",
         TextKey::FlowBadgeSharedFrom => "[condiviso da]",
         TextKey::FlowBadgeSharing => "[in condivisione]",
-        TextKey::FlowDetailOwner => "Proprietario",
-        TextKey::FlowDetailYourAccess => "Tuo accesso",
-        TextKey::FlowDetailSharedWith => "Condiviso con",
-        TextKey::FlowActionUnshare => "Rimuovi condivisione",
-        TextKey::FlowActionManageSharing => "Gestisci condivisione",
 
         // Recurring
         TextKey::RecurringTitle => "Ricorrenti",

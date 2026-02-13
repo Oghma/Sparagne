@@ -112,12 +112,10 @@ impl App {
                 if self.state.section == Section::Accounts
                     && self.state.accounts_tab == AccountsTab::Budget
                     && self.state.flows.mode == EntityListMode::List
+                    && let Some(flow) = self.selected_flow()
+                    && flow.is_reference
                 {
-                    if let Some(flow) = self.selected_flow()
-                        && flow.is_reference
-                    {
-                        self.open_flow_unshare_dialog();
-                    }
+                    self.open_flow_unshare_dialog();
                 }
             }
             _ => {}
