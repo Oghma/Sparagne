@@ -76,7 +76,7 @@ pub fn render_list(
                     let badge_text = if let Some(ref owner) = f.owner_user_id {
                         format!(
                             "[{} {}]",
-                            t(state.locale, TextKey::FlowBadgeSharedFrom).trim_matches(&['[', ']']),
+                            t(state.locale, TextKey::FlowBadgeSharedFrom).trim_matches(['[', ']']),
                             owner
                         )
                     } else {
