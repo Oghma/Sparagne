@@ -49,29 +49,31 @@ pub fn render_list(
             .map(|f| {
                 let mut extra_badges = Vec::new();
                 if f.is_unallocated {
-                    extra_badges.push((t(state.locale, TextKey::EntityBadgeDefault), theme.info));
+                    extra_badges.push((t(state.locale, TextKey::EntityBadgeDefault).to_string(), theme.info));
                 }
                 if f.max_balance.is_some() {
                     extra_badges
-                        .push((t(state.locale, TextKey::FlowBadgeCapped), theme.accent));
+                        .push((t(state.locale, TextKey::FlowBadgeCapped).to_string(), theme.accent));
                 }
                 if f.allow_negative {
                     extra_badges.push((
-                        t(state.locale, TextKey::FlowBadgeAllowNegative),
+                        t(state.locale, TextKey::FlowBadgeAllowNegative).to_string(),
                         theme.warning,
                     ));
                 }
                 // Distinguish between:
-                // - is_reference=true: flow shared FROM another vault (show "condiviso da")
+                // - is_reference=true: flow shared FROM another vault (show "condiviso da [user]")
                 // - is_shared=true but is_reference=false: flow being shared TO others (show "in condivisione")
                 if f.is_reference {
-                    extra_badges.push((
-                        t(state.locale, TextKey::FlowBadgeSharedFrom),
-                        theme.info,
-                    ));
+                    let badge_text = if let Some(ref owner) = f.owner_user_id {
+                        format!("[{} {}]", t(state.locale, TextKey::FlowBadgeSharedFrom).trim_matches(&['[', ']']), owner)
+                    } else {
+                        t(state.locale, TextKey::FlowBadgeSharedFrom).to_string()
+                    };
+                    extra_badges.push((badge_text, theme.info));
                 } else if f.is_shared {
                     extra_badges.push((
-                        t(state.locale, TextKey::FlowBadgeSharing),
+                        t(state.locale, TextKey::FlowBadgeSharing).to_string(),
                         theme.positive,
                     ));
                 }
