@@ -130,6 +130,7 @@ pub async fn snapshot(
                 max_balance: flow.max_balance,
                 is_shared: flow.is_shared,
                 is_reference: flow.is_reference,
+                owner_user_id: flow.owner_user_id,
             }
         })
         .collect::<Vec<_>>();

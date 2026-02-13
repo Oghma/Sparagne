@@ -214,6 +214,8 @@ pub mod vault {
         pub is_shared: bool,
         #[serde(default)]
         pub is_reference: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub owner_user_id: Option<String>,
     }
 }
 

@@ -163,6 +163,7 @@ pub async fn shared_list(
             archived: flow.archived,
             is_shared: flow.is_shared,
             is_reference: flow.is_reference,
+            owner_user_id: flow.owner_user_id,
         })
         .collect::<Vec<_>>();
 
