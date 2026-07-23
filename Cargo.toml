@@ -43,7 +43,7 @@ strip = "symbols"
 async-trait = "0.1.89"
 axum = "0.8.7"
 axum-extra = "0.12.2"
-base64 = "0.22.1"
+base64 = "0.23.0"
 clap = { version = "4.5.53", features = ["derive", "env"] }
 chrono = { version = "0.4.43", features = ["serde", "clock"] }
 chrono-tz = "0.10.4"
