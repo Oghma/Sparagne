@@ -3,6 +3,7 @@
 > Bozza iniziale, 2026-09-05. Base: v1 `0.93.0` (HEAD `be41ad0`), 703 commit, nov 2022 → feb 2026.
 > Scopo: elencare cosa la v1 ha prodotto di riutilizzabile per la riscrittura (UI nativa macOS, multi-tenant, stile bancario + tabellare), con un verdetto per ogni voce.
 > Gli inventari grezzi (engine, server/schema, TUI, bot + storia git) sono in `docs/v2/inventory/`.
+> I sorgenti v1 sono stati rimossi dal branch `v2` il 2026-09-09: i percorsi `crates/...` citati qui sotto si leggono al tag `v0.93.0` (commit `be41ad0`).
 
 Legenda verdetti: **TIENI** (porta com'è, al più rinomina) · **RIPENSA** (l'idea è buona, l'implementazione no) · **BUTTA**.
 

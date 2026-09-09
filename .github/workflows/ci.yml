@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, v2]
   pull_request:
 
 concurrency:
@@ -15,41 +15,28 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.92.0
-  RUSTFMT_TOOLCHAIN: nightly
 
 jobs:
-  ci:
+  core:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Use the pinned MSRV toolchain for build/test/clippy.
-      - name: Install Rust 1.92.0 + clippy
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: clippy
-
-      # Use nightly rustfmt because `rustfmt.toml` uses nightly-only options.
-      - name: Install nightly + rustfmt
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUSTFMT_TOOLCHAIN }}
-          components: rustfmt
+          components: clippy, rustfmt
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
       - name: Format
-        run: cargo +nightly fmt --all -- --check
+        run: cargo fmt --all -- --check
 
-      # Keep clippy non-blocking on warnings for now; tighten during the engine refactor.
       - name: Clippy
-        run: cargo +${{ env.RUST_TOOLCHAIN }} clippy --workspace --all-targets
-
-      - name: Clippy (no unwrap/expect)
-        run: cargo +${{ env.RUST_TOOLCHAIN }} clippy --workspace --all-targets -- -D clippy::unwrap_used -D clippy::expect_used
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Test
-        run: cargo +${{ env.RUST_TOOLCHAIN }} test --workspace --all-targets
+        run: cargo test --workspace --all-targets
