@@ -76,7 +76,7 @@ Tutto ciò che muta un vault è un comando; niente scritture dirette alle tabell
 | Busta | `CreateFlow`, `UpdateFlow` (nome, mode, allow_negative), `ArchiveFlow`, `RestoreFlow` |
 | Categoria | `CreateCategory`, `RenameCategory`, `ArchiveCategory`, `RestoreCategory`, `AddAlias`, `RemoveAlias`, `MergeCategory` |
 | Transazione | `Income`, `Expense`, `Refund`, `TransferWallet`, `TransferFlow`, `UpdateTransaction`, `VoidTransaction` |
-| Ricorrenze | `CreateRecurring`, `UpdateRecurring`, `ArchiveRecurring`, `ExecuteRecurring`, `SkipRecurring` |
+| Ricorrenze | `CreateRecurring`, `UpdateRecurring`, `ArchiveRecurring`, `RestoreRecurring`, `ExecuteRecurring`, `SkipRecurring` |
 | Vault | `CreateVault` (unico comando fuori dal log del vault; vive nel log dell'account) |
 
 Convenzioni comuni (fissate il 2026-09-09, vedi `core/src/command.rs`):
@@ -131,13 +131,15 @@ Multi-tenant lato server: account utente, vault di proprietà di un account, mem
 
 ## 8. Fasi
 
-| Fase | Cosa | Esito |
-|---|---|---|
-| 0 | SPEC v2 breve (dominio v1 + §3-§4 di questo documento) | documento |
-| 1 | crate `core`: modello, comandi, log, proiezione, query, test | libreria testata, nessuna UI |
-| 2 | UniFFI, Swift Package, app con tabella transazioni e quick-add, solo locale | app usabile da un utente |
-| 3 | server `sync`, auth, membership, outbox e pull | secondo utente |
-| 4 | dashboard e analytics con query sul SQLite locale | stile bancario |
+| Fase | Cosa | Esito | Stato |
+|---|---|---|---|
+| 0 | SPEC v2 breve (dominio v1 + §3-§4 di questo documento) | documento | assorbita dal distillato §1 e da questo documento |
+| 1 | crate `core`: modello, comandi, log, proiezione, query, test | libreria testata, nessuna UI | fatta il 2026-09-09 (154 test) |
+| 2 | UniFFI, Swift Package, app con tabella transazioni e quick-add, solo locale | app usabile da un utente | fatta il 2026-09-09: `apple/SparagneCore` + `apple/Sparagne` (tabella, quick-add, void con undo, inspector, gestione wallet/buste/categorie, ricorrenze) |
+| 3 | server `sync`, auth, membership, outbox e pull | secondo utente | da fare |
+| 4 | dashboard e analytics con query sul SQLite locale | stile bancario | da fare |
+
+Rimandato dalle fasi 1-2: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), un'app che chiama il core da un attore in background invece che dal main actor, firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`.
 
 La Fase 1 già scrive il log con i campi di §3, anche se `seq` è locale e `outbox` non esiste.
 
