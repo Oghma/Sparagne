@@ -71,12 +71,19 @@ Tutto ciò che muta un vault è un comando; niente scritture dirette alle tabell
 
 | Famiglia | Comandi |
 |---|---|
-| Wallet | `CreateWallet`, `RenameWallet`, `ArchiveWallet` |
-| Busta | `CreateFlow`, `UpdateFlow` (nome, mode, cap, allow_negative), `ArchiveFlow` |
-| Categoria | `CreateCategory`, `UpdateCategory`, `AddAlias`, `RemoveAlias`, `MergeCategory` |
+| Wallet | `CreateWallet`, `RenameWallet`, `ArchiveWallet`, `RestoreWallet` |
+| Busta | `CreateFlow`, `UpdateFlow` (nome, mode, allow_negative), `ArchiveFlow`, `RestoreFlow` |
+| Categoria | `CreateCategory`, `RenameCategory`, `ArchiveCategory`, `RestoreCategory`, `AddAlias`, `RemoveAlias`, `MergeCategory` |
 | Transazione | `Income`, `Expense`, `Refund`, `TransferWallet`, `TransferFlow`, `UpdateTransaction`, `VoidTransaction` |
 | Ricorrenze | `CreateRecurring`, `UpdateRecurring`, `ArchiveRecurring`, `ExecuteRecurring`, `SkipRecurring` |
 | Vault | `CreateVault` (unico comando fuori dal log del vault; vive nel log dell'account) |
+
+Convenzioni comuni (fissate il 2026-09-09, vedi `core/src/command.rs`):
+- Archiviare e ripristinare sono comandi distinti, così il log si legge senza guardare il payload. Archiviare un wallet o una busta richiede saldo zero; wallet, buste e categorie archiviati rifiutano nuove leg.
+- Gli `Update*` portano solo i campi cambiati (`Option`); una stringa vuota azzera la nota o riporta la categoria a `Uncategorized`. Almeno un campo deve essere presente.
+- `MergeCategory` ripunta le transazioni, sposta gli alias, aggiunge il nome della sorgente come alias del target e **elimina** la sorgente (non la archivia: la chiave deve tornare libera perché l'alias risolva). `Core::preview_merge` elenca i conflitti prima.
+- Le ricorrenze non si materializzano mai da sole: `Core::pending_recurring(vault, oggi)` elenca i periodi dovuti, compresi quelli arretrati, e l'utente li esegue o li salta uno per uno. "Oggi" lo passa l'app con la timezone di sistema. Lo `Schedule` è `frequency` (daily, weekly{weekday}, monthly{day}, yearly{month,day}) più `interval`, `start_date`, `end_date`; i giorni 29-31 si agganciano all'ultimo giorno del mese senza derivare.
+- Il parser quick-add (§3.1 del distillato, più i token data `oggi`, `ieri`, `-3d`, `12/03`) vive nel core come `quick_add::parse` e `Core::resolve_quick_add`, che risolve i nomi di wallet e busta (esatto > prefisso > contiene) e produce un `Command`.
 
 `UpdateTransaction` porta solo i campi cambiati: due utenti che modificano campi diversi della stessa riga non confliggono; sullo stesso campo vince l'ultimo in ordine di `seq`.
 
