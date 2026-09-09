@@ -15,16 +15,20 @@
 #![forbid(unsafe_code)]
 
 mod category;
+mod command;
 mod currency;
 mod error;
 mod flow;
 mod money;
+mod store;
 
 pub use category::{normalize_category_display, normalize_category_key, validate_category_name};
+pub use command::{Command, CommandEnvelope, CommandRecord, Entry, Receipt, TransactionKind};
 pub use currency::Currency;
 pub use error::DomainError;
 pub use flow::{Flow, FlowMode, UNALLOCATED_NAME};
 pub use money::Money;
+pub use store::Core;
 
 /// Result alias used across the crate.
 pub type Result<T> = std::result::Result<T, DomainError>;
