@@ -23,7 +23,7 @@ use crate::{
     AliasView, CategoryView, Command, CommandEnvelope, CommandRecord, Core, Currency, DomainError,
     MergePreview, Money, Page, PendingRecurring, PeriodTotals, Receipt, RecentUsage,
     RecurringRunView, RecurringView, TransactionFilter, TransactionView, VaultSnapshot, VaultView,
-    quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError},
+    quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
 };
 
 // ---------------------------------------------------------------------------
@@ -196,12 +196,14 @@ impl CoreHandle {
         self.lock()?.recent_usage(vault_id, since, to_usize(limit))
     }
 
-    /// Sums by kind over `[from, to)`.
+    /// Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
+    /// is all time.
+    #[uniffi::method(default(from = None, to = None))]
     pub fn period_totals(
         &self,
         vault_id: Uuid,
-        from: UtcDateTime,
-        to: UtcDateTime,
+        from: Option<UtcDateTime>,
+        to: Option<UtcDateTime>,
     ) -> Result<PeriodTotals, DomainError> {
         self.lock()?.period_totals(vault_id, from, to)
     }
@@ -242,14 +244,15 @@ impl CoreHandle {
     }
 
     /// Resolves the wallet and flow names of a parsed quick-add line against
-    /// the vault and returns the command to execute.
+    /// the vault and returns the command to execute plus the ids the names
+    /// resolved to.
     pub fn resolve_quick_add(
         &self,
         vault_id: Uuid,
         parsed: QuickAdd,
         now: OffsetDateTime,
         defaults: QuickAddDefaults,
-    ) -> Result<Command, QuickAddError> {
+    ) -> Result<ResolvedQuickAdd, QuickAddError> {
         self.lock()?
             .resolve_quick_add(vault_id, &parsed, now, &defaults)
     }

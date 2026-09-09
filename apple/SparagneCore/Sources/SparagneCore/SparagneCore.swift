@@ -621,9 +621,10 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func pendingRecurring(vaultId: Uuid, today: NaiveDate) throws  -> [PendingRecurring]
     
     /**
-     * Sums by kind over `[from, to)`.
+     * Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
+     * is all time.
      */
-    func periodTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) throws  -> PeriodTotals
+    func periodTotals(vaultId: Uuid, from: UtcDateTime?, to: UtcDateTime?) throws  -> PeriodTotals
     
     /**
      * What `MergeCategory` would refuse, without changing anything.
@@ -639,9 +640,10 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     
     /**
      * Resolves the wallet and flow names of a parsed quick-add line against
-     * the vault and returns the command to execute.
+     * the vault and returns the command to execute plus the ids the names
+     * resolved to.
      */
-    func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, defaults: QuickAddDefaults) throws  -> Command
+    func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, defaults: QuickAddDefaults) throws  -> ResolvedQuickAdd
     
     /**
      * Active categories whose name is close to `name`, nearest first.
@@ -839,16 +841,17 @@ open func pendingRecurring(vaultId: Uuid, today: NaiveDate)throws  -> [PendingRe
 }
     
     /**
-     * Sums by kind over `[from, to)`.
+     * Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
+     * is all time.
      */
-open func periodTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime)throws  -> PeriodTotals  {
+open func periodTotals(vaultId: Uuid, from: UtcDateTime? = nil, to: UtcDateTime? = nil)throws  -> PeriodTotals  {
     return try  FfiConverterTypePeriodTotals_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
         uniffiCallStatus in
     uniffi_sparagne_core_fn_method_corehandle_period_totals(
             self.uniffiCloneHandle(),
         FfiConverterTypeUuid_lower(vaultId),
-        FfiConverterTypeUtcDateTime_lower(from),
-        FfiConverterTypeUtcDateTime_lower(to),uniffiCallStatus
+        FfiConverterOptionTypeUtcDateTime.lower(from),
+        FfiConverterOptionTypeUtcDateTime.lower(to),uniffiCallStatus
     )
 })
 }
@@ -896,10 +899,11 @@ open func recurringRuns(vaultId: Uuid, recurringId: Uuid)throws  -> [RecurringRu
     
     /**
      * Resolves the wallet and flow names of a parsed quick-add line against
-     * the vault and returns the command to execute.
+     * the vault and returns the command to execute plus the ids the names
+     * resolved to.
      */
-open func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, defaults: QuickAddDefaults)throws  -> Command  {
-    return try  FfiConverterTypeCommand_lift(try rustCallWithError(FfiConverterTypeQuickAddError_lift) {
+open func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, defaults: QuickAddDefaults)throws  -> ResolvedQuickAdd  {
+    return try  FfiConverterTypeResolvedQuickAdd_lift(try rustCallWithError(FfiConverterTypeQuickAddError_lift) {
         uniffiCallStatus in
     uniffi_sparagne_core_fn_method_corehandle_resolve_quick_add(
             self.uniffiCloneHandle(),
@@ -1744,7 +1748,8 @@ public func FfiConverterTypePendingRecurring_lower(_ value: PendingRecurring) ->
 
 
 /**
- * Sums of `transactions.amount` by kind over a `[from, to)` range.
+ * Sums of `transactions.amount` by kind over a `[from, to)` range, either
+ * end open.
  */
 public struct PeriodTotals: Equatable, Hashable, Codable {
     public var income: Int64
@@ -1824,7 +1829,7 @@ public struct QuickAddDefaults: Equatable, Hashable, Codable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(walletId: Uuid?, flowId: Uuid?) {
+    public init(walletId: Uuid? = nil, flowId: Uuid? = nil) {
         self.walletId = walletId
         self.flowId = flowId
     }
@@ -2018,6 +2023,108 @@ public func FfiConverterTypeRecentUsage_lower(_ value: RecentUsage) -> RustBuffe
 
 
 /**
+ * The fields [`Command::UpdateRecurring`] can change. `None` leaves the
+ * field as it is.
+ */
+public struct RecurringPatch: Equatable, Hashable, Codable {
+    /**
+     * Absolute, `> 0`.
+     */
+    public var amount: Int64?
+    public var walletId: Uuid?
+    public var flowId: Uuid?
+    /**
+     * Blank = Uncategorized.
+     */
+    public var category: String?
+    /**
+     * Blank = clear.
+     */
+    public var note: String?
+    public var schedule: Schedule?
+    /**
+     * Disabled templates are never pending.
+     */
+    public var enabled: Bool?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Absolute, `> 0`.
+         */amount: Int64? = nil, walletId: Uuid? = nil, flowId: Uuid? = nil, 
+        /**
+         * Blank = Uncategorized.
+         */category: String? = nil, 
+        /**
+         * Blank = clear.
+         */note: String? = nil, schedule: Schedule? = nil, 
+        /**
+         * Disabled templates are never pending.
+         */enabled: Bool? = nil) {
+        self.amount = amount
+        self.walletId = walletId
+        self.flowId = flowId
+        self.category = category
+        self.note = note
+        self.schedule = schedule
+        self.enabled = enabled
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RecurringPatch: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRecurringPatch: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecurringPatch {
+        return
+            try RecurringPatch(
+                amount: FfiConverterOptionInt64.read(from: &buf), 
+                walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                category: FfiConverterOptionString.read(from: &buf), 
+                note: FfiConverterOptionString.read(from: &buf), 
+                schedule: FfiConverterOptionTypeSchedule.read(from: &buf), 
+                enabled: FfiConverterOptionBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RecurringPatch, into buf: inout [UInt8]) {
+        FfiConverterOptionInt64.write(value.amount, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterOptionString.write(value.category, into: &buf)
+        FfiConverterOptionString.write(value.note, into: &buf)
+        FfiConverterOptionTypeSchedule.write(value.schedule, into: &buf)
+        FfiConverterOptionBool.write(value.enabled, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecurringPatch_lift(_ buf: RustBuffer) throws -> RecurringPatch {
+    return try FfiConverterTypeRecurringPatch.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecurringPatch_lower(_ value: RecurringPatch) -> RustBuffer {
+    return FfiConverterTypeRecurringPatch.lower(value)
+}
+
+
+/**
  * One handled period of a template.
  */
 public struct RecurringRunView: Equatable, Hashable, Codable {
@@ -2204,6 +2311,83 @@ public func FfiConverterTypeRecurringView_lower(_ value: RecurringView) -> RustB
 
 
 /**
+ * A resolved quick-add line: the command to execute plus the entities its
+ * names resolved to.
+ *
+ * The ids are the ones the command carries, handed over separately so the app
+ * does not have to take the command apart to learn what the line meant (for
+ * instance to keep the wallet and flow as sticky defaults). Entries fill
+ * `wallet_id` and `flow_id`; transfers fill `from_id` and `to_id` with the
+ * source and the destination, both wallets or both flows depending on the
+ * kind.
+ */
+public struct ResolvedQuickAdd: Equatable, Hashable, Codable {
+    public var command: Command
+    public var walletId: Uuid?
+    public var flowId: Uuid?
+    public var fromId: Uuid?
+    public var toId: Uuid?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(command: Command, walletId: Uuid?, flowId: Uuid?, fromId: Uuid?, toId: Uuid?) {
+        self.command = command
+        self.walletId = walletId
+        self.flowId = flowId
+        self.fromId = fromId
+        self.toId = toId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ResolvedQuickAdd: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeResolvedQuickAdd: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ResolvedQuickAdd {
+        return
+            try ResolvedQuickAdd(
+                command: FfiConverterTypeCommand.read(from: &buf), 
+                walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                fromId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                toId: FfiConverterOptionTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ResolvedQuickAdd, into buf: inout [UInt8]) {
+        FfiConverterTypeCommand.write(value.command, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.fromId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.toId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeResolvedQuickAdd_lift(_ buf: RustBuffer) throws -> ResolvedQuickAdd {
+    return try FfiConverterTypeResolvedQuickAdd.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeResolvedQuickAdd_lower(_ value: ResolvedQuickAdd) -> RustBuffer {
+    return FfiConverterTypeResolvedQuickAdd.lower(value)
+}
+
+
+/**
  * When a template fires: every `interval` units of `frequency`, starting
  * from the first matching date on or after `start_date`, up to and including
  * `end_date`.
@@ -2314,23 +2498,23 @@ public struct TransactionFilter: Equatable, Hashable, Codable {
     public init(
         /**
          * Inclusive.
-         */from: UtcDateTime?, 
+         */from: UtcDateTime? = nil, 
         /**
          * Exclusive.
-         */to: UtcDateTime?, 
+         */to: UtcDateTime? = nil, 
         /**
          * Allow-list; `None` = all kinds (minus transfers unless
          * `include_transfers`).
-         */kinds: [TransactionKind]?, includeVoided: Bool, includeTransfers: Bool, 
+         */kinds: [TransactionKind]? = nil, includeVoided: Bool = false, includeTransfers: Bool = false, 
         /**
          * Only transactions with a leg on this wallet.
-         */walletId: Uuid?, 
+         */walletId: Uuid? = nil, 
         /**
          * Only transactions with a leg on this flow.
-         */flowId: Uuid?, 
+         */flowId: Uuid? = nil, 
         /**
          * Case-insensitive substring on note or category name.
-         */text: String?) {
+         */text: String? = nil) {
         self.from = from
         self.to = to
         self.kinds = kinds
@@ -2396,6 +2580,143 @@ public func FfiConverterTypeTransactionFilter_lower(_ value: TransactionFilter) 
 }
 
 
+/**
+ * The fields [`Command::UpdateTransaction`] can change.
+ *
+ * Every field is optional and `None` means "leave as is"; a blank string
+ * clears the note or puts the category back to Uncategorized. Which fields
+ * apply depends on the kind of the transaction being patched: `wallet_id`,
+ * `flow_id` and `category` belong to entries, `from_id` and `to_id` to
+ * transfers, and mixing the two is refused.
+ */
+public struct TransactionPatch: Equatable, Hashable, Codable {
+    /**
+     * Absolute, `> 0`.
+     */
+    public var amount: Int64?
+    public var occurredAt: OffsetDateTime?
+    /**
+     * Entries only; blank = Uncategorized.
+     */
+    public var category: String?
+    /**
+     * Blank = clear.
+     */
+    public var note: String?
+    /**
+     * Entries only.
+     */
+    public var walletId: Uuid?
+    /**
+     * Entries only.
+     */
+    public var flowId: Uuid?
+    /**
+     * Transfers only; a wallet id or a flow id matching the kind.
+     */
+    public var fromId: Uuid?
+    /**
+     * Transfers only.
+     */
+    public var toId: Uuid?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Absolute, `> 0`.
+         */amount: Int64? = nil, occurredAt: OffsetDateTime? = nil, 
+        /**
+         * Entries only; blank = Uncategorized.
+         */category: String? = nil, 
+        /**
+         * Blank = clear.
+         */note: String? = nil, 
+        /**
+         * Entries only.
+         */walletId: Uuid? = nil, 
+        /**
+         * Entries only.
+         */flowId: Uuid? = nil, 
+        /**
+         * Transfers only; a wallet id or a flow id matching the kind.
+         */fromId: Uuid? = nil, 
+        /**
+         * Transfers only.
+         */toId: Uuid? = nil) {
+        self.amount = amount
+        self.occurredAt = occurredAt
+        self.category = category
+        self.note = note
+        self.walletId = walletId
+        self.flowId = flowId
+        self.fromId = fromId
+        self.toId = toId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TransactionPatch: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionPatch: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionPatch {
+        return
+            try TransactionPatch(
+                amount: FfiConverterOptionInt64.read(from: &buf), 
+                occurredAt: FfiConverterOptionTypeOffsetDateTime.read(from: &buf), 
+                category: FfiConverterOptionString.read(from: &buf), 
+                note: FfiConverterOptionString.read(from: &buf), 
+                walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                fromId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                toId: FfiConverterOptionTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TransactionPatch, into buf: inout [UInt8]) {
+        FfiConverterOptionInt64.write(value.amount, into: &buf)
+        FfiConverterOptionTypeOffsetDateTime.write(value.occurredAt, into: &buf)
+        FfiConverterOptionString.write(value.category, into: &buf)
+        FfiConverterOptionString.write(value.note, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.fromId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.toId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionPatch_lift(_ buf: RustBuffer) throws -> TransactionPatch {
+    return try FfiConverterTypeTransactionPatch.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionPatch_lower(_ value: TransactionPatch) -> RustBuffer {
+    return FfiConverterTypeTransactionPatch.lower(value)
+}
+
+
+/**
+ * One transaction as the table shows it.
+ *
+ * `legs` is the raw shape; `wallet_id`, `flow_id`, `from_id` and `to_id` are
+ * the same information already sorted out by kind, so the app never has to
+ * bucket the legs itself. Entries fill `wallet_id` and `flow_id`; transfers
+ * fill `from_id` with the negative leg and `to_id` with the positive one.
+ */
 public struct TransactionView: Equatable, Hashable, Codable {
     public var id: Uuid
     public var kind: TransactionKind
@@ -2406,8 +2727,28 @@ public struct TransactionView: Equatable, Hashable, Codable {
     public var amount: Int64
     public var categoryId: Uuid
     public var category: String
+    /**
+     * `true` for `Opening` and `Uncategorized`: the app localizes the name.
+     */
+    public var categoryIsSystem: Bool
     public var note: String?
     public var voided: Bool
+    /**
+     * Entries only: the wallet the money moved on.
+     */
+    public var walletId: Uuid?
+    /**
+     * Entries only: the envelope the money moved on.
+     */
+    public var flowId: Uuid?
+    /**
+     * Transfers only: the source, a wallet or a flow matching the kind.
+     */
+    public var fromId: Uuid?
+    /**
+     * Transfers only: the destination.
+     */
+    public var toId: Uuid?
     public var legs: [LegView]
 
     // Default memberwise initializers are never public by default, so we
@@ -2415,15 +2756,35 @@ public struct TransactionView: Equatable, Hashable, Codable {
     public init(id: Uuid, kind: TransactionKind, occurredAt: OffsetDateTime, 
         /**
          * Absolute value; see `legs` for signs.
-         */amount: Int64, categoryId: Uuid, category: String, note: String?, voided: Bool, legs: [LegView]) {
+         */amount: Int64, categoryId: Uuid, category: String, 
+        /**
+         * `true` for `Opening` and `Uncategorized`: the app localizes the name.
+         */categoryIsSystem: Bool, note: String?, voided: Bool, 
+        /**
+         * Entries only: the wallet the money moved on.
+         */walletId: Uuid?, 
+        /**
+         * Entries only: the envelope the money moved on.
+         */flowId: Uuid?, 
+        /**
+         * Transfers only: the source, a wallet or a flow matching the kind.
+         */fromId: Uuid?, 
+        /**
+         * Transfers only: the destination.
+         */toId: Uuid?, legs: [LegView]) {
         self.id = id
         self.kind = kind
         self.occurredAt = occurredAt
         self.amount = amount
         self.categoryId = categoryId
         self.category = category
+        self.categoryIsSystem = categoryIsSystem
         self.note = note
         self.voided = voided
+        self.walletId = walletId
+        self.flowId = flowId
+        self.fromId = fromId
+        self.toId = toId
         self.legs = legs
     }
 
@@ -2449,8 +2810,13 @@ public struct FfiConverterTypeTransactionView: FfiConverterRustBuffer {
                 amount: FfiConverterInt64.read(from: &buf), 
                 categoryId: FfiConverterTypeUuid.read(from: &buf), 
                 category: FfiConverterString.read(from: &buf), 
+                categoryIsSystem: FfiConverterBool.read(from: &buf), 
                 note: FfiConverterOptionString.read(from: &buf), 
                 voided: FfiConverterBool.read(from: &buf), 
+                walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                fromId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                toId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 legs: FfiConverterSequenceTypeLegView.read(from: &buf)
         )
     }
@@ -2462,8 +2828,13 @@ public struct FfiConverterTypeTransactionView: FfiConverterRustBuffer {
         FfiConverterInt64.write(value.amount, into: &buf)
         FfiConverterTypeUuid.write(value.categoryId, into: &buf)
         FfiConverterString.write(value.category, into: &buf)
+        FfiConverterBool.write(value.categoryIsSystem, into: &buf)
         FfiConverterOptionString.write(value.note, into: &buf)
         FfiConverterBool.write(value.voided, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.fromId, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.toId, into: &buf)
         FfiConverterSequenceTypeLegView.write(value.legs, into: &buf)
     }
 }
@@ -2799,32 +3170,11 @@ public enum Command: Equatable, Hashable, Codable {
     case transferFlow(amount: Int64, fromFlowId: Uuid, toFlowId: Uuid, note: String?, occurredAt: OffsetDateTime
     )
     /**
-     * Partial update; at least one field must be set. The kind never
-     * changes (void and recreate instead). Caps and non-negativity are
+     * Partial update; the patch must carry at least one field. The kind
+     * never changes (void and recreate instead). Caps and non-negativity are
      * re-checked on the resulting legs; nothing changes on failure.
      */
-    case updateTransaction(transactionId: Uuid, 
-        /**
-         * Absolute, `> 0`.
-         */amount: Int64?, occurredAt: OffsetDateTime?, 
-        /**
-         * Entries only; blank = Uncategorized.
-         */category: String?, 
-        /**
-         * Blank = clear.
-         */note: String?, 
-        /**
-         * Entries only.
-         */walletId: Uuid?, 
-        /**
-         * Entries only.
-         */flowId: Uuid?, 
-        /**
-         * Transfers only; a wallet id or a flow id matching the kind.
-         */fromId: Uuid?, 
-        /**
-         * Transfers only.
-         */toId: Uuid?
+    case updateTransaction(transactionId: Uuid, patch: TransactionPatch
     )
     /**
      * Soft delete. Never blocked by caps or non-negativity.
@@ -2850,19 +3200,10 @@ public enum Command: Equatable, Hashable, Codable {
          */category: String?, note: String?, schedule: Schedule
     )
     /**
-     * Partial update; at least one field must be set. Past runs are not
-     * touched.
+     * Partial update; the patch must carry at least one field. Past runs are
+     * not touched.
      */
-    case updateRecurring(recurringId: Uuid, amount: Int64?, walletId: Uuid?, flowId: Uuid?, 
-        /**
-         * Blank = Uncategorized.
-         */category: String?, 
-        /**
-         * Blank = clear.
-         */note: String?, schedule: Schedule?, 
-        /**
-         * Disabled templates are never pending.
-         */enabled: Bool?
+    case updateRecurring(recurringId: Uuid, patch: RecurringPatch
     )
     case archiveRecurring(recurringId: Uuid
     )
@@ -2962,7 +3303,7 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         case 21: return .transferFlow(amount: try FfiConverterInt64.read(from: &buf), fromFlowId: try FfiConverterTypeUuid.read(from: &buf), toFlowId: try FfiConverterTypeUuid.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
         )
         
-        case 22: return .updateTransaction(transactionId: try FfiConverterTypeUuid.read(from: &buf), amount: try FfiConverterOptionInt64.read(from: &buf), occurredAt: try FfiConverterOptionTypeOffsetDateTime.read(from: &buf), category: try FfiConverterOptionString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), walletId: try FfiConverterOptionTypeUuid.read(from: &buf), flowId: try FfiConverterOptionTypeUuid.read(from: &buf), fromId: try FfiConverterOptionTypeUuid.read(from: &buf), toId: try FfiConverterOptionTypeUuid.read(from: &buf)
+        case 22: return .updateTransaction(transactionId: try FfiConverterTypeUuid.read(from: &buf), patch: try FfiConverterTypeTransactionPatch.read(from: &buf)
         )
         
         case 23: return .voidTransaction(transactionId: try FfiConverterTypeUuid.read(from: &buf)
@@ -2971,7 +3312,7 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         case 24: return .createRecurring(transactionKind: try FfiConverterTypeTransactionKind.read(from: &buf), amount: try FfiConverterInt64.read(from: &buf), walletId: try FfiConverterOptionTypeUuid.read(from: &buf), flowId: try FfiConverterOptionTypeUuid.read(from: &buf), category: try FfiConverterOptionString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), schedule: try FfiConverterTypeSchedule.read(from: &buf)
         )
         
-        case 25: return .updateRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), amount: try FfiConverterOptionInt64.read(from: &buf), walletId: try FfiConverterOptionTypeUuid.read(from: &buf), flowId: try FfiConverterOptionTypeUuid.read(from: &buf), category: try FfiConverterOptionString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), schedule: try FfiConverterOptionTypeSchedule.read(from: &buf), enabled: try FfiConverterOptionBool.read(from: &buf)
+        case 25: return .updateRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), patch: try FfiConverterTypeRecurringPatch.read(from: &buf)
         )
         
         case 26: return .archiveRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf)
@@ -3119,17 +3460,10 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             FfiConverterTypeOffsetDateTime.write(occurredAt, into: &buf)
             
         
-        case let .updateTransaction(transactionId,amount,occurredAt,category,note,walletId,flowId,fromId,toId):
+        case let .updateTransaction(transactionId,patch):
             writeInt(&buf, Int32(22))
             FfiConverterTypeUuid.write(transactionId, into: &buf)
-            FfiConverterOptionInt64.write(amount, into: &buf)
-            FfiConverterOptionTypeOffsetDateTime.write(occurredAt, into: &buf)
-            FfiConverterOptionString.write(category, into: &buf)
-            FfiConverterOptionString.write(note, into: &buf)
-            FfiConverterOptionTypeUuid.write(walletId, into: &buf)
-            FfiConverterOptionTypeUuid.write(flowId, into: &buf)
-            FfiConverterOptionTypeUuid.write(fromId, into: &buf)
-            FfiConverterOptionTypeUuid.write(toId, into: &buf)
+            FfiConverterTypeTransactionPatch.write(patch, into: &buf)
             
         
         case let .voidTransaction(transactionId):
@@ -3148,16 +3482,10 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             FfiConverterTypeSchedule.write(schedule, into: &buf)
             
         
-        case let .updateRecurring(recurringId,amount,walletId,flowId,category,note,schedule,enabled):
+        case let .updateRecurring(recurringId,patch):
             writeInt(&buf, Int32(25))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
-            FfiConverterOptionInt64.write(amount, into: &buf)
-            FfiConverterOptionTypeUuid.write(walletId, into: &buf)
-            FfiConverterOptionTypeUuid.write(flowId, into: &buf)
-            FfiConverterOptionString.write(category, into: &buf)
-            FfiConverterOptionString.write(note, into: &buf)
-            FfiConverterOptionTypeSchedule.write(schedule, into: &buf)
-            FfiConverterOptionBool.write(enabled, into: &buf)
+            FfiConverterTypeRecurringPatch.write(patch, into: &buf)
             
         
         case let .archiveRecurring(recurringId):
@@ -3981,36 +4309,43 @@ public func FfiConverterTypeQuickAdd_lower(_ value: QuickAdd) -> RustBuffer {
 
 /**
  * Error raised while parsing or resolving a quick-add line.
+ *
+ * Every variant has named fields so the app receives the data, not only a
+ * sentence: [`Self::AmbiguousName`] carries the candidates to offer, and
+ * [`Self::UnknownName`] the kind and the name that missed. The variants that
+ * have nothing else to say carry their rendered `message`, and the wrapped
+ * [`DomainError`] crosses as its stable `code` plus its message, because a
+ * nested error cannot travel over the FFI.
  */
 public 
 enum QuickAddError: Swift.Error, Equatable, Hashable, Codable, Foundation.LocalizedError {
 
     
     
-    case EmptyInput(message: String)
-    
-    case MissingAmount(message: String)
-    
-    case InvalidAmount(message: String)
-    
-    case DuplicateMarker(message: String)
-    
-    case MarkerNotAllowed(message: String)
-    
-    case MissingTransferTarget(message: String)
-    
-    case InvalidDate(message: String)
-    
-    case DuplicateDate(message: String)
-    
-    case AmbiguousName(message: String)
-    
-    case UnknownName(message: String)
-    
-    case SameTarget(message: String)
-    
-    case Domain(message: String)
-    
+    case EmptyInput(message: String
+    )
+    case MissingAmount(message: String
+    )
+    case InvalidAmount(message: String
+    )
+    case DuplicateMarker(message: String
+    )
+    case MarkerNotAllowed(message: String
+    )
+    case MissingTransferTarget(message: String
+    )
+    case InvalidDate(message: String
+    )
+    case DuplicateDate(message: String
+    )
+    case AmbiguousName(name: String, candidates: [String]
+    )
+    case UnknownName(kind: String, name: String
+    )
+    case SameTarget(message: String
+    )
+    case Domain(code: String, message: String
+    )
 
     
 
@@ -4042,54 +4377,45 @@ public struct FfiConverterTypeQuickAddError: FfiConverterRustBuffer {
         
         case 1: return .EmptyInput(
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
         case 2: return .MissingAmount(
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
         case 3: return .InvalidAmount(
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
         case 4: return .DuplicateMarker(
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
         case 5: return .MarkerNotAllowed(
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
         case 6: return .MissingTransferTarget(
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
         case 7: return .InvalidDate(
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
         case 8: return .DuplicateDate(
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
         case 9: return .AmbiguousName(
-            message: try FfiConverterString.read(from: &buf)
-        )
-        
+            name: try FfiConverterString.read(from: &buf), 
+            candidates: try FfiConverterSequenceString.read(from: &buf)
+            )
         case 10: return .UnknownName(
-            message: try FfiConverterString.read(from: &buf)
-        )
-        
+            kind: try FfiConverterString.read(from: &buf), 
+            name: try FfiConverterString.read(from: &buf)
+            )
         case 11: return .SameTarget(
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
         case 12: return .Domain(
+            code: try FfiConverterString.read(from: &buf), 
             message: try FfiConverterString.read(from: &buf)
-        )
-        
+            )
 
-        default: throw UniffiInternalError.unexpectedEnumCase
+         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
@@ -4099,32 +4425,69 @@ public struct FfiConverterTypeQuickAddError: FfiConverterRustBuffer {
         
 
         
-        case .EmptyInput(_ /* message is ignored*/):
-            writeInt(&buf, Int32(1))
-        case .MissingAmount(_ /* message is ignored*/):
-            writeInt(&buf, Int32(2))
-        case .InvalidAmount(_ /* message is ignored*/):
-            writeInt(&buf, Int32(3))
-        case .DuplicateMarker(_ /* message is ignored*/):
-            writeInt(&buf, Int32(4))
-        case .MarkerNotAllowed(_ /* message is ignored*/):
-            writeInt(&buf, Int32(5))
-        case .MissingTransferTarget(_ /* message is ignored*/):
-            writeInt(&buf, Int32(6))
-        case .InvalidDate(_ /* message is ignored*/):
-            writeInt(&buf, Int32(7))
-        case .DuplicateDate(_ /* message is ignored*/):
-            writeInt(&buf, Int32(8))
-        case .AmbiguousName(_ /* message is ignored*/):
-            writeInt(&buf, Int32(9))
-        case .UnknownName(_ /* message is ignored*/):
-            writeInt(&buf, Int32(10))
-        case .SameTarget(_ /* message is ignored*/):
-            writeInt(&buf, Int32(11))
-        case .Domain(_ /* message is ignored*/):
-            writeInt(&buf, Int32(12))
-
         
+        case let .EmptyInput(message):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .MissingAmount(message):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .InvalidAmount(message):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .DuplicateMarker(message):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .MarkerNotAllowed(message):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .MissingTransferTarget(message):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .InvalidDate(message):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .DuplicateDate(message):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .AmbiguousName(name,candidates):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(name, into: &buf)
+            FfiConverterSequenceString.write(candidates, into: &buf)
+            
+        
+        case let .UnknownName(kind,name):
+            writeInt(&buf, Int32(10))
+            FfiConverterString.write(kind, into: &buf)
+            FfiConverterString.write(name, into: &buf)
+            
+        
+        case let .SameTarget(message):
+            writeInt(&buf, Int32(11))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .Domain(code,message):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(code, into: &buf)
+            FfiConverterString.write(message, into: &buf)
+            
         }
     }
 }
@@ -4564,6 +4927,31 @@ fileprivate struct FfiConverterOptionTypeUuid: FfiConverterRustBuffer {
         case 1: return try FfiConverterTypeUuid.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
     }
 }
 
@@ -5234,7 +5622,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_pending_recurring() != 33812) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_period_totals() != 13368) {
+    if (uniffi_sparagne_core_checksum_method_corehandle_period_totals() != 68) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_preview_merge() != 37701) {
@@ -5246,7 +5634,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_recurring_runs() != 59830) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_resolve_quick_add() != 56027) {
+    if (uniffi_sparagne_core_checksum_method_corehandle_resolve_quick_add() != 42675) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_similar_categories() != 2308) {

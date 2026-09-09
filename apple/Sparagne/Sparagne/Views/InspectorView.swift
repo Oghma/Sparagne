@@ -140,7 +140,7 @@ struct InspectorView: View {
             patch.amount = amount
         }
         if draft.date != row.occurredAt {
-            patch.occurredAt = draft.date
+            patch.occurredAt = CoreDate.offset(draft.date)
         }
         if draft.note != row.note {
             patch.note = draft.note

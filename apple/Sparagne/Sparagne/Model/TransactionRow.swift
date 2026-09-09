@@ -25,8 +25,8 @@ struct NameBook: Sendable {
     func flow(_ id: Uuid?) -> String? { id.flatMap { flows[$0] } }
 }
 
-/// One row of the transactions table: a `TransactionView` with its legs
-/// resolved and its amount signed for display.
+/// One row of the transactions table: a `TransactionView` with its ids
+/// resolved to names and its amount signed for display.
 struct TransactionRow: Identifiable, Hashable, Sendable {
     static let placeholder = "—"
 
@@ -39,6 +39,7 @@ struct TransactionRow: Identifiable, Hashable, Sendable {
     /// transfers left positive and shown in the neutral transfer color.
     let signedAmount: Int64
     let categoryId: Uuid
+    /// Localized for the two system categories, verbatim otherwise.
     let category: String
     let note: String
     let voided: Bool
@@ -62,42 +63,41 @@ struct TransactionRow: Identifiable, Hashable, Sendable {
         absoluteAmount = view.amount
         signedAmount = view.kind == .expense ? -view.amount : view.amount
         categoryId = view.categoryId
-        category = view.category
+        category = Self.categoryLabel(view)
         note = view.note ?? ""
         voided = view.voided
 
-        var walletLegs: [(id: Uuid, amount: Int64)] = []
-        var flowLegs: [(id: Uuid, amount: Int64)] = []
-        for leg in view.legs {
-            switch leg.target {
-            case .wallet(let walletId): walletLegs.append((walletId, leg.amount))
-            case .flow(let flowId): flowLegs.append((flowId, leg.amount))
-            }
-        }
-
+        // The core already sorted the legs out by kind (`core/src/query.rs`).
         switch view.kind {
         case .transferWallet:
-            let source = walletLegs.first { $0.amount < 0 } ?? walletLegs.first
-            let target = walletLegs.first { $0.amount > 0 } ?? walletLegs.last
-            walletId = source?.id
-            destinationId = target?.id
+            walletId = view.fromId
+            destinationId = view.toId
             flowId = nil
-            walletDisplay = Self.arrow(names.wallet(source?.id), names.wallet(target?.id))
+            walletDisplay = Self.arrow(names.wallet(view.fromId), names.wallet(view.toId))
             envelopeDisplay = Self.placeholder
         case .transferFlow:
-            let source = flowLegs.first { $0.amount < 0 } ?? flowLegs.first
-            let target = flowLegs.first { $0.amount > 0 } ?? flowLegs.last
-            flowId = source?.id
-            destinationId = target?.id
+            flowId = view.fromId
+            destinationId = view.toId
             walletId = nil
             walletDisplay = Self.placeholder
-            envelopeDisplay = Self.arrow(names.flow(source?.id), names.flow(target?.id))
+            envelopeDisplay = Self.arrow(names.flow(view.fromId), names.flow(view.toId))
         case .income, .expense, .refund:
-            walletId = walletLegs.first?.id
-            flowId = flowLegs.first?.id
+            walletId = view.walletId
+            flowId = view.flowId
             destinationId = nil
-            walletDisplay = names.wallet(walletLegs.first?.id) ?? Self.placeholder
-            envelopeDisplay = names.flow(flowLegs.first?.id) ?? Self.placeholder
+            walletDisplay = names.wallet(view.walletId) ?? Self.placeholder
+            envelopeDisplay = names.flow(view.flowId) ?? Self.placeholder
+        }
+    }
+
+    /// System categories are named in English by the core (`Opening`,
+    /// `Uncategorized`); the UI shows the localized term instead.
+    private static func categoryLabel(_ view: TransactionView) -> String {
+        guard view.categoryIsSystem else { return view.category }
+        switch view.category.lowercased() {
+        case "opening": return String(localized: "Opening")
+        case "uncategorized": return String(localized: "Uncategorized")
+        default: return view.category
         }
     }
 

@@ -6,46 +6,19 @@
 //! [`Flow::apply_leg_change`](crate::Flow::apply_leg_change), so caps and
 //! non-negativity are re-checked exactly as on create.
 
-use chrono::{DateTime, FixedOffset};
 use rusqlite::{OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
-use crate::{CommandEnvelope, DomainError, Result, TransactionKind};
-
-/// Borrowed view of `Command::UpdateTransaction`.
-pub(super) struct TransactionPatch<'a> {
-    pub transaction_id: Uuid,
-    pub amount: Option<i64>,
-    pub occurred_at: Option<DateTime<FixedOffset>>,
-    pub category: Option<&'a str>,
-    pub note: Option<&'a str>,
-    pub wallet_id: Option<Uuid>,
-    pub flow_id: Option<Uuid>,
-    pub from_id: Option<Uuid>,
-    pub to_id: Option<Uuid>,
-}
-
-impl TransactionPatch<'_> {
-    /// A patch that carries no field at all changes nothing.
-    fn is_empty(&self) -> bool {
-        self.amount.is_none()
-            && self.occurred_at.is_none()
-            && self.category.is_none()
-            && self.note.is_none()
-            && self.wallet_id.is_none()
-            && self.flow_id.is_none()
-            && self.from_id.is_none()
-            && self.to_id.is_none()
-    }
-}
+use crate::{CommandEnvelope, DomainError, Result, TransactionKind, TransactionPatch};
 
 pub(super) fn update_transaction(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
-    patch: &TransactionPatch<'_>,
+    transaction_id: Uuid,
+    patch: &TransactionPatch,
 ) -> Result<()> {
     super::require_vault(tx, env.vault_id)?;
-    let row = load_transaction(tx, env.vault_id, patch.transaction_id)?;
+    let row = load_transaction(tx, env.vault_id, transaction_id)?;
     if row.voided {
         return Err(DomainError::InvalidCommand(
             "transaction is voided".to_string(),
@@ -59,7 +32,7 @@ pub(super) fn update_transaction(
         return Err(DomainError::InvalidAmount("amount must be > 0".to_string()));
     }
 
-    let old_legs = load_legs(tx, patch.transaction_id)?;
+    let old_legs = load_legs(tx, transaction_id)?;
     let (new_legs, category_id) = match row.kind {
         TransactionKind::Income | TransactionKind::Expense | TransactionKind::Refund => {
             entry_legs(tx, env, patch, &row, &old_legs, amount)?
@@ -74,7 +47,7 @@ pub(super) fn update_transaction(
 
     apply_balance_changes(tx, env.vault_id, &old_legs, &new_legs)?;
 
-    let note = match patch.note {
+    let note = match patch.note.as_deref() {
         Some(text) => super::normalize_note(Some(text)),
         None => row.note,
     };
@@ -92,17 +65,17 @@ pub(super) fn update_transaction(
             occurred_offset,
             category_id,
             note,
-            patch.transaction_id
+            transaction_id
         ],
     )?;
     tx.execute(
         "DELETE FROM legs WHERE transaction_id = ?1",
-        params![patch.transaction_id],
+        params![transaction_id],
     )?;
     let [first, second] = new_legs;
     super::insert_leg(
         tx,
-        patch.transaction_id,
+        transaction_id,
         0,
         first.kind.as_str(),
         first.id,
@@ -110,7 +83,7 @@ pub(super) fn update_transaction(
     )?;
     super::insert_leg(
         tx,
-        patch.transaction_id,
+        transaction_id,
         1,
         second.kind.as_str(),
         second.id,
@@ -128,7 +101,7 @@ pub(super) fn update_transaction(
 fn entry_legs(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
-    patch: &TransactionPatch<'_>,
+    patch: &TransactionPatch,
     row: &Row,
     old_legs: &[Leg],
     amount: i64,
@@ -148,7 +121,7 @@ fn entry_legs(
     };
     super::resolve_wallet(tx, env.vault_id, Some(wallet_id))?;
     require_active_flow(tx, env.vault_id, flow_id)?;
-    let category_id = match patch.category {
+    let category_id = match patch.category.as_deref() {
         Some(text) => super::resolve_category(tx, env, Some(text))?,
         None => row.category_id,
     };
@@ -171,7 +144,7 @@ fn entry_legs(
 fn transfer_legs(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
-    patch: &TransactionPatch<'_>,
+    patch: &TransactionPatch,
     row: &Row,
     old_legs: &[Leg],
     kind: Target,

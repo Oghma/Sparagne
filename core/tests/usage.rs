@@ -53,6 +53,12 @@ fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vau
     assert_eq!(view.amount, 500);
     assert!(!view.voided);
     assert_eq!(view.legs.len(), 2);
+    // The legs are also reported already sorted out by kind.
+    assert_eq!(view.wallet_id, Some(fx.wallet));
+    assert_eq!(view.flow_id, Some(fx.unallocated));
+    assert_eq!(view.from_id, None);
+    assert_eq!(view.to_id, None);
+    assert!(!view.category_is_system);
 
     run(
         &mut fx.core,
@@ -82,6 +88,59 @@ fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vau
         wrong_vault.unwrap_err(),
         DomainError::NotFound("transaction".to_string())
     );
+}
+
+#[test]
+fn listed_rows_carry_their_shape() {
+    let mut fx = setup();
+    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 1000))
+        .result_id
+        .unwrap();
+    let expense = run(
+        &mut fx.core,
+        fx.vault,
+        Command::Expense(entry(100, Some(fx.wallet), None, Some("Food"), T0 + 1)),
+    )
+    .result_id
+    .unwrap();
+    let transfer = run(
+        &mut fx.core,
+        fx.vault,
+        Command::TransferWallet {
+            amount: 50,
+            from_wallet_id: fx.wallet,
+            to_wallet_id: bank,
+            note: None,
+            occurred_at: at(T0 + 2),
+        },
+    )
+    .result_id
+    .unwrap();
+
+    let rows = list(&fx.core, fx.vault, &all());
+    let find = |id: Uuid| rows.iter().find(|t| t.id == id).unwrap().clone();
+
+    let row = find(expense);
+    assert_eq!(row.wallet_id, Some(fx.wallet));
+    assert_eq!(row.flow_id, Some(fx.unallocated));
+    assert_eq!(row.from_id, None);
+    assert_eq!(row.to_id, None);
+    assert!(!row.category_is_system);
+
+    // Source is the negative leg, destination the positive one.
+    let row = find(transfer);
+    assert_eq!(row.from_id, Some(fx.wallet));
+    assert_eq!(row.to_id, Some(bank));
+    assert_eq!(row.wallet_id, None);
+    assert_eq!(row.flow_id, None);
+
+    // The opening balance sits on the system category `Opening`.
+    let opening = rows
+        .iter()
+        .find(|t| t.kind == TransactionKind::Income)
+        .unwrap();
+    assert!(opening.category_is_system);
+    assert_eq!(opening.category, "Opening");
 }
 
 // -- recent_usage -----------------------------------------------------------
@@ -304,7 +363,7 @@ fn period_totals_treats_refunds_as_expense_reduction() {
 
     let totals = fx
         .core
-        .period_totals(fx.vault, since_utc(T0), since_utc(T0 + 100))
+        .period_totals(fx.vault, Some(since_utc(T0)), Some(since_utc(T0 + 100)))
         .unwrap();
     assert_eq!(totals.income, 1000);
     assert_eq!(totals.expense, 300);
@@ -351,7 +410,7 @@ fn period_totals_ignores_transfers_and_voided() {
 
     let totals = fx
         .core
-        .period_totals(fx.vault, since_utc(T0), since_utc(T0 + 10))
+        .period_totals(fx.vault, Some(since_utc(T0)), Some(since_utc(T0 + 10)))
         .unwrap();
     assert_eq!(totals.income, 1000);
     assert_eq!(totals.expense, 0);
@@ -375,9 +434,39 @@ fn period_totals_bounds_are_from_inclusive_to_exclusive() {
 
     let totals = fx
         .core
-        .period_totals(fx.vault, since_utc(T0), since_utc(T0 + 5))
+        .period_totals(fx.vault, Some(since_utc(T0)), Some(since_utc(T0 + 5)))
         .unwrap();
     assert_eq!(totals.income, 10);
+}
+
+#[test]
+fn period_totals_without_bounds_covers_everything() {
+    let mut fx = setup();
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::Income(entry(10, None, None, None, T0)),
+    );
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::Income(entry(20, None, None, None, T0 + 5)),
+    );
+
+    let all_time = fx.core.period_totals(fx.vault, None, None).unwrap();
+    assert_eq!(all_time.income, 30);
+
+    // One open end still filters on the other.
+    let from_only = fx
+        .core
+        .period_totals(fx.vault, Some(since_utc(T0 + 5)), None)
+        .unwrap();
+    assert_eq!(from_only.income, 20);
+    let to_only = fx
+        .core
+        .period_totals(fx.vault, None, Some(since_utc(T0 + 5)))
+        .unwrap();
+    assert_eq!(to_only.income, 10);
 }
 
 #[test]
@@ -385,7 +474,7 @@ fn period_totals_rejects_invalid_range() {
     let fx = setup();
     let err = fx
         .core
-        .period_totals(fx.vault, since_utc(T0 + 1), since_utc(T0))
+        .period_totals(fx.vault, Some(since_utc(T0 + 1)), Some(since_utc(T0)))
         .unwrap_err();
     assert_eq!(
         err,
@@ -393,7 +482,7 @@ fn period_totals_rejects_invalid_range() {
     );
     let err_eq = fx
         .core
-        .period_totals(fx.vault, since_utc(T0), since_utc(T0))
+        .period_totals(fx.vault, Some(since_utc(T0)), Some(since_utc(T0)))
         .unwrap_err();
     assert_eq!(
         err_eq,

@@ -3,7 +3,8 @@
 //! Two stages: [`parse`] turns a line of text into a [`QuickAdd`] with no
 //! database access, then [`Core::resolve_quick_add`] resolves the wallet and
 //! flow names it carries against a vault's active entities and produces a
-//! [`Command`] ready for [`crate::Core::execute`].
+//! [`ResolvedQuickAdd`]: the [`Command`] ready for [`crate::Core::execute`]
+//! and the ids its names resolved to.
 //!
 //! Grammar (see `docs/v2/DISTILLATO_V1.md` §3.1):
 //!
@@ -20,55 +21,140 @@ use uuid::Uuid;
 use crate::{Command, Core, Currency, DomainError, Entry, Money, TransactionKind};
 
 /// Error raised while parsing or resolving a quick-add line.
+///
+/// Every variant has named fields so the app receives the data, not only a
+/// sentence: [`Self::AmbiguousName`] carries the candidates to offer, and
+/// [`Self::UnknownName`] the kind and the name that missed. The variants that
+/// have nothing else to say carry their rendered `message`, and the wrapped
+/// [`DomainError`] crosses as its stable `code` plus its message, because a
+/// nested error cannot travel over the FFI.
 #[derive(Error, Debug, Clone, PartialEq, Eq, uniffi::Error)]
-#[uniffi(flat_error)]
 pub enum QuickAddError {
-    #[error("the line is empty")]
-    EmptyInput,
-    #[error("the amount must be the first token")]
-    MissingAmount,
-    #[error("invalid amount: {0}")]
-    InvalidAmount(String),
-    #[error("duplicate '{0}' marker")]
-    DuplicateMarker(char),
-    #[error("marker '{marker}' is not allowed here")]
-    MarkerNotAllowed { marker: char },
-    #[error("a transfer needs two '{0}' targets")]
-    MissingTransferTarget(char),
-    #[error("invalid date '{0}'")]
-    InvalidDate(String),
-    #[error("only one date token is allowed")]
-    DuplicateDate,
-    #[error("'{name}' is ambiguous among {candidates:?}")]
+    #[error("{message}")]
+    EmptyInput { message: String },
+    #[error("{message}")]
+    MissingAmount { message: String },
+    #[error("{message}")]
+    InvalidAmount { message: String },
+    #[error("{message}")]
+    DuplicateMarker { message: String },
+    #[error("{message}")]
+    MarkerNotAllowed { message: String },
+    #[error("{message}")]
+    MissingTransferTarget { message: String },
+    #[error("{message}")]
+    InvalidDate { message: String },
+    #[error("{message}")]
+    DuplicateDate { message: String },
+    #[error("'{name}' is ambiguous among {}", candidates.join(", "))]
     AmbiguousName {
         name: String,
         candidates: Vec<String>,
     },
     #[error("unknown {kind} '{name}'")]
-    UnknownName { kind: &'static str, name: String },
-    #[error("the transfer source and target are the same")]
-    SameTarget,
-    #[error(transparent)]
-    Domain(#[from] DomainError),
+    UnknownName { kind: String, name: String },
+    #[error("{message}")]
+    SameTarget { message: String },
+    #[error("{message}")]
+    Domain { code: String, message: String },
 }
 
 impl QuickAddError {
-    /// Stable snake_case code for clients.
+    /// Stable snake_case code for clients. A wrapped [`DomainError`] reports
+    /// its own code.
     #[must_use]
-    pub const fn code(&self) -> &'static str {
+    pub fn code(&self) -> &str {
         match self {
-            Self::EmptyInput => "empty_input",
-            Self::MissingAmount => "missing_amount",
-            Self::InvalidAmount(_) => "invalid_amount",
-            Self::DuplicateMarker(_) => "duplicate_marker",
+            Self::EmptyInput { .. } => "empty_input",
+            Self::MissingAmount { .. } => "missing_amount",
+            Self::InvalidAmount { .. } => "invalid_amount",
+            Self::DuplicateMarker { .. } => "duplicate_marker",
             Self::MarkerNotAllowed { .. } => "marker_not_allowed",
-            Self::MissingTransferTarget(_) => "missing_transfer_target",
-            Self::InvalidDate(_) => "invalid_date",
-            Self::DuplicateDate => "duplicate_date",
+            Self::MissingTransferTarget { .. } => "missing_transfer_target",
+            Self::InvalidDate { .. } => "invalid_date",
+            Self::DuplicateDate { .. } => "duplicate_date",
             Self::AmbiguousName { .. } => "ambiguous_name",
             Self::UnknownName { .. } => "unknown_name",
-            Self::SameTarget => "same_target",
-            Self::Domain(e) => e.code(),
+            Self::SameTarget { .. } => "same_target",
+            Self::Domain { code, .. } => code,
+        }
+    }
+
+    /// The line has nothing on it.
+    #[must_use]
+    pub fn empty_input() -> Self {
+        Self::EmptyInput {
+            message: "the line is empty".to_string(),
+        }
+    }
+
+    /// The amount is missing or is not the first token.
+    #[must_use]
+    pub fn missing_amount() -> Self {
+        Self::MissingAmount {
+            message: "the amount must be the first token".to_string(),
+        }
+    }
+
+    #[must_use]
+    pub fn invalid_amount(detail: impl std::fmt::Display) -> Self {
+        Self::InvalidAmount {
+            message: format!("invalid amount: {detail}"),
+        }
+    }
+
+    /// The same marker appears twice on one line.
+    #[must_use]
+    pub fn duplicate_marker(marker: char) -> Self {
+        Self::DuplicateMarker {
+            message: format!("duplicate '{marker}' marker"),
+        }
+    }
+
+    /// A marker that this line shape does not accept, e.g. `#` on a transfer.
+    #[must_use]
+    pub fn marker_not_allowed(marker: char) -> Self {
+        Self::MarkerNotAllowed {
+            message: format!("marker '{marker}' is not allowed here"),
+        }
+    }
+
+    /// A transfer names fewer than two endpoints.
+    #[must_use]
+    pub fn missing_transfer_target(marker: char) -> Self {
+        Self::MissingTransferTarget {
+            message: format!("a transfer needs two '{marker}' targets"),
+        }
+    }
+
+    #[must_use]
+    pub fn invalid_date(token: impl std::fmt::Display) -> Self {
+        Self::InvalidDate {
+            message: format!("invalid date '{token}'"),
+        }
+    }
+
+    #[must_use]
+    pub fn duplicate_date() -> Self {
+        Self::DuplicateDate {
+            message: "only one date token is allowed".to_string(),
+        }
+    }
+
+    /// The two endpoints of a transfer resolve to the same entity.
+    #[must_use]
+    pub fn same_target() -> Self {
+        Self::SameTarget {
+            message: "the transfer source and target are the same".to_string(),
+        }
+    }
+}
+
+impl From<DomainError> for QuickAddError {
+    fn from(err: DomainError) -> Self {
+        Self::Domain {
+            code: err.code().to_string(),
+            message: err.to_string(),
         }
     }
 }
@@ -102,13 +188,13 @@ impl DateSpec {
             Self::Today => Ok(today),
             Self::Yesterday => today
                 .pred_opt()
-                .ok_or_else(|| QuickAddError::InvalidDate("yesterday".to_string())),
+                .ok_or_else(|| QuickAddError::invalid_date("yesterday")),
             Self::DaysAgo(n) => today
                 .checked_sub_signed(chrono::Duration::days(i64::from(n)))
-                .ok_or_else(|| QuickAddError::InvalidDate(format!("-{n}d"))),
+                .ok_or_else(|| QuickAddError::invalid_date(format!("-{n}d"))),
             Self::DayMonth { day, month } => {
                 NaiveDate::from_ymd_opt(today.year(), u32::from(month), u32::from(day))
-                    .ok_or_else(|| QuickAddError::InvalidDate(format!("{day:02}/{month:02}")))
+                    .ok_or_else(|| QuickAddError::invalid_date(format!("{day:02}/{month:02}")))
             }
             Self::Date(date) => Ok(date),
         }
@@ -148,7 +234,7 @@ pub enum QuickAdd {
 pub fn parse(input: &str, currency: Currency) -> Result<QuickAdd, QuickAddError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        return Err(QuickAddError::EmptyInput);
+        return Err(QuickAddError::empty_input());
     }
 
     if let Some(rest) = strip_ci_prefix(trimmed, "tw>") {
@@ -179,7 +265,7 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAdd, QuickAddError>
 
     let amount_token = match amount_token {
         Some(t) if !t.is_empty() => t,
-        _ => return Err(QuickAddError::MissingAmount),
+        _ => return Err(QuickAddError::missing_amount()),
     };
     let amount = parse_positive_amount(amount_token, currency)?;
 
@@ -194,7 +280,7 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAdd, QuickAddError>
             if rest.is_empty() {
                 note_tokens.push(token);
             } else if category.is_some() {
-                return Err(QuickAddError::DuplicateMarker('#'));
+                return Err(QuickAddError::duplicate_marker('#'));
             } else {
                 category = Some(rest.to_string());
             }
@@ -202,7 +288,7 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAdd, QuickAddError>
             if rest.is_empty() {
                 note_tokens.push(token);
             } else if wallet.is_some() {
-                return Err(QuickAddError::DuplicateMarker('@'));
+                return Err(QuickAddError::duplicate_marker('@'));
             } else {
                 wallet = Some(rest.to_string());
             }
@@ -210,13 +296,13 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAdd, QuickAddError>
             if rest.is_empty() {
                 note_tokens.push(token);
             } else if flow.is_some() {
-                return Err(QuickAddError::DuplicateMarker('>'));
+                return Err(QuickAddError::duplicate_marker('>'));
             } else {
                 flow = Some(rest.to_string());
             }
         } else if let Some(result) = try_parse_date_token(token) {
             if date.is_some() {
-                return Err(QuickAddError::DuplicateDate);
+                return Err(QuickAddError::duplicate_date());
             }
             date = Some(result?);
         } else {
@@ -250,7 +336,7 @@ fn parse_transfer(
     let amount_token = tokens
         .first()
         .copied()
-        .ok_or(QuickAddError::MissingAmount)?;
+        .ok_or_else(QuickAddError::missing_amount)?;
     let amount = parse_positive_amount(amount_token, currency)?;
 
     let (marker, forbidden) = match kind {
@@ -267,13 +353,13 @@ fn parse_transfer(
             if tag.is_empty() {
                 note_tokens.push(token);
             } else {
-                return Err(QuickAddError::MarkerNotAllowed { marker: '#' });
+                return Err(QuickAddError::marker_not_allowed('#'));
             }
         } else if let Some(tag) = token.strip_prefix(marker) {
             if tag.is_empty() {
                 note_tokens.push(token);
             } else if targets.len() >= 2 {
-                return Err(QuickAddError::DuplicateMarker(marker));
+                return Err(QuickAddError::duplicate_marker(marker));
             } else {
                 targets.push(tag.to_string());
             }
@@ -281,11 +367,11 @@ fn parse_transfer(
             if tag.is_empty() {
                 note_tokens.push(token);
             } else {
-                return Err(QuickAddError::MarkerNotAllowed { marker: forbidden });
+                return Err(QuickAddError::marker_not_allowed(forbidden));
             }
         } else if let Some(result) = try_parse_date_token(token) {
             if date.is_some() {
-                return Err(QuickAddError::DuplicateDate);
+                return Err(QuickAddError::duplicate_date());
             }
             date = Some(result?);
         } else {
@@ -294,7 +380,7 @@ fn parse_transfer(
     }
 
     if targets.len() < 2 {
-        return Err(QuickAddError::MissingTransferTarget(marker));
+        return Err(QuickAddError::missing_transfer_target(marker));
     }
     let from = targets[0].clone();
     let to = targets[1].clone();
@@ -319,11 +405,10 @@ fn parse_transfer(
 }
 
 fn parse_positive_amount(token: &str, currency: Currency) -> Result<i64, QuickAddError> {
-    let amount = Money::parse_major(token, currency)
-        .map_err(|e| QuickAddError::InvalidAmount(e.to_string()))?;
+    let amount = Money::parse_major(token, currency).map_err(QuickAddError::invalid_amount)?;
     if amount.minor() <= 0 {
-        return Err(QuickAddError::InvalidAmount(
-            "amount must be greater than zero".to_string(),
+        return Err(QuickAddError::invalid_amount(
+            "amount must be greater than zero",
         ));
     }
     Ok(amount.minor())
@@ -367,12 +452,12 @@ fn try_parse_date_token(token: &str) -> Option<Result<DateSpec, QuickAddError>> 
         return Some(
             digits
                 .parse::<u32>()
-                .map_err(|_| QuickAddError::InvalidDate(token.to_string()))
+                .map_err(|_| QuickAddError::invalid_date(token))
                 .and_then(|n| {
                     if n >= 1 {
                         Ok(DateSpec::DaysAgo(n))
                     } else {
-                        Err(QuickAddError::InvalidDate(token.to_string()))
+                        Err(QuickAddError::invalid_date(token))
                     }
                 }),
         );
@@ -391,7 +476,7 @@ fn try_parse_date_token(token: &str) -> Option<Result<DateSpec, QuickAddError>> 
                     parts[0]
                         .parse::<u8>()
                         .and_then(|day| parts[1].parse::<u8>().map(|month| (day, month)))
-                        .map_err(|_| QuickAddError::InvalidDate(token.to_string()))
+                        .map_err(|_| QuickAddError::invalid_date(token))
                         .map(|(day, month)| DateSpec::DayMonth { day, month }),
                 );
             }
@@ -420,7 +505,7 @@ fn split_numeric(token: &str, sep: char) -> Option<Vec<&str>> {
 }
 
 fn build_date(year: &str, month: &str, day: &str, token: &str) -> Result<DateSpec, QuickAddError> {
-    let invalid = || QuickAddError::InvalidDate(token.to_string());
+    let invalid = || QuickAddError::invalid_date(token);
     let year: i32 = year.parse().map_err(|_| invalid())?;
     let month: u32 = month.parse().map_err(|_| invalid())?;
     let day: u32 = day.parse().map_err(|_| invalid())?;
@@ -433,20 +518,41 @@ fn build_date(year: &str, month: &str, day: &str, token: &str) -> Result<DateSpe
 /// flow.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct QuickAddDefaults {
+    #[uniffi(default = None)]
+    pub wallet_id: Option<Uuid>,
+    #[uniffi(default = None)]
+    pub flow_id: Option<Uuid>,
+}
+
+/// A resolved quick-add line: the command to execute plus the entities its
+/// names resolved to.
+///
+/// The ids are the ones the command carries, handed over separately so the app
+/// does not have to take the command apart to learn what the line meant (for
+/// instance to keep the wallet and flow as sticky defaults). Entries fill
+/// `wallet_id` and `flow_id`; transfers fill `from_id` and `to_id` with the
+/// source and the destination, both wallets or both flows depending on the
+/// kind.
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct ResolvedQuickAdd {
+    pub command: Command,
     pub wallet_id: Option<Uuid>,
     pub flow_id: Option<Uuid>,
+    pub from_id: Option<Uuid>,
+    pub to_id: Option<Uuid>,
 }
 
 impl Core {
     /// Resolves a parsed quick-add line against `vault_id`'s active wallets
-    /// and flows and builds the [`Command`] to execute.
+    /// and flows and builds the [`Command`] to execute, together with the ids
+    /// the line resolved to.
     pub fn resolve_quick_add(
         &self,
         vault_id: Uuid,
         parsed: &QuickAdd,
         now: DateTime<FixedOffset>,
         defaults: &QuickAddDefaults,
-    ) -> Result<Command, QuickAddError> {
+    ) -> Result<ResolvedQuickAdd, QuickAddError> {
         let snapshot = self.snapshot(vault_id)?;
         let wallets: Vec<(Uuid, &str)> = snapshot
             .wallets
@@ -487,13 +593,20 @@ impl Core {
                     note: note.clone(),
                     occurred_at: resolve_occurred_at(date, now)?,
                 };
-                Ok(match kind {
+                let command = match kind {
                     TransactionKind::Income => Command::Income(entry),
                     TransactionKind::Expense => Command::Expense(entry),
                     TransactionKind::Refund => Command::Refund(entry),
                     TransactionKind::TransferWallet | TransactionKind::TransferFlow => {
                         unreachable!("quick_add entries are never transfers")
                     }
+                };
+                Ok(ResolvedQuickAdd {
+                    command,
+                    wallet_id,
+                    flow_id,
+                    from_id: None,
+                    to_id: None,
                 })
             }
             QuickAdd::TransferWallet {
@@ -506,14 +619,20 @@ impl Core {
                 let from_wallet_id = resolve_name(&wallets, from, "wallet")?;
                 let to_wallet_id = resolve_name(&wallets, to, "wallet")?;
                 if from_wallet_id == to_wallet_id {
-                    return Err(QuickAddError::SameTarget);
+                    return Err(QuickAddError::same_target());
                 }
-                Ok(Command::TransferWallet {
-                    amount: *amount,
-                    from_wallet_id,
-                    to_wallet_id,
-                    note: note.clone(),
-                    occurred_at: resolve_occurred_at(date, now)?,
+                Ok(ResolvedQuickAdd {
+                    command: Command::TransferWallet {
+                        amount: *amount,
+                        from_wallet_id,
+                        to_wallet_id,
+                        note: note.clone(),
+                        occurred_at: resolve_occurred_at(date, now)?,
+                    },
+                    wallet_id: None,
+                    flow_id: None,
+                    from_id: Some(from_wallet_id),
+                    to_id: Some(to_wallet_id),
                 })
             }
             QuickAdd::TransferFlow {
@@ -526,14 +645,20 @@ impl Core {
                 let from_flow_id = resolve_name(&flows, from, "flow")?;
                 let to_flow_id = resolve_name(&flows, to, "flow")?;
                 if from_flow_id == to_flow_id {
-                    return Err(QuickAddError::SameTarget);
+                    return Err(QuickAddError::same_target());
                 }
-                Ok(Command::TransferFlow {
-                    amount: *amount,
-                    from_flow_id,
-                    to_flow_id,
-                    note: note.clone(),
-                    occurred_at: resolve_occurred_at(date, now)?,
+                Ok(ResolvedQuickAdd {
+                    command: Command::TransferFlow {
+                        amount: *amount,
+                        from_flow_id,
+                        to_flow_id,
+                        note: note.clone(),
+                        occurred_at: resolve_occurred_at(date, now)?,
+                    },
+                    wallet_id: None,
+                    flow_id: None,
+                    from_id: Some(from_flow_id),
+                    to_id: Some(to_flow_id),
                 })
             }
         }
@@ -555,7 +680,7 @@ fn resolve_occurred_at(
     offset
         .from_local_datetime(&naive)
         .single()
-        .ok_or_else(|| QuickAddError::InvalidDate("ambiguous local time".to_string()))
+        .ok_or_else(|| QuickAddError::invalid_date("ambiguous local time"))
 }
 
 /// Matches `query` case-insensitively against `candidates`, priority exact >
@@ -591,7 +716,7 @@ fn resolve_name(
 
     match tier.as_slice() {
         [] => Err(QuickAddError::UnknownName {
-            kind,
+            kind: kind.to_string(),
             name: query.to_string(),
         }),
         [(id, _)] => Ok(*id),
@@ -721,7 +846,7 @@ mod tests {
         // "rent" glued-refund-parses as amount "ent", which is not a number.
         assert!(matches!(
             parse_err("rent 50"),
-            QuickAddError::InvalidAmount(_)
+            QuickAddError::InvalidAmount { .. }
         ));
     }
 
@@ -770,26 +895,26 @@ mod tests {
 
     #[test]
     fn duplicate_category_marker_is_an_error() {
-        assert!(matches!(
+        assert_eq!(
             parse_err("15 pizza #food #snack"),
-            QuickAddError::DuplicateMarker('#')
-        ));
+            QuickAddError::duplicate_marker('#')
+        );
     }
 
     #[test]
     fn duplicate_wallet_marker_is_an_error() {
-        assert!(matches!(
+        assert_eq!(
             parse_err("15 pizza @cash @card"),
-            QuickAddError::DuplicateMarker('@')
-        ));
+            QuickAddError::duplicate_marker('@')
+        );
     }
 
     #[test]
     fn duplicate_flow_marker_is_an_error() {
-        assert!(matches!(
+        assert_eq!(
             parse_err("15 pizza >ufficio >casa"),
-            QuickAddError::DuplicateMarker('>')
-        ));
+            QuickAddError::duplicate_marker('>')
+        );
     }
 
     // -- transfers ----------------------------------------------------------
@@ -842,42 +967,42 @@ mod tests {
 
     #[test]
     fn transfer_wallet_requires_two_targets() {
-        assert!(matches!(
+        assert_eq!(
             parse_err("tw>50 @bank"),
-            QuickAddError::MissingTransferTarget('@')
-        ));
+            QuickAddError::missing_transfer_target('@')
+        );
     }
 
     #[test]
     fn transfer_flow_requires_two_targets() {
-        assert!(matches!(
+        assert_eq!(
             parse_err("tf>50 >food"),
-            QuickAddError::MissingTransferTarget('>')
-        ));
+            QuickAddError::missing_transfer_target('>')
+        );
     }
 
     #[test]
     fn transfer_rejects_category_marker() {
-        assert!(matches!(
+        assert_eq!(
             parse_err("tw>50 @bank @cash #food"),
-            QuickAddError::MarkerNotAllowed { marker: '#' }
-        ));
+            QuickAddError::marker_not_allowed('#')
+        );
     }
 
     #[test]
     fn transfer_wallet_rejects_flow_marker() {
-        assert!(matches!(
+        assert_eq!(
             parse_err("tw>50 @bank @cash >food"),
-            QuickAddError::MarkerNotAllowed { marker: '>' }
-        ));
+            QuickAddError::marker_not_allowed('>')
+        );
     }
 
     #[test]
     fn transfer_flow_rejects_wallet_marker() {
-        assert!(matches!(
+        assert_eq!(
             parse_err("tf>50 >food >savings @cash"),
-            QuickAddError::MarkerNotAllowed { marker: '@' }
-        ));
+            QuickAddError::marker_not_allowed('@')
+        );
     }
 
     // -- date tokens ----------------------------------------------------------
@@ -910,7 +1035,7 @@ mod tests {
     fn date_days_ago_zero_is_invalid() {
         assert!(matches!(
             parse_err("10 lunch -0d"),
-            QuickAddError::InvalidDate(_)
+            QuickAddError::InvalidDate { .. }
         ));
     }
 
@@ -958,16 +1083,16 @@ mod tests {
     fn date_invalid_calendar_date_is_an_error() {
         assert!(matches!(
             parse_err("10 lunch 31/02/2024"),
-            QuickAddError::InvalidDate(_)
+            QuickAddError::InvalidDate { .. }
         ));
     }
 
     #[test]
     fn duplicate_date_token_is_an_error() {
-        assert!(matches!(
+        assert_eq!(
             parse_err("10 lunch oggi ieri"),
-            QuickAddError::DuplicateDate
-        ));
+            QuickAddError::duplicate_date()
+        );
     }
 
     #[test]
@@ -1007,28 +1132,28 @@ mod tests {
     fn too_many_decimals_is_invalid() {
         assert!(matches!(
             parse_err("12.345 x"),
-            QuickAddError::InvalidAmount(_)
+            QuickAddError::InvalidAmount { .. }
         ));
     }
 
     #[test]
     fn empty_input_is_an_error() {
-        assert_eq!(parse_err(""), QuickAddError::EmptyInput);
-        assert_eq!(parse_err("   "), QuickAddError::EmptyInput);
+        assert_eq!(parse_err(""), QuickAddError::empty_input());
+        assert_eq!(parse_err("   "), QuickAddError::empty_input());
     }
 
     #[test]
     fn only_a_sign_is_missing_amount() {
-        assert_eq!(parse_err("-"), QuickAddError::MissingAmount);
-        assert_eq!(parse_err("+"), QuickAddError::MissingAmount);
-        assert_eq!(parse_err("r"), QuickAddError::MissingAmount);
+        assert_eq!(parse_err("-"), QuickAddError::missing_amount());
+        assert_eq!(parse_err("+"), QuickAddError::missing_amount());
+        assert_eq!(parse_err("r"), QuickAddError::missing_amount());
     }
 
     #[test]
     fn negative_zero_is_invalid() {
         assert!(matches!(
             parse_err("-0.00 x"),
-            QuickAddError::InvalidAmount(_)
+            QuickAddError::InvalidAmount { .. }
         ));
     }
 
@@ -1036,7 +1161,7 @@ mod tests {
     fn huge_amount_is_invalid() {
         assert!(matches!(
             parse_err("99999999999999999999 x"),
-            QuickAddError::InvalidAmount(_)
+            QuickAddError::InvalidAmount { .. }
         ));
     }
 }

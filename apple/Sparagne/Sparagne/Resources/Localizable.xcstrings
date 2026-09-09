@@ -545,6 +545,22 @@
         }
       }
     },
+    "Opening": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apertura"
+          }
+        }
+      }
+    },
     "Opening allocation": {
       "localizations": {
         "en": {
@@ -861,6 +877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Non in flow"
+          }
+        }
+      }
+    },
+    "Uncategorized": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uncategorized"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senza categoria"
           }
         }
       }

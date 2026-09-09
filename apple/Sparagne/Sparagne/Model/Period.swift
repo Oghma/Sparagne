@@ -20,8 +20,8 @@ enum Period: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// `nil` bounds mean "unfiltered"; `totalsBounds` still needs concrete
-    /// ones, because `period_totals` rejects an open range.
+    /// `nil` bounds mean "unfiltered": both the transaction filter and
+    /// `period_totals` take open ends.
     func bounds(now: Date = Date(), calendar: Calendar = .current) -> (from: UtcDateTime?, to: UtcDateTime?) {
         switch self {
         case .all:
@@ -30,12 +30,6 @@ enum Period: String, CaseIterable, Identifiable, Sendable {
             let range = dateRange(now: now, calendar: calendar)
             return (CoreDate.utcString(range.lowerBound), CoreDate.utcString(range.upperBound))
         }
-    }
-
-    /// Always-concrete bounds, for `Core::period_totals`.
-    func totalsBounds(now: Date = Date(), calendar: Calendar = .current) -> (from: UtcDateTime, to: UtcDateTime) {
-        let range = dateRange(now: now, calendar: calendar)
-        return (CoreDate.utcString(range.lowerBound), CoreDate.utcString(range.upperBound))
     }
 
     private func dateRange(now: Date, calendar: Calendar) -> Range<Date> {
@@ -51,8 +45,8 @@ enum Period: String, CaseIterable, Identifiable, Sendable {
             let start = calendar.date(byAdding: .day, value: -30, to: startOfToday) ?? startOfToday
             return start..<tomorrow
         case .all:
-            // Wide enough to cover any plausible ledger, and still a valid range.
-            return Date(timeIntervalSince1970: 0)..<max(tomorrow, Date(timeIntervalSince1970: 1))
+            // Unreachable: `.all` never asks for a range, its bounds are open.
+            return startOfToday..<tomorrow
         }
     }
 }

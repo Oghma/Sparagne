@@ -65,6 +65,12 @@ pub struct LegView {
     pub amount: i64,
 }
 
+/// One transaction as the table shows it.
+///
+/// `legs` is the raw shape; `wallet_id`, `flow_id`, `from_id` and `to_id` are
+/// the same information already sorted out by kind, so the app never has to
+/// bucket the legs itself. Entries fill `wallet_id` and `flow_id`; transfers
+/// fill `from_id` with the negative leg and `to_id` with the positive one.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct TransactionView {
     pub id: Uuid,
@@ -74,9 +80,61 @@ pub struct TransactionView {
     pub amount: i64,
     pub category_id: Uuid,
     pub category: String,
+    /// `true` for `Opening` and `Uncategorized`: the app localizes the name.
+    pub category_is_system: bool,
     pub note: Option<String>,
     pub voided: bool,
+    /// Entries only: the wallet the money moved on.
+    pub wallet_id: Option<Uuid>,
+    /// Entries only: the envelope the money moved on.
+    pub flow_id: Option<Uuid>,
+    /// Transfers only: the source, a wallet or a flow matching the kind.
+    pub from_id: Option<Uuid>,
+    /// Transfers only: the destination.
+    pub to_id: Option<Uuid>,
     pub legs: Vec<LegView>,
+}
+
+/// Splits the legs of a transaction into the ids [`TransactionView`] exposes:
+/// `(wallet_id, flow_id, from_id, to_id)`.
+pub(crate) fn leg_shape(
+    kind: TransactionKind,
+    legs: &[LegView],
+) -> (Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<Uuid>) {
+    let wallet = |leg: &LegView| match leg.target {
+        LegTarget::Wallet { wallet_id } => Some(wallet_id),
+        LegTarget::Flow { .. } => None,
+    };
+    let flow = |leg: &LegView| match leg.target {
+        LegTarget::Flow { flow_id } => Some(flow_id),
+        LegTarget::Wallet { .. } => None,
+    };
+    if kind.is_transfer() {
+        // Source = the negative leg, destination = the positive one; ordinal
+        // order is the fallback for the degenerate zero-amount case.
+        let ids: Vec<Uuid> = legs
+            .iter()
+            .filter_map(|leg| wallet(leg).or_else(|| flow(leg)))
+            .collect();
+        let from = legs
+            .iter()
+            .position(|leg| leg.amount < 0)
+            .or(Some(0))
+            .and_then(|i| ids.get(i).copied());
+        let to = legs
+            .iter()
+            .position(|leg| leg.amount > 0)
+            .or(Some(1))
+            .and_then(|i| ids.get(i).copied());
+        (None, None, from, to)
+    } else {
+        (
+            legs.iter().find_map(wallet),
+            legs.iter().find_map(flow),
+            None,
+            None,
+        )
+    }
 }
 
 /// Filter for [`Core::list_transactions`]. Defaults hide voided rows and
@@ -84,19 +142,27 @@ pub struct TransactionView {
 #[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct TransactionFilter {
     /// Inclusive.
+    #[uniffi(default = None)]
     pub from: Option<DateTime<Utc>>,
     /// Exclusive.
+    #[uniffi(default = None)]
     pub to: Option<DateTime<Utc>>,
     /// Allow-list; `None` = all kinds (minus transfers unless
     /// `include_transfers`).
+    #[uniffi(default = None)]
     pub kinds: Option<Vec<TransactionKind>>,
+    #[uniffi(default = false)]
     pub include_voided: bool,
+    #[uniffi(default = false)]
     pub include_transfers: bool,
     /// Only transactions with a leg on this wallet.
+    #[uniffi(default = None)]
     pub wallet_id: Option<Uuid>,
     /// Only transactions with a leg on this flow.
+    #[uniffi(default = None)]
     pub flow_id: Option<Uuid>,
     /// Case-insensitive substring on note or category name.
+    #[uniffi(default = None)]
     pub text: Option<String>,
 }
 
@@ -218,7 +284,7 @@ impl Core {
         }
 
         let mut sql = String::from(
-            "SELECT t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, t.note, t.voided_at
+            "SELECT t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at
              FROM transactions t JOIN categories c ON c.id = t.category_id
              WHERE t.vault_id = ?",
         );
@@ -288,7 +354,7 @@ impl Core {
                 let at: i64 = r.get(2)?;
                 let off: i32 = r.get(3)?;
                 let kind: String = r.get(1)?;
-                let voided_at: Option<i64> = r.get(8)?;
+                let voided_at: Option<i64> = r.get(9)?;
                 Ok((
                     TransactionView {
                         id: r.get(0)?,
@@ -297,8 +363,13 @@ impl Core {
                         amount: r.get(4)?,
                         category_id: r.get(5)?,
                         category: r.get(6)?,
-                        note: r.get(7)?,
+                        category_is_system: r.get(7)?,
+                        note: r.get(8)?,
                         voided: voided_at.is_some(),
+                        wallet_id: None,
+                        flow_id: None,
+                        from_id: None,
+                        to_id: None,
                         legs: Vec::new(),
                     },
                     at,
@@ -333,6 +404,11 @@ impl Core {
                     })
                 })?
                 .collect::<std::result::Result<_, _>>()?;
+            let (wallet_id, flow_id, from_id, to_id) = leg_shape(view.kind, &view.legs);
+            view.wallet_id = wallet_id;
+            view.flow_id = flow_id;
+            view.from_id = from_id;
+            view.to_id = to_id;
             items.push(view);
         }
         Ok(Page { items, next_cursor })

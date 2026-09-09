@@ -68,22 +68,22 @@ fn exact_beats_prefix_but_ambiguous_prefix_errors() {
     // "@bank" is an exact match for Bank, even though it is also a prefix of
     // Bancoposta.
     let parsed = quick_add::parse("15 pizza @bank", Currency::Eur).unwrap();
-    let cmd =
+    let resolved =
         f.fx.core
             .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
             .unwrap();
-    match cmd {
+    match resolved.command {
         Command::Expense(entry) => assert_eq!(entry.wallet_id, Some(f.bank)),
         other => panic!("unexpected {other:?}"),
     }
 
     // "@bancoposta" is an exact match for Bancoposta.
     let parsed = quick_add::parse("15 pizza @bancoposta", Currency::Eur).unwrap();
-    let cmd =
+    let resolved =
         f.fx.core
             .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
             .unwrap();
-    match cmd {
+    match resolved.command {
         Command::Expense(entry) => assert_eq!(entry.wallet_id, Some(f.bancoposta)),
         other => panic!("unexpected {other:?}"),
     }
@@ -120,7 +120,7 @@ fn unknown_wallet_name_is_an_error() {
     assert_eq!(
         err,
         QuickAddError::UnknownName {
-            kind: "wallet",
+            kind: "wallet".to_string(),
             name: "revolut".to_string()
         }
     );
@@ -135,11 +135,17 @@ fn defaults_apply_when_no_marker_present() {
         flow_id: Some(f.vacanze),
     };
     let parsed = quick_add::parse("15 pizza", Currency::Eur).unwrap();
-    let cmd =
+    let resolved =
         f.fx.core
             .resolve_quick_add(f.fx.vault, &parsed, now, &defaults)
             .unwrap();
-    match cmd {
+    // The resolution reports the ids it settled on, so the app can keep them
+    // as the next defaults without taking the command apart.
+    assert_eq!(resolved.wallet_id, Some(f.bank));
+    assert_eq!(resolved.flow_id, Some(f.vacanze));
+    assert_eq!(resolved.from_id, None);
+    assert_eq!(resolved.to_id, None);
+    match resolved.command {
         Command::Expense(entry) => {
             assert_eq!(entry.wallet_id, Some(f.bank));
             assert_eq!(entry.flow_id, Some(f.vacanze));
@@ -153,11 +159,12 @@ fn wallet_exact_match_resolves_to_cash() {
     let f = build_fixture();
     let now = at(T0);
     let parsed = quick_add::parse("15 pizza @cash", Currency::Eur).unwrap();
-    let cmd =
+    let resolved =
         f.fx.core
             .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
             .unwrap();
-    match cmd {
+    assert_eq!(resolved.wallet_id, Some(f.cash));
+    match resolved.command {
         Command::Expense(entry) => assert_eq!(entry.wallet_id, Some(f.cash)),
         other => panic!("unexpected {other:?}"),
     }
@@ -168,11 +175,11 @@ fn unallocated_flow_resolves_by_its_display_name() {
     let f = build_fixture();
     let now = at(T0);
     let parsed = quick_add::parse("15 pizza >unallocated", Currency::Eur).unwrap();
-    let cmd =
+    let resolved =
         f.fx.core
             .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
             .unwrap();
-    match cmd {
+    match resolved.command {
         Command::Expense(entry) => assert_eq!(entry.flow_id, Some(f.fx.unallocated)),
         other => panic!("unexpected {other:?}"),
     }
@@ -184,11 +191,11 @@ fn yesterday_shifts_occurred_at_by_one_day_keeping_time_and_offset() {
     let offset = FixedOffset::east_opt(3600).unwrap();
     let now = offset.from_utc_datetime(&Utc.timestamp_opt(T0, 0).unwrap().naive_utc());
     let parsed = quick_add::parse("15 pizza ieri", Currency::Eur).unwrap();
-    let cmd =
+    let resolved =
         f.fx.core
             .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
             .unwrap();
-    match cmd {
+    match resolved.command {
         Command::Expense(entry) => {
             assert_eq!(
                 entry.occurred_at.date_naive(),
@@ -218,7 +225,7 @@ fn archived_wallets_are_not_matched() {
     assert_eq!(
         err,
         QuickAddError::UnknownName {
-            kind: "wallet",
+            kind: "wallet".to_string(),
             name: "bank".to_string()
         }
     );
@@ -229,11 +236,11 @@ fn transfer_flow_execute_produces_expected_transaction() {
     let mut f = build_fixture();
     let now = at(T0 + 10);
     let parsed = quick_add::parse("tf>25 >vacanze >spesa weekend", Currency::Eur).unwrap();
-    let cmd =
+    let resolved =
         f.fx.core
             .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
             .unwrap();
-    match &cmd {
+    match &resolved.command {
         Command::TransferFlow {
             from_flow_id,
             to_flow_id,
@@ -247,7 +254,12 @@ fn transfer_flow_execute_produces_expected_transaction() {
         other => panic!("unexpected {other:?}"),
     }
 
-    try_run(&mut f.fx.core, f.fx.vault, cmd).unwrap();
+    assert_eq!(resolved.from_id, Some(f.vacanze));
+    assert_eq!(resolved.to_id, Some(f.spesa));
+    assert_eq!(resolved.wallet_id, None);
+    assert_eq!(resolved.flow_id, None);
+
+    try_run(&mut f.fx.core, f.fx.vault, resolved.command).unwrap();
 
     let txns = list(&f.fx.core, f.fx.vault, &all());
     let transfer = txns
@@ -267,7 +279,7 @@ fn same_target_transfer_is_rejected() {
         f.fx.core
             .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
             .unwrap_err();
-    assert_eq!(err, QuickAddError::SameTarget);
+    assert_eq!(err, QuickAddError::same_target());
 }
 
 #[test]

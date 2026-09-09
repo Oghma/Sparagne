@@ -5,11 +5,10 @@
 
 mod common;
 
-use chrono::{DateTime, FixedOffset};
 use common::*;
 use sparagne_core::{
     Command, Core, DomainError, Entry, FlowMode, LegTarget, LegView, TransactionFilter,
-    TransactionKind, TransactionView, replay,
+    TransactionKind, TransactionPatch, TransactionView, replay,
 };
 use uuid::Uuid;
 
@@ -17,87 +16,65 @@ use uuid::Uuid;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Builder for `Command::UpdateTransaction`; every field defaults to "leave
-/// as is".
+/// Builder around [`TransactionPatch`]; every field defaults to "leave as is".
 #[derive(Clone)]
 struct Patch {
     transaction_id: Uuid,
-    amount: Option<i64>,
-    occurred_at: Option<DateTime<FixedOffset>>,
-    category: Option<String>,
-    note: Option<String>,
-    wallet_id: Option<Uuid>,
-    flow_id: Option<Uuid>,
-    from_id: Option<Uuid>,
-    to_id: Option<Uuid>,
+    patch: TransactionPatch,
 }
 
 fn patch(transaction_id: Uuid) -> Patch {
     Patch {
         transaction_id,
-        amount: None,
-        occurred_at: None,
-        category: None,
-        note: None,
-        wallet_id: None,
-        flow_id: None,
-        from_id: None,
-        to_id: None,
+        patch: TransactionPatch::default(),
     }
 }
 
 impl Patch {
     fn amount(mut self, value: i64) -> Self {
-        self.amount = Some(value);
+        self.patch.amount = Some(value);
         self
     }
 
     fn occurred_at(mut self, secs: i64) -> Self {
-        self.occurred_at = Some(at(secs));
+        self.patch.occurred_at = Some(at(secs));
         self
     }
 
     fn category(mut self, value: &str) -> Self {
-        self.category = Some(value.to_string());
+        self.patch.category = Some(value.to_string());
         self
     }
 
     fn note(mut self, value: &str) -> Self {
-        self.note = Some(value.to_string());
+        self.patch.note = Some(value.to_string());
         self
     }
 
     fn wallet_id(mut self, value: Uuid) -> Self {
-        self.wallet_id = Some(value);
+        self.patch.wallet_id = Some(value);
         self
     }
 
     fn flow_id(mut self, value: Uuid) -> Self {
-        self.flow_id = Some(value);
+        self.patch.flow_id = Some(value);
         self
     }
 
     fn source(mut self, value: Uuid) -> Self {
-        self.from_id = Some(value);
+        self.patch.from_id = Some(value);
         self
     }
 
     fn destination(mut self, value: Uuid) -> Self {
-        self.to_id = Some(value);
+        self.patch.to_id = Some(value);
         self
     }
 
     fn cmd(self) -> Command {
         Command::UpdateTransaction {
             transaction_id: self.transaction_id,
-            amount: self.amount,
-            occurred_at: self.occurred_at,
-            category: self.category,
-            note: self.note,
-            wallet_id: self.wallet_id,
-            flow_id: self.flow_id,
-            from_id: self.from_id,
-            to_id: self.to_id,
+            patch: self.patch,
         }
     }
 }

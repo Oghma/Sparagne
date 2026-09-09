@@ -41,17 +41,9 @@ private struct Fixture {
 }
 
 /// Non-transfer, non-voided transactions of the given kinds; `nil` = all kinds.
+/// Every other field of the filter keeps its default.
 private func filter(kinds: [TransactionKind]? = nil) -> TransactionFilter {
-    TransactionFilter(
-        from: nil,
-        to: nil,
-        kinds: kinds,
-        includeVoided: false,
-        includeTransfers: false,
-        walletId: nil,
-        flowId: nil,
-        text: nil
-    )
+    TransactionFilter(kinds: kinds)
 }
 
 @Test("A quick-add line becomes a command, an entry and a balance")
@@ -70,20 +62,24 @@ func quickAddRoundTrip() throws {
     #expect(category == "food")
     #expect(wallet == "cash")
 
-    let command = try fixture.core.resolveQuickAdd(
+    let resolved = try fixture.core.resolveQuickAdd(
         vaultId: fixture.vaultId,
         parsed: parsed,
         now: Fixture.now,
-        defaults: QuickAddDefaults(walletId: nil, flowId: nil)
+        defaults: QuickAddDefaults()
     )
-    guard case .expense(let entry) = command else {
-        Issue.record("expected an expense, got \(command)")
+    guard case .expense(let entry) = resolved.command else {
+        Issue.record("expected an expense, got \(resolved.command)")
         return
     }
     #expect(entry.walletId == fixture.walletId)
+    // The resolution hands the ids over, so the app never digs into the command.
+    #expect(resolved.walletId == fixture.walletId)
+    #expect(resolved.fromId == nil)
 
     _ = try fixture.core.execute(
-        envelope: newEnvelope(vaultId: fixture.vaultId, author: Fixture.author, command: command)
+        envelope: newEnvelope(
+            vaultId: fixture.vaultId, author: Fixture.author, command: resolved.command)
     )
 
     let snapshot = try fixture.core.snapshot(vaultId: fixture.vaultId)
@@ -104,8 +100,12 @@ func quickAddRoundTrip() throws {
     #expect(transaction.kind == .expense)
     #expect(transaction.amount == 1250)
     #expect(transaction.category == "food")
+    #expect(transaction.categoryIsSystem == false)
     #expect(transaction.voided == false)
     #expect(transaction.legs.count == 2)
+    #expect(transaction.walletId == fixture.walletId)
+    #expect(transaction.flowId != nil)
+    #expect(transaction.fromId == nil)
 
     let all = try fixture.core.listTransactions(
         vaultId: fixture.vaultId,
@@ -223,4 +223,68 @@ func naiveDatesRoundTrip() throws {
     // The 31st clamps to the length of each month without drifting.
     #expect(template.due == ["2026-01-31", "2026-02-28"])
     #expect(template.template.schedule.frequency == .monthly(day: 31))
+}
+
+@Test("An ambiguous wallet name comes back with its candidates")
+func ambiguousNameCarriesTheCandidates() throws {
+    let fixture = try Fixture()
+    _ = try fixture.execute(.createWallet(name: "Bank", openingBalance: 0, occurredAt: Fixture.now))
+    _ = try fixture.execute(
+        .createWallet(name: "Bancoposta", openingBalance: 0, occurredAt: Fixture.now))
+
+    let parsed = try parseQuickAdd(input: "-5.00 hotel @ban", currency: .eur)
+    do {
+        _ = try fixture.core.resolveQuickAdd(
+            vaultId: fixture.vaultId,
+            parsed: parsed,
+            now: Fixture.now,
+            defaults: QuickAddDefaults()
+        )
+        Issue.record("expected the name to be ambiguous")
+    } catch let error as QuickAddError {
+        guard case .AmbiguousName(let name, let candidates) = error else {
+            Issue.record("expected an ambiguous name, got \(error)")
+            return
+        }
+        #expect(name == "ban")
+        #expect(candidates.sorted() == ["Bancoposta", "Bank"])
+        #expect(error.code == "ambiguous_name")
+        #expect(error.candidates.count == 2)
+        #expect(error.message.contains("Bank"))
+    }
+}
+
+@Test("Period totals with no bounds cover the whole ledger")
+func periodTotalsWithoutBounds() throws {
+    let fixture = try Fixture()
+    let parsed = try parseQuickAdd(input: "-12.50 pizza #food", currency: .eur)
+    let resolved = try fixture.core.resolveQuickAdd(
+        vaultId: fixture.vaultId,
+        parsed: parsed,
+        now: Fixture.now,
+        defaults: QuickAddDefaults()
+    )
+    _ = try fixture.execute(resolved.command)
+
+    let all = try fixture.core.periodTotals(vaultId: fixture.vaultId, from: nil, to: nil)
+    #expect(all.expense == 1250)
+    // The wallet's opening balance is an income of 100.00.
+    #expect(all.income == 10000)
+
+    // A window that ends before the expense sees only the opening balance.
+    let before = try fixture.core.periodTotals(
+        vaultId: fixture.vaultId,
+        from: nil,
+        to: "2026-03-01T10:00:00Z"
+    )
+    #expect(before.expense == 0)
+
+    // from >= to is still refused when both are given.
+    #expect(throws: DomainError.self) {
+        try fixture.core.periodTotals(
+            vaultId: fixture.vaultId,
+            from: "2026-03-02T00:00:00Z",
+            to: "2026-03-01T00:00:00Z"
+        )
+    }
 }

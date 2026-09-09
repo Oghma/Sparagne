@@ -183,30 +183,8 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
         }
         Command::UpdateTransaction {
             transaction_id,
-            amount,
-            occurred_at,
-            category,
-            note,
-            wallet_id,
-            flow_id,
-            from_id,
-            to_id,
-        } => update::update_transaction(
-            tx,
-            env,
-            &update::TransactionPatch {
-                transaction_id: *transaction_id,
-                amount: *amount,
-                occurred_at: *occurred_at,
-                category: category.as_deref(),
-                note: note.as_deref(),
-                wallet_id: *wallet_id,
-                flow_id: *flow_id,
-                from_id: *from_id,
-                to_id: *to_id,
-            },
-        )
-        .map(|()| None),
+            patch,
+        } => update::update_transaction(tx, env, *transaction_id, patch).map(|()| None),
         Command::VoidTransaction { transaction_id } => {
             void_transaction(tx, env, *transaction_id, now).map(|()| None)
         }
@@ -235,28 +213,8 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
         .map(Some),
         Command::UpdateRecurring {
             recurring_id,
-            amount,
-            wallet_id,
-            flow_id,
-            category,
-            note,
-            schedule,
-            enabled,
-        } => recurring::update_recurring(
-            tx,
-            env,
-            *recurring_id,
-            &recurring::RecurringPatch {
-                amount: *amount,
-                wallet_id: *wallet_id,
-                flow_id: *flow_id,
-                category: category.as_deref(),
-                note: note.as_deref(),
-                schedule: *schedule,
-                enabled: *enabled,
-            },
-        )
-        .map(|()| None),
+            patch,
+        } => recurring::update_recurring(tx, env, *recurring_id, patch).map(|()| None),
         Command::ArchiveRecurring { recurring_id } => {
             recurring::archive_recurring(tx, env, *recurring_id, now).map(|()| None)
         }

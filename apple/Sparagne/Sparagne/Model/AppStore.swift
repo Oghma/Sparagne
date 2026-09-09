@@ -8,10 +8,14 @@ struct AppError: Identifiable, Equatable, Sendable {
     let id = UUID()
     let code: String
     let message: String
+    /// The names an ambiguous quick-add marker could have meant; empty
+    /// otherwise. The alert offers them so the user can retype one.
+    let candidates: [String]
 
-    init(code: String, message: String) {
+    init(code: String, message: String, candidates: [String] = []) {
         self.code = code
         self.message = message
+        self.candidates = candidates
     }
 
     init(_ error: DomainError) {
@@ -19,7 +23,7 @@ struct AppError: Identifiable, Equatable, Sendable {
     }
 
     init(_ error: QuickAddError) {
-        self.init(code: error.code, message: error.message)
+        self.init(code: error.code, message: error.message, candidates: error.candidates)
     }
 }
 
@@ -47,23 +51,10 @@ struct PendingUndo: Identifiable, Equatable, Sendable {
     }
 }
 
-/// The fields of a transaction the inspector can change. Only the ones that
-/// actually differ from the row are sent, so `UpdateTransaction` stays a
-/// partial update (`docs/v2/ARCH.md` §4).
-struct TransactionPatch: Equatable, Sendable {
-    var amount: Int64?
-    var occurredAt: Date?
-    var category: String?
-    var note: String?
-    var walletId: Uuid?
-    var flowId: Uuid?
-    var fromId: Uuid?
-    var toId: Uuid?
-
-    var isEmpty: Bool {
-        amount == nil && occurredAt == nil && category == nil && note == nil
-            && walletId == nil && flowId == nil && fromId == nil && toId == nil
-    }
+extension TransactionPatch {
+    /// A patch that carries no field changes nothing, so it is never sent
+    /// (`UpdateTransaction` refuses it, `docs/v2/ARCH.md` §4).
+    var isEmpty: Bool { self == TransactionPatch() }
 }
 
 /// Everything the window shows and everything it can do.
@@ -208,7 +199,7 @@ final class AppStore {
             )
             transactions = page.items
             nextCursor = page.nextCursor
-            let bounds = period.totalsBounds()
+            let bounds = period.bounds()
             totals = try client.totals(vaultId: vault.id, from: bounds.from, to: bounds.to)
             rebuildRows()
         }
@@ -319,7 +310,7 @@ final class AppStore {
         } catch let error as QuickAddError {
             return .failure(error)
         } catch {
-            return .failure(.Domain(message: error.localizedDescription))
+            return .failure(.Domain(code: "unexpected", message: error.localizedDescription))
         }
     }
 
@@ -330,27 +321,19 @@ final class AppStore {
         guard !trimmed.isEmpty else { return }
         guarded {
             let parsed = try parseQuickAdd(input: trimmed, currency: currency)
-            let command = try client.resolveQuickAdd(
+            let resolved = try client.resolveQuickAdd(
                 vaultId: vault.id,
                 parsed: parsed,
                 now: Date(),
                 defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId)
             )
-            try client.execute(vaultId: vault.id, command)
-            remember(command)
+            try client.execute(vaultId: vault.id, resolved.command)
+            // The core reports what the names resolved to, so the sticky
+            // defaults never depend on the shape of the command.
+            lastWalletId = resolved.walletId ?? lastWalletId
+            lastFlowId = resolved.flowId ?? lastFlowId
             quickAddText = ""
             reload()
-        }
-    }
-
-    /// Keeps the wallet and envelope of the last entry as quick-add defaults.
-    private func remember(_ command: Command) {
-        switch command {
-        case .income(let entry), .expense(let entry), .refund(let entry):
-            lastWalletId = entry.walletId ?? lastWalletId
-            lastFlowId = entry.flowId ?? lastFlowId
-        default:
-            break
         }
     }
 
@@ -398,17 +381,7 @@ final class AppStore {
         guarded {
             try client.execute(
                 vaultId: vault.id,
-                .updateTransaction(
-                    transactionId: transactionId,
-                    amount: patch.amount,
-                    occurredAt: patch.occurredAt.map { CoreDate.offset($0) },
-                    category: patch.category,
-                    note: patch.note,
-                    walletId: patch.walletId,
-                    flowId: patch.flowId,
-                    fromId: patch.fromId,
-                    toId: patch.toId
-                )
+                .updateTransaction(transactionId: transactionId, patch: patch)
             )
             reload()
         }

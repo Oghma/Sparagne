@@ -207,6 +207,43 @@ struct AppStoreTests {
         #expect(store.presentedError == nil)
     }
 
+    @Test("An ambiguous wallet name surfaces the candidates to choose from")
+    func ambiguousNameOffersTheCandidates() throws {
+        let store = try Self.onboarded()
+        store.createWallet(name: "Bank", openingBalance: 0)
+        store.createWallet(name: "Bancoposta", openingBalance: 0)
+        #expect(store.presentedError == nil)
+
+        store.submit(quickAdd: "-5.00 hotel @ban")
+
+        let error = try #require(store.presentedError)
+        #expect(error.code == "ambiguous_name")
+        #expect(error.candidates.sorted() == ["Bancoposta", "Bank"])
+        #expect(error.message.contains("Bancoposta"))
+        // Nothing was written.
+        #expect(!store.rows.contains { $0.note == "hotel" })
+    }
+
+    @Test("A row exposes the ids of its wallet and envelope")
+    func rowExposesItsIds() throws {
+        let store = try Self.onboarded()
+        store.createEnvelope(name: "Spesa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
+        let envelope = try #require(store.flows.first { $0.name == "Spesa" })
+
+        store.submit(quickAdd: "-12.50 pizza #food >Spesa")
+
+        #expect(store.presentedError == nil)
+        let row = try Self.pizzaRow(store)
+        #expect(row.walletId == store.wallets.first?.id)
+        #expect(row.flowId == envelope.id)
+        #expect(row.destinationId == nil)
+        #expect(row.envelopeDisplay == "Spesa")
+
+        // The opening balance carries the system category, localized here.
+        let opening = try #require(store.rows.first { $0.kind == .income })
+        #expect(opening.category == String(localized: "Opening"))
+    }
+
     @Test("A wallet transfer shows both ends in the wallet column")
     func transferRowShowsBothEnds() throws {
         let store = try Self.onboarded()
@@ -219,6 +256,9 @@ struct AppStoreTests {
         #expect(row.walletDisplay == "Cash → Bank")
         #expect(row.envelopeDisplay == TransactionRow.placeholder)
         #expect(row.isTransfer)
+        #expect(row.walletId == store.wallets.first { $0.name == "Cash" }?.id)
+        #expect(row.destinationId == store.wallets.first { $0.name == "Bank" }?.id)
+        #expect(row.flowId == nil)
         #expect(store.wallets.first { $0.name == "Bank" }?.balance == 2000)
     }
 }
@@ -268,9 +308,10 @@ struct PeriodTests {
         #expect(bounds.to == "2026-02-28T23:00:00Z")
     }
 
-    @Test func totalsBoundsAreAlwaysConcrete() {
-        let bounds = Period.all.totalsBounds(now: Date(), calendar: Self.calendar)
-        #expect(bounds.from == "1970-01-01T00:00:00Z")
-        #expect(bounds.from < bounds.to)
+    @Test func last30DaysEndsTomorrow() throws {
+        let now = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 2, day: 25, hour: 12)))
+        let bounds = Period.last30Days.bounds(now: now, calendar: Self.calendar)
+        #expect(bounds.from == "2026-01-25T23:00:00Z")
+        #expect(bounds.to == "2026-02-25T23:00:00Z")
     }
 }

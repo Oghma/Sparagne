@@ -12,7 +12,8 @@ use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use uuid::Uuid;
 
 use crate::{
-    CommandEnvelope, Core, DomainError, Result, TransactionKind, normalize_category_key,
+    CommandEnvelope, Core, DomainError, RecurringPatch, Result, TransactionKind,
+    normalize_category_key,
     recurring::{PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule},
 };
 
@@ -25,17 +26,6 @@ pub(super) struct RecurringSpec<'a> {
     pub category: Option<&'a str>,
     pub note: Option<&'a str>,
     pub schedule: Schedule,
-}
-
-/// Borrowed view of `Command::UpdateRecurring`.
-pub(super) struct RecurringPatch<'a> {
-    pub amount: Option<i64>,
-    pub wallet_id: Option<Uuid>,
-    pub flow_id: Option<Uuid>,
-    pub category: Option<&'a str>,
-    pub note: Option<&'a str>,
-    pub schedule: Option<Schedule>,
-    pub enabled: Option<bool>,
 }
 
 // ---------------------------------------------------------------------------
@@ -82,20 +72,13 @@ pub(super) fn update_recurring(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
     recurring_id: Uuid,
-    patch: &RecurringPatch<'_>,
+    patch: &RecurringPatch,
 ) -> Result<()> {
     let current = load_template(tx, env.vault_id, recurring_id)?;
     if current.archived {
         return Err(invalid("recurring is archived"));
     }
-    if patch.amount.is_none()
-        && patch.wallet_id.is_none()
-        && patch.flow_id.is_none()
-        && patch.category.is_none()
-        && patch.note.is_none()
-        && patch.schedule.is_none()
-        && patch.enabled.is_none()
-    {
+    if patch.is_empty() {
         return Err(invalid("nothing to update"));
     }
 
@@ -127,11 +110,11 @@ pub(super) fn update_recurring(
         }
         None => current.flow_id,
     };
-    let category = match patch.category {
+    let category = match patch.category.as_deref() {
         Some(text) => normalize_category(Some(text))?,
         None => current.category,
     };
-    let note = match patch.note {
+    let note = match patch.note.as_deref() {
         Some(text) => super::normalize_note(Some(text)),
         None => current.note,
     };

@@ -8,7 +8,8 @@ mod common;
 use chrono::NaiveDate;
 use common::*;
 use sparagne_core::{
-    Command, Core, DomainError, FlowMode, Frequency, RunOutcome, Schedule, TransactionKind, replay,
+    Command, Core, DomainError, FlowMode, Frequency, RecurringPatch, RunOutcome, Schedule,
+    TransactionKind, replay,
 };
 use uuid::Uuid;
 
@@ -204,13 +205,13 @@ fn update_changes_the_schedule_and_what_is_pending() {
         fx.vault,
         Command::UpdateRecurring {
             recurring_id: id,
-            amount: Some(3000),
-            wallet_id: None,
-            flow_id: None,
-            category: Some("  ".to_string()),
-            note: Some("monthly rent".to_string()),
-            schedule: Some(moved),
-            enabled: None,
+            patch: RecurringPatch {
+                amount: Some(3000),
+                category: Some("  ".to_string()),
+                note: Some("monthly rent".to_string()),
+                schedule: Some(moved),
+                ..RecurringPatch::default()
+            },
         },
     );
 
@@ -231,13 +232,7 @@ fn update_and_archive_refuse_the_impossible() {
     let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
     let empty = Command::UpdateRecurring {
         recurring_id: id,
-        amount: None,
-        wallet_id: None,
-        flow_id: None,
-        category: None,
-        note: None,
-        schedule: None,
-        enabled: None,
+        patch: RecurringPatch::default(),
     };
     assert!(matches!(
         try_run(&mut fx.core, fx.vault, empty),
@@ -274,13 +269,10 @@ fn update_and_archive_refuse_the_impossible() {
             fx.vault,
             Command::UpdateRecurring {
                 recurring_id: id,
-                amount: Some(10),
-                wallet_id: None,
-                flow_id: None,
-                category: None,
-                note: None,
-                schedule: None,
-                enabled: None,
+                patch: RecurringPatch {
+                    amount: Some(10),
+                    ..RecurringPatch::default()
+                },
             },
         ),
         Err(DomainError::InvalidCommand(_))
@@ -339,13 +331,10 @@ fn pending_respects_end_date_disabled_and_archived() {
         fx.vault,
         Command::UpdateRecurring {
             recurring_id: off,
-            amount: None,
-            wallet_id: None,
-            flow_id: None,
-            category: None,
-            note: None,
-            schedule: None,
-            enabled: Some(false),
+            patch: RecurringPatch {
+                enabled: Some(false),
+                ..RecurringPatch::default()
+            },
         },
     );
     run(
@@ -651,13 +640,13 @@ fn replay_rebuilds_templates_runs_and_transactions() {
         fx.vault,
         Command::UpdateRecurring {
             recurring_id: id,
-            amount: Some(2600),
-            wallet_id: Some(fx.wallet),
-            flow_id: None,
-            category: None,
-            note: Some("rent".to_string()),
-            schedule: Some(monthly(3, date(2026, 1, 1), Some(date(2026, 12, 31)))),
-            enabled: None,
+            patch: RecurringPatch {
+                amount: Some(2600),
+                wallet_id: Some(fx.wallet),
+                note: Some("rent".to_string()),
+                schedule: Some(monthly(3, date(2026, 1, 1), Some(date(2026, 12, 31)))),
+                ..RecurringPatch::default()
+            },
         },
     );
     run(

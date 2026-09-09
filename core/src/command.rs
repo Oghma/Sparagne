@@ -183,26 +183,12 @@ pub enum Command {
         note: Option<String>,
         occurred_at: DateTime<FixedOffset>,
     },
-    /// Partial update; at least one field must be set. The kind never
-    /// changes (void and recreate instead). Caps and non-negativity are
+    /// Partial update; the patch must carry at least one field. The kind
+    /// never changes (void and recreate instead). Caps and non-negativity are
     /// re-checked on the resulting legs; nothing changes on failure.
     UpdateTransaction {
         transaction_id: Uuid,
-        /// Absolute, `> 0`.
-        amount: Option<i64>,
-        occurred_at: Option<DateTime<FixedOffset>>,
-        /// Entries only; blank = Uncategorized.
-        category: Option<String>,
-        /// Blank = clear.
-        note: Option<String>,
-        /// Entries only.
-        wallet_id: Option<Uuid>,
-        /// Entries only.
-        flow_id: Option<Uuid>,
-        /// Transfers only; a wallet id or a flow id matching the kind.
-        from_id: Option<Uuid>,
-        /// Transfers only.
-        to_id: Option<Uuid>,
+        patch: TransactionPatch,
     },
     /// Soft delete. Never blocked by caps or non-negativity.
     VoidTransaction {
@@ -225,20 +211,11 @@ pub enum Command {
         note: Option<String>,
         schedule: Schedule,
     },
-    /// Partial update; at least one field must be set. Past runs are not
-    /// touched.
+    /// Partial update; the patch must carry at least one field. Past runs are
+    /// not touched.
     UpdateRecurring {
         recurring_id: Uuid,
-        amount: Option<i64>,
-        wallet_id: Option<Uuid>,
-        flow_id: Option<Uuid>,
-        /// Blank = Uncategorized.
-        category: Option<String>,
-        /// Blank = clear.
-        note: Option<String>,
-        schedule: Option<Schedule>,
-        /// Disabled templates are never pending.
-        enabled: Option<bool>,
+        patch: RecurringPatch,
     },
     ArchiveRecurring {
         recurring_id: Uuid,
@@ -256,6 +233,95 @@ pub enum Command {
         recurring_id: Uuid,
         period_date: NaiveDate,
     },
+}
+
+/// The fields [`Command::UpdateTransaction`] can change.
+///
+/// Every field is optional and `None` means "leave as is"; a blank string
+/// clears the note or puts the category back to Uncategorized. Which fields
+/// apply depends on the kind of the transaction being patched: `wallet_id`,
+/// `flow_id` and `category` belong to entries, `from_id` and `to_id` to
+/// transfers, and mixing the two is refused.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, uniffi::Record)]
+#[serde(default)]
+pub struct TransactionPatch {
+    /// Absolute, `> 0`.
+    #[uniffi(default = None)]
+    pub amount: Option<i64>,
+    #[uniffi(default = None)]
+    pub occurred_at: Option<DateTime<FixedOffset>>,
+    /// Entries only; blank = Uncategorized.
+    #[uniffi(default = None)]
+    pub category: Option<String>,
+    /// Blank = clear.
+    #[uniffi(default = None)]
+    pub note: Option<String>,
+    /// Entries only.
+    #[uniffi(default = None)]
+    pub wallet_id: Option<Uuid>,
+    /// Entries only.
+    #[uniffi(default = None)]
+    pub flow_id: Option<Uuid>,
+    /// Transfers only; a wallet id or a flow id matching the kind.
+    #[uniffi(default = None)]
+    pub from_id: Option<Uuid>,
+    /// Transfers only.
+    #[uniffi(default = None)]
+    pub to_id: Option<Uuid>,
+}
+
+impl TransactionPatch {
+    /// A patch that carries no field at all changes nothing.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.amount.is_none()
+            && self.occurred_at.is_none()
+            && self.category.is_none()
+            && self.note.is_none()
+            && self.wallet_id.is_none()
+            && self.flow_id.is_none()
+            && self.from_id.is_none()
+            && self.to_id.is_none()
+    }
+}
+
+/// The fields [`Command::UpdateRecurring`] can change. `None` leaves the
+/// field as it is.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, uniffi::Record)]
+#[serde(default)]
+pub struct RecurringPatch {
+    /// Absolute, `> 0`.
+    #[uniffi(default = None)]
+    pub amount: Option<i64>,
+    #[uniffi(default = None)]
+    pub wallet_id: Option<Uuid>,
+    #[uniffi(default = None)]
+    pub flow_id: Option<Uuid>,
+    /// Blank = Uncategorized.
+    #[uniffi(default = None)]
+    pub category: Option<String>,
+    /// Blank = clear.
+    #[uniffi(default = None)]
+    pub note: Option<String>,
+    #[uniffi(default = None)]
+    pub schedule: Option<Schedule>,
+    /// Disabled templates are never pending.
+    #[uniffi(default = None)]
+    pub enabled: Option<bool>,
+}
+
+impl RecurringPatch {
+    /// A patch that carries no field at all changes nothing.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.amount.is_none()
+            && self.wallet_id.is_none()
+            && self.flow_id.is_none()
+            && self.category.is_none()
+            && self.note.is_none()
+            && self.schedule.is_none()
+            && self.enabled.is_none()
+    }
 }
 
 impl Command {
@@ -304,7 +370,7 @@ impl Command {
             | Self::TransferFlow { occurred_at, .. }
             | Self::ExecuteRecurring { occurred_at, .. } => Some(*occurred_at),
             Self::Income(e) | Self::Expense(e) | Self::Refund(e) => Some(e.occurred_at),
-            Self::UpdateTransaction { occurred_at, .. } => *occurred_at,
+            Self::UpdateTransaction { patch, .. } => patch.occurred_at,
             Self::CreateVault { .. }
             | Self::RenameWallet { .. }
             | Self::ArchiveWallet { .. }

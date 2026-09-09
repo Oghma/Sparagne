@@ -84,18 +84,19 @@ final class CoreClient {
         try handle.listTransactions(vaultId: vaultId, filter: filter, limit: limit, cursor: cursor)
     }
 
-    func totals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) throws -> PeriodTotals {
+    /// `nil` bounds mean "open end": both nil is all time.
+    func totals(vaultId: Uuid, from: UtcDateTime?, to: UtcDateTime?) throws -> PeriodTotals {
         try handle.periodTotals(vaultId: vaultId, from: from, to: to)
     }
 
-    /// Turns a parsed quick-add line into a command, resolving wallet and
-    /// envelope names against the vault's active entities.
+    /// Turns a parsed quick-add line into a command plus the ids its names
+    /// resolved to, against the vault's active entities.
     func resolveQuickAdd(
         vaultId: Uuid,
         parsed: QuickAdd,
         now: Date,
         defaults: QuickAddDefaults
-    ) throws -> Command {
+    ) throws -> ResolvedQuickAdd {
         try handle.resolveQuickAdd(
             vaultId: vaultId,
             parsed: parsed,

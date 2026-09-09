@@ -1,12 +1,14 @@
 //
 //  Hand-written companion to the generated bindings.
 //
-//  `DomainError` and `QuickAddError` cross the FFI as flat errors: Swift gets
-//  one case per Rust variant carrying the `Display` message, but not the
-//  associated data and not the `code()` string. These switches mirror the
-//  `code()` implementations in `core/src/error.rs` and `core/src/quick_add.rs`.
-//  They are exhaustive on purpose: adding a variant in Rust breaks this file
-//  at compile time instead of drifting silently.
+//  `DomainError` crosses the FFI as a flat error: Swift gets one case per Rust
+//  variant carrying the `Display` message, but not the `code()` string.
+//  `QuickAddError` crosses with its fields, so `.AmbiguousName` and
+//  `.UnknownName` arrive with their data and only need their sentence
+//  rebuilt here. These switches mirror the `code()` implementations in
+//  `core/src/error.rs` and `core/src/quick_add.rs`, and the `#[error(...)]`
+//  formats next to them. They are exhaustive on purpose: adding a variant in
+//  Rust breaks this file at compile time instead of drifting silently.
 //
 
 extension DomainError {
@@ -47,11 +49,8 @@ extension DomainError {
 }
 
 extension QuickAddError {
-    /// Stable snake_case code, identical to `QuickAddError::code()` in Rust.
-    ///
-    /// One difference: Rust's `Domain` variant reports the code of the wrapped
-    /// `DomainError`, which the flat representation cannot carry across the
-    /// FFI. Here it reports `domain_error`; read `message` for the detail.
+    /// Stable snake_case code, identical to `QuickAddError::code()` in Rust,
+    /// including the wrapped `DomainError`'s own code.
     public var code: String {
         switch self {
         case .EmptyInput: "empty_input"
@@ -65,11 +64,11 @@ extension QuickAddError {
         case .AmbiguousName: "ambiguous_name"
         case .UnknownName: "unknown_name"
         case .SameTarget: "same_target"
-        case .Domain: "domain_error"
+        case .Domain(let code, _): code
         }
     }
 
-    /// The Rust `Display` message carried by every case.
+    /// The sentence the Rust `Display` implementation produces.
     public var message: String {
         switch self {
         case .EmptyInput(let message),
@@ -80,11 +79,22 @@ extension QuickAddError {
             .MissingTransferTarget(let message),
             .InvalidDate(let message),
             .DuplicateDate(let message),
-            .AmbiguousName(let message),
-            .UnknownName(let message),
             .SameTarget(let message),
-            .Domain(let message):
+            .Domain(_, let message):
             message
+        case .AmbiguousName(let name, let candidates):
+            "'\(name)' is ambiguous among \(candidates.joined(separator: ", "))"
+        case .UnknownName(let kind, let name):
+            "unknown \(kind) '\(name)'"
+        }
+    }
+
+    /// The names a `#`, `@` or `>` marker could have meant, when the line was
+    /// ambiguous; empty for every other case. The app offers them as a choice.
+    public var candidates: [String] {
+        switch self {
+        case .AmbiguousName(_, let candidates): candidates
+        default: []
         }
     }
 }
