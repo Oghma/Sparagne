@@ -2,3 +2,4 @@
 migration/target/
 /data
 config/telegram_bot_state.json
+core/target

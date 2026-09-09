@@ -9,6 +9,7 @@ members = [
     "crates/api_types",
     "crates/tui",
 ]
+exclude = ["core"]
 resolver = "3"
 
 [workspace.package]
