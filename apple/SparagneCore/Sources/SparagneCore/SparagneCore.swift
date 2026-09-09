@@ -3207,6 +3207,8 @@ public enum Command: Equatable, Hashable, Codable {
     )
     case archiveRecurring(recurringId: Uuid
     )
+    case restoreRecurring(recurringId: Uuid
+    )
     /**
      * Materializes the period `period_date` of a template as a transaction
      * whose id is the command id. `period_date` must be a due date of the
@@ -3318,10 +3320,13 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         case 26: return .archiveRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 27: return .executeRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
+        case 27: return .restoreRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 28: return .skipRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
+        case 28: return .executeRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
+        )
+        
+        case 29: return .skipRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -3493,15 +3498,20 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             
         
-        case let .executeRecurring(recurringId,periodDate,occurredAt):
+        case let .restoreRecurring(recurringId):
             writeInt(&buf, Int32(27))
+            FfiConverterTypeUuid.write(recurringId, into: &buf)
+            
+        
+        case let .executeRecurring(recurringId,periodDate,occurredAt):
+            writeInt(&buf, Int32(28))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
             FfiConverterTypeOffsetDateTime.write(occurredAt, into: &buf)
             
         
         case let .skipRecurring(recurringId,periodDate):
-            writeInt(&buf, Int32(28))
+            writeInt(&buf, Int32(29))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
             

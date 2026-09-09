@@ -218,6 +218,9 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
         Command::ArchiveRecurring { recurring_id } => {
             recurring::archive_recurring(tx, env, *recurring_id, now).map(|()| None)
         }
+        Command::RestoreRecurring { recurring_id } => {
+            recurring::restore_recurring(tx, env, *recurring_id).map(|()| None)
+        }
         Command::ExecuteRecurring {
             recurring_id,
             period_date,

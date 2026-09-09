@@ -220,6 +220,9 @@ pub enum Command {
     ArchiveRecurring {
         recurring_id: Uuid,
     },
+    RestoreRecurring {
+        recurring_id: Uuid,
+    },
     /// Materializes the period `period_date` of a template as a transaction
     /// whose id is the command id. `period_date` must be a due date of the
     /// schedule that has not been executed or skipped yet.
@@ -355,6 +358,7 @@ impl Command {
             Self::CreateRecurring { .. } => "create_recurring",
             Self::UpdateRecurring { .. } => "update_recurring",
             Self::ArchiveRecurring { .. } => "archive_recurring",
+            Self::RestoreRecurring { .. } => "restore_recurring",
             Self::ExecuteRecurring { .. } => "execute_recurring",
             Self::SkipRecurring { .. } => "skip_recurring",
         }
@@ -389,6 +393,7 @@ impl Command {
             | Self::CreateRecurring { .. }
             | Self::UpdateRecurring { .. }
             | Self::ArchiveRecurring { .. }
+            | Self::RestoreRecurring { .. }
             | Self::SkipRecurring { .. } => None,
         }
     }

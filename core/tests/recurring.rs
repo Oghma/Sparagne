@@ -279,6 +279,45 @@ fn update_and_archive_refuse_the_impossible() {
     ));
 }
 
+#[test]
+fn restore_reactivates_an_archived_template() {
+    let mut fx = setup();
+    let id = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();
+    assert!(matches!(
+        try_run(
+            &mut fx.core,
+            fx.vault,
+            Command::RestoreRecurring { recurring_id: id },
+        ),
+        Err(DomainError::InvalidCommand(_))
+    ));
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::ArchiveRecurring { recurring_id: id },
+    );
+    assert!(fx.core.list_recurring(fx.vault, false).unwrap().is_empty());
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::RestoreRecurring { recurring_id: id },
+    );
+    let listed = fx.core.list_recurring(fx.vault, false).unwrap();
+    assert_eq!(listed.len(), 1);
+    assert!(!listed[0].archived);
+    assert_eq!(
+        try_run(
+            &mut fx.core,
+            fx.vault,
+            Command::RestoreRecurring {
+                recurring_id: Uuid::now_v7()
+            },
+        )
+        .unwrap_err(),
+        DomainError::NotFound("recurring".to_string())
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Pending
 // ---------------------------------------------------------------------------

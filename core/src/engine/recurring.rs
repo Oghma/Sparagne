@@ -156,6 +156,22 @@ pub(super) fn archive_recurring(
     Ok(())
 }
 
+pub(super) fn restore_recurring(
+    tx: &Transaction<'_>,
+    env: &CommandEnvelope,
+    recurring_id: Uuid,
+) -> Result<()> {
+    let current = load_template(tx, env.vault_id, recurring_id)?;
+    if !current.archived {
+        return Err(invalid("recurring is already active"));
+    }
+    tx.execute(
+        "UPDATE recurring_templates SET archived_at = NULL WHERE id = ?1",
+        params![recurring_id],
+    )?;
+    Ok(())
+}
+
 /// Returns the id of the created transaction (the command id).
 pub(super) fn execute_recurring(
     tx: &Transaction<'_>,
