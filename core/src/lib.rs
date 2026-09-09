@@ -37,7 +37,9 @@ pub use query::{
     CategoryView, FlowView, LegTarget, LegView, Page, TransactionFilter, TransactionView,
     VaultSnapshot, WalletView, replay,
 };
-pub use recurring::{Frequency, Schedule};
+pub use recurring::{
+    Frequency, PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule,
+};
 pub use store::Core;
 
 /// Result alias used across the crate.

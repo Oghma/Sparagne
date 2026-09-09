@@ -96,3 +96,34 @@ CREATE TABLE commands (
     result_id   BLOB                     -- id of the entity the command created
 );
 CREATE UNIQUE INDEX ux_commands_vault_seq ON commands(vault_id, seq);
+
+-- Recurring templates. Never materialized automatically: the app lists the
+-- due periods and the user executes or skips each one with a command.
+CREATE TABLE recurring_templates (
+    id          BLOB PRIMARY KEY,
+    vault_id    BLOB NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,       -- income|expense
+    amount      INTEGER NOT NULL,    -- absolute, > 0
+    wallet_id   BLOB,                -- NULL = the only active wallet at execution time
+    flow_id     BLOB,                -- NULL = Unallocated
+    category    TEXT,                -- free text, resolved at execution time
+    note        TEXT,
+    schedule    TEXT NOT NULL,       -- JSON of Schedule
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    archived_at INTEGER,
+    created_by  TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+);
+CREATE INDEX ix_recurring_vault ON recurring_templates(vault_id);
+
+-- One row per period the user has decided on; its absence is what makes a
+-- period pending.
+CREATE TABLE recurring_runs (
+    recurring_id   BLOB NOT NULL REFERENCES recurring_templates(id) ON DELETE CASCADE,
+    period_date    TEXT NOT NULL,    -- ISO yyyy-mm-dd
+    outcome        TEXT NOT NULL,    -- executed|skipped
+    transaction_id BLOB,             -- non-NULL only when executed
+    command_id     BLOB NOT NULL,
+    created_at     INTEGER NOT NULL,
+    PRIMARY KEY (recurring_id, period_date)
+);
