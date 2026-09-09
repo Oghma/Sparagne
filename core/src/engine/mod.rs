@@ -141,9 +141,9 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             source_id,
             target_id,
         } => entities::merge_category(tx, env, *source_id, *target_id).map(|()| None),
-        Command::Income(e) => entry(tx, env, TransactionKind::Income, e, now).map(Some),
-        Command::Expense(e) => entry(tx, env, TransactionKind::Expense, e, now).map(Some),
-        Command::Refund(e) => entry(tx, env, TransactionKind::Refund, e, now).map(Some),
+        Command::Income(e) => entry(tx, env, TransactionKind::Income, e).map(Some),
+        Command::Expense(e) => entry(tx, env, TransactionKind::Expense, e).map(Some),
+        Command::Refund(e) => entry(tx, env, TransactionKind::Refund, e).map(Some),
         Command::TransferWallet {
             amount,
             from_wallet_id,
@@ -158,7 +158,6 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             *to_wallet_id,
             note.as_deref(),
             *occurred_at,
-            now,
         )
         .map(Some),
         Command::TransferFlow {
@@ -179,7 +178,6 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
                 category,
                 normalize_note(note.as_deref()),
                 *occurred_at,
-                now,
             )
             .map(Some)
         }
@@ -207,7 +205,6 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
                 from_id: *from_id,
                 to_id: *to_id,
             },
-            now,
         )
         .map(|()| None),
         Command::VoidTransaction { transaction_id } => {
@@ -361,7 +358,6 @@ fn create_wallet(
             system_category_id(tx, env.vault_id, OPENING_KEY)?,
             Some(format!("opening balance for wallet '{name}'")),
             occurred_at,
-            now,
         )?;
     }
     Ok(env.id)
@@ -415,7 +411,6 @@ fn create_flow(
             system_category_id(tx, env.vault_id, OPENING_KEY)?,
             Some(format!("opening allocation for flow '{name}'")),
             occurred_at,
-            now,
         )?;
     }
     Ok(env.id)
@@ -443,7 +438,6 @@ fn entry(
     env: &CommandEnvelope,
     kind: TransactionKind,
     e: &Entry,
-    now: i64,
 ) -> Result<Uuid> {
     require_vault(tx, env.vault_id)?;
     if e.amount <= 0 {
@@ -476,7 +470,6 @@ fn entry(
         category_id,
         normalize_note(e.note.as_deref()),
         e.occurred_at,
-        now,
     )?;
     Ok(env.id)
 }
@@ -494,7 +487,6 @@ fn post_entry(
     category_id: Uuid,
     note: Option<String>,
     occurred_at: DateTime<FixedOffset>,
-    now: i64,
 ) -> Result<()> {
     let mut flow = load_flow(tx, env.vault_id, flow_id)?;
     flow.apply_leg_change(0, signed)?;
@@ -509,7 +501,6 @@ fn post_entry(
         category_id,
         note,
         occurred_at,
-        now,
     )?;
     insert_leg(tx, tx_id, 0, "wallet", wallet_id, signed)?;
     insert_leg(tx, tx_id, 1, "flow", flow_id, signed)?;
@@ -525,7 +516,6 @@ fn transfer_wallet(
     to: Uuid,
     note: Option<&str>,
     occurred_at: DateTime<FixedOffset>,
-    now: i64,
 ) -> Result<Uuid> {
     require_vault(tx, env.vault_id)?;
     if amount <= 0 {
@@ -550,7 +540,6 @@ fn transfer_wallet(
         category,
         normalize_note(note),
         occurred_at,
-        now,
     )?;
     insert_leg(tx, env.id, 0, "wallet", from, -amount)?;
     insert_leg(tx, env.id, 1, "wallet", to, amount)?;
@@ -568,7 +557,6 @@ fn post_transfer_flow(
     category_id: Uuid,
     note: Option<String>,
     occurred_at: DateTime<FixedOffset>,
-    now: i64,
 ) -> Result<Uuid> {
     require_vault(tx, env.vault_id)?;
     if amount <= 0 {
@@ -597,7 +585,6 @@ fn post_transfer_flow(
         category_id,
         note,
         occurred_at,
-        now,
     )?;
     insert_leg(tx, tx_id, 0, "flow", from, -amount)?;
     insert_leg(tx, tx_id, 1, "flow", to, amount)?;
@@ -888,9 +875,7 @@ fn insert_transaction(
     category_id: Uuid,
     note: Option<String>,
     occurred_at: DateTime<FixedOffset>,
-    now: i64,
 ) -> Result<()> {
-    let _ = now;
     tx.execute(
         "INSERT INTO transactions
             (id, vault_id, kind, occurred_at, occurred_offset, amount, category_id, note, created_by, command_id)

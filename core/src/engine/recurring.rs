@@ -207,7 +207,6 @@ pub(super) fn execute_recurring(
         category_id,
         template.note,
         occurred_at,
-        now,
     )?;
     insert_run(
         tx,

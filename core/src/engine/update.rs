@@ -43,7 +43,6 @@ pub(super) fn update_transaction(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
     patch: &TransactionPatch<'_>,
-    _now: i64,
 ) -> Result<()> {
     super::require_vault(tx, env.vault_id)?;
     let row = load_transaction(tx, env.vault_id, patch.transaction_id)?;
