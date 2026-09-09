@@ -3,13 +3,17 @@ import SparagneCore
 
 /// Vault picker, wallet balances and envelope balances.
 ///
-/// Archived wallets and envelopes are hidden; capped envelopes show
-/// `balance / cap` with the 70%/90% tinted bar (docs/v2/DISTILLATO_V1.md §3.4).
+/// Archived wallets and envelopes are hidden behind a collapsed "Archived"
+/// group; capped envelopes show `balance / cap` with the 70%/90% tinted bar
+/// (docs/v2/DISTILLATO_V1.md §3.4). Context menus carry wallet/envelope
+/// management (team-lead task 2) and a "Manage Recurring…" entry opens the
+/// Recurring panel (task 4).
 struct SidebarView: View {
     let store: AppStore
-    let onNewVault: () -> Void
-    let onNewWallet: () -> Void
-    let onNewEnvelope: () -> Void
+    /// Requests one of `MainWindow`'s sheets; `MainWindow` owns the
+    /// presentation state so every sheet, new or management, goes through
+    /// one `.sheet(item:)`.
+    let present: (MainWindow.SheetKind) -> Void
 
     var body: some View {
         List {
@@ -19,7 +23,7 @@ struct SidebarView: View {
                         Button(vault.name) { store.select(vault) }
                     }
                     Divider()
-                    Button(String(localized: "New Vault…"), action: onNewVault)
+                    Button(String(localized: "New Vault…")) { present(.vault) }
                 } label: {
                     Label(
                         store.currentVault?.name ?? String(localized: "No vault"),
@@ -32,8 +36,21 @@ struct SidebarView: View {
             Section(String(localized: "Wallets")) {
                 ForEach(store.wallets, id: \.id) { wallet in
                     WalletSidebarRow(wallet: wallet, currencyCode: store.currencyCode)
+                        .contextMenu {
+                            Button(String(localized: "Rename…")) { present(.renameWallet(wallet)) }
+                            Button(String(localized: "Archive"), role: .destructive) {
+                                store.archiveWallet(wallet.id)
+                            }
+                        }
                 }
-                Button(String(localized: "New Wallet…"), action: onNewWallet)
+                if !store.archivedWallets.isEmpty {
+                    DisclosureGroup(String(localized: "Archived")) {
+                        ForEach(store.archivedWallets, id: \.id) { wallet in
+                            ArchivedRow(name: wallet.name) { store.restoreWallet(wallet.id) }
+                        }
+                    }
+                }
+                Button(String(localized: "New Wallet…")) { present(.wallet) }
                     .buttonStyle(.link)
                     .disabled(store.currentVault == nil)
             }
@@ -45,14 +62,53 @@ struct SidebarView: View {
                         name: store.flowName(flow),
                         currencyCode: store.currencyCode
                     )
+                    .contextMenu {
+                        // Unallocated is a system envelope: the core
+                        // refuses to update or archive it.
+                        if !flow.isUnallocated {
+                            Button(String(localized: "Rename…")) { present(.renameEnvelope(flow)) }
+                            Button(String(localized: "Edit…")) { present(.editEnvelope(flow)) }
+                            Button(String(localized: "Archive"), role: .destructive) {
+                                store.archiveEnvelope(flow.id)
+                            }
+                        }
+                    }
                 }
-                Button(String(localized: "New Envelope…"), action: onNewEnvelope)
+                if !store.archivedFlows.isEmpty {
+                    DisclosureGroup(String(localized: "Archived")) {
+                        ForEach(store.archivedFlows, id: \.id) { flow in
+                            ArchivedRow(name: flow.name) { store.restoreEnvelope(flow.id) }
+                        }
+                    }
+                }
+                Button(String(localized: "New Envelope…")) { present(.envelope) }
+                    .buttonStyle(.link)
+                    .disabled(store.currentVault == nil)
+            }
+
+            Section(String(localized: "Recurring")) {
+                Button(String(localized: "Manage Recurring…")) { present(.recurring) }
                     .buttonStyle(.link)
                     .disabled(store.currentVault == nil)
             }
         }
         .listStyle(.sidebar)
         .frame(minWidth: 220)
+    }
+}
+
+/// One archived wallet or envelope, with its Restore action.
+private struct ArchivedRow: View {
+    let name: String
+    let restore: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(name).foregroundStyle(.secondary)
+            Spacer()
+            Button(String(localized: "Restore"), action: restore)
+                .buttonStyle(.link)
+        }
     }
 }
 

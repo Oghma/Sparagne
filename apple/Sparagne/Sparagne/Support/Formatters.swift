@@ -68,3 +68,53 @@ extension Currency {
         }
     }
 }
+
+/// Describes a recurring template's `Schedule` (`docs/v2/ARCH.md` §4:
+/// `frequency` + `interval`, day/weekday/month clamped to the calendar by
+/// the core) for the Recurring panel's list and edit form.
+enum ScheduleFormatting {
+    static func describe(_ schedule: Schedule, locale: Locale = .autoupdatingCurrent) -> String {
+        frequencyText(schedule.frequency, interval: schedule.interval, locale: locale)
+    }
+
+    /// The localized weekday name for an ISO weekday (Monday = 1 ... Sunday
+    /// = 7), used both by `describe` and by the weekday picker.
+    static func weekdayName(_ isoWeekday: UInt8, locale: Locale = .autoupdatingCurrent) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        let symbols = calendar.weekdaySymbols
+        let index = Int(isoWeekday) % 7
+        return symbols.indices.contains(index) ? symbols[index] : "\(isoWeekday)"
+    }
+
+    /// The localized month name for a 1-based month, used both by
+    /// `describe` and by the yearly-schedule picker.
+    static func monthName(_ month: UInt8, locale: Locale = .autoupdatingCurrent) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        let symbols = calendar.monthSymbols
+        let index = Int(month) - 1
+        return symbols.indices.contains(index) ? symbols[index] : "\(month)"
+    }
+
+    private static func frequencyText(_ frequency: Frequency, interval: UInt32, locale: Locale) -> String {
+        switch frequency {
+        case .daily:
+            return interval == 1
+                ? String(localized: "Daily")
+                : String(localized: "Every") + " \(interval) " + String(localized: "days")
+        case .weekly(let weekday):
+            let name = weekdayName(weekday, locale: locale)
+            return interval == 1
+                ? String(localized: "Weekly on") + " " + name
+                : String(localized: "Every") + " \(interval) " + String(localized: "weeks on") + " " + name
+        case .monthly(let day):
+            return interval == 1
+                ? String(localized: "Monthly on day") + " \(day)"
+                : String(localized: "Every") + " \(interval) " + String(localized: "months on day") + " \(day)"
+        case .yearly(let month, let day):
+            let name = monthName(month, locale: locale)
+            return String(localized: "Yearly on") + " \(name) \(day)"
+        }
+    }
+}

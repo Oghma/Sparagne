@@ -1,10 +1,12 @@
 import SwiftUI
 import SparagneCore
 
-/// Opens the database, then hands the window over to `MainWindow`.
+/// Opens the database, then hands the window over to `MainWindow`. Owns the
+/// store through a binding so `SparagneApp` can share the same instance
+/// with the Categories `Window` scene (team-lead task 3).
 struct ContentView: View {
-    @State private var store: AppStore?
-    @State private var launchFailure: String?
+    @Binding var store: AppStore?
+    @Binding var launchFailure: String?
 
     var body: some View {
         Group {
@@ -40,23 +42,33 @@ struct MainWindow: View {
     let store: AppStore
     @State private var sheet: SheetKind?
 
-    /// The three small sheets the window can present.
-    enum SheetKind: String, Identifiable {
+    /// The sheets the window can present. Associated values seed the sheet
+    /// with the entity being renamed or edited (team-lead task 2).
+    enum SheetKind: Identifiable {
         case vault
         case wallet
         case envelope
+        case renameWallet(WalletView)
+        case renameEnvelope(FlowView)
+        case editEnvelope(FlowView)
+        case recurring
 
-        var id: String { rawValue }
+        var id: String {
+            switch self {
+            case .vault: "vault"
+            case .wallet: "wallet"
+            case .envelope: "envelope"
+            case .renameWallet(let wallet): "renameWallet-\(wallet.id)"
+            case .renameEnvelope(let flow): "renameEnvelope-\(flow.id)"
+            case .editEnvelope(let flow): "editEnvelope-\(flow.id)"
+            case .recurring: "recurring"
+            }
+        }
     }
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(
-                store: store,
-                onNewVault: { sheet = .vault },
-                onNewWallet: { sheet = .wallet },
-                onNewEnvelope: { sheet = .envelope }
-            )
+            SidebarView(store: store, present: { sheet = $0 })
         } detail: {
             DetailView(store: store)
         }
@@ -95,17 +107,40 @@ struct MainWindow: View {
                         openingAllocation: allocation
                     )
                 }
+            case .renameWallet(let wallet):
+                RenameSheet(title: String(localized: "Rename Wallet"), name: wallet.name) { name in
+                    store.renameWallet(wallet.id, name: name)
+                }
+            case .renameEnvelope(let flow):
+                RenameSheet(title: String(localized: "Rename Envelope"), name: flow.name) { name in
+                    store.updateEnvelope(flow.id, name: name)
+                }
+            case .editEnvelope(let flow):
+                EditEnvelopeSheet(flow: flow, currency: store.currency) { mode, allowNegative in
+                    store.updateEnvelope(flow.id, mode: mode, allowNegative: allowNegative)
+                }
+            case .recurring:
+                RecurringPanel(store: store)
             }
         }
         .alert(
-            String(localized: "Something went wrong"),
+            store.presentedError.map { ErrorMessages.summary(for: $0.code) } ?? String(localized: "Something went wrong"),
             isPresented: Binding(
                 get: { store.presentedError != nil },
                 set: { if !$0 { store.presentedError = nil } }
             ),
             presenting: store.presentedError
-        ) { _ in
-            Button(String(localized: "OK"), role: .cancel) { store.presentedError = nil }
+        ) { error in
+            // ambiguous_name: one button per candidate name, rewriting the
+            // marker in quickAddText and resubmitting (task 1).
+            if error.candidates.isEmpty {
+                Button(String(localized: "OK"), role: .cancel) { store.presentedError = nil }
+            } else {
+                ForEach(error.candidates, id: \.self) { candidate in
+                    Button(candidate) { store.resolveAmbiguous(choosing: candidate) }
+                }
+                Button(String(localized: "Cancel"), role: .cancel) { store.presentedError = nil }
+            }
         } message: { error in
             Text(error.message)
         }

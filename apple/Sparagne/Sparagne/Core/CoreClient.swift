@@ -71,8 +71,34 @@ final class CoreClient {
         try handle.snapshot(vaultId: vaultId)
     }
 
-    func categories(vaultId: Uuid) throws -> [CategoryView] {
-        try handle.categories(vaultId: vaultId, includeArchived: false)
+    func categories(vaultId: Uuid, includeArchived: Bool = false) throws -> [CategoryView] {
+        try handle.categories(vaultId: vaultId, includeArchived: includeArchived)
+    }
+
+    func aliases(vaultId: Uuid) throws -> [AliasView] {
+        try handle.aliases(vaultId: vaultId)
+    }
+
+    /// Active categories whose name is close to `name`, for the "similar
+    /// categories" hint while typing a new one (docs task 3: suggest, never
+    /// block, `docs/v2/DISTILLATO_V1.md` §2.1).
+    func similarCategories(vaultId: Uuid, name: String) throws -> [CategoryView] {
+        try handle.similarCategories(vaultId: vaultId, name: name)
+    }
+
+    /// What `MergeCategory` would refuse, without changing anything.
+    func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid) throws -> MergePreview {
+        try handle.previewMerge(vaultId: vaultId, sourceId: sourceId, targetId: targetId)
+    }
+
+    func listRecurring(vaultId: Uuid, includeArchived: Bool) throws -> [RecurringView] {
+        try handle.listRecurring(vaultId: vaultId, includeArchived: includeArchived)
+    }
+
+    /// Templates with periods still waiting for a decision, as of `today`
+    /// (`docs/v2/ARCH.md` §4: the app passes "today" in the system timezone).
+    func pendingRecurring(vaultId: Uuid, today: NaiveDate) throws -> [PendingRecurring] {
+        try handle.pendingRecurring(vaultId: vaultId, today: today)
     }
 
     func transactions(

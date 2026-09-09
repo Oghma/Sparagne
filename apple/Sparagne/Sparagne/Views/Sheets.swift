@@ -181,6 +181,118 @@ struct NewEnvelopeSheet: View {
     }
 }
 
+/// A single text field with Cancel/Save: wallet rename and the envelope
+/// quick-rename (team-lead task 2). Fuller envelope edits go through
+/// `EditEnvelopeSheet`.
+struct RenameSheet: View {
+    let title: String
+    let name: String
+    let save: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+
+    init(title: String, name: String, save: @escaping (String) -> Void) {
+        self.title = title
+        self.name = name
+        self.save = save
+        _text = State(initialValue: name)
+    }
+
+    private var trimmed: String { text.trimmingCharacters(in: .whitespaces) }
+    private var canSave: Bool { !trimmed.isEmpty && trimmed != name }
+
+    var body: some View {
+        SheetLayout(
+            title: title,
+            confirmTitle: String(localized: "Save"),
+            canConfirm: canSave,
+            showsCancel: true,
+            confirm: {
+                save(trimmed)
+                dismiss()
+            },
+            cancel: { dismiss() }
+        ) {
+            TextField(String(localized: "Name"), text: $text)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+}
+
+/// Mode, cap and allow-negative for an existing envelope (`.updateFlow`,
+/// team-lead task 2). Renaming is the separate, lighter `RenameSheet`.
+struct EditEnvelopeSheet: View {
+    let flow: FlowView
+    let currency: Currency
+    let save: (_ mode: FlowMode, _ allowNegative: Bool) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var capKind: NewEnvelopeSheet.CapKind
+    @State private var capAmount: String
+    @State private var allowNegative: Bool
+
+    init(flow: FlowView, currency: Currency, save: @escaping (_ mode: FlowMode, _ allowNegative: Bool) -> Void) {
+        self.flow = flow
+        self.currency = currency
+        self.save = save
+        switch flow.mode {
+        case .unlimited:
+            _capKind = State(initialValue: .unlimited)
+            _capAmount = State(initialValue: "")
+        case .netCapped(let cap):
+            _capKind = State(initialValue: .netCapped)
+            _capAmount = State(initialValue: MoneyFormatter.editable(minorUnits: cap))
+        case .incomeCapped(let cap):
+            _capKind = State(initialValue: .incomeCapped)
+            _capAmount = State(initialValue: MoneyFormatter.editable(minorUnits: cap))
+        }
+        _allowNegative = State(initialValue: flow.allowNegative)
+    }
+
+    private func minorUnits(_ text: String) -> Int64? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return 0 }
+        return try? parseMoney(text: trimmed, currency: currency)
+    }
+
+    private var mode: FlowMode? {
+        switch capKind {
+        case .unlimited: .unlimited
+        case .netCapped: minorUnits(capAmount).map { .netCapped(cap: $0) }
+        case .incomeCapped: minorUnits(capAmount).map { .incomeCapped(cap: $0) }
+        }
+    }
+
+    var body: some View {
+        SheetLayout(
+            title: String(localized: "Edit Envelope"),
+            confirmTitle: String(localized: "Save"),
+            canConfirm: mode != nil,
+            showsCancel: true,
+            confirm: {
+                if let mode { save(mode, allowNegative) }
+                dismiss()
+            },
+            cancel: { dismiss() }
+        ) {
+            Form {
+                Picker(String(localized: "Cap"), selection: $capKind) {
+                    ForEach(NewEnvelopeSheet.CapKind.allCases) { kind in
+                        Text(kind.label).tag(kind)
+                    }
+                }
+                if capKind != .unlimited {
+                    TextField(String(localized: "Cap amount"), text: $capAmount)
+                        .monospacedDigit()
+                }
+                Toggle(String(localized: "Allow negative balance"), isOn: $allowNegative)
+            }
+            .formStyle(.grouped)
+        }
+    }
+}
+
 // MARK: - Shared chrome
 
 /// Title, content and a Cancel/Confirm footer: the plain macOS sheet shape.

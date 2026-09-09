@@ -11,6 +11,7 @@ struct DetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            RecurringBanner(store: store)
             QuickAddBar(store: store, focused: $quickAddFocused)
             Divider()
             filterBar
@@ -227,5 +228,54 @@ private struct TransactionsTable: View {
         case .transferWallet: String(localized: "Wallet transfer")
         case .transferFlow: String(localized: "Envelope transfer")
         }
+    }
+}
+
+// MARK: - Recurring banner
+
+/// One row per (template, due date): `pendingRecurring` can report several
+/// backlogged periods for the same template. Execute materializes the
+/// period as a transaction; Skip marks it handled without one
+/// (docs/v2/DISTILLATO_V1.md §2.3).
+private struct RecurringBanner: View {
+    let store: AppStore
+
+    private var rows: [(template: RecurringView, due: NaiveDate)] {
+        store.pendingRecurringItems.flatMap { pending in
+            pending.due.map { (pending.template, $0) }
+        }
+    }
+
+    var body: some View {
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    HStack {
+                        Image(systemName: "arrow.triangle.2.circlepath.circle")
+                            .foregroundStyle(AppTheme.warning)
+                        Text(label(row.template, row.due))
+                        Spacer()
+                        Button(String(localized: "Skip")) {
+                            store.skipRecurring(row.template.id, periodDate: row.due)
+                        }
+                        Button(String(localized: "Execute")) {
+                            store.executeRecurring(row.template.id, periodDate: row.due)
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(AppTheme.warning.opacity(0.12))
+            .transition(.opacity)
+        }
+    }
+
+    private func label(_ template: RecurringView, _ due: NaiveDate) -> String {
+        let amount = MoneyFormatter.format(minorUnits: template.amount, currencyCode: store.currencyCode)
+        let date = CoreDate.localDay(due).map { DateFormatting.relativeDay($0) } ?? due
+        let subject = template.note.flatMap { $0.isEmpty ? nil : $0 } ?? template.category ?? TransactionRow.placeholder
+        return "\(amount) · \(subject) · \(date)"
     }
 }

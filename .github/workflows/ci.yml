@@ -62,5 +62,24 @@ jobs:
       - name: Check the committed bindings are up to date
         run: git diff --exit-code -- apple/SparagneCore/Sources/SparagneCore/SparagneCore.swift
 
-      - name: Test
+      - name: Test the Swift package
         run: swift test --package-path apple/SparagneCore
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        run: xcodegen generate
+        working-directory: apple/Sparagne
+
+      - name: Build the app
+        run: |
+          xcodebuild -project Sparagne.xcodeproj -scheme Sparagne \
+            -destination 'platform=macOS' build -quiet CODE_SIGNING_ALLOWED=NO
+        working-directory: apple/Sparagne
+
+      - name: Test the app
+        run: |
+          xcodebuild -project Sparagne.xcodeproj -scheme Sparagne \
+            -destination 'platform=macOS' test -quiet CODE_SIGNING_ALLOWED=NO
+        working-directory: apple/Sparagne

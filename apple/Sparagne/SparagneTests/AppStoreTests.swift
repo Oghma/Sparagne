@@ -261,6 +261,159 @@ struct AppStoreTests {
         #expect(row.flowId == nil)
         #expect(store.wallets.first { $0.name == "Bank" }?.balance == 2000)
     }
+
+    // MARK: - Wallet and envelope management
+
+    @Test("Archiving a wallet with a balance surfaces invalid_command")
+    func archivingAWalletWithBalanceIsRefused() throws {
+        let store = try Self.onboarded()
+        let cash = try #require(store.wallets.first { $0.name == "Cash" })
+
+        store.archiveWallet(cash.id)
+
+        let error = try #require(store.presentedError)
+        #expect(error.code == "invalid_command")
+        #expect(store.wallets.contains { $0.id == cash.id })
+    }
+
+    @Test("Updating an envelope's cap shows up in the snapshot")
+    func updatingAnEnvelopeChangesTheCapInTheSnapshot() throws {
+        let store = try Self.onboarded()
+        store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
+        let envelope = try #require(store.flows.first { $0.name == "Vacanze" })
+
+        store.updateEnvelope(envelope.id, mode: .netCapped(cap: 5000))
+
+        #expect(store.presentedError == nil)
+        let updated = try #require(store.flows.first { $0.id == envelope.id })
+        #expect(updated.mode == .netCapped(cap: 5000))
+    }
+
+    // MARK: - Category management
+
+    @Test("Renaming a category shows up in the categories list")
+    func renamingACategoryShowsInCategories() throws {
+        let store = try Self.onboarded()
+        store.submit(quickAdd: "-5.00 pizza #Food")
+        #expect(store.presentedError == nil)
+        store.loadCategoryManagement()
+        let food = try #require(store.windowCategories.first { $0.name == "Food" })
+
+        store.renameCategory(food.id, name: "Groceries")
+
+        #expect(store.presentedError == nil)
+        #expect(store.categories.contains { $0.name == "Groceries" })
+        #expect(store.windowCategories.contains { $0.id == food.id && $0.name == "Groceries" })
+    }
+
+    @Test("A merge with preview conflicts is refused; a clean merge repoints transactions")
+    func categoryMergePreviewAndCleanMerge() throws {
+        let store = try Self.onboarded()
+        store.submit(quickAdd: "-5.00 pizza #Food")
+        #expect(store.presentedError == nil)
+        store.loadCategoryManagement()
+        let food = try #require(store.windowCategories.first { $0.name == "Food" })
+
+        // Merging a category into itself always conflicts.
+        let selfPreview = store.previewCategoryMerge(sourceId: food.id, targetId: food.id)
+        #expect(selfPreview?.ok == false)
+        #expect(selfPreview?.conflicts.contains { $0.kind == .sameCategory } == true)
+
+        store.mergeCategory(sourceId: food.id, targetId: food.id)
+        #expect(store.presentedError != nil)
+        store.presentedError = nil
+
+        // A fresh, unrelated target has no conflicts and the merge repoints
+        // the existing transaction (checked via `listTransactions`).
+        store.createCategory(name: "Groceries")
+        store.loadCategoryManagement()
+        let groceries = try #require(store.windowCategories.first { $0.name == "Groceries" })
+
+        let cleanPreview = store.previewCategoryMerge(sourceId: food.id, targetId: groceries.id)
+        #expect(cleanPreview?.ok == true)
+        #expect(cleanPreview?.conflicts.isEmpty == true)
+
+        store.mergeCategory(sourceId: food.id, targetId: groceries.id)
+
+        #expect(store.presentedError == nil)
+        let pizza = try #require(store.transactions.first { $0.note == "pizza" })
+        #expect(pizza.categoryId == groceries.id)
+        #expect(!store.windowCategories.contains { $0.id == food.id })
+    }
+
+    // MARK: - Recurring
+
+    @Test("A template due a month ago is pending; executing adds a transaction and clears it, skipping leaves no transaction")
+    func recurringExecuteAndSkip() throws {
+        let store = try Self.onboarded()
+        // The executed transaction lands last month; widen the filter so it
+        // stays visible in `rows` (the default period is `.thisMonth`).
+        store.period = .all
+        let now = Date()
+        let calendar = Calendar(identifier: .gregorian)
+        let dayOfMonth = calendar.component(.day, from: now)
+        let monthAgo = try #require(calendar.date(byAdding: .month, value: -1, to: now))
+
+        store.createRecurring(
+            kind: .expense,
+            amount: 999,
+            walletId: nil,
+            flowId: nil,
+            category: "Bills",
+            note: "Rent",
+            schedule: Schedule(
+                frequency: .monthly(day: UInt8(dayOfMonth)),
+                interval: 1,
+                startDate: CoreDate.day(monthAgo),
+                endDate: nil
+            )
+        )
+        #expect(store.presentedError == nil)
+        let template = try #require(store.recurringTemplates.first { $0.note == "Rent" })
+
+        let dueDate = try #require(
+            store.pendingRecurringItems.first { $0.template.id == template.id }?.due.first
+        )
+
+        store.executeRecurring(template.id, periodDate: dueDate)
+
+        #expect(store.presentedError == nil)
+        #expect(!(store.pendingRecurringItems.first { $0.template.id == template.id }?.due.contains(dueDate) ?? false))
+        let executed = try #require(store.rows.first { $0.note == "Rent" })
+        #expect(executed.kind == .expense)
+        #expect(executed.absoluteAmount == 999)
+
+        // Skipping the following period (if any is already due) leaves no
+        // additional transaction.
+        if let nextDue = store.pendingRecurringItems.first(where: { $0.template.id == template.id })?.due.first {
+            let countBefore = store.rows.filter { $0.note == "Rent" }.count
+            store.skipRecurring(template.id, periodDate: nextDue)
+            #expect(store.presentedError == nil)
+            #expect(store.rows.filter { $0.note == "Rent" }.count == countBefore)
+        }
+    }
+}
+
+/// Every code `ErrorMessages.summary(for:)` is documented to cover
+/// (`ErrorMessages.swift`): every `DomainError` and `QuickAddError` code,
+/// plus the `"domain_error"` fallback key.
+struct ErrorMessagesTests {
+    private static let allCodes = [
+        "insufficient_funds", "max_balance_reached", "not_found", "already_exists",
+        "invalid_amount", "invalid_name", "invalid_flow", "currency_mismatch",
+        "invalid_command", "invalid_cursor", "storage_error",
+        "empty_input", "missing_amount", "duplicate_marker", "marker_not_allowed",
+        "missing_transfer_target", "invalid_date", "duplicate_date", "ambiguous_name",
+        "unknown_name", "same_target", "domain_error",
+    ]
+
+    @Test("Every documented error code maps to a non-empty localized summary")
+    func everyCodeHasASummary() {
+        for code in Self.allCodes {
+            let summary = ErrorMessages.summary(for: code)
+            #expect(!summary.isEmpty, "no summary for \(code)")
+        }
+    }
 }
 
 /// Date conversions on the FFI boundary.

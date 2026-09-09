@@ -6,10 +6,17 @@ struct SparagneApp: App {
     // DetailView's filter bar, so the menu item and the toolbar toggle stay
     // in sync without extra plumbing.
     @AppStorage("showVoided") private var showVoided = false
+    @Environment(\.openWindow) private var openWindow
+
+    /// Opened once, in `ContentView`, and shared with the Categories window
+    /// so both windows see the same vault and the same in-process core
+    /// (team-lead task 3).
+    @State private var store: AppStore?
+    @State private var launchFailure: String?
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(store: $store, launchFailure: $launchFailure)
         }
         .commands {
             CommandMenu(String(localized: "Transaction")) {
@@ -23,7 +30,25 @@ struct SparagneApp: App {
                 Toggle(String(localized: "Show Voided"), isOn: $showVoided)
                     .keyboardShortcut("v", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .newItem) {
+                Button(String(localized: "Categories…")) { openWindow(id: "categories") }
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+            }
         }
+
+        Window(String(localized: "Categories"), id: "categories") {
+            Group {
+                if let store {
+                    CategoriesWindowView(store: store)
+                } else {
+                    ContentUnavailableView(
+                        String(localized: "No vault yet"),
+                        systemImage: "tag"
+                    )
+                }
+            }
+        }
+        .defaultSize(width: 560, height: 420)
 
         Settings {
             SettingsView()

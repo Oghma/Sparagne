@@ -11,11 +11,20 @@ struct AppError: Identifiable, Equatable, Sendable {
     /// The names an ambiguous quick-add marker could have meant; empty
     /// otherwise. The alert offers them so the user can retype one.
     let candidates: [String]
+    /// The fragment that was ambiguous (`QuickAddError.AmbiguousName`'s
+    /// `name`), so `AppStore.resolveAmbiguous` knows what to replace in
+    /// `quickAddText`. `nil` outside that one case.
+    let ambiguousFragment: String?
 
-    init(code: String, message: String, candidates: [String] = []) {
+    /// The localized headline for `code` (`ErrorMessages.swift`); the alert
+    /// keeps `message`, the Rust `Display` text, as its secondary detail.
+    var summary: String { ErrorMessages.summary(for: code) }
+
+    init(code: String, message: String, candidates: [String] = [], ambiguousFragment: String? = nil) {
         self.code = code
         self.message = message
         self.candidates = candidates
+        self.ambiguousFragment = ambiguousFragment
     }
 
     init(_ error: DomainError) {
@@ -23,7 +32,8 @@ struct AppError: Identifiable, Equatable, Sendable {
     }
 
     init(_ error: QuickAddError) {
-        self.init(code: error.code, message: error.message, candidates: error.candidates)
+        let fragment: String? = if case .AmbiguousName(let name, _) = error { name } else { nil }
+        self.init(code: error.code, message: error.message, candidates: error.candidates, ambiguousFragment: fragment)
     }
 }
 
@@ -55,6 +65,12 @@ extension TransactionPatch {
     /// A patch that carries no field changes nothing, so it is never sent
     /// (`UpdateTransaction` refuses it, `docs/v2/ARCH.md` §4).
     var isEmpty: Bool { self == TransactionPatch() }
+}
+
+extension RecurringPatch {
+    /// Same rule as `TransactionPatch.isEmpty`: `UpdateRecurring` refuses an
+    /// empty patch.
+    var isEmpty: Bool { self == RecurringPatch() }
 }
 
 /// Everything the window shows and everything it can do.
@@ -91,6 +107,22 @@ final class AppStore {
     private(set) var nextCursor: String?
     private(set) var totals: PeriodTotals?
     private(set) var allRows: [TransactionRow] = []
+
+    // MARK: Category management (Categories window)
+
+    /// Active and archived categories, for the Categories window;
+    /// `categories` above stays active-only, for pickers.
+    private(set) var windowCategories: [CategoryView] = []
+    private(set) var categoryAliases: [AliasView] = []
+
+    // MARK: Recurring
+
+    /// Periods still waiting for a decision, refreshed on every `reload()`
+    /// so the banner in `DetailView` stays current without a separate poll.
+    private(set) var pendingRecurringItems: [PendingRecurring] = []
+    /// Every template, active and archived; loaded on demand when the
+    /// Recurring panel opens.
+    private(set) var recurringTemplates: [RecurringView] = []
 
     // MARK: Filters and view state
 
@@ -135,6 +167,12 @@ final class AppStore {
     /// Active envelopes, Unallocated first (the core already orders them).
     var flows: [FlowView] { snapshot?.flows.filter { !$0.archived } ?? [] }
 
+    /// For the sidebar's collapsed "Archived" group.
+    var archivedWallets: [WalletView] { snapshot?.wallets.filter { $0.archived } ?? [] }
+
+    /// Unallocated is never archived, so it never needs to appear here.
+    var archivedFlows: [FlowView] { snapshot?.flows.filter { $0.archived && !$0.isUnallocated } ?? [] }
+
     /// Loaded rows minus the one waiting on the undo toast.
     var rows: [TransactionRow] {
         guard let hidden = pendingUndo?.id else { return allRows }
@@ -174,6 +212,11 @@ final class AppStore {
         selection = nil
         lastWalletId = nil
         lastFlowId = nil
+        // Stale until whichever view needs them reloads: the Categories
+        // window and the Recurring panel load on appear, not eagerly.
+        windowCategories = []
+        categoryAliases = []
+        recurringTemplates = []
         reload()
     }
 
@@ -186,6 +229,7 @@ final class AppStore {
             allRows = []
             nextCursor = nil
             totals = nil
+            pendingRecurringItems = []
             return
         }
         guarded {
@@ -201,6 +245,7 @@ final class AppStore {
             nextCursor = page.nextCursor
             let bounds = period.bounds()
             totals = try client.totals(vaultId: vault.id, from: bounds.from, to: bounds.to)
+            pendingRecurringItems = try client.pendingRecurring(vaultId: vault.id, today: CoreDate.day(Date()))
             rebuildRows()
         }
     }
@@ -301,6 +346,262 @@ final class AppStore {
         }
     }
 
+    // MARK: - Wallet and envelope management
+
+    func renameWallet(_ walletId: Uuid, name: String) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .renameWallet(walletId: walletId, name: name))
+            reload()
+        }
+    }
+
+    /// Requires a zero balance in the core; the error surfaces as-is
+    /// (docs task 2: no client-side pre-validation).
+    func archiveWallet(_ walletId: Uuid) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .archiveWallet(walletId: walletId))
+            reload()
+        }
+    }
+
+    func restoreWallet(_ walletId: Uuid) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .restoreWallet(walletId: walletId))
+            reload()
+        }
+    }
+
+    /// Only the given fields change; Unallocated cannot be updated
+    /// (`.updateFlow`, `docs/v2/ARCH.md` §4).
+    func updateEnvelope(_ flowId: Uuid, name: String? = nil, mode: FlowMode? = nil, allowNegative: Bool? = nil) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(
+                vaultId: vault.id,
+                .updateFlow(flowId: flowId, name: name, mode: mode, allowNegative: allowNegative)
+            )
+            reload()
+        }
+    }
+
+    /// Requires a zero balance in the core; the error surfaces as-is.
+    func archiveEnvelope(_ flowId: Uuid) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .archiveFlow(flowId: flowId))
+            reload()
+        }
+    }
+
+    func restoreEnvelope(_ flowId: Uuid) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .restoreFlow(flowId: flowId))
+            reload()
+        }
+    }
+
+    // MARK: - Category management (Categories window)
+
+    /// Loads both the management list (archived included) and the aliases;
+    /// called when the Categories window appears (docs task 3).
+    func loadCategoryManagement() {
+        guard let vault = currentVault else {
+            windowCategories = []
+            categoryAliases = []
+            return
+        }
+        guarded {
+            windowCategories = try client.categories(vaultId: vault.id, includeArchived: true)
+            categoryAliases = try client.aliases(vaultId: vault.id)
+        }
+    }
+
+    /// Active categories near `name`, nearest first; empty on a blank name
+    /// or any core error. Used as a live, non-blocking hint while typing
+    /// (docs/v2/DISTILLATO_V1.md §2.1: "suggest, don't block").
+    func similarCategories(name: String) -> [CategoryView] {
+        guard let vault = currentVault, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        return (try? client.similarCategories(vaultId: vault.id, name: name)) ?? []
+    }
+
+    /// What `mergeCategory` would refuse, without changing anything.
+    func previewCategoryMerge(sourceId: Uuid, targetId: Uuid) -> MergePreview? {
+        guard let vault = currentVault else { return nil }
+        return try? client.previewMerge(vaultId: vault.id, sourceId: sourceId, targetId: targetId)
+    }
+
+    func createCategory(name: String) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .createCategory(name: name))
+            reloadCategories()
+        }
+    }
+
+    /// System categories cannot be renamed; the core refuses it.
+    func renameCategory(_ categoryId: Uuid, name: String) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .renameCategory(categoryId: categoryId, name: name))
+            reloadCategories()
+        }
+    }
+
+    func archiveCategory(_ categoryId: Uuid) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .archiveCategory(categoryId: categoryId))
+            reloadCategories()
+        }
+    }
+
+    func restoreCategory(_ categoryId: Uuid) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .restoreCategory(categoryId: categoryId))
+            reloadCategories()
+        }
+    }
+
+    func addAlias(categoryId: Uuid, alias: String) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .addAlias(categoryId: categoryId, alias: alias))
+            reloadCategories()
+        }
+    }
+
+    func removeAlias(categoryId: Uuid, alias: String) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .removeAlias(categoryId: categoryId, alias: alias))
+            reloadCategories()
+        }
+    }
+
+    /// Refused when `previewCategoryMerge` reports conflicts; repoints every
+    /// transaction of `sourceId` to `targetId` and deletes the source
+    /// (`docs/v2/ARCH.md` §4).
+    func mergeCategory(sourceId: Uuid, targetId: Uuid) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .mergeCategory(sourceId: sourceId, targetId: targetId))
+            reloadCategories()
+        }
+    }
+
+    /// Refreshes the picker list and the management window's list together,
+    /// after any category command. A full `reload()` because a rename
+    /// propagates its denormalized name onto transactions and a merge
+    /// repoints them (`docs/v2/DISTILLATO_V1.md` §2.1): the loaded
+    /// transactions page can be stale, not just the category lists.
+    private func reloadCategories() {
+        guard let vault = currentVault else { return }
+        reload()
+        windowCategories = (try? client.categories(vaultId: vault.id, includeArchived: true)) ?? windowCategories
+        categoryAliases = (try? client.aliases(vaultId: vault.id)) ?? categoryAliases
+    }
+
+    // MARK: - Recurring
+
+    /// Every template, active and archived; called when the Recurring panel
+    /// opens (`pendingRecurringItems` itself is kept current by `reload()`).
+    func loadRecurringTemplates() {
+        guard let vault = currentVault else {
+            recurringTemplates = []
+            return
+        }
+        guarded {
+            recurringTemplates = try client.listRecurring(vaultId: vault.id, includeArchived: true)
+        }
+    }
+
+    func createRecurring(
+        kind: TransactionKind,
+        amount: Int64,
+        walletId: Uuid?,
+        flowId: Uuid?,
+        category: String?,
+        note: String?,
+        schedule: Schedule
+    ) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(
+                vaultId: vault.id,
+                .createRecurring(
+                    transactionKind: kind,
+                    amount: amount,
+                    walletId: walletId,
+                    flowId: flowId,
+                    category: category,
+                    note: note,
+                    schedule: schedule
+                )
+            )
+            loadRecurringTemplates()
+            reload()
+        }
+    }
+
+    func updateRecurring(_ recurringId: Uuid, patch: RecurringPatch) {
+        guard let vault = currentVault, !patch.isEmpty else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .updateRecurring(recurringId: recurringId, patch: patch))
+            loadRecurringTemplates()
+            reload()
+        }
+    }
+
+    func archiveRecurring(_ recurringId: Uuid) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .archiveRecurring(recurringId: recurringId))
+            loadRecurringTemplates()
+            reload()
+        }
+    }
+
+    /// Materializes `periodDate` as a transaction; `occurredAt` is the due
+    /// date at the current time of day, in the system offset (team-lead
+    /// task 4).
+    func executeRecurring(_ recurringId: Uuid, periodDate: NaiveDate) {
+        guard let vault = currentVault else { return }
+        guarded {
+            let now = Date()
+            let occurredAt = Self.combine(day: periodDate, timeOf: now)
+            try client.execute(
+                vaultId: vault.id,
+                .executeRecurring(recurringId: recurringId, periodDate: periodDate, occurredAt: occurredAt)
+            )
+            loadRecurringTemplates()
+            reload()
+        }
+    }
+
+    func skipRecurring(_ recurringId: Uuid, periodDate: NaiveDate) {
+        guard let vault = currentVault else { return }
+        guarded {
+            try client.execute(vaultId: vault.id, .skipRecurring(recurringId: recurringId, periodDate: periodDate))
+            loadRecurringTemplates()
+            reload()
+        }
+    }
+
+    /// `periodDate` (a bare day) at today's time of day, in the system
+    /// offset: what `executeRecurring` sends as `occurredAt`.
+    private static func combine(day: NaiveDate, timeOf now: Date) -> OffsetDateTime {
+        guard let dayDate = CoreDate.localDay(day) else { return CoreDate.offset(now) }
+        let calendar = Calendar.current
+        let time = calendar.dateComponents([.hour, .minute, .second], from: now)
+        let combined = calendar.date(bySettingHour: time.hour ?? 0, minute: time.minute ?? 0, second: time.second ?? 0, of: dayDate)
+        return CoreDate.offset(combined ?? now)
+    }
+
     // MARK: - Quick add
 
     /// Pure parse, for the live preview line. No database access.
@@ -335,6 +636,31 @@ final class AppStore {
             quickAddText = ""
             reload()
         }
+    }
+
+    /// Called from the error alert's candidate buttons after an
+    /// `ambiguous_name` quick-add error: rewrites the marker that carried
+    /// the ambiguous fragment with the chosen name and resubmits (task 1).
+    func resolveAmbiguous(choosing candidate: String) {
+        guard let error = presentedError, let fragment = error.ambiguousFragment else { return }
+        presentedError = nil
+        let rewritten = Self.rewrite(quickAddText, fragment: fragment, with: candidate)
+        quickAddText = rewritten
+        submit(quickAdd: rewritten)
+    }
+
+    /// Finds which marker (`#`, `@`, `>`) carried `fragment` and swaps in
+    /// `chosen`, preserving the marker. The grammar allows at most one of
+    /// each marker (`docs/v2/DISTILLATO_V1.md` §3.1), so the first match is
+    /// unambiguous.
+    private static func rewrite(_ text: String, fragment: String, with chosen: String) -> String {
+        for marker in ["#", "@", ">"] {
+            let needle = marker + fragment
+            if let range = text.range(of: needle, options: .caseInsensitive) {
+                return text.replacingCharacters(in: range, with: marker + chosen)
+            }
+        }
+        return text
     }
 
     // MARK: - Void with deferred undo
