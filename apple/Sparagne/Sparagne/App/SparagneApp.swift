@@ -40,7 +40,7 @@ extension Notification.Name {
 private struct SettingsView: View {
     var body: some View {
         Form {
-            Text(String(localized: "Sparagne settings will live here once the core is wired up."))
+            Text(String(localized: "Sparagne stores everything locally, in Application Support."))
                 .foregroundStyle(.secondary)
         }
         .padding()

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import SparagneCore
 
 /// Semantic colors and icons, built on top of system colors/symbols so they
 /// pick up light/dark, accessibility contrast and tint preferences for free.

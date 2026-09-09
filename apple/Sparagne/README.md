@@ -1,10 +1,28 @@
-# Sparagne (macOS app scaffold)
+# Sparagne (macOS app)
 
-SwiftUI/macOS shell for Sparagne v2 (see `docs/v2/ARCH.md` §2.2 and
-`docs/v2/DISTILLATO_V1.md`). This builds standalone, without the
-UniFFI-generated `SparagneCore` Swift package: `Sparagne/Model/Placeholders.swift`
-stands in for the core's types until that package exists next to this one at
-`apple/SparagneCore`.
+SwiftUI/macOS front end for Sparagne v2 (see `docs/v2/ARCH.md` §2.2 and
+`docs/v2/DISTILLATO_V1.md` §3). It depends on the local `../SparagneCore`
+Swift package, which wraps the Rust core over UniFFI; run
+`bash ../build-core.sh` once after cloning to produce its XCFramework.
+
+The app owns no domain state: every view is a query on the core and every
+action is a command (`AppStore` is the only thing that talks to `CoreClient`,
+which is the only thing that talks to `CoreHandle`).
+
+## Layout
+
+| Path | What |
+|---|---|
+| `Sparagne/Core/CoreClient.swift` | The `CoreHandle` wrapper, the database location and the `Date` ↔ RFC 3339 conversions |
+| `Sparagne/Model/AppStore.swift` | `@Observable` store: vaults, snapshot, transactions, filters, deferred undo, errors |
+| `Sparagne/Model/TransactionRow.swift` | Table row derived from a `TransactionView` plus the vault snapshot |
+| `Sparagne/Model/Period.swift` | This month / last 30 days / all, as half-open UTC bounds |
+| `Sparagne/Views/` | Sidebar, detail (quick-add, filters, table), inspector, sheets, undo toast |
+| `Sparagne/Support/` | Money and date formatting, theme, quick-add preview line |
+
+The database lives at
+`~/Library/Application Support/Sparagne/sparagne.sqlite`, which the sandbox
+resolves inside the app container.
 
 ## Commands
 
@@ -17,10 +35,3 @@ xcodebuild -project Sparagne.xcodeproj -scheme Sparagne -destination 'platform=m
 The generated `Sparagne.xcodeproj`, build products and `.build` directories
 are git-ignored; regenerate the project with `xcodegen generate` any time
 `project.yml` changes.
-
-## Wiring up the core later
-
-`project.yml` has a commented-out `packages:`/`dependencies:` block showing
-how to add the local `../SparagneCore` Swift package once it's generated.
-After that, delete `Sparagne/Model/Placeholders.swift` and point the views at
-the generated types instead of `SampleData`.

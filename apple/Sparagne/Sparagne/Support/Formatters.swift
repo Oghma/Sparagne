@@ -1,4 +1,5 @@
 import Foundation
+import SparagneCore
 
 /// Formats `Int64` minor units (e.g. cents) as currency. Amounts are never
 /// floats anywhere in the app (docs/v2/DISTILLATO_V1.md §1.4); this is the
@@ -21,6 +22,13 @@ enum MoneyFormatter {
     static func formatSigned(minorUnits: Int64, currencyCode: String, locale: Locale = .autoupdatingCurrent) -> String {
         let formatted = format(minorUnits: minorUnits, currencyCode: currencyCode, locale: locale)
         return minorUnits > 0 ? "+\(formatted)" : formatted
+    }
+
+    /// `1250` -> `"12.50"`: the plain major-unit text `parseMoney` accepts,
+    /// with no sign, grouping separator or currency code.
+    static func editable(minorUnits: Int64) -> String {
+        let absolute = minorUnits.magnitude
+        return String(format: "%llu.%02llu", absolute / 100, absolute % 100)
     }
 
     private static func decimalValue(_ minorUnits: Int64) -> Decimal {
@@ -48,5 +56,15 @@ enum DateFormatting {
         let day = relativeDay(date, now: now, calendar: calendar, locale: locale)
         let time = date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: locale))
         return "\(day), \(time)"
+    }
+}
+
+extension Currency {
+    /// ISO 4217 code, for `MoneyFormatter`. One currency per vault
+    /// (docs/v2/ARCH.md §7); this switch grows with the enum.
+    var code: String {
+        switch self {
+        case .eur: "EUR"
+        }
     }
 }
