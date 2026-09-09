@@ -96,6 +96,8 @@ pub struct TransactionFilter {
     pub wallet_id: Option<Uuid>,
     /// Only transactions with a leg on this flow.
     pub flow_id: Option<Uuid>,
+    /// Case-insensitive substring on note or category name.
+    pub text: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -252,6 +254,21 @@ impl Core {
         }
         if !filter.include_voided {
             sql.push_str(" AND t.voided_at IS NULL");
+        }
+        if let Some(text) = filter.text.as_deref() {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                let escaped = trimmed
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                sql.push_str(
+                    " AND (t.note LIKE ? ESCAPE '\\' COLLATE NOCASE OR c.name LIKE ? ESCAPE '\\' COLLATE NOCASE)",
+                );
+                let pattern = format!("%{escaped}%");
+                args.push(Value::Text(pattern.clone()));
+                args.push(Value::Text(pattern));
+            }
         }
         if let Some(cursor) = cursor {
             let (at, id) = parse_cursor(cursor)?;
