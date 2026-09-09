@@ -29,6 +29,7 @@ mod store;
 pub use category::{normalize_category_display, normalize_category_key, validate_category_name};
 pub use command::{Command, CommandEnvelope, CommandRecord, Entry, Receipt, TransactionKind};
 pub use currency::Currency;
+pub use engine::entities::{AliasView, MergeConflict, MergeConflictKind, MergePreview};
 pub use error::DomainError;
 pub use flow::{Flow, FlowMode, UNALLOCATED_NAME};
 pub use money::Money;

@@ -157,8 +157,9 @@ pub enum Command {
         alias: String,
     },
     /// Repoints every transaction of `source` to `target`, moves the aliases,
-    /// adds the source name as an alias of the target and archives the
-    /// source. Refused when `Core::preview_merge` reports conflicts.
+    /// adds the source name as an alias of the target (unless the target is
+    /// a system category) and deletes the source, so its key is free for the
+    /// alias. Refused when `Core::preview_merge` reports conflicts.
     MergeCategory {
         source_id: Uuid,
         target_id: Uuid,
