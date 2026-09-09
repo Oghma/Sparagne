@@ -1,0 +1,10 @@
+[bindings.swift]
+# Name of the high-level Swift module. Must match the SwiftPM target name.
+module_name = "SparagneCore"
+# Name of the low-level C module with the FFI declarations. Must match the
+# binary target name in Package.swift and the module in the modulemap.
+ffi_module_name = "SparagneCoreFFI"
+generate_module_map = true
+# `Codable` on every record/enum makes drafts easy to persist in the app.
+generate_codable_conformance = true
+generate_case_iterable_conformance = true

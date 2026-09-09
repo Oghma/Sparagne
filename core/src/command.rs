@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{Currency, DomainError, FlowMode, recurring::Schedule};
 
 /// Kind of a transaction.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum)]
 #[serde(rename_all = "snake_case")]
 pub enum TransactionKind {
     Income,
@@ -48,7 +48,7 @@ impl TransactionKind {
 }
 
 /// Payload shared by income, expense and refund.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct Entry {
     /// Absolute amount in minor units, `> 0`.
     pub amount: i64,
@@ -67,7 +67,7 @@ pub struct Entry {
 /// Conventions shared by every `Update*` command: an `Option` field left as
 /// `None` is untouched; a text field set to a blank string clears it (note)
 /// or falls back to the system default (category = Uncategorized).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, uniffi::Enum)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Command {
     // -- Vault --------------------------------------------------------------
@@ -329,7 +329,7 @@ impl Command {
 }
 
 /// A command addressed to a vault by an author.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct CommandEnvelope {
     /// Client-generated UUID v7; idempotency key and id of what gets created.
     pub id: Uuid,
@@ -371,7 +371,7 @@ impl CommandEnvelope {
 }
 
 /// Outcome of `execute`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct Receipt {
     pub command_id: Uuid,
     /// Position in the vault log.
@@ -383,7 +383,7 @@ pub struct Receipt {
 }
 
 /// A command as stored in the log.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct CommandRecord {
     pub envelope: CommandEnvelope,
     pub seq: i64,

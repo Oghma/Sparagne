@@ -6,7 +6,8 @@ use thiserror::Error;
 ///
 /// `code()` is stable and meant to reach the UI unchanged; the message is
 /// for logs and developers.
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[derive(Error, Debug, Clone, PartialEq, Eq, uniffi::Error)]
+#[uniffi(flat_error)]
 pub enum DomainError {
     #[error("insufficient funds in flow '{0}'")]
     InsufficientFunds(String),

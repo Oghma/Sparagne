@@ -12,13 +12,12 @@
 //! - domain checks (flow caps, non-negativity) run on create and update, never
 //!   on void.
 
-#![forbid(unsafe_code)]
-
 mod category;
 mod command;
 mod currency;
 mod engine;
 mod error;
+mod ffi;
 mod flow;
 mod money;
 mod query;
@@ -32,6 +31,10 @@ pub use command::{Command, CommandEnvelope, CommandRecord, Entry, Receipt, Trans
 pub use currency::Currency;
 pub use engine::entities::{AliasView, MergeConflict, MergeConflictKind, MergePreview};
 pub use error::DomainError;
+pub use ffi::{
+    CoreHandle, create_vault_envelope, format_money, new_envelope, parse_money, parse_quick_add,
+    resolve_date_spec,
+};
 pub use flow::{Flow, FlowMode, UNALLOCATED_NAME};
 pub use money::Money;
 pub use query::{
@@ -46,3 +49,5 @@ pub use usage::{PeriodTotals, RecentUsage, VaultView};
 
 /// Result alias used across the crate.
 pub type Result<T> = std::result::Result<T, DomainError>;
+
+uniffi::setup_scaffolding!();

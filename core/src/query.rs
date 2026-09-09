@@ -10,7 +10,7 @@ use crate::{
     TransactionKind,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct WalletView {
     pub id: Uuid,
     pub name: String,
@@ -18,7 +18,7 @@ pub struct WalletView {
     pub archived: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct FlowView {
     pub id: Uuid,
     pub name: String,
@@ -30,7 +30,7 @@ pub struct FlowView {
     pub is_unallocated: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct CategoryView {
     pub id: Uuid,
     pub name: String,
@@ -39,7 +39,7 @@ pub struct CategoryView {
 }
 
 /// Everything the UI needs to render a vault's accounts.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct VaultSnapshot {
     pub id: Uuid,
     pub name: String,
@@ -51,21 +51,21 @@ pub struct VaultSnapshot {
     pub unallocated_flow_id: Uuid,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 #[serde(tag = "target", rename_all = "snake_case")]
 pub enum LegTarget {
     Wallet { wallet_id: Uuid },
     Flow { flow_id: Uuid },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct LegView {
     pub target: LegTarget,
     /// Signed.
     pub amount: i64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct TransactionView {
     pub id: Uuid,
     pub kind: TransactionKind,
@@ -81,7 +81,7 @@ pub struct TransactionView {
 
 /// Filter for [`Core::list_transactions`]. Defaults hide voided rows and
 /// transfers.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct TransactionFilter {
     /// Inclusive.
     pub from: Option<DateTime<Utc>>,
@@ -100,7 +100,7 @@ pub struct TransactionFilter {
     pub text: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct Page {
     pub items: Vec<TransactionView>,
     /// Opaque; pass back to get the next (older) page.

@@ -20,7 +20,8 @@ use uuid::Uuid;
 use crate::{Command, Core, Currency, DomainError, Entry, Money, TransactionKind};
 
 /// Error raised while parsing or resolving a quick-add line.
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[derive(Error, Debug, Clone, PartialEq, Eq, uniffi::Error)]
+#[uniffi(flat_error)]
 pub enum QuickAddError {
     #[error("the line is empty")]
     EmptyInput,
@@ -79,7 +80,7 @@ impl From<QuickAddError> for DomainError {
 }
 
 /// A relative or absolute date token from a quick-add line.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum DateSpec {
     Today,
     Yesterday,
@@ -115,7 +116,7 @@ impl DateSpec {
 }
 
 /// A parsed quick-add line, before name resolution.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum QuickAdd {
     Entry {
         kind: TransactionKind,
@@ -430,7 +431,7 @@ fn build_date(year: &str, month: &str, day: &str, token: &str) -> Result<DateSpe
 
 /// Sticky/last-used entities used when a quick-add line names no wallet or
 /// flow.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct QuickAddDefaults {
     pub wallet_id: Option<Uuid>,
     pub flow_id: Option<Uuid>,

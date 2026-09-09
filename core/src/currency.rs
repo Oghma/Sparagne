@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::DomainError;
 
 /// ISO-like currency code. One currency per vault.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum,
+)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Currency {
     #[default]

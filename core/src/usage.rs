@@ -10,7 +10,7 @@ use crate::{
 };
 
 /// One row of [`Core::vaults`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct VaultView {
     pub id: Uuid,
     pub name: String,
@@ -21,7 +21,7 @@ pub struct VaultView {
 
 /// Ids of the most recently used entities, most recent first. Feeds the
 /// "recent" tier of picker ordering (default -> recent -> rest).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct RecentUsage {
     pub categories: Vec<Uuid>,
     pub wallets: Vec<Uuid>,
@@ -29,7 +29,7 @@ pub struct RecentUsage {
 }
 
 /// Sums of `transactions.amount` by kind over a `[from, to)` range.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct PeriodTotals {
     pub income: i64,
     pub expense: i64,

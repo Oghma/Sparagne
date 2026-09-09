@@ -9,7 +9,7 @@ use crate::{DomainError, Result};
 pub const UNALLOCATED_NAME: &str = "unallocated";
 
 /// Upper-bound rule of a flow. Stored as data, never as a type.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum FlowMode {
     /// No cap.

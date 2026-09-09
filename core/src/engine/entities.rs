@@ -383,7 +383,7 @@ fn load_category(conn: &Connection, vault_id: Uuid, category_id: Uuid) -> Result
 // ---------------------------------------------------------------------------
 
 /// Why a merge cannot go through.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 #[serde(rename_all = "snake_case")]
 pub enum MergeConflictKind {
     /// Source and target are the same category.
@@ -407,21 +407,21 @@ impl MergeConflictKind {
 }
 
 /// One reason a merge is refused, with the name of the offending category.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct MergeConflict {
     pub kind: MergeConflictKind,
     pub value: String,
 }
 
 /// Outcome of [`Core::preview_merge`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct MergePreview {
     pub ok: bool,
     pub conflicts: Vec<MergeConflict>,
 }
 
 /// An alias of a category.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct AliasView {
     pub id: Uuid,
     pub category_id: Uuid,

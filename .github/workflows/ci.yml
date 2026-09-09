@@ -40,3 +40,27 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --all-targets
+
+  apple:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-apple-darwin
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build the Swift package artefacts
+        run: bash apple/build-core.sh
+
+      - name: Check the committed bindings are up to date
+        run: git diff --exit-code -- apple/SparagneCore/Sources/SparagneCore/SparagneCore.swift
+
+      - name: Test
+        run: swift test --package-path apple/SparagneCore

@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{DomainError, Result, TransactionKind};
 
 /// Rhythm of a recurring template.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 #[serde(tag = "unit", rename_all = "snake_case")]
 pub enum Frequency {
     Daily,
@@ -34,7 +34,7 @@ pub enum Frequency {
 /// When a template fires: every `interval` units of `frequency`, starting
 /// from the first matching date on or after `start_date`, up to and including
 /// `end_date`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct Schedule {
     pub frequency: Frequency,
     /// `>= 1`.
@@ -256,7 +256,7 @@ fn next_month(year: i32, month: u32) -> Option<(i32, u32)> {
 // ---------------------------------------------------------------------------
 
 /// A recurring template as the UI sees it.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct RecurringView {
     pub id: Uuid,
     /// Only `Income` or `Expense`.
@@ -276,7 +276,7 @@ pub struct RecurringView {
 }
 
 /// A template with the period dates still waiting for a decision.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct PendingRecurring {
     pub template: RecurringView,
     /// Ascending, oldest missed period first; never empty.
@@ -284,7 +284,7 @@ pub struct PendingRecurring {
 }
 
 /// How a period was handled.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 #[serde(rename_all = "snake_case")]
 pub enum RunOutcome {
     Executed,
@@ -311,7 +311,7 @@ impl RunOutcome {
 }
 
 /// One handled period of a template.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct RecurringRunView {
     pub period_date: NaiveDate,
     pub outcome: RunOutcome,

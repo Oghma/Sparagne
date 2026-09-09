@@ -10,6 +10,19 @@ authors.workspace = true
 [lib]
 name = "sparagne_core"
 path = "src/lib.rs"
+# `staticlib` is what the Apple XCFramework links; `lib` keeps the crate usable
+# as a normal Rust dependency (tests, future `server`).
+crate-type = ["lib", "staticlib"]
+
+# UniFFI's bindings generator, built only when the `cli` feature is on so that
+# a plain `cargo build` does not pull the bindgen tree into the default build.
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["cli"]
+
+[features]
+cli = ["uniffi/cli"]
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde", "clock"] }
@@ -18,7 +31,18 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 unicode-normalization = "0.1"
+uniffi = "0.32.1"
 uuid = { version = "1", features = ["v5", "v7", "serde"] }
 
-[lints]
-workspace = true
+# Not `workspace = true`: the UniFFI scaffolding macros expand to
+# `#[unsafe(no_mangle)] extern "C"` functions and `unsafe impl FfiConverter`,
+# which the workspace-wide `unsafe_code = "forbid"` rejects. Everything else is
+# a copy of `[workspace.lints]`.
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+todo = "warn"
+dbg_macro = "warn"
