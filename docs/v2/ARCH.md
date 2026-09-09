@@ -26,6 +26,7 @@ L'app lavora su un SQLite locale attraverso un core Rust in-process; ogni scritt
 - Un solo crate, libreria. Niente async, niente ORM: `rusqlite` con feature `bundled`.
 - Contiene: tipi di dominio, `Money`, normalizzazione categorie, `apply_leg_change`, i comandi, la proiezione (tabelle di stato), le query per la UI, il parser quick-add, le aggregazioni per dashboard.
 - Esposto a Swift con **UniFFI** (Swift Package generato). Swift non fa mai SQL e non conosce le regole: chiama `execute(cmd)` e `query_*`.
+- Stato (2026-09-09): i derive UniFFI stanno sui tipi di dominio reali (nessun DTO specchio); `Uuid`, date e date-time viaggiano come stringhe; `CoreHandle` serializza l'accesso al `Core` con un mutex; gli id degli envelope si generano solo in Rust. `apple/build-core.sh` produce `apple/SparagneCore` (XCFramework non versionato più `SparagneCore.swift` generato e versionato). Il crate `core` ammette `unsafe_code` solo per lo scaffolding generato. Gli errori attraversano l'FFI come *flat error* (un case per variante con il messaggio); `ErrorCodes.swift` riporta il `code()` stabile a mano.
 - Lo stesso crate gira nel server (Fase 3) come dipendenza di axum o come NIF Rustler dentro Elixir. Il linguaggio del server è una decisione rimandata (§9).
 
 ### 2.2 App macOS
