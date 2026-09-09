@@ -2,135 +2,15 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use chrono::{DateTime, FixedOffset, TimeZone, Utc};
+mod common;
+
+use chrono::{TimeZone, Utc};
+use common::*;
 use sparagne_core::{
-    Command, CommandEnvelope, Core, Currency, DomainError, Entry, FlowMode, Receipt,
-    TransactionFilter, TransactionKind, TransactionView, replay,
+    Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, TransactionFilter,
+    TransactionKind, replay,
 };
 use uuid::Uuid;
-
-const T0: i64 = 1_700_000_000;
-
-/// `(id, balance)` pairs.
-type Balances = Vec<(Uuid, i64)>;
-
-fn at(secs: i64) -> DateTime<FixedOffset> {
-    Utc.timestamp_opt(secs, 0).unwrap().fixed_offset()
-}
-
-struct Fx {
-    core: Core,
-    vault: Uuid,
-    wallet: Uuid,
-    unallocated: Uuid,
-}
-
-fn setup() -> Fx {
-    let mut core = Core::open_in_memory().unwrap();
-    let vault = core
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Main",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
-    let wallet = run(&mut core, vault, wallet_cmd("Cash", 0))
-        .result_id
-        .unwrap();
-    let unallocated = core.snapshot(vault).unwrap().unallocated_flow_id;
-    Fx {
-        core,
-        vault,
-        wallet,
-        unallocated,
-    }
-}
-
-fn run(core: &mut Core, vault: Uuid, cmd: Command) -> Receipt {
-    core.execute(CommandEnvelope::new(vault, "alice", cmd))
-        .unwrap()
-}
-
-fn try_run(core: &mut Core, vault: Uuid, cmd: Command) -> Result<Receipt, DomainError> {
-    core.execute(CommandEnvelope::new(vault, "alice", cmd))
-}
-
-fn wallet_cmd(name: &str, opening: i64) -> Command {
-    Command::CreateWallet {
-        name: name.to_string(),
-        opening_balance: opening,
-        occurred_at: at(T0),
-    }
-}
-
-fn flow_cmd(name: &str, mode: FlowMode, allow_negative: bool, opening: i64) -> Command {
-    Command::CreateFlow {
-        name: name.to_string(),
-        mode,
-        allow_negative,
-        opening_allocation: opening,
-        occurred_at: at(T0),
-    }
-}
-
-fn entry(
-    amount: i64,
-    wallet: Option<Uuid>,
-    flow: Option<Uuid>,
-    category: Option<&str>,
-    secs: i64,
-) -> Entry {
-    Entry {
-        amount,
-        wallet_id: wallet,
-        flow_id: flow,
-        category: category.map(str::to_string),
-        note: None,
-        occurred_at: at(secs),
-    }
-}
-
-fn balances(core: &Core, vault: Uuid) -> (Balances, Balances) {
-    let s = core.snapshot(vault).unwrap();
-    (
-        s.wallets.iter().map(|w| (w.id, w.balance)).collect(),
-        s.flows.iter().map(|f| (f.id, f.balance)).collect(),
-    )
-}
-
-fn wallet_balance(core: &Core, vault: Uuid, id: Uuid) -> i64 {
-    balances(core, vault)
-        .0
-        .into_iter()
-        .find(|(w, _)| *w == id)
-        .unwrap()
-        .1
-}
-
-fn flow_balance(core: &Core, vault: Uuid, id: Uuid) -> i64 {
-    balances(core, vault)
-        .1
-        .into_iter()
-        .find(|(f, _)| *f == id)
-        .unwrap()
-        .1
-}
-
-fn list(core: &Core, vault: Uuid, filter: &TransactionFilter) -> Vec<TransactionView> {
-    core.list_transactions(vault, filter, 100, None)
-        .unwrap()
-        .items
-}
-
-fn all() -> TransactionFilter {
-    TransactionFilter {
-        include_voided: true,
-        include_transfers: true,
-        ..Default::default()
-    }
-}
 
 #[test]
 fn create_vault_creates_unallocated_and_system_categories() {

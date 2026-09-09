@@ -1,10 +1,10 @@
 //! Commands: the only way to change a vault.
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{Currency, DomainError, FlowMode};
+use crate::{Currency, DomainError, FlowMode, recurring::Schedule};
 
 /// Kind of a transaction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -63,14 +63,21 @@ pub struct Entry {
 }
 
 /// One unit of change. Serialized as JSON in the log with a `kind` tag.
+///
+/// Conventions shared by every `Update*` command: an `Option` field left as
+/// `None` is untouched; a text field set to a blank string clears it (note)
+/// or falls back to the system default (category = Uncategorized).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Command {
+    // -- Vault --------------------------------------------------------------
     /// The vault id is the command id.
     CreateVault {
         name: String,
         currency: Currency,
     },
+
+    // -- Wallet -------------------------------------------------------------
     /// Non-zero `opening_balance` creates an opening transaction on
     /// Unallocated with the system category `opening`.
     CreateWallet {
@@ -78,6 +85,19 @@ pub enum Command {
         opening_balance: i64,
         occurred_at: DateTime<FixedOffset>,
     },
+    RenameWallet {
+        wallet_id: Uuid,
+        name: String,
+    },
+    /// Requires a zero balance. Archived wallets refuse new legs.
+    ArchiveWallet {
+        wallet_id: Uuid,
+    },
+    RestoreWallet {
+        wallet_id: Uuid,
+    },
+
+    // -- Flow ---------------------------------------------------------------
     /// Positive `opening_allocation` moves money from Unallocated into the new
     /// flow, subject to its cap.
     CreateFlow {
@@ -87,9 +107,64 @@ pub enum Command {
         opening_allocation: i64,
         occurred_at: DateTime<FixedOffset>,
     },
+    /// Only the given fields change. A new cap must already hold for the
+    /// current balance (net) or the cumulative income (income-capped);
+    /// `allow_negative = false` requires a non-negative balance. Unallocated
+    /// cannot be updated.
+    UpdateFlow {
+        flow_id: Uuid,
+        name: Option<String>,
+        mode: Option<FlowMode>,
+        allow_negative: Option<bool>,
+    },
+    /// Requires a zero balance. Archived flows refuse new legs.
+    ArchiveFlow {
+        flow_id: Uuid,
+    },
+    RestoreFlow {
+        flow_id: Uuid,
+    },
+
+    // -- Category -----------------------------------------------------------
     CreateCategory {
         name: String,
     },
+    /// System categories cannot be renamed. Transactions follow the category
+    /// by id, so nothing else changes.
+    RenameCategory {
+        category_id: Uuid,
+        name: String,
+    },
+    /// Archived categories are refused on new and updated transactions;
+    /// existing ones keep pointing at them. System categories cannot be
+    /// archived.
+    ArchiveCategory {
+        category_id: Uuid,
+    },
+    RestoreCategory {
+        category_id: Uuid,
+    },
+    /// `alias` is normalized like a category name and must be unique across
+    /// category keys and aliases of the vault. Not allowed on system
+    /// categories.
+    AddAlias {
+        category_id: Uuid,
+        alias: String,
+    },
+    /// Matched by normalized key.
+    RemoveAlias {
+        category_id: Uuid,
+        alias: String,
+    },
+    /// Repoints every transaction of `source` to `target`, moves the aliases,
+    /// adds the source name as an alias of the target and archives the
+    /// source. Refused when `Core::preview_merge` reports conflicts.
+    MergeCategory {
+        source_id: Uuid,
+        target_id: Uuid,
+    },
+
+    // -- Transaction --------------------------------------------------------
     Income(Entry),
     Expense(Entry),
     Refund(Entry),
@@ -107,9 +182,78 @@ pub enum Command {
         note: Option<String>,
         occurred_at: DateTime<FixedOffset>,
     },
+    /// Partial update; at least one field must be set. The kind never
+    /// changes (void and recreate instead). Caps and non-negativity are
+    /// re-checked on the resulting legs; nothing changes on failure.
+    UpdateTransaction {
+        transaction_id: Uuid,
+        /// Absolute, `> 0`.
+        amount: Option<i64>,
+        occurred_at: Option<DateTime<FixedOffset>>,
+        /// Entries only; blank = Uncategorized.
+        category: Option<String>,
+        /// Blank = clear.
+        note: Option<String>,
+        /// Entries only.
+        wallet_id: Option<Uuid>,
+        /// Entries only.
+        flow_id: Option<Uuid>,
+        /// Transfers only; a wallet id or a flow id matching the kind.
+        from_id: Option<Uuid>,
+        /// Transfers only.
+        to_id: Option<Uuid>,
+    },
     /// Soft delete. Never blocked by caps or non-negativity.
     VoidTransaction {
         transaction_id: Uuid,
+    },
+
+    // -- Recurring ----------------------------------------------------------
+    /// A template that the user materializes period by period. Only
+    /// `Income` and `Expense` kinds. The template id is the command id.
+    CreateRecurring {
+        transaction_kind: TransactionKind,
+        /// Absolute, `> 0`.
+        amount: i64,
+        /// `None` = the only active wallet at execution time.
+        wallet_id: Option<Uuid>,
+        /// `None` = Unallocated.
+        flow_id: Option<Uuid>,
+        /// Free text, resolved at execution time; blank = Uncategorized.
+        category: Option<String>,
+        note: Option<String>,
+        schedule: Schedule,
+    },
+    /// Partial update; at least one field must be set. Past runs are not
+    /// touched.
+    UpdateRecurring {
+        recurring_id: Uuid,
+        amount: Option<i64>,
+        wallet_id: Option<Uuid>,
+        flow_id: Option<Uuid>,
+        /// Blank = Uncategorized.
+        category: Option<String>,
+        /// Blank = clear.
+        note: Option<String>,
+        schedule: Option<Schedule>,
+        /// Disabled templates are never pending.
+        enabled: Option<bool>,
+    },
+    ArchiveRecurring {
+        recurring_id: Uuid,
+    },
+    /// Materializes the period `period_date` of a template as a transaction
+    /// whose id is the command id. `period_date` must be a due date of the
+    /// schedule that has not been executed or skipped yet.
+    ExecuteRecurring {
+        recurring_id: Uuid,
+        period_date: NaiveDate,
+        occurred_at: DateTime<FixedOffset>,
+    },
+    /// Marks a due period as handled without a transaction.
+    SkipRecurring {
+        recurring_id: Uuid,
+        period_date: NaiveDate,
     },
 }
 
@@ -120,14 +264,32 @@ impl Command {
         match self {
             Self::CreateVault { .. } => "create_vault",
             Self::CreateWallet { .. } => "create_wallet",
+            Self::RenameWallet { .. } => "rename_wallet",
+            Self::ArchiveWallet { .. } => "archive_wallet",
+            Self::RestoreWallet { .. } => "restore_wallet",
             Self::CreateFlow { .. } => "create_flow",
+            Self::UpdateFlow { .. } => "update_flow",
+            Self::ArchiveFlow { .. } => "archive_flow",
+            Self::RestoreFlow { .. } => "restore_flow",
             Self::CreateCategory { .. } => "create_category",
+            Self::RenameCategory { .. } => "rename_category",
+            Self::ArchiveCategory { .. } => "archive_category",
+            Self::RestoreCategory { .. } => "restore_category",
+            Self::AddAlias { .. } => "add_alias",
+            Self::RemoveAlias { .. } => "remove_alias",
+            Self::MergeCategory { .. } => "merge_category",
             Self::Income(_) => "income",
             Self::Expense(_) => "expense",
             Self::Refund(_) => "refund",
             Self::TransferWallet { .. } => "transfer_wallet",
             Self::TransferFlow { .. } => "transfer_flow",
+            Self::UpdateTransaction { .. } => "update_transaction",
             Self::VoidTransaction { .. } => "void_transaction",
+            Self::CreateRecurring { .. } => "create_recurring",
+            Self::UpdateRecurring { .. } => "update_recurring",
+            Self::ArchiveRecurring { .. } => "archive_recurring",
+            Self::ExecuteRecurring { .. } => "execute_recurring",
+            Self::SkipRecurring { .. } => "skip_recurring",
         }
     }
 
@@ -138,11 +300,29 @@ impl Command {
             Self::CreateWallet { occurred_at, .. }
             | Self::CreateFlow { occurred_at, .. }
             | Self::TransferWallet { occurred_at, .. }
-            | Self::TransferFlow { occurred_at, .. } => Some(*occurred_at),
+            | Self::TransferFlow { occurred_at, .. }
+            | Self::ExecuteRecurring { occurred_at, .. } => Some(*occurred_at),
             Self::Income(e) | Self::Expense(e) | Self::Refund(e) => Some(e.occurred_at),
+            Self::UpdateTransaction { occurred_at, .. } => *occurred_at,
             Self::CreateVault { .. }
+            | Self::RenameWallet { .. }
+            | Self::ArchiveWallet { .. }
+            | Self::RestoreWallet { .. }
+            | Self::UpdateFlow { .. }
+            | Self::ArchiveFlow { .. }
+            | Self::RestoreFlow { .. }
             | Self::CreateCategory { .. }
-            | Self::VoidTransaction { .. } => None,
+            | Self::RenameCategory { .. }
+            | Self::ArchiveCategory { .. }
+            | Self::RestoreCategory { .. }
+            | Self::AddAlias { .. }
+            | Self::RemoveAlias { .. }
+            | Self::MergeCategory { .. }
+            | Self::VoidTransaction { .. }
+            | Self::CreateRecurring { .. }
+            | Self::UpdateRecurring { .. }
+            | Self::ArchiveRecurring { .. }
+            | Self::SkipRecurring { .. } => None,
         }
     }
 }

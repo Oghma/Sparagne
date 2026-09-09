@@ -3,6 +3,10 @@
 //! Every command runs inside one SQLite transaction: validation, state
 //! changes and the log row commit together or not at all.
 
+mod entities;
+mod recurring;
+mod update;
+
 use chrono::{DateTime, FixedOffset, Utc};
 use rusqlite::{OptionalExtension, Transaction, params};
 use uuid::Uuid;
@@ -95,7 +99,48 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             now,
         )
         .map(Some),
+        Command::RenameWallet { wallet_id, name } => {
+            entities::rename_wallet(tx, env, *wallet_id, name).map(|()| None)
+        }
+        Command::ArchiveWallet { wallet_id } => {
+            entities::set_wallet_archived(tx, env, *wallet_id, true).map(|()| None)
+        }
+        Command::RestoreWallet { wallet_id } => {
+            entities::set_wallet_archived(tx, env, *wallet_id, false).map(|()| None)
+        }
+        Command::UpdateFlow {
+            flow_id,
+            name,
+            mode,
+            allow_negative,
+        } => entities::update_flow(tx, env, *flow_id, name.as_deref(), *mode, *allow_negative)
+            .map(|()| None),
+        Command::ArchiveFlow { flow_id } => {
+            entities::set_flow_archived(tx, env, *flow_id, true).map(|()| None)
+        }
+        Command::RestoreFlow { flow_id } => {
+            entities::set_flow_archived(tx, env, *flow_id, false).map(|()| None)
+        }
         Command::CreateCategory { name } => create_category(tx, env, name).map(Some),
+        Command::RenameCategory { category_id, name } => {
+            entities::rename_category(tx, env, *category_id, name).map(|()| None)
+        }
+        Command::ArchiveCategory { category_id } => {
+            entities::set_category_archived(tx, env, *category_id, true).map(|()| None)
+        }
+        Command::RestoreCategory { category_id } => {
+            entities::set_category_archived(tx, env, *category_id, false).map(|()| None)
+        }
+        Command::AddAlias { category_id, alias } => {
+            entities::add_alias(tx, env, *category_id, alias).map(Some)
+        }
+        Command::RemoveAlias { category_id, alias } => {
+            entities::remove_alias(tx, env, *category_id, alias).map(|()| None)
+        }
+        Command::MergeCategory {
+            source_id,
+            target_id,
+        } => entities::merge_category(tx, env, *source_id, *target_id).map(|()| None),
         Command::Income(e) => entry(tx, env, TransactionKind::Income, e, now).map(Some),
         Command::Expense(e) => entry(tx, env, TransactionKind::Expense, e, now).map(Some),
         Command::Refund(e) => entry(tx, env, TransactionKind::Refund, e, now).map(Some),
@@ -138,9 +183,96 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             )
             .map(Some)
         }
+        Command::UpdateTransaction {
+            transaction_id,
+            amount,
+            occurred_at,
+            category,
+            note,
+            wallet_id,
+            flow_id,
+            from_id,
+            to_id,
+        } => update::update_transaction(
+            tx,
+            env,
+            &update::TransactionPatch {
+                transaction_id: *transaction_id,
+                amount: *amount,
+                occurred_at: *occurred_at,
+                category: category.as_deref(),
+                note: note.as_deref(),
+                wallet_id: *wallet_id,
+                flow_id: *flow_id,
+                from_id: *from_id,
+                to_id: *to_id,
+            },
+            now,
+        )
+        .map(|()| None),
         Command::VoidTransaction { transaction_id } => {
             void_transaction(tx, env, *transaction_id, now).map(|()| None)
         }
+        Command::CreateRecurring {
+            transaction_kind,
+            amount,
+            wallet_id,
+            flow_id,
+            category,
+            note,
+            schedule,
+        } => recurring::create_recurring(
+            tx,
+            env,
+            &recurring::RecurringSpec {
+                kind: *transaction_kind,
+                amount: *amount,
+                wallet_id: *wallet_id,
+                flow_id: *flow_id,
+                category: category.as_deref(),
+                note: note.as_deref(),
+                schedule: *schedule,
+            },
+            now,
+        )
+        .map(Some),
+        Command::UpdateRecurring {
+            recurring_id,
+            amount,
+            wallet_id,
+            flow_id,
+            category,
+            note,
+            schedule,
+            enabled,
+        } => recurring::update_recurring(
+            tx,
+            env,
+            *recurring_id,
+            &recurring::RecurringPatch {
+                amount: *amount,
+                wallet_id: *wallet_id,
+                flow_id: *flow_id,
+                category: category.as_deref(),
+                note: note.as_deref(),
+                schedule: *schedule,
+                enabled: *enabled,
+            },
+        )
+        .map(|()| None),
+        Command::ArchiveRecurring { recurring_id } => {
+            recurring::archive_recurring(tx, env, *recurring_id, now).map(|()| None)
+        }
+        Command::ExecuteRecurring {
+            recurring_id,
+            period_date,
+            occurred_at,
+        } => recurring::execute_recurring(tx, env, *recurring_id, *period_date, *occurred_at, now)
+            .map(Some),
+        Command::SkipRecurring {
+            recurring_id,
+            period_date,
+        } => recurring::skip_recurring(tx, env, *recurring_id, *period_date, now).map(|()| None),
     }
 }
 

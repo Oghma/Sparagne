@@ -22,6 +22,8 @@ mod error;
 mod flow;
 mod money;
 mod query;
+pub mod quick_add;
+pub mod recurring;
 mod store;
 
 pub use category::{normalize_category_display, normalize_category_key, validate_category_name};
@@ -34,6 +36,7 @@ pub use query::{
     CategoryView, FlowView, LegTarget, LegView, Page, TransactionFilter, TransactionView,
     VaultSnapshot, WalletView, replay,
 };
+pub use recurring::{Frequency, Schedule};
 pub use store::Core;
 
 /// Result alias used across the crate.
