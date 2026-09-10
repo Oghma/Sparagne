@@ -4,3 +4,4 @@
 /apple/**/.build
 /apple/**/*.xcodeproj
 /apple/**/*.xcframework
+/apple/**/.swiftpm

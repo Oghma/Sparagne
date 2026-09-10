@@ -24,6 +24,7 @@ mod query;
 pub mod quick_add;
 pub mod recurring;
 mod store;
+pub mod sync;
 mod usage;
 
 pub use category::{normalize_category_display, normalize_category_key, validate_category_name};
@@ -48,6 +49,7 @@ pub use recurring::{
     Frequency, PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule,
 };
 pub use store::Core;
+pub use sync::{RejectedCommand, SyncReport, SyncState};
 pub use usage::{PeriodTotals, RecentUsage, VaultView};
 
 /// Result alias used across the crate.

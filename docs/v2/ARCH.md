@@ -145,6 +145,6 @@ La Fase 1 già scrive il log con i campi di §3, anche se `seq` è locale e `out
 
 ## 9. Punti aperti
 
-- **Linguaggio del server.** axum con `core` come dipendenza, oppure Elixir/Phoenix con `core` come NIF Rustler (processo per vault, canali per il push). Non tocca l'app: si decide in Fase 3.
+- **Linguaggio del server: axum** (deciso il 2026-09-10; Elixir/Phoenix con NIF Rustler scartato per ora). Protocollo, API e algoritmo del client in `SYNC.md`.
 - **Layout del repo.** Workspace Cargo alla radice con `core/` (e `server/` in Fase 3); `apple/` contiene il Swift Package generato e il progetto Xcode (Fase 2). I crate v1 sono stati rimossi il 2026-09-09, chiuso il port dei test dell'engine; restano al tag `v0.93.0`.
 - **Erlang/BEAM come core in-process: scartato.** La BEAM non si linka in un processo Swift; servirebbe un runtime da 40-50 MB lanciato come processo figlio e un IPC scritto a mano al posto di UniFFI.
