@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    Command, CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowMode, Result,
-    TransactionKind,
+    CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowMode, Result, TransactionKind,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -83,6 +82,9 @@ pub struct TransactionView {
     /// `true` for `Opening` and `Uncategorized`: the app localizes the name.
     pub category_is_system: bool,
     pub note: Option<String>,
+    /// Author of the command that created the row; the account username once
+    /// the vault is shared.
+    pub created_by: String,
     pub voided: bool,
     /// Entries only: the wallet the money moved on.
     pub wallet_id: Option<Uuid>,
@@ -284,7 +286,7 @@ impl Core {
         }
 
         let mut sql = String::from(
-            "SELECT t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at
+            "SELECT t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at, t.created_by
              FROM transactions t JOIN categories c ON c.id = t.category_id
              WHERE t.vault_id = ?",
         );
@@ -365,6 +367,7 @@ impl Core {
                         category: r.get(6)?,
                         category_is_system: r.get(7)?,
                         note: r.get(8)?,
+                        created_by: r.get(10)?,
                         voided: voided_at.is_some(),
                         wallet_id: None,
                         flow_id: None,
@@ -416,39 +419,70 @@ impl Core {
 
     /// Log entries of a vault with `seq > since_seq`, in order.
     pub fn commands_since(&self, vault_id: Uuid, since_seq: i64) -> Result<Vec<CommandRecord>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, vault_id, seq, author, payload, created_at, result_id
-             FROM commands WHERE vault_id = ?1 AND seq > ?2 AND status = 'applied' ORDER BY seq",
-        )?;
-        let rows = stmt.query_map(params![vault_id, since_seq], |r| {
-            Ok((
-                r.get::<_, Uuid>(0)?,
-                r.get::<_, Uuid>(1)?,
-                r.get::<_, i64>(2)?,
-                r.get::<_, String>(3)?,
-                r.get::<_, String>(4)?,
-                r.get::<_, i64>(5)?,
-                r.get::<_, Option<Uuid>>(6)?,
-            ))
-        })?;
-        let mut out = Vec::new();
-        for row in rows {
-            let (id, vault_id, seq, author, payload, created_at, result_id) = row?;
-            let command: Command = serde_json::from_str(&payload)?;
-            out.push(CommandRecord {
-                envelope: CommandEnvelope {
-                    id,
-                    vault_id,
-                    author,
-                    command,
-                },
-                seq,
-                created_at,
-                result_id,
-            });
-        }
-        Ok(out)
+        log_records(
+            &self.conn,
+            "vault_id = ?1 AND seq > ?2 AND status = 'applied'",
+            params![vault_id, since_seq],
+        )
     }
+}
+
+/// Log rows matching a `WHERE` clause, ordered by local seq.
+///
+/// Takes a bare connection so the sync rebase can read the log from inside the
+/// transaction that is rewriting it.
+pub(crate) fn log_records(
+    conn: &rusqlite::Connection,
+    where_clause: &str,
+    args: impl rusqlite::Params,
+) -> Result<Vec<CommandRecord>> {
+    let sql = format!(
+        "SELECT id, vault_id, seq, author, payload, created_at, result_id, server_seq
+         FROM commands WHERE {where_clause} ORDER BY seq"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt
+        .query_map(args, |r| {
+            Ok(LogRowFields {
+                id: r.get(0)?,
+                vault_id: r.get(1)?,
+                seq: r.get(2)?,
+                author: r.get(3)?,
+                payload: r.get(4)?,
+                created_at: r.get(5)?,
+                result_id: r.get(6)?,
+                server_seq: r.get(7)?,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(CommandRecord {
+                envelope: CommandEnvelope {
+                    id: row.id,
+                    vault_id: row.vault_id,
+                    author: row.author,
+                    command: serde_json::from_str(&row.payload)?,
+                },
+                seq: row.seq,
+                created_at: row.created_at,
+                result_id: row.result_id,
+                server_seq: row.server_seq,
+            })
+        })
+        .collect()
+}
+
+/// One `commands` row as SQLite hands it over, before the payload is parsed.
+struct LogRowFields {
+    id: Uuid,
+    vault_id: Uuid,
+    seq: i64,
+    author: String,
+    payload: String,
+    created_at: i64,
+    result_id: Option<Uuid>,
+    server_seq: Option<i64>,
 }
 
 /// Re-execute a log into `target`. Ids and balances come out identical; only

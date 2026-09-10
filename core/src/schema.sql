@@ -92,10 +92,13 @@ CREATE TABLE commands (
     occurred_at INTEGER,                 -- for transaction commands
     created_at  INTEGER NOT NULL,
     status      TEXT NOT NULL,           -- applied|rejected
-    rejection   TEXT,
-    result_id   BLOB                     -- id of the entity the command created
+    rejection   TEXT,                    -- '<code>: <message>' for rejected rows
+    result_id   BLOB,                    -- id of the entity the command created
+    server_seq  INTEGER                  -- seq the server gave it; NULL = outbox
 );
 CREATE UNIQUE INDEX ux_commands_vault_seq ON commands(vault_id, seq);
+-- NULLs are distinct in SQLite, so the outbox is free to hold many rows.
+CREATE UNIQUE INDEX ux_commands_vault_server_seq ON commands(vault_id, server_seq);
 
 -- Recurring templates. Never materialized automatically: the app lists the
 -- due periods and the user executes or skips each one with a command.

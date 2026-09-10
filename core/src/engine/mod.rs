@@ -40,28 +40,8 @@ impl Core {
         }
 
         let now = Utc::now().timestamp();
-        let result_id = apply(&tx, &env, now)?;
-        let seq: i64 = tx.query_row(
-            "SELECT COALESCE(MAX(seq), 0) + 1 FROM commands WHERE vault_id = ?1",
-            params![env.vault_id],
-            |r| r.get(0),
-        )?;
-        tx.execute(
-            "INSERT INTO commands
-                (id, vault_id, seq, author, kind, payload, occurred_at, created_at, status, result_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'applied', ?9)",
-            params![
-                env.id,
-                env.vault_id,
-                seq,
-                env.author,
-                env.command.kind_name(),
-                serde_json::to_string(&env.command)?,
-                env.command.occurred_at().map(|d| d.timestamp()),
-                now,
-                result_id,
-            ],
-        )?;
+        let seq = next_seq(&tx, env.vault_id)?;
+        let result_id = apply_envelope(&tx, &env, seq, None, now)?;
         tx.commit()?;
         Ok(Receipt {
             command_id: env.id,
@@ -70,6 +50,99 @@ impl Core {
             deduplicated: false,
         })
     }
+}
+
+/// Next free local position in a vault's log. Rejected rows count: seq is a
+/// key, not a measure of how much was applied.
+pub(crate) fn next_seq(tx: &Transaction<'_>, vault_id: Uuid) -> Result<i64> {
+    Ok(tx.query_row(
+        "SELECT COALESCE(MAX(seq), 0) + 1 FROM commands WHERE vault_id = ?1",
+        params![vault_id],
+        |r| r.get(0),
+    )?)
+}
+
+/// Applies one envelope inside an open transaction at an explicit position and
+/// appends its log row. The caller owns the transaction, the seq and the
+/// idempotency check, which is what lets a rebase rebuild a whole vault in one
+/// transaction.
+pub(crate) fn apply_envelope(
+    tx: &Transaction<'_>,
+    env: &CommandEnvelope,
+    seq: i64,
+    server_seq: Option<i64>,
+    now: i64,
+) -> Result<Option<Uuid>> {
+    let result_id = apply(tx, env, now)?;
+    log_row(tx, env, seq, server_seq, now, LogRow::Applied(result_id))?;
+    Ok(result_id)
+}
+
+/// Same as [`apply_envelope`], but a domain failure only rolls the command
+/// back: `Ok(Some(err))` means nothing of it was written and the surrounding
+/// transaction is still usable.
+pub(crate) fn try_apply_envelope(
+    tx: &Transaction<'_>,
+    env: &CommandEnvelope,
+    seq: i64,
+    server_seq: Option<i64>,
+    now: i64,
+) -> Result<Option<DomainError>> {
+    tx.execute_batch("SAVEPOINT sparagne_apply")?;
+    match apply_envelope(tx, env, seq, server_seq, now) {
+        Ok(_) => {
+            tx.execute_batch("RELEASE sparagne_apply")?;
+            Ok(None)
+        }
+        Err(err) => {
+            tx.execute_batch("ROLLBACK TO sparagne_apply; RELEASE sparagne_apply")?;
+            Ok(Some(err))
+        }
+    }
+}
+
+/// What a log row records: a command that went through, or one the server (or
+/// a rebase) refused, kept for the UI.
+pub(crate) enum LogRow {
+    Applied(Option<Uuid>),
+    /// `<code>: <message>`.
+    Rejected(String),
+}
+
+/// Writes one row of the log.
+pub(crate) fn log_row(
+    tx: &Transaction<'_>,
+    env: &CommandEnvelope,
+    seq: i64,
+    server_seq: Option<i64>,
+    created_at: i64,
+    row: LogRow,
+) -> Result<()> {
+    let (status, result_id, rejection) = match row {
+        LogRow::Applied(result_id) => ("applied", result_id, None),
+        LogRow::Rejected(reason) => ("rejected", None, Some(reason)),
+    };
+    tx.execute(
+        "INSERT INTO commands
+            (id, vault_id, seq, author, kind, payload, occurred_at, created_at,
+             status, rejection, result_id, server_seq)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            env.id,
+            env.vault_id,
+            seq,
+            env.author,
+            env.command.kind_name(),
+            serde_json::to_string(&env.command)?,
+            env.command.occurred_at().map(|d| d.timestamp()),
+            created_at,
+            status,
+            rejection,
+            result_id,
+            server_seq,
+        ],
+    )?;
+    Ok(())
 }
 
 fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option<Uuid>> {

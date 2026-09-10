@@ -22,7 +22,8 @@ use uuid::Uuid;
 use crate::{
     AliasView, CategoryView, Command, CommandEnvelope, CommandRecord, Core, Currency, DomainError,
     MergePreview, Money, Page, PendingRecurring, PeriodTotals, Receipt, RecentUsage,
-    RecurringRunView, RecurringView, TransactionFilter, TransactionView, VaultSnapshot, VaultView,
+    RecurringRunView, RecurringView, RejectedCommand, SyncReport, SyncState, TransactionFilter,
+    TransactionView, VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
 };
 
@@ -241,6 +242,75 @@ impl CoreHandle {
         since_seq: i64,
     ) -> Result<Vec<CommandRecord>, DomainError> {
         self.lock()?.commands_since(vault_id, since_seq)
+    }
+
+    // -- Sync ---------------------------------------------------------------
+
+    /// Where the vault stands with the server: last known server seq, outbox
+    /// size, pending rejections.
+    pub fn sync_state(&self, vault_id: Uuid) -> Result<SyncState, DomainError> {
+        self.lock()?.sync_state(vault_id)
+    }
+
+    /// Highest applied seq in the vault's local log; 0 for an unknown vault.
+    pub fn last_seq(&self, vault_id: Uuid) -> Result<i64, DomainError> {
+        self.lock()?.last_seq(vault_id)
+    }
+
+    /// JSON body for `POST /vaults/{id}/push`. Swift only does the HTTP.
+    pub fn push_request_json(&self, vault_id: Uuid) -> Result<String, DomainError> {
+        self.lock()?.push_request_json(vault_id)
+    }
+
+    /// Folds the server's push response back into the log.
+    pub fn apply_push_response_json(
+        &self,
+        vault_id: Uuid,
+        json: String,
+    ) -> Result<SyncReport, DomainError> {
+        self.lock()?.apply_push_response_json(vault_id, &json)
+    }
+
+    /// Folds a pull response into the log, rebasing when it has to.
+    pub fn integrate_pull_json(
+        &self,
+        vault_id: Uuid,
+        json: String,
+    ) -> Result<SyncReport, DomainError> {
+        self.lock()?.integrate_pull_json(vault_id, &json)
+    }
+
+    /// Server side of a push, for a core acting as the server (tests, local
+    /// fake server).
+    pub fn serve_push_json(&self, vault_id: Uuid, json: String) -> Result<String, DomainError> {
+        self.lock()?.serve_push_json(vault_id, &json)
+    }
+
+    /// Server side of a pull.
+    pub fn serve_pull_json(
+        &self,
+        vault_id: Uuid,
+        since: i64,
+        limit: u32,
+    ) -> Result<String, DomainError> {
+        self.lock()?
+            .serve_pull_json(vault_id, since, limit as usize)
+    }
+
+    /// Rewrites the author of the outbox after a login and rebuilds the
+    /// projection, so `created_by` and the vault owner follow the account.
+    pub fn relabel_outbox(&self, vault_id: Uuid, author: String) -> Result<(), DomainError> {
+        self.lock()?.relabel_outbox(vault_id, &author)
+    }
+
+    /// Commands the server (or a rebase) refused, oldest first.
+    pub fn rejected_commands(&self, vault_id: Uuid) -> Result<Vec<RejectedCommand>, DomainError> {
+        self.lock()?.rejected_commands(vault_id)
+    }
+
+    /// Forgets one rejected command.
+    pub fn dismiss_rejected(&self, vault_id: Uuid, command_id: Uuid) -> Result<(), DomainError> {
+        self.lock()?.dismiss_rejected(vault_id, command_id)
     }
 
     /// Resolves the wallet and flow names of a parsed quick-add line against

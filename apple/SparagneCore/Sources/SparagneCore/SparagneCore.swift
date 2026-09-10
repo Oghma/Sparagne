@@ -594,6 +594,11 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     
     func aliases(vaultId: Uuid) throws  -> [AliasView]
     
+    /**
+     * Folds the server's push response back into the log.
+     */
+    func applyPushResponseJson(vaultId: Uuid, json: String) throws  -> SyncReport
+    
     func categories(vaultId: Uuid, includeArchived: Bool) throws  -> [CategoryView]
     
     /**
@@ -602,9 +607,24 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func commandsSince(vaultId: Uuid, sinceSeq: Int64) throws  -> [CommandRecord]
     
     /**
+     * Forgets one rejected command.
+     */
+    func dismissRejected(vaultId: Uuid, commandId: Uuid) throws 
+    
+    /**
      * Applies one command: the only way to change a vault.
      */
     func execute(envelope: CommandEnvelope) throws  -> Receipt
+    
+    /**
+     * Folds a pull response into the log, rebasing when it has to.
+     */
+    func integratePullJson(vaultId: Uuid, json: String) throws  -> SyncReport
+    
+    /**
+     * Highest applied seq in the vault's local log; 0 for an unknown vault.
+     */
+    func lastSeq(vaultId: Uuid) throws  -> Int64
     
     func listRecurring(vaultId: Uuid, includeArchived: Bool) throws  -> [RecurringView]
     
@@ -632,6 +652,11 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid) throws  -> MergePreview
     
     /**
+     * JSON body for `POST /vaults/{id}/push`. Swift only does the HTTP.
+     */
+    func pushRequestJson(vaultId: Uuid) throws  -> String
+    
+    /**
      * Ids of the entities used most recently, for picker ordering.
      */
     func recentUsage(vaultId: Uuid, since: UtcDateTime, limit: UInt32) throws  -> RecentUsage
@@ -639,11 +664,33 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func recurringRuns(vaultId: Uuid, recurringId: Uuid) throws  -> [RecurringRunView]
     
     /**
+     * Commands the server (or a rebase) refused, oldest first.
+     */
+    func rejectedCommands(vaultId: Uuid) throws  -> [RejectedCommand]
+    
+    /**
+     * Rewrites the author of the outbox after a login and rebuilds the
+     * projection, so `created_by` and the vault owner follow the account.
+     */
+    func relabelOutbox(vaultId: Uuid, author: String) throws 
+    
+    /**
      * Resolves the wallet and flow names of a parsed quick-add line against
      * the vault and returns the command to execute plus the ids the names
      * resolved to.
      */
     func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, defaults: QuickAddDefaults) throws  -> ResolvedQuickAdd
+    
+    /**
+     * Server side of a pull.
+     */
+    func servePullJson(vaultId: Uuid, since: Int64, limit: UInt32) throws  -> String
+    
+    /**
+     * Server side of a push, for a core acting as the server (tests, local
+     * fake server).
+     */
+    func servePushJson(vaultId: Uuid, json: String) throws  -> String
     
     /**
      * Active categories whose name is close to `name`, nearest first.
@@ -654,6 +701,12 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * Wallets and flows of a vault with their balances.
      */
     func snapshot(vaultId: Uuid) throws  -> VaultSnapshot
+    
+    /**
+     * Where the vault stands with the server: last known server seq, outbox
+     * size, pending rejections.
+     */
+    func syncState(vaultId: Uuid) throws  -> SyncState
     
     /**
      * One transaction with its legs, voided included.
@@ -759,6 +812,20 @@ open func aliases(vaultId: Uuid)throws  -> [AliasView]  {
 })
 }
     
+    /**
+     * Folds the server's push response back into the log.
+     */
+open func applyPushResponseJson(vaultId: Uuid, json: String)throws  -> SyncReport  {
+    return try  FfiConverterTypeSyncReport_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_apply_push_response_json(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterString.lower(json),uniffiCallStatus
+    )
+})
+}
+    
 open func categories(vaultId: Uuid, includeArchived: Bool)throws  -> [CategoryView]  {
     return try  FfiConverterSequenceTypeCategoryView.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
         uniffiCallStatus in
@@ -785,6 +852,19 @@ open func commandsSince(vaultId: Uuid, sinceSeq: Int64)throws  -> [CommandRecord
 }
     
     /**
+     * Forgets one rejected command.
+     */
+open func dismissRejected(vaultId: Uuid, commandId: Uuid)throws   {try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_dismiss_rejected(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeUuid_lower(commandId),uniffiCallStatus
+    )
+}
+}
+    
+    /**
      * Applies one command: the only way to change a vault.
      */
 open func execute(envelope: CommandEnvelope)throws  -> Receipt  {
@@ -793,6 +873,33 @@ open func execute(envelope: CommandEnvelope)throws  -> Receipt  {
     uniffi_sparagne_core_fn_method_corehandle_execute(
             self.uniffiCloneHandle(),
         FfiConverterTypeCommandEnvelope_lower(envelope),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Folds a pull response into the log, rebasing when it has to.
+     */
+open func integratePullJson(vaultId: Uuid, json: String)throws  -> SyncReport  {
+    return try  FfiConverterTypeSyncReport_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_integrate_pull_json(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterString.lower(json),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Highest applied seq in the vault's local log; 0 for an unknown vault.
+     */
+open func lastSeq(vaultId: Uuid)throws  -> Int64  {
+    return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_last_seq(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
     )
 })
 }
@@ -872,6 +979,19 @@ open func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid)throws  -> 
 }
     
     /**
+     * JSON body for `POST /vaults/{id}/push`. Swift only does the HTTP.
+     */
+open func pushRequestJson(vaultId: Uuid)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_push_request_json(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * Ids of the entities used most recently, for picker ordering.
      */
 open func recentUsage(vaultId: Uuid, since: UtcDateTime, limit: UInt32)throws  -> RecentUsage  {
@@ -898,6 +1018,33 @@ open func recurringRuns(vaultId: Uuid, recurringId: Uuid)throws  -> [RecurringRu
 }
     
     /**
+     * Commands the server (or a rebase) refused, oldest first.
+     */
+open func rejectedCommands(vaultId: Uuid)throws  -> [RejectedCommand]  {
+    return try  FfiConverterSequenceTypeRejectedCommand.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_rejected_commands(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Rewrites the author of the outbox after a login and rebuilds the
+     * projection, so `created_by` and the vault owner follow the account.
+     */
+open func relabelOutbox(vaultId: Uuid, author: String)throws   {try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_relabel_outbox(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterString.lower(author),uniffiCallStatus
+    )
+}
+}
+    
+    /**
      * Resolves the wallet and flow names of a parsed quick-add line against
      * the vault and returns the command to execute plus the ids the names
      * resolved to.
@@ -911,6 +1058,36 @@ open func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, 
         FfiConverterTypeQuickAdd_lower(parsed),
         FfiConverterTypeOffsetDateTime_lower(now),
         FfiConverterTypeQuickAddDefaults_lower(defaults),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Server side of a pull.
+     */
+open func servePullJson(vaultId: Uuid, since: Int64, limit: UInt32)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_serve_pull_json(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterInt64.lower(since),
+        FfiConverterUInt32.lower(limit),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Server side of a push, for a core acting as the server (tests, local
+     * fake server).
+     */
+open func servePushJson(vaultId: Uuid, json: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_serve_push_json(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterString.lower(json),uniffiCallStatus
     )
 })
 }
@@ -936,6 +1113,20 @@ open func snapshot(vaultId: Uuid)throws  -> VaultSnapshot  {
     return try  FfiConverterTypeVaultSnapshot_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
         uniffiCallStatus in
     uniffi_sparagne_core_fn_method_corehandle_snapshot(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Where the vault stands with the server: last known server seq, outbox
+     * size, pending rejections.
+     */
+open func syncState(vaultId: Uuid)throws  -> SyncState  {
+    return try  FfiConverterTypeSyncState_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_sync_state(
             self.uniffiCloneHandle(),
         FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
     )
@@ -1215,17 +1406,31 @@ public func FfiConverterTypeCommandEnvelope_lower(_ value: CommandEnvelope) -> R
  */
 public struct CommandRecord: Equatable, Hashable, Codable {
     public var envelope: CommandEnvelope
+    /**
+     * Position in the local log.
+     */
     public var seq: Int64
     public var createdAt: Int64
     public var resultId: Uuid?
+    /**
+     * Position the server gave it; `None` while the command is in the outbox.
+     */
+    public var serverSeq: Int64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(envelope: CommandEnvelope, seq: Int64, createdAt: Int64, resultId: Uuid?) {
+    public init(envelope: CommandEnvelope, 
+        /**
+         * Position in the local log.
+         */seq: Int64, createdAt: Int64, resultId: Uuid?, 
+        /**
+         * Position the server gave it; `None` while the command is in the outbox.
+         */serverSeq: Int64?) {
         self.envelope = envelope
         self.seq = seq
         self.createdAt = createdAt
         self.resultId = resultId
+        self.serverSeq = serverSeq
     }
 
     
@@ -1247,7 +1452,8 @@ public struct FfiConverterTypeCommandRecord: FfiConverterRustBuffer {
                 envelope: FfiConverterTypeCommandEnvelope.read(from: &buf), 
                 seq: FfiConverterInt64.read(from: &buf), 
                 createdAt: FfiConverterInt64.read(from: &buf), 
-                resultId: FfiConverterOptionTypeUuid.read(from: &buf)
+                resultId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                serverSeq: FfiConverterOptionInt64.read(from: &buf)
         )
     }
 
@@ -1256,6 +1462,7 @@ public struct FfiConverterTypeCommandRecord: FfiConverterRustBuffer {
         FfiConverterInt64.write(value.seq, into: &buf)
         FfiConverterInt64.write(value.createdAt, into: &buf)
         FfiConverterOptionTypeUuid.write(value.resultId, into: &buf)
+        FfiConverterOptionInt64.write(value.serverSeq, into: &buf)
     }
 }
 
@@ -2311,6 +2518,71 @@ public func FfiConverterTypeRecurringView_lower(_ value: RecurringView) -> RustB
 
 
 /**
+ * A command the server refused (or that failed during a rebase).
+ */
+public struct RejectedCommand: Equatable, Hashable, Codable {
+    public var commandId: Uuid
+    public var kind: String
+    public var code: String
+    public var message: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(commandId: Uuid, kind: String, code: String, message: String) {
+        self.commandId = commandId
+        self.kind = kind
+        self.code = code
+        self.message = message
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RejectedCommand: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRejectedCommand: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RejectedCommand {
+        return
+            try RejectedCommand(
+                commandId: FfiConverterTypeUuid.read(from: &buf), 
+                kind: FfiConverterString.read(from: &buf), 
+                code: FfiConverterString.read(from: &buf), 
+                message: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RejectedCommand, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.commandId, into: &buf)
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterString.write(value.code, into: &buf)
+        FfiConverterString.write(value.message, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRejectedCommand_lift(_ buf: RustBuffer) throws -> RejectedCommand {
+    return try FfiConverterTypeRejectedCommand.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRejectedCommand_lower(_ value: RejectedCommand) -> RustBuffer {
+    return FfiConverterTypeRejectedCommand.lower(value)
+}
+
+
+/**
  * A resolved quick-add line: the command to execute plus the entities its
  * names resolved to.
  *
@@ -2457,6 +2729,170 @@ public func FfiConverterTypeSchedule_lift(_ buf: RustBuffer) throws -> Schedule 
 #endif
 public func FfiConverterTypeSchedule_lower(_ value: Schedule) -> RustBuffer {
     return FfiConverterTypeSchedule.lower(value)
+}
+
+
+/**
+ * Outcome of a push response or a pull integration.
+ */
+public struct SyncReport: Equatable, Hashable, Codable {
+    /**
+     * Local commands that got their server seq.
+     */
+    public var confirmed: UInt32
+    /**
+     * Commands from other members applied locally.
+     */
+    public var received: UInt32
+    /**
+     * Whether the projection was rebuilt.
+     */
+    public var rebased: Bool
+    public var rejected: [RejectedCommand]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Local commands that got their server seq.
+         */confirmed: UInt32, 
+        /**
+         * Commands from other members applied locally.
+         */received: UInt32, 
+        /**
+         * Whether the projection was rebuilt.
+         */rebased: Bool, rejected: [RejectedCommand]) {
+        self.confirmed = confirmed
+        self.received = received
+        self.rebased = rebased
+        self.rejected = rejected
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncReport: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncReport: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncReport {
+        return
+            try SyncReport(
+                confirmed: FfiConverterUInt32.read(from: &buf), 
+                received: FfiConverterUInt32.read(from: &buf), 
+                rebased: FfiConverterBool.read(from: &buf), 
+                rejected: FfiConverterSequenceTypeRejectedCommand.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncReport, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.confirmed, into: &buf)
+        FfiConverterUInt32.write(value.received, into: &buf)
+        FfiConverterBool.write(value.rebased, into: &buf)
+        FfiConverterSequenceTypeRejectedCommand.write(value.rejected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncReport_lift(_ buf: RustBuffer) throws -> SyncReport {
+    return try FfiConverterTypeSyncReport.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncReport_lower(_ value: SyncReport) -> RustBuffer {
+    return FfiConverterTypeSyncReport.lower(value)
+}
+
+
+/**
+ * Where a vault stands with respect to the server.
+ */
+public struct SyncState: Equatable, Hashable, Codable {
+    /**
+     * What to pull from: the highest server seq this database holds with no
+     * hole before it. 0 when never synced.
+     */
+    public var lastServerSeq: Int64
+    /**
+     * Applied local commands not yet confirmed.
+     */
+    public var outbox: UInt32
+    /**
+     * Commands the server refused, kept for the UI until dismissed.
+     */
+    public var rejected: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * What to pull from: the highest server seq this database holds with no
+         * hole before it. 0 when never synced.
+         */lastServerSeq: Int64, 
+        /**
+         * Applied local commands not yet confirmed.
+         */outbox: UInt32, 
+        /**
+         * Commands the server refused, kept for the UI until dismissed.
+         */rejected: UInt32) {
+        self.lastServerSeq = lastServerSeq
+        self.outbox = outbox
+        self.rejected = rejected
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncState {
+        return
+            try SyncState(
+                lastServerSeq: FfiConverterInt64.read(from: &buf), 
+                outbox: FfiConverterUInt32.read(from: &buf), 
+                rejected: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncState, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.lastServerSeq, into: &buf)
+        FfiConverterUInt32.write(value.outbox, into: &buf)
+        FfiConverterUInt32.write(value.rejected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncState_lift(_ buf: RustBuffer) throws -> SyncState {
+    return try FfiConverterTypeSyncState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncState_lower(_ value: SyncState) -> RustBuffer {
+    return FfiConverterTypeSyncState.lower(value)
 }
 
 
@@ -2732,6 +3168,11 @@ public struct TransactionView: Equatable, Hashable, Codable {
      */
     public var categoryIsSystem: Bool
     public var note: String?
+    /**
+     * Author of the command that created the row; the account username once
+     * the vault is shared.
+     */
+    public var createdBy: String
     public var voided: Bool
     /**
      * Entries only: the wallet the money moved on.
@@ -2759,7 +3200,11 @@ public struct TransactionView: Equatable, Hashable, Codable {
          */amount: Int64, categoryId: Uuid, category: String, 
         /**
          * `true` for `Opening` and `Uncategorized`: the app localizes the name.
-         */categoryIsSystem: Bool, note: String?, voided: Bool, 
+         */categoryIsSystem: Bool, note: String?, 
+        /**
+         * Author of the command that created the row; the account username once
+         * the vault is shared.
+         */createdBy: String, voided: Bool, 
         /**
          * Entries only: the wallet the money moved on.
          */walletId: Uuid?, 
@@ -2780,6 +3225,7 @@ public struct TransactionView: Equatable, Hashable, Codable {
         self.category = category
         self.categoryIsSystem = categoryIsSystem
         self.note = note
+        self.createdBy = createdBy
         self.voided = voided
         self.walletId = walletId
         self.flowId = flowId
@@ -2812,6 +3258,7 @@ public struct FfiConverterTypeTransactionView: FfiConverterRustBuffer {
                 category: FfiConverterString.read(from: &buf), 
                 categoryIsSystem: FfiConverterBool.read(from: &buf), 
                 note: FfiConverterOptionString.read(from: &buf), 
+                createdBy: FfiConverterString.read(from: &buf), 
                 voided: FfiConverterBool.read(from: &buf), 
                 walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
@@ -2830,6 +3277,7 @@ public struct FfiConverterTypeTransactionView: FfiConverterRustBuffer {
         FfiConverterString.write(value.category, into: &buf)
         FfiConverterBool.write(value.categoryIsSystem, into: &buf)
         FfiConverterOptionString.write(value.note, into: &buf)
+        FfiConverterString.write(value.createdBy, into: &buf)
         FfiConverterBool.write(value.voided, into: &buf)
         FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
         FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
@@ -5193,6 +5641,31 @@ fileprivate struct FfiConverterSequenceTypeRecurringView: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRejectedCommand: FfiConverterRustBuffer {
+    typealias SwiftType = [RejectedCommand]
+
+    public static func write(_ value: [RejectedCommand], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRejectedCommand.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RejectedCommand] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RejectedCommand]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRejectedCommand.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTransactionView: FfiConverterRustBuffer {
     typealias SwiftType = [TransactionView]
 
@@ -5614,13 +6087,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_aliases() != 6737) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_method_corehandle_apply_push_response_json() != 58020) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_method_corehandle_categories() != 30998) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_commands_since() != 55432) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_method_corehandle_dismiss_rejected() != 48987) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_method_corehandle_execute() != 4893) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_integrate_pull_json() != 23226) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_last_seq() != 19574) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_list_recurring() != 7134) {
@@ -5638,19 +6123,37 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_preview_merge() != 37701) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_method_corehandle_push_request_json() != 12380) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_method_corehandle_recent_usage() != 39179) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_recurring_runs() != 59830) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_method_corehandle_rejected_commands() != 26105) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_relabel_outbox() != 61026) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_method_corehandle_resolve_quick_add() != 42675) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_serve_pull_json() != 45657) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_serve_push_json() != 18692) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_similar_categories() != 2308) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_snapshot() != 24099) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_sync_state() != 54821) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_transaction() != 29047) {

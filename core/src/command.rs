@@ -457,7 +457,10 @@ pub struct Receipt {
 #[derive(Clone, Debug, PartialEq, uniffi::Record)]
 pub struct CommandRecord {
     pub envelope: CommandEnvelope,
+    /// Position in the local log.
     pub seq: i64,
     pub created_at: i64,
     pub result_id: Option<Uuid>,
+    /// Position the server gave it; `None` while the command is in the outbox.
+    pub server_seq: Option<i64>,
 }

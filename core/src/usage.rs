@@ -74,7 +74,7 @@ impl Core {
         let row = self
             .conn
             .query_row(
-                "SELECT t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at
+                "SELECT t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at, t.created_by
                  FROM transactions t JOIN categories c ON c.id = t.category_id
                  WHERE t.vault_id = ?1 AND t.id = ?2",
                 params![vault_id, transaction_id],
@@ -92,6 +92,7 @@ impl Core {
                         category: r.get(5)?,
                         category_is_system: r.get(6)?,
                         note: r.get(7)?,
+                        created_by: r.get(9)?,
                         voided: voided_at.is_some(),
                         wallet_id: None,
                         flow_id: None,

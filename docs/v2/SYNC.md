@@ -8,7 +8,7 @@
 - Il **client** applica i comandi in locale (ottimista) e li tiene in **outbox** finché il server non li conferma. Il log locale ha `seq` (ordine locale) e `server_seq` (NULL finché non confermato). `outbox` = righe applicate con `server_seq IS NULL`, in ordine di `seq`.
 - Il **vault è l'unità di replica e di permesso**: `vault_memberships(vault, user, role ∈ owner|editor|viewer)` vive nel server. Lettura = owner o membro; scrittura = owner o editor; gestione membri = owner. Le risorse altrui non esistono ("blind 404").
 - L'**autore** di un comando è lo username dell'account. Il server rifiuta un push il cui `author` non coincide con l'utente autenticato (`403 author_mismatch`): così client e server producono la stessa proiezione (`created_by`, `owner_user_id`). Al login il client rietichetta i comandi in outbox con `relabel_outbox` e ricostruisce la proiezione.
-- Il client non serializza mai un comando: il core produce e consuma il JSON di push e pull (`push_request_json`, `apply_push_response_json`, `integrate_pull_json`); Swift fa solo HTTP con `URLSession`.
+- Il core espone anche il lato server del protocollo (`serve_push`, `serve_pull`, e le varianti JSON via FFI): il server axum ha la propria implementazione con le stesse regole, e l'app li usa per un finto server nei test. Il client non serializza mai un comando: il core produce e consuma il JSON di push e pull (`push_request_json`, `apply_push_response_json`, `integrate_pull_json`); Swift fa solo HTTP con `URLSession`.
 
 ## 2. Storage del server
 
@@ -45,10 +45,10 @@ Codici HTTP: `invalid_request`/`invalid_*` 400, `unauthorized` 401, `forbidden`/
 
 ## 4. Algoritmo del client (nel core)
 
-Stato per vault: `last_server_seq = max(server_seq)`, outbox, righe `rejected`.
+Stato per vault: `last_server_seq` = **watermark contiguo** (il più alto `server_seq` tale che tutti i precedenti sono presenti in locale, non il massimo: dopo un push confermato oltre un buco lasciato da un altro membro, il pull deve ripartire dal buco), outbox, righe `rejected`.
 
 1. **Push.** `push_request(vault)` = outbox. `apply_push_response`: per ogni risultato `applied` scrive `server_seq`; per ogni `rejected` marca la riga `status = rejected` con il motivo, poi ricostruisce la proiezione senza di essa. Dopo un push il client fa sempre un pull.
-2. **Pull.** `integrate_pull(vault, response)`: ignora i record con `seq <= last_server_seq`. Se tutti i record restanti sono comandi locali in outbox e nello stesso ordine relativo → **fast path**: scrive i `server_seq`. Altrimenti → **rebase**: in una sola transazione SQLite cancella proiezione e log del vault, riapplica nell'ordine del server i comandi confermati locali più quelli ricevuti (devono tutti applicarsi: se uno fallisce è una divergenza, errore `storage`), poi riesegue l'outbox rimasta in ordine locale; i comandi che ora falliscono diventano `rejected` e finiscono nel `SyncReport`. Le righe `rejected` precedenti vengono conservate.
+2. **Pull.** `integrate_pull(vault, response)`: ignora i record con `seq <= last_server_seq`. Se i record restanti sono un **prefisso dell'outbox** (stessi id, stesso ordine, confrontati a coppie) → **fast path**: scrive i `server_seq`. Altrimenti → **rebase**: in una sola transazione SQLite cancella proiezione e log del vault, riapplica nell'ordine del server i comandi confermati locali più quelli ricevuti (devono tutti applicarsi: se uno fallisce è una divergenza, errore `storage`), poi riesegue l'outbox rimasta in ordine locale; i comandi che ora falliscono diventano `rejected` e finiscono nel `SyncReport`. Le righe `rejected` precedenti vengono conservate e reinserite in coda al log rinumerato; se un record in arrivo ha l'id di una riga `rejected` locale, vince il server e la riga viene tolta. I comandi riapplicati conservano il `created_at` originale (quello del server per i confermati), così i timestamp convergono.
 3. **Vault condivisi.** Un vault di cui si diventa membri non esiste in locale: `integrate_pull` da `since = 0` lo crea, perché il primo comando del log è `CreateVault`.
 4. **Login.** `relabel_outbox(vault, username)` aggiorna l'`author` delle righe in outbox e ricostruisce la proiezione.
 5. **Rifiuti.** `rejected_commands(vault)` elenca i comandi rifiutati (id, kind, codice, messaggio) per la UI; `dismiss_rejected` li toglie.
