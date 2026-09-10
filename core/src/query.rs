@@ -166,6 +166,14 @@ pub struct TransactionFilter {
     /// Case-insensitive substring on note or category name.
     #[uniffi(default = None)]
     pub text: Option<String>,
+    /// Exact `created_by`: the PERSONA filter of the ledger
+    /// (`docs/v2/UI.md` §3). `None` = everybody.
+    #[uniffi(default = None)]
+    pub author: Option<String>,
+    /// Oldest first, the reading order of the ledger. Cursors keep working:
+    /// they simply walk forward instead of backward.
+    #[uniffi(default = false)]
+    pub ascending: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -338,14 +346,24 @@ impl Core {
                 args.push(Value::Text(pattern));
             }
         }
+        if let Some(author) = filter.author.as_deref() {
+            sql.push_str(" AND t.created_by = ?");
+            args.push(Value::Text(author.to_string()));
+        }
         if let Some(cursor) = cursor {
             let (at, id) = parse_cursor(cursor)?;
-            sql.push_str(" AND (t.occurred_at < ? OR (t.occurred_at = ? AND t.id < ?))");
+            let cmp = if filter.ascending { '>' } else { '<' };
+            sql.push_str(&format!(
+                " AND (t.occurred_at {cmp} ? OR (t.occurred_at = ? AND t.id {cmp} ?))"
+            ));
             args.push(Value::Integer(at));
             args.push(Value::Integer(at));
             args.push(blob(id));
         }
-        sql.push_str(" ORDER BY t.occurred_at DESC, t.id DESC LIMIT ?");
+        let direction = if filter.ascending { "ASC" } else { "DESC" };
+        sql.push_str(&format!(
+            " ORDER BY t.occurred_at {direction}, t.id {direction} LIMIT ?"
+        ));
         args.push(Value::Integer(
             i64::try_from(limit).unwrap_or(i64::MAX).saturating_add(1),
         ));
@@ -494,11 +512,11 @@ pub fn replay(records: &[CommandRecord], target: &mut Core) -> Result<()> {
     Ok(())
 }
 
-fn blob(id: Uuid) -> Value {
+pub(crate) fn blob(id: Uuid) -> Value {
     Value::Blob(id.as_bytes().to_vec())
 }
 
-fn to_fixed(secs: i64, offset_secs: i32) -> DateTime<FixedOffset> {
+pub(crate) fn to_fixed(secs: i64, offset_secs: i32) -> DateTime<FixedOffset> {
     let tz = FixedOffset::east_opt(offset_secs).unwrap_or_else(|| Utc.fix());
     DateTime::from_timestamp(secs, 0)
         .unwrap_or_default()

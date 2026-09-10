@@ -20,10 +20,11 @@ use chrono::{DateTime, FixedOffset, NaiveDate, SecondsFormat, Utc};
 use uuid::Uuid;
 
 use crate::{
-    AliasView, CategoryView, Command, CommandEnvelope, CommandRecord, Core, Currency, DomainError,
-    MergePreview, Money, Page, PendingRecurring, PeriodTotals, Receipt, RecentUsage,
-    RecurringRunView, RecurringView, RejectedCommand, SyncReport, SyncState, TransactionFilter,
-    TransactionView, VaultSnapshot, VaultView,
+    AliasView, CategoryTotals, CategoryView, Command, CommandEnvelope, CommandRecord, Core,
+    Currency, DomainError, FlowPersonTotals, MergePreview, Money, Page, PendingRecurring,
+    PeriodTotals, Receipt, RecentUsage, RecurringRunView, RecurringView, RejectedCommand,
+    SyncReport, SyncState, TopExpense, TransactionFilter, TransactionView, VaultSnapshot,
+    VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
 };
 
@@ -207,6 +208,60 @@ impl CoreHandle {
         to: Option<UtcDateTime>,
     ) -> Result<PeriodTotals, DomainError> {
         self.lock()?.period_totals(vault_id, from, to)
+    }
+
+    // -- analytics (docs/v2/UI.md §4) ------------------------------------
+
+    /// Distinct authors of live transactions: the PERSONA segmented control.
+    pub fn authors(&self, vault_id: Uuid) -> Result<Vec<String>, DomainError> {
+        self.lock()?.authors(vault_id)
+    }
+
+    /// Envelope x person matrix over `[from, to)`.
+    pub fn flow_person_totals(
+        &self,
+        vault_id: Uuid,
+        from: UtcDateTime,
+        to: UtcDateTime,
+    ) -> Result<Vec<FlowPersonTotals>, DomainError> {
+        self.lock()?.flow_person_totals(vault_id, from, to)
+    }
+
+    /// Category breakdown over `[from, to)`, heaviest net expense first.
+    #[uniffi::method(default(person = None))]
+    pub fn category_totals(
+        &self,
+        vault_id: Uuid,
+        from: UtcDateTime,
+        to: UtcDateTime,
+        person: Option<String>,
+    ) -> Result<Vec<CategoryTotals>, DomainError> {
+        self.lock()?.category_totals(vault_id, from, to, person)
+    }
+
+    /// Totals of the ranges between consecutive `bounds`: 13 month starts give
+    /// the twelve bars of a year.
+    #[uniffi::method(default(person = None))]
+    pub fn bucket_totals(
+        &self,
+        vault_id: Uuid,
+        bounds: Vec<UtcDateTime>,
+        person: Option<String>,
+    ) -> Result<Vec<PeriodTotals>, DomainError> {
+        self.lock()?.bucket_totals(vault_id, bounds, person)
+    }
+
+    /// The heaviest expenses of `[from, to)`, largest first.
+    #[uniffi::method(default(person = None))]
+    pub fn top_expenses(
+        &self,
+        vault_id: Uuid,
+        from: UtcDateTime,
+        to: UtcDateTime,
+        person: Option<String>,
+        limit: u32,
+    ) -> Result<Vec<TopExpense>, DomainError> {
+        self.lock()?.top_expenses(vault_id, from, to, person, limit)
     }
 
     pub fn list_recurring(

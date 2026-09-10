@@ -599,7 +599,23 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      */
     func applyPushResponseJson(vaultId: Uuid, json: String) throws  -> SyncReport
     
+    /**
+     * Distinct authors of live transactions: the PERSONA segmented control.
+     */
+    func authors(vaultId: Uuid) throws  -> [String]
+    
+    /**
+     * Totals of the ranges between consecutive `bounds`: 13 month starts give
+     * the twelve bars of a year.
+     */
+    func bucketTotals(vaultId: Uuid, bounds: [UtcDateTime], person: String?) throws  -> [PeriodTotals]
+    
     func categories(vaultId: Uuid, includeArchived: Bool) throws  -> [CategoryView]
+    
+    /**
+     * Category breakdown over `[from, to)`, heaviest net expense first.
+     */
+    func categoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String?) throws  -> [CategoryTotals]
     
     /**
      * Log entries of a vault with `seq > since_seq`, in order.
@@ -615,6 +631,11 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * Applies one command: the only way to change a vault.
      */
     func execute(envelope: CommandEnvelope) throws  -> Receipt
+    
+    /**
+     * Envelope x person matrix over `[from, to)`.
+     */
+    func flowPersonTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) throws  -> [FlowPersonTotals]
     
     /**
      * Folds a pull response into the log, rebasing when it has to.
@@ -707,6 +728,11 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * size, pending rejections.
      */
     func syncState(vaultId: Uuid) throws  -> SyncState
+    
+    /**
+     * The heaviest expenses of `[from, to)`, largest first.
+     */
+    func topExpenses(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String?, limit: UInt32) throws  -> [TopExpense]
     
     /**
      * One transaction with its legs, voided included.
@@ -826,6 +852,35 @@ open func applyPushResponseJson(vaultId: Uuid, json: String)throws  -> SyncRepor
 })
 }
     
+    /**
+     * Distinct authors of live transactions: the PERSONA segmented control.
+     */
+open func authors(vaultId: Uuid)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_authors(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Totals of the ranges between consecutive `bounds`: 13 month starts give
+     * the twelve bars of a year.
+     */
+open func bucketTotals(vaultId: Uuid, bounds: [UtcDateTime], person: String? = nil)throws  -> [PeriodTotals]  {
+    return try  FfiConverterSequenceTypePeriodTotals.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_bucket_totals(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterSequenceTypeUtcDateTime.lower(bounds),
+        FfiConverterOptionString.lower(person),uniffiCallStatus
+    )
+})
+}
+    
 open func categories(vaultId: Uuid, includeArchived: Bool)throws  -> [CategoryView]  {
     return try  FfiConverterSequenceTypeCategoryView.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
         uniffiCallStatus in
@@ -833,6 +888,22 @@ open func categories(vaultId: Uuid, includeArchived: Bool)throws  -> [CategoryVi
             self.uniffiCloneHandle(),
         FfiConverterTypeUuid_lower(vaultId),
         FfiConverterBool.lower(includeArchived),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Category breakdown over `[from, to)`, heaviest net expense first.
+     */
+open func categoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String? = nil)throws  -> [CategoryTotals]  {
+    return try  FfiConverterSequenceTypeCategoryTotals.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_category_totals(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeUtcDateTime_lower(from),
+        FfiConverterTypeUtcDateTime_lower(to),
+        FfiConverterOptionString.lower(person),uniffiCallStatus
     )
 })
 }
@@ -873,6 +944,21 @@ open func execute(envelope: CommandEnvelope)throws  -> Receipt  {
     uniffi_sparagne_core_fn_method_corehandle_execute(
             self.uniffiCloneHandle(),
         FfiConverterTypeCommandEnvelope_lower(envelope),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Envelope x person matrix over `[from, to)`.
+     */
+open func flowPersonTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime)throws  -> [FlowPersonTotals]  {
+    return try  FfiConverterSequenceTypeFlowPersonTotals.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_flow_person_totals(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeUtcDateTime_lower(from),
+        FfiConverterTypeUtcDateTime_lower(to),uniffiCallStatus
     )
 })
 }
@@ -1134,6 +1220,23 @@ open func syncState(vaultId: Uuid)throws  -> SyncState  {
 }
     
     /**
+     * The heaviest expenses of `[from, to)`, largest first.
+     */
+open func topExpenses(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime, person: String? = nil, limit: UInt32)throws  -> [TopExpense]  {
+    return try  FfiConverterSequenceTypeTopExpense.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_top_expenses(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeUtcDateTime_lower(from),
+        FfiConverterTypeUtcDateTime_lower(to),
+        FfiConverterOptionString.lower(person),
+        FfiConverterUInt32.lower(limit),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * One transaction with its legs, voided included.
      */
 open func transaction(vaultId: Uuid, transactionId: Uuid)throws  -> TransactionView  {
@@ -1265,6 +1368,105 @@ public func FfiConverterTypeAliasView_lift(_ buf: RustBuffer) throws -> AliasVie
 #endif
 public func FfiConverterTypeAliasView_lower(_ value: AliasView) -> RustBuffer {
     return FfiConverterTypeAliasView.lower(value)
+}
+
+
+/**
+ * One row of the category breakdown.
+ */
+public struct CategoryTotals: Equatable, Hashable, Codable {
+    public var categoryId: Uuid
+    public var name: String
+    /**
+     * `true` for `Opening` and `Uncategorized`: the app localizes the name.
+     */
+    public var isSystem: Bool
+    public var income: Int64
+    public var expense: Int64
+    public var refund: Int64
+    /**
+     * `max(expense - refund, 0)`.
+     */
+    public var netExpense: Int64
+    /**
+     * Transactions behind the row, voided excluded.
+     */
+    public var count: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(categoryId: Uuid, name: String, 
+        /**
+         * `true` for `Opening` and `Uncategorized`: the app localizes the name.
+         */isSystem: Bool, income: Int64, expense: Int64, refund: Int64, 
+        /**
+         * `max(expense - refund, 0)`.
+         */netExpense: Int64, 
+        /**
+         * Transactions behind the row, voided excluded.
+         */count: UInt32) {
+        self.categoryId = categoryId
+        self.name = name
+        self.isSystem = isSystem
+        self.income = income
+        self.expense = expense
+        self.refund = refund
+        self.netExpense = netExpense
+        self.count = count
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CategoryTotals: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCategoryTotals: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CategoryTotals {
+        return
+            try CategoryTotals(
+                categoryId: FfiConverterTypeUuid.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                isSystem: FfiConverterBool.read(from: &buf), 
+                income: FfiConverterInt64.read(from: &buf), 
+                expense: FfiConverterInt64.read(from: &buf), 
+                refund: FfiConverterInt64.read(from: &buf), 
+                netExpense: FfiConverterInt64.read(from: &buf), 
+                count: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CategoryTotals, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.categoryId, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterBool.write(value.isSystem, into: &buf)
+        FfiConverterInt64.write(value.income, into: &buf)
+        FfiConverterInt64.write(value.expense, into: &buf)
+        FfiConverterInt64.write(value.refund, into: &buf)
+        FfiConverterInt64.write(value.netExpense, into: &buf)
+        FfiConverterUInt32.write(value.count, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCategoryTotals_lift(_ buf: RustBuffer) throws -> CategoryTotals {
+    return try FfiConverterTypeCategoryTotals.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCategoryTotals_lower(_ value: CategoryTotals) -> RustBuffer {
+    return FfiConverterTypeCategoryTotals.lower(value)
 }
 
 
@@ -1576,6 +1778,94 @@ public func FfiConverterTypeEntry_lift(_ buf: RustBuffer) throws -> Entry {
 #endif
 public func FfiConverterTypeEntry_lower(_ value: Entry) -> RustBuffer {
     return FfiConverterTypeEntry.lower(value)
+}
+
+
+/**
+ * Income, expense and refund on one envelope for one person.
+ *
+ * Amounts come from the flow legs, not from `transactions.amount`, so a
+ * future expense split across two envelopes lands on both.
+ */
+public struct FlowPersonTotals: Equatable, Hashable, Codable {
+    public var flowId: Uuid
+    /**
+     * `transactions.created_by`: the member of the vault, the PERSONA column.
+     */
+    public var person: String
+    public var income: Int64
+    public var expense: Int64
+    public var refund: Int64
+    /**
+     * `max(expense - refund, 0)`.
+     */
+    public var netExpense: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(flowId: Uuid, 
+        /**
+         * `transactions.created_by`: the member of the vault, the PERSONA column.
+         */person: String, income: Int64, expense: Int64, refund: Int64, 
+        /**
+         * `max(expense - refund, 0)`.
+         */netExpense: Int64) {
+        self.flowId = flowId
+        self.person = person
+        self.income = income
+        self.expense = expense
+        self.refund = refund
+        self.netExpense = netExpense
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FlowPersonTotals: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFlowPersonTotals: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FlowPersonTotals {
+        return
+            try FlowPersonTotals(
+                flowId: FfiConverterTypeUuid.read(from: &buf), 
+                person: FfiConverterString.read(from: &buf), 
+                income: FfiConverterInt64.read(from: &buf), 
+                expense: FfiConverterInt64.read(from: &buf), 
+                refund: FfiConverterInt64.read(from: &buf), 
+                netExpense: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FlowPersonTotals, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterString.write(value.person, into: &buf)
+        FfiConverterInt64.write(value.income, into: &buf)
+        FfiConverterInt64.write(value.expense, into: &buf)
+        FfiConverterInt64.write(value.refund, into: &buf)
+        FfiConverterInt64.write(value.netExpense, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFlowPersonTotals_lift(_ buf: RustBuffer) throws -> FlowPersonTotals {
+    return try FfiConverterTypeFlowPersonTotals.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFlowPersonTotals_lower(_ value: FlowPersonTotals) -> RustBuffer {
+    return FfiConverterTypeFlowPersonTotals.lower(value)
 }
 
 
@@ -2897,6 +3187,83 @@ public func FfiConverterTypeSyncState_lower(_ value: SyncState) -> RustBuffer {
 
 
 /**
+ * One line of "top uscite del mese".
+ */
+public struct TopExpense: Equatable, Hashable, Codable {
+    public var transactionId: Uuid
+    public var occurredAt: OffsetDateTime
+    public var note: String?
+    public var category: String
+    public var categoryIsSystem: Bool
+    public var person: String
+    public var amount: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(transactionId: Uuid, occurredAt: OffsetDateTime, note: String?, category: String, categoryIsSystem: Bool, person: String, amount: Int64) {
+        self.transactionId = transactionId
+        self.occurredAt = occurredAt
+        self.note = note
+        self.category = category
+        self.categoryIsSystem = categoryIsSystem
+        self.person = person
+        self.amount = amount
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TopExpense: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTopExpense: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TopExpense {
+        return
+            try TopExpense(
+                transactionId: FfiConverterTypeUuid.read(from: &buf), 
+                occurredAt: FfiConverterTypeOffsetDateTime.read(from: &buf), 
+                note: FfiConverterOptionString.read(from: &buf), 
+                category: FfiConverterString.read(from: &buf), 
+                categoryIsSystem: FfiConverterBool.read(from: &buf), 
+                person: FfiConverterString.read(from: &buf), 
+                amount: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TopExpense, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.transactionId, into: &buf)
+        FfiConverterTypeOffsetDateTime.write(value.occurredAt, into: &buf)
+        FfiConverterOptionString.write(value.note, into: &buf)
+        FfiConverterString.write(value.category, into: &buf)
+        FfiConverterBool.write(value.categoryIsSystem, into: &buf)
+        FfiConverterString.write(value.person, into: &buf)
+        FfiConverterInt64.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTopExpense_lift(_ buf: RustBuffer) throws -> TopExpense {
+    return try FfiConverterTypeTopExpense.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTopExpense_lower(_ value: TopExpense) -> RustBuffer {
+    return FfiConverterTypeTopExpense.lower(value)
+}
+
+
+/**
  * Filter for [`Core::list_transactions`]. Defaults hide voided rows and
  * transfers.
  */
@@ -2928,6 +3295,16 @@ public struct TransactionFilter: Equatable, Hashable, Codable {
      * Case-insensitive substring on note or category name.
      */
     public var text: String?
+    /**
+     * Exact `created_by`: the PERSONA filter of the ledger
+     * (`docs/v2/UI.md` §3). `None` = everybody.
+     */
+    public var author: String?
+    /**
+     * Oldest first, the reading order of the ledger. Cursors keep working:
+     * they simply walk forward instead of backward.
+     */
+    public var ascending: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2950,7 +3327,15 @@ public struct TransactionFilter: Equatable, Hashable, Codable {
          */flowId: Uuid? = nil, 
         /**
          * Case-insensitive substring on note or category name.
-         */text: String? = nil) {
+         */text: String? = nil, 
+        /**
+         * Exact `created_by`: the PERSONA filter of the ledger
+         * (`docs/v2/UI.md` §3). `None` = everybody.
+         */author: String? = nil, 
+        /**
+         * Oldest first, the reading order of the ledger. Cursors keep working:
+         * they simply walk forward instead of backward.
+         */ascending: Bool = false) {
         self.from = from
         self.to = to
         self.kinds = kinds
@@ -2959,6 +3344,8 @@ public struct TransactionFilter: Equatable, Hashable, Codable {
         self.walletId = walletId
         self.flowId = flowId
         self.text = text
+        self.author = author
+        self.ascending = ascending
     }
 
     
@@ -2984,7 +3371,9 @@ public struct FfiConverterTypeTransactionFilter: FfiConverterRustBuffer {
                 includeTransfers: FfiConverterBool.read(from: &buf), 
                 walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
-                text: FfiConverterOptionString.read(from: &buf)
+                text: FfiConverterOptionString.read(from: &buf), 
+                author: FfiConverterOptionString.read(from: &buf), 
+                ascending: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2997,6 +3386,8 @@ public struct FfiConverterTypeTransactionFilter: FfiConverterRustBuffer {
         FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
         FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
         FfiConverterOptionString.write(value.text, into: &buf)
+        FfiConverterOptionString.write(value.author, into: &buf)
+        FfiConverterBool.write(value.ascending, into: &buf)
     }
 }
 
@@ -5441,6 +5832,31 @@ fileprivate struct FfiConverterSequenceTypeAliasView: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCategoryTotals: FfiConverterRustBuffer {
+    typealias SwiftType = [CategoryTotals]
+
+    public static func write(_ value: [CategoryTotals], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCategoryTotals.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CategoryTotals] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CategoryTotals]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCategoryTotals.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCategoryView: FfiConverterRustBuffer {
     typealias SwiftType = [CategoryView]
 
@@ -5483,6 +5899,31 @@ fileprivate struct FfiConverterSequenceTypeCommandRecord: FfiConverterRustBuffer
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCommandRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFlowPersonTotals: FfiConverterRustBuffer {
+    typealias SwiftType = [FlowPersonTotals]
+
+    public static func write(_ value: [FlowPersonTotals], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFlowPersonTotals.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FlowPersonTotals] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FlowPersonTotals]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFlowPersonTotals.read(from: &buf))
         }
         return seq
     }
@@ -5591,6 +6032,31 @@ fileprivate struct FfiConverterSequenceTypePendingRecurring: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePeriodTotals: FfiConverterRustBuffer {
+    typealias SwiftType = [PeriodTotals]
+
+    public static func write(_ value: [PeriodTotals], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePeriodTotals.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PeriodTotals] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PeriodTotals]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePeriodTotals.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRecurringRunView: FfiConverterRustBuffer {
     typealias SwiftType = [RecurringRunView]
 
@@ -5658,6 +6124,31 @@ fileprivate struct FfiConverterSequenceTypeRejectedCommand: FfiConverterRustBuff
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeRejectedCommand.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTopExpense: FfiConverterRustBuffer {
+    typealias SwiftType = [TopExpense]
+
+    public static func write(_ value: [TopExpense], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTopExpense.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TopExpense] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TopExpense]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTopExpense.read(from: &buf))
         }
         return seq
     }
@@ -5783,6 +6274,31 @@ fileprivate struct FfiConverterSequenceTypeNaiveDate: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeNaiveDate.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeUtcDateTime: FfiConverterRustBuffer {
+    typealias SwiftType = [UtcDateTime]
+
+    public static func write(_ value: [UtcDateTime], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUtcDateTime.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UtcDateTime] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UtcDateTime]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUtcDateTime.read(from: &buf))
         }
         return seq
     }
@@ -6090,7 +6606,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_apply_push_response_json() != 58020) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_method_corehandle_authors() != 39372) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_bucket_totals() != 55160) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_method_corehandle_categories() != 30998) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_category_totals() != 11373) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_commands_since() != 55432) {
@@ -6100,6 +6625,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_execute() != 4893) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_flow_person_totals() != 61392) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_integrate_pull_json() != 23226) {
@@ -6154,6 +6682,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_sync_state() != 54821) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_top_expenses() != 20349) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_transaction() != 29047) {
