@@ -34,7 +34,7 @@ JSON ovunque; autenticazione `Authorization: Bearer <token>` tranne dove indicat
 | `POST /vaults/{vault_id}/push` | `PushRequest` → 200 `PushResponse` | owner, editor | viewer `403 forbidden`; non membro `404 not_found`; `vault_id` dell'envelope diverso dal path `400 invalid_request`; `author` diverso `403 author_mismatch` |
 | `GET /vaults/{vault_id}/pull?since=0&limit=500` | → 200 `PullResponse` | membro | `since` = ultimo seq noto; `limit` massimo 1000; `last_seq` è l'ultimo seq del vault (per sapere se c'è altro) |
 | `GET /vaults/{vault_id}/members` | → `[MemberEntry]` | membro | |
-| `PUT /vaults/{vault_id}/members` | `SetMemberRequest` → 204 | owner | upsert; l'owner non si tocca (`403 forbidden`); utente inesistente `404 not_found` |
+| `PUT /vaults/{vault_id}/members` | `SetMemberRequest` → 204 | owner | upsert di editor o viewer; `role = owner` è `400 invalid_request`; cambiare il ruolo dell'owner esistente `403 forbidden`; utente inesistente `404 not_found` |
 | `DELETE /vaults/{vault_id}/members/{username}` | → 204 | owner | l'owner non si rimuove |
 
 Codici HTTP: `invalid_request`/`invalid_*` 400, `unauthorized` 401, `forbidden`/`author_mismatch`/`registration_disabled` 403, `not_found` 404, `already_exists` 409, errori di storage 500.
@@ -64,3 +64,15 @@ Gli id delle entità derivano dall'id del comando (`ARCH.md` §4), quindi il reb
 ## 6. Test di accettazione (in `server/tests`)
 
 Due `Core` in memoria come client A e B contro il router in-process: A registra, crea il vault, un wallet e un'entrata e fa push; B registra e l'owner lo aggiunge come editor (l'utente deve esistere prima); B fa pull da 0 (ottiene il vault), aggiunge una spesa e fa push; A fa pull e ricostruisce (rebase); le proiezioni di A, B e del server coincidono (`snapshot`, `list_transactions`, `categories`). Più: push idempotente; spesa oltre il saldo rifiutata dal server e tolta dalla proiezione di chi l'ha emessa; viewer che non può fare push; non membro che riceve 404; `author` diverso rifiutato; token scaduto o revocato → 401.
+
+## 7. Stato e punti rimandati
+
+Fase 3 completata il 2026-09-10: `server/` (40 test, di cui 4 end-to-end a due client), sync lato client nel core (`core/tests/sync.rs`, 13 test più il finto server), app con account, motore di sync, condivisione e rifiuti (10 test su un finto server fatto da un secondo `CoreHandle`). Emerso dall'integrazione, da fare quando serve:
+
+- `POST /vaults` risponde con un `PushResult` singolo mentre il core consuma un `PushResponse`: l'app lo incarta a mano. Un entry point del core che accetti il singolo risultato, o un `POST /vaults/{id}/push` che accetti `CreateVault` come primo comando di un vault ignoto, toglierebbe il caso speciale dal client.
+- Il client legge `last_seq` e `command.kind` dal JSON con `JSONSerialization`: sono i due soli punti in cui Swift guarda dentro la risposta o il comando. Un accessor del core (`create_vault_envelope_json(vault)`, `last_seq` nel `SyncReport`) li eliminerebbe.
+- `sync_state` di un vault sconosciuto risponde zeri invece di errore; il join si appoggia a questo comportamento, che va reso esplicito nella documentazione dell'API.
+- `RejectedCommand.kind` è il nome snake_case del comando; l'app lo mostra tal quale accanto al messaggio localizzato.
+- Il Keychain con firma ad-hoc può rifiutare `SecItemAdd`: il token resta in memoria per la sessione. Con un team Apple il problema sparisce.
+- Il server non tiene i comandi rifiutati (solo la risposta al push); un lotto di push oltre 2 MB (circa 6000 comandi) è `400 invalid_request`: il client deve spezzare i lotti grandi.
+- Manca un `Core::vault(id)` e un `last_seq` in blocco: `GET /vaults` scansiona `vaults()` e fa una query per vault.

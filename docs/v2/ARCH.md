@@ -40,6 +40,7 @@ L'app lavora su un SQLite locale attraverso un core Rust in-process; ogni scritt
 - Autentica (argon2 + token opachi), mantiene il log di ogni vault, espone `push(vault, comandi)` e `pull(vault, since_seq)`.
 - Applica ogni comando ricevuto con `core` prima di accettarlo: è l'unico punto dove le regole vengono fatte rispettare tra utenti diversi.
 - Serializza i comandi per vault (un lock per vault in Rust, o un processo per vault sulla BEAM).
+- Stato (2026-09-10): fatto in axum con un solo `Mutex<Core>` (SQLite ha un solo scrittore) e `spawn_blocking`; protocollo in `SYNC.md`.
 
 ## 3. Il log dei comandi
 
@@ -136,7 +137,7 @@ Multi-tenant lato server: account utente, vault di proprietà di un account, mem
 | 0 | SPEC v2 breve (dominio v1 + §3-§4 di questo documento) | documento | assorbita dal distillato §1 e da questo documento |
 | 1 | crate `core`: modello, comandi, log, proiezione, query, test | libreria testata, nessuna UI | fatta il 2026-09-09 (154 test) |
 | 2 | UniFFI, Swift Package, app con tabella transazioni e quick-add, solo locale | app usabile da un utente | fatta il 2026-09-09: `apple/SparagneCore` + `apple/Sparagne` (tabella, quick-add, void con undo, inspector, gestione wallet/buste/categorie, ricorrenze) |
-| 3 | server `sync`, auth, membership, outbox e pull | secondo utente | da fare |
+| 3 | server `sync`, auth, membership, outbox e pull | secondo utente | fatta il 2026-09-10: `server/` in axum, sync nel core, account e condivisione nell'app; dettagli e rimandi in `SYNC.md` §7 |
 | 4 | dashboard e analytics con query sul SQLite locale | stile bancario | da fare |
 
 Rimandato dalle fasi 1-2: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), un'app che chiama il core da un attore in background invece che dal main actor, firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`.
