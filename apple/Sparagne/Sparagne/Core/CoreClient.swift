@@ -15,8 +15,14 @@ import SparagneCore
 final class CoreClient {
     let handle: CoreHandle
 
-    /// Author recorded on every command in the log.
-    let author: String
+    /// Author recorded on every command in the log. It follows the account:
+    /// logging in changes it and relabels whatever the outbox still holds
+    /// (`docs/v2/SYNC.md` §1).
+    var author: String
+
+    /// Called after every applied command, so `SyncEngine` can schedule a
+    /// push. Set by the engine, never by the views.
+    var onExecuted: (() -> Void)?
 
     init(handle: CoreHandle, author: String = NSUserName()) {
         self.handle = handle
@@ -52,13 +58,21 @@ final class CoreClient {
     /// Addresses a command to a vault and applies it.
     @discardableResult
     func execute(vaultId: Uuid, _ command: Command) throws -> Receipt {
-        try handle.execute(envelope: newEnvelope(vaultId: vaultId, author: author, command: command))
+        let receipt = try handle.execute(
+            envelope: newEnvelope(vaultId: vaultId, author: author, command: command)
+        )
+        onExecuted?()
+        return receipt
     }
 
     /// `CreateVault` lives outside any vault log, so it has its own envelope.
     @discardableResult
     func createVault(name: String, currency: Currency = .eur) throws -> Receipt {
-        try handle.execute(envelope: createVaultEnvelope(author: author, name: name, currency: currency))
+        let receipt = try handle.execute(
+            envelope: createVaultEnvelope(author: author, name: name, currency: currency)
+        )
+        onExecuted?()
+        return receipt
     }
 
     // MARK: - Reads
@@ -129,6 +143,45 @@ final class CoreClient {
             now: CoreDate.offset(now),
             defaults: defaults
         )
+    }
+
+    // MARK: - Sync
+    //
+    // The core writes and reads every sync body; `SyncEngine` only carries
+    // the strings to the server and back (`docs/v2/SYNC.md` §1).
+
+    func syncState(vaultId: Uuid) throws -> SyncState {
+        try handle.syncState(vaultId: vaultId)
+    }
+
+    /// The body of `POST /vaults/{id}/push`: the outbox, in local order.
+    func pushRequestJson(vaultId: Uuid) throws -> String {
+        try handle.pushRequestJson(vaultId: vaultId)
+    }
+
+    @discardableResult
+    func applyPushResponse(vaultId: Uuid, json: String) throws -> SyncReport {
+        try handle.applyPushResponseJson(vaultId: vaultId, json: json)
+    }
+
+    /// Folds a pull into the log; the core rebases when it has to, and
+    /// creates the vault when this is a join.
+    @discardableResult
+    func integratePull(vaultId: Uuid, json: String) throws -> SyncReport {
+        try handle.integratePullJson(vaultId: vaultId, json: json)
+    }
+
+    /// After a login: the outbox is re-signed with the account's username.
+    func relabelOutbox(vaultId: Uuid, author: String) throws {
+        try handle.relabelOutbox(vaultId: vaultId, author: author)
+    }
+
+    func rejectedCommands(vaultId: Uuid) throws -> [RejectedCommand] {
+        try handle.rejectedCommands(vaultId: vaultId)
+    }
+
+    func dismissRejected(vaultId: Uuid, commandId: Uuid) throws {
+        try handle.dismissRejected(vaultId: vaultId, commandId: commandId)
     }
 }
 

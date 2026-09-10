@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%lld changes waiting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld changes waiting"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld modifiche in attesa"
+          }
+        }
+      }
+    },
     "-12.50 pizza #food @cash >groceries": {
       "localizations": {
         "en": {
@@ -61,6 +77,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un vault contiene i tuoi wallet, le tue buste e le transazioni. Il wallet è dove i soldi stanno, la busta è a cosa sono destinati."
+          }
+        }
+      }
+    },
+    "Account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
           }
         }
       }
@@ -337,6 +369,22 @@
         }
       }
     },
+    "Close": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chiudi"
+          }
+        }
+      }
+    },
     "Could not load more": {
       "localizations": {
         "en": {
@@ -465,6 +513,38 @@
         }
       }
     },
+    "Dismiss": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignora"
+          }
+        }
+      }
+    },
+    "Dismiss All": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss All"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignora tutte"
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "en": {
@@ -525,6 +605,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modifica ricorrenza"
+          }
+        }
+      }
+    },
+    "Editor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editor"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collaboratore"
           }
         }
       }
@@ -721,6 +817,22 @@
         }
       }
     },
+    "In sync": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In sync"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizzato"
+          }
+        }
+      }
+    },
     "Income": {
       "localizations": {
         "en": {
@@ -881,6 +993,38 @@
         }
       }
     },
+    "Last synced at %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last synced at %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ultima sincronizzazione alle %@"
+          }
+        }
+      }
+    },
+    "Later": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Più tardi"
+          }
+        }
+      }
+    },
     "Load More": {
       "localizations": {
         "en": {
@@ -893,6 +1037,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Carica altre"
+          }
+        }
+      }
+    },
+    "Log In": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log In"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accedi"
+          }
+        }
+      }
+    },
+    "Log Out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log Out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esci"
           }
         }
       }
@@ -1313,6 +1489,22 @@
         }
       }
     },
+    "Not signed in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not signed in"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non connesso"
+          }
+        }
+      }
+    },
     "Note": {
       "localizations": {
         "en": {
@@ -1325,6 +1517,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nota"
+          }
+        }
+      }
+    },
+    "Nothing was refused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing was refused"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna modifica rifiutata"
+          }
+        }
+      }
+    },
+    "Offline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non in linea"
           }
         }
       }
@@ -1393,6 +1617,38 @@
         }
       }
     },
+    "Owner": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Owner"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proprietario"
+          }
+        }
+      }
+    },
+    "Password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
+          }
+        }
+      }
+    },
     "Period": {
       "localizations": {
         "en": {
@@ -1453,6 +1709,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rimborso"
+          }
+        }
+      }
+    },
+    "Refused changes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused changes"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifiche rifiutate"
+          }
+        }
+      }
+    },
+    "Register": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Register"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrati"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi"
           }
         }
       }
@@ -1537,6 +1841,38 @@
         }
       }
     },
+    "Review": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rivedi"
+          }
+        }
+      }
+    },
+    "Role": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ruolo"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "en": {
@@ -1569,6 +1905,70 @@
         }
       }
     },
+    "Server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        }
+      }
+    },
+    "Server address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server address"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indirizzo del server"
+          }
+        }
+      }
+    },
+    "Share Vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share Vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Condividi vault"
+          }
+        }
+      }
+    },
+    "Share…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Condividi…"
+          }
+        }
+      }
+    },
     "Show Voided": {
       "localizations": {
         "en": {
@@ -1581,6 +1981,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mostra annullate"
+          }
+        }
+      }
+    },
+    "Signed in as": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed in as"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connesso come"
           }
         }
       }
@@ -1613,6 +2029,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salta"
+          }
+        }
+      }
+    },
+    "Some changes were refused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some changes were refused"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alcune modifiche sono state rifiutate"
           }
         }
       }
@@ -1729,6 +2161,54 @@
         }
       }
     },
+    "Status": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stato"
+          }
+        }
+      }
+    },
+    "Sync": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizzazione"
+          }
+        }
+      }
+    },
+    "Syncing…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Syncing…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizzazione…"
+          }
+        }
+      }
+    },
     "System": {
       "localizations": {
         "en": {
@@ -1841,6 +2321,22 @@
         }
       }
     },
+    "That server address is not valid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That server address is not valid"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quell'indirizzo del server non è valido"
+          }
+        }
+      }
+    },
     "That would go over the cap": {
       "localizations": {
         "en": {
@@ -1857,6 +2353,102 @@
         }
       }
     },
+    "The server answered something unexpected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server answered something unexpected"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server ha risposto in modo imprevisto"
+          }
+        }
+      }
+    },
+    "The server did not accept them, so they are not in your balances.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server did not accept them, so they are not in your balances."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server non le ha accettate, quindi non sono nei tuoi saldi."
+          }
+        }
+      }
+    },
+    "The server did not accept these changes, so they are not in your balances.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server did not accept these changes, so they are not in your balances."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server non ha accettato queste modifiche, quindi non sono nei tuoi saldi."
+          }
+        }
+      }
+    },
+    "The server had a problem": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server had a problem"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server ha avuto un problema"
+          }
+        }
+      }
+    },
+    "The server is unreachable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server is unreachable"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server non è raggiungibile"
+          }
+        }
+      }
+    },
+    "The server refused the request": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server refused the request"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server ha rifiutato la richiesta"
+          }
+        }
+      }
+    },
     "This month": {
       "localizations": {
         "en": {
@@ -1869,6 +2461,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Questo mese"
+          }
+        }
+      }
+    },
+    "This server is not accepting new accounts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This server is not accepting new accounts"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo server non accetta nuovi account"
+          }
+        }
+      }
+    },
+    "Those changes belong to another account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Those changes belong to another account"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle modifiche appartengono a un altro account"
           }
         }
       }
@@ -2065,6 +2689,22 @@
         }
       }
     },
+    "Username": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Username"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome utente"
+          }
+        }
+      }
+    },
     "Vault name": {
       "localizations": {
         "en": {
@@ -2077,6 +2717,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome del vault"
+          }
+        }
+      }
+    },
+    "Viewer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viewer"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lettore"
           }
         }
       }
@@ -2109,6 +2765,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annullate"
+          }
+        }
+      }
+    },
+    "Waiting to sync": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting to sync"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In attesa di sincronizzazione"
           }
         }
       }
@@ -2257,6 +2929,22 @@
         }
       }
     },
+    "Wrong username or password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong username or password"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome utente o password errati"
+          }
+        }
+      }
+    },
     "Yearly": {
       "localizations": {
         "en": {
@@ -2301,6 +2989,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ieri"
+          }
+        }
+      }
+    },
+    "You are not allowed to do that": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are not allowed to do that"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non hai i permessi per farlo"
           }
         }
       }

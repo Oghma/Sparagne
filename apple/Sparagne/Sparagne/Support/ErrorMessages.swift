@@ -35,6 +35,17 @@ enum ErrorMessages {
         case "ambiguous_name": String(localized: "Which one did you mean?")
         case "unknown_name": String(localized: "Unknown name")
         case "same_target": String(localized: "Source and destination are the same")
+        // Server-side codes (`docs/v2/SYNC.md` §3) plus the two the transport
+        // itself raises, `offline` and `invalid_server_url`.
+        case "offline": String(localized: "The server is unreachable")
+        case "unauthorized": String(localized: "Wrong username or password")
+        case "forbidden": String(localized: "You are not allowed to do that")
+        case "author_mismatch": String(localized: "Those changes belong to another account")
+        case "registration_disabled": String(localized: "This server is not accepting new accounts")
+        case "invalid_request": String(localized: "The server refused the request")
+        case "invalid_response": String(localized: "The server answered something unexpected")
+        case "invalid_server_url": String(localized: "That server address is not valid")
+        case "server_error": String(localized: "The server had a problem")
         default: String(localized: "Something went wrong")
         }
     }

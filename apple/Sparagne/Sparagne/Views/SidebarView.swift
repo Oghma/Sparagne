@@ -10,6 +10,9 @@ import SparagneCore
 /// Recurring panel (task 4).
 struct SidebarView: View {
     let store: AppStore
+    /// Says whether this vault is mine on the server, which is what the
+    /// "Share…" entry needs (`docs/v2/SYNC.md` §3).
+    let engine: SyncEngine?
     /// Requests one of `MainWindow`'s sheets; `MainWindow` owns the
     /// presentation state so every sheet, new or management, goes through
     /// one `.sheet(item:)`.
@@ -24,6 +27,10 @@ struct SidebarView: View {
                     }
                     Divider()
                     Button(String(localized: "New Vault…")) { present(.vault) }
+                    if let vault = store.currentVault, let engine, engine.isLoggedIn,
+                        engine.isOwner(ofVault: vault.id) {
+                        Button(String(localized: "Share…")) { present(.share(vault)) }
+                    }
                 } label: {
                     Label(
                         store.currentVault?.name ?? String(localized: "No vault"),

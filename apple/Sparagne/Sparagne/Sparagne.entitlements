@@ -6,5 +6,8 @@
 	<true/>
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
+	<!-- Sync talks to the server over HTTP (docs/v2/SYNC.md §3). -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 </dict>
 </plist>

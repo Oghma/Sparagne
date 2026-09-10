@@ -6,12 +6,13 @@ import SparagneCore
 /// with the Categories `Window` scene (team-lead task 3).
 struct ContentView: View {
     @Binding var store: AppStore?
+    @Binding var engine: SyncEngine?
     @Binding var launchFailure: String?
 
     var body: some View {
         Group {
             if let store {
-                MainWindow(store: store)
+                MainWindow(store: store, engine: engine)
             } else if let launchFailure {
                 ContentUnavailableView(
                     String(localized: "Sparagne could not open its database"),
@@ -28,9 +29,16 @@ struct ContentView: View {
     private func open() {
         guard store == nil, launchFailure == nil else { return }
         do {
-            let opened = AppStore(client: try CoreClient.onDisk())
+            let client = try CoreClient.onDisk()
+            let opened = AppStore(client: client)
             opened.bootstrap()
+            // The engine adopts the account's username as the author and
+            // starts the first sync right after bootstrap
+            // (`docs/v2/SYNC.md` §5).
+            let sync = SyncEngine(client: client, store: opened, account: AccountStore())
             store = opened
+            engine = sync
+            sync.start()
         } catch {
             launchFailure = error.localizedDescription
         }
@@ -40,6 +48,8 @@ struct ContentView: View {
 /// The sidebar/detail split, plus the sheets, the alert and the undo toast.
 struct MainWindow: View {
     let store: AppStore
+    /// `nil` only before the database is open.
+    let engine: SyncEngine?
     @State private var sheet: SheetKind?
 
     /// The sheets the window can present. Associated values seed the sheet
@@ -52,6 +62,8 @@ struct MainWindow: View {
         case renameEnvelope(FlowView)
         case editEnvelope(FlowView)
         case recurring
+        case share(VaultView)
+        case rejected
 
         var id: String {
             switch self {
@@ -62,17 +74,26 @@ struct MainWindow: View {
             case .renameEnvelope(let flow): "renameEnvelope-\(flow.id)"
             case .editEnvelope(let flow): "editEnvelope-\(flow.id)"
             case .recurring: "recurring"
+            case .share(let vault): "share-\(vault.id)"
+            case .rejected: "rejected"
             }
         }
     }
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(store: store, present: { sheet = $0 })
+            SidebarView(store: store, engine: engine, present: { sheet = $0 })
         } detail: {
             DetailView(store: store)
         }
         .navigationTitle(store.currentVault?.name ?? String(localized: "Sparagne"))
+        .toolbar {
+            if let engine {
+                ToolbarItem(placement: .primaryAction) {
+                    SyncStatusButton(engine: engine) { sheet = .rejected }
+                }
+            }
+        }
         .overlay(alignment: .bottom) {
             if let pending = store.pendingUndo {
                 UndoToast(pending: pending) { store.undo() }
@@ -121,7 +142,30 @@ struct MainWindow: View {
                 }
             case .recurring:
                 RecurringPanel(store: store)
+            case .share(let vault):
+                if let engine {
+                    ShareVaultSheet(engine: engine, vault: vault)
+                }
+            case .rejected:
+                if let engine {
+                    RejectedChangesSheet(engine: engine)
+                }
             }
+        }
+        .alert(
+            String(localized: "Some changes were refused"),
+            isPresented: Binding(
+                get: { engine?.showsRejectedAlert ?? false },
+                set: { engine?.showsRejectedAlert = $0 }
+            )
+        ) {
+            Button(String(localized: "Review")) {
+                engine?.showsRejectedAlert = false
+                sheet = .rejected
+            }
+            Button(String(localized: "Later"), role: .cancel) { engine?.showsRejectedAlert = false }
+        } message: {
+            Text(String(localized: "The server did not accept them, so they are not in your balances."))
         }
         .alert(
             store.presentedError.map { ErrorMessages.summary(for: $0.code) } ?? String(localized: "Something went wrong"),

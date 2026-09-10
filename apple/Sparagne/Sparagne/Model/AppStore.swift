@@ -205,6 +205,29 @@ final class AppStore {
         }
     }
 
+    /// Re-reads everything after the log changed underneath the window: a
+    /// sync that rebased the projection, a vault joined from the server, or
+    /// a login that relabelled the outbox (`docs/v2/SYNC.md` §5).
+    func refreshAfterSync() {
+        guarded {
+            vaults = try client.vaults()
+            guard !vaults.isEmpty else {
+                needsOnboarding = true
+                currentVault = nil
+                reload()
+                return
+            }
+            needsOnboarding = false
+            if let current = currentVault, let fresh = vaults.first(where: { $0.id == current.id }) {
+                currentVault = fresh
+                reload()
+            } else {
+                let stored = defaults.string(forKey: Self.lastVaultKey)
+                select(vaults.first { $0.id == stored } ?? vaults[0])
+            }
+        }
+    }
+
     func select(_ vault: VaultView) {
         flushPendingUndo()
         currentVault = vault

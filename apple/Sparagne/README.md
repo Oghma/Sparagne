@@ -17,8 +17,14 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Model/AppStore.swift` | `@Observable` store: vaults, snapshot, transactions, filters, deferred undo, errors |
 | `Sparagne/Model/TransactionRow.swift` | Table row derived from a `TransactionView` plus the vault snapshot |
 | `Sparagne/Model/Period.swift` | This month / last 30 days / all, as half-open UTC bounds |
-| `Sparagne/Views/` | Sidebar, detail (quick-add, filters, table), inspector, sheets, undo toast |
+| `Sparagne/Sync/` | Transport, typed HTTP API, account and token store, and the sync engine (`docs/v2/SYNC.md` §5) |
+| `Sparagne/Views/` | Sidebar, detail (quick-add, filters, table), inspector, sheets, undo toast, sync status and sharing |
 | `Sparagne/Support/` | Money and date formatting, theme, quick-add preview line |
+
+Sync is off until an account is set up in Settings: server address, then
+Register or Log In. From then on the account's username signs every command,
+the engine pushes and pulls each vault after every change and every 60 s, and
+the owner of a vault can share it from the vault menu in the sidebar.
 
 The database lives at
 `~/Library/Application Support/Sparagne/sparagne.sqlite`, which the sandbox

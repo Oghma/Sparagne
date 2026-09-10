@@ -405,6 +405,10 @@ struct ErrorMessagesTests {
         "empty_input", "missing_amount", "duplicate_marker", "marker_not_allowed",
         "missing_transfer_target", "invalid_date", "duplicate_date", "ambiguous_name",
         "unknown_name", "same_target", "domain_error",
+        // Sync: the server's codes and the transport's own two.
+        "offline", "unauthorized", "forbidden", "author_mismatch",
+        "registration_disabled", "invalid_request", "invalid_response",
+        "invalid_server_url", "server_error",
     ]
 
     @Test("Every documented error code maps to a non-empty localized summary")

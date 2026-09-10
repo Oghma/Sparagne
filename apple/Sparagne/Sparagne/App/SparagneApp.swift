@@ -12,11 +12,14 @@ struct SparagneApp: App {
     /// so both windows see the same vault and the same in-process core
     /// (team-lead task 3).
     @State private var store: AppStore?
+    /// Created with the store, and shared with the Settings scene so the
+    /// account lives in one place.
+    @State private var engine: SyncEngine?
     @State private var launchFailure: String?
 
     var body: some Scene {
         WindowGroup {
-            ContentView(store: $store, launchFailure: $launchFailure)
+            ContentView(store: $store, engine: $engine, launchFailure: $launchFailure)
         }
         .commands {
             CommandMenu(String(localized: "Transaction")) {
@@ -51,7 +54,7 @@ struct SparagneApp: App {
         .defaultSize(width: 560, height: 420)
 
         Settings {
-            SettingsView()
+            SettingsView(engine: engine)
         }
     }
 }
@@ -63,12 +66,18 @@ extension Notification.Name {
 }
 
 private struct SettingsView: View {
+    let engine: SyncEngine?
+
     var body: some View {
-        Form {
-            Text(String(localized: "Sparagne stores everything locally, in Application Support."))
-                .foregroundStyle(.secondary)
+        if let engine {
+            AccountSettingsView(engine: engine)
+        } else {
+            Form {
+                Text(String(localized: "Sparagne stores everything locally, in Application Support."))
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .frame(width: 360, height: 140)
         }
-        .padding()
-        .frame(width: 360, height: 140)
     }
 }
