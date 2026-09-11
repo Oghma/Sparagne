@@ -74,7 +74,6 @@ struct AppStoreTests {
         let row = try Self.pizzaRow(store)
         #expect(row.kind == .expense)
         #expect(row.absoluteAmount == 1250)
-        #expect(row.signedAmount == -1250)
         #expect(row.category == "food")
         #expect(row.walletDisplay == "Cash")
 
@@ -238,7 +237,6 @@ struct AppStoreTests {
         let row = try Self.pizzaRow(store)
         #expect(row.walletId == store.wallets.first?.id)
         #expect(row.flowId == envelope.id)
-        #expect(row.destinationId == nil)
         #expect(row.envelopeDisplay == "Spesa")
 
         // The opening balance carries the system category, localized here.
@@ -262,7 +260,6 @@ struct AppStoreTests {
         #expect(row.envelopeDisplay == TransactionRow.placeholder)
         #expect(row.isTransfer)
         #expect(row.walletId == store.wallets.first { $0.name == "Cash" }?.id)
-        #expect(row.destinationId == store.wallets.first { $0.name == "Bank" }?.id)
         #expect(row.flowId == nil)
         #expect(store.wallets.first { $0.name == "Bank" }?.balance == 2000)
     }

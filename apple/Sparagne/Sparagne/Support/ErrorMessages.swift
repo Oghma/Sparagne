@@ -1,9 +1,9 @@
 import Foundation
 
 /// Headlines for the stable error codes in
-/// `apple/SparagneCore/Sources/SparagneCore/ErrorCodes.swift` (team-lead
-/// task 1): every `DomainError` and `QuickAddError` code, mapped to a short
-/// user-facing sentence. The alert keeps the Rust `Display` text
+/// `apple/SparagneCore/Sources/SparagneCore/ErrorCodes.swift`: every
+/// `DomainError` and `QuickAddError` code, mapped to a short user-facing
+/// sentence. The alert keeps the Rust `Display` text
 /// (`AppError.message`) as its secondary detail; this is the headline.
 ///
 /// `"domain_error"` is never produced by the core itself (`QuickAddError

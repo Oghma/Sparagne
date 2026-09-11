@@ -110,7 +110,6 @@ final class AppStore {
     private(set) var categories: [CategoryView] = []
     private(set) var transactions: [TransactionView] = []
     private(set) var nextCursor: String?
-    private(set) var totals: PeriodTotals?
     private(set) var allRows: [TransactionRow] = []
     /// Distinct authors in the vault: the PERSONA segmented control.
     private(set) var authors: [String] = []
@@ -129,7 +128,8 @@ final class AppStore {
     // MARK: Recurring
 
     /// Periods still waiting for a decision, refreshed on every `reload()`
-    /// so the banner in `DetailView` stays current without a separate poll.
+    /// so the ledger window's banner (`RecurringBanner`, `LedgerWindow.swift`)
+    /// stays current without a separate poll.
     private(set) var pendingRecurringItems: [PendingRecurring] = []
     /// Every template, active and archived; loaded on demand when the
     /// Recurring panel opens.
@@ -152,7 +152,6 @@ final class AppStore {
     /// Debounced by the view; call `reload()` when it settles.
     var searchText = ""
     var quickAddText = ""
-    var selection: Uuid?
 
     // MARK: Transient
 
@@ -190,7 +189,7 @@ final class AppStore {
     /// Active envelopes, Unallocated first (the core already orders them).
     var flows: [FlowView] { snapshot?.flows.filter { !$0.archived } ?? [] }
 
-    /// For the sidebar's collapsed "Archived" group.
+    /// For the management sheet's collapsed "Archived" group.
     var archivedWallets: [WalletView] { snapshot?.wallets.filter { $0.archived } ?? [] }
 
     /// Unallocated is never archived, so it never needs to appear here.
@@ -200,11 +199,6 @@ final class AppStore {
     var rows: [TransactionRow] {
         guard let hidden = pendingUndo?.id else { return allRows }
         return allRows.filter { $0.id != hidden }
-    }
-
-    var selectedRow: TransactionRow? {
-        guard let selection else { return nil }
-        return rows.first { $0.id == selection }
     }
 
     func flowName(_ flow: FlowView) -> String {
@@ -255,7 +249,6 @@ final class AppStore {
         flushPendingUndo()
         currentVault = vault
         defaults.set(vault.id, forKey: Self.lastVaultKey)
-        selection = nil
         lastWalletId = nil
         lastFlowId = nil
         // Stale until whichever view needs them reloads: the Categories
@@ -266,7 +259,8 @@ final class AppStore {
         reload()
     }
 
-    /// Snapshot, categories, totals and the first page of transactions.
+    /// Snapshot, categories, the summary aggregates and the first page of
+    /// transactions.
     func reload() {
         guard let vault = currentVault else {
             snapshot = nil
@@ -274,7 +268,6 @@ final class AppStore {
             transactions = []
             allRows = []
             nextCursor = nil
-            totals = nil
             authors = []
             summary = nil
             pendingRecurringItems = []
@@ -295,9 +288,7 @@ final class AppStore {
             // A person who has left the vault's history must not stay
             // selected, or the ledger shows an empty month with no way back.
             if let person, !authors.contains(person) { self.person = nil }
-            let loaded = try loadSummary(vault: vault)
-            summary = loaded
-            totals = loaded.totals
+            summary = try loadSummary(vault: vault)
             pendingRecurringItems = try client.pendingRecurring(vaultId: vault.id, today: CoreDate.day(Date()))
             rebuildRows()
         }
@@ -789,11 +780,11 @@ final class AppStore {
             if matches.count == 1 { return matches[0].id }
             if matches.count > 1 {
                 throw DomainError.InvalidCommand(
-                    message: String(localized: "More than one envelope matches") + " \u{201C}\(text)\u{201D}"
+                    message: String(localized: "More than one envelope matches \u{201C}\(text)\u{201D}")
                 )
             }
         }
-        throw DomainError.NotFound(message: String(localized: "No envelope named") + " \u{201C}\(text)\u{201D}")
+        throw DomainError.NotFound(message: String(localized: "No envelope named \u{201C}\(text)\u{201D}"))
     }
 
     /// Surfaces a validation failure from the grid through the same alert the
@@ -870,7 +861,6 @@ final class AppStore {
     /// when the window elapses or another destructive action starts.
     func void(transactionId: Uuid) {
         flushPendingUndo()
-        if selection == transactionId { selection = nil }
         pendingUndo = PendingUndo(id: transactionId, startedAt: Date(), duration: undoWindow)
         let window = undoWindow
         let sleep = sleeper

@@ -182,8 +182,7 @@ struct NewEnvelopeSheet: View {
 }
 
 /// A single text field with Cancel/Save: wallet rename and the envelope
-/// quick-rename (team-lead task 2). Fuller envelope edits go through
-/// `EditEnvelopeSheet`.
+/// quick-rename. Fuller envelope edits go through `EditEnvelopeSheet`.
 struct RenameSheet: View {
     let title: String
     let name: String
@@ -220,8 +219,8 @@ struct RenameSheet: View {
     }
 }
 
-/// Mode, cap and allow-negative for an existing envelope (`.updateFlow`,
-/// team-lead task 2). Renaming is the separate, lighter `RenameSheet`.
+/// Mode, cap and allow-negative for an existing envelope (`.updateFlow`).
+/// Renaming is the separate, lighter `RenameSheet`.
 struct EditEnvelopeSheet: View {
     let flow: FlowView
     let currency: Currency

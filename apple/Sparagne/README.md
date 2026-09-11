@@ -1,9 +1,9 @@
 # Sparagne (macOS app)
 
 SwiftUI/macOS front end for Sparagne v2 (see `docs/v2/ARCH.md` §2.2 and
-`docs/v2/DISTILLATO_V1.md` §3). It depends on the local `../SparagneCore`
-Swift package, which wraps the Rust core over UniFFI; run
-`bash ../build-core.sh` once after cloning to produce its XCFramework.
+`docs/v2/UI.md`). It depends on the local `../SparagneCore` Swift package,
+which wraps the Rust core over UniFFI; run `bash ../build-core.sh` once after
+cloning to produce its XCFramework.
 
 The app owns no domain state: every view is a query on the core and every
 action is a command (`AppStore` is the only thing that talks to `CoreClient`,
@@ -16,19 +16,42 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Core/CoreClient.swift` | The `CoreHandle` wrapper, the database location and the `Date` ↔ RFC 3339 conversions |
 | `Sparagne/Model/AppStore.swift` | `@Observable` store: vaults, snapshot, transactions, filters, deferred undo, errors |
 | `Sparagne/Model/TransactionRow.swift` | Table row derived from a `TransactionView` plus the vault snapshot |
-| `Sparagne/Model/Period.swift` | This month / last 30 days / all, as half-open UTC bounds |
+| `Sparagne/Model/LedgerModel.swift` | `MonthKey` and the calendar arithmetic behind it, `LedgerDirection`, `LedgerTab` and `LedgerSummary` |
+| `Sparagne/Views/Ledger/` | The single window: `LedgerWindow` (month header, view switcher, status bar), `LedgerHeader`, the `LedgerGrid` spreadsheet, `LedgerRow`, `SummaryPanel` |
+| `Sparagne/Views/Summary/` | The RIEPILOGO and ANNO views (`SummaryView`, `YearView`) |
+| `Sparagne/Views/ManagementSheet.swift` | Vault picker plus wallet and envelope balances and management (⌘⇧M); the window has no sidebar |
+| `Sparagne/Views/CategoriesWindow.swift` | The Categories window (⌘⇧C): create, rename, archive, alias and merge |
+| `Sparagne/Views/RecurringPanel.swift` | Recurring templates: list, create, edit, archive |
+| `Sparagne/Views/Sheets.swift` | Onboarding, new wallet/envelope, rename and edit-envelope sheets |
+| `Sparagne/Views/SyncViews.swift` | The toolbar's sync status button and the rejected-changes and share sheets |
+| `Sparagne/Views/UndoToast.swift` | The undo bar after a void |
 | `Sparagne/Sync/` | Transport, typed HTTP API, account and token store, and the sync engine (`docs/v2/SYNC.md` §5) |
-| `Sparagne/Views/` | Sidebar, detail (quick-add, filters, table), inspector, sheets, undo toast, sync status and sharing |
-| `Sparagne/Support/` | Money and date formatting, theme, quick-add preview line |
+| `Sparagne/Support/` | Money and date formatting (`Formatters.swift`), the mockup's own money format (`LedgerFormat.swift`), the fixed dark palette (`Palette.swift`), the quick-add preview line (`QuickAddSummary.swift`), error headlines (`ErrorMessages.swift`) |
 
 Sync is off until an account is set up in Settings: server address, then
 Register or Log In. From then on the account's username signs every command,
 the engine pushes and pulls each vault after every change and every 60 s, and
-the owner of a vault can share it from the vault menu in the sidebar.
+the owner of a vault can share it from the Vault menu.
 
 The database lives at
 `~/Library/Application Support/Sparagne/sparagne.sqlite`, which the sandbox
 resolves inside the app container.
+
+## Keyboard
+
+The full table is `docs/v2/UI.md` §6; the shortcuts that reach across the
+whole window (`SparagneApp.swift`'s menu commands) are:
+
+| Key | Action |
+|---|---|
+| `⌘K` | quick-add line over the grid |
+| `⌘D` | duplicate the last row |
+| `⌘F` | focus the search field |
+| `⌘E` | export the rows on screen as CSV |
+| `⌘⇧M` | management sheet: vault, wallets, envelopes, recurring |
+| `⌘⇧C` | Categories window |
+| `⌘⇧V` / `⌘⇧T` | show voided rows / show transfers |
+| `⌥←` / `⌥→` | previous / next month |
 
 ## Commands
 

@@ -4,7 +4,7 @@ import SparagneCore
 /// The `Window` scene behind the "Categories…" (⌘⇧C) menu item
 /// (`SparagneApp`): create, rename, archive/restore categories and their
 /// aliases, and merge duplicates with a preview step
-/// (docs/v2/DISTILLATO_V1.md §2.1, team-lead task 3).
+/// (docs/v2/DISTILLATO_V1.md §2.1).
 struct CategoriesWindowView: View {
     let store: AppStore
     @State private var selection: Uuid?

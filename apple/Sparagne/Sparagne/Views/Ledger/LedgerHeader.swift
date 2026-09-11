@@ -84,6 +84,11 @@ struct LedgerHeader: View {
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
                 .focused($searchFocused)
+                // esc clears and drops focus; ⌘F (the menu) focuses it again.
+                .onExitCommand {
+                    store.searchText = ""
+                    searchFocused = false
+                }
         }
         .padding(.horizontal, 10)
         .frame(height: 24)
@@ -127,7 +132,7 @@ struct SegmentedStrip<Option: Hashable>: View {
 /// The bottom line of the window: the filters in force, the total of what is
 /// on screen, and where the database is.
 struct LedgerStatusBar: View {
-    @Bindable var store: AppStore
+    let store: AppStore
 
     var body: some View {
         HStack(spacing: 16) {
@@ -167,12 +172,14 @@ struct LedgerStatusBar: View {
         .background(Ink.bg)
     }
 
-    /// `mese=8 flow=uscite persona=tutti`, the mockup's own shorthand.
+    /// `mese=8 flow=uscite persona=tutti`, the mockup's own shorthand. The
+    /// segment values are the localized labels, lowercased, not the enums'
+    /// raw values, so the line reads in the user's language too.
     private var filters: String {
         let person = store.person ?? String(localized: "all")
-        let view = store.tab == .ledger ? "" : "\(String(localized: "view"))=\(store.tab.rawValue) "
+        let view = store.tab == .ledger ? "" : "\(String(localized: "view"))=\(store.tab.label.lowercased()) "
         return "\(view)\(String(localized: "month"))=\(store.month.month) "
-            + "\(String(localized: "flow"))=\(store.direction.rawValue) "
+            + "\(String(localized: "flow"))=\(store.direction.label.lowercased()) "
             + "\(String(localized: "person"))=\(person)"
     }
 

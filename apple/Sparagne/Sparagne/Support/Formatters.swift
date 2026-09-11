@@ -17,13 +17,6 @@ enum MoneyFormatter {
         decimalValue(minorUnits).formatted(.currency(code: currencyCode).locale(locale))
     }
 
-    /// Same as `format`, but always shows a leading `+` for positive amounts
-    /// (negative amounts already carry their own sign).
-    static func formatSigned(minorUnits: Int64, currencyCode: String, locale: Locale = .autoupdatingCurrent) -> String {
-        let formatted = format(minorUnits: minorUnits, currencyCode: currencyCode, locale: locale)
-        return minorUnits > 0 ? "+\(formatted)" : formatted
-    }
-
     /// `1250` -> `"12.50"`: the plain major-unit text `parseMoney` accepts,
     /// with no sign, grouping separator or currency code.
     static func editable(minorUnits: Int64) -> String {

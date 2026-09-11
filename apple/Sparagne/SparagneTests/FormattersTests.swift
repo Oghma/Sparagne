@@ -29,21 +29,6 @@ struct MoneyFormatterTests {
         #expect(formatted.contains("0,00"))
     }
 
-    @Test func signedPositiveGetsLeadingPlus() {
-        let formatted = MoneyFormatter.formatSigned(minorUnits: 500, currencyCode: "EUR", locale: Locale(identifier: "en_US"))
-        #expect(formatted.hasPrefix("+"))
-    }
-
-    @Test func signedNegativeIsNotDoubleSigned() {
-        let formatted = MoneyFormatter.formatSigned(minorUnits: -500, currencyCode: "EUR", locale: Locale(identifier: "en_US"))
-        #expect(!formatted.hasPrefix("+"))
-        #expect(formatted.contains("-"))
-    }
-
-    @Test func signedZeroHasNoPlus() {
-        let formatted = MoneyFormatter.formatSigned(minorUnits: 0, currencyCode: "EUR", locale: Locale(identifier: "en_US"))
-        #expect(!formatted.hasPrefix("+"))
-    }
 }
 
 struct DateFormattingTests {

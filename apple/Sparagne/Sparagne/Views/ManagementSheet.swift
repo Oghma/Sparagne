@@ -58,7 +58,7 @@ struct ManagementSheet: View {
 
             Section(String(localized: "Wallets")) {
                 ForEach(store.wallets, id: \.id) { wallet in
-                    WalletSidebarRow(wallet: wallet, currencyCode: store.currencyCode)
+                    WalletManagementRow(wallet: wallet)
                         .contextMenu {
                             Button(String(localized: "Rename…")) { present(.renameWallet(wallet)) }
                             Button(String(localized: "Archive"), role: .destructive) {
@@ -80,10 +80,9 @@ struct ManagementSheet: View {
 
             Section(String(localized: "Envelopes")) {
                 ForEach(store.flows, id: \.id) { flow in
-                    EnvelopeSidebarRow(
+                    EnvelopeManagementRow(
                         flow: flow,
-                        name: store.flowName(flow),
-                        currencyCode: store.currencyCode
+                        name: store.flowName(flow)
                     )
                     .contextMenu {
                         // Unallocated is a system envelope: the core
@@ -134,9 +133,8 @@ private struct ArchivedRow: View {
     }
 }
 
-private struct WalletSidebarRow: View {
+private struct WalletManagementRow: View {
     let wallet: WalletView
-    let currencyCode: String
 
     var body: some View {
         HStack {
@@ -149,10 +147,9 @@ private struct WalletSidebarRow: View {
     }
 }
 
-private struct EnvelopeSidebarRow: View {
+private struct EnvelopeManagementRow: View {
     let flow: FlowView
     let name: String
-    let currencyCode: String
 
     /// The cap, when the mode has one.
     private var cap: Int64? {

@@ -3,9 +3,9 @@ import SparagneCore
 
 /// Templates the user materializes period by period, never automatically
 /// (docs/v2/DISTILLATO_V1.md §2.3): list, create, edit and archive. The
-/// banner of periods still waiting for a decision lives in `DetailView`
-/// (`RecurringBanner`), since it needs to be visible without opening this
-/// sheet (team-lead task 4).
+/// banner of periods still waiting for a decision lives in the ledger window
+/// (`RecurringBanner`, `LedgerWindow.swift`), since it needs to be visible
+/// without opening this sheet.
 struct RecurringPanel: View {
     let store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -107,8 +107,8 @@ private struct RecurringRow: View {
 }
 
 /// Create or edit one template. Editing sends only the fields that changed,
-/// the same convention as `InspectorView`'s `TransactionPatch`
-/// (`RecurringPatch`, `docs/v2/ARCH.md` §4).
+/// the same convention `AppStore.update(transactionId:patch:)` uses for
+/// transactions (`RecurringPatch`, `docs/v2/ARCH.md` §4).
 struct RecurringTemplateSheet: View {
     let store: AppStore
     /// `nil` = create.
