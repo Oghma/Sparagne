@@ -9,8 +9,7 @@ struct SparagneApp: App {
     @Environment(\.openWindow) private var openWindow
 
     /// Opened once, in `ContentView`, and shared with the Categories window
-    /// so both windows see the same vault and the same in-process core
-    /// (team-lead task 3).
+    /// so both windows see the same vault and the same in-process core.
     @State private var store: AppStore?
     /// Created with the store, and shared with the Settings scene so the
     /// account lives in one place.
@@ -32,6 +31,13 @@ struct SparagneApp: App {
                     NotificationCenter.default.post(name: .duplicateLastRow, object: nil)
                 }
                 .keyboardShortcut("d", modifiers: .command)
+            }
+
+            CommandGroup(after: .importExport) {
+                Button(String(localized: "Export CSV\u{2026}")) {
+                    NotificationCenter.default.post(name: .exportCSV, object: nil)
+                }
+                .keyboardShortcut("e", modifiers: .command)
             }
 
             CommandMenu(String(localized: "Ledger")) {
@@ -82,11 +88,15 @@ struct SparagneApp: App {
                     )
                 }
             }
+            // The ledger forces the dark palette (`docs/v2/UI.md` §5); the
+            // secondary windows follow it rather than the system.
+            .preferredColorScheme(.dark)
         }
         .defaultSize(width: 560, height: 420)
 
         Settings {
             SettingsView(engine: engine)
+                .preferredColorScheme(.dark)
         }
     }
 }
@@ -105,6 +115,8 @@ extension Notification.Name {
     static let stepMonth = Notification.Name("it.oghma.sparagne.stepMonth")
     /// ⌘⇧M: opens the management sheet.
     static let openManagement = Notification.Name("it.oghma.sparagne.openManagement")
+    /// ⌘E: exports the rows on screen as CSV (`docs/v2/UI.md` §6).
+    static let exportCSV = Notification.Name("it.oghma.sparagne.exportCSV")
 }
 
 private struct SettingsView: View {

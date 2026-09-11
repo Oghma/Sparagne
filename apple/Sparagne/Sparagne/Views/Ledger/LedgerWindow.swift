@@ -1,5 +1,6 @@
 import SwiftUI
 import SparagneCore
+import UniformTypeIdentifiers
 
 /// The window (`docs/v2/UI.md` §2): a month header, one of the three views,
 /// and a status bar. No sidebar and no inspector: the grid is editable in
@@ -15,6 +16,16 @@ struct LedgerWindow: View {
     @AppStorage("showVoided") private var showVoided = false
     @AppStorage("showTransfers") private var showTransfers = false
 
+    // MARK: CSV export (⌘E, `Support/LedgerCSV.swift`)
+    @State private var showsCSVExporter = false
+    @State private var exportDocument: CSVDocument?
+    @State private var exportFileName = "export.csv"
+
+    /// The debounce's own memory of what it last reloaded for, so the task
+    /// re-running on the initial value (and on every fresh mount, e.g. a
+    /// vault switch) does not fire a second, redundant `reload()`.
+    @State private var lastSearched = ""
+
     var body: some View {
         VStack(spacing: 0) {
             RecurringBanner(store: store) { sheet = .recurring }
@@ -27,20 +38,46 @@ struct LedgerWindow: View {
         .background(Ink.bg)
         .overlay(alignment: .top) {
             if showsQuickAdd {
-                QuickAddOverlay(store: store, isPresented: $showsQuickAdd)
-                    .padding(.top, 60)
+                // A full-window, transparent backdrop under the box: a click
+                // outside dismisses it, the same as esc.
+                ZStack(alignment: .top) {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .onTapGesture {
+                            store.quickAddText = ""
+                            showsQuickAdd = false
+                        }
+                    QuickAddOverlay(store: store, isPresented: $showsQuickAdd)
+                        .padding(.top, 60)
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusQuickAdd)) { _ in
             showsQuickAdd = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
+            // The search field is not in the hierarchy outside the ledger
+            // tab (the header stays compact there), so the tab has to switch
+            // and lay out before the field can take focus.
             store.tab = .ledger
-            searchFocused = true
+            Task { @MainActor in
+                await Task.yield()
+                searchFocused = true
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .stepMonth)) { note in
             let months = note.object as? Int ?? 1
             store.month = store.month.adding(months: months)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .exportCSV)) { _ in
+            exportDocument = CSVDocument(text: LedgerCSV.render(store.rows))
+            exportFileName = LedgerCSV.fileName(
+                vault: store.currentVault?.name ?? "",
+                month: store.month,
+                direction: store.direction
+            )
+            showsCSVExporter = true
         }
         .onAppear {
             store.showVoided = showVoided
@@ -49,9 +86,22 @@ struct LedgerWindow: View {
         .onChange(of: showVoided) { _, new in store.showVoided = new }
         .onChange(of: showTransfers) { _, new in store.showTransfers = new }
         .task(id: store.searchText) {
-            // Debounce: reload only once the field has been quiet for 300 ms.
+            // Debounce: reload only once the field has been quiet for 300 ms,
+            // and only if it actually changed since the last reload (the task
+            // also runs for the value the view already had, e.g. on a fresh
+            // mount after a vault switch).
+            guard store.searchText != lastSearched else { return }
             guard (try? await Task.sleep(for: .milliseconds(300))) != nil else { return }
+            lastSearched = store.searchText
             store.reload()
+        }
+        .fileExporter(
+            isPresented: $showsCSVExporter,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: exportFileName
+        ) { result in
+            if case .failure(let error) = result { store.report(error) }
         }
     }
 
@@ -80,6 +130,31 @@ struct LedgerWindow: View {
             }
             .frame(maxWidth: .infinity)
         }
+    }
+}
+
+// MARK: - CSV export
+
+/// The in-memory file `.fileExporter` writes: the ledger's own CSV text
+/// (`Support/LedgerCSV.swift`, `docs/v2/UI.md` §6, ⌘E). Export only, so
+/// reading back a foreign file is not a case this window has to handle.
+struct CSVDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+    static var writableContentTypes: [UTType] { [.commaSeparatedText] }
+
+    var text: String
+
+    init(text: String) { self.text = text }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        text = String(decoding: data, as: UTF8.self)
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(text.utf8))
     }
 }
 
@@ -141,7 +216,12 @@ struct QuickAddOverlay: View {
             .focused($focused)
             .onSubmit {
                 store.submit(quickAdd: store.quickAddText)
-                isPresented = false
+                // A failed submit leaves the text in place and raises
+                // `presentedError`; stay open so the user can fix the line
+                // instead of closing over an empty grid.
+                if store.presentedError == nil {
+                    isPresented = false
+                }
             }
 
             Text(preview.text)
@@ -158,6 +238,14 @@ struct QuickAddOverlay: View {
         .onExitCommand {
             store.quickAddText = ""
             isPresented = false
+        }
+        .onChange(of: store.savedAt) { _, _ in
+            // `resolveAmbiguous` resubmits from the error alert's candidate
+            // buttons, outside this field's own `onSubmit`, and clears the
+            // text on success. A save that lands while the line still holds
+            // text is someone else's (a pending void flushing) and must not
+            // take the line away.
+            if store.quickAddText.isEmpty { isPresented = false }
         }
     }
 

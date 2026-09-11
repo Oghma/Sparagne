@@ -118,7 +118,7 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | `⌥←` `⌥→` | mese precedente / successivo |
 | `⌘F` | fuoco sulla ricerca |
 | `⌘K` | riga quick-add sopra la griglia (la grammatica di §3.1 del distillato) |
-| `⌘E` | esporta CSV (non ancora implementato) |
+| `⌘E` | esporta CSV: le righe a schermo, RFC 4180, `Support/LedgerCSV.swift` |
 | `⌘⇧M` | gestione: vault, wallet, buste, ricorrenze, condivisione |
 | `⌘⇧C` | finestra categorie |
 | `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
@@ -137,9 +137,17 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 Stato al 2026-09-10: A-F fatte in due commit (`core/src/analytics.rs` con 10
 test; la finestra nuova con 47 test dell'app). `SidebarView` è diventata
 `ManagementSheet`, `DetailView` e `InspectorView` sono state cancellate
-insieme a `Period` e ad `AppTheme` (la palette li sostituisce). Restano fuori:
-export CSV (⌘E), la palette comandi ⌘K del mockup è per ora solo il quick-add,
-e il wallet non ha ancora una colonna opzionale.
+insieme a `Period` e ad `AppTheme` (la palette li sostituisce).
+
+Rifinitura del 2026-09-11 (65 test dell'app): la griglia salva anche quando
+si lascia la riga (⇥ oltre IMPORTO, click su un'altra riga o sulla ricerca),
+tutta la cella è cliccabile, la riga vuota sopravvive a sync e annullamenti,
+la cella DATA parte dal numero del giorno; export CSV (⌘E); il catalogo
+stringhe copre tutta la UI del mastro in italiano; le barre dei 12 mesi
+hanno una linea di base per i mesi in rosso; il toast di annullamento e il
+bottone di sync usano la palette; le finestre secondarie forzano il tema
+scuro. Restano fuori: la palette comandi ⌘K del mockup è per ora solo il
+quick-add, e il wallet non ha ancora una colonna opzionale.
 
 Per guardare la UI con dei dati veri c'è una fixture:
 
