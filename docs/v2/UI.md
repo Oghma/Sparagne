@@ -69,6 +69,11 @@ ott   (vuoto: mese futuro)
 └───────────────────────────────────┘ └──────────────────────────────────┘
 ```
 
+In cima, prima dell'intestazione, le quattro card del primo riepilogo
+(richieste di nuovo il 2026-09-12): entrate, uscite, risparmio e tasso del
+mese a schermo, col nome del mese nel titolo perché non si leggano come
+valori dell'anno.
+
 Definizioni (dell'utente, 2026-09-11), per il mese `m`:
 
 | Colonna | Definizione |

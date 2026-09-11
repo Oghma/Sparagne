@@ -15,6 +15,9 @@ struct SummaryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let summary = store.summary {
+                MonthCards(summary: summary)
+            }
             heading
 
             if !year.funds.isEmpty {
@@ -239,6 +242,95 @@ struct SummaryView: View {
 
     /// A future month has no line to draw, only an empty slot on the axis.
     private var past: [YearMonth] { year.months.filter { !$0.isFuture } }
+}
+
+// MARK: - The month's cards
+
+/// The four numbers of the month on screen, kept from the first summary at
+/// the user's request (2026-09-12): income, expenses, savings and the rate,
+/// with the month named so they do not read as the year's.
+private struct MonthCards: View {
+    let summary: LedgerSummary
+
+    var body: some View {
+        HStack(spacing: 10) {
+            StatCard(
+                title: "\(String(localized: "Income")) \u{00B7} \(month)",
+                value: LedgerMoney.amount(summary.totals.income),
+                tint: Ink.positive,
+                caption: "\(summary.people.count) \(String(localized: "people"))"
+            )
+            StatCard(
+                title: "\(String(localized: "Expenses")) \u{00B7} \(month)",
+                value: LedgerMoney.amount(summary.totals.netExpense),
+                tint: Ink.negative,
+                caption: refundCaption
+            )
+            StatCard(
+                title: "\(String(localized: "Savings")) \u{00B7} \(month)",
+                value: LedgerMoney.amount(summary.savings),
+                tint: Ink.text,
+                caption: deltaCaption
+            )
+            StatCard(
+                title: "\(String(localized: "Rate")) \u{00B7} \(month)",
+                value: LedgerMoney.percent(summary.savings, of: summary.totals.income) ?? TransactionRow.placeholder,
+                tint: Ink.text,
+                caption: nil,
+                meter: rate
+            )
+        }
+    }
+
+    private var month: String { LedgerDate.fullMonth(summary.month.month) }
+
+    private var refundCaption: String? {
+        guard summary.totals.refund > 0 else { return nil }
+        return "\(String(localized: "net of refunds")) \(LedgerMoney.bare(summary.totals.refund))"
+    }
+
+    private var deltaCaption: String? {
+        guard let delta = LedgerMoney.delta(current: summary.savings, previous: summary.previousSavings) else {
+            return nil
+        }
+        let previous = summary.month.adding(months: -1)
+        return "\(delta) \(String(localized: "vs")) \(LedgerDate.fullMonth(previous.month).lowercased())"
+    }
+
+    /// Clamped by the bar: a month that saved more than it earned (a refund
+    /// of an earlier month) would otherwise overflow it.
+    private var rate: Double? {
+        guard summary.totals.income > 0 else { return nil }
+        return Double(summary.savings) / Double(summary.totals.income)
+    }
+}
+
+/// One of the four numbers across the top.
+private struct StatCard: View {
+    let title: String
+    let value: String
+    let tint: Color
+    var caption: String?
+    var meter: Double?
+
+    var body: some View {
+        Panel(padding: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(text: title)
+                Text(value)
+                    .font(Face.display)
+                    .foregroundStyle(tint)
+                if let meter {
+                    MeterBar(fraction: meter, tint: Ink.positive, height: 4)
+                        .padding(.top, 2)
+                } else {
+                    Text(caption ?? " ")
+                        .font(Face.footnote)
+                        .foregroundStyle(Ink.dim)
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Geometry
