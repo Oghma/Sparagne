@@ -194,4 +194,64 @@ struct LedgerStoreTests {
         store.createEnvelope(name: "Casa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         #expect(throws: DomainError.self) { try store.resolveFlow(named: "cas") }
     }
+
+    // MARK: - The draft behind a row being edited
+
+    @Test("A committed row sends the cells that changed and nothing else")
+    func draftPatchesOnlyWhatChanged() throws {
+        let (store, _) = try Self.household()
+        let row = try #require(store.rows.first { $0.note == "mutuo" })
+
+        var draft = RowDraft(row: row, store: store)
+        // Untouched: the same values the cells were filled with.
+        let untouched = try draft.patch(against: row, store: store)
+        #expect(untouched.isEmpty)
+
+        draft.note = "mutuo agosto"
+        // An emptied amount cell is not a way to say zero, so it is left alone.
+        draft.amount = "  "
+        let patch = try draft.patch(against: row, store: store)
+
+        #expect(patch.note == "mutuo agosto")
+        #expect(patch.amount == nil)
+        #expect(patch.category == nil)
+        #expect(patch.flowId == nil)
+        #expect(patch.occurredAt == nil)
+    }
+
+    @Test("Moving a row to another day keeps its time of day")
+    func draftKeepsTheTimeOfDay() throws {
+        let (store, _) = try Self.household()
+        let row = try #require(store.rows.first { $0.note == "coop" })
+        let calendar = Calendar.current
+        let moved = try #require(calendar.date(byAdding: .day, value: 1, to: row.occurredAt))
+
+        var draft = RowDraft(row: row, store: store)
+        // The DATA cell hands over a bare calendar day, at midnight.
+        draft.day = try #require(calendar.date(from: calendar.dateComponents([.year, .month, .day], from: moved)))
+
+        let patch = try draft.patch(against: row, store: store)
+        // Rows entered on the same day keep their typing order, so a row must
+        // not fall back to midnight when it changes day.
+        #expect(patch.occurredAt == AppStore.stamp(day: draft.day, likeTimeOf: row.occurredAt))
+        #expect(patch.amount == nil)
+    }
+
+    @Test("The empty line starts on the month it is shown in, with the sticky envelope")
+    func blankDraftFollowsTheMonth() throws {
+        let (store, envelope) = try Self.household()
+        let calendar = Calendar.current
+
+        // The current month: the line is ready for a row entered today.
+        let today = RowDraft.blank(in: store)
+        #expect(calendar.isDateInToday(today.day))
+        #expect(today.flow == envelope.name)
+
+        // Any other month has no "today", so the line starts on its first day.
+        store.month = store.month.adding(months: -3)
+        let past = RowDraft.blank(in: store)
+        #expect(past.day == store.month.start())
+        #expect(calendar.component(.day, from: past.day) == 1)
+        #expect(past.flow == envelope.name)
+    }
 }

@@ -28,6 +28,11 @@ private struct Cell<Content: View>: View {
             .frame(width: width, alignment: alignment)
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: alignment)
             .padding(.horizontal, GridColumn.padding)
+            // The whole column is the click target. SwiftUI does not hit-test
+            // the transparent part of a frame, so without this a short "Casa"
+            // or the "—" of an empty note would leave most of its cell dead
+            // and the row would refuse to open (`docs/v2/UI.md` §2.1).
+            .contentShape(Rectangle())
     }
 }
 
@@ -93,6 +98,10 @@ struct LedgerRowView: View {
                     .font(Face.row)
                     .foregroundStyle(Ink.dim)
             }
+            // # and PERSONA hold no field of their own, but a click anywhere
+            // on a line should open it; DESCRIZIONE is the widest cell and the
+            // one most often retyped, so it takes the caret.
+            .onTapGesture { onOpen(.note) }
 
             if let draft {
                 DayCell(day: draft.day, month: store.month, focus: $focus, key: key(.date))
@@ -133,6 +142,7 @@ struct LedgerRowView: View {
                 .font(Face.row)
                 .foregroundStyle(Ink.dim)
         }
+        .onTapGesture { onOpen(.note) }
         Cell(width: GridColumn.amount, alignment: .trailing) {
             Text(LedgerMoney.amount(row.absoluteAmount))
                 .font(Face.row)
@@ -267,6 +277,7 @@ struct NewRowView: View {
 
 /// Shows `01 ago` and accepts `29`, `29/8` or `29/8/2026` while editing: a day
 /// alone stays inside the month on screen, which is how a ledger is filled in.
+/// Text that means no date leaves the day alone and the cell snaps back to it.
 struct DayCell: View {
     @Binding var day: Date
     let month: MonthKey
@@ -289,25 +300,36 @@ struct DayCell: View {
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
                 .focused($focus, equals: key)
-                .onAppear { text = LedgerDate.day(day) }
+                // Clicking the DATA cell of a closed row focuses it in the
+                // same update that builds this view, so `onChange(of: focus)`
+                // never fires: without this the cell would open showing
+                // "01 ago" and typing a day would give "01 ago15".
+                .onAppear { text = focus == key ? Self.number(day) : LedgerDate.day(day) }
                 .onChange(of: day) { _, new in
                     if focus != key { text = LedgerDate.day(new) }
                 }
-                .onChange(of: focus) { _, new in
+                .onChange(of: focus) { old, new in
                     if new == key {
                         // Editing starts from the bare day number.
-                        text = "\(Calendar.current.component(.day, from: day))"
-                    } else {
-                        commit()
+                        text = Self.number(day)
+                    } else if old == key {
+                        // Only when the focus leaves this cell: `focus` is the
+                        // whole grid's, and every other cell changes it too.
+                        text = LedgerDate.day(day)
                     }
+                }
+                .onChange(of: text) { _, new in
+                    // The day is read back as it is typed, not on blur, so a
+                    // row committed from somewhere else (⇥ off the line, a
+                    // click on another row) still carries what this cell says.
+                    guard focus == key, let parsed = LedgerDate.parseDay(new, in: month) else { return }
+                    day = parsed
                 }
         }
     }
 
-    private func commit() {
-        if let parsed = LedgerDate.parseDay(text, in: month) {
-            day = parsed
-        }
-        text = LedgerDate.day(day)
+    /// The bare day number, which is what editing starts from.
+    private static func number(_ date: Date, calendar: Calendar = .current) -> String {
+        "\(calendar.component(.day, from: date))"
     }
 }

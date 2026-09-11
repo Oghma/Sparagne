@@ -8,6 +8,10 @@ import SparagneCore
 /// editing with the focus on that cell, ⇥ walks the fields, ↩ commits the diff
 /// as one `UpdateTransaction` and esc throws the draft away. That is what the
 /// footer hints promise, and it means a row is never half-written.
+///
+/// Leaving the row saves it too, the way a spreadsheet does: ⇥ off IMPORTO, a
+/// click on another row or on the search field all commit what was typed. esc
+/// is the only way to lose it.
 struct LedgerGrid: View {
     @Bindable var store: AppStore
 
@@ -15,6 +19,9 @@ struct LedgerGrid: View {
     @State private var editing: Uuid?
     @State private var draft = RowDraft()
     @State private var newRow = RowDraft()
+    /// The row under the pointer, so the eye can follow it across a grid that
+    /// is much wider than a line of text.
+    @State private var hovered: Uuid?
     @FocusState private var focus: CellFocus?
 
     var body: some View {
@@ -35,10 +42,20 @@ struct LedgerGrid: View {
             KeyHints()
         }
         .background(Ink.bg)
-        .onChange(of: store.month) { _, _ in resetEditing() }
+        // The month and the vault change what the empty line means, so its
+        // draft starts over with them. A sync landing or a void must not:
+        // those move `store.rows` under a line that is being typed.
+        .onChange(of: store.month) { _, _ in
+            resetEditing()
+            newRow = RowDraft.blank(in: store)
+        }
+        .onChange(of: store.currentVault?.id) { _, _ in
+            resetEditing()
+            newRow = RowDraft.blank(in: store)
+        }
         .onChange(of: store.direction) { _, _ in resetEditing() }
+        .onChange(of: focus) { _, new in commitIfLeft(new) }
         .onAppear { newRow = RowDraft.blank(in: store) }
-        .onChange(of: store.rows.count) { _, _ in newRow = RowDraft.blank(in: store) }
         .onReceive(NotificationCenter.default.publisher(for: .duplicateLastRow)) { _ in
             duplicateLast()
         }
@@ -56,13 +73,20 @@ struct LedgerGrid: View {
             draft: isEditing ? $draft : nil,
             focus: $focus,
             onOpen: { field in open(row, at: field) },
-            onCommit: { commit(row) },
+            onCommit: { submit(row.id) },
             onCancel: resetEditing
         )
-        .background(isEditing ? Ink.raised : Color.clear)
+        .background(isEditing || hovered == row.id ? Ink.raised : Color.clear)
         .overlay(alignment: .leading) {
             if isEditing {
                 Rectangle().fill(Ink.accent).frame(width: 2)
+            }
+        }
+        .onHover { inside in
+            if inside {
+                hovered = row.id
+            } else if hovered == row.id {
+                hovered = nil
             }
         }
         .contextMenu {
@@ -84,28 +108,70 @@ struct LedgerGrid: View {
 
     // MARK: - Actions
 
+    /// Opens `row` with the caret in `field`, saving whatever line was open
+    /// before. A row that refuses to save stays open and keeps the focus, so
+    /// the click that would have left it does not lose it.
     private func open(_ row: TransactionRow, at field: RowField) {
         guard !row.voided else { return }
+        if editing == row.id {
+            // Another cell of the row already open: move the caret only, or
+            // the draft would be rebuilt from the stored row and lose the edit.
+            focus = CellFocus(row: row.id, field: field)
+            return
+        }
+        if let editing, !commit(editing) { return }
         editing = row.id
         draft = RowDraft(row: row, store: store)
         focus = CellFocus(row: row.id, field: field)
     }
 
+    /// esc: throw the draft away. `editing` is cleared before the focus, so
+    /// the focus change that follows does not read as "left the row" and save
+    /// what esc was meant to undo.
     private func resetEditing() {
         editing = nil
         focus = nil
     }
 
+    /// ↩: save the row and close it.
+    private func submit(_ rowId: Uuid) {
+        if commit(rowId) { focus = nil }
+    }
+
+    /// The commit on blur a spreadsheet does: ⇥ off IMPORTO lands on the empty
+    /// line, a click lands on another row or on the search field, and in every
+    /// case the line being left is written.
+    private func commitIfLeft(_ new: CellFocus?) {
+        guard let editing, new?.row != editing else { return }
+        commit(editing)
+    }
+
+    /// Writes the draft back and says whether it went through.
+    ///
     /// Sends only what changed, so two people editing different cells of the
-    /// same row do not conflict (`docs/v2/ARCH.md` §4).
-    private func commit(_ row: TransactionRow) {
-        guard editing == row.id else { return }
+    /// same row do not conflict (`docs/v2/ARCH.md` §4). A cell the parser or
+    /// the core refuses keeps the row open with the draft intact and puts the
+    /// focus back where the mistake is.
+    @discardableResult
+    private func commit(_ rowId: Uuid) -> Bool {
+        guard editing == rowId else { return true }
+        guard let row = store.rows.first(where: { $0.id == rowId }) else {
+            // Voided, or carried out of the month by a sync while it was open.
+            editing = nil
+            return true
+        }
         do {
             let patch = try draft.patch(against: row, store: store)
-            resetEditing()
-            if !patch.isEmpty { store.update(transactionId: row.id, patch: patch) }
+            editing = nil
+            if !patch.isEmpty { store.update(transactionId: rowId, patch: patch) }
+            return true
+        } catch let failure as RowDraftError {
+            store.report(failure.underlying)
+            focus = CellFocus(row: rowId, field: failure.field)
+            return false
         } catch {
             store.report(error)
+            return false
         }
     }
 
@@ -121,6 +187,9 @@ struct LedgerGrid: View {
             )
             newRow = RowDraft.blank(in: store)
             focus = CellFocus(row: nil, field: .date)
+        } catch let failure as RowDraftError {
+            store.report(failure.underlying)
+            focus = CellFocus(row: nil, field: failure.field)
         } catch {
             store.report(error)
         }
@@ -149,23 +218,32 @@ struct CellFocus: Hashable {
     let field: RowField
 }
 
+/// The cells a row is typed into. PERSONA is not one: it is the author of the
+/// command, not a field (`docs/v2/UI.md` §3).
+///
+/// Nothing here drives the traversal. ⇥ and ⇧⇥ are the system's, walking the
+/// focusable views in layout order, and the order of the cases is only the
+/// order the cells are laid out in. A closed row holds no text field, so from
+/// IMPORTO of the row being edited ⇥ reaches the DATA cell of the empty line
+/// and never gets stuck on the rows in between; ⇧⇥ from DATA goes back up to
+/// the header, whose search field is the previous focusable view. Both leave
+/// the row, which is what `commitIfLeft` is for.
 enum RowField: Hashable, CaseIterable {
     case date
     case flow
     case category
     case note
     case amount
-
-    /// ⇥ order. PERSONA is not here: it is the author of the command, not a
-    /// field (`docs/v2/UI.md` §3).
-    var next: RowField? {
-        let all = RowField.allCases
-        guard let index = all.firstIndex(of: self), index + 1 < all.count else { return nil }
-        return all[index + 1]
-    }
 }
 
 // MARK: - The draft behind an edited row
+
+/// A cell that refused what was typed. The grid reports `underlying`, which
+/// carries the core's own message, and puts the focus back on `field`.
+struct RowDraftError: Error {
+    let field: RowField
+    let underlying: Error
+}
 
 /// The text in the cells of the row being edited. Everything is a string
 /// until it commits, so a half-typed amount never has to be a number.
@@ -207,13 +285,15 @@ struct RowDraft {
     /// is not an error, it is nothing.
     func entry(store: AppStore) throws -> (day: Date, flowId: Uuid?, category: String?, note: String, amount: Int64)? {
         guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let resolvedFlow = try cell(.flow) { try store.resolveFlow(named: flow) }
+        let parsedAmount = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
         let trimmed = category.trimmingCharacters(in: .whitespacesAndNewlines)
         return (
             day: day,
-            flowId: try store.resolveFlow(named: flow) ?? store.defaultFlowId,
+            flowId: resolvedFlow ?? store.defaultFlowId,
             category: trimmed.isEmpty ? nil : trimmed,
             note: note,
-            amount: try parseMoney(text: amount, currency: store.currency)
+            amount: parsedAmount
         )
     }
 
@@ -224,7 +304,7 @@ struct RowDraft {
         // An emptied amount cell leaves the amount alone: clearing it is not a
         // way to say zero, and the core would refuse zero anyway.
         if !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let parsed = try parseMoney(text: amount, currency: store.currency)
+            let parsed = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
             if parsed != row.absoluteAmount, parsed > 0 { patch.amount = parsed }
         }
 
@@ -234,13 +314,22 @@ struct RowDraft {
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedNote != row.note { patch.note = trimmedNote }
 
-        if let flowId = try store.resolveFlow(named: flow), flowId != row.flowId {
-            patch.flowId = flowId
-        }
+        let resolvedFlow = try cell(.flow) { try store.resolveFlow(named: flow) }
+        if let flowId = resolvedFlow, flowId != row.flowId { patch.flowId = flowId }
 
         if !Calendar.current.isDate(day, inSameDayAs: row.occurredAt) {
             patch.occurredAt = AppStore.stamp(day: day, likeTimeOf: row.occurredAt)
         }
         return patch
+    }
+
+    /// Runs a cell's parse, tagging whatever it throws with the cell it came
+    /// from so the grid can send the focus back there.
+    private func cell<T>(_ field: RowField, _ work: () throws -> T) throws -> T {
+        do {
+            return try work()
+        } catch {
+            throw RowDraftError(field: field, underlying: error)
+        }
     }
 }
