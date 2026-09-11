@@ -18,9 +18,10 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Model/TransactionRow.swift` | Table row derived from a `TransactionView` plus the vault snapshot |
 | `Sparagne/Model/LedgerModel.swift` | `MonthKey` and the calendar arithmetic behind it, `LedgerDirection`, `LedgerTab` and `LedgerSummary` |
 | `Sparagne/Views/Ledger/` | The single window: `LedgerWindow` (month header, view switcher, status bar), `LedgerHeader`, the `LedgerGrid` spreadsheet, `LedgerRow`, `SummaryPanel` |
-| `Sparagne/Views/Summary/` | The RIEPILOGO and ANNO views (`SummaryView`, `YearView`) |
+| `Sparagne/Views/Summary/` | The RIEPILOGO view (`SummaryView`): the year up to the month on screen |
+| `Sparagne/Views/Setup/` | The SETUP view (⌘⇧C): envelopes and categories as two editable tables, the merge sheet |
+| `Sparagne/Model/YearModel.swift` | `YearSummary.build`, the arithmetic behind the RIEPILOGO |
 | `Sparagne/Views/ManagementSheet.swift` | Vault picker plus wallet and envelope balances and management (⌘⇧M); the window has no sidebar |
-| `Sparagne/Views/CategoriesWindow.swift` | The Categories window (⌘⇧C): create, rename, archive, alias and merge |
 | `Sparagne/Views/RecurringPanel.swift` | Recurring templates: list, create, edit, archive |
 | `Sparagne/Views/Sheets.swift` | Onboarding, new wallet/envelope, rename and edit-envelope sheets |
 | `Sparagne/Views/SyncViews.swift` | The toolbar's sync status button and the rejected-changes and share sheets |
@@ -49,7 +50,7 @@ whole window (`SparagneApp.swift`'s menu commands) are:
 | `⌘F` | focus the search field |
 | `⌘E` | export the rows on screen as CSV |
 | `⌘⇧M` | management sheet: vault, wallets, envelopes, recurring |
-| `⌘⇧C` | Categories window |
+| `⌘⇧C` | Setup view: envelopes and categories |
 | `⌘⇧V` / `⌘⇧T` | show voided rows / show transfers |
 | `⌥←` / `⌥→` | previous / next month |
 

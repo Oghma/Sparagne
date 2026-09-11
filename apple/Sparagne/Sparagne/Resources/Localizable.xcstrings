@@ -33,6 +33,22 @@
         }
       }
     },
+    "A capped envelope needs a cap amount": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A capped envelope needs a cap amount"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una busta con tetto ha bisogno di un importo"
+          }
+        }
+      }
+    },
     "A storage error occurred": {
       "localizations": {
         "en": {
@@ -113,18 +129,18 @@
         }
       }
     },
-    "Aliases for": {
+    "Aliases": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aliases for"
+            "value": "Aliases"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Alias per"
+            "value": "Alias"
           }
         }
       }
@@ -257,6 +273,22 @@
         }
       }
     },
+    "Balance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balance"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saldo"
+          }
+        }
+      }
+    },
     "Cancel": {
       "localizations": {
         "en": {
@@ -349,22 +381,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Categorie"
-          }
-        }
-      }
-    },
-    "Categories…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Categories…"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Categorie…"
           }
         }
       }
@@ -753,6 +769,22 @@
         }
       }
     },
+    "Envelopes & Categories…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envelopes & Categories…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buste e categorie…"
+          }
+        }
+      }
+    },
     "Every": {
       "localizations": {
         "en": {
@@ -1121,22 +1153,6 @@
         }
       }
     },
-    "Manage Aliases…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manage Aliases…"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gestisci alias…"
-          }
-        }
-      }
-    },
     "Manage Recurring…": {
       "localizations": {
         "en": {
@@ -1297,6 +1313,22 @@
         }
       }
     },
+    "Neg": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neg"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neg"
+          }
+        }
+      }
+    },
     "Net cap": {
       "localizations": {
         "en": {
@@ -1309,22 +1341,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limite sul saldo"
-          }
-        }
-      }
-    },
-    "New Category": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Category"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nuova categoria"
           }
         }
       }
@@ -1437,22 +1453,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nuovo wallet…"
-          }
-        }
-      }
-    },
-    "New alias": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New alias"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nuovo alias"
           }
         }
       }
@@ -1857,6 +1857,22 @@
         }
       }
     },
+    "Rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasso"
+          }
+        }
+      }
+    },
     "Recurring": {
       "localizations": {
         "en": {
@@ -1917,22 +1933,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rimuovi"
-          }
-        }
-      }
-    },
-    "Rename Category": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rename Category"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rinomina categoria"
           }
         }
       }
@@ -2093,6 +2093,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Indirizzo del server"
+          }
+        }
+      }
+    },
+    "Setup": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setup"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setup"
           }
         }
       }
@@ -2545,6 +2561,22 @@
         }
       }
     },
+    "The balance of a new envelope is moved from Unallocated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The balance of a new envelope is moved from Unallocated"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il saldo di una busta nuova viene spostato da Non allocato"
+          }
+        }
+      }
+    },
     "The server answered something unexpected": {
       "localizations": {
         "en": {
@@ -2733,6 +2765,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transazione annullata"
+          }
+        }
+      }
+    },
+    "Type": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipo"
           }
         }
       }
@@ -3153,6 +3201,22 @@
         }
       }
     },
+    "cap…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cap…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tetto…"
+          }
+        }
+      }
+    },
     "days": {
       "localizations": {
         "en": {
@@ -3213,6 +3277,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "flow"
+          }
+        }
+      }
+    },
+    "income cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "income cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "entrate"
           }
         }
       }
@@ -3281,6 +3361,54 @@
         }
       }
     },
+    "name…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "name…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nome…"
+          }
+        }
+      }
+    },
+    "net cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "net cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "netto"
+          }
+        }
+      }
+    },
+    "net of refunds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "net of refunds"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "al netto dei rimborsi"
+          }
+        }
+      }
+    },
     "next field": {
       "localizations": {
         "en": {
@@ -3297,6 +3425,38 @@
         }
       }
     },
+    "no": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no"
+          }
+        }
+      }
+    },
+    "none": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "none"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nessuno"
+          }
+        }
+      }
+    },
     "of income": {
       "localizations": {
         "en": {
@@ -3309,6 +3469,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "del reddito"
+          }
+        }
+      }
+    },
+    "people": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "people"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "persone"
           }
         }
       }
@@ -3469,6 +3645,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "settimane il"
+          }
+        }
+      }
+    },
+    "yes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yes"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sì"
           }
         }
       }
