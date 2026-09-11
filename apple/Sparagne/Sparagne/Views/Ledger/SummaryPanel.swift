@@ -25,8 +25,8 @@ struct SummaryPanel: View {
 // MARK: - Person x envelope
 
 /// `Entrate / Uscite cash / Uscite varie / … / Risparmio`, one column per
-/// person. In the panel the TOTALE column is dropped for width; the summary
-/// view shows it.
+/// person plus a total. The panel beside the grid drops the total column for
+/// width; the summary view shows it.
 struct PersonMatrix: View {
     let summary: LedgerSummary
     let store: AppStore
@@ -56,6 +56,7 @@ struct PersonMatrix: View {
                     row(
                         String(localized: "Savings"),
                         values: people.map { summary.totals(for: $0).savings },
+                        tint: Ink.positive,
                         emphasis: true
                     )
                 }
@@ -77,25 +78,42 @@ struct PersonMatrix: View {
                 SectionLabel(text: person)
                     .frame(width: columnWidth, alignment: .trailing)
             }
+            if showsTotal {
+                SectionLabel(text: String(localized: "Total"), tint: Ink.text)
+                    .frame(width: columnWidth, alignment: .trailing)
+            }
         }
     }
 
+    /// The total column carries the tint; the per-person ones stay neutral, so
+    /// the eye lands on the sum rather than on the columns it is made of.
     private func row(_ label: String, values: [Int64], tint: Color = Ink.text, emphasis: Bool = false) -> some View {
-        HStack(spacing: 0) {
+        let font = emphasis ? Face.mono(12, .semibold) : Face.row
+        return HStack(spacing: 0) {
             Text(label)
-                .font(emphasis ? Face.mono(12, .semibold) : Face.row)
+                .font(font)
                 .foregroundStyle(emphasis ? Ink.text : Ink.text.opacity(0.85))
                 .lineLimit(1)
             Spacer(minLength: 6)
             ForEach(Array(values.enumerated()), id: \.offset) { _, value in
                 Text(LedgerMoney.bare(value))
-                    .font(emphasis ? Face.mono(12, .semibold) : Face.row)
-                    .foregroundStyle(value == 0 ? Ink.dim : tint)
+                    .font(font)
+                    .foregroundStyle(value == 0 ? Ink.dim : (compact ? tint : Ink.text))
+                    .frame(width: columnWidth, alignment: .trailing)
+            }
+            if showsTotal {
+                let total = values.reduce(0, +)
+                Text(LedgerMoney.bare(total))
+                    .font(font)
+                    .foregroundStyle(total == 0 ? Ink.dim : tint)
                     .frame(width: columnWidth, alignment: .trailing)
             }
         }
         .frame(height: 21)
     }
+
+    /// One person needs no total: it would repeat the only column there is.
+    private var showsTotal: Bool { !compact && people.count > 1 }
 
     private var columnWidth: CGFloat { compact ? 78 : 100 }
 }
