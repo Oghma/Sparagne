@@ -107,25 +107,25 @@ enum LedgerDirection: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// The three views behind the title-bar switcher (`docs/v2/UI.md` §2).
+/// The two views behind the title-bar switcher (`docs/v2/UI.md` §2), in
+/// the switcher's order; the first is the one the window opens on.
 enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
-    case ledger
     case summary
-    case year
+    case ledger
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .ledger: String(localized: "Ledger")
         case .summary: String(localized: "Summary")
-        case .year: String(localized: "Year")
+        case .ledger: String(localized: "Ledger")
         }
     }
 }
 
-/// Everything the summary panel and the summary views draw, loaded together so
-/// the numbers on screen always describe one month.
+/// Everything the ledger's summary panel draws, loaded together so the
+/// numbers on screen always describe one month. The RIEPILOGO view has its
+/// own model (`YearSummary`).
 struct LedgerSummary: Sendable {
     /// The month these figures cover.
     let month: MonthKey
@@ -140,9 +140,6 @@ struct LedgerSummary: Sendable {
     /// Twelve buckets ending with `month`, oldest first, and their labels.
     let trailing: [PeriodTotals]
     let trailingMonths: [MonthKey]
-    /// The calendar year of `month`, January first: the ENTRATE VS USCITE bars.
-    let year: [PeriodTotals]
-    let top: [TopExpense]
 
     /// `income - net_expense`, the ledger's definition of savings.
     static func savings(_ totals: PeriodTotals) -> Int64 {

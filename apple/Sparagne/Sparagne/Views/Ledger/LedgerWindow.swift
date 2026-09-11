@@ -116,9 +116,9 @@ struct LedgerWindow: View {
                     SummaryPanel(summary: summary, store: store)
                 }
             case .summary:
-                ScrollView { SummaryView(summary: summary, store: store) }
-            case .year:
-                ScrollView { YearView(summary: summary, store: store) }
+                if let year = store.year {
+                    ScrollView { SummaryView(year: year, store: store) }
+                }
             }
         } else {
             VStack {

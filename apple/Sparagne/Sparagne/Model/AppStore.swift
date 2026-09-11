@@ -84,7 +84,6 @@ final class AppStore {
     /// A month of a personal ledger fits in one page, so the grid never
     /// paginates in practice; `loadMore` stays for the pathological month.
     static let pageSize: UInt32 = 1000
-    static let topExpenseCount: UInt32 = 6
     static let lastVaultKey = "lastVaultId"
 
     // MARK: Dependencies
@@ -113,8 +112,11 @@ final class AppStore {
     private(set) var allRows: [TransactionRow] = []
     /// Distinct authors in the vault: the PERSONA segmented control.
     private(set) var authors: [String] = []
-    /// Everything the summary panel and the summary views draw.
+    /// Everything the ledger's summary panel draws.
     private(set) var summary: LedgerSummary?
+    /// Everything the RIEPILOGO draws: the year of `month`, up to `month`
+    /// (`docs/v2/UI.md` §2.2).
+    private(set) var year: YearSummary?
     /// When the last command was applied, for the status bar's "saved at".
     private(set) var savedAt: Date?
 
@@ -144,8 +146,9 @@ final class AppStore {
     var direction: LedgerDirection = .expenses { didSet { if direction != oldValue { reload() } } }
     /// The PERSONA filter: `nil` is everybody.
     var person: String? { didSet { if person != oldValue { reload() } } }
-    /// Which of the three views is on screen; no reload, the data is the same.
-    var tab: LedgerTab = .ledger
+    /// Which of the two views is on screen; no reload, the data is the same.
+    /// The window opens on the RIEPILOGO (`docs/v2/UI.md` §2).
+    var tab: LedgerTab = .summary
     var showVoided = false { didSet { if showVoided != oldValue { reload() } } }
     /// Transfers are in neither direction, so the View menu opts into them.
     var showTransfers = false { didSet { if showTransfers != oldValue { reload() } } }
@@ -280,6 +283,7 @@ final class AppStore {
             nextCursor = nil
             authors = []
             summary = nil
+            year = nil
             pendingRecurringItems = []
             return
         }
@@ -299,6 +303,7 @@ final class AppStore {
             // selected, or the ledger shows an empty month with no way back.
             if let person, !authors.contains(person) { self.person = nil }
             summary = try loadSummary(vault: vault)
+            year = try loadYear(vault: vault)
             pendingRecurringItems = try client.pendingRecurring(vaultId: vault.id, today: CoreDate.day(Date()))
             rebuildRows()
         }
@@ -333,20 +338,16 @@ final class AppStore {
             totals: pair.count > 1 ? pair[1] : empty,
             previous: pair.first ?? empty,
             trailing: try client.bucketTotals(vaultId: vault.id, bounds: trailing.bounds, person: person),
-            trailingMonths: trailing.months,
-            year: try client.bucketTotals(
-                vaultId: vault.id,
-                bounds: MonthKey.yearBounds(month.year),
-                person: person
-            ),
-            top: try client.topExpenses(
-                vaultId: vault.id,
-                from: bounds.from,
-                to: bounds.to,
-                person: person,
-                limit: Self.topExpenseCount
-            )
+            trailingMonths: trailing.months
         )
+    }
+
+    /// The RIEPILOGO's year: one `year_breakdown` call with fourteen
+    /// boundaries, the epoch and the thirteen month starts, so bucket 0 is
+    /// everything before January (`docs/v2/UI.md` §4).
+    private func loadYear(vault: VaultView) throws -> YearSummary? {
+        // Wired to the core once the bindings expose `year_breakdown`.
+        nil
     }
 
     /// Appends the next page, if any.

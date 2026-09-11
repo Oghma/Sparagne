@@ -10,9 +10,12 @@ Un foglio di calcolo per le righe, un terminale finanziario per i numeri: una
 sola finestra scura, monospazio, con il mese come unità di lettura e gli
 aggregati sempre a fianco delle righe.
 
-## 2. Le tre viste
+## 2. Le due viste
 
-Uno switcher in barra titolo: `MASTRO · RIEPILOGO · ANNO`.
+Uno switcher in barra titolo: `RIEPILOGO · MASTRO`. Il riepilogo è la vista
+di apertura. (Fino al 2026-09-11 le viste erano tre, `MASTRO · RIEPILOGO ·
+ANNO`: il riepilogo mensile è stato assorbito dal pannello destro del mastro
+e ANNO dal nuovo riepilogo.)
 
 ### 2.1 MASTRO
 
@@ -36,22 +39,64 @@ Uno switcher in barra titolo: `MASTRO · RIEPILOGO · ANNO`.
 - L'ultima riga è sempre vuota ed è l'inserimento: si compila da sinistra a
   destra con ⇥ e si salva con ↩. Nessun pulsante "aggiungi".
 - Ogni cella delle righe esistenti è editabile in posto; ↩ emette un
-  `UpdateTransaction` con i soli campi cambiati, esc ripristina.
-- Il pannello destro (284 pt) è lo stesso riepilogo della vista RIEPILOGO,
-  ridotto: tabella per persona, card risparmio, uscite per categoria, 12 mesi.
+  `UpdateTransaction` con i soli campi cambiati, esc ripristina. Lasciare la
+  riga (⇥ oltre IMPORTO, click altrove) salva come in un foglio di calcolo.
+- Il pannello destro (284 pt) è il riepilogo del mese: tabella per persona,
+  card risparmio, uscite per categoria, 12 mesi.
 - I trasferimenti non stanno né in USCITE né in ENTRATE: spostano soldi senza
   guadagnarli o spenderli. Il menu Mastro li aggiunge alla lista corrente
   (⌘⇧T), come fa con le annullate (⌘⇧V).
 
 ### 2.2 RIEPILOGO
 
-Quattro card in alto (entrate, uscite, risparmio, tasso di risparmio), a
-sinistra la tabella persona × flow più "chi ha speso cosa", a destra la serie
-entrate/uscite dei 12 mesi dell'anno e le top uscite del mese.
+> Ridisegnato il 2026-09-11 sul foglio Excel "Riepilogo" fornito
+> dall'utente: l'anno fino al mese a schermo, con le definizioni sue.
 
-### 2.3 ANNO
+```
+‹ SETTEMBRE 2026 ›                                    2026 · fino a settembre
+┌ FONDO EMERGENZA ─┐ ┌ FONDO VARIE ─────┐ ┌ FONDO CASA ──────┐
+│      ◯ 99,8%     │ │      ◯ 92,2%     │ │      ◯ 21,3%     │   una gauge per
+│ 29.931 / 30.000  │ │  4.611 / 5.000   │ │ 31.935 / 150.000 │   busta con tetto
+└──────────────────┘ └──────────────────┘ └──────────────────┘
+FONDO CASSA INIZIALE      ELISA 14.275,60    MATTEO 17.946,20    TOTALE 32.221,80
+MESE  ENTRATE  USCITE  RISPARMIO  FONDO CASSA  USCITE FONDI   TOTALE    ELISA   MATTEO
+gen   9.200    3.100     6.100      32.221        1.500      36.934   18.100   18.834
+feb   …
+set   …
+ott   (vuoto: mese futuro)
+┌ CASH FLOW ────────────────────────┐ ┌ FONDO CASSA ─────────────────────┐
+│ linee entrate / uscite / risparmio│ │ linea del TOTALE, mese per mese  │
+└───────────────────────────────────┘ └──────────────────────────────────┘
+```
 
-La stessa tabella del riepilogo con i 12 mesi come colonne.
+Definizioni (dell'utente, 2026-09-11), per il mese `m`:
+
+| Colonna | Definizione |
+|---|---|
+| ENTRATE | entrate del mese, escluse le aperture dei wallet (categoria di sistema `Opening`) |
+| USCITE | uscite nette del mese sulle buste **senza tetto** (Cash, Non allocato) |
+| RISPARMIO | ENTRATE − USCITE |
+| USCITE FONDI | uscite nette del mese sulle buste **con tetto** (i "fondi": casa, varie, emergenza…) |
+| FONDO CASSA | TOTALE del mese prima, più le aperture di wallet del mese; a gennaio è tutto ciò che è successo prima dell'anno |
+| TOTALE | RISPARMIO + FONDO CASSA − USCITE FONDI, cioè il saldo complessivo dei wallet a fine mese |
+| colonne persona | il TOTALE di ciascuna persona, stessa formula sulle sue sole righe |
+
+- Le persone non sono fisse: una colonna per ogni autore del vault, nell'ordine
+  del core. Un vault con una persona ha una colonna sola e nessun totale
+  ripetuto.
+- Il mese a schermo (lo stepper è lo stesso del mastro) decide l'anno e il
+  "fino a": i mesi dopo quello a schermo, nell'anno a schermo, sono righe
+  vuote. Un anno passato è pieno.
+- TOTALE è `positive` se non è sceso rispetto al mese prima, `negative` se è
+  sceso. Il mese a schermo è evidenziato.
+- "Fondo" è una busta con tetto (`netCapped` o `incomeCapped`), il che rende
+  la classificazione un dato del vault e non un nome. Una gauge per ogni busta
+  attiva con tetto: riempimento = saldo/tetto (net) o entrate cumulative/tetto
+  (income), sotto `saldo / tetto`. Senza buste con tetto la fila di gauge non
+  c'è.
+- CASH FLOW e FONDO CASSA sono grafici a linee (Swift Charts, palette): il
+  primo entrate, uscite e risparmio per mese; il secondo il TOTALE.
+- Nessun filtro persona nel riepilogo: le persone sono colonne.
 
 ## 3. Mappa mockup → dominio
 
@@ -63,8 +108,11 @@ La stessa tabella del riepilogo con i 12 mesi come colonne.
 | `PERSONA` (Elisa, Matteo) | `transactions.created_by`, cioè l'autore del comando |
 | `IMPORTO` | `amount`, valore assoluto: il segno lo dà il filtro USCITE/ENTRATE |
 | `USCITE` / `ENTRATE` | `kinds = [expense, refund]` / `kinds = [income]` |
-| `Risparmio` | `income − net_expense` |
+| `Risparmio` (mastro) | `income − net_expense` |
 | `Tasso` | `risparmio / income` |
+| `Fondo` (riepilogo) | busta con `cap` non nullo |
+| `USCITE` / `USCITE FONDI` (riepilogo) | `net_expense` sulle buste senza / con tetto |
+| `FONDO CASSA INIZIALE` | il secchio "prima di gennaio" di `year_breakdown`, per persona |
 
 Il **wallet non è una colonna**: i mockup non lo mostrano. Resta nel modello
 (ogni entry ha una leg wallet) e viene risolto con il default sticky; è una
@@ -89,7 +137,8 @@ sistema, così il core non conosce fusi né calendari.
 | `flow_person_totals(vault, from, to)` | tabella persona × flow, "chi ha speso cosa" |
 | `category_totals(vault, from, to, person?)` | uscite per categoria |
 | `bucket_totals(vault, bounds[], person?)` | serie 12 mesi (13 estremi → 12 secchi) |
-| `top_expenses(vault, from, to, person?, limit)` | top uscite del mese |
+| `top_expenses(vault, from, to, person?, limit)` | top uscite del mese (non più a schermo dal 2026-09-11) |
+| `year_breakdown(vault, bounds[])` | il riepilogo: per secchio × persona, `income` (senza aperture), `opening`, `cash_expense`, `fund_expense`; l'app passa 14 estremi (epoca + 13 inizi mese) e legge 13 secchi |
 | `TransactionFilter.author` + `ascending` | griglia del mastro |
 
 ## 5. Aspetto
@@ -141,6 +190,11 @@ Stato al 2026-09-10: A-F fatte in due commit (`core/src/analytics.rs` con 10
 test; la finestra nuova con 47 test dell'app). `SidebarView` è diventata
 `ManagementSheet`, `DetailView` e `InspectorView` sono state cancellate
 insieme a `Period` e ad `AppTheme` (la palette li sostituisce).
+
+Riepilogo ridisegnato il 2026-09-11 (§2.2): `core::analytics::year_breakdown`,
+`Model/YearModel.swift` (`YearSummary.build`, aritmetica pura testata),
+`Views/Summary/SummaryView.swift` riscritta; `YearView` cancellata insieme
+al riepilogo mensile, che vive nel pannello del mastro.
 
 Rifinitura del 2026-09-11 (65 test dell'app): la griglia salva anche quando
 si lascia la riga (⇥ oltre IMPORTO, click su un'altra riga o sulla ricerca),

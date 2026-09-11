@@ -129,14 +129,11 @@ struct LedgerStoreTests {
         #expect(summary.categories.first?.name == "Casa")
         #expect(summary.categories.first?.netExpense == 95_000)
 
-        // Twelve buckets ending with this month, and a calendar year of them.
+        // Twelve buckets ending with this month.
         #expect(summary.trailing.count == 12)
         #expect(summary.trailingMonths.last == store.month)
         #expect(summary.trailing.last?.income == 400_000)
-        #expect(summary.year.count == 12)
-        #expect(summary.year[store.month.month - 1].income == 400_000)
 
-        #expect(summary.top.first?.note == "mutuo")
         #expect(summary.spendByPerson.first?.person == "matteo")
     }
 
