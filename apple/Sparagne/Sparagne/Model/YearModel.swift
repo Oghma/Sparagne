@@ -79,7 +79,102 @@ struct YearSummary: Sendable {
     /// can be tested without a database (`docs/v2/UI.md` §2.2 for the
     /// definitions).
     static func build(year: Int, upTo: MonthKey, rows: [YearRow], flows: [FlowView]) -> YearSummary {
-        // Implemented by the summary work; the stub keeps the window building.
-        YearSummary(year: year, upTo: upTo, people: [], initialByPerson: [], months: [], funds: [])
+        let people = Self.people(in: rows)
+        var byBucket: [Int: [YearRow]] = [:]
+        for row in rows { byBucket[row.bucket, default: []].append(row) }
+
+        // Bucket 0 is everything before January: it opens the recurrence.
+        let initialByPerson = people.map { person in
+            Self.closing(byBucket[0, default: []].filter { $0.person == person })
+        }
+
+        var months: [YearMonth] = []
+        var runningTotal = initialByPerson.reduce(0, +)
+        var runningByPerson = initialByPerson
+        for month in 1...12 {
+            let monthRows = byBucket[month, default: []]
+            let income = monthRows.reduce(0) { $0 + $1.income }
+            let cashExpense = monthRows.reduce(0) { $0 + $1.cashExpense }
+            let fundExpense = monthRows.reduce(0) { $0 + $1.fundExpense }
+            // FONDO CASSA: last month's TOTALE plus the wallets opened now.
+            let carried = runningTotal + monthRows.reduce(0) { $0 + $1.opening }
+            let total = (income - cashExpense) + carried - fundExpense
+
+            var totalByPerson: [Int64] = []
+            totalByPerson.reserveCapacity(people.count)
+            for (index, person) in people.enumerated() {
+                let personRows = monthRows.filter { $0.person == person }
+                let personCarried = runningByPerson[index] + personRows.reduce(0) { $0 + $1.opening }
+                let personSavings = personRows.reduce(0) { $0 + $1.income - $1.cashExpense }
+                let personFunds = personRows.reduce(0) { $0 + $1.fundExpense }
+                totalByPerson.append(personSavings + personCarried - personFunds)
+            }
+
+            months.append(
+                YearMonth(
+                    month: MonthKey(year: year, month: month),
+                    isFuture: Self.isFuture(year: year, month: month, upTo: upTo),
+                    income: income,
+                    cashExpense: cashExpense,
+                    fundExpense: fundExpense,
+                    carried: carried,
+                    total: total,
+                    totalByPerson: totalByPerson
+                )
+            )
+            runningTotal = total
+            runningByPerson = totalByPerson
+        }
+
+        return YearSummary(
+            year: year,
+            upTo: upTo,
+            people: people,
+            initialByPerson: initialByPerson,
+            months: months,
+            funds: Self.funds(in: flows)
+        )
+    }
+
+    /// One column per author, de-duplicated in the core's order and then
+    /// sorted case-insensitively, so two runs of the same vault always put
+    /// the columns in the same place.
+    private static func people(in rows: [YearRow]) -> [String] {
+        var seen = Set<String>()
+        var people: [String] = []
+        for row in rows where seen.insert(row.person).inserted {
+            people.append(row.person)
+        }
+        return people.sorted { $0.lowercased() < $1.lowercased() }
+    }
+
+    /// What a bucket leaves behind: everything that came in, less everything
+    /// that went out, on both kinds of envelope.
+    private static func closing(_ rows: [YearRow]) -> Int64 {
+        rows.reduce(0) { $0 + $1.income + $1.opening - $1.cashExpense - $1.fundExpense }
+    }
+
+    /// Blank rows: the months after the one on screen, in the year on screen.
+    /// A later year is all future, an earlier one all past.
+    private static func isFuture(year: Int, month: Int, upTo: MonthKey) -> Bool {
+        year > upTo.year || (year == upTo.year && month > upTo.month)
+    }
+
+    /// A "fondo" is an envelope with a cap, which makes the classification a
+    /// fact of the vault rather than a name (`docs/v2/UI.md` §2.2).
+    private static func funds(in flows: [FlowView]) -> [FundGauge] {
+        flows.compactMap { flow in
+            guard !flow.archived else { return nil }
+            switch flow.mode {
+            case .unlimited:
+                return nil
+            case .netCapped(let cap):
+                return FundGauge(id: flow.id, name: flow.name, cap: cap, filled: flow.balance)
+            case .incomeCapped(let cap):
+                // Spending does not free room on an income cap, so what fills
+                // the ring is the cumulative income.
+                return FundGauge(id: flow.id, name: flow.name, cap: cap, filled: flow.incomeTotal ?? flow.balance)
+            }
+        }
     }
 }

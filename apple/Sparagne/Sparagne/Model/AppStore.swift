@@ -346,8 +346,19 @@ final class AppStore {
     /// boundaries, the epoch and the thirteen month starts, so bucket 0 is
     /// everything before January (`docs/v2/UI.md` §4).
     private func loadYear(vault: VaultView) throws -> YearSummary? {
-        // Wired to the core once the bindings expose `year_breakdown`.
-        nil
+        let epoch = CoreDate.utcString(Date(timeIntervalSince1970: 0))
+        let bounds = [epoch] + MonthKey.yearBounds(month.year)
+        let rows = try client.yearBreakdown(vaultId: vault.id, bounds: bounds).map {
+            YearRow(
+                bucket: Int($0.bucket),
+                person: $0.person,
+                income: $0.income,
+                opening: $0.opening,
+                cashExpense: $0.cashExpense,
+                fundExpense: $0.fundExpense
+            )
+        }
+        return YearSummary.build(year: month.year, upTo: month, rows: rows, flows: flows)
     }
 
     /// Appends the next page, if any.

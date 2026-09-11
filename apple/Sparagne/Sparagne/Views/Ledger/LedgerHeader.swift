@@ -6,8 +6,8 @@ import SparagneCore
 struct LedgerHeader: View {
     @Bindable var store: AppStore
     @FocusState.Binding var searchFocused: Bool
-    /// The summary views are not a list, so they get the month and the person
-    /// but neither the direction, the search nor the row count.
+    /// The summary is not a list, so it gets the month stepper alone: no
+    /// person, no direction, no search, no row count.
     var compact = false
 
     var body: some View {
@@ -18,7 +18,10 @@ struct LedgerHeader: View {
                 .font(Face.footnote)
                 .foregroundStyle(Ink.dim)
 
-            if store.authors.count > 1 {
+            // No person filter in the summary: there the people are columns,
+            // so filtering would blank all of them but one
+            // (`docs/v2/UI.md` §2.2).
+            if !compact, store.authors.count > 1 {
                 SegmentedStrip(
                     options: [nil] + store.authors.map(Optional.some),
                     selection: $store.person,

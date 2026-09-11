@@ -158,6 +158,12 @@ final class CoreClient {
         try handle.bucketTotals(vaultId: vaultId, bounds: bounds, person: person)
     }
 
+    /// One row per bucket and person for the RIEPILOGO: the epoch plus the
+    /// thirteen month starts give thirteen buckets.
+    func yearBreakdown(vaultId: Uuid, bounds: [UtcDateTime]) throws -> [BucketPersonTotals] {
+        try handle.yearBreakdown(vaultId: vaultId, bounds: bounds)
+    }
+
     func topExpenses(
         vaultId: Uuid,
         from: UtcDateTime,

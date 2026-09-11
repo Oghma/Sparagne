@@ -305,6 +305,38 @@
         }
       }
     },
+    "Cash flow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cash flow"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cash flow"
+          }
+        }
+      }
+    },
+    "Cash fund": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cash fund"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fondo cassa"
+          }
+        }
+      }
+    },
     "Categories": {
       "localizations": {
         "en": {
@@ -849,6 +881,22 @@
         }
       }
     },
+    "Fund expenses": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fund expenses"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uscite fondi"
+          }
+        }
+      }
+    },
     "In sync": {
       "localizations": {
         "en": {
@@ -876,7 +924,7 @@
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Entrata"
+            "value": "Entrate"
           }
         }
       }
@@ -893,22 +941,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limite sulle entrate"
-          }
-        }
-      }
-    },
-    "Income vs expenses": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Income vs expenses"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Entrate vs uscite"
           }
         }
       }
@@ -1473,6 +1505,22 @@
         }
       }
     },
+    "No activity this year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No activity this year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun movimento quest'anno"
+          }
+        }
+      }
+    },
     "No envelope named “%@”": {
       "localizations": {
         "en": {
@@ -1713,6 +1761,22 @@
         }
       }
     },
+    "Opening cash fund": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening cash fund"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fondo cassa iniziale"
+          }
+        }
+      }
+    },
     "Owner": {
       "localizations": {
         "en": {
@@ -1789,22 +1853,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aggiunta rapida…"
-          }
-        }
-      }
-    },
-    "Rate": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rate"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tasso"
           }
         }
       }
@@ -2641,22 +2689,6 @@
         }
       }
     },
-    "Top expenses this month": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Top expenses this month"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Top uscite del mese"
-          }
-        }
-      }
-    },
     "Total": {
       "localizations": {
         "en": {
@@ -3009,22 +3041,6 @@
         }
       }
     },
-    "Who spent what": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Who spent what"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chi ha speso cosa"
-          }
-        }
-      }
-    },
     "Wrong username or password": {
       "localizations": {
         "en": {
@@ -3037,22 +3053,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome utente o password errati"
-          }
-        }
-      }
-    },
-    "Year": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Year"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anno"
           }
         }
       }
@@ -3281,22 +3281,6 @@
         }
       }
     },
-    "net of refunds": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "net of refunds"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "al netto dei rimborsi"
-          }
-        }
-      }
-    },
     "next field": {
       "localizations": {
         "en": {
@@ -3325,22 +3309,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "del reddito"
-          }
-        }
-      }
-    },
-    "people": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "people"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "persone"
           }
         }
       }
@@ -3437,6 +3405,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "cerca descrizione…"
+          }
+        }
+      }
+    },
+    "up to": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "up to"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fino a"
           }
         }
       }
