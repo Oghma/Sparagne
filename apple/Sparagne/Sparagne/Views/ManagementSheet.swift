@@ -1,14 +1,14 @@
 import SwiftUI
 import SparagneCore
 
-/// Vault picker, wallet balances and envelope balances.
+/// Everything that manages the vault's entities, in one sheet (⌘⇧M).
 ///
-/// Archived wallets and envelopes are hidden behind a collapsed "Archived"
-/// group; capped envelopes show `balance / cap` with the 70%/90% tinted bar
-/// (docs/v2/DISTILLATO_V1.md §3.4). Context menus carry wallet/envelope
-/// management (team-lead task 2) and a "Manage Recurring…" entry opens the
-/// Recurring panel (task 4).
-struct SidebarView: View {
+/// The ledger window has no sidebar (`docs/v2/UI.md` §2), so the vault picker,
+/// the wallet and envelope balances and their management actions moved here.
+/// Archived entities are behind a collapsed "Archived" group; capped envelopes
+/// show `balance / cap` with the 70%/90% tinted bar
+/// (docs/v2/DISTILLATO_V1.md §3.4).
+struct ManagementSheet: View {
     let store: AppStore
     /// Says whether this vault is mine on the server, which is what the
     /// "Share…" entry needs (`docs/v2/SYNC.md` §3).
@@ -18,7 +18,23 @@ struct SidebarView: View {
     /// one `.sheet(item:)`.
     let present: (MainWindow.SheetKind) -> Void
 
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
+        VStack(spacing: 0) {
+            list
+            Divider()
+            HStack {
+                Spacer()
+                Button(String(localized: "Done")) { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(12)
+        }
+        .frame(width: 420, height: 520)
+    }
+
+    private var list: some View {
         List {
             Section {
                 Menu {
@@ -99,8 +115,7 @@ struct SidebarView: View {
                     .disabled(store.currentVault == nil)
             }
         }
-        .listStyle(.sidebar)
-        .frame(minWidth: 220)
+        .listStyle(.inset)
     }
 }
 
@@ -127,7 +142,7 @@ private struct WalletSidebarRow: View {
         HStack {
             Text(wallet.name)
             Spacer()
-            Text(MoneyFormatter.format(minorUnits: wallet.balance, currencyCode: currencyCode))
+            Text(LedgerMoney.amount(wallet.balance))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
@@ -167,21 +182,19 @@ private struct EnvelopeSidebarRow: View {
                 Text(name)
                 Spacer()
                 if let cap {
-                    Text(
-                        "\(MoneyFormatter.format(minorUnits: flow.balance, currencyCode: currencyCode)) / \(MoneyFormatter.format(minorUnits: cap, currencyCode: currencyCode))"
-                    )
+                    Text("\(LedgerMoney.bare(flow.balance)) / \(LedgerMoney.amount(cap))")
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                 } else {
-                    Text(MoneyFormatter.format(minorUnits: flow.balance, currencyCode: currencyCode))
+                    Text(LedgerMoney.amount(flow.balance))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
             }
             if let progress {
                 ProgressView(value: progress)
-                    .tint(AppTheme.progressTint(progress))
+                    .tint(Ink.progressTint(progress))
             }
         }
     }

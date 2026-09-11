@@ -2,10 +2,10 @@ import SwiftUI
 
 @main
 struct SparagneApp: App {
-    // Shared UserDefaults key with the "Voided" filter toggle in
-    // DetailView's filter bar, so the menu item and the toolbar toggle stay
-    // in sync without extra plumbing.
+    // Shared UserDefaults keys with the store's own filters, so the menu
+    // items and the ledger stay in sync without extra plumbing.
     @AppStorage("showVoided") private var showVoided = false
+    @AppStorage("showTransfers") private var showTransfers = false
     @Environment(\.openWindow) private var openWindow
 
     /// Opened once, in `ContentView`, and shared with the Categories window
@@ -22,19 +22,51 @@ struct SparagneApp: App {
             ContentView(store: $store, engine: $engine, launchFailure: $launchFailure)
         }
         .commands {
-            CommandMenu(String(localized: "Transaction")) {
-                Button(String(localized: "Quick Add")) {
+            CommandGroup(replacing: .newItem) {
+                Button(String(localized: "Quick Add\u{2026}")) {
                     NotificationCenter.default.post(name: .focusQuickAdd, object: nil)
                 }
-                .keyboardShortcut("n", modifiers: .command)
+                .keyboardShortcut("k", modifiers: .command)
+
+                Button(String(localized: "Duplicate Last Row")) {
+                    NotificationCenter.default.post(name: .duplicateLastRow, object: nil)
+                }
+                .keyboardShortcut("d", modifiers: .command)
+            }
+
+            CommandMenu(String(localized: "Ledger")) {
+                Button(String(localized: "Previous Month")) {
+                    NotificationCenter.default.post(name: .stepMonth, object: -1)
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+
+                Button(String(localized: "Next Month")) {
+                    NotificationCenter.default.post(name: .stepMonth, object: 1)
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+
+                Divider()
+
+                Button(String(localized: "Find\u{2026}")) {
+                    NotificationCenter.default.post(name: .focusSearch, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
 
                 Divider()
 
                 Toggle(String(localized: "Show Voided"), isOn: $showVoided)
                     .keyboardShortcut("v", modifiers: [.command, .shift])
+                Toggle(String(localized: "Show Transfers"), isOn: $showTransfers)
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
             }
-            CommandGroup(after: .newItem) {
-                Button(String(localized: "Categories…")) { openWindow(id: "categories") }
+
+            CommandMenu(String(localized: "Vault")) {
+                Button(String(localized: "Manage\u{2026}")) {
+                    NotificationCenter.default.post(name: .openManagement, object: nil)
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+
+                Button(String(localized: "Categories\u{2026}")) { openWindow(id: "categories") }
                     .keyboardShortcut("c", modifiers: [.command, .shift])
             }
         }
@@ -59,10 +91,20 @@ struct SparagneApp: App {
     }
 }
 
+/// Menu commands reach the window through notifications rather than shared
+/// state: the menu bar is a scene, the ledger is a view, and the only thing
+/// they need to agree on is the name of the action.
 extension Notification.Name {
-    /// Posted by the "Quick Add" (⌘N) menu command; ContentView focuses the
-    /// quick-add field in response instead of the app owning UI state.
+    /// ⌘K: opens the quick-add line over the grid.
     static let focusQuickAdd = Notification.Name("it.oghma.sparagne.focusQuickAdd")
+    /// ⌘F: focuses the search field of the ledger header.
+    static let focusSearch = Notification.Name("it.oghma.sparagne.focusSearch")
+    /// ⌘D: copies the last row of the month into the empty line.
+    static let duplicateLastRow = Notification.Name("it.oghma.sparagne.duplicateLastRow")
+    /// ⌥←/⌥→: steps the month; the object is the number of months, signed.
+    static let stepMonth = Notification.Name("it.oghma.sparagne.stepMonth")
+    /// ⌘⇧M: opens the management sheet.
+    static let openManagement = Notification.Name("it.oghma.sparagne.openManagement")
 }
 
 private struct SettingsView: View {

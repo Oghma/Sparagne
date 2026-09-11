@@ -24,14 +24,14 @@ L'app lavora su un SQLite locale attraverso un core Rust in-process; ogni scritt
 ### 2.1 `core` (Rust, sincrono)
 
 - Un solo crate, libreria. Niente async, niente ORM: `rusqlite` con feature `bundled`.
-- Contiene: tipi di dominio, `Money`, normalizzazione categorie, `apply_leg_change`, i comandi, la proiezione (tabelle di stato), le query per la UI, il parser quick-add, le aggregazioni per dashboard.
+- Contiene: tipi di dominio, `Money`, normalizzazione categorie, `apply_leg_change`, i comandi, la proiezione (tabelle di stato), le query per la UI, il parser quick-add, le aggregazioni del mastro (`analytics.rs`).
 - Esposto a Swift con **UniFFI** (Swift Package generato). Swift non fa mai SQL e non conosce le regole: chiama `execute(cmd)` e `query_*`.
 - Stato (2026-09-09): i derive UniFFI stanno sui tipi di dominio reali (nessun DTO specchio); `Uuid`, date e date-time viaggiano come stringhe; `CoreHandle` serializza l'accesso al `Core` con un mutex; gli id degli envelope si generano solo in Rust. `apple/build-core.sh` produce `apple/SparagneCore` (XCFramework non versionato più `SparagneCore.swift` generato e versionato). Il crate `core` ammette `unsafe_code` solo per lo scaffolding generato. `DomainError` attraversa l'FFI come *flat error* (un case per variante con il messaggio) e `ErrorCodes.swift` riporta il `code()` stabile a mano; `QuickAddError` invece è strutturato, così `ambiguous_name` porta i candidati e la UI può proporli. `resolve_quick_add` restituisce il comando insieme agli id risolti (`ResolvedQuickAdd`), `TransactionView` espone wallet, busta, sorgente e destinazione oltre alle leg, e gli `Update*` portano un record `*Patch` con default.
 - Lo stesso crate gira nel server (Fase 3) come dipendenza di axum o come NIF Rustler dentro Elixir. Il linguaggio del server è una decisione rimandata (§9).
 
 ### 2.2 App macOS
 
-- SwiftUI, `@Observable` store che incapsula il core. `Table` per la vista transazioni; NSTableView via `NSViewRepresentable` solo se l'editing in cella lo richiede.
+- SwiftUI, `@Observable` store che incapsula il core. Dalla Fase 4 la tabella è una griglia SwiftUI scritta a mano (`Views/Ledger/`), non `Table`: l'editing in cella e il look dei mockup lo richiedono. NSTableView è stata valutata e scartata (`UI.md`).
 - L'app non ha stato di dominio proprio: ogni vista è una query sul core, ogni azione è un comando.
 - Timezone di sistema; i comandi portano `occurred_at` come RFC3339 con offset.
 
@@ -138,11 +138,16 @@ Multi-tenant lato server: account utente, vault di proprietà di un account, mem
 | 1 | crate `core`: modello, comandi, log, proiezione, query, test | libreria testata, nessuna UI | fatta il 2026-09-09 (154 test) |
 | 2 | UniFFI, Swift Package, app con tabella transazioni e quick-add, solo locale | app usabile da un utente | fatta il 2026-09-09: `apple/SparagneCore` + `apple/Sparagne` (tabella, quick-add, void con undo, inspector, gestione wallet/buste/categorie, ricorrenze) |
 | 3 | server `sync`, auth, membership, outbox e pull | secondo utente | fatta il 2026-09-10: `server/` in axum, sync nel core, account e condivisione nell'app; dettagli e rimandi in `SYNC.md` §7 |
-| 4 | dashboard e analytics con query sul SQLite locale | stile bancario | da fare |
+| 4 | libro mastro: griglia editabile, riepilogo e anno, aggregati nel core | l'app dei mockup | fatta il 2026-09-10: `core/src/analytics.rs` e la finestra nuova; design in `UI.md` |
 
 Rimandato dalle fasi 1-2: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), un'app che chiama il core da un attore in background invece che dal main actor, firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`.
 
 La Fase 1 già scrive il log con i campi di §3, anche se `seq` è locale e `outbox` non esiste.
+
+La griglia di dashboard di `DISTILLATO_V1.md` §3.4 è stata scartata il
+2026-09-10 a favore dei mockup: il riepilogo sta **accanto** alle righe, il
+mese è l'unità di lettura e la tabella si edita in cella. Le formule di §3.5
+restano e vivono in `core::analytics`. Design e tastiera in `UI.md`.
 
 ## 9. Punti aperti
 

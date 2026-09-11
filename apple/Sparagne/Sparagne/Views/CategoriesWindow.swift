@@ -237,7 +237,7 @@ private struct MergeCategorySheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(preview.conflicts.enumerated()), id: \.offset) { _, conflict in
                         Label(conflictText(conflict), systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(AppTheme.warning)
+                            .foregroundStyle(Ink.accent)
                             .font(.caption)
                     }
                 }

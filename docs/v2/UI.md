@@ -37,8 +37,11 @@ Uno switcher in barra titolo: `MASTRO · RIEPILOGO · ANNO`.
   destra con ⇥ e si salva con ↩. Nessun pulsante "aggiungi".
 - Ogni cella delle righe esistenti è editabile in posto; ↩ emette un
   `UpdateTransaction` con i soli campi cambiati, esc ripristina.
-- Il pannello destro (280 pt) è lo stesso riepilogo della vista RIEPILOGO,
+- Il pannello destro (284 pt) è lo stesso riepilogo della vista RIEPILOGO,
   ridotto: tabella per persona, card risparmio, uscite per categoria, 12 mesi.
+- I trasferimenti non stanno né in USCITE né in ENTRATE: spostano soldi senza
+  guadagnarli o spenderli. Il menu Mastro li aggiunge alla lista corrente
+  (⌘⇧T), come fa con le annullate (⌘⇧V).
 
 ### 2.2 RIEPILOGO
 
@@ -112,10 +115,13 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | `↩` | salva la riga |
 | `esc` | annulla la modifica |
 | `⌘D` | duplica l'ultima riga |
-| `‹` `›` / `⌥←` `⌥→` | mese precedente / successivo |
-| `/` | fuoco sulla ricerca |
-| `⌘1 ⌘2 ⌘3` | mastro / riepilogo / anno |
-| `⌘E` | esporta CSV |
+| `⌥←` `⌥→` | mese precedente / successivo |
+| `⌘F` | fuoco sulla ricerca |
+| `⌘K` | riga quick-add sopra la griglia (la grammatica di §3.1 del distillato) |
+| `⌘E` | esporta CSV (non ancora implementato) |
+| `⌘⇧M` | gestione: vault, wallet, buste, ricorrenze, condivisione |
+| `⌘⇧C` | finestra categorie |
+| `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
 
 ## 7. Tappe
 
@@ -127,3 +133,16 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | D | pannello riepilogo a destra | il primo mockup completo |
 | E | viste RIEPILOGO e ANNO | il secondo mockup |
 | F | gestione (vault, wallet, buste, categorie, ricorrenze, sync) in menu e finestre; rimozione delle view vecchie | fine fase 4 |
+
+Stato al 2026-09-10: A-F fatte in due commit (`core/src/analytics.rs` con 10
+test; la finestra nuova con 47 test dell'app). `SidebarView` è diventata
+`ManagementSheet`, `DetailView` e `InspectorView` sono state cancellate
+insieme a `Period` e ad `AppTheme` (la palette li sostituisce). Restano fuori:
+export CSV (⌘E), la palette comandi ⌘K del mockup è per ora solo il quick-add,
+e il wallet non ha ancora una colonna opzionale.
+
+Per guardare la UI con dei dati veri c'è una fixture:
+
+```text
+cargo run -p sparagne_core --example seed -- <db path> --replace
+```

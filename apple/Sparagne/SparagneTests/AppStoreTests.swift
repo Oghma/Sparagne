@@ -55,7 +55,9 @@ struct AppStoreTests {
         #expect(wallet.name == "Cash")
         #expect(wallet.balance == 10000)
 
-        // The opening balance is a real transaction, not a special case.
+        // The opening balance is a real transaction, not a special case. The
+        // ledger opens on ENTRATE or USCITE, never both, so ask for income.
+        store.direction = .income
         #expect(store.rows.count == 1)
         #expect(store.rows.first?.kind == .income)
     }
@@ -240,6 +242,7 @@ struct AppStoreTests {
         #expect(row.envelopeDisplay == "Spesa")
 
         // The opening balance carries the system category, localized here.
+        store.direction = .income
         let opening = try #require(store.rows.first { $0.kind == .income })
         #expect(opening.category == String(localized: "Opening"))
     }
@@ -252,6 +255,8 @@ struct AppStoreTests {
         store.submit(quickAdd: "tw> 20.00 @cash @bank")
 
         #expect(store.presentedError == nil)
+        // Transfers are in neither direction; the View menu opts into them.
+        store.showTransfers = true
         let row = try #require(store.rows.first { $0.kind == .transferWallet })
         #expect(row.walletDisplay == "Cash → Bank")
         #expect(row.envelopeDisplay == TransactionRow.placeholder)
@@ -346,13 +351,13 @@ struct AppStoreTests {
     @Test("A template due a month ago is pending; executing adds a transaction and clears it, skipping leaves no transaction")
     func recurringExecuteAndSkip() throws {
         let store = try Self.onboarded()
-        // The executed transaction lands last month; widen the filter so it
-        // stays visible in `rows` (the default period is `.thisMonth`).
-        store.period = .all
         let now = Date()
         let calendar = Calendar(identifier: .gregorian)
         let dayOfMonth = calendar.component(.day, from: now)
         let monthAgo = try #require(calendar.date(byAdding: .month, value: -1, to: now))
+        // The executed transaction lands last month, and the ledger reads one
+        // month at a time, so move the window there or `rows` will be empty.
+        store.month = MonthKey(monthAgo)
 
         store.createRecurring(
             kind: .expense,
@@ -391,6 +396,60 @@ struct AppStoreTests {
             #expect(store.presentedError == nil)
             #expect(store.rows.filter { $0.note == "Rent" }.count == countBefore)
         }
+    }
+}
+
+@MainActor
+struct MonthKeyTests {
+    private static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Rome") ?? .gmt
+        return calendar
+    }()
+
+    @Test func boundsAreTheMonthInLocalTime() {
+        let bounds = MonthKey(year: 2026, month: 2).bounds(Self.calendar)
+        // Rome is UTC+1 in February, so local midnight is 23:00 the day before.
+        #expect(bounds.from == "2026-01-31T23:00:00Z")
+        #expect(bounds.to == "2026-02-28T23:00:00Z")
+    }
+
+    @Test func steppingRollsOverTheYear() {
+        #expect(MonthKey(year: 2026, month: 12).adding(months: 1, calendar: Self.calendar) == MonthKey(year: 2027, month: 1))
+        #expect(MonthKey(year: 2026, month: 1).adding(months: -1, calendar: Self.calendar) == MonthKey(year: 2025, month: 12))
+    }
+
+    @Test func aYearIsTwelveBucketsAndThirteenBoundaries() {
+        let bounds = MonthKey.yearBounds(2026, calendar: Self.calendar)
+        #expect(bounds.count == 13)
+        #expect(bounds.first == "2025-12-31T23:00:00Z")
+        #expect(bounds.last == "2026-12-31T23:00:00Z")
+    }
+
+    @Test func theTrailingYearEndsWithTheMonthItself() {
+        let month = MonthKey(year: 2026, month: 8)
+        let trailing = month.trailingYear(calendar: Self.calendar)
+        #expect(trailing.months.count == 12)
+        #expect(trailing.bounds.count == 13)
+        #expect(trailing.months.first == MonthKey(year: 2025, month: 9))
+        #expect(trailing.months.last == month)
+    }
+
+    @Test func aBareDayStaysInsideTheMonthOnScreen() throws {
+        let month = MonthKey(year: 2026, month: 8)
+        let parsed = try #require(LedgerDate.parseDay("29", in: month, calendar: Self.calendar))
+        let parts = Self.calendar.dateComponents([.year, .month, .day], from: parsed)
+        #expect(parts.year == 2026)
+        #expect(parts.month == 8)
+        #expect(parts.day == 29)
+
+        // A day the month does not have snaps back rather than rolling over.
+        #expect(LedgerDate.parseDay("31", in: MonthKey(year: 2026, month: 2), calendar: Self.calendar) == nil)
+        #expect(LedgerDate.parseDay("", in: month, calendar: Self.calendar) == nil)
+
+        // `29/9` moves to another month of the same year.
+        let other = try #require(LedgerDate.parseDay("29/9", in: month, calendar: Self.calendar))
+        #expect(Self.calendar.component(.month, from: other) == 9)
     }
 }
 
@@ -440,35 +499,5 @@ struct CoreDateTests {
         let rome = try #require(TimeZone(identifier: "Europe/Rome"))
         #expect(CoreDate.day(date, timeZone: rome) == "2026-02-25")
         #expect(CoreDate.localDay("2026-02-25", timeZone: rome) != nil)
-    }
-}
-
-/// The period filter's half-open bounds.
-@MainActor
-struct PeriodTests {
-    private static let calendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "Europe/Rome") ?? .gmt
-        return calendar
-    }()
-
-    @Test func allIsUnfiltered() {
-        let bounds = Period.all.bounds(now: Date(), calendar: Self.calendar)
-        #expect(bounds.from == nil)
-        #expect(bounds.to == nil)
-    }
-
-    @Test func thisMonthStartsOnTheFirst() throws {
-        let now = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 2, day: 25, hour: 12)))
-        let bounds = Period.thisMonth.bounds(now: now, calendar: Self.calendar)
-        #expect(bounds.from == "2026-01-31T23:00:00Z")
-        #expect(bounds.to == "2026-02-28T23:00:00Z")
-    }
-
-    @Test func last30DaysEndsTomorrow() throws {
-        let now = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 2, day: 25, hour: 12)))
-        let bounds = Period.last30Days.bounds(now: now, calendar: Self.calendar)
-        #expect(bounds.from == "2026-01-25T23:00:00Z")
-        #expect(bounds.to == "2026-02-25T23:00:00Z")
     }
 }

@@ -42,6 +42,9 @@ struct TransactionRow: Identifiable, Hashable, Sendable {
     /// Localized for the two system categories, verbatim otherwise.
     let category: String
     let note: String
+    /// `created_by`: the member of the vault who entered the row, the PERSONA
+    /// column of the ledger (`docs/v2/UI.md` §3).
+    let person: String
     let voided: Bool
 
     /// Entries: the wallet leg. Transfers between wallets: the source.
@@ -65,6 +68,7 @@ struct TransactionRow: Identifiable, Hashable, Sendable {
         categoryId = view.categoryId
         category = Self.categoryLabel(view)
         note = view.note ?? ""
+        person = view.createdBy
         voided = view.voided
 
         // The core already sorted the legs out by kind (`core/src/query.rs`).

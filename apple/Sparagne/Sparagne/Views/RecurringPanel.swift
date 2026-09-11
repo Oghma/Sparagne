@@ -78,7 +78,7 @@ private struct RecurringRow: View {
     var body: some View {
         HStack {
             Image(systemName: template.kind == .income ? "arrow.down.circle" : "arrow.up.circle")
-                .foregroundStyle(template.kind == .income ? AppTheme.income : AppTheme.expense)
+                .foregroundStyle(template.kind == .income ? Ink.positive : Ink.negative)
             VStack(alignment: .leading, spacing: 2) {
                 Text(
                     MoneyFormatter.format(minorUnits: template.amount, currencyCode: store.currencyCode)

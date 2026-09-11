@@ -81,12 +81,17 @@ extension RecurringPatch {
 @Observable
 @MainActor
 final class AppStore {
-    static let pageSize: UInt32 = 100
+    /// A month of a personal ledger fits in one page, so the grid never
+    /// paginates in practice; `loadMore` stays for the pathological month.
+    static let pageSize: UInt32 = 1000
+    static let topExpenseCount: UInt32 = 6
     static let lastVaultKey = "lastVaultId"
 
     // MARK: Dependencies
 
-    @ObservationIgnored private let client: CoreClient
+    /// Not private: `SyncEngine` owns the same instance and swaps the author
+    /// on login, and the tests write rows as a second member of the vault.
+    @ObservationIgnored let client: CoreClient
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let undoWindow: Duration
     /// Injected so tests do not wait out the real undo window.
@@ -107,6 +112,12 @@ final class AppStore {
     private(set) var nextCursor: String?
     private(set) var totals: PeriodTotals?
     private(set) var allRows: [TransactionRow] = []
+    /// Distinct authors in the vault: the PERSONA segmented control.
+    private(set) var authors: [String] = []
+    /// Everything the summary panel and the summary views draw.
+    private(set) var summary: LedgerSummary?
+    /// When the last command was applied, for the status bar's "saved at".
+    private(set) var savedAt: Date?
 
     // MARK: Category management (Categories window)
 
@@ -126,9 +137,18 @@ final class AppStore {
 
     // MARK: Filters and view state
 
-    var period: Period = .thisMonth { didSet { if period != oldValue { reload() } } }
+    /// The month the ledger reads and writes (`docs/v2/UI.md` §2.1). Changing
+    /// it reloads the rows and every aggregate together, so the panel never
+    /// describes a different month from the table.
+    var month = MonthKey(Date()) { didSet { if month != oldValue { reload() } } }
+    var direction: LedgerDirection = .expenses { didSet { if direction != oldValue { reload() } } }
+    /// The PERSONA filter: `nil` is everybody.
+    var person: String? { didSet { if person != oldValue { reload() } } }
+    /// Which of the three views is on screen; no reload, the data is the same.
+    var tab: LedgerTab = .ledger
     var showVoided = false { didSet { if showVoided != oldValue { reload() } } }
-    var showTransfers = true { didSet { if showTransfers != oldValue { reload() } } }
+    /// Transfers are in neither direction, so the View menu opts into them.
+    var showTransfers = false { didSet { if showTransfers != oldValue { reload() } } }
     /// Debounced by the view; call `reload()` when it settles.
     var searchText = ""
     var quickAddText = ""
@@ -159,6 +179,9 @@ final class AppStore {
     // MARK: - Derived
 
     var currency: Currency { snapshot?.currency ?? .eur }
+
+    /// Who the log will credit the next command to: the PERSONA of a new row.
+    var currentAuthor: String { client.author }
     var currencyCode: String { currency.code }
 
     /// Active wallets, for the pickers.
@@ -252,6 +275,8 @@ final class AppStore {
             allRows = []
             nextCursor = nil
             totals = nil
+            authors = []
+            summary = nil
             pendingRecurringItems = []
             return
         }
@@ -266,11 +291,61 @@ final class AppStore {
             )
             transactions = page.items
             nextCursor = page.nextCursor
-            let bounds = period.bounds()
-            totals = try client.totals(vaultId: vault.id, from: bounds.from, to: bounds.to)
+            authors = try client.authors(vaultId: vault.id)
+            // A person who has left the vault's history must not stay
+            // selected, or the ledger shows an empty month with no way back.
+            if let person, !authors.contains(person) { self.person = nil }
+            let loaded = try loadSummary(vault: vault)
+            summary = loaded
+            totals = loaded.totals
             pendingRecurringItems = try client.pendingRecurring(vaultId: vault.id, today: CoreDate.day(Date()))
             rebuildRows()
         }
+    }
+
+    /// The six aggregate queries behind the panel, loaded as one unit.
+    ///
+    /// The month and the month before come from a single `bucket_totals` call
+    /// with three boundaries, which is the only totals query that takes a
+    /// person, so the whole window honours the PERSONA filter. The envelope x
+    /// person matrix stays unfiltered on purpose: it *is* the per-person
+    /// breakdown, and filtering it would blank every column but one.
+    private func loadSummary(vault: VaultView) throws -> LedgerSummary {
+        let bounds = month.bounds()
+        let previousStart = CoreDate.utcString(month.adding(months: -1).start())
+        let pair = try client.bucketTotals(
+            vaultId: vault.id,
+            bounds: [previousStart, bounds.from, bounds.to],
+            person: person
+        )
+        let empty = PeriodTotals(income: 0, expense: 0, refund: 0, netExpense: 0)
+        let trailing = month.trailingYear()
+        return LedgerSummary(
+            month: month,
+            flowPerson: try client.flowPersonTotals(vaultId: vault.id, from: bounds.from, to: bounds.to),
+            categories: try client.categoryTotals(
+                vaultId: vault.id,
+                from: bounds.from,
+                to: bounds.to,
+                person: person
+            ),
+            totals: pair.count > 1 ? pair[1] : empty,
+            previous: pair.first ?? empty,
+            trailing: try client.bucketTotals(vaultId: vault.id, bounds: trailing.bounds, person: person),
+            trailingMonths: trailing.months,
+            year: try client.bucketTotals(
+                vaultId: vault.id,
+                bounds: MonthKey.yearBounds(month.year),
+                person: person
+            ),
+            top: try client.topExpenses(
+                vaultId: vault.id,
+                from: bounds.from,
+                to: bounds.to,
+                person: person,
+                limit: Self.topExpenseCount
+            )
+        )
     }
 
     /// Appends the next page, if any.
@@ -290,17 +365,24 @@ final class AppStore {
     }
 
     private var filter: TransactionFilter {
-        let bounds = period.bounds()
+        let bounds = month.bounds()
         let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Transfers belong to neither direction; the View menu adds them to
+        // whichever one is showing rather than replacing it.
+        let kinds = showTransfers
+            ? direction.kinds + [.transferWallet, .transferFlow]
+            : direction.kinds
         return TransactionFilter(
             from: bounds.from,
             to: bounds.to,
-            kinds: nil,
+            kinds: kinds,
             includeVoided: showVoided,
             includeTransfers: showTransfers,
             walletId: nil,
             flowId: nil,
-            text: text.isEmpty ? nil : text
+            text: text.isEmpty ? nil : text,
+            author: person,
+            ascending: true
         )
     }
 
@@ -617,12 +699,107 @@ final class AppStore {
 
     /// `periodDate` (a bare day) at today's time of day, in the system
     /// offset: what `executeRecurring` sends as `occurredAt`.
+    /// The calendar day of `day` with the clock time of `reference`: moving a
+    /// row to another day must not silently move it to midnight.
+    static func stamp(day: Date, likeTimeOf reference: Date, calendar: Calendar = .current) -> OffsetDateTime {
+        let time = calendar.dateComponents([.hour, .minute, .second], from: reference)
+        let combined = calendar.date(
+            bySettingHour: time.hour ?? 0,
+            minute: time.minute ?? 0,
+            second: time.second ?? 0,
+            of: day
+        )
+        return CoreDate.offset(combined ?? day)
+    }
+
     private static func combine(day: NaiveDate, timeOf now: Date) -> OffsetDateTime {
         guard let dayDate = CoreDate.localDay(day) else { return CoreDate.offset(now) }
         let calendar = Calendar.current
         let time = calendar.dateComponents([.hour, .minute, .second], from: now)
         let combined = calendar.date(bySettingHour: time.hour ?? 0, minute: time.minute ?? 0, second: time.second ?? 0, of: dayDate)
         return CoreDate.offset(combined ?? now)
+    }
+
+    // MARK: - Ledger writes
+    //
+    // The grid writes the same commands the quick-add line does; the only
+    // difference is where the fields come from (`docs/v2/UI.md` §2.1).
+
+    /// The wallet a new row lands on. The core reads `nil` as "the only
+    /// active wallet", which is exactly right for a one-wallet vault and an
+    /// error for any other, so a vault with several falls back to the last
+    /// one written to, then to the first.
+    var defaultWalletId: Uuid? {
+        if let lastWalletId, wallets.contains(where: { $0.id == lastWalletId }) { return lastWalletId }
+        return wallets.count == 1 ? nil : wallets.first?.id
+    }
+
+    /// The envelope a new row lands on: the last one written to, else the
+    /// first that is not Unallocated, else Unallocated.
+    var defaultFlowId: Uuid? {
+        if let lastFlowId, flows.contains(where: { $0.id == lastFlowId }) { return lastFlowId }
+        return flows.first { !$0.isUnallocated }?.id ?? flows.first?.id
+    }
+
+    /// The last row of the loaded month, which ⌘D copies into the new line.
+    var lastRow: TransactionRow? { rows.last }
+
+    /// Appends the row typed in the grid's empty last line. `day` carries the
+    /// calendar day the DATA cell shows; the time of day comes from the clock,
+    /// so rows entered on the same day keep their typing order.
+    ///
+    /// A `nil` envelope means "the sticky default", not Unallocated: an empty
+    /// FLOW cell has to behave like the last row, not like a system envelope
+    /// the user never picked.
+    func addRow(day: Date, flowId: Uuid?, category: String?, note: String, amount: Int64) {
+        guard let vault = currentVault, amount > 0 else { return }
+        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let envelope = flowId ?? defaultFlowId
+        let entry = Entry(
+            amount: amount,
+            walletId: defaultWalletId,
+            flowId: envelope,
+            category: category?.trimmingCharacters(in: .whitespacesAndNewlines),
+            note: trimmedNote.isEmpty ? nil : trimmedNote,
+            occurredAt: Self.combine(day: CoreDate.day(day), timeOf: Date())
+        )
+        let command: Command = direction == .income ? .income(entry) : .expense(entry)
+        guarded {
+            try client.execute(vaultId: vault.id, command)
+            lastWalletId = entry.walletId ?? lastWalletId
+            lastFlowId = envelope ?? lastFlowId
+            savedAt = Date()
+            reload()
+        }
+    }
+
+    /// Resolves what was typed in the FLOW cell to an envelope, with the same
+    /// precedence the core's quick-add resolver uses: exact, then unique
+    /// prefix, then unique substring (`core/src/quick_add.rs`). Returns `nil`
+    /// for blank text, meaning "leave the default".
+    func resolveFlow(named text: String) throws -> Uuid? {
+        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return nil }
+        let candidates = flows.map { (id: $0.id, name: flowName($0).lowercased()) }
+        if let exact = candidates.first(where: { $0.name == needle }) { return exact.id }
+        for matches in [
+            candidates.filter { $0.name.hasPrefix(needle) },
+            candidates.filter { $0.name.contains(needle) },
+        ] {
+            if matches.count == 1 { return matches[0].id }
+            if matches.count > 1 {
+                throw DomainError.InvalidCommand(
+                    message: String(localized: "More than one envelope matches") + " \u{201C}\(text)\u{201D}"
+                )
+            }
+        }
+        throw DomainError.NotFound(message: String(localized: "No envelope named") + " \u{201C}\(text)\u{201D}")
+    }
+
+    /// Surfaces a validation failure from the grid through the same alert the
+    /// core's errors use, so a bad cell reads like a refused command.
+    func report(_ error: Error) {
+        guarded { throw error }
     }
 
     // MARK: - Quick add
@@ -652,6 +829,7 @@ final class AppStore {
                 defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId)
             )
             try client.execute(vaultId: vault.id, resolved.command)
+            savedAt = Date()
             // The core reports what the names resolved to, so the sticky
             // defaults never depend on the shape of the command.
             lastWalletId = resolved.walletId ?? lastWalletId
@@ -718,6 +896,7 @@ final class AppStore {
         undoTask = nil
         guarded {
             try client.execute(vaultId: vault.id, .voidTransaction(transactionId: pending.id))
+            savedAt = Date()
             reload()
         }
     }
@@ -732,6 +911,7 @@ final class AppStore {
                 vaultId: vault.id,
                 .updateTransaction(transactionId: transactionId, patch: patch)
             )
+            savedAt = Date()
             reload()
         }
     }

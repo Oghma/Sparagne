@@ -129,6 +129,45 @@ final class CoreClient {
         try handle.periodTotals(vaultId: vaultId, from: from, to: to)
     }
 
+    // MARK: - Analytics
+    //
+    // The summary panel and the summary views (`docs/v2/UI.md` §4). Every
+    // range is half-open `[from, to)` in UTC; the app computes the month
+    // boundaries with the system calendar so the core never sees one.
+
+    /// The people who appear in the PERSONA column.
+    func authors(vaultId: Uuid) throws -> [String] {
+        try handle.authors(vaultId: vaultId)
+    }
+
+    func flowPersonTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) throws -> [FlowPersonTotals] {
+        try handle.flowPersonTotals(vaultId: vaultId, from: from, to: to)
+    }
+
+    func categoryTotals(
+        vaultId: Uuid,
+        from: UtcDateTime,
+        to: UtcDateTime,
+        person: String? = nil
+    ) throws -> [CategoryTotals] {
+        try handle.categoryTotals(vaultId: vaultId, from: from, to: to, person: person)
+    }
+
+    /// One `PeriodTotals` per gap between consecutive `bounds`.
+    func bucketTotals(vaultId: Uuid, bounds: [UtcDateTime], person: String? = nil) throws -> [PeriodTotals] {
+        try handle.bucketTotals(vaultId: vaultId, bounds: bounds, person: person)
+    }
+
+    func topExpenses(
+        vaultId: Uuid,
+        from: UtcDateTime,
+        to: UtcDateTime,
+        person: String? = nil,
+        limit: UInt32
+    ) throws -> [TopExpense] {
+        try handle.topExpenses(vaultId: vaultId, from: from, to: to, person: person, limit: limit)
+    }
+
     /// Turns a parsed quick-add line into a command plus the ids its names
     /// resolved to, against the vault's active entities.
     func resolveQuickAdd(
