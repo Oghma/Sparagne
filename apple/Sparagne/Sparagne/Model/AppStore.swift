@@ -173,6 +173,14 @@ final class AppStore {
         self.defaults = defaults
         self.undoWindow = undoWindow
         self.sleeper = sleeper
+        currentAuthor = client.author
+    }
+
+    /// The engine calls this on login and logout, and when Settings change
+    /// the local name: the client stamps it on every command from now on.
+    func setAuthor(_ name: String) {
+        client.author = name
+        currentAuthor = name
     }
 
     // MARK: - Derived
@@ -180,7 +188,9 @@ final class AppStore {
     var currency: Currency { snapshot?.currency ?? .eur }
 
     /// Who the log will credit the next command to: the PERSONA of a new row.
-    var currentAuthor: String { client.author }
+    /// Stored rather than read off the client, so the empty line redraws when
+    /// the engine or Settings change the name (`setAuthor`).
+    private(set) var currentAuthor: String
     var currencyCode: String { currency.code }
 
     /// Active wallets, for the pickers.

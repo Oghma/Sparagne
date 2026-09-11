@@ -73,6 +73,9 @@ colonna opzionale, nascosta di default.
 Decisione sulla persona (2026-09-10): niente campo nuovo sulle transazioni.
 `created_by` è già l'utente del vault ed è il senso della colonna nei vault
 condivisi. Costo: non si registra una spesa "per conto di" un altro membro.
+Da loggati fuori il nome si sceglie nelle Impostazioni ("Nome nel mastro",
+2026-09-11); senza scelta vale l'utente macOS, e dopo il login vale il nome
+dell'account.
 
 ## 4. Contratto delle query (core)
 

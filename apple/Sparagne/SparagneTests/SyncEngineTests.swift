@@ -528,7 +528,7 @@ struct SyncEngineTests {
         #expect(peer.engine.serverVaults.isEmpty)
 
         peer.store.submit(quickAdd: "-2.00 water @Cash >Food")
-        #expect(peer.store.transactions.first { $0.note == "water" }?.createdBy == AccountStore.localAuthor)
+        #expect(peer.store.transactions.first { $0.note == "water" }?.createdBy == AccountStore.systemAuthor)
 
         // A sync while logged out is a no-op, not an error.
         await peer.engine.syncNow()

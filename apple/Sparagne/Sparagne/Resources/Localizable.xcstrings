@@ -1249,6 +1249,22 @@
         }
       }
     },
+    "Name in the ledger": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name in the ledger"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome nel mastro"
+          }
+        }
+      }
+    },
     "Net cap": {
       "localizations": {
         "en": {
@@ -2109,6 +2125,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connesso come"
+          }
+        }
+      }
+    },
+    "Signs the rows you add while logged out; an account's name takes over when you log in.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signs the rows you add while logged out; an account's name takes over when you log in."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Firma le righe che aggiungi finché non accedi; da loggato vale il nome dell'account."
           }
         }
       }

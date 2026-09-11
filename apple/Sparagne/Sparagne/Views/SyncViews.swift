@@ -5,15 +5,19 @@ import SparagneCore
 /// still waiting to reach the server.
 ///
 /// Clicking it syncs; when the core is holding rejected commands it opens the
-/// list instead, because that is what needs a decision.
+/// list instead, because that is what needs a decision, and while nobody is
+/// logged in it opens Settings, because there is nothing to sync with yet.
 struct SyncStatusButton: View {
     let engine: SyncEngine
     let showRejected: () -> Void
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         Button {
             if !engine.rejected.isEmpty {
                 showRejected()
+            } else if !engine.isLoggedIn {
+                openSettings()
             } else {
                 Task { await engine.syncNow() }
             }
@@ -276,6 +280,18 @@ struct AccountSettingsView: View {
                     .disabled(busy)
                 }
             } else {
+                Section(String(localized: "Person")) {
+                    TextField(
+                        String(localized: "Name in the ledger"),
+                        text: $account.localAuthor,
+                        prompt: Text(AccountStore.systemAuthor)
+                    )
+                    .onChange(of: account.localAuthor) { _, _ in engine.adoptLocalAuthor() }
+                    Text(String(localized: "Signs the rows you add while logged out; an account's name takes over when you log in."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section(String(localized: "Account")) {
                     TextField(String(localized: "Username"), text: $username)
                     SecureField(String(localized: "Password"), text: $password)

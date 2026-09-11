@@ -83,7 +83,7 @@ final class SyncEngine {
         self.store = store
         self.account = account
         self.makeTransport = makeTransport
-        client.author = account.author
+        store.setAuthor(account.author)
         client.onExecuted = { [weak self] in self?.scheduleSync() }
         refreshLocalState()
     }
@@ -323,7 +323,7 @@ final class SyncEngine {
                 ? try await api.register(username: username, password: password)
                 : try await api.login(username: username, password: password)
             account.signIn(username: response.username, token: response.token)
-            client.author = response.username
+            store.setAuthor(response.username)
             for vault in try client.vaults() {
                 try client.relabelOutbox(vaultId: vault.id, author: response.username)
             }
@@ -343,10 +343,16 @@ final class SyncEngine {
         }
         stop()
         account.signOut()
-        client.author = AccountStore.localAuthor
+        store.setAuthor(account.author)
         serverVaults = []
         status = .idle
         lastSyncAt = nil
+    }
+
+    /// Settings changed the name for the rows written while logged out. An
+    /// account, when there is one, keeps precedence (`AccountStore.author`).
+    func adoptLocalAuthor() {
+        store.setAuthor(account.author)
     }
 
     // MARK: - Sharing

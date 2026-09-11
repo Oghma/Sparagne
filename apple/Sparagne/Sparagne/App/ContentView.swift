@@ -154,18 +154,27 @@ struct MainWindow: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            SegmentedStrip(
-                options: LedgerTab.allCases,
-                selection: $store.tab,
-                label: { $0.label.uppercased() }
-            )
+        if #available(macOS 26.0, *) {
+            // macOS 26 wraps every toolbar item in a glass capsule; the strip
+            // is square by design (`docs/v2/UI.md` §2) and sits badly in one.
+            ToolbarItem(placement: .principal) { switcher }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .principal) { switcher }
         }
         if let engine {
             ToolbarItem(placement: .primaryAction) {
                 SyncStatusButton(engine: engine) { sheet = .rejected }
             }
         }
+    }
+
+    private var switcher: some View {
+        SegmentedStrip(
+            options: LedgerTab.allCases,
+            selection: $store.tab,
+            label: { $0.label.uppercased() }
+        )
     }
 
     @ViewBuilder

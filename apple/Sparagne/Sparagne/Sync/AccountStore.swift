@@ -88,8 +88,18 @@ final class AccountStore {
     static let usernameKey = "syncUsername"
     static let defaultServerURL = "http://127.0.0.1:3000"
 
-    /// The author of commands written while logged out: the macOS account.
-    static var localAuthor: String { NSUserName() }
+    static let localAuthorKey = "localAuthor"
+
+    /// What signs commands when nobody is logged in and no name was chosen:
+    /// the macOS account.
+    static var systemAuthor: String { NSUserName() }
+
+    /// The name chosen in Settings for the rows written while logged out. A
+    /// household ledger names people, not logins, so the macOS account name
+    /// is only the fallback (`docs/v2/UI.md` §3, PERSONA).
+    var localAuthor: String {
+        didSet { defaults.set(localAuthor, forKey: Self.localAuthorKey) }
+    }
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let tokens: TokenStore
@@ -110,6 +120,7 @@ final class AccountStore {
         self.defaults = defaults
         self.tokens = tokens
         serverURLText = defaults.string(forKey: Self.serverURLKey) ?? Self.defaultServerURL
+        localAuthor = defaults.string(forKey: Self.localAuthorKey) ?? ""
         let stored = defaults.string(forKey: Self.usernameKey)
         lastUsername = stored ?? ""
         let held = stored.flatMap { tokens.token(for: $0) }
@@ -127,8 +138,13 @@ final class AccountStore {
         return url
     }
 
-    /// The author to stamp on new commands: the account when there is one.
-    var author: String { username ?? Self.localAuthor }
+    /// The author to stamp on new commands: the account when there is one,
+    /// else the name chosen in Settings, else the macOS account.
+    var author: String {
+        if let username { return username }
+        let chosen = localAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
+        return chosen.isEmpty ? Self.systemAuthor : chosen
+    }
 
     func signIn(username: String, token: String) {
         self.username = username
