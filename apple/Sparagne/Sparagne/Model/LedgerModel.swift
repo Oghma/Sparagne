@@ -107,11 +107,13 @@ enum LedgerDirection: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// The two views behind the title-bar switcher (`docs/v2/UI.md` §2), in
+/// The three views behind the title-bar switcher (`docs/v2/UI.md` §2), in
 /// the switcher's order; the first is the one the window opens on.
 enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
     case summary
     case ledger
+    /// Envelopes and categories, as two editable tables (§2.3).
+    case setup
 
     var id: String { rawValue }
 
@@ -119,6 +121,7 @@ enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .summary: String(localized: "Summary")
         case .ledger: String(localized: "Ledger")
+        case .setup: String(localized: "Setup")
         }
     }
 }

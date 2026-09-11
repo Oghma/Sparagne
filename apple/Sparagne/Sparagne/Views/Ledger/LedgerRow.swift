@@ -15,8 +15,9 @@ enum GridColumn {
     static let padding: CGFloat = 10
 }
 
-/// One cell: fixed width, one line, the grid's padding.
-private struct Cell<Content: View>: View {
+/// One cell: fixed width, one line, the grid's padding. Shared with the
+/// setup tables (`Views/Setup`), which are drawn as the same kind of sheet.
+struct GridCell<Content: View>: View {
     var width: CGFloat?
     var alignment: Alignment = .leading
     @ViewBuilder var content: Content
@@ -40,13 +41,13 @@ private struct Cell<Content: View>: View {
 struct GridHeader: View {
     var body: some View {
         HStack(spacing: 0) {
-            Cell(width: GridColumn.ordinal, alignment: .trailing) { SectionLabel(text: "#") }
-            Cell(width: GridColumn.date) { SectionLabel(text: String(localized: "Date")) }
-            Cell(width: GridColumn.flow) { SectionLabel(text: String(localized: "Envelope")) }
-            Cell(width: GridColumn.category) { SectionLabel(text: String(localized: "Category")) }
-            Cell { SectionLabel(text: String(localized: "Description")) }
-            Cell(width: GridColumn.person) { SectionLabel(text: String(localized: "Person")) }
-            Cell(width: GridColumn.amount, alignment: .trailing) { SectionLabel(text: String(localized: "Amount")) }
+            GridCell(width: GridColumn.ordinal, alignment: .trailing) { SectionLabel(text: "#") }
+            GridCell(width: GridColumn.date) { SectionLabel(text: String(localized: "Date")) }
+            GridCell(width: GridColumn.flow) { SectionLabel(text: String(localized: "Envelope")) }
+            GridCell(width: GridColumn.category) { SectionLabel(text: String(localized: "Category")) }
+            GridCell { SectionLabel(text: String(localized: "Description")) }
+            GridCell(width: GridColumn.person) { SectionLabel(text: String(localized: "Person")) }
+            GridCell(width: GridColumn.amount, alignment: .trailing) { SectionLabel(text: String(localized: "Amount")) }
         }
         .frame(height: 24)
         .background(Ink.bg)
@@ -93,7 +94,7 @@ struct LedgerRowView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Cell(width: GridColumn.ordinal, alignment: .trailing) {
+            GridCell(width: GridColumn.ordinal, alignment: .trailing) {
                 Text(String(format: "%03d", ordinal))
                     .font(Face.row)
                     .foregroundStyle(Ink.dim)
@@ -129,21 +130,21 @@ struct LedgerRowView: View {
 
     @ViewBuilder
     private var display: some View {
-        Cell(width: GridColumn.date) { text(LedgerDate.day(row.occurredAt)) }
+        GridCell(width: GridColumn.date) { text(LedgerDate.day(row.occurredAt)) }
             .onTapGesture { onOpen(.date) }
-        Cell(width: GridColumn.flow) { text(row.envelopeDisplay) }
+        GridCell(width: GridColumn.flow) { text(row.envelopeDisplay) }
             .onTapGesture { onOpen(.flow) }
-        Cell(width: GridColumn.category) { text(row.category) }
+        GridCell(width: GridColumn.category) { text(row.category) }
             .onTapGesture { onOpen(.category) }
-        Cell { text(row.note.isEmpty ? TransactionRow.placeholder : row.note) }
+        GridCell { text(row.note.isEmpty ? TransactionRow.placeholder : row.note) }
             .onTapGesture { onOpen(.note) }
-        Cell(width: GridColumn.person) {
+        GridCell(width: GridColumn.person) {
             Text(row.person)
                 .font(Face.row)
                 .foregroundStyle(Ink.dim)
         }
         .onTapGesture { onOpen(.note) }
-        Cell(width: GridColumn.amount, alignment: .trailing) {
+        GridCell(width: GridColumn.amount, alignment: .trailing) {
             Text(LedgerMoney.amount(row.absoluteAmount))
                 .font(Face.row)
                 .foregroundStyle(amountTint)
@@ -175,7 +176,7 @@ struct LedgerRowView: View {
     // MARK: Editing cells
 
     private func textCell(_ field: RowField, width: CGFloat?) -> some View {
-        Cell(width: width) {
+        GridCell(width: width) {
             TextField("", text: binding(field))
                 .textFieldStyle(.plain)
                 .font(Face.row)
@@ -186,7 +187,7 @@ struct LedgerRowView: View {
     }
 
     private var amountCell: some View {
-        Cell(width: GridColumn.amount, alignment: .trailing) {
+        GridCell(width: GridColumn.amount, alignment: .trailing) {
             TextField("", text: binding(.amount))
                 .textFieldStyle(.plain)
                 .font(Face.row)
@@ -198,7 +199,7 @@ struct LedgerRowView: View {
     }
 
     private var personCell: some View {
-        Cell(width: GridColumn.person) {
+        GridCell(width: GridColumn.person) {
             Text(row.person)
                 .font(Face.row)
                 .foregroundStyle(Ink.dim)
@@ -228,17 +229,17 @@ struct NewRowView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Cell(width: GridColumn.ordinal, alignment: .trailing) { Text("").font(Face.row) }
+            GridCell(width: GridColumn.ordinal, alignment: .trailing) { Text("").font(Face.row) }
             DayCell(day: $draft.day, month: store.month, focus: $focus, key: CellFocus(row: nil, field: .date))
             field($draft.flow, .flow, String(localized: "Envelope"), width: GridColumn.flow)
             field($draft.category, .category, String(localized: "Category"), width: GridColumn.category)
             field($draft.note, .note, String(localized: "description…"), width: nil)
-            Cell(width: GridColumn.person) {
+            GridCell(width: GridColumn.person) {
                 Text(store.currentAuthor)
                     .font(Face.row)
                     .foregroundStyle(Ink.dim)
             }
-            Cell(width: GridColumn.amount, alignment: .trailing) {
+            GridCell(width: GridColumn.amount, alignment: .trailing) {
                 TextField("0,00", text: $draft.amount)
                     .textFieldStyle(.plain)
                     .font(Face.row)
@@ -262,7 +263,7 @@ struct NewRowView: View {
         _ placeholder: String,
         width: CGFloat?
     ) -> some View {
-        Cell(width: width) {
+        GridCell(width: width) {
             TextField(placeholder, text: text)
                 .textFieldStyle(.plain)
                 .font(Face.row)
@@ -294,7 +295,7 @@ struct DayCell: View {
     }
 
     var body: some View {
-        Cell(width: GridColumn.date) {
+        GridCell(width: GridColumn.date) {
             TextField("", text: $text)
                 .textFieldStyle(.plain)
                 .font(Face.row)

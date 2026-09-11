@@ -29,8 +29,11 @@ struct LedgerWindow: View {
     var body: some View {
         VStack(spacing: 0) {
             RecurringBanner(store: store) { sheet = .recurring }
-            LedgerHeader(store: store, searchFocused: $searchFocused, compact: store.tab != .ledger)
-            Hairline()
+            // The setup tables are not about a month, so they get no header.
+            if store.tab != .setup {
+                LedgerHeader(store: store, searchFocused: $searchFocused, compact: store.tab != .ledger)
+                Hairline()
+            }
             content
             Hairline()
             LedgerStatusBar(store: store)
@@ -65,6 +68,9 @@ struct LedgerWindow: View {
                 await Task.yield()
                 searchFocused = true
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openSetup)) { _ in
+            store.tab = .setup
         }
         .onReceive(NotificationCenter.default.publisher(for: .stepMonth)) { note in
             let months = note.object as? Int ?? 1
@@ -119,6 +125,8 @@ struct LedgerWindow: View {
                 if let year = store.year {
                     ScrollView { SummaryView(year: year, store: store) }
                 }
+            case .setup:
+                SetupView(store: store)
             }
         } else {
             VStack {

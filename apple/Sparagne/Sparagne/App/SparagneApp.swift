@@ -6,10 +6,9 @@ struct SparagneApp: App {
     // items and the ledger stay in sync without extra plumbing.
     @AppStorage("showVoided") private var showVoided = false
     @AppStorage("showTransfers") private var showTransfers = false
-    @Environment(\.openWindow) private var openWindow
 
-    /// Opened once, in `ContentView`, and shared with the Categories window
-    /// so both windows see the same vault and the same in-process core.
+    /// Opened once, in `ContentView`; the Settings scene shares the engine
+    /// built with it.
     @State private var store: AppStore?
     /// Created with the store, and shared with the Settings scene so the
     /// account lives in one place.
@@ -72,27 +71,12 @@ struct SparagneApp: App {
                 }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
 
-                Button(String(localized: "Categories\u{2026}")) { openWindow(id: "categories") }
-                    .keyboardShortcut("c", modifiers: [.command, .shift])
-            }
-        }
-
-        Window(String(localized: "Categories"), id: "categories") {
-            Group {
-                if let store {
-                    CategoriesWindowView(store: store)
-                } else {
-                    ContentUnavailableView(
-                        String(localized: "No vault yet"),
-                        systemImage: "tag"
-                    )
+                Button(String(localized: "Envelopes & Categories\u{2026}")) {
+                    NotificationCenter.default.post(name: .openSetup, object: nil)
                 }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
             }
-            // The ledger forces the dark palette (`docs/v2/UI.md` §5); the
-            // secondary windows follow it rather than the system.
-            .preferredColorScheme(.dark)
         }
-        .defaultSize(width: 560, height: 420)
 
         Settings {
             SettingsView(engine: engine)
@@ -117,6 +101,8 @@ extension Notification.Name {
     static let openManagement = Notification.Name("it.oghma.sparagne.openManagement")
     /// ⌘E: exports the rows on screen as CSV (`docs/v2/UI.md` §6).
     static let exportCSV = Notification.Name("it.oghma.sparagne.exportCSV")
+    /// ⌘⇧C: switches to the setup tab, envelopes and categories (§2.3).
+    static let openSetup = Notification.Name("it.oghma.sparagne.openSetup")
 }
 
 private struct SettingsView: View {

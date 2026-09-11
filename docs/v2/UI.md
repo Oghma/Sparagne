@@ -12,8 +12,8 @@ aggregati sempre a fianco delle righe.
 
 ## 2. Le due viste
 
-Uno switcher in barra titolo: `RIEPILOGO · MASTRO`. Il riepilogo è la vista
-di apertura. (Fino al 2026-09-11 le viste erano tre, `MASTRO · RIEPILOGO ·
+Uno switcher in barra titolo: `RIEPILOGO · MASTRO · SETUP`. Il riepilogo è
+la vista di apertura. (Fino al 2026-09-11 le viste erano tre, `MASTRO · RIEPILOGO ·
 ANNO`: il riepilogo mensile è stato assorbito dal pannello destro del mastro
 e ANNO dal nuovo riepilogo.)
 
@@ -98,6 +98,38 @@ Definizioni (dell'utente, 2026-09-11), per il mese `m`:
   primo entrate, uscite e risparmio per mese; il secondo il TOTALE.
 - Nessun filtro persona nel riepilogo: le persone sono colonne.
 
+### 2.3 SETUP
+
+> Aggiunta il 2026-09-12 su richiesta: "sezioni per aggiungere le categorie
+> e gli envelope", l'equivalente del foglio "Categorie e flow" dell'Excel.
+
+Due tabelle affiancate nello stile del mastro (stesse celle, stesse
+intestazioni, stessa riga vuota in fondo per aggiungere: ⇥ tra i campi, ↩
+salva, esc annulla), buste a sinistra e categorie a destra. Nessun mese, quindi
+niente intestazione mese. Le archiviate stanno in fondo, in `dim`, con
+"Ripristina" nel menu contestuale. Gli errori del core passano dallo stesso
+alert del mastro.
+
+```
+┌ BUSTE ─────────────────────────────────────────┐ ┌ CATEGORIE ────────────────────────┐
+│ NOME        TIPO      TETTO     NEG   SALDO    │ │ NOME         ALIAS                 │
+│ Non alloc.  —         —         —     1.250,00 │ │ Casa         mutuo, affitto        │
+│ Cash        nessuno   —         no    3.480,20 │ │ Spesa        coop, esselunga       │
+│ Casa        netto     150.000   no   31.935,00 │ │ Opening      (sistema)             │
+│ Emergenza   entrate   30.000    no   29.931,00 │ │ nome…        simili: Casa          │
+│ nome…       nessuno ▾ tetto…    no   apertura… │ └───────────────────────────────────┘
+└────────────────────────────────────────────────┘
+```
+
+| Tabella | Colonne | In posto | Menu contestuale |
+|---|---|---|---|
+| BUSTE | NOME, TIPO (nessuno / netto / entrate), TETTO, NEG (sì/no, un click), SALDO | nome, tipo, tetto, negativo → `UpdateFlow` con i soli campi cambiati; nella riga vuota SALDO è l'allocazione iniziale da Non allocato → `CreateFlow` | archivia / ripristina |
+| CATEGORIE | NOME, ALIAS (lista separata da virgole) | nome → `RenameCategory`; alias → la differenza fra la lista di prima e quella nuova, un `AddAlias`/`RemoveAlias` per voce; nella riga vuota, sotto il nome, "simili: …" suggerisce e non blocca (`similar_categories`) | unisci in… (anteprima con `preview_merge`), archivia / ripristina |
+
+Non allocato e le categorie di sistema (`Opening`, `Uncategorized`) si vedono
+ma non si modificano. ⌘⇧C porta qui; la finestra Categorie separata non c'è
+più. Wallet, vault, ricorrenze e condivisione restano nella gestione ⌘⇧M.
+
 ## 3. Mappa mockup → dominio
 
 | Colonna / etichetta | Dominio |
@@ -172,7 +204,7 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | `⌘K` | riga quick-add sopra la griglia (la grammatica di §3.1 del distillato) |
 | `⌘E` | esporta CSV: le righe a schermo, RFC 4180, `Support/LedgerCSV.swift` |
 | `⌘⇧M` | gestione: vault, wallet, buste, ricorrenze, condivisione |
-| `⌘⇧C` | finestra categorie |
+| `⌘⇧C` | vista SETUP: buste e categorie |
 | `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
 
 ## 7. Tappe
