@@ -744,6 +744,12 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      */
     func vaults() throws  -> [VaultView]
     
+    /**
+     * Bucket x person breakdown behind the RIEPILOGO: the app passes the
+     * epoch plus thirteen month starts and reads thirteen buckets.
+     */
+    func yearBreakdown(vaultId: Uuid, bounds: [UtcDateTime]) throws  -> [BucketPersonTotals]
+    
 }
 /**
  * The app's handle on one database file.
@@ -1262,6 +1268,21 @@ open func vaults()throws  -> [VaultView]  {
 })
 }
     
+    /**
+     * Bucket x person breakdown behind the RIEPILOGO: the app passes the
+     * epoch plus thirteen month starts and reads thirteen buckets.
+     */
+open func yearBreakdown(vaultId: Uuid, bounds: [UtcDateTime])throws  -> [BucketPersonTotals]  {
+    return try  FfiConverterSequenceTypeBucketPersonTotals.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_year_breakdown(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterSequenceTypeUtcDateTime.lower(bounds),uniffiCallStatus
+    )
+})
+}
+    
 
     
 }
@@ -1368,6 +1389,118 @@ public func FfiConverterTypeAliasView_lift(_ buf: RustBuffer) throws -> AliasVie
 #endif
 public func FfiConverterTypeAliasView_lower(_ value: AliasView) -> RustBuffer {
     return FfiConverterTypeAliasView.lower(value)
+}
+
+
+/**
+ * One person's movement inside one bucket of the year summary, split the way
+ * the RIEPILOGO reads it (`docs/v2/UI.md` §2.2).
+ */
+public struct BucketPersonTotals: Equatable, Hashable, Codable {
+    /**
+     * Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
+     */
+    public var bucket: UInt32
+    /**
+     * `transactions.created_by`.
+     */
+    public var person: String
+    /**
+     * Income other than opening balances.
+     */
+    public var income: Int64
+    /**
+     * Opening balances of wallets (system category `Opening`), signed: an
+     * income counts positive, an expense negative.
+     */
+    public var opening: Int64
+    /**
+     * `max(expense - refund, 0)` on envelopes without a cap.
+     */
+    public var cashExpense: Int64
+    /**
+     * `max(expense - refund, 0)` on envelopes with a cap (the "fondi").
+     */
+    public var fundExpense: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
+         */bucket: UInt32, 
+        /**
+         * `transactions.created_by`.
+         */person: String, 
+        /**
+         * Income other than opening balances.
+         */income: Int64, 
+        /**
+         * Opening balances of wallets (system category `Opening`), signed: an
+         * income counts positive, an expense negative.
+         */opening: Int64, 
+        /**
+         * `max(expense - refund, 0)` on envelopes without a cap.
+         */cashExpense: Int64, 
+        /**
+         * `max(expense - refund, 0)` on envelopes with a cap (the "fondi").
+         */fundExpense: Int64) {
+        self.bucket = bucket
+        self.person = person
+        self.income = income
+        self.opening = opening
+        self.cashExpense = cashExpense
+        self.fundExpense = fundExpense
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BucketPersonTotals: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBucketPersonTotals: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BucketPersonTotals {
+        return
+            try BucketPersonTotals(
+                bucket: FfiConverterUInt32.read(from: &buf), 
+                person: FfiConverterString.read(from: &buf), 
+                income: FfiConverterInt64.read(from: &buf), 
+                opening: FfiConverterInt64.read(from: &buf), 
+                cashExpense: FfiConverterInt64.read(from: &buf), 
+                fundExpense: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BucketPersonTotals, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.bucket, into: &buf)
+        FfiConverterString.write(value.person, into: &buf)
+        FfiConverterInt64.write(value.income, into: &buf)
+        FfiConverterInt64.write(value.opening, into: &buf)
+        FfiConverterInt64.write(value.cashExpense, into: &buf)
+        FfiConverterInt64.write(value.fundExpense, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBucketPersonTotals_lift(_ buf: RustBuffer) throws -> BucketPersonTotals {
+    return try FfiConverterTypeBucketPersonTotals.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBucketPersonTotals_lower(_ value: BucketPersonTotals) -> RustBuffer {
+    return FfiConverterTypeBucketPersonTotals.lower(value)
 }
 
 
@@ -5832,6 +5965,31 @@ fileprivate struct FfiConverterSequenceTypeAliasView: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeBucketPersonTotals: FfiConverterRustBuffer {
+    typealias SwiftType = [BucketPersonTotals]
+
+    public static func write(_ value: [BucketPersonTotals], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBucketPersonTotals.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BucketPersonTotals] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BucketPersonTotals]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBucketPersonTotals.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCategoryTotals: FfiConverterRustBuffer {
     typealias SwiftType = [CategoryTotals]
 
@@ -6691,6 +6849,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_vaults() != 61325) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_year_breakdown() != 63797) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_constructor_corehandle_open() != 26050) {

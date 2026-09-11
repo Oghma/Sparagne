@@ -28,7 +28,7 @@ mod store;
 pub mod sync;
 mod usage;
 
-pub use analytics::{CategoryTotals, FlowPersonTotals, TopExpense};
+pub use analytics::{BucketPersonTotals, CategoryTotals, FlowPersonTotals, TopExpense};
 pub use category::{normalize_category_display, normalize_category_key, validate_category_name};
 pub use command::{
     Command, CommandEnvelope, CommandRecord, Entry, Receipt, RecurringPatch, TransactionKind,

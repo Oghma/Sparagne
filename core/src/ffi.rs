@@ -20,11 +20,11 @@ use chrono::{DateTime, FixedOffset, NaiveDate, SecondsFormat, Utc};
 use uuid::Uuid;
 
 use crate::{
-    AliasView, CategoryTotals, CategoryView, Command, CommandEnvelope, CommandRecord, Core,
-    Currency, DomainError, FlowPersonTotals, MergePreview, Money, Page, PendingRecurring,
-    PeriodTotals, Receipt, RecentUsage, RecurringRunView, RecurringView, RejectedCommand,
-    SyncReport, SyncState, TopExpense, TransactionFilter, TransactionView, VaultSnapshot,
-    VaultView,
+    AliasView, BucketPersonTotals, CategoryTotals, CategoryView, Command, CommandEnvelope,
+    CommandRecord, Core, Currency, DomainError, FlowPersonTotals, MergePreview, Money, Page,
+    PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView, RecurringView,
+    RejectedCommand, SyncReport, SyncState, TopExpense, TransactionFilter, TransactionView,
+    VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
 };
 
@@ -249,6 +249,16 @@ impl CoreHandle {
         person: Option<String>,
     ) -> Result<Vec<PeriodTotals>, DomainError> {
         self.lock()?.bucket_totals(vault_id, bounds, person)
+    }
+
+    /// Bucket x person breakdown behind the RIEPILOGO: the app passes the
+    /// epoch plus thirteen month starts and reads thirteen buckets.
+    pub fn year_breakdown(
+        &self,
+        vault_id: Uuid,
+        bounds: Vec<UtcDateTime>,
+    ) -> Result<Vec<BucketPersonTotals>, DomainError> {
+        self.lock()?.year_breakdown(vault_id, bounds)
     }
 
     /// The heaviest expenses of `[from, to)`, largest first.

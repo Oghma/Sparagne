@@ -1,6 +1,6 @@
 //! Tests for the ledger aggregations (`docs/v2/UI.md` §4): authors, the
-//! envelope x person matrix, the category breakdown, the twelve-month buckets
-//! and the top expenses.
+//! envelope x person matrix, the category breakdown, the twelve-month buckets,
+//! the top expenses and the year breakdown behind the RIEPILOGO.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -314,6 +314,195 @@ fn top_expenses_are_largest_first_limited_and_filterable() {
             .unwrap();
     assert_eq!(elisa.len(), 1);
     assert_eq!(elisa[0].amount, 30);
+}
+
+// -- year breakdown --------------------------------------------------------
+
+struct YearFx {
+    fx: Fx,
+    /// The capped envelope, for the tests that add a row of their own.
+    fondo: Uuid,
+}
+
+/// Opens a wallet with a balance at `secs`, which posts an `Opening` row.
+fn open_wallet(core: &mut Core, vault: Uuid, author: &str, name: &str, opening: i64, secs: i64) {
+    run_as(
+        core,
+        vault,
+        author,
+        Command::CreateWallet {
+            name: name.to_string(),
+            opening_balance: opening,
+            occurred_at: at(secs),
+        },
+    );
+}
+
+/// Three buckets: everything before `T0`, then two stretches of ten days.
+fn year_bounds() -> Vec<DateTime<Utc>> {
+    vec![utc(0), utc(T0), utc(T0 + 10 * DAY), utc(T0 + 20 * DAY)]
+}
+
+/// One unlimited envelope and one capped one (a "fondo"), wallets opened
+/// before and inside the year, and two people moving money.
+fn year_fx() -> YearFx {
+    let mut fx = setup();
+    let cash = run(
+        &mut fx.core,
+        fx.vault,
+        flow_cmd("Cash", FlowMode::Unlimited, true, 0),
+    )
+    .result_id
+    .unwrap();
+    let fondo = run(
+        &mut fx.core,
+        fx.vault,
+        flow_cmd("Fondo casa", FlowMode::NetCapped { cap: 100_000 }, true, 0),
+    )
+    .result_id
+    .unwrap();
+    let w = Some(fx.wallet);
+
+    // Before the year: alice's savings account.
+    open_wallet(
+        &mut fx.core,
+        fx.vault,
+        "alice",
+        "Risparmi",
+        5_000,
+        T0 - 5 * DAY,
+    );
+
+    // First bucket.
+    run_as(
+        &mut fx.core,
+        fx.vault,
+        "alice",
+        Command::Income(entry(900, w, Some(cash), Some("Stipendio"), T0 + DAY)),
+    );
+    run_as(
+        &mut fx.core,
+        fx.vault,
+        "elisa",
+        Command::Expense(entry(100, w, Some(cash), Some("Spesa"), T0 + 2 * DAY)),
+    );
+    run_as(
+        &mut fx.core,
+        fx.vault,
+        "elisa",
+        Command::Expense(entry(80, w, Some(fondo), Some("Casa"), T0 + 3 * DAY)),
+    );
+    run_as(
+        &mut fx.core,
+        fx.vault,
+        "elisa",
+        Command::Refund(entry(30, w, Some(fondo), Some("Casa"), T0 + 4 * DAY)),
+    );
+    open_wallet(&mut fx.core, fx.vault, "alice", "Conto", 200, T0 + 5 * DAY);
+    open_wallet(&mut fx.core, fx.vault, "alice", "Debito", -50, T0 + 6 * DAY);
+
+    // Second bucket: elisa alone.
+    run_as(
+        &mut fx.core,
+        fx.vault,
+        "elisa",
+        Command::Expense(entry(40, w, Some(cash), Some("Spesa"), T0 + 11 * DAY)),
+    );
+
+    YearFx { fx, fondo }
+}
+
+#[test]
+fn year_breakdown_puts_wallet_openings_in_their_own_column() {
+    let s = year_fx();
+    let rows = s.fx.core.year_breakdown(s.fx.vault, year_bounds()).unwrap();
+
+    // Everything before the year is bucket 0: only alice's 5.000 opening,
+    // and it is an opening, never income.
+    let before: Vec<_> = rows.iter().filter(|r| r.bucket == 0).collect();
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].person, "alice");
+    assert_eq!(before[0].opening, 5_000);
+    assert_eq!(before[0].income, 0);
+
+    // Inside the year the openings land in their own bucket, signed: 200 in,
+    // 50 out, and the negative one is not an expense.
+    let alice = rows
+        .iter()
+        .find(|r| r.bucket == 1 && r.person == "alice")
+        .unwrap();
+    assert_eq!(alice.opening, 150);
+    assert_eq!(alice.income, 900);
+    assert_eq!((alice.cash_expense, alice.fund_expense), (0, 0));
+}
+
+#[test]
+fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
+    let s = year_fx();
+    let rows = s.fx.core.year_breakdown(s.fx.vault, year_bounds()).unwrap();
+    let elisa = rows
+        .iter()
+        .find(|r| r.bucket == 1 && r.person == "elisa")
+        .unwrap();
+
+    // 100 on the unlimited envelope, 80 - 30 on the capped one: the refund
+    // nets off the fondo only.
+    assert_eq!(elisa.cash_expense, 100);
+    assert_eq!(elisa.fund_expense, 50);
+    assert_eq!((elisa.income, elisa.opening), (0, 0));
+
+    // A refund alone floors its group at zero instead of going negative.
+    let mut s = s;
+    run_as(
+        &mut s.fx.core,
+        s.fx.vault,
+        "elisa",
+        Command::Refund(entry(
+            70,
+            Some(s.fx.wallet),
+            Some(s.fondo),
+            Some("Casa"),
+            T0 + 12 * DAY,
+        )),
+    );
+    let rows = s.fx.core.year_breakdown(s.fx.vault, year_bounds()).unwrap();
+    let late = rows
+        .iter()
+        .find(|r| r.bucket == 2 && r.person == "elisa")
+        .unwrap();
+    assert_eq!((late.cash_expense, late.fund_expense), (40, 0));
+}
+
+#[test]
+fn year_breakdown_returns_one_ordered_row_per_person_with_movement() {
+    let s = year_fx();
+    let rows = s.fx.core.year_breakdown(s.fx.vault, year_bounds()).unwrap();
+
+    let pairs: Vec<(u32, &str)> = rows.iter().map(|r| (r.bucket, r.person.as_str())).collect();
+    // Bucket order first, then the person case-insensitively; alice has no
+    // row in the last bucket because she moved nothing there.
+    assert_eq!(
+        pairs,
+        [(0, "alice"), (1, "alice"), (1, "elisa"), (2, "elisa")]
+    );
+}
+
+#[test]
+fn year_breakdown_rejects_bad_boundaries() {
+    let s = year_fx();
+    assert!(matches!(
+        s.fx.core.year_breakdown(s.fx.vault, vec![utc(T0)]),
+        Err(DomainError::InvalidCommand(_))
+    ));
+    assert!(matches!(
+        s.fx.core.year_breakdown(s.fx.vault, vec![]),
+        Err(DomainError::InvalidCommand(_))
+    ));
+    assert!(matches!(
+        s.fx.core
+            .year_breakdown(s.fx.vault, vec![utc(T0 + DAY), utc(T0)]),
+        Err(DomainError::InvalidCommand(_))
+    ));
 }
 
 // -- filter additions ------------------------------------------------------

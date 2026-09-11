@@ -5,6 +5,9 @@
 //! the month boundaries with the system timezone, so the core never has to
 //! know about calendars or offsets. Voided rows and transfers are always out;
 //! `net_expense` follows `DISTILLATO_V1.md` §3.5 (`max(expense - refund, 0)`).
+//!
+//! [`Core::bucket_totals`] and [`Core::year_breakdown`] take the boundaries of
+//! several consecutive ranges instead, so a whole year costs one query.
 
 use chrono::{DateTime, FixedOffset, Utc};
 use rusqlite::{params_from_iter, types::Value};
@@ -12,6 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     Core, DomainError, PeriodTotals, Result,
+    category::OPENING_KEY,
     query::{blob, to_fixed},
 };
 
@@ -59,6 +63,37 @@ pub struct TopExpense {
     pub amount: i64,
 }
 
+/// One person's movement inside one bucket of the year summary, split the way
+/// the RIEPILOGO reads it (`docs/v2/UI.md` §2.2).
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct BucketPersonTotals {
+    /// Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
+    pub bucket: u32,
+    /// `transactions.created_by`.
+    pub person: String,
+    /// Income other than opening balances.
+    pub income: i64,
+    /// Opening balances of wallets (system category `Opening`), signed: an
+    /// income counts positive, an expense negative.
+    pub opening: i64,
+    /// `max(expense - refund, 0)` on envelopes without a cap.
+    pub cash_expense: i64,
+    /// `max(expense - refund, 0)` on envelopes with a cap (the "fondi").
+    pub fund_expense: i64,
+}
+
+/// The six sums [`BucketPersonTotals`] is folded from: expenses and refunds
+/// stay apart until the end, because each group nets on its own.
+#[derive(Default)]
+struct YearSlot {
+    income: i64,
+    opening: i64,
+    cash_expense: i64,
+    cash_refund: i64,
+    fund_expense: i64,
+    fund_refund: i64,
+}
+
 /// Folds the three kind sums into [`PeriodTotals`].
 fn totals(income: i64, expense: i64, refund: i64) -> PeriodTotals {
     PeriodTotals {
@@ -85,6 +120,22 @@ fn check_range(from: DateTime<Utc>, to: DateTime<Utc>) -> Result<()> {
         return Err(DomainError::InvalidCommand(
             "invalid range: from must be < to".to_string(),
         ));
+    }
+    Ok(())
+}
+
+/// Rejects boundaries that cannot describe consecutive half-open buckets.
+/// `query` names the caller so the message says which one refused.
+fn check_bounds(bounds: &[DateTime<Utc>], query: &str) -> Result<()> {
+    if bounds.len() < 2 {
+        return Err(DomainError::InvalidCommand(format!(
+            "{query} needs at least two boundaries"
+        )));
+    }
+    if bounds.windows(2).any(|w| w[0] >= w[1]) {
+        return Err(DomainError::InvalidCommand(format!(
+            "{query} boundaries must be strictly increasing"
+        )));
     }
     Ok(())
 }
@@ -270,16 +321,7 @@ impl Core {
         bounds: Vec<DateTime<Utc>>,
         person: Option<String>,
     ) -> Result<Vec<PeriodTotals>> {
-        if bounds.len() < 2 {
-            return Err(DomainError::InvalidCommand(
-                "bucket_totals needs at least two boundaries".to_string(),
-            ));
-        }
-        if bounds.windows(2).any(|w| w[0] >= w[1]) {
-            return Err(DomainError::InvalidCommand(
-                "bucket_totals boundaries must be strictly increasing".to_string(),
-            ));
-        }
+        check_bounds(&bounds, "bucket_totals")?;
 
         let edges: Vec<i64> = bounds.iter().map(|b| b.timestamp()).collect();
         let (where_sql, args) = scope(
@@ -311,6 +353,108 @@ impl Core {
             .into_iter()
             .map(|(income, expense, refund)| totals(income, expense, refund))
             .collect())
+    }
+
+    /// Bucket x person breakdown behind the RIEPILOGO (`docs/v2/UI.md` §4).
+    ///
+    /// The app passes the epoch followed by thirteen month starts, so bucket 0
+    /// is everything that happened before the year. Amounts come from the flow
+    /// legs, like [`Core::flow_person_totals`], so a future split lands on both
+    /// envelopes, and each leg is cash or fund depending on whether its
+    /// envelope has a cap. Only pairs with movement come back; the app fills
+    /// the gaps with zeros.
+    pub fn year_breakdown(
+        &self,
+        vault_id: Uuid,
+        bounds: Vec<DateTime<Utc>>,
+    ) -> Result<Vec<BucketPersonTotals>> {
+        check_bounds(&bounds, "year_breakdown")?;
+
+        let edges: Vec<i64> = bounds.iter().map(|b| b.timestamp()).collect();
+        let (where_sql, args) = scope(vault_id, bounds[0], bounds[bounds.len() - 1], None);
+        let sql = format!(
+            "SELECT t.occurred_at, t.created_by, t.kind, c.is_system, c.name_norm,
+                    f.cap IS NULL, ABS(l.amount)
+             FROM transactions t
+             JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
+             JOIN flows f ON f.id = l.target_id
+             JOIN categories c ON c.id = t.category_id
+             {where_sql}"
+        );
+
+        // Bucketed in Rust like bucket_totals: a year of a personal ledger is
+        // a few thousand legs, and the SQL stays free of a CASE ladder.
+        let mut slots: Vec<((usize, String), YearSlot)> = Vec::new();
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query(params_from_iter(args.iter()))?;
+        while let Some(row) = rows.next()? {
+            let at: i64 = row.get(0)?;
+            let person: String = row.get(1)?;
+            let kind: String = row.get(2)?;
+            let is_system: bool = row.get(3)?;
+            let category: String = row.get(4)?;
+            let uncapped: bool = row.get(5)?;
+            let amount: i64 = row.get(6)?;
+
+            // partition_point gives the first edge strictly greater than
+            // `at`; minus one is the bucket that contains it. The scope keeps
+            // `at` inside the outer range, so the index is always a bucket.
+            let bucket = edges.partition_point(|&edge| edge <= at).saturating_sub(1);
+            if bucket >= edges.len() - 1 {
+                continue;
+            }
+            let slot = match slots
+                .iter_mut()
+                .find(|((b, p), _)| *b == bucket && *p == person)
+            {
+                Some((_, existing)) => existing,
+                None => {
+                    slots.push(((bucket, person), YearSlot::default()));
+                    match slots.last_mut() {
+                        Some((_, slot)) => slot,
+                        None => unreachable!("just pushed"),
+                    }
+                }
+            };
+
+            // A wallet's opening balance is an income (or an expense when
+            // negative) on the Unallocated envelope: it is neither earned nor
+            // spent, so it only ever feeds FONDO CASSA.
+            if is_system && category == OPENING_KEY {
+                match kind.as_str() {
+                    "income" => slot.opening += amount,
+                    "expense" => slot.opening -= amount,
+                    _ => {}
+                }
+                continue;
+            }
+            match (kind.as_str(), uncapped) {
+                ("income", _) => slot.income += amount,
+                ("expense", true) => slot.cash_expense += amount,
+                ("expense", false) => slot.fund_expense += amount,
+                ("refund", true) => slot.cash_refund += amount,
+                ("refund", false) => slot.fund_refund += amount,
+                _ => {}
+            }
+        }
+
+        let mut out: Vec<BucketPersonTotals> = slots
+            .into_iter()
+            .map(|((bucket, person), slot)| BucketPersonTotals {
+                bucket: u32::try_from(bucket).unwrap_or(u32::MAX),
+                person,
+                income: slot.income,
+                opening: slot.opening,
+                cash_expense: (slot.cash_expense - slot.cash_refund).max(0),
+                fund_expense: (slot.fund_expense - slot.fund_refund).max(0),
+            })
+            .collect();
+        out.sort_by(|a, b| {
+            a.bucket
+                .cmp(&b.bucket)
+                .then_with(|| a.person.to_lowercase().cmp(&b.person.to_lowercase()))
+        });
+        Ok(out)
     }
 
     /// The heaviest expenses of the range, largest first.
