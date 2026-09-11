@@ -34,8 +34,8 @@ struct SyncStatusButton: View {
                 .font(.system(size: 9, weight: .semibold))
                 .monospacedDigit()
                 .padding(.horizontal, 3)
-                .background(Capsule().fill(.tint))
-                .foregroundStyle(.white)
+                .background(Capsule().fill(Ink.accent))
+                .foregroundStyle(Ink.bg)
                 .offset(x: 8, y: -6)
         }
     }
@@ -51,11 +51,11 @@ struct SyncStatusButton: View {
     }
 
     private var tint: Color {
-        if !engine.rejected.isEmpty { return .orange }
+        if !engine.rejected.isEmpty { return Ink.warning }
         switch engine.status {
-        case .error: return .red
-        case .offline: return .secondary
-        case .idle, .syncing: return .primary
+        case .error: return Ink.negative
+        case .offline: return Ink.dim
+        case .idle, .syncing: return Ink.text
         }
     }
 

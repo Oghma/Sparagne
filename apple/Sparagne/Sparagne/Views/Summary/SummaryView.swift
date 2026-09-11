@@ -128,7 +128,7 @@ struct SpendByPerson: View {
                         HStack(spacing: 1) {
                             ForEach(Array(shares.enumerated()), id: \.offset) { index, share in
                                 Rectangle()
-                                    .fill(index == 0 ? Ink.accent : Ink.muted)
+                                    .fill(segmentColor(at: index))
                                     .frame(width: geometry.size.width * fraction(share.amount))
                             }
                         }
@@ -150,6 +150,15 @@ struct SpendByPerson: View {
 
     private func fraction(_ amount: Int64) -> Double {
         total > 0 ? Double(amount) / Double(total) : 0
+    }
+
+    /// A short opacity ramp on `Ink.accent`, repeating past the fourth
+    /// person: with three or more people, one flat `Ink.muted` for everyone
+    /// after the first made the segments indistinguishable.
+    private static let rampOpacities: [Double] = [1.0, 0.55, 0.35, 0.2]
+
+    private func segmentColor(at index: Int) -> Color {
+        Ink.accent.opacity(Self.rampOpacities[index % Self.rampOpacities.count])
     }
 
     private func caption(_ share: (person: String, amount: Int64)) -> String {

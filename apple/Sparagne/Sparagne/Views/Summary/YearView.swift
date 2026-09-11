@@ -70,6 +70,7 @@ struct YearView: View {
 
     private func line(_ label: String, values: [Int64], tint: Color, emphasis: Bool = false) -> some View {
         let font = emphasis ? Face.mono(12, .semibold) : Face.row
+        let total = values.reduce(0, +)
         return HStack(spacing: 0) {
             Text(label)
                 .font(font)
@@ -81,9 +82,9 @@ struct YearView: View {
                     .foregroundStyle(value == 0 ? Ink.dim : tint)
                     .frame(width: columnWidth, alignment: .trailing)
             }
-            Text(LedgerMoney.bare(values.reduce(0, +)))
+            Text(LedgerMoney.bare(total))
                 .font(Face.mono(12, .semibold))
-                .foregroundStyle(values.reduce(0, +) == 0 ? Ink.dim : tint)
+                .foregroundStyle(total == 0 ? Ink.dim : tint)
                 .frame(width: columnWidth + 16, alignment: .trailing)
         }
         .frame(height: 24)

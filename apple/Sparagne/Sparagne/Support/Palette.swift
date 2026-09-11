@@ -21,13 +21,17 @@ enum Ink {
     /// The darker half of a two-tone bar (the second person, last year).
     static let muted = Color(hex: 0x5C2318)
     static let mutedPositive = Color(hex: 0x1D5340)
+    /// Amber: a refused sync change, the mid band of a budget bar. Not in
+    /// `docs/v2/UI.md` §5's table, but used consistently wherever the ledger
+    /// needs a caution color instead of system orange.
+    static let warning = Color(hex: 0xE8A33D)
 
     /// Traffic light for a budget bar at a given fill fraction
     /// (`DISTILLATO_V1.md` §3.4: thresholds at 70% and 90%).
     static func progressTint(_ fraction: Double) -> Color {
         switch fraction {
         case ..<0.7: positive
-        case ..<0.9: Color(hex: 0xE8A33D)
+        case ..<0.9: warning
         default: negative
         }
     }

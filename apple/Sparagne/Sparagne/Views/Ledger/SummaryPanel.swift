@@ -42,23 +42,29 @@ struct PersonMatrix: View {
                     tint: Ink.accent
                 )
 
-                VStack(spacing: 0) {
-                    header
-                    Hairline().padding(.vertical, 5)
-                    row(String(localized: "Income"), values: people.map { summary.totals(for: $0).income }, tint: Ink.positive)
-                    ForEach(envelopes, id: \.id) { flow in
+                if people.isEmpty {
+                    Text(String(localized: "No activity this month"))
+                        .font(Face.row)
+                        .foregroundStyle(Ink.dim)
+                } else {
+                    VStack(spacing: 0) {
+                        header
+                        Hairline().padding(.vertical, 5)
+                        row(String(localized: "Income"), values: people.map { summary.totals(for: $0).income }, tint: Ink.positive)
+                        ForEach(envelopes, id: \.id) { flow in
+                            row(
+                                "\(String(localized: "Expenses")) \(store.flowName(flow).lowercased())",
+                                values: people.map { summary.netExpense(flow: flow.id, person: $0) }
+                            )
+                        }
+                        Hairline().padding(.vertical, 5)
                         row(
-                            "\(String(localized: "Expenses")) \(store.flowName(flow).lowercased())",
-                            values: people.map { summary.netExpense(flow: flow.id, person: $0) }
+                            String(localized: "Savings"),
+                            values: people.map { summary.totals(for: $0).savings },
+                            tint: Ink.positive,
+                            emphasis: true
                         )
                     }
-                    Hairline().padding(.vertical, 5)
-                    row(
-                        String(localized: "Savings"),
-                        values: people.map { summary.totals(for: $0).savings },
-                        tint: Ink.positive,
-                        emphasis: true
-                    )
                 }
             }
         }
@@ -228,16 +234,25 @@ struct TrailingMonths: View {
 }
 
 /// A row of bars with a one-letter label under each. Negative values hang
-/// below the baseline, so a month in the red reads as one.
+/// below a baseline placed proportionally inside the strip, so a month in
+/// the red reads as one; when every value is zero or positive the baseline
+/// sits at the bottom and the strip looks exactly as it always has.
 struct BarStrip: View {
     let values: [Int64]
     let labels: [String]
     var highlighted: Int?
     var tint: Color = Ink.positive
 
-    private var scale: Double {
-        let peak = values.map { abs(Double($0)) }.max() ?? 0
-        return peak > 0 ? peak : 1
+    /// At least 0: how far the tallest positive bar reaches.
+    private var peak: Double { max(0, values.map(Double.init).max() ?? 0) }
+    /// At most 0: how far the deepest negative bar reaches.
+    private var trough: Double { min(0, values.map(Double.init).min() ?? 0) }
+    private var hasNegative: Bool { trough < 0 }
+    /// Share of the strip's height above the baseline; 1 when nothing is
+    /// negative, so the baseline stays pinned to the bottom.
+    private var positiveFraction: Double {
+        let range = peak - trough
+        return range > 0 ? peak / range : 1
     }
 
     var body: some View {
@@ -245,13 +260,38 @@ struct BarStrip: View {
             ForEach(Array(values.enumerated()), id: \.offset) { index, value in
                 VStack(spacing: 4) {
                     GeometryReader { geometry in
-                        let height = geometry.size.height * (abs(Double(value)) / scale)
-                        VStack {
-                            Spacer(minLength: 0)
-                            Rectangle()
-                                .fill(index == highlighted ? tint : tint.opacity(0.45))
-                                .frame(height: max(height, value == 0 ? 0 : 1))
+                        let height = geometry.size.height
+                        let positiveZone = height * positiveFraction
+                        let negativeZone = height - positiveZone
+                        let doubleValue = Double(value)
+                        let opacity = index == highlighted ? 1.0 : 0.45
+
+                        ZStack(alignment: .top) {
+                            if doubleValue > 0, peak > 0 {
+                                let barHeight = max(positiveZone * doubleValue / peak, 1)
+                                Rectangle()
+                                    .fill(tint.opacity(opacity))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: barHeight)
+                                    .offset(y: positiveZone - barHeight)
+                            }
+                            if doubleValue < 0, trough < 0 {
+                                let barHeight = max(negativeZone * doubleValue / trough, 1)
+                                Rectangle()
+                                    .fill(Ink.negative.opacity(opacity))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: barHeight)
+                                    .offset(y: positiveZone)
+                            }
+                            if hasNegative {
+                                Rectangle()
+                                    .fill(Ink.line)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 1)
+                                    .offset(y: positiveZone)
+                            }
                         }
+                        .frame(width: geometry.size.width, height: height, alignment: .topLeading)
                     }
                     Text(labels.indices.contains(index) ? labels[index] : "")
                         .font(Face.mono(8))
