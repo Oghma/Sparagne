@@ -83,3 +83,6 @@ jobs:
           xcodebuild -project Sparagne.xcodeproj -scheme Sparagne \
             -destination 'platform=macOS' test -quiet CODE_SIGNING_ALLOWED=NO
         working-directory: apple/Sparagne
+
+      - name: The app against the real server
+        run: bash scripts/e2e.sh

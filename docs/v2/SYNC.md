@@ -62,9 +62,32 @@ Gli id delle entità derivano dall'id del comando (`ARCH.md` §4), quindi il reb
 - Sync automatica: all'avvio, dopo ogni comando (con un piccolo debounce) e ogni 60 s: per ogni vault locale push poi pull; per i vault del server non ancora locali pull da 0. Stato nella toolbar (in sync, in attesa, offline, errore); i rifiuti in un alert e in un elenco consultabile.
 - Condivisione: foglio "Condividi vault…" (solo owner) con elenco membri, aggiunta per username e ruolo, rimozione.
 
-## 6. Test di accettazione (in `server/tests`)
+## 6. Test di accettazione
 
-Due `Core` in memoria come client A e B contro il router in-process: A registra, crea il vault, un wallet e un'entrata e li manda con un solo push, che è anche ciò che crea il vault sul server; B registra e l'owner lo aggiunge come editor (l'utente deve esistere prima); B fa pull da 0 (ottiene il vault), aggiunge una spesa e fa push; A fa pull e ricostruisce (rebase); le proiezioni di A, B e del server coincidono (`snapshot`, `list_transactions`, `categories`). Più: push idempotente; spesa oltre il saldo rifiutata dal server e tolta dalla proiezione di chi l'ha emessa; viewer che non può fare push; non membro che riceve 404; `author` diverso rifiutato; token scaduto o revocato → 401.
+**Server** (`server/tests`). Due `Core` in memoria come client A e B contro il router in-process: A registra, crea il vault, un wallet e un'entrata e li manda con un solo push, che è anche ciò che crea il vault sul server; B registra e l'owner lo aggiunge come editor (l'utente deve esistere prima); B fa pull da 0 (ottiene il vault), aggiunge una spesa e fa push; A fa pull e ricostruisce (rebase); le proiezioni di A, B e del server coincidono (`snapshot`, `list_transactions`, `categories`). Più: push idempotente; spesa oltre il saldo rifiutata dal server e tolta dalla proiezione di chi l'ha emessa; viewer che non può fare push; non membro che riceve 404; `author` diverso rifiutato; token scaduto o revocato → 401.
+
+**L'app contro il server vero** (`apple/Sparagne/SparagneTests/ServerE2ETests.swift`).
+Lo stesso scenario con l'app intera e nessun finto server: due `AppStore` su
+due file SQLite temporanei, ognuno col suo `SyncEngine` e il transport vero
+(`URLSessionTransport`), contro un `sparagne-server` in ascolto su una porta
+libera. A registra, crea vault, wallet, busta e un'entrata dall'API normale
+dell'app e sincronizza (il push conia il vault); aggiunge B come editor; B
+sincronizza da zero e riceve il vault, scrive una spesa e risincronizza; A
+riconverge. Si confrontano snapshot, elenco completo delle transazioni e
+`GET /vaults` (id, owner, ruolo) fra i due. Un secondo test ripete la
+condivisione con un `viewer`: il push torna `403 forbidden`, l'engine lo
+riporta come stato di errore e il comando resta in outbox.
+
+La suite gira solo se `SPARAGNE_E2E_SERVER` è impostata, altrimenti si salta.
+La imposta `scripts/e2e.sh`, che compila il server, lo avvia su una porta
+libera con `SPARAGNE_DATA_DIR` temporanea e `SPARAGNE_ALLOW_REGISTRATION=true`,
+aspetta `GET /health`, lancia `xcodebuild ... -only-testing:SparagneTests/ServerE2ETests`
+passando l'indirizzo come `TEST_RUNNER_SPARAGNE_E2E_SERVER` (xcodebuild
+inoltra al processo di test le variabili d'ambiente con quel prefisso,
+togliendolo) e ferma il server uscendo. `DERIVED_DATA` diventa
+`-derivedDataPath`, per non litigare con un'altra build. Gli username sono
+casuali a ogni esecuzione, così lo stesso server si può riusare. In CI è
+l'ultimo passo del job `apple`.
 
 ## 7. Stato e punti rimandati
 
@@ -74,12 +97,20 @@ push accetta `CreateVault` come primo comando di un vault ignoto, l'outbox sale
 a lotti, il `SyncReport` porta `server_last_seq` e `has_more`, e il core espone
 `vault(id)` e `last_seqs()` per `GET /vaults`. Swift non legge più dentro
 nessun corpo JSON. Copertura: `server/` 42 test (4 end-to-end a due client),
-sync lato client nel core 16 test più il finto server, app 100 test su un finto
-server fatto da un secondo `CoreHandle`.
+sync lato client nel core 16 test più il finto server, app 102 test su un finto
+server fatto da un secondo `CoreHandle`, di cui i 2 end-to-end di §6 girano
+solo contro un server vero.
+
+Il percorso HTTP vero fra app e server (`URLSession` verso axum) è esercitato
+dal 2026-09-12 (pacchetto P1): `URLSessionTransport`, `ServerAPI` e le rotte
+del server si sono trovati d'accordo al primo colpo, nessuna divergenza da
+correggere. App Transport Security non ha richiesto nulla, perché il loopback
+è esente: `project.yml` resta senza blocco `info`. Verso un server non locale
+in chiaro ATS bloccherebbe invece la chiamata, ed è la ragione per cui
+`DEPLOY.md` mette il TLS fra i requisiti.
 
 Ancora da fare quando servirà:
 
 - `RejectedCommand.kind` è il nome snake_case del comando; l'app lo mostra tal quale accanto al messaggio localizzato.
 - Il Keychain con firma ad-hoc può rifiutare `SecItemAdd`: il token resta in memoria per la sessione. Con un team Apple il problema sparisce.
 - Il server non tiene i comandi rifiutati, solo la risposta al push.
-- Il percorso HTTP vero fra app e server (`URLSession` verso axum) non è ancora esercitato da un test: lo copre il pacchetto P1.
