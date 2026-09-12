@@ -1,0 +1,7 @@
+# Replace with the real domain (or set DOMAIN in .env and pass it through if
+# you template this file yourself; Caddy's own env substitution only expands
+# {$VAR} inside the Caddyfile, which compose does not preprocess, so this file
+# is meant to be edited once per deployment).
+sparagne.example.com {
+	reverse_proxy sparagne:3000
+}

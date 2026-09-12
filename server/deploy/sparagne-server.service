@@ -1,0 +1,55 @@
+[Unit]
+Description=Sparagne sync server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Bare-metal install: put the binary at the path below (build with
+# `cargo build --release -p sparagne_server` and copy
+# target/release/sparagne-server), create the dedicated user and data
+# directory once:
+#
+#   sudo useradd --system --home-dir /var/lib/sparagne --shell /usr/sbin/nologin sparagne
+#   sudo install -o sparagne -g sparagne -d /var/lib/sparagne
+#   sudo install -m 755 target/release/sparagne-server /usr/local/bin/sparagne-server
+#   sudo install -m 640 -o root -g sparagne server/deploy/.env.example /etc/sparagne.env
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now sparagne-server
+#
+# /etc/sparagne.env holds SPARAGNE_ALLOW_REGISTRATION, SPARAGNE_TOKEN_TTL_DAYS
+# and RUST_LOG (docs/v2/DEPLOY.md); SPARAGNE_BIND and SPARAGNE_DATA_DIR are
+# set below since they describe this machine, not the deployment's policy.
+User=sparagne
+Group=sparagne
+EnvironmentFile=/etc/sparagne.env
+Environment=SPARAGNE_BIND=127.0.0.1:3000
+Environment=SPARAGNE_DATA_DIR=/var/lib/sparagne
+ExecStart=/usr/local/bin/sparagne-server
+Restart=on-failure
+RestartSec=2
+
+# Hardening. SQLite (WAL mode) needs to create/write/lock ordinary files in
+# the data dir, which ReadWritePaths grants without disabling the rest of
+# ProtectSystem=strict; it needs no other filesystem, network or capability
+# access.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sparagne
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

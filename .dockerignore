@@ -1,0 +1,13 @@
+# Keep the Docker build context to what server/Dockerfile actually needs:
+# the workspace manifests plus core/ and server/ sources.
+target/
+data/
+apple/
+docs/
+.git/
+.github/
+scripts/
+*.md
+.DS_Store
+.vscode/
+.idea/

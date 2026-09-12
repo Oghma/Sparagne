@@ -28,4 +28,13 @@ cargo test
 cargo clippy --workspace --all-targets
 ```
 
+### Server
+
+```sh
+cd server/deploy && cp .env.example .env && docker compose up -d
+```
+
+See `docs/v2/DEPLOY.md` for the full setup (TLS via Caddy, backups,
+upgrades).
+
 The design is in `docs/v2/ARCH.md`.

@@ -1,0 +1,45 @@
+# Run from server/deploy/:
+#
+#   cp .env.example .env   # edit DOMAIN and the rest
+#   # edit Caddyfile: replace sparagne.example.com with the real domain
+#   docker compose up -d
+#
+# Backups: `docker compose exec sparagne backup.sh` writes straight to
+# ./backups on the host (server/deploy/backup.sh ships inside the image).
+#
+# See docs/v2/DEPLOY.md for the full first-run flow, backups and upgrades.
+
+services:
+  sparagne:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    image: sparagne-server:latest
+    restart: unless-stopped
+    volumes:
+      - sparagne-data:/data
+      - ./backups:/backups
+    environment:
+      SPARAGNE_ALLOW_REGISTRATION: ${SPARAGNE_ALLOW_REGISTRATION:-true}
+      SPARAGNE_TOKEN_TTL_DAYS: ${SPARAGNE_TOKEN_TTL_DAYS:-30}
+      RUST_LOG: ${RUST_LOG:-info}
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - sparagne
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  sparagne-data:
+  caddy-data:
+  caddy-config:
