@@ -10,14 +10,22 @@ import SparagneCore
 /// carries a comma, a quote or a newline, with inner quotes doubled.
 enum LedgerCSV {
     static let header = "date,kind,envelope,category,description,person,amount,voided"
+    /// With the optional WALLET column on, the file carries it in the same
+    /// place the grid does: after the description (`docs/v2/UI.md` §3).
+    static let headerWithWallet = "date,kind,envelope,category,description,wallet,person,amount,voided"
+
+    static func header(wallet: Bool) -> String { wallet ? headerWithWallet : header }
 
     /// The full file text, header included. An empty `rows` still yields the
     /// header line, so a filtered month with nothing in it still exports a
     /// file a spreadsheet can open.
-    static func render(_ rows: [TransactionRow]) -> String {
-        var text = header + "\r\n"
+    ///
+    /// `wallet` is the visibility of the column in the window: the export is
+    /// what is on screen, columns included.
+    static func render(_ rows: [TransactionRow], wallet: Bool = false) -> String {
+        var text = header(wallet: wallet) + "\r\n"
         for row in rows {
-            text += line(for: row) + "\r\n"
+            text += line(for: row, wallet: wallet) + "\r\n"
         }
         return text
     }
@@ -30,22 +38,25 @@ enum LedgerCSV {
         return String(format: "%@-%04d-%02d-%@.csv", slug, month.year, month.month, direction.rawValue)
     }
 
-    private static func line(for row: TransactionRow) -> String {
+    private static func line(for row: TransactionRow, wallet: Bool) -> String {
         // A wallet transfer's `envelopeDisplay` is only the placeholder
         // (`TransactionRow`), so the export falls back to the wallet arrow
         // for that one kind; every other row already carries what it needs
         // in `envelopeDisplay`.
         let envelope = row.isTransfer && row.kind == .transferWallet ? row.walletDisplay : row.envelopeDisplay
-        let fields = [
+        var fields = [
             CoreDate.day(row.occurredAt),
             kindText(row.kind),
             envelope,
             row.category,
             row.note,
+        ]
+        if wallet { fields.append(row.walletDisplay) }
+        fields.append(contentsOf: [
             row.person,
             amountText(row),
             row.voided ? "true" : "false",
-        ]
+        ])
         return fields.map(quoted).joined(separator: ",")
     }
 

@@ -85,6 +85,9 @@ final class AppStore {
     /// paginates in practice; `loadMore` stays for the pathological month.
     static let pageSize: UInt32 = 1000
     static let lastVaultKey = "lastVaultId"
+    /// Shared with the View menu's `@AppStorage` toggle, so the preference
+    /// has one home (`docs/v2/UI.md` §3).
+    static let walletColumnKey = "showWalletColumn"
 
     // MARK: Dependencies
 
@@ -152,6 +155,14 @@ final class AppStore {
     var showVoided = false { didSet { if showVoided != oldValue { reload() } } }
     /// Transfers are in neither direction, so the View menu opts into them.
     var showTransfers = false { didSet { if showTransfers != oldValue { reload() } } }
+    /// The optional WALLET column (`docs/v2/UI.md` §3). Display only: it
+    /// changes what the grid draws and what ⌘E writes, never what is loaded,
+    /// so it does not reload.
+    var showWalletColumn: Bool {
+        didSet {
+            if showWalletColumn != oldValue { defaults.set(showWalletColumn, forKey: Self.walletColumnKey) }
+        }
+    }
     /// Debounced by the view; call `reload()` when it settles.
     var searchText = ""
     var quickAddText = ""
@@ -176,6 +187,7 @@ final class AppStore {
         self.defaults = defaults
         self.undoWindow = undoWindow
         self.sleeper = sleeper
+        showWalletColumn = defaults.bool(forKey: Self.walletColumnKey)
         currentAuthor = client.author
     }
 
@@ -747,6 +759,14 @@ final class AppStore {
         return wallets.count == 1 ? nil : wallets.first?.id
     }
 
+    /// The name of the wallet a new row would land on, for the WALLET cell of
+    /// the empty line. `defaultWalletId` is `nil` in a one-wallet vault (the
+    /// core resolves it), which still has a name to show.
+    var defaultWalletName: String? {
+        if let lastWalletId, let wallet = wallets.first(where: { $0.id == lastWalletId }) { return wallet.name }
+        return wallets.first?.name
+    }
+
     /// The envelope a new row lands on: the last one written to, else the
     /// first that is not Unallocated, else Unallocated.
     var defaultFlowId: Uuid? {
@@ -764,13 +784,20 @@ final class AppStore {
     /// A `nil` envelope means "the sticky default", not Unallocated: an empty
     /// FLOW cell has to behave like the last row, not like a system envelope
     /// the user never picked.
-    func addRow(day: Date, flowId: Uuid?, category: String?, note: String, amount: Int64) {
+    func addRow(
+        day: Date,
+        flowId: Uuid?,
+        category: String?,
+        note: String,
+        amount: Int64,
+        walletId: Uuid? = nil
+    ) {
         guard let vault = currentVault, amount > 0 else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let envelope = flowId ?? defaultFlowId
         let entry = Entry(
             amount: amount,
-            walletId: defaultWalletId,
+            walletId: walletId ?? defaultWalletId,
             flowId: envelope,
             category: category?.trimmingCharacters(in: .whitespacesAndNewlines),
             note: trimmedNote.isEmpty ? nil : trimmedNote,
@@ -807,6 +834,27 @@ final class AppStore {
             }
         }
         throw DomainError.NotFound(message: String(localized: "No envelope named \u{201C}\(text)\u{201D}"))
+    }
+
+    /// The WALLET cell's resolver, the same precedence `resolveFlow` uses.
+    /// Returns `nil` for blank text, meaning "leave the default".
+    func resolveWallet(named text: String) throws -> Uuid? {
+        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return nil }
+        let candidates = wallets.map { (id: $0.id, name: $0.name.lowercased()) }
+        if let exact = candidates.first(where: { $0.name == needle }) { return exact.id }
+        for matches in [
+            candidates.filter { $0.name.hasPrefix(needle) },
+            candidates.filter { $0.name.contains(needle) },
+        ] {
+            if matches.count == 1 { return matches[0].id }
+            if matches.count > 1 {
+                throw DomainError.InvalidCommand(
+                    message: String(localized: "More than one wallet matches \u{201C}\(text)\u{201D}")
+                )
+            }
+        }
+        throw DomainError.NotFound(message: String(localized: "No wallet named \u{201C}\(text)\u{201D}"))
     }
 
     /// Surfaces a validation failure from the grid through the same alert the

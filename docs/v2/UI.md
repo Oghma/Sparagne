@@ -151,9 +151,18 @@ più. Wallet, vault, ricorrenze e condivisione restano nella gestione ⌘⇧M.
 | `USCITE` / `USCITE FONDI` (riepilogo) | `net_expense` sulle buste senza / con tetto |
 | `FONDO CASSA INIZIALE` | il secchio "prima di gennaio" di `year_breakdown`, per persona |
 
-Il **wallet non è una colonna**: i mockup non lo mostrano. Resta nel modello
-(ogni entry ha una leg wallet) e viene risolto con il default sticky; è una
-colonna opzionale, nascosta di default.
+Il **wallet non è una colonna** di default: i mockup non lo mostrano, e ogni
+riga lo prende dal default sticky. È una colonna opzionale (fatta il
+2026-09-12), fra DESCRIZIONE e PERSONA, che si accende dal menu Vista
+("Mostra colonna wallet", ⌘⇧W) e resta accesa fra un avvio e l'altro
+(`UserDefaults`, chiave `showWalletColumn`, condivisa fra il menu e
+`AppStore.showWalletColumn`). Quando è visibile la cella si modifica come le
+altre — ↩ manda il wallet nuovo in `UpdateTransaction.wallet_id`, risolto per
+nome come la cella FLOW — e la riga vuota lascia scegliere il wallet invece di
+prendere il default. I trasferimenti fanno eccezione: la cella mostra
+`da → a` in `dim` e non si modifica, perché le due gambe stanno in
+`from_id`/`to_id`, che la griglia non tocca. L'export CSV (⌘E) porta la
+colonna `wallet` solo quando è a schermo.
 
 Decisione sulla persona (2026-09-10): niente campo nuovo sulle transazioni.
 `created_by` è già l'utente del vault ed è il senso della colonna nei vault
@@ -206,11 +215,26 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | `⌘D` | duplica l'ultima riga |
 | `⌥←` `⌥→` | mese precedente / successivo |
 | `⌘F` | fuoco sulla ricerca |
-| `⌘K` | riga quick-add sopra la griglia (la grammatica di §3.1 del distillato) |
+| `⌘K` | riga quick-add sopra la griglia (la grammatica di §3.1 del distillato); con `>` in prima posizione è la palette comandi |
 | `⌘E` | esporta CSV: le righe a schermo, RFC 4180, `Support/LedgerCSV.swift` |
 | `⌘⇧M` | gestione: vault, wallet, buste, ricorrenze, condivisione |
 | `⌘⇧C` | vista SETUP: buste e categorie |
 | `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
+| `⌘⇧W` | mostra / nasconde la colonna WALLET (menu Vista) |
+
+**Palette comandi** (2026-09-12): il campo ⌘K resta il quick-add finché il
+testo non comincia con `>`. Allora sotto il campo compare l'elenco delle
+azioni, filtrato dal vivo su quello che segue il `>` (senza distinzione di
+maiuscole né di accenti: prima il titolo dall'inizio, poi dall'inizio di una
+sua parola, poi ovunque, infine le parole chiave nascoste); ↑↓ scorrono con
+rientro in fondo, ↩ esegue e chiude, esc chiude. Nessuna finestra nuova:
+è lo stesso riquadro. Le azioni sono mese precedente / successivo / corrente,
+vai a RIEPILOGO o MASTRO, un "Vault: nome" per ogni altro vault, SETUP,
+gestione, esporta CSV, sincronizza ora, e i tre interruttori di vista
+(annullate, trasferimenti, colonna wallet). Quelle che hanno già una voce di
+menu ne mandano la notifica, così le due strade condividono una sola
+implementazione; il modello (`Views/Ledger/CommandPalette.swift`) è puro e
+testato senza finestra.
 
 ## 7. Tappe
 
@@ -240,8 +264,16 @@ la cella DATA parte dal numero del giorno; export CSV (⌘E); il catalogo
 stringhe copre tutta la UI del mastro in italiano; le barre dei 12 mesi
 hanno una linea di base per i mesi in rosso; il toast di annullamento e il
 bottone di sync usano la palette; le finestre secondarie forzano il tema
-scuro. Restano fuori: la palette comandi ⌘K del mockup è per ora solo il
-quick-add, e il wallet non ha ancora una colonna opzionale.
+scuro.
+
+Chiusura del 2026-09-12 (P3, 124 test dell'app): i due buchi lasciati aperti
+il 2026-09-11 sono chiusi. Il campo ⌘K è anche una palette comandi quando la
+riga comincia con `>` (§6), e il wallet ha la sua colonna opzionale, spenta
+di default, accesa da ⌘⇧W e ricordata in `UserDefaults` (§3). Codice nuovo:
+`Views/Ledger/CommandPalette.swift` (`PaletteAction`, `CommandPaletteModel`,
+la lista sotto il campo) e `SparagneTests/CommandPaletteTests.swift`; la
+colonna vive in `GridColumn.wallet`, `RowField.wallet`, `RowDraft.wallet`,
+`AppStore.resolveWallet` e `LedgerCSV.render(_:wallet:)`.
 
 Per guardare la UI con dei dati veri c'è una fixture:
 

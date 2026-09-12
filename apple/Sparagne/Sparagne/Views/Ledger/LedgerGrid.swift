@@ -26,7 +26,7 @@ struct LedgerGrid: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            GridHeader()
+            GridHeader(showsWallet: store.showWalletColumn)
             Hairline()
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -54,6 +54,12 @@ struct LedgerGrid: View {
             newRow = RowDraft.blank(in: store)
         }
         .onChange(of: store.direction) { _, _ in resetEditing() }
+        // Showing the column fills the empty line's cell with the sticky
+        // default; hiding it puts that value back out of reach.
+        .onChange(of: store.showWalletColumn) { _, _ in
+            resetEditing()
+            newRow = RowDraft.blank(in: store)
+        }
         .onChange(of: focus) { _, new in commitIfLeft(new) }
         .onAppear { newRow = RowDraft.blank(in: store) }
         .onReceive(NotificationCenter.default.publisher(for: .duplicateLastRow)) { _ in
@@ -70,6 +76,7 @@ struct LedgerGrid: View {
             ordinal: index + 1,
             row: row,
             store: store,
+            showsWallet: store.showWalletColumn,
             draft: isEditing ? $draft : nil,
             focus: $focus,
             onOpen: { field in open(row, at: field) },
@@ -99,7 +106,13 @@ struct LedgerGrid: View {
     // MARK: - The empty line
 
     private var newRowView: some View {
-        NewRowView(store: store, draft: $newRow, focus: $focus, onCommit: commitNewRow)
+        NewRowView(
+            store: store,
+            draft: $newRow,
+            focus: $focus,
+            onCommit: commitNewRow,
+            showsWallet: store.showWalletColumn
+        )
             .background(focus?.row == nil && focus != nil ? Ink.raised : Color.clear)
             .overlay(alignment: .leading) {
                 Rectangle().fill(Ink.accent).frame(width: 2)
@@ -183,7 +196,8 @@ struct LedgerGrid: View {
                 flowId: entry.flowId,
                 category: entry.category,
                 note: entry.note,
-                amount: entry.amount
+                amount: entry.amount,
+                walletId: entry.walletId
             )
             newRow = RowDraft.blank(in: store)
             focus = CellFocus(row: nil, field: .date)
@@ -233,6 +247,8 @@ enum RowField: Hashable, CaseIterable {
     case flow
     case category
     case note
+    /// Only in the hierarchy while the optional WALLET column is on.
+    case wallet
     case amount
 }
 
@@ -256,6 +272,7 @@ struct RowDraft {
     var flow = ""
     var category = ""
     var note = ""
+    var wallet = ""
     var amount = ""
 
     nonisolated init() {}
@@ -265,6 +282,10 @@ struct RowDraft {
         flow = row.envelopeDisplay == TransactionRow.placeholder ? "" : row.envelopeDisplay
         category = row.category
         note = row.note
+        // A transfer's WALLET cell is an arrow between two wallets, not a
+        // name: nothing the cell could resolve, so it opens empty and the
+        // commit leaves the legs alone.
+        wallet = row.isTransfer || row.walletDisplay == TransactionRow.placeholder ? "" : row.walletDisplay
         amount = LedgerMoney.editable(row.absoluteAmount)
     }
 
@@ -277,15 +298,19 @@ struct RowDraft {
         if let id = store.defaultFlowId, let flow = store.flows.first(where: { $0.id == id }) {
             draft.flow = store.flowName(flow)
         }
+        if store.showWalletColumn { draft.wallet = store.defaultWalletName ?? "" }
         return draft
     }
 
     /// The fields of a new row, resolved and parsed. `nil` when the amount
     /// cell is still empty: tabbing to the end of a blank line and pressing ↩
     /// is not an error, it is nothing.
-    func entry(store: AppStore) throws -> (day: Date, flowId: Uuid?, category: String?, note: String, amount: Int64)? {
+    func entry(
+        store: AppStore
+    ) throws -> (day: Date, flowId: Uuid?, category: String?, note: String, amount: Int64, walletId: Uuid?)? {
         guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let resolvedFlow = try cell(.flow) { try store.resolveFlow(named: flow) }
+        let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: wallet) }
         let parsedAmount = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
         let trimmed = category.trimmingCharacters(in: .whitespacesAndNewlines)
         return (
@@ -293,7 +318,8 @@ struct RowDraft {
             flowId: resolvedFlow ?? store.defaultFlowId,
             category: trimmed.isEmpty ? nil : trimmed,
             note: note,
-            amount: parsedAmount
+            amount: parsedAmount,
+            walletId: resolvedWallet
         )
     }
 
@@ -316,6 +342,14 @@ struct RowDraft {
 
         let resolvedFlow = try cell(.flow) { try store.resolveFlow(named: flow) }
         if let flowId = resolvedFlow, flowId != row.flowId { patch.flowId = flowId }
+
+        // Only when the cell was actually retyped: a row sitting on an
+        // archived wallet still shows its name, which no longer resolves.
+        let trimmedWallet = wallet.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedWallet.isEmpty, trimmedWallet != row.walletDisplay {
+            let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: trimmedWallet) }
+            if let walletId = resolvedWallet, walletId != row.walletId { patch.walletId = walletId }
+        }
 
         if !Calendar.current.isDate(day, inSameDayAs: row.occurredAt) {
             patch.occurredAt = AppStore.stamp(day: day, likeTimeOf: row.occurredAt)

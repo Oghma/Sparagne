@@ -251,4 +251,85 @@ struct LedgerStoreTests {
         #expect(calendar.component(.day, from: past.day) == 1)
         #expect(past.flow == envelope.name)
     }
+
+    // MARK: - The optional WALLET column (`docs/v2/UI.md` §3)
+
+    @Test("The wallet column is off until it is asked for, and the choice is remembered")
+    func walletColumnIsRememberedOff() throws {
+        let suite = "sparagne.wallet.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        let store = AppStore(client: try CoreClient.inMemory(author: "matteo"), defaults: defaults)
+        #expect(store.showWalletColumn == false)
+
+        store.showWalletColumn = true
+
+        // A later launch reads the preference back, the same key the View
+        // menu's toggle writes.
+        let relaunched = AppStore(client: try CoreClient.inMemory(author: "matteo"), defaults: defaults)
+        #expect(relaunched.showWalletColumn)
+        #expect(defaults.bool(forKey: AppStore.walletColumnKey))
+    }
+
+    @Test("A row carries the name of its wallet, and the empty line offers the sticky default")
+    func rowShowsItsWallet() throws {
+        let (store, envelope) = try Self.household()
+        store.createWallet(name: "Contanti", openingBalance: 0)
+        let cash = try #require(store.wallets.first { $0.name == "Contanti" })
+
+        let row = try #require(store.rows.first)
+        #expect(row.walletDisplay == "Conto")
+
+        // The empty line fills the cell only when the column is on screen.
+        store.showWalletColumn = false
+        #expect(RowDraft.blank(in: store).wallet == "")
+        store.showWalletColumn = true
+        #expect(RowDraft.blank(in: store).wallet == store.defaultWalletName)
+
+        // A row written against another wallet lands there, and the cell says so.
+        store.addRow(
+            day: Date(),
+            flowId: envelope.id,
+            category: "Spesa",
+            note: "contanti",
+            amount: 1_000,
+            walletId: cash.id
+        )
+        #expect(store.presentedError == nil)
+        let written = try #require(store.rows.first { $0.note == "contanti" })
+        #expect(written.walletDisplay == "Contanti")
+    }
+
+    @Test("The WALLET cell is editable: the diff carries the new wallet and the core moves the row")
+    func walletCellEdits() throws {
+        let (store, _) = try Self.household()
+        store.showWalletColumn = true
+        store.createWallet(name: "Contanti", openingBalance: 0)
+        let cash = try #require(store.wallets.first { $0.name == "Contanti" })
+
+        let row = try #require(store.rows.first { $0.note == "mutuo" })
+        var draft = RowDraft(row: row, store: store)
+        #expect(draft.wallet == "Conto")
+
+        // Typed into the cell, resolved the way the FLOW cell resolves names.
+        draft.wallet = "conta"
+        let patch = try draft.patch(against: row, store: store)
+        #expect(patch.walletId == cash.id)
+
+        store.update(transactionId: row.id, patch: patch)
+        #expect(store.presentedError == nil)
+        let moved = try #require(store.rows.first { $0.id == row.id })
+        #expect(moved.walletDisplay == "Contanti")
+    }
+
+    @Test("A wallet name that matches nothing, or two wallets, keeps the row open")
+    func walletCellRefusesBadNames() throws {
+        let (store, _) = try Self.household()
+        store.createWallet(name: "Contanti", openingBalance: 0)
+        store.createWallet(name: "Contanti extra", openingBalance: 0)
+
+        #expect(throws: DomainError.self) { try store.resolveWallet(named: "banca") }
+        #expect(throws: DomainError.self) { try store.resolveWallet(named: "cont") }
+        // Blank means "leave the default", not an error.
+        #expect(try store.resolveWallet(named: "  ") == nil)
+    }
 }

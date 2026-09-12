@@ -6,6 +6,9 @@ struct SparagneApp: App {
     // items and the ledger stay in sync without extra plumbing.
     @AppStorage("showVoided") private var showVoided = false
     @AppStorage("showTransfers") private var showTransfers = false
+    /// The optional WALLET column of the grid (`docs/v2/UI.md` §3): off by
+    /// default, remembered here.
+    @AppStorage("showWalletColumn") private var showWalletColumn = false
 
     /// Opened once, in `ContentView`; the Settings scene shares the engine
     /// built with it.
@@ -30,6 +33,13 @@ struct SparagneApp: App {
                     NotificationCenter.default.post(name: .duplicateLastRow, object: nil)
                 }
                 .keyboardShortcut("d", modifiers: .command)
+            }
+
+            // The standard View menu, beside "Show Toolbar": the column is a
+            // property of the view, not of the ledger's filters.
+            CommandGroup(after: .toolbar) {
+                Toggle(String(localized: "Show Wallet Column"), isOn: $showWalletColumn)
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
             }
 
             CommandGroup(after: .importExport) {

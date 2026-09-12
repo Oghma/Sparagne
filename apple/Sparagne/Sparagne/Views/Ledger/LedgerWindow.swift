@@ -15,6 +15,9 @@ struct LedgerWindow: View {
     /// Driven by the two toggles in the Ledger menu.
     @AppStorage("showVoided") private var showVoided = false
     @AppStorage("showTransfers") private var showTransfers = false
+    /// The optional WALLET column of the grid (`docs/v2/UI.md` §3), off until
+    /// the View menu turns it on.
+    @AppStorage("showWalletColumn") private var showWalletColumn = false
 
     // MARK: CSV export (⌘E, `Support/LedgerCSV.swift`)
     @State private var showsCSVExporter = false
@@ -51,7 +54,7 @@ struct LedgerWindow: View {
                             store.quickAddText = ""
                             showsQuickAdd = false
                         }
-                    QuickAddOverlay(store: store, isPresented: $showsQuickAdd)
+                    QuickAddOverlay(store: store, engine: engine, isPresented: $showsQuickAdd)
                         .padding(.top, 60)
                 }
             }
@@ -77,7 +80,9 @@ struct LedgerWindow: View {
             store.month = store.month.adding(months: months)
         }
         .onReceive(NotificationCenter.default.publisher(for: .exportCSV)) { _ in
-            exportDocument = CSVDocument(text: LedgerCSV.render(store.rows))
+            // The export carries the columns the grid is showing, so a file
+            // opened next to the window has the same shape (`UI.md` §6).
+            exportDocument = CSVDocument(text: LedgerCSV.render(store.rows, wallet: store.showWalletColumn))
             exportFileName = LedgerCSV.fileName(
                 vault: store.currentVault?.name ?? "",
                 month: store.month,
@@ -88,9 +93,16 @@ struct LedgerWindow: View {
         .onAppear {
             store.showVoided = showVoided
             store.showTransfers = showTransfers
+            store.showWalletColumn = showWalletColumn
         }
+        // Both ways for all three: the menu writes the preference, the
+        // palette writes the store, and the shared key keeps them one value.
         .onChange(of: showVoided) { _, new in store.showVoided = new }
+        .onChange(of: store.showVoided) { _, new in showVoided = new }
         .onChange(of: showTransfers) { _, new in store.showTransfers = new }
+        .onChange(of: store.showTransfers) { _, new in showTransfers = new }
+        .onChange(of: showWalletColumn) { _, new in store.showWalletColumn = new }
+        .onChange(of: store.showWalletColumn) { _, new in showWalletColumn = new }
         .task(id: store.searchText) {
             // Debounce: reload only once the field has been quiet for 300 ms,
             // and only if it actually changed since the last reload (the task
@@ -203,14 +215,22 @@ struct RecurringBanner: View {
 
 // MARK: - Quick add
 
-/// ⌘K: the one-line grammar of `DISTILLATO_V1.md` §3.1, over the grid.
+/// ⌘K: the one-line grammar of `DISTILLATO_V1.md` §3.1, over the grid, and
+/// the command palette of `docs/v2/UI.md` §6 when the line starts with `>`.
 ///
 /// The grid covers the common case; this covers the fast case, where the
 /// whole row is one line of text and the fingers never leave the keyboard.
+/// One field, two grammars: a transaction, or a command.
 struct QuickAddOverlay: View {
     @Bindable var store: AppStore
+    let engine: SyncEngine?
     @Binding var isPresented: Bool
+
     @FocusState private var focused: Bool
+    @State private var palette = CommandPaletteModel()
+
+    /// `>` in first position turns the field into the palette.
+    private var isCommand: Bool { CommandPaletteModel.isCommand(store.quickAddText) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -222,7 +242,25 @@ struct QuickAddOverlay: View {
             .font(Face.mono(14))
             .foregroundStyle(Ink.text)
             .focused($focused)
+            // The arrows belong to the list while the field is a palette; the
+            // caret gets them back as soon as the `>` is gone.
+            .onKeyPress(.upArrow) {
+                guard isCommand else { return .ignored }
+                palette.move(by: -1)
+                return .handled
+            }
+            .onKeyPress(.downArrow) {
+                guard isCommand else { return .ignored }
+                palette.move(by: 1)
+                return .handled
+            }
             .onSubmit {
+                if isCommand {
+                    // Nothing highlighted means nothing matched: stay open so
+                    // the query can be fixed.
+                    if palette.run() { close() }
+                    return
+                }
                 store.submit(quickAdd: store.quickAddText)
                 // A failed submit leaves the text in place and raises
                 // `presentedError`; stay open so the user can fix the line
@@ -232,21 +270,33 @@ struct QuickAddOverlay: View {
                 }
             }
 
-            Text(preview.text)
-                .font(Face.footnote)
-                .foregroundStyle(preview.isError ? Ink.accent : Ink.dim)
-                .lineLimit(1)
+            if isCommand {
+                CommandPaletteList(model: palette, onRun: close)
+            } else {
+                Text(preview.text)
+                    .font(Face.footnote)
+                    .foregroundStyle(preview.isError ? Ink.accent : Ink.dim)
+                    .lineLimit(1)
+            }
         }
         .padding(14)
         .frame(width: 520, alignment: .leading)
         .background(Ink.panel)
         .overlay(Rectangle().strokeBorder(Ink.accent, lineWidth: 1))
         .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
-        .onAppear { focused = true }
-        .onExitCommand {
-            store.quickAddText = ""
-            isPresented = false
+        .onAppear {
+            focused = true
+            refreshActions()
         }
+        // The entries say what the toggles will do and list the other vaults,
+        // so they are built fresh every time the `>` is typed.
+        .onChange(of: isCommand) { _, now in
+            if now { refreshActions() }
+        }
+        .onChange(of: store.quickAddText) { _, new in
+            palette.query = CommandPaletteModel.query(in: new)
+        }
+        .onExitCommand(perform: close)
         .onChange(of: store.savedAt) { _, _ in
             // `resolveAmbiguous` resubmits from the error alert's candidate
             // buttons, outside this field's own `onSubmit`, and clears the
@@ -255,6 +305,16 @@ struct QuickAddOverlay: View {
             // take the line away.
             if store.quickAddText.isEmpty { isPresented = false }
         }
+    }
+
+    private func close() {
+        store.quickAddText = ""
+        isPresented = false
+    }
+
+    private func refreshActions() {
+        palette.actions = CommandPaletteModel.ledgerActions(store: store, engine: engine)
+        palette.query = CommandPaletteModel.query(in: store.quickAddText)
     }
 
     private var preview: (text: String, isError: Bool) {

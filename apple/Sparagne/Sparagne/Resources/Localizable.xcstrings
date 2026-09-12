@@ -481,6 +481,22 @@
         }
       }
     },
+    "Current Month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current Month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mese corrente"
+          }
+        }
+      }
+    },
     "Daily": {
       "localizations": {
         "en": {
@@ -929,6 +945,70 @@
         }
       }
     },
+    "Go to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vai a %@"
+          }
+        }
+      }
+    },
+    "Hide Transfers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Transfers"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nascondi trasferimenti"
+          }
+        }
+      }
+    },
+    "Hide Voided": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Voided"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nascondi annullate"
+          }
+        }
+      }
+    },
+    "Hide Wallet Column": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Wallet Column"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nascondi colonna wallet"
+          }
+        }
+      }
+    },
     "In sync": {
       "localizations": {
         "en": {
@@ -1281,6 +1361,22 @@
         }
       }
     },
+    "More than one wallet matches “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More than one wallet matches “%@”"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Più di un wallet corrisponde a “%@”"
+          }
+        }
+      }
+    },
     "Name": {
       "localizations": {
         "en": {
@@ -1537,6 +1633,22 @@
         }
       }
     },
+    "No matching command": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching command"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun comando corrispondente"
+          }
+        }
+      }
+    },
     "No recurring templates": {
       "localizations": {
         "en": {
@@ -1581,6 +1693,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessun vault ancora"
+          }
+        }
+      }
+    },
+    "No wallet named “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No wallet named “%@”"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun wallet chiamato “%@”"
           }
         }
       }
@@ -2177,6 +2305,22 @@
         }
       }
     },
+    "Show Wallet Column": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Wallet Column"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra colonna wallet"
+          }
+        }
+      }
+    },
     "Signed in as": {
       "localizations": {
         "en": {
@@ -2397,6 +2541,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sincronizzazione"
+          }
+        }
+      }
+    },
+    "Sync Now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync Now"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizza ora"
           }
         }
       }
@@ -2925,6 +3085,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome del vault"
+          }
+        }
+      }
+    },
+    "Vault: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault: %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault: %@"
           }
         }
       }
@@ -3537,6 +3713,22 @@
         }
       }
     },
+    "run": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "run"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "esegui"
+          }
+        }
+      }
+    },
     "save row": {
       "localizations": {
         "en": {
@@ -3581,6 +3773,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "cerca descrizione…"
+          }
+        }
+      }
+    },
+    "select": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "select"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "scegli"
           }
         }
       }

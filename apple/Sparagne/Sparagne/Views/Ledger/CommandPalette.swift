@@ -1,0 +1,338 @@
+import SwiftUI
+import SparagneCore
+
+/// One entry of the ⌘K command palette (`docs/v2/UI.md` §6).
+///
+/// `run` is whatever the menu item of the same name already does: the palette
+/// is a second way to reach the app's actions, never a second implementation
+/// of them.
+struct PaletteAction: Identifiable {
+    /// Stable across rebuilds, so a list that is re-made while the field is
+    /// open does not lose its identity mid-animation.
+    let id: String
+    /// Localized: the palette filters on what is on screen, not on a key.
+    let title: String
+    /// Extra words the entry can be found by, never displayed. Not localized
+    /// for that reason: the title already carries the user's language.
+    let keywords: [String]
+    let run: @MainActor () -> Void
+
+    init(id: String, title: String, keywords: [String] = [], run: @escaping @MainActor () -> Void) {
+        self.id = id
+        self.title = title
+        self.keywords = keywords
+        self.run = run
+    }
+}
+
+/// The state behind the palette: the actions, the text typed after `>`, and
+/// which row the arrows are on.
+///
+/// Deliberately free of SwiftUI, so the filtering and the selection can be
+/// tested without a window (`SparagneTests/CommandPaletteTests.swift`).
+@MainActor
+@Observable
+final class CommandPaletteModel {
+    /// Rebuilt every time the palette opens: the vault list and the state of
+    /// the two toggles change what the entries say.
+    var actions: [PaletteAction] {
+        didSet { selection = 0 }
+    }
+
+    /// What was typed after the `>`, already stripped of the marker.
+    var query: String = "" {
+        didSet { if query != oldValue { selection = 0 } }
+    }
+
+    /// Index into `results`, not into `actions`.
+    private(set) var selection = 0
+
+    init(actions: [PaletteAction] = []) {
+        self.actions = actions
+    }
+
+    // MARK: - The `>` marker
+
+    /// The field is a palette when its first character is `>`. Quick-add uses
+    /// `>` as its envelope marker, but never in first position: a line that
+    /// starts with one has no amount and is not a transaction.
+    static func isCommand(_ text: String) -> Bool { text.hasPrefix(">") }
+
+    /// The text after the marker.
+    static func query(in text: String) -> String {
+        guard isCommand(text) else { return "" }
+        return String(text.dropFirst()).trimmingCharacters(in: .whitespaces)
+    }
+
+    // MARK: - Filtering
+
+    /// Case- and accent-insensitive: `citta` finds "Città", `MESE` finds
+    /// "mese".
+    static func fold(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    }
+
+    /// The entries `query` matches, best first. Ties keep the order the
+    /// actions were registered in, so an empty field always lists the same
+    /// commands in the same places.
+    static func filter(_ actions: [PaletteAction], query: String) -> [PaletteAction] {
+        let needle = fold(query.trimmingCharacters(in: .whitespaces))
+        guard !needle.isEmpty else { return actions }
+        return actions.enumerated()
+            .compactMap { index, action in
+                rank(action, needle).map { (rank: $0, index: index, action: action) }
+            }
+            .sorted { ($0.rank, $0.index) < ($1.rank, $1.index) }
+            .map(\.action)
+    }
+
+    /// Lower is better: the title from its start, then from the start of one
+    /// of its words, then anywhere in it, then the hidden keywords.
+    private static func rank(_ action: PaletteAction, _ needle: String) -> Int? {
+        let title = fold(action.title)
+        if title.hasPrefix(needle) { return 0 }
+        if title.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(needle) }) {
+            return 1
+        }
+        if title.contains(needle) { return 2 }
+        if action.keywords.contains(where: { fold($0).hasPrefix(needle) }) { return 3 }
+        if action.keywords.contains(where: { fold($0).contains(needle) }) { return 4 }
+        return nil
+    }
+
+    var results: [PaletteAction] { Self.filter(actions, query: query) }
+
+    // MARK: - Selection
+
+    var selected: PaletteAction? {
+        let list = results
+        return list.indices.contains(selection) ? list[selection] : nil
+    }
+
+    /// ↓ is `move(by: 1)`, ↑ is `move(by: -1)`; both wrap, so holding one
+    /// arrow walks the list round instead of sticking at an end.
+    func move(by delta: Int) {
+        let count = results.count
+        guard count > 0 else {
+            selection = 0
+            return
+        }
+        selection = ((selection + delta) % count + count) % count
+    }
+
+    /// The pointer picking a row.
+    func select(_ index: Int) {
+        guard results.indices.contains(index) else { return }
+        selection = index
+    }
+
+    /// ↩: runs the highlighted entry. `false` when nothing matches, so the
+    /// field can stay open instead of closing over a typo.
+    @discardableResult
+    func run() -> Bool {
+        guard let action = selected else { return false }
+        action.run()
+        return true
+    }
+}
+
+// MARK: - The app's own actions
+
+extension CommandPaletteModel {
+    /// Everything the palette can do, in the order it lists them.
+    ///
+    /// The entries that have a menu item post that item's notification, so
+    /// the two ways in share one implementation; the rest write the same
+    /// state the header and the switcher write. The three view toggles write
+    /// the store, which the window mirrors back into the menu's preference.
+    static func ledgerActions(store: AppStore, engine: SyncEngine?) -> [PaletteAction] {
+        var actions: [PaletteAction] = [
+            PaletteAction(
+                id: "month.previous",
+                title: String(localized: "Previous Month"),
+                keywords: ["month", "mese", "prev"]
+            ) {
+                NotificationCenter.default.post(name: .stepMonth, object: -1)
+            },
+            PaletteAction(
+                id: "month.next",
+                title: String(localized: "Next Month"),
+                keywords: ["month", "mese"]
+            ) {
+                NotificationCenter.default.post(name: .stepMonth, object: 1)
+            },
+            PaletteAction(
+                id: "month.today",
+                title: String(localized: "Current Month"),
+                keywords: ["today", "oggi", "month", "mese"]
+            ) {
+                // Through the same notification the arrows use, so the window
+                // stays the one place that moves the month.
+                let now = MonthKey(Date())
+                let delta = (now.year - store.month.year) * 12 + (now.month - store.month.month)
+                NotificationCenter.default.post(name: .stepMonth, object: delta)
+            },
+        ]
+
+        for tab in [LedgerTab.summary, .ledger] {
+            actions.append(
+                PaletteAction(
+                    id: "tab.\(tab.rawValue)",
+                    title: String(localized: "Go to \(tab.label)"),
+                    keywords: [tab.rawValue, "tab", "vista"]
+                ) {
+                    store.tab = tab
+                }
+            )
+        }
+
+        for vault in store.vaults where vault.id != store.currentVault?.id {
+            actions.append(
+                PaletteAction(
+                    id: "vault.\(vault.id)",
+                    title: String(localized: "Vault: \(vault.name)"),
+                    keywords: [vault.name]
+                ) {
+                    store.select(vault)
+                }
+            )
+        }
+
+        actions.append(contentsOf: [
+            PaletteAction(
+                id: "open.setup",
+                title: String(localized: "Envelopes & Categories\u{2026}"),
+                keywords: ["setup", "flow", "buste", "categorie"]
+            ) {
+                NotificationCenter.default.post(name: .openSetup, object: nil)
+            },
+            PaletteAction(
+                id: "open.management",
+                title: String(localized: "Manage\u{2026}"),
+                keywords: ["vault", "wallet", "gestione", "sharing"]
+            ) {
+                NotificationCenter.default.post(name: .openManagement, object: nil)
+            },
+            PaletteAction(
+                id: "export.csv",
+                title: String(localized: "Export CSV\u{2026}"),
+                keywords: ["csv", "export", "esporta"]
+            ) {
+                NotificationCenter.default.post(name: .exportCSV, object: nil)
+            },
+        ])
+
+        if let engine {
+            actions.append(
+                PaletteAction(
+                    id: "sync.now",
+                    title: String(localized: "Sync Now"),
+                    keywords: ["sync", "sincronizza", "server"]
+                ) {
+                    Task { await engine.syncNow() }
+                }
+            )
+        }
+
+        actions.append(contentsOf: [
+            PaletteAction(
+                id: "toggle.voided",
+                title: store.showVoided
+                    ? String(localized: "Hide Voided")
+                    : String(localized: "Show Voided"),
+                keywords: ["voided", "annullate"]
+            ) {
+                store.showVoided.toggle()
+            },
+            PaletteAction(
+                id: "toggle.transfers",
+                title: store.showTransfers
+                    ? String(localized: "Hide Transfers")
+                    : String(localized: "Show Transfers"),
+                keywords: ["transfers", "trasferimenti"]
+            ) {
+                store.showTransfers.toggle()
+            },
+            PaletteAction(
+                id: "toggle.wallet",
+                title: store.showWalletColumn
+                    ? String(localized: "Hide Wallet Column")
+                    : String(localized: "Show Wallet Column"),
+                keywords: ["wallet", "column", "colonna"]
+            ) {
+                store.showWalletColumn.toggle()
+            },
+        ])
+
+        return actions
+    }
+}
+
+// MARK: - The list under the field
+
+/// The rows under the ⌘K field while it is in command mode. Same ink as the
+/// grid: this is a list of choices, not a dialog.
+struct CommandPaletteList: View {
+    let model: CommandPaletteModel
+    /// Called after an entry ran, so the field can close itself.
+    let onRun: () -> Void
+
+    var body: some View {
+        let results = model.results
+        VStack(alignment: .leading, spacing: 0) {
+            Hairline()
+            if results.isEmpty {
+                Text(String(localized: "No matching command"))
+                    .font(Face.row)
+                    .foregroundStyle(Ink.dim)
+                    .padding(.horizontal, 4)
+                    .frame(height: Metrics.rowHeight, alignment: .leading)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(results.enumerated()), id: \.element.id) { index, action in
+                            row(index: index, action: action)
+                        }
+                    }
+                }
+                .frame(maxHeight: Metrics.rowHeight * 8)
+                .scrollBounceBehavior(.basedOnSize)
+            }
+            Hairline()
+            HStack(spacing: 16) {
+                hint("\u{2191}\u{2193}", String(localized: "select"))
+                hint("\u{21A9}", String(localized: "run"))
+                hint("esc", String(localized: "cancel"))
+            }
+            .frame(height: 22)
+        }
+    }
+
+    private func row(index: Int, action: PaletteAction) -> some View {
+        let active = index == model.selection
+        return Text(action.title)
+            .font(Face.row)
+            .foregroundStyle(active ? Ink.bg : Ink.text)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: Metrics.rowHeight)
+            .background(active ? Ink.accent : Color.clear)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { model.select(index) }
+            }
+            .onTapGesture {
+                model.select(index)
+                if model.run() { onRun() }
+            }
+    }
+
+    private func hint(_ key: String, _ label: String) -> some View {
+        HStack(spacing: 5) {
+            Text(key).font(Face.footnote).foregroundStyle(Ink.text)
+            Text(label).font(Face.footnote).foregroundStyle(Ink.dim)
+        }
+    }
+}

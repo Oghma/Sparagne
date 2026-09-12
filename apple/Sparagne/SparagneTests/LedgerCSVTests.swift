@@ -100,4 +100,58 @@ struct LedgerCSVTests {
         #expect(LedgerCSV.fileName(vault: "Casa Nostra", month: month, direction: .expenses) == "casa-nostra-2026-08-expenses.csv")
         #expect(LedgerCSV.fileName(vault: "Casa Nostra", month: month, direction: .income) == "casa-nostra-2026-08-income.csv")
     }
+
+    // MARK: - The optional WALLET column (`docs/v2/UI.md` §3)
+
+    /// The same fixture, with a wallet the `NameBook` can resolve to a name.
+    private static func namedWalletRow(wallet: String) -> TransactionRow {
+        let walletId = UUID().uuidString
+        let view = TransactionView(
+            id: UUID().uuidString,
+            kind: .expense,
+            occurredAt: CoreDate.offset(Date()),
+            amount: 1_000,
+            categoryId: UUID().uuidString,
+            category: "Groceries",
+            categoryIsSystem: false,
+            note: nil,
+            createdBy: "Matteo",
+            voided: false,
+            walletId: walletId,
+            flowId: nil,
+            fromId: nil,
+            toId: nil,
+            legs: []
+        )
+        let snapshot = VaultSnapshot(
+            id: UUID().uuidString,
+            name: "Casa",
+            currency: .eur,
+            wallets: [WalletView(id: walletId, name: wallet, balance: 0, archived: false)],
+            flows: [],
+            unallocatedFlowId: UUID().uuidString
+        )
+        return TransactionRow(view: view, names: NameBook(snapshot: snapshot))
+    }
+
+    @Test("The export carries the wallet column only while the grid is showing it")
+    func walletColumnFollowsTheGrid() {
+        #expect(LedgerCSV.render([]) == LedgerCSV.header + "\r\n")
+        #expect(LedgerCSV.render([], wallet: true) == LedgerCSV.headerWithWallet + "\r\n")
+        #expect(!LedgerCSV.header.contains("wallet"))
+    }
+
+    @Test("With the column on, the wallet name sits between the description and the person")
+    func walletFieldPosition() {
+        let row = Self.namedWalletRow(wallet: "Conto")
+        let hidden = LedgerCSV.render([row]).components(separatedBy: "\r\n")[1].components(separatedBy: ",")
+        #expect(hidden.count == 8)
+        #expect(hidden[5] == "Matteo")
+
+        let shown = LedgerCSV.render([row], wallet: true).components(separatedBy: "\r\n")[1]
+            .components(separatedBy: ",")
+        #expect(shown.count == 9)
+        #expect(shown[5] == "Conto")
+        #expect(shown[6] == "Matteo")
+    }
 }

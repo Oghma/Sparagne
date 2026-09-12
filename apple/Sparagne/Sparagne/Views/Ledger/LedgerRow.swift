@@ -8,6 +8,9 @@ enum GridColumn {
     static let date: CGFloat = 78
     static let flow: CGFloat = 98
     static let category: CGFloat = 118
+    /// The optional WALLET column (`docs/v2/UI.md` §3), between DESCRIZIONE
+    /// and PERSONA when the View menu turns it on.
+    static let wallet: CGFloat = 98
     static let person: CGFloat = 92
     static let amount: CGFloat = 112
     /// DESCRIZIONE takes whatever is left, down to this.
@@ -39,6 +42,9 @@ struct GridCell<Content: View>: View {
 
 /// The column headings.
 struct GridHeader: View {
+    /// The optional WALLET column, off by default.
+    var showsWallet = false
+
     var body: some View {
         HStack(spacing: 0) {
             GridCell(width: GridColumn.ordinal, alignment: .trailing) { SectionLabel(text: "#") }
@@ -46,6 +52,9 @@ struct GridHeader: View {
             GridCell(width: GridColumn.flow) { SectionLabel(text: String(localized: "Envelope")) }
             GridCell(width: GridColumn.category) { SectionLabel(text: String(localized: "Category")) }
             GridCell { SectionLabel(text: String(localized: "Description")) }
+            if showsWallet {
+                GridCell(width: GridColumn.wallet) { SectionLabel(text: String(localized: "Wallet")) }
+            }
             GridCell(width: GridColumn.person) { SectionLabel(text: String(localized: "Person")) }
             GridCell(width: GridColumn.amount, alignment: .trailing) { SectionLabel(text: String(localized: "Amount")) }
         }
@@ -83,6 +92,8 @@ struct LedgerRowView: View {
     let ordinal: Int
     let row: TransactionRow
     @Bindable var store: AppStore
+    /// Draws the WALLET column when the View menu is showing it.
+    var showsWallet = false
     /// Non-nil while this row is the one being edited.
     let draft: Binding<RowDraft>?
     @FocusState.Binding var focus: CellFocus?
@@ -109,6 +120,7 @@ struct LedgerRowView: View {
                 textCell(.flow, width: GridColumn.flow)
                 textCell(.category, width: GridColumn.category)
                 textCell(.note, width: nil)
+                if showsWallet { walletCell }
                 personCell
                 amountCell
             } else {
@@ -138,6 +150,10 @@ struct LedgerRowView: View {
             .onTapGesture { onOpen(.category) }
         GridCell { text(row.note.isEmpty ? TransactionRow.placeholder : row.note) }
             .onTapGesture { onOpen(.note) }
+        if showsWallet {
+            GridCell(width: GridColumn.wallet) { text(row.walletDisplay) }
+                .onTapGesture { onOpen(row.isTransfer ? .note : .wallet) }
+        }
         GridCell(width: GridColumn.person) {
             Text(row.person)
                 .font(Face.row)
@@ -198,6 +214,22 @@ struct LedgerRowView: View {
         }
     }
 
+    /// A transfer's wallets are its two ends, not a field: `UpdateTransaction`
+    /// moves them with `from_id`/`to_id`, which the grid does not edit, so the
+    /// cell stays read-only for those rows.
+    @ViewBuilder
+    private var walletCell: some View {
+        if row.isTransfer {
+            GridCell(width: GridColumn.wallet) {
+                Text(row.walletDisplay)
+                    .font(Face.row)
+                    .foregroundStyle(Ink.dim)
+            }
+        } else {
+            textCell(.wallet, width: GridColumn.wallet)
+        }
+    }
+
     private var personCell: some View {
         GridCell(width: GridColumn.person) {
             Text(row.person)
@@ -212,6 +244,7 @@ struct LedgerRowView: View {
         case .flow: return draft.flow
         case .category: return draft.category
         case .note: return draft.note
+        case .wallet: return draft.wallet
         case .amount: return draft.amount
         case .date: return .constant("")
         }
@@ -226,6 +259,9 @@ struct NewRowView: View {
     @Binding var draft: RowDraft
     @FocusState.Binding var focus: CellFocus?
     let onCommit: () -> Void
+    /// With the column hidden the new row still lands on the sticky default
+    /// wallet; showing it lets the wallet be picked per row (`UI.md` §3).
+    var showsWallet = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -234,6 +270,14 @@ struct NewRowView: View {
             field($draft.flow, .flow, String(localized: "Envelope"), width: GridColumn.flow)
             field($draft.category, .category, String(localized: "Category"), width: GridColumn.category)
             field($draft.note, .note, String(localized: "description…"), width: nil)
+            if showsWallet {
+                field(
+                    $draft.wallet,
+                    .wallet,
+                    store.defaultWalletName ?? String(localized: "Wallet"),
+                    width: GridColumn.wallet
+                )
+            }
             GridCell(width: GridColumn.person) {
                 Text(store.currentAuthor)
                     .font(Face.row)
