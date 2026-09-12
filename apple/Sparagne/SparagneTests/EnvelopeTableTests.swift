@@ -12,15 +12,15 @@ import Testing
 struct EnvelopeTableTests {
     private static func makeStore() throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.envelopes.\(UUID().uuidString)"))
-        return AppStore(client: try CoreClient.inMemory(author: "matteo"), defaults: defaults)
+        return AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
     }
 
     /// A vault whose Unallocated holds the wallet's opening balance, which is
     /// what a new envelope's allocation is moved out of.
-    private static func vault() throws -> AppStore {
+    private static func vault() async throws -> AppStore {
         let store = try makeStore()
-        store.bootstrap()
-        store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
         #expect(store.presentedError == nil)
         return store
     }
@@ -160,8 +160,8 @@ struct EnvelopeTableTests {
     }
 
     @Test("The empty line parses its kind, its cap and its allocation, and creates the envelope")
-    func newLineCreates() throws {
-        let store = try Self.vault()
+    func newLineCreates() async throws {
+        let store = try await Self.vault()
         var line = EnvelopeDraft()
         line.name = "  Emergenza  "
         line.kind = .income
@@ -175,7 +175,7 @@ struct EnvelopeTableTests {
         #expect(entry.allowNegative)
         #expect(entry.allocation == 25_000)
 
-        store.createEnvelope(
+        await store.createEnvelope(
             name: entry.name,
             mode: entry.mode,
             allowNegative: entry.allowNegative,
@@ -195,9 +195,9 @@ struct EnvelopeTableTests {
     // MARK: - Through the store
 
     @Test("The diff reaches the core as an update of the changed fields only")
-    func patchReachesTheStore() throws {
-        let store = try Self.vault()
-        store.createEnvelope(name: "Casa", mode: .netCapped(cap: 150_000_00), allowNegative: false, openingAllocation: 0)
+    func patchReachesTheStore() async throws {
+        let store = try await Self.vault()
+        await store.createEnvelope(name: "Casa", mode: .netCapped(cap: 150_000_00), allowNegative: false, openingAllocation: 0)
         let flow = try #require(store.flows.first { $0.name == "Casa" })
 
         var draft = EnvelopeDraft(flow: flow)
@@ -206,7 +206,7 @@ struct EnvelopeTableTests {
         let patch = try draft.patch(against: flow, currency: store.currency)
         #expect(patch.mode == nil)
 
-        store.updateEnvelope(flow.id, name: patch.name, mode: patch.mode, allowNegative: patch.allowNegative)
+        await store.updateEnvelope(flow.id, name: patch.name, mode: patch.mode, allowNegative: patch.allowNegative)
         #expect(store.presentedError == nil)
 
         let updated = try #require(store.flows.first { $0.id == flow.id })

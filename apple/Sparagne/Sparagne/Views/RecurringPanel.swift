@@ -51,7 +51,7 @@ struct RecurringPanel: View {
                             Button(String(localized: "Edit…")) { sheet = .edit(template) }
                             if !template.archived {
                                 Button(String(localized: "Archive"), role: .destructive) {
-                                    store.archiveRecurring(template.id)
+                                    Task { await store.archiveRecurring(template.id) }
                                 }
                             }
                         }
@@ -59,7 +59,7 @@ struct RecurringPanel: View {
             }
         }
         .frame(width: 480, height: 420)
-        .onAppear { store.loadRecurringTemplates() }
+        .task { await store.loadRecurringTemplates() }
         .sheet(item: $sheet) { kind in
             switch kind {
             case .new:
@@ -318,17 +318,19 @@ struct RecurringTemplateSheet: View {
             if noteValue != (template.note ?? "") { patch.note = noteValue }
             if schedule != template.schedule { patch.schedule = schedule }
             if enabled != template.enabled { patch.enabled = enabled }
-            store.updateRecurring(template.id, patch: patch)
+            Task { await store.updateRecurring(template.id, patch: patch) }
         } else {
-            store.createRecurring(
-                kind: kind,
-                amount: amount,
-                walletId: walletId,
-                flowId: flowId,
-                category: categoryValue.isEmpty ? nil : categoryValue,
-                note: noteValue.isEmpty ? nil : noteValue,
-                schedule: schedule
-            )
+            Task {
+                await store.createRecurring(
+                    kind: kind,
+                    amount: amount,
+                    walletId: walletId,
+                    flowId: flowId,
+                    category: categoryValue.isEmpty ? nil : categoryValue,
+                    note: noteValue.isEmpty ? nil : noteValue,
+                    schedule: schedule
+                )
+            }
         }
         dismiss()
     }

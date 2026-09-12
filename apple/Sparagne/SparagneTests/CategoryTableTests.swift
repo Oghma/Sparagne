@@ -11,15 +11,15 @@ import Testing
 struct CategoryTableTests {
     private static func makeStore() throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.categories.\(UUID().uuidString)"))
-        return AppStore(client: try CoreClient.inMemory(author: "matteo"), defaults: defaults)
+        return AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
     }
 
     /// A vault with its system categories and one of the user's own.
-    private static func vault() throws -> AppStore {
+    private static func vault() async throws -> AppStore {
         let store = try makeStore()
-        store.bootstrap()
-        store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
-        store.loadCategoryManagement()
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        await store.loadCategoryManagement()
         #expect(store.presentedError == nil)
         return store
     }
@@ -82,12 +82,12 @@ struct CategoryTableTests {
     // MARK: - The empty line
 
     @Test("The empty line creates a category, and a blank name creates nothing")
-    func emptyLineCreates() throws {
-        let store = try Self.vault()
+    func emptyLineCreates() async throws {
+        let store = try await Self.vault()
         #expect(CategoryDraft.creation(from: "   ") == nil)
 
         let name = try #require(CategoryDraft.creation(from: "  Spesa  "))
-        store.createCategory(name: name)
+        await store.createCategory(name: name)
         #expect(store.presentedError == nil)
         #expect(store.windowCategories.contains { $0.name == "Spesa" })
     }
@@ -95,19 +95,19 @@ struct CategoryTableTests {
     // MARK: - System categories
 
     @Test("System categories are read-only, and are shown under their localized name")
-    func systemCategoriesAreReadOnly() throws {
-        let store = try Self.vault()
+    func systemCategoriesAreReadOnly() async throws {
+        let store = try await Self.vault()
         let system = try #require(store.windowCategories.first { $0.isSystem })
         #expect(!CategoryDraft.isEditable(system))
         #expect(!CategoryDraft.label(system).isEmpty)
 
-        store.createCategory(name: "Spesa")
+        await store.createCategory(name: "Spesa")
         let own = try #require(store.windowCategories.first { $0.name == "Spesa" })
         #expect(CategoryDraft.isEditable(own))
         #expect(CategoryDraft.label(own) == "Spesa")
 
         // An archived row is restored from the menu, not retyped.
-        store.archiveCategory(own.id)
+        await store.archiveCategory(own.id)
         let archived = try #require(store.windowCategories.first { $0.id == own.id })
         #expect(archived.archived)
         #expect(!CategoryDraft.isEditable(archived))

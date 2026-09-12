@@ -111,7 +111,7 @@ struct LedgerWindow: View {
             guard store.searchText != lastSearched else { return }
             guard (try? await Task.sleep(for: .milliseconds(300))) != nil else { return }
             lastSearched = store.searchText
-            store.reload()
+            await store.reload()
         }
         .fileExporter(
             isPresented: $showsCSVExporter,
@@ -258,15 +258,17 @@ struct QuickAddOverlay: View {
                 if isCommand {
                     // Nothing highlighted means nothing matched: stay open so
                     // the query can be fixed.
-                    if palette.run() { close() }
+                    Task { if await palette.run() { close() } }
                     return
                 }
-                store.submit(quickAdd: store.quickAddText)
-                // A failed submit leaves the text in place and raises
-                // `presentedError`; stay open so the user can fix the line
-                // instead of closing over an empty grid.
-                if store.presentedError == nil {
-                    isPresented = false
+                Task {
+                    await store.submit(quickAdd: store.quickAddText)
+                    // A failed submit leaves the text in place and raises
+                    // `presentedError`; stay open so the user can fix the line
+                    // instead of closing over an empty grid.
+                    if store.presentedError == nil {
+                        isPresented = false
+                    }
                 }
             }
 

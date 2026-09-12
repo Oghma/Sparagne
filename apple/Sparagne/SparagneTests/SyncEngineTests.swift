@@ -272,32 +272,33 @@ actor FakeServerTransport: SyncTransport {
 /// the same fake server.
 @MainActor
 private struct Peer {
-    let client: CoreClient
+    let core: CoreActor
     let store: AppStore
     let account: AccountStore
     let engine: SyncEngine
 
-    init(server: FakeServerTransport) throws {
+    init(server: FakeServerTransport) async throws {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.sync.\(UUID().uuidString)"))
-        client = try CoreClient.inMemory(author: "local")
-        store = AppStore(client: client, defaults: defaults, undoWindow: .seconds(60))
+        core = try CoreActor.inMemory(author: "local")
+        store = AppStore(core: core, defaults: defaults, undoWindow: .seconds(60))
         account = AccountStore(defaults: defaults, tokens: MemoryTokenStore())
         account.serverURLText = "http://fake.test"
         engine = SyncEngine(
-            client: client,
+            core: core,
             store: store,
             account: account,
             makeTransport: { _ in server }
         )
         // No timer and no debounce: every sync in these tests is explicit.
         engine.automaticSync = false
-        store.bootstrap()
+        await engine.prepare()
+        await store.bootstrap()
     }
 
     var vaultId: Uuid? { store.currentVault?.id }
 
-    func syncState() throws -> SyncState {
-        try client.syncState(vaultId: #require(vaultId))
+    func syncState() async throws -> SyncState {
+        try await core.syncState(vaultId: #require(vaultId))
     }
 
     /// Names and balances of the wallets and envelopes, for comparing two
@@ -318,14 +319,19 @@ private struct Peer {
 struct SyncEngineTests {
     /// A vault with a `Cash` wallet holding 100.00 and a `Food` envelope
     /// holding 50.00, all still in the outbox.
-    private static func seed(_ peer: Peer) {
-        peer.store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
-        peer.store.createEnvelope(name: "Food", mode: .unlimited, allowNegative: false, openingAllocation: 5_000)
+    private static func seed(_ peer: Peer) async {
+        await peer.store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        await peer.store.createEnvelope(
+            name: "Food",
+            mode: .unlimited,
+            allowNegative: false,
+            openingAllocation: 5_000
+        )
     }
 
     private static func alice(_ server: FakeServerTransport) async throws -> Peer {
-        let peer = try Peer(server: server)
-        seed(peer)
+        let peer = try await Peer(server: server)
+        await seed(peer)
         await peer.engine.register(username: "alice", password: "supersecret")
         return peer
     }
@@ -333,11 +339,11 @@ struct SyncEngineTests {
     @Test("Logging in re-signs the outbox, so the server accepts it")
     func loginRelabelsTheOutbox() async throws {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let peer = try Peer(server: server)
-        Self.seed(peer)
+        let peer = try await Peer(server: server)
+        await Self.seed(peer)
 
         #expect(peer.store.transactions.allSatisfy { $0.createdBy != "alice" })
-        #expect(try peer.syncState().outbox > 0)
+        #expect(try await peer.syncState().outbox > 0)
 
         await peer.engine.register(username: "alice", password: "supersecret")
 
@@ -346,7 +352,7 @@ struct SyncEngineTests {
         #expect(peer.store.transactions.allSatisfy { $0.createdBy == "alice" })
         // The push only goes through when the author matches the account:
         // an empty outbox is the proof the relabelling happened first.
-        #expect(try peer.syncState().outbox == 0)
+        #expect(try await peer.syncState().outbox == 0)
         #expect(peer.engine.status == .idle)
     }
 
@@ -356,7 +362,7 @@ struct SyncEngineTests {
         let peer = try await Self.alice(server)
         let vaultId = try #require(peer.vaultId)
 
-        let state = try peer.syncState()
+        let state = try await peer.syncState()
         #expect(state.outbox == 0)
         #expect(state.rejected == 0)
         #expect(state.lastServerSeq == (try await server.lastSeq(ofVault: vaultId)))
@@ -373,7 +379,7 @@ struct SyncEngineTests {
         let peer = try await Self.alice(server)
         let vaultId = try #require(peer.vaultId)
 
-        peer.store.submit(quickAdd: "-10.00 coffee @Cash >Food")
+        await peer.store.submit(quickAdd: "-10.00 coffee @Cash >Food")
         await peer.engine.syncNow()
         await peer.engine.syncNow()
 
@@ -381,7 +387,7 @@ struct SyncEngineTests {
         // the seeding sync plus these two are the only pushes.
         #expect(await server.callCount(method: "POST", path: "/vaults") == 0)
         #expect(await server.callCount(method: "POST", path: "/vaults/\(vaultId)/push") == 2)
-        #expect(try peer.syncState().outbox == 0)
+        #expect(try await peer.syncState().outbox == 0)
         #expect(peer.engine.isOwner(ofVault: vaultId))
         #expect(peer.engine.status == .idle)
     }
@@ -393,15 +399,15 @@ struct SyncEngineTests {
 
         // A second machine, same account, a local vault with the same name:
         // the push that would create it is a conflict, not a silent success.
-        let other = try Peer(server: server)
-        Self.seed(other)
+        let other = try await Peer(server: server)
+        await Self.seed(other)
         let clash = try #require(other.vaultId)
         await other.engine.logIn(username: "alice", password: "supersecret")
 
         #expect(other.account.isLoggedIn)
         #expect(other.engine.status != .idle)
-        #expect(try other.client.syncState(vaultId: clash).outbox > 0)
-        #expect(try other.client.syncState(vaultId: clash).lastServerSeq == 0)
+        #expect(try await other.core.syncState(vaultId: clash).outbox > 0)
+        #expect(try await other.core.syncState(vaultId: clash).lastServerSeq == 0)
     }
 
     @Test("An editor joins a shared vault and gets the same snapshot")
@@ -410,7 +416,7 @@ struct SyncEngineTests {
         let alice = try await Self.alice(server)
         let vaultId = try #require(alice.vaultId)
 
-        let bob = try Peer(server: server)
+        let bob = try await Peer(server: server)
         await bob.engine.register(username: "bob", password: "supersecret")
         #expect(bob.store.currentVault == nil)
 
@@ -434,13 +440,13 @@ struct SyncEngineTests {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())
         let alice = try await Self.alice(server)
         let vaultId = try #require(alice.vaultId)
-        let bob = try Peer(server: server)
+        let bob = try await Peer(server: server)
         await bob.engine.register(username: "bob", password: "supersecret")
         try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
         await bob.engine.syncNow()
 
-        alice.store.submit(quickAdd: "-12.50 pizza @Cash >Food")
-        bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
+        await alice.store.submit(quickAdd: "-12.50 pizza @Cash >Food")
+        await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
 
         await alice.engine.syncNow()
         await bob.engine.syncNow()
@@ -451,9 +457,9 @@ struct SyncEngineTests {
         #expect(alice.notes().contains("pizza"))
         #expect(alice.notes().contains("milk"))
         #expect(alice.balances() == bob.balances())
-        #expect(try alice.syncState().lastServerSeq == (try bob.syncState().lastServerSeq))
-        #expect(try alice.syncState().outbox == 0)
-        #expect(try bob.syncState().outbox == 0)
+        #expect(try await alice.syncState().lastServerSeq == (try await bob.syncState().lastServerSeq))
+        #expect(try await alice.syncState().outbox == 0)
+        #expect(try await bob.syncState().outbox == 0)
         // The server holds the same projection as both clients.
         let served = try await server.snapshot(ofVault: vaultId)
         let serverBalances = Dictionary(
@@ -468,15 +474,15 @@ struct SyncEngineTests {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())
         let alice = try await Self.alice(server)
         let vaultId = try #require(alice.vaultId)
-        let bob = try Peer(server: server)
+        let bob = try await Peer(server: server)
         await bob.engine.register(username: "bob", password: "supersecret")
         try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
         await bob.engine.syncNow()
 
         // Both spend 40.00 out of an envelope holding 50.00: each is fine
         // locally, but the second one to reach the server is not.
-        alice.store.submit(quickAdd: "-40.00 alice-dinner @Cash >Food")
-        bob.store.submit(quickAdd: "-40.00 bob-dinner @Cash >Food")
+        await alice.store.submit(quickAdd: "-40.00 alice-dinner @Cash >Food")
+        await bob.store.submit(quickAdd: "-40.00 bob-dinner @Cash >Food")
         #expect(bob.notes().contains("bob-dinner"))
 
         await alice.engine.syncNow()
@@ -490,11 +496,11 @@ struct SyncEngineTests {
         #expect(bob.engine.showsRejectedAlert)
         #expect(bob.notes().contains("bob-dinner") == false)
         #expect(bob.notes().contains("alice-dinner"))
-        #expect(try bob.syncState().rejected == 1)
+        #expect(try await bob.syncState().rejected == 1)
 
-        bob.engine.dismiss(refused)
+        await bob.engine.dismiss(refused)
         #expect(bob.engine.rejected.isEmpty)
-        #expect(try bob.syncState().rejected == 0)
+        #expect(try await bob.syncState().rejected == 0)
 
         // Alice never sees it: the server never logged it.
         #expect(alice.engine.rejected.isEmpty)
@@ -506,19 +512,19 @@ struct SyncEngineTests {
         let peer = try await Self.alice(server)
 
         await server.setOffline(true)
-        peer.store.submit(quickAdd: "-5.00 bus @Cash >Food")
+        await peer.store.submit(quickAdd: "-5.00 bus @Cash >Food")
         await peer.engine.syncNow()
 
         #expect(peer.engine.status == .offline)
         #expect(peer.engine.pendingCount == 1)
-        #expect(try peer.syncState().outbox == 1)
+        #expect(try await peer.syncState().outbox == 1)
 
         await server.setOffline(false)
         await peer.engine.syncNow()
 
         #expect(peer.engine.status == .idle)
         #expect(peer.engine.pendingCount == 0)
-        #expect(try peer.syncState().outbox == 0)
+        #expect(try await peer.syncState().outbox == 0)
         #expect(peer.notes().contains("bus"))
     }
 
@@ -527,17 +533,17 @@ struct SyncEngineTests {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())
         let alice = try await Self.alice(server)
         let vaultId = try #require(alice.vaultId)
-        let carol = try Peer(server: server)
+        let carol = try await Peer(server: server)
         await carol.engine.register(username: "carol", password: "supersecret")
         try await alice.engine.setMember(vaultId: vaultId, username: "carol", role: .viewer)
         await carol.engine.syncNow()
 
         #expect(carol.store.currentVault?.id == vaultId)
-        carol.store.submit(quickAdd: "-1.00 gum @Cash >Food")
+        await carol.store.submit(quickAdd: "-1.00 gum @Cash >Food")
         await carol.engine.syncNow()
 
         #expect(carol.engine.status != .idle)
-        #expect(try carol.syncState().outbox == 1)
+        #expect(try await carol.syncState().outbox == 1)
         #expect(carol.engine.pendingCount == 1)
     }
 
@@ -553,7 +559,7 @@ struct SyncEngineTests {
         #expect(peer.account.lastUsername == "alice")
         #expect(peer.engine.serverVaults.isEmpty)
 
-        peer.store.submit(quickAdd: "-2.00 water @Cash >Food")
+        await peer.store.submit(quickAdd: "-2.00 water @Cash >Food")
         #expect(peer.store.transactions.first { $0.note == "water" }?.createdBy == AccountStore.systemAuthor)
 
         // A sync while logged out is a no-op, not an error.
@@ -564,13 +570,13 @@ struct SyncEngineTests {
     @Test("Bad credentials are reported and nothing is signed in")
     func failedLoginIsReported() async throws {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())
-        let peer = try Peer(server: server)
-        Self.seed(peer)
+        let peer = try await Peer(server: server)
+        await Self.seed(peer)
 
         await peer.engine.logIn(username: "ghost", password: "supersecret")
 
         #expect(peer.account.isLoggedIn == false)
         #expect(peer.engine.authMessage != nil)
-        #expect(try peer.syncState().outbox > 0)
+        #expect(try await peer.syncState().outbox > 0)
     }
 }

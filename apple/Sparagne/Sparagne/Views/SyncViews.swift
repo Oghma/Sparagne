@@ -104,13 +104,13 @@ struct RejectedChangesSheet: View {
                 .frame(height: 140)
             } else {
                 List(engine.rejected) { change in
-                    RejectedRow(change: change) { engine.dismiss(change) }
+                    RejectedRow(change: change) { Task { await engine.dismiss(change) } }
                 }
                 .frame(height: 220)
             }
 
             HStack {
-                Button(String(localized: "Dismiss All")) { engine.dismissAllRejected() }
+                Button(String(localized: "Dismiss All")) { Task { await engine.dismissAllRejected() } }
                     .disabled(engine.rejected.isEmpty)
                 Spacer()
                 Button(String(localized: "Close"), role: .cancel) { dismiss() }
@@ -286,7 +286,9 @@ struct AccountSettingsView: View {
                         text: $account.localAuthor,
                         prompt: Text(AccountStore.systemAuthor)
                     )
-                    .onChange(of: account.localAuthor) { _, _ in engine.adoptLocalAuthor() }
+                    .onChange(of: account.localAuthor) { _, _ in
+                        Task { await engine.adoptLocalAuthor() }
+                    }
                     Text(String(localized: "Signs the rows you add while logged out; an account's name takes over when you log in."))
                         .font(.callout)
                         .foregroundStyle(.secondary)

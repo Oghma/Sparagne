@@ -45,6 +45,9 @@ struct CategoryTable: View {
     @State private var newName = ""
     @State private var hovered: Uuid?
     @State private var merging: MergeSubject?
+    /// The names the core reports as close to what is being typed in the
+    /// empty line; filled by a task, never by the layout pass.
+    @State private var similar: [String] = []
     @FocusState private var focus: CategoryCellFocus?
 
     var body: some View {
@@ -80,7 +83,10 @@ struct CategoryTable: View {
             newName = ""
             focus = nil
         }
-        .onChange(of: focus) { _, new in commitIfLeft(new) }
+        .onChange(of: focus) { _, new in Task { await commitIfLeft(new) } }
+        .task(id: newName) {
+            similar = await store.similarCategories(name: newName).map(\.name)
+        }
         .sheet(item: $merging) { subject in
             MergeCategorySheet(
                 store: store,
@@ -133,13 +139,17 @@ struct CategoryTable: View {
             line
         } else if category.archived {
             line.contextMenu {
-                Button(String(localized: "Restore")) { store.restoreCategory(category.id) }
+                Button(String(localized: "Restore")) {
+                    Task { await store.restoreCategory(category.id) }
+                }
             }
         } else {
             line.contextMenu {
                 Button(String(localized: "Merge Into…")) { merging = MergeSubject(category: category) }
                 Divider()
-                Button(String(localized: "Archive"), role: .destructive) { store.archiveCategory(category.id) }
+                Button(String(localized: "Archive"), role: .destructive) {
+                    Task { await store.archiveCategory(category.id) }
+                }
             }
         }
     }
@@ -152,8 +162,8 @@ struct CategoryTable: View {
             aliases: aliases(of: category.id),
             draft: isEditing ? $draft : nil,
             focus: $focus,
-            onOpen: { field in open(category, at: field) },
-            onCommit: { submit(category.id) },
+            onOpen: { field in Task { await open(category, at: field) } },
+            onCommit: { Task { await submit(category.id) } },
             onCancel: cancel
         )
         .background(isEditing || hovered == category.id ? Ink.raised : Color.clear)
@@ -181,7 +191,7 @@ struct CategoryTable: View {
                     .font(Face.row)
                     .foregroundStyle(Ink.text)
                     .focused($focus, equals: CategoryCellFocus(row: nil, field: .name))
-                    .onSubmit(commitNewLine)
+                    .onSubmit { Task { await commitNewLine() } }
             }
             GridCell {
                 Text(similarHint)
@@ -202,10 +212,12 @@ struct CategoryTable: View {
         }
     }
 
+    /// The hint under the empty line, refreshed by a `task(id:)` on the
+    /// typed name: the lookup is a core query, so it cannot be computed while
+    /// the row is being laid out.
     private var similarHint: String {
-        let names = store.similarCategories(name: newName).map(\.name)
-        guard !names.isEmpty else { return "" }
-        return String(localized: "Similar:") + " " + names.joined(separator: ", ")
+        guard !similar.isEmpty else { return "" }
+        return String(localized: "Similar:") + " " + similar.joined(separator: ", ")
     }
 
     private func aliases(of categoryId: Uuid) -> [String] {
@@ -220,7 +232,7 @@ struct CategoryTable: View {
     /// Opens `category` with the caret in `field`, saving whatever row was
     /// open before. A row the core refuses stays open and keeps the focus, so
     /// the click that would have left it does not lose what was typed.
-    private func open(_ category: CategoryView, at field: CategoryField) {
+    private func open(_ category: CategoryView, at field: CategoryField) async {
         guard CategoryDraft.isEditable(category) else { return }
         if editing == category.id {
             // Another cell of the same row: move the caret only, or the draft
@@ -228,7 +240,7 @@ struct CategoryTable: View {
             focus = CategoryCellFocus(row: category.id, field: field)
             return
         }
-        if let editing, !commit(editing) { return }
+        if let editing, !(await commit(editing)) { return }
         editing = category.id
         draft = CategoryDraft(name: category.name, aliases: aliases(of: category.id))
         focus = CategoryCellFocus(row: category.id, field: field)
@@ -243,22 +255,22 @@ struct CategoryTable: View {
     }
 
     /// ↩: save the row and close it.
-    private func submit(_ categoryId: Uuid) {
-        if commit(categoryId) { focus = nil }
+    private func submit(_ categoryId: Uuid) async {
+        if await commit(categoryId) { focus = nil }
     }
 
     /// The commit on blur a spreadsheet does: a click on another row, on the
     /// empty line or away from the table all write the line being left.
-    private func commitIfLeft(_ new: CategoryCellFocus?) {
+    private func commitIfLeft(_ new: CategoryCellFocus?) async {
         guard let editing, new?.row != editing else { return }
-        commit(editing)
+        await commit(editing)
     }
 
     /// Writes the draft back as the commands it implies and says whether they
     /// all went through: a rename, then one RemoveAlias per alias that is
     /// gone, then one AddAlias per new one. Nothing changed sends nothing.
     @discardableResult
-    private func commit(_ categoryId: Uuid) -> Bool {
+    private func commit(_ categoryId: Uuid) async -> Bool {
         guard editing == categoryId else { return true }
         guard let category = store.windowCategories.first(where: { $0.id == categoryId }) else {
             // Merged away, or gone with a sync while the row was open.
@@ -266,18 +278,18 @@ struct CategoryTable: View {
             return true
         }
         if let name = draft.rename(from: category.name) {
-            guard accepted({ store.renameCategory(categoryId, name: name) }) else {
+            guard await accepted({ await store.renameCategory(categoryId, name: name) }) else {
                 return keepOpen(categoryId, at: .name)
             }
         }
         let changes = draft.aliasChanges(from: aliases(of: categoryId))
         for alias in changes.removed {
-            guard accepted({ store.removeAlias(categoryId: categoryId, alias: alias) }) else {
+            guard await accepted({ await store.removeAlias(categoryId: categoryId, alias: alias) }) else {
                 return keepOpen(categoryId, at: .aliases)
             }
         }
         for alias in changes.added {
-            guard accepted({ store.addAlias(categoryId: categoryId, alias: alias) }) else {
+            guard await accepted({ await store.addAlias(categoryId: categoryId, alias: alias) }) else {
                 return keepOpen(categoryId, at: .aliases)
             }
         }
@@ -287,9 +299,9 @@ struct CategoryTable: View {
 
     /// ↩ on the empty line. An empty name is not an error, it is nothing; a
     /// name the core refuses stays in the cell so it can be fixed.
-    private func commitNewLine() {
+    private func commitNewLine() async {
         guard let name = CategoryDraft.creation(from: newName) else { return }
-        guard accepted({ store.createCategory(name: name) }) else { return }
+        guard await accepted({ await store.createCategory(name: name) }) else { return }
         newName = ""
         focus = CategoryCellFocus(row: nil, field: .name)
     }
@@ -304,9 +316,9 @@ struct CategoryTable: View {
     /// Runs a store command and says whether the core took it. The store turns
     /// a refusal into `presentedError`, the alert the ledger already uses
     /// (`AppStore.report` feeds the same one), instead of throwing.
-    private func accepted(_ work: () -> Void) -> Bool {
+    private func accepted(_ work: () async -> Void) async -> Bool {
         let before = store.presentedError
-        work()
+        await work()
         return store.presentedError == before
     }
 }

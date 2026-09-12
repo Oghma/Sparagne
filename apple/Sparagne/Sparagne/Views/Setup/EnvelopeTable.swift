@@ -122,7 +122,7 @@ struct EnvelopeTable: View {
             // archive it (`docs/v2/UI.md` §2.3).
             if !flow.isUnallocated {
                 Button(String(localized: "Archive"), role: .destructive) {
-                    store.archiveEnvelope(flow.id)
+                    Task { await store.archiveEnvelope(flow.id) }
                 }
             }
         }
@@ -232,7 +232,9 @@ struct EnvelopeTable: View {
                 .frame(height: Metrics.rowHeight)
                 .contentShape(Rectangle())
                 .contextMenu {
-                    Button(String(localized: "Restore")) { store.restoreEnvelope(flow.id) }
+                    Button(String(localized: "Restore")) {
+                        Task { await store.restoreEnvelope(flow.id) }
+                    }
                 }
             }
         }
@@ -386,7 +388,7 @@ struct EnvelopeTable: View {
         if let row = focus?.row {
             if commit(row) { focus = nil }
         } else {
-            commitNewLine()
+            Task { await commitNewLine() }
         }
     }
 
@@ -421,13 +423,17 @@ struct EnvelopeTable: View {
         do {
             let patch = try draft.patch(against: flow, currency: store.currency)
             editing = nil
+            // The row closes now: the draft was already checked against the
+            // cells, and the write itself belongs to the core actor.
             if !patch.isEmpty {
-                store.updateEnvelope(
-                    flowId,
-                    name: patch.name,
-                    mode: patch.mode,
-                    allowNegative: patch.allowNegative
-                )
+                Task {
+                    await store.updateEnvelope(
+                        flowId,
+                        name: patch.name,
+                        mode: patch.mode,
+                        allowNegative: patch.allowNegative
+                    )
+                }
             }
             return true
         } catch let failure as EnvelopeDraftError {
@@ -443,10 +449,10 @@ struct EnvelopeTable: View {
     /// ↩ on the empty line. A refused name (a duplicate, an allocation larger
     /// than Unallocated) surfaces through the store's alert and the line keeps
     /// its text, so the mistake can be fixed instead of retyped.
-    private func commitNewLine() {
+    private func commitNewLine() async {
         do {
             guard let entry = try newLine.envelope(currency: store.currency) else { return }
-            store.createEnvelope(
+            await store.createEnvelope(
                 name: entry.name,
                 mode: entry.mode,
                 allowNegative: entry.allowNegative,

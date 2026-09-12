@@ -78,6 +78,12 @@ extension RecurringPatch {
 /// The store holds no domain state of its own: `snapshot`, `categories` and
 /// `transactions` are query results, refreshed by `reload()` after every
 /// command (`docs/v2/ARCH.md` §2.2).
+///
+/// The state lives on the main actor and is written there; the core lives on
+/// `CoreActor` and is reached only by awaiting it, so a long query costs a
+/// suspension and not a frozen window (`docs/v2/ARCH.md` §8). Every entry
+/// point that touches the core is therefore `async`: views call them from a
+/// `Task`, tests await them.
 @Observable
 @MainActor
 final class AppStore {
@@ -91,9 +97,9 @@ final class AppStore {
 
     // MARK: Dependencies
 
-    /// Not private: `SyncEngine` owns the same instance and swaps the author
-    /// on login, and the tests write rows as a second member of the vault.
-    @ObservationIgnored let client: CoreClient
+    /// Not private: `SyncEngine` awaits the same actor, and the tests write
+    /// rows as a second member of the vault.
+    @ObservationIgnored let core: CoreActor
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let undoWindow: Duration
     /// Injected so tests do not wait out the real undo window.
@@ -123,9 +129,9 @@ final class AppStore {
     /// When the last command was applied, for the status bar's "saved at".
     private(set) var savedAt: Date?
 
-    // MARK: Category management (Categories window)
+    // MARK: Category management (the SETUP tab)
 
-    /// Active and archived categories, for the Categories window;
+    /// Active and archived categories, for the Categories table;
     /// `categories` above stays active-only, for pickers.
     private(set) var windowCategories: [CategoryView] = []
     private(set) var categoryAliases: [AliasView] = []
@@ -145,16 +151,19 @@ final class AppStore {
     /// The month the ledger reads and writes (`docs/v2/UI.md` §2.1). Changing
     /// it reloads the rows and every aggregate together, so the panel never
     /// describes a different month from the table.
-    var month = MonthKey(Date()) { didSet { if month != oldValue { reload() } } }
-    var direction: LedgerDirection = .expenses { didSet { if direction != oldValue { reload() } } }
+    ///
+    /// A `didSet` cannot await, so it queues the reload; `settle()` is how a
+    /// caller waits for the queue to drain.
+    var month = MonthKey(Date()) { didSet { if month != oldValue { scheduleReload() } } }
+    var direction: LedgerDirection = .expenses { didSet { if direction != oldValue { scheduleReload() } } }
     /// The PERSONA filter: `nil` is everybody.
-    var person: String? { didSet { if person != oldValue { reload() } } }
+    var person: String? { didSet { if person != oldValue { scheduleReload() } } }
     /// Which of the two views is on screen; no reload, the data is the same.
     /// The window opens on the RIEPILOGO (`docs/v2/UI.md` §2).
     var tab: LedgerTab = .summary
-    var showVoided = false { didSet { if showVoided != oldValue { reload() } } }
+    var showVoided = false { didSet { if showVoided != oldValue { scheduleReload() } } }
     /// Transfers are in neither direction, so the View menu opts into them.
-    var showTransfers = false { didSet { if showTransfers != oldValue { reload() } } }
+    var showTransfers = false { didSet { if showTransfers != oldValue { scheduleReload() } } }
     /// The optional WALLET column (`docs/v2/UI.md` §3). Display only: it
     /// changes what the grid draws and what ⌘E writes, never what is loaded,
     /// so it does not reload.
@@ -177,24 +186,32 @@ final class AppStore {
     private(set) var lastWalletId: Uuid?
     private(set) var lastFlowId: Uuid?
 
+    /// The queued reload, if any, and a counter that says whether a new one
+    /// was queued while the last was running (`settle`).
+    @ObservationIgnored private var queuedLoad: Task<Void, Never>?
+    @ObservationIgnored private var queuedGeneration = 0
+    /// Which reload may write the state: a slower one that started earlier
+    /// must not overwrite a newer month with what it found.
+    @ObservationIgnored private var loadGeneration = 0
+
     init(
-        client: CoreClient,
+        core: CoreActor,
         defaults: UserDefaults = .standard,
         undoWindow: Duration = .seconds(5),
         sleeper: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
-        self.client = client
+        self.core = core
         self.defaults = defaults
         self.undoWindow = undoWindow
         self.sleeper = sleeper
         showWalletColumn = defaults.bool(forKey: Self.walletColumnKey)
-        currentAuthor = client.author
+        currentAuthor = core.initialAuthor
     }
 
     /// The engine calls this on login and logout, and when Settings change
-    /// the local name: the client stamps it on every command from now on.
-    func setAuthor(_ name: String) {
-        client.author = name
+    /// the local name: the core stamps it on every command from now on.
+    func setAuthor(_ name: String) async {
+        await core.setAuthor(name)
         currentAuthor = name
     }
 
@@ -203,7 +220,7 @@ final class AppStore {
     var currency: Currency { snapshot?.currency ?? .eur }
 
     /// Who the log will credit the next command to: the PERSONA of a new row.
-    /// Stored rather than read off the client, so the empty line redraws when
+    /// Stored rather than read off the actor, so the empty line redraws when
     /// the engine or Settings change the name (`setAuthor`).
     private(set) var currentAuthor: String
     var currencyCode: String { currency.code }
@@ -230,63 +247,92 @@ final class AppStore {
         flow.isUnallocated ? NameBook.unallocatedLabel : flow.name
     }
 
+    // MARK: - The load queue
+
+    /// Queues a reload behind whatever is already loading. The filters are
+    /// plain properties so the views can bind to them, and a `didSet` cannot
+    /// await.
+    private func scheduleReload() {
+        queuedGeneration += 1
+        let previous = queuedLoad
+        queuedLoad = Task { @MainActor [weak self] in
+            await previous?.value
+            await self?.reload()
+        }
+    }
+
+    /// Waits until every queued reload has finished, including any a reload
+    /// queued itself (a stale PERSONA being cleared). The views never need
+    /// this; anything that reads the store straight after writing a filter
+    /// does.
+    func settle() async {
+        while queuedLoad != nil {
+            let generation = queuedGeneration
+            await queuedLoad?.value
+            if generation == queuedGeneration {
+                queuedLoad = nil
+                return
+            }
+        }
+    }
+
     // MARK: - Lifecycle
 
     /// Loads the vault list and restores the last selected vault, or flags
     /// that onboarding is needed.
-    func bootstrap() {
-        guarded {
-            vaults = try client.vaults()
+    func bootstrap() async {
+        await guarded {
+            vaults = try await core.vaults()
             guard !vaults.isEmpty else {
                 needsOnboarding = true
                 return
             }
             needsOnboarding = false
             let stored = defaults.string(forKey: Self.lastVaultKey)
-            select(vaults.first { $0.id == stored } ?? vaults[0])
+            await select(vaults.first { $0.id == stored } ?? vaults[0])
         }
     }
 
     /// Re-reads everything after the log changed underneath the window: a
     /// sync that rebased the projection, a vault joined from the server, or
     /// a login that relabelled the outbox (`docs/v2/SYNC.md` §5).
-    func refreshAfterSync() {
-        guarded {
-            vaults = try client.vaults()
+    func refreshAfterSync() async {
+        await guarded {
+            vaults = try await core.vaults()
             guard !vaults.isEmpty else {
                 needsOnboarding = true
                 currentVault = nil
-                reload()
+                await reload()
                 return
             }
             needsOnboarding = false
             if let current = currentVault, let fresh = vaults.first(where: { $0.id == current.id }) {
                 currentVault = fresh
-                reload()
+                await reload()
             } else {
                 let stored = defaults.string(forKey: Self.lastVaultKey)
-                select(vaults.first { $0.id == stored } ?? vaults[0])
+                await select(vaults.first { $0.id == stored } ?? vaults[0])
             }
         }
     }
 
-    func select(_ vault: VaultView) {
-        flushPendingUndo()
+    func select(_ vault: VaultView) async {
+        await flushPendingUndo()
         currentVault = vault
         defaults.set(vault.id, forKey: Self.lastVaultKey)
         lastWalletId = nil
         lastFlowId = nil
-        // Stale until whichever view needs them reloads: the Categories
-        // window and the Recurring panel load on appear, not eagerly.
+        // Stale until whichever view needs them reloads: the SETUP tab and
+        // the Recurring panel load on appear, not eagerly.
         windowCategories = []
         categoryAliases = []
         recurringTemplates = []
-        reload()
+        await reload()
     }
 
     /// Snapshot, categories, the summary aggregates and the first page of
-    /// transactions.
-    func reload() {
+    /// transactions: one visit to the core, one consistent window.
+    func reload() async {
         guard let vault = currentVault else {
             snapshot = nil
             categories = []
@@ -299,68 +345,67 @@ final class AppStore {
             pendingRecurringItems = []
             return
         }
-        guarded {
-            snapshot = try client.snapshot(vaultId: vault.id)
-            categories = try client.categories(vaultId: vault.id)
-            let page = try client.transactions(
-                vaultId: vault.id,
-                filter: filter,
-                limit: Self.pageSize,
-                cursor: nil
-            )
-            transactions = page.items
-            nextCursor = page.nextCursor
-            authors = try client.authors(vaultId: vault.id)
+        loadGeneration += 1
+        let generation = loadGeneration
+        let request = loadRequest(vaultId: vault.id)
+        await guarded {
+            let loaded = try await core.load(request)
+            // A newer month asked for its own load while this one was in the
+            // air: the answer on the table is the stale one, so drop it.
+            guard generation == loadGeneration else { return }
+            snapshot = loaded.snapshot
+            categories = loaded.categories
+            transactions = loaded.page.items
+            nextCursor = loaded.page.nextCursor
+            authors = loaded.authors
+            pendingRecurringItems = loaded.pendingRecurring
+            summary = Self.summary(month: month, from: loaded)
+            year = Self.year(month: month, from: loaded, flows: flows)
+            rebuildRows()
             // A person who has left the vault's history must not stay
             // selected, or the ledger shows an empty month with no way back.
+            // Clearing it queues the reload that fetches the whole month.
             if let person, !authors.contains(person) { self.person = nil }
-            summary = try loadSummary(vault: vault)
-            year = try loadYear(vault: vault)
-            pendingRecurringItems = try client.pendingRecurring(vaultId: vault.id, today: CoreDate.day(Date()))
-            rebuildRows()
         }
     }
 
-    /// The six aggregate queries behind the panel, loaded as one unit.
-    ///
-    /// The month and the month before come from a single `bucket_totals` call
-    /// with three boundaries, which is the only totals query that takes a
-    /// person, so the whole window honours the PERSONA filter. The envelope x
-    /// person matrix stays unfiltered on purpose: it *is* the per-person
-    /// breakdown, and filtering it would blank every column but one.
-    private func loadSummary(vault: VaultView) throws -> LedgerSummary {
+    /// The window on screen, as the core wants it.
+    private func loadRequest(vaultId: Uuid) -> VaultLoadRequest {
         let bounds = month.bounds()
-        let previousStart = CoreDate.utcString(month.adding(months: -1).start())
-        let pair = try client.bucketTotals(
-            vaultId: vault.id,
-            bounds: [previousStart, bounds.from, bounds.to],
-            person: person
-        )
-        let empty = PeriodTotals(income: 0, expense: 0, refund: 0, netExpense: 0)
         let trailing = month.trailingYear()
-        return LedgerSummary(
-            month: month,
-            flowPerson: try client.flowPersonTotals(vaultId: vault.id, from: bounds.from, to: bounds.to),
-            categories: try client.categoryTotals(
-                vaultId: vault.id,
-                from: bounds.from,
-                to: bounds.to,
-                person: person
-            ),
-            totals: pair.count > 1 ? pair[1] : empty,
-            previous: pair.first ?? empty,
-            trailing: try client.bucketTotals(vaultId: vault.id, bounds: trailing.bounds, person: person),
-            trailingMonths: trailing.months
+        let epoch = CoreDate.utcString(Date(timeIntervalSince1970: 0))
+        return VaultLoadRequest(
+            vaultId: vaultId,
+            filter: filter,
+            limit: Self.pageSize,
+            monthFrom: bounds.from,
+            monthTo: bounds.to,
+            previousStart: CoreDate.utcString(month.adding(months: -1).start()),
+            trailingBounds: trailing.bounds,
+            yearBounds: [epoch] + MonthKey.yearBounds(month.year),
+            person: person,
+            today: CoreDate.day(Date())
         )
     }
 
-    /// The RIEPILOGO's year: one `year_breakdown` call with fourteen
-    /// boundaries, the epoch and the thirteen month starts, so bucket 0 is
-    /// everything before January (`docs/v2/UI.md` §4).
-    private func loadYear(vault: VaultView) throws -> YearSummary? {
-        let epoch = CoreDate.utcString(Date(timeIntervalSince1970: 0))
-        let bounds = [epoch] + MonthKey.yearBounds(month.year)
-        let rows = try client.yearBreakdown(vaultId: vault.id, bounds: bounds).map {
+    /// The panel's six aggregates, as they came back from one visit.
+    private static func summary(month: MonthKey, from loaded: VaultLoad) -> LedgerSummary {
+        let empty = PeriodTotals(income: 0, expense: 0, refund: 0, netExpense: 0)
+        return LedgerSummary(
+            month: month,
+            flowPerson: loaded.flowPerson,
+            categories: loaded.categoryTotals,
+            totals: loaded.monthPair.count > 1 ? loaded.monthPair[1] : empty,
+            previous: loaded.monthPair.first ?? empty,
+            trailing: loaded.trailing,
+            trailingMonths: month.trailingYear().months
+        )
+    }
+
+    /// The RIEPILOGO's year: the `year_breakdown` rows of the same visit,
+    /// folded into the table the view draws (`docs/v2/UI.md` §4).
+    private static func year(month: MonthKey, from loaded: VaultLoad, flows: [FlowView]) -> YearSummary? {
+        let rows = loaded.year.map {
             YearRow(
                 bucket: Int($0.bucket),
                 person: $0.person,
@@ -374,10 +419,10 @@ final class AppStore {
     }
 
     /// Appends the next page, if any.
-    func loadMore() {
+    func loadMore() async {
         guard let vault = currentVault, let cursor = nextCursor else { return }
-        guarded {
-            let page = try client.transactions(
+        await guarded {
+            let page = try await core.transactions(
                 vaultId: vault.id,
                 filter: filter,
                 limit: Self.pageSize,
@@ -419,15 +464,15 @@ final class AppStore {
     // MARK: - Vault and entity creation
 
     /// Onboarding: a vault plus its first wallet, as two commands.
-    func createVault(name: String, walletName: String, openingBalance: Int64) {
-        guarded {
-            let receipt = try client.createVault(name: name)
+    func createVault(name: String, walletName: String, openingBalance: Int64) async {
+        await guarded {
+            let receipt = try await core.createVault(name: name)
             guard let vaultId = receipt.resultId else {
                 throw DomainError.InvalidCommand(message: "the vault command returned no id")
             }
             let wallet = walletName.trimmingCharacters(in: .whitespacesAndNewlines)
             if !wallet.isEmpty {
-                try client.execute(
+                try await core.execute(
                     vaultId: vaultId,
                     .createWallet(
                         name: wallet,
@@ -436,18 +481,18 @@ final class AppStore {
                     )
                 )
             }
-            vaults = try client.vaults()
+            vaults = try await core.vaults()
             needsOnboarding = false
             if let created = vaults.first(where: { $0.id == vaultId }) {
-                select(created)
+                await select(created)
             }
         }
     }
 
-    func createWallet(name: String, openingBalance: Int64) {
+    func createWallet(name: String, openingBalance: Int64) async {
         guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(
+        await guarded {
+            try await core.execute(
                 vaultId: vault.id,
                 .createWallet(
                     name: name,
@@ -455,14 +500,14 @@ final class AppStore {
                     occurredAt: CoreDate.offset(Date())
                 )
             )
-            reload()
+            await reload()
         }
     }
 
-    func createEnvelope(name: String, mode: FlowMode, allowNegative: Bool, openingAllocation: Int64) {
+    func createEnvelope(name: String, mode: FlowMode, allowNegative: Bool, openingAllocation: Int64) async {
         guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(
+        await guarded {
+            try await core.execute(
                 vaultId: vault.id,
                 .createFlow(
                     name: name,
@@ -472,181 +517,147 @@ final class AppStore {
                     occurredAt: CoreDate.offset(Date())
                 )
             )
-            reload()
+            await reload()
         }
     }
 
     // MARK: - Wallet and envelope management
 
-    func renameWallet(_ walletId: Uuid, name: String) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .renameWallet(walletId: walletId, name: name))
-            reload()
-        }
+    func renameWallet(_ walletId: Uuid, name: String) async {
+        await command(.renameWallet(walletId: walletId, name: name))
     }
 
     /// Requires a zero balance in the core; the error surfaces as-is
     /// (docs task 2: no client-side pre-validation).
-    func archiveWallet(_ walletId: Uuid) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .archiveWallet(walletId: walletId))
-            reload()
-        }
+    func archiveWallet(_ walletId: Uuid) async {
+        await command(.archiveWallet(walletId: walletId))
     }
 
-    func restoreWallet(_ walletId: Uuid) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .restoreWallet(walletId: walletId))
-            reload()
-        }
+    func restoreWallet(_ walletId: Uuid) async {
+        await command(.restoreWallet(walletId: walletId))
     }
 
     /// Only the given fields change; Unallocated cannot be updated
     /// (`.updateFlow`, `docs/v2/ARCH.md` §4).
-    func updateEnvelope(_ flowId: Uuid, name: String? = nil, mode: FlowMode? = nil, allowNegative: Bool? = nil) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(
-                vaultId: vault.id,
-                .updateFlow(flowId: flowId, name: name, mode: mode, allowNegative: allowNegative)
-            )
-            reload()
-        }
+    func updateEnvelope(
+        _ flowId: Uuid,
+        name: String? = nil,
+        mode: FlowMode? = nil,
+        allowNegative: Bool? = nil
+    ) async {
+        await command(.updateFlow(flowId: flowId, name: name, mode: mode, allowNegative: allowNegative))
     }
 
     /// Requires a zero balance in the core; the error surfaces as-is.
-    func archiveEnvelope(_ flowId: Uuid) {
+    func archiveEnvelope(_ flowId: Uuid) async {
+        await command(.archiveFlow(flowId: flowId))
+    }
+
+    func restoreEnvelope(_ flowId: Uuid) async {
+        await command(.restoreFlow(flowId: flowId))
+    }
+
+    /// One command against the current vault, then the reload that shows what
+    /// it did. The shape every management action has.
+    private func command(_ command: Command) async {
         guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .archiveFlow(flowId: flowId))
-            reload()
+        await guarded {
+            try await core.execute(vaultId: vault.id, command)
+            await reload()
         }
     }
 
-    func restoreEnvelope(_ flowId: Uuid) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .restoreFlow(flowId: flowId))
-            reload()
-        }
-    }
-
-    // MARK: - Category management (Categories window)
+    // MARK: - Category management (the SETUP tab)
 
     /// Loads both the management list (archived included) and the aliases;
-    /// called when the Categories window appears (docs task 3).
-    func loadCategoryManagement() {
+    /// called when the SETUP tab appears (docs task 3).
+    func loadCategoryManagement() async {
         guard let vault = currentVault else {
             windowCategories = []
             categoryAliases = []
             return
         }
-        guarded {
-            windowCategories = try client.categories(vaultId: vault.id, includeArchived: true)
-            categoryAliases = try client.aliases(vaultId: vault.id)
+        await guarded {
+            let management = try await core.categoryManagement(vaultId: vault.id)
+            windowCategories = management.categories
+            categoryAliases = management.aliases
         }
     }
 
     /// Active categories near `name`, nearest first; empty on a blank name
     /// or any core error. Used as a live, non-blocking hint while typing
     /// (docs/v2/DISTILLATO_V1.md §2.1: "suggest, don't block").
-    func similarCategories(name: String) -> [CategoryView] {
+    func similarCategories(name: String) async -> [CategoryView] {
         guard let vault = currentVault, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
-        return (try? client.similarCategories(vaultId: vault.id, name: name)) ?? []
+        return (try? await core.similarCategories(vaultId: vault.id, name: name)) ?? []
     }
 
     /// What `mergeCategory` would refuse, without changing anything.
-    func previewCategoryMerge(sourceId: Uuid, targetId: Uuid) -> MergePreview? {
+    func previewCategoryMerge(sourceId: Uuid, targetId: Uuid) async -> MergePreview? {
         guard let vault = currentVault else { return nil }
-        return try? client.previewMerge(vaultId: vault.id, sourceId: sourceId, targetId: targetId)
+        return try? await core.previewMerge(vaultId: vault.id, sourceId: sourceId, targetId: targetId)
     }
 
-    func createCategory(name: String) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .createCategory(name: name))
-            reloadCategories()
-        }
+    func createCategory(name: String) async {
+        await categoryCommand(.createCategory(name: name))
     }
 
     /// System categories cannot be renamed; the core refuses it.
-    func renameCategory(_ categoryId: Uuid, name: String) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .renameCategory(categoryId: categoryId, name: name))
-            reloadCategories()
-        }
+    func renameCategory(_ categoryId: Uuid, name: String) async {
+        await categoryCommand(.renameCategory(categoryId: categoryId, name: name))
     }
 
-    func archiveCategory(_ categoryId: Uuid) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .archiveCategory(categoryId: categoryId))
-            reloadCategories()
-        }
+    func archiveCategory(_ categoryId: Uuid) async {
+        await categoryCommand(.archiveCategory(categoryId: categoryId))
     }
 
-    func restoreCategory(_ categoryId: Uuid) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .restoreCategory(categoryId: categoryId))
-            reloadCategories()
-        }
+    func restoreCategory(_ categoryId: Uuid) async {
+        await categoryCommand(.restoreCategory(categoryId: categoryId))
     }
 
-    func addAlias(categoryId: Uuid, alias: String) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .addAlias(categoryId: categoryId, alias: alias))
-            reloadCategories()
-        }
+    func addAlias(categoryId: Uuid, alias: String) async {
+        await categoryCommand(.addAlias(categoryId: categoryId, alias: alias))
     }
 
-    func removeAlias(categoryId: Uuid, alias: String) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .removeAlias(categoryId: categoryId, alias: alias))
-            reloadCategories()
-        }
+    func removeAlias(categoryId: Uuid, alias: String) async {
+        await categoryCommand(.removeAlias(categoryId: categoryId, alias: alias))
     }
 
     /// Refused when `previewCategoryMerge` reports conflicts; repoints every
     /// transaction of `sourceId` to `targetId` and deletes the source
     /// (`docs/v2/ARCH.md` §4).
-    func mergeCategory(sourceId: Uuid, targetId: Uuid) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .mergeCategory(sourceId: sourceId, targetId: targetId))
-            reloadCategories()
-        }
+    func mergeCategory(sourceId: Uuid, targetId: Uuid) async {
+        await categoryCommand(.mergeCategory(sourceId: sourceId, targetId: targetId))
     }
 
-    /// Refreshes the picker list and the management window's list together,
-    /// after any category command. A full `reload()` because a rename
+    /// A category command, then the refresh of the picker list and the
+    /// management table together. A full `reload()` because a rename
     /// propagates its denormalized name onto transactions and a merge
     /// repoints them (`docs/v2/DISTILLATO_V1.md` §2.1): the loaded
     /// transactions page can be stale, not just the category lists.
-    private func reloadCategories() {
+    private func categoryCommand(_ command: Command) async {
         guard let vault = currentVault else { return }
-        reload()
-        windowCategories = (try? client.categories(vaultId: vault.id, includeArchived: true)) ?? windowCategories
-        categoryAliases = (try? client.aliases(vaultId: vault.id)) ?? categoryAliases
+        await guarded {
+            try await core.execute(vaultId: vault.id, command)
+            await reload()
+            if let management = try? await core.categoryManagement(vaultId: vault.id) {
+                windowCategories = management.categories
+                categoryAliases = management.aliases
+            }
+        }
     }
 
     // MARK: - Recurring
 
     /// Every template, active and archived; called when the Recurring panel
     /// opens (`pendingRecurringItems` itself is kept current by `reload()`).
-    func loadRecurringTemplates() {
+    func loadRecurringTemplates() async {
         guard let vault = currentVault else {
             recurringTemplates = []
             return
         }
-        guarded {
-            recurringTemplates = try client.listRecurring(vaultId: vault.id, includeArchived: true)
+        await guarded {
+            recurringTemplates = try await core.listRecurring(vaultId: vault.id, includeArchived: true)
         }
     }
 
@@ -658,72 +669,54 @@ final class AppStore {
         category: String?,
         note: String?,
         schedule: Schedule
-    ) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(
-                vaultId: vault.id,
-                .createRecurring(
-                    transactionKind: kind,
-                    amount: amount,
-                    walletId: walletId,
-                    flowId: flowId,
-                    category: category,
-                    note: note,
-                    schedule: schedule
-                )
+    ) async {
+        await recurringCommand(
+            .createRecurring(
+                transactionKind: kind,
+                amount: amount,
+                walletId: walletId,
+                flowId: flowId,
+                category: category,
+                note: note,
+                schedule: schedule
             )
-            loadRecurringTemplates()
-            reload()
-        }
+        )
     }
 
-    func updateRecurring(_ recurringId: Uuid, patch: RecurringPatch) {
-        guard let vault = currentVault, !patch.isEmpty else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .updateRecurring(recurringId: recurringId, patch: patch))
-            loadRecurringTemplates()
-            reload()
-        }
+    func updateRecurring(_ recurringId: Uuid, patch: RecurringPatch) async {
+        guard !patch.isEmpty else { return }
+        await recurringCommand(.updateRecurring(recurringId: recurringId, patch: patch))
     }
 
-    func archiveRecurring(_ recurringId: Uuid) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .archiveRecurring(recurringId: recurringId))
-            loadRecurringTemplates()
-            reload()
-        }
+    func archiveRecurring(_ recurringId: Uuid) async {
+        await recurringCommand(.archiveRecurring(recurringId: recurringId))
     }
 
     /// Materializes `periodDate` as a transaction; `occurredAt` is the due
     /// date at the current time of day, in the system offset (team-lead
     /// task 4).
-    func executeRecurring(_ recurringId: Uuid, periodDate: NaiveDate) {
+    func executeRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
+        let occurredAt = Self.combine(day: periodDate, timeOf: Date())
+        await recurringCommand(
+            .executeRecurring(recurringId: recurringId, periodDate: periodDate, occurredAt: occurredAt)
+        )
+    }
+
+    func skipRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
+        await recurringCommand(.skipRecurring(recurringId: recurringId, periodDate: periodDate))
+    }
+
+    /// A recurring command, then the template list and the ledger together:
+    /// executing a period writes a transaction as well as a run.
+    private func recurringCommand(_ command: Command) async {
         guard let vault = currentVault else { return }
-        guarded {
-            let now = Date()
-            let occurredAt = Self.combine(day: periodDate, timeOf: now)
-            try client.execute(
-                vaultId: vault.id,
-                .executeRecurring(recurringId: recurringId, periodDate: periodDate, occurredAt: occurredAt)
-            )
-            loadRecurringTemplates()
-            reload()
+        await guarded {
+            try await core.execute(vaultId: vault.id, command)
+            await loadRecurringTemplates()
+            await reload()
         }
     }
 
-    func skipRecurring(_ recurringId: Uuid, periodDate: NaiveDate) {
-        guard let vault = currentVault else { return }
-        guarded {
-            try client.execute(vaultId: vault.id, .skipRecurring(recurringId: recurringId, periodDate: periodDate))
-            loadRecurringTemplates()
-            reload()
-        }
-    }
-
-    /// `periodDate` (a bare day) at today's time of day, in the system
-    /// offset: what `executeRecurring` sends as `occurredAt`.
     /// The calendar day of `day` with the clock time of `reference`: moving a
     /// row to another day must not silently move it to midnight.
     static func stamp(day: Date, likeTimeOf reference: Date, calendar: Calendar = .current) -> OffsetDateTime {
@@ -737,6 +730,8 @@ final class AppStore {
         return CoreDate.offset(combined ?? day)
     }
 
+    /// `periodDate` (a bare day) at today's time of day, in the system
+    /// offset: what `executeRecurring` sends as `occurredAt`.
     private static func combine(day: NaiveDate, timeOf now: Date) -> OffsetDateTime {
         guard let dayDate = CoreDate.localDay(day) else { return CoreDate.offset(now) }
         let calendar = Calendar.current
@@ -791,7 +786,7 @@ final class AppStore {
         note: String,
         amount: Int64,
         walletId: Uuid? = nil
-    ) {
+    ) async {
         guard let vault = currentVault, amount > 0 else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let envelope = flowId ?? defaultFlowId
@@ -804,12 +799,12 @@ final class AppStore {
             occurredAt: Self.combine(day: CoreDate.day(day), timeOf: Date())
         )
         let command: Command = direction == .income ? .income(entry) : .expense(entry)
-        guarded {
-            try client.execute(vaultId: vault.id, command)
+        await guarded {
+            try await core.execute(vaultId: vault.id, command)
             lastWalletId = entry.walletId ?? lastWalletId
             lastFlowId = envelope ?? lastFlowId
             savedAt = Date()
-            reload()
+            await reload()
         }
     }
 
@@ -817,6 +812,9 @@ final class AppStore {
     /// precedence the core's quick-add resolver uses: exact, then unique
     /// prefix, then unique substring (`core/src/quick_add.rs`). Returns `nil`
     /// for blank text, meaning "leave the default".
+    ///
+    /// Synchronous on purpose: the names come from the loaded snapshot, not
+    /// from the core, so a cell can be validated while it is being typed.
     func resolveFlow(named text: String) throws -> Uuid? {
         let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return nil }
@@ -860,7 +858,7 @@ final class AppStore {
     /// Surfaces a validation failure from the grid through the same alert the
     /// core's errors use, so a bad cell reads like a refused command.
     func report(_ error: Error) {
-        guarded { throw error }
+        present(error)
     }
 
     // MARK: - Quick add
@@ -877,38 +875,38 @@ final class AppStore {
     }
 
     /// Parses, resolves names against the vault, executes, reloads.
-    func submit(quickAdd input: String) {
+    func submit(quickAdd input: String) async {
         guard let vault = currentVault else { return }
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        guarded {
+        await guarded {
             let parsed = try parseQuickAdd(input: trimmed, currency: currency)
-            let resolved = try client.resolveQuickAdd(
+            let resolved = try await core.resolveQuickAdd(
                 vaultId: vault.id,
                 parsed: parsed,
                 now: Date(),
                 defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId)
             )
-            try client.execute(vaultId: vault.id, resolved.command)
+            try await core.execute(vaultId: vault.id, resolved.command)
             savedAt = Date()
             // The core reports what the names resolved to, so the sticky
             // defaults never depend on the shape of the command.
             lastWalletId = resolved.walletId ?? lastWalletId
             lastFlowId = resolved.flowId ?? lastFlowId
             quickAddText = ""
-            reload()
+            await reload()
         }
     }
 
     /// Called from the error alert's candidate buttons after an
     /// `ambiguous_name` quick-add error: rewrites the marker that carried
     /// the ambiguous fragment with the chosen name and resubmits (task 1).
-    func resolveAmbiguous(choosing candidate: String) {
+    func resolveAmbiguous(choosing candidate: String) async {
         guard let error = presentedError, let fragment = error.ambiguousFragment else { return }
         presentedError = nil
         let rewritten = Self.rewrite(quickAddText, fragment: fragment, with: candidate)
         quickAddText = rewritten
-        submit(quickAdd: rewritten)
+        await submit(quickAdd: rewritten)
     }
 
     /// Finds which marker (`#`, `@`, `>`) carried `fragment` and swaps in
@@ -929,15 +927,15 @@ final class AppStore {
 
     /// Hides the row and starts the undo window. The command is only sent
     /// when the window elapses or another destructive action starts.
-    func void(transactionId: Uuid) {
-        flushPendingUndo()
+    func void(transactionId: Uuid) async {
+        await flushPendingUndo()
         pendingUndo = PendingUndo(id: transactionId, startedAt: Date(), duration: undoWindow)
         let window = undoWindow
         let sleep = sleeper
         undoTask = Task { [weak self] in
             try? await sleep(window)
             guard !Task.isCancelled else { return }
-            self?.flushPendingUndo()
+            await self?.flushPendingUndo()
         }
     }
 
@@ -949,45 +947,49 @@ final class AppStore {
     }
 
     /// Applies a pending void now.
-    func flushPendingUndo() {
+    func flushPendingUndo() async {
         guard let pending = pendingUndo, let vault = currentVault else { return }
         pendingUndo = nil
         undoTask?.cancel()
         undoTask = nil
-        guarded {
-            try client.execute(vaultId: vault.id, .voidTransaction(transactionId: pending.id))
+        await guarded {
+            try await core.execute(vaultId: vault.id, .voidTransaction(transactionId: pending.id))
             savedAt = Date()
-            reload()
+            await reload()
         }
     }
 
     // MARK: - Editing
 
     /// Sends only the fields that changed.
-    func update(transactionId: Uuid, patch: TransactionPatch) {
+    func update(transactionId: Uuid, patch: TransactionPatch) async {
         guard let vault = currentVault, !patch.isEmpty else { return }
-        guarded {
-            try client.execute(
+        await guarded {
+            try await core.execute(
                 vaultId: vault.id,
                 .updateTransaction(transactionId: transactionId, patch: patch)
             )
             savedAt = Date()
-            reload()
+            await reload()
         }
     }
 
     // MARK: - Errors
 
     /// Runs a piece of work, turning any core error into `presentedError`.
-    private func guarded(_ work: () throws -> Void) {
+    private func guarded(_ work: () async throws -> Void) async {
         do {
-            try work()
-        } catch let error as DomainError {
-            presentedError = AppError(error)
-        } catch let error as QuickAddError {
-            presentedError = AppError(error)
+            try await work()
         } catch {
-            presentedError = AppError(code: "unexpected", message: error.localizedDescription)
+            present(error)
+        }
+    }
+
+    private func present(_ error: Error) {
+        switch error {
+        case let error as DomainError: presentedError = AppError(error)
+        case let error as QuickAddError: presentedError = AppError(error)
+        default: presentedError = AppError(code: "unexpected", message: error.localizedDescription)
         }
     }
 }

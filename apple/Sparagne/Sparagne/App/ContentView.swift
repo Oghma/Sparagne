@@ -23,21 +23,23 @@ struct ContentView: View {
                 ProgressView()
             }
         }
-        .task { open() }
+        .task { await open() }
     }
 
-    private func open() {
+    private func open() async {
         guard store == nil, launchFailure == nil else { return }
         do {
-            let client = try CoreClient.onDisk()
-            let opened = AppStore(client: client)
-            opened.bootstrap()
+            let core = try CoreActor.onDisk()
+            let opened = AppStore(core: core)
             // The engine adopts the account's username as the author and
             // starts the first sync right after bootstrap
-            // (`docs/v2/SYNC.md` §5).
-            let sync = SyncEngine(client: client, store: opened, account: AccountStore())
+            // (`docs/v2/SYNC.md` §5). It prepares before the bootstrap so the
+            // first command is already signed with the account's name.
+            let sync = SyncEngine(core: core, store: opened, account: AccountStore())
             store = opened
             engine = sync
+            await sync.prepare()
+            await opened.bootstrap()
             sync.start()
         } catch {
             launchFailure = error.localizedDescription
@@ -137,7 +139,7 @@ struct MainWindow: View {
                     Button(String(localized: "OK"), role: .cancel) { store.presentedError = nil }
                 } else {
                     ForEach(error.candidates, id: \.self) { candidate in
-                        Button(candidate) { store.resolveAmbiguous(choosing: candidate) }
+                        Button(candidate) { Task { await store.resolveAmbiguous(choosing: candidate) } }
                     }
                     Button(String(localized: "Cancel"), role: .cancel) { store.presentedError = nil }
                 }
@@ -182,33 +184,35 @@ struct MainWindow: View {
         switch kind {
         case .vault:
             OnboardingSheet(isFirstRun: store.needsOnboarding) { name, wallet, opening in
-                store.createVault(name: name, walletName: wallet, openingBalance: opening)
+                Task { await store.createVault(name: name, walletName: wallet, openingBalance: opening) }
             }
             .interactiveDismissDisabled(store.needsOnboarding)
         case .wallet:
             NewWalletSheet(currency: store.currency) { name, opening in
-                store.createWallet(name: name, openingBalance: opening)
+                Task { await store.createWallet(name: name, openingBalance: opening) }
             }
         case .envelope:
             NewEnvelopeSheet(currency: store.currency) { name, mode, allowNegative, allocation in
-                store.createEnvelope(
-                    name: name,
-                    mode: mode,
-                    allowNegative: allowNegative,
-                    openingAllocation: allocation
-                )
+                Task {
+                    await store.createEnvelope(
+                        name: name,
+                        mode: mode,
+                        allowNegative: allowNegative,
+                        openingAllocation: allocation
+                    )
+                }
             }
         case .renameWallet(let wallet):
             RenameSheet(title: String(localized: "Rename Wallet"), name: wallet.name) { name in
-                store.renameWallet(wallet.id, name: name)
+                Task { await store.renameWallet(wallet.id, name: name) }
             }
         case .renameEnvelope(let flow):
             RenameSheet(title: String(localized: "Rename Envelope"), name: flow.name) { name in
-                store.updateEnvelope(flow.id, name: name)
+                Task { await store.updateEnvelope(flow.id, name: name) }
             }
         case .editEnvelope(let flow):
             EditEnvelopeSheet(flow: flow, currency: store.currency) { mode, allowNegative in
-                store.updateEnvelope(flow.id, mode: mode, allowNegative: allowNegative)
+                Task { await store.updateEnvelope(flow.id, mode: mode, allowNegative: allowNegative) }
             }
         case .recurring:
             RecurringPanel(store: store)

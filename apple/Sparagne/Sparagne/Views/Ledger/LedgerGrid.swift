@@ -99,7 +99,9 @@ struct LedgerGrid: View {
         .contextMenu {
             Button(String(localized: "Duplicate")) { duplicate(row) }
             Divider()
-            Button(String(localized: "Void"), role: .destructive) { store.void(transactionId: row.id) }
+            Button(String(localized: "Void"), role: .destructive) {
+                Task { await store.void(transactionId: row.id) }
+            }
         }
     }
 
@@ -176,7 +178,9 @@ struct LedgerGrid: View {
         do {
             let patch = try draft.patch(against: row, store: store)
             editing = nil
-            if !patch.isEmpty { store.update(transactionId: rowId, patch: patch) }
+            // The write goes to the core actor; the row closes now, because
+            // the draft was already checked against the cells.
+            if !patch.isEmpty { Task { await store.update(transactionId: rowId, patch: patch) } }
             return true
         } catch let failure as RowDraftError {
             store.report(failure.underlying)
@@ -191,14 +195,16 @@ struct LedgerGrid: View {
     private func commitNewRow() {
         do {
             guard let entry = try newRow.entry(store: store), entry.amount > 0 else { return }
-            store.addRow(
-                day: entry.day,
-                flowId: entry.flowId,
-                category: entry.category,
-                note: entry.note,
-                amount: entry.amount,
-                walletId: entry.walletId
-            )
+            Task {
+                await store.addRow(
+                    day: entry.day,
+                    flowId: entry.flowId,
+                    category: entry.category,
+                    note: entry.note,
+                    amount: entry.amount,
+                    walletId: entry.walletId
+                )
+            }
             newRow = RowDraft.blank(in: store)
             focus = CellFocus(row: nil, field: .date)
         } catch let failure as RowDraftError {

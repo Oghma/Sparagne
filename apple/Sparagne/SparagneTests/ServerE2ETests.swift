@@ -35,7 +35,7 @@ enum E2EServer {
 /// one: same construction, same API, nothing stubbed below `ServerAPI`.
 @MainActor
 private struct E2EPeer {
-    let client: CoreClient
+    let core: CoreActor
     let store: AppStore
     let account: AccountStore
     let engine: SyncEngine
@@ -43,26 +43,27 @@ private struct E2EPeer {
 
     static let password = "supersecret"
 
-    init(server: URL, root: URL, name: String, username: String) throws {
+    init(server: URL, root: URL, name: String, username: String) async throws {
         let directory = root.appending(path: name, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let database = directory.appending(path: "sparagne.sqlite", directoryHint: .notDirectory)
 
         let defaults = try #require(UserDefaults(suiteName: "sparagne.e2e.\(UUID().uuidString)"))
         self.username = username
-        client = CoreClient(
+        core = CoreActor(
             handle: try CoreHandle.open(path: database.path(percentEncoded: false)),
             author: "local"
         )
-        store = AppStore(client: client, defaults: defaults, undoWindow: .seconds(60))
+        store = AppStore(core: core, defaults: defaults, undoWindow: .seconds(60))
         account = AccountStore(defaults: defaults, tokens: MemoryTokenStore())
         account.serverURLText = server.absoluteString
         // The default transport is `URLSessionTransport`: this is the path
         // under test.
-        engine = SyncEngine(client: client, store: store, account: account)
+        engine = SyncEngine(core: core, store: store, account: account)
         // No timer and no debounce: every sync here is explicit.
         engine.automaticSync = false
-        store.bootstrap()
+        await engine.prepare()
+        await store.bootstrap()
     }
 
     var vaultId: Uuid? { store.currentVault?.id }
@@ -72,15 +73,15 @@ private struct E2EPeer {
         try #require(account.isLoggedIn, "register failed: \(engine.authMessage ?? "no message")")
     }
 
-    func syncState() throws -> SyncState {
-        try client.syncState(vaultId: #require(vaultId))
+    func syncState() async throws -> SyncState {
+        try await core.syncState(vaultId: #require(vaultId))
     }
 
     /// Every transaction in the vault, whatever month and direction the ledger
     /// window happens to be filtering on (`store.transactions` is one page of
     /// one month, expenses only).
-    func allTransactions() throws -> [TransactionView] {
-        try client.transactions(
+    func allTransactions() async throws -> [TransactionView] {
+        try await core.transactions(
             vaultId: #require(vaultId),
             filter: TransactionFilter(
                 from: nil,
@@ -99,8 +100,8 @@ private struct E2EPeer {
         ).items
     }
 
-    func notes() throws -> [String] {
-        try allTransactions().compactMap(\.note)
+    func notes() async throws -> [String] {
+        try await allTransactions().compactMap(\.note)
     }
 
     /// The role `GET /vaults` last reported for `vaultId`.
@@ -128,15 +129,15 @@ struct ServerE2ETests {
     /// A vault with a `Cash` wallet, a `Food` envelope and one income, pushed
     /// to the server by the very sync that logging in triggers.
     private static func owner(server: URL, root: URL, suffix: String) async throws -> E2EPeer {
-        let peer = try E2EPeer(server: server, root: root, name: "owner", username: "a\(suffix)")
-        peer.store.createVault(name: "Casa \(suffix)", walletName: "Cash", openingBalance: 10_000)
-        peer.store.createEnvelope(
+        let peer = try await E2EPeer(server: server, root: root, name: "owner", username: "a\(suffix)")
+        await peer.store.createVault(name: "Casa \(suffix)", walletName: "Cash", openingBalance: 10_000)
+        await peer.store.createEnvelope(
             name: "Food",
             mode: .unlimited,
             allowNegative: false,
             openingAllocation: 5_000
         )
-        peer.store.submit(quickAdd: "+120.00 stipendio @Cash")
+        await peer.store.submit(quickAdd: "+120.00 stipendio @Cash")
         #expect(peer.store.presentedError == nil)
         try await peer.register()
         return peer
@@ -150,7 +151,7 @@ struct ServerE2ETests {
         let suffix = E2EServer.suffix()
 
         // B has to exist before the owner can name it as a member.
-        let bob = try E2EPeer(server: server, root: root, name: "bob", username: "b\(suffix)")
+        let bob = try await E2EPeer(server: server, root: root, name: "bob", username: "b\(suffix)")
         try await bob.register()
         #expect(bob.store.currentVault == nil)
 
@@ -160,8 +161,8 @@ struct ServerE2ETests {
         // The push claimed the vault: no route created it, the outbox is empty
         // and the server made the caller its owner.
         #expect(alice.engine.status == .idle)
-        #expect(try alice.syncState().outbox == 0)
-        #expect(try alice.syncState().lastServerSeq > 0)
+        #expect(try await alice.syncState().outbox == 0)
+        #expect(try await alice.syncState().lastServerSeq > 0)
         #expect(alice.serverRole(vaultId) == .owner)
 
         try await alice.engine.setMember(vaultId: vaultId, username: bob.username, role: .editor)
@@ -175,24 +176,24 @@ struct ServerE2ETests {
         #expect(bob.store.currentVault?.owner == alice.username)
         #expect(bob.serverRole(vaultId) == .editor)
         #expect(bob.store.snapshot == alice.store.snapshot)
-        #expect(try bob.allTransactions() == (try alice.allTransactions()))
+        #expect(try await bob.allTransactions() == (try await alice.allTransactions()))
 
-        bob.store.submit(quickAdd: "-12.50 pizza @Cash >Food")
+        await bob.store.submit(quickAdd: "-12.50 pizza @Cash >Food")
         #expect(bob.store.presentedError == nil)
         await bob.engine.syncNow()
         await alice.engine.syncNow()
 
         #expect(alice.engine.status == .idle)
         #expect(bob.engine.status == .idle)
-        #expect(try alice.syncState().outbox == 0)
-        #expect(try bob.syncState().outbox == 0)
-        #expect(try alice.syncState().rejected == 0)
-        #expect(try bob.syncState().rejected == 0)
-        #expect(try alice.syncState().lastServerSeq == (try bob.syncState().lastServerSeq))
+        #expect(try await alice.syncState().outbox == 0)
+        #expect(try await bob.syncState().outbox == 0)
+        #expect(try await alice.syncState().rejected == 0)
+        #expect(try await bob.syncState().rejected == 0)
+        #expect(try await alice.syncState().lastServerSeq == (try await bob.syncState().lastServerSeq))
         #expect(alice.store.snapshot == bob.store.snapshot)
-        #expect(try alice.allTransactions() == (try bob.allTransactions()))
-        #expect(try alice.notes().contains("pizza"))
-        #expect(try alice.notes().contains("stipendio"))
+        #expect(try await alice.allTransactions() == (try await bob.allTransactions()))
+        #expect(try await alice.notes().contains("pizza"))
+        #expect(try await alice.notes().contains("stipendio"))
         #expect(alice.engine.rejected.isEmpty)
         #expect(bob.engine.rejected.isEmpty)
 
@@ -212,7 +213,7 @@ struct ServerE2ETests {
         defer { try? FileManager.default.removeItem(at: root) }
         let suffix = E2EServer.suffix()
 
-        let carol = try E2EPeer(server: server, root: root, name: "carol", username: "c\(suffix)")
+        let carol = try await E2EPeer(server: server, root: root, name: "carol", username: "c\(suffix)")
         try await carol.register()
         let alice = try await Self.owner(server: server, root: root, suffix: suffix)
         let vaultId = try #require(alice.vaultId)
@@ -222,7 +223,7 @@ struct ServerE2ETests {
         #expect(carol.store.currentVault?.id == vaultId)
         #expect(carol.serverRole(vaultId) == .viewer)
 
-        carol.store.submit(quickAdd: "-1.00 gum @Cash >Food")
+        await carol.store.submit(quickAdd: "-1.00 gum @Cash >Food")
         #expect(carol.store.presentedError == nil)
         await carol.engine.syncNow()
 
@@ -233,13 +234,13 @@ struct ServerE2ETests {
         case .error(let text): #expect(text.contains(ErrorMessages.summary(for: "forbidden")))
         default: Issue.record("expected an error status, got \(carol.engine.status)")
         }
-        #expect(try carol.syncState().outbox == 1)
+        #expect(try await carol.syncState().outbox == 1)
         #expect(carol.engine.pendingCount == 1)
         #expect(carol.engine.rejected.isEmpty)
 
         // The owner never sees the change.
         await alice.engine.syncNow()
-        #expect(try alice.notes().contains("gum") == false)
+        #expect(try await alice.notes().contains("gum") == false)
         #expect(alice.engine.status == .idle)
     }
 }

@@ -14,7 +14,6 @@ struct SetupView: View {
         .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Ink.bg)
-        .onAppear { store.loadCategoryManagement() }
-        .onChange(of: store.currentVault?.id) { _, _ in store.loadCategoryManagement() }
+        .task(id: store.currentVault?.id) { await store.loadCategoryManagement() }
     }
 }

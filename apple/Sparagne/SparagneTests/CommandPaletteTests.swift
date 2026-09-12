@@ -26,7 +26,7 @@ struct CommandPaletteTests {
 
     private static func store(author: String = "matteo") throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.palette.\(UUID().uuidString)"))
-        return AppStore(client: try CoreClient.inMemory(author: author), defaults: defaults)
+        return AppStore(core: try CoreActor.inMemory(author: author), defaults: defaults)
     }
 
     // MARK: - The `>` marker
@@ -92,12 +92,12 @@ struct CommandPaletteTests {
     }
 
     @Test("Nothing matching leaves no results and nothing to run")
-    func noMatch() {
+    func noMatch() async {
         let model = CommandPaletteModel(actions: Self.sample())
         model.query = "zzz"
         #expect(model.results.isEmpty)
         #expect(model.selected == nil)
-        #expect(model.run() == false)
+        #expect(await model.run() == false)
     }
 
     // MARK: - Selection
@@ -126,23 +126,23 @@ struct CommandPaletteTests {
     }
 
     @Test("↩ runs the highlighted action, not the first one")
-    func runsTheSelection() {
+    func runsTheSelection() async {
         let box = Box()
         let model = CommandPaletteModel(actions: Self.sample(box))
         model.query = "month"
         model.move(by: 1)
-        #expect(model.run())
+        #expect(await model.run())
         #expect(box.value == "b")
     }
 
     // MARK: - The app's own actions
 
     @Test("Every other vault is an entry; the one on screen is not")
-    func vaultEntries() throws {
+    func vaultEntries() async throws {
         let store = try Self.store()
-        store.bootstrap()
-        store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
-        store.createVault(name: "Lavoro", walletName: "Conto", openingBalance: 0)
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        await store.createVault(name: "Lavoro", walletName: "Conto", openingBalance: 0)
         let current = try #require(store.currentVault)
         let other = try #require(store.vaults.first { $0.id != current.id })
 
@@ -152,43 +152,43 @@ struct CommandPaletteTests {
     }
 
     @Test("Running the vault entry switches the vault on screen")
-    func vaultEntrySwitches() throws {
+    func vaultEntrySwitches() async throws {
         let store = try Self.store()
-        store.bootstrap()
-        store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
-        store.createVault(name: "Lavoro", walletName: "Conto", openingBalance: 0)
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        await store.createVault(name: "Lavoro", walletName: "Conto", openingBalance: 0)
         let other = try #require(store.vaults.first { $0.id != store.currentVault?.id })
 
         let model = CommandPaletteModel(actions: CommandPaletteModel.ledgerActions(store: store, engine: nil))
         let entry = try #require(model.actions.first { $0.id == "vault.\(other.id)" })
-        entry.run()
+        await entry.run()
         #expect(store.currentVault?.id == other.id)
     }
 
     @Test("The tab entries switch the view")
-    func tabEntries() throws {
+    func tabEntries() async throws {
         let store = try Self.store()
-        store.bootstrap()
-        store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
         store.tab = .summary
 
         let actions = CommandPaletteModel.ledgerActions(store: store, engine: nil)
         let entry = try #require(actions.first { $0.id == "tab.ledger" })
-        entry.run()
+        await entry.run()
         #expect(store.tab == .ledger)
     }
 
     @Test("The three view toggles are entries, and flip the state they name")
-    func toggleEntries() throws {
+    func toggleEntries() async throws {
         let store = try Self.store()
-        store.bootstrap()
-        store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
 
         let actions = CommandPaletteModel.ledgerActions(store: store, engine: nil)
         for id in ["toggle.voided", "toggle.transfers", "toggle.wallet"] {
             #expect(actions.contains { $0.id == id })
         }
-        try #require(actions.first { $0.id == "toggle.wallet" }).run()
+        await (try #require(actions.first { $0.id == "toggle.wallet" })).run()
         #expect(store.showWalletColumn)
 
         // Rebuilt after the flip, the entry offers the opposite.
@@ -198,10 +198,10 @@ struct CommandPaletteTests {
     }
 
     @Test("Without a sync engine there is no sync entry")
-    func syncEntryNeedsAnEngine() throws {
+    func syncEntryNeedsAnEngine() async throws {
         let store = try Self.store()
-        store.bootstrap()
-        store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
         #expect(!CommandPaletteModel.ledgerActions(store: store, engine: nil).contains { $0.id == "sync.now" })
     }
 }

@@ -16,7 +16,7 @@ struct AppStoreTests {
     ) throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.tests.\(UUID().uuidString)"))
         return AppStore(
-            client: try CoreClient.inMemory(author: "tester"),
+            core: try CoreActor.inMemory(author: "tester"),
             defaults: defaults,
             undoWindow: undoWindow,
             sleeper: sleeper
@@ -25,10 +25,10 @@ struct AppStoreTests {
 
     /// A store that has been through onboarding: vault `Main`, wallet `Cash`
     /// holding 100.00.
-    private static func onboarded() throws -> AppStore {
+    private static func onboarded() async throws -> AppStore {
         let store = try makeStore()
-        store.bootstrap()
-        store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
+        await store.bootstrap()
+        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
         return store
     }
 
@@ -37,14 +37,14 @@ struct AppStoreTests {
     }
 
     @Test("An empty database asks for onboarding, which creates the vault and its wallet")
-    func onboarding() throws {
+    func onboarding() async throws {
         let store = try Self.makeStore()
 
-        store.bootstrap()
+        await store.bootstrap()
         #expect(store.needsOnboarding)
         #expect(store.currentVault == nil)
 
-        store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
+        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
 
         #expect(store.presentedError == nil)
         #expect(!store.needsOnboarding)
@@ -58,15 +58,16 @@ struct AppStoreTests {
         // The opening balance is a real transaction, not a special case. The
         // ledger opens on ENTRATE or USCITE, never both, so ask for income.
         store.direction = .income
+        await store.settle()
         #expect(store.rows.count == 1)
         #expect(store.rows.first?.kind == .income)
     }
 
     @Test("A quick-add line adds a row and moves the wallet balance")
-    func quickAddLowersTheWalletBalance() throws {
-        let store = try Self.onboarded()
+    func quickAddLowersTheWalletBalance() async throws {
+        let store = try await Self.onboarded()
 
-        store.submit(quickAdd: "-12.50 pizza #food")
+        await store.submit(quickAdd: "-12.50 pizza #food")
 
         #expect(store.presentedError == nil)
         #expect(store.quickAddText.isEmpty)
@@ -81,12 +82,12 @@ struct AppStoreTests {
     }
 
     @Test("Void hides the row, and undo puts it back without executing anything")
-    func undoCancelsThePendingVoid() throws {
-        let store = try Self.onboarded()
-        store.submit(quickAdd: "-12.50 pizza #food")
+    func undoCancelsThePendingVoid() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-12.50 pizza #food")
         let row = try Self.pizzaRow(store)
 
-        store.void(transactionId: row.id)
+        await store.void(transactionId: row.id)
         #expect(store.pendingUndo?.id == row.id)
         #expect(!store.rows.contains { $0.id == row.id })
         // Nothing was sent yet: the balance has not moved back.
@@ -97,7 +98,7 @@ struct AppStoreTests {
         #expect(store.rows.contains { $0.id == row.id })
 
         // And the core still has it as a live transaction.
-        store.reload()
+        await store.reload()
         let reloaded = try Self.pizzaRow(store)
         #expect(!reloaded.voided)
         #expect(store.wallets.first?.balance == 8750)
@@ -107,12 +108,12 @@ struct AppStoreTests {
     func elapsedUndoWindowVoids() async throws {
         // The window is driven by the injected sleeper, so the test never waits.
         let store = try Self.makeStore(undoWindow: .zero, sleeper: { _ in })
-        store.bootstrap()
-        store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
-        store.submit(quickAdd: "-12.50 pizza #food")
+        await store.bootstrap()
+        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
+        await store.submit(quickAdd: "-12.50 pizza #food")
         let row = try Self.pizzaRow(store)
 
-        store.void(transactionId: row.id)
+        await store.void(transactionId: row.id)
         let task = store.undoTask
         await task?.value
 
@@ -123,19 +124,20 @@ struct AppStoreTests {
         #expect(!store.rows.contains { $0.id == row.id })
 
         store.showVoided = true
+        await store.settle()
         let voided = try #require(store.allRows.first { $0.id == row.id })
         #expect(voided.voided)
     }
 
     @Test("Editing the amount re-applies the legs")
-    func updatingTheAmountMovesTheBalance() throws {
-        let store = try Self.onboarded()
-        store.submit(quickAdd: "-12.50 pizza #food")
+    func updatingTheAmountMovesTheBalance() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-12.50 pizza #food")
         let row = try Self.pizzaRow(store)
 
         var patch = TransactionPatch()
         patch.amount = 2000
-        store.update(transactionId: row.id, patch: patch)
+        await store.update(transactionId: row.id, patch: patch)
 
         #expect(store.presentedError == nil)
         #expect(store.wallets.first?.balance == 8000)
@@ -143,24 +145,24 @@ struct AppStoreTests {
     }
 
     @Test("An empty patch is not sent")
-    func emptyPatchDoesNothing() throws {
-        let store = try Self.onboarded()
-        store.submit(quickAdd: "-12.50 pizza #food")
+    func emptyPatchDoesNothing() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-12.50 pizza #food")
         let row = try Self.pizzaRow(store)
 
-        store.update(transactionId: row.id, patch: TransactionPatch())
+        await store.update(transactionId: row.id, patch: TransactionPatch())
 
         #expect(store.presentedError == nil)
         #expect(store.wallets.first?.balance == 8750)
     }
 
     @Test("Spending more than an envelope holds surfaces insufficient_funds")
-    func overspendingAnEnvelopeIsReported() throws {
-        let store = try Self.onboarded()
-        store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
+    func overspendingAnEnvelopeIsReported() async throws {
+        let store = try await Self.onboarded()
+        await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
         #expect(store.presentedError == nil)
 
-        store.submit(quickAdd: "-5.00 hotel >Vacanze")
+        await store.submit(quickAdd: "-5.00 hotel >Vacanze")
 
         let error = try #require(store.presentedError)
         #expect(error.code == "insufficient_funds")
@@ -170,18 +172,18 @@ struct AppStoreTests {
     }
 
     @Test("An unknown envelope name is a quick-add error, not a domain error")
-    func unknownNameIsReported() throws {
-        let store = try Self.onboarded()
+    func unknownNameIsReported() async throws {
+        let store = try await Self.onboarded()
 
-        store.submit(quickAdd: "-5.00 hotel >nowhere")
+        await store.submit(quickAdd: "-5.00 hotel >nowhere")
 
         let error = try #require(store.presentedError)
         #expect(error.code == "unknown_name")
     }
 
     @Test("The preview parses without touching the database")
-    func previewParses() throws {
-        let store = try Self.onboarded()
+    func previewParses() async throws {
+        let store = try await Self.onboarded()
 
         guard case .success(let parsed) = store.preview(quickAdd: "-12.50 pizza #food @cash") else {
             Issue.record("expected the line to parse")
@@ -209,13 +211,13 @@ struct AppStoreTests {
     }
 
     @Test("An ambiguous wallet name surfaces the candidates to choose from")
-    func ambiguousNameOffersTheCandidates() throws {
-        let store = try Self.onboarded()
-        store.createWallet(name: "Bank", openingBalance: 0)
-        store.createWallet(name: "Bancoposta", openingBalance: 0)
+    func ambiguousNameOffersTheCandidates() async throws {
+        let store = try await Self.onboarded()
+        await store.createWallet(name: "Bank", openingBalance: 0)
+        await store.createWallet(name: "Bancoposta", openingBalance: 0)
         #expect(store.presentedError == nil)
 
-        store.submit(quickAdd: "-5.00 hotel @ban")
+        await store.submit(quickAdd: "-5.00 hotel @ban")
 
         let error = try #require(store.presentedError)
         #expect(error.code == "ambiguous_name")
@@ -226,12 +228,12 @@ struct AppStoreTests {
     }
 
     @Test("A row exposes the ids of its wallet and envelope")
-    func rowExposesItsIds() throws {
-        let store = try Self.onboarded()
-        store.createEnvelope(name: "Spesa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
+    func rowExposesItsIds() async throws {
+        let store = try await Self.onboarded()
+        await store.createEnvelope(name: "Spesa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         let envelope = try #require(store.flows.first { $0.name == "Spesa" })
 
-        store.submit(quickAdd: "-12.50 pizza #food >Spesa")
+        await store.submit(quickAdd: "-12.50 pizza #food >Spesa")
 
         #expect(store.presentedError == nil)
         let row = try Self.pizzaRow(store)
@@ -241,20 +243,22 @@ struct AppStoreTests {
 
         // The opening balance carries the system category, localized here.
         store.direction = .income
+        await store.settle()
         let opening = try #require(store.rows.first { $0.kind == .income })
         #expect(opening.category == String(localized: "Opening"))
     }
 
     @Test("A wallet transfer shows both ends in the wallet column")
-    func transferRowShowsBothEnds() throws {
-        let store = try Self.onboarded()
-        store.createWallet(name: "Bank", openingBalance: 0)
+    func transferRowShowsBothEnds() async throws {
+        let store = try await Self.onboarded()
+        await store.createWallet(name: "Bank", openingBalance: 0)
 
-        store.submit(quickAdd: "tw> 20.00 @cash @bank")
+        await store.submit(quickAdd: "tw> 20.00 @cash @bank")
 
         #expect(store.presentedError == nil)
         // Transfers are in neither direction; the View menu opts into them.
         store.showTransfers = true
+        await store.settle()
         let row = try #require(store.rows.first { $0.kind == .transferWallet })
         #expect(row.walletDisplay == "Cash → Bank")
         #expect(row.envelopeDisplay == TransactionRow.placeholder)
@@ -267,11 +271,11 @@ struct AppStoreTests {
     // MARK: - Wallet and envelope management
 
     @Test("Archiving a wallet with a balance surfaces invalid_command")
-    func archivingAWalletWithBalanceIsRefused() throws {
-        let store = try Self.onboarded()
+    func archivingAWalletWithBalanceIsRefused() async throws {
+        let store = try await Self.onboarded()
         let cash = try #require(store.wallets.first { $0.name == "Cash" })
 
-        store.archiveWallet(cash.id)
+        await store.archiveWallet(cash.id)
 
         let error = try #require(store.presentedError)
         #expect(error.code == "invalid_command")
@@ -279,12 +283,12 @@ struct AppStoreTests {
     }
 
     @Test("Updating an envelope's cap shows up in the snapshot")
-    func updatingAnEnvelopeChangesTheCapInTheSnapshot() throws {
-        let store = try Self.onboarded()
-        store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
+    func updatingAnEnvelopeChangesTheCapInTheSnapshot() async throws {
+        let store = try await Self.onboarded()
+        await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
         let envelope = try #require(store.flows.first { $0.name == "Vacanze" })
 
-        store.updateEnvelope(envelope.id, mode: .netCapped(cap: 5000))
+        await store.updateEnvelope(envelope.id, mode: .netCapped(cap: 5000))
 
         #expect(store.presentedError == nil)
         let updated = try #require(store.flows.first { $0.id == envelope.id })
@@ -294,14 +298,14 @@ struct AppStoreTests {
     // MARK: - Category management
 
     @Test("Renaming a category shows up in the categories list")
-    func renamingACategoryShowsInCategories() throws {
-        let store = try Self.onboarded()
-        store.submit(quickAdd: "-5.00 pizza #Food")
+    func renamingACategoryShowsInCategories() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-5.00 pizza #Food")
         #expect(store.presentedError == nil)
-        store.loadCategoryManagement()
+        await store.loadCategoryManagement()
         let food = try #require(store.windowCategories.first { $0.name == "Food" })
 
-        store.renameCategory(food.id, name: "Groceries")
+        await store.renameCategory(food.id, name: "Groceries")
 
         #expect(store.presentedError == nil)
         #expect(store.categories.contains { $0.name == "Groceries" })
@@ -309,33 +313,33 @@ struct AppStoreTests {
     }
 
     @Test("A merge with preview conflicts is refused; a clean merge repoints transactions")
-    func categoryMergePreviewAndCleanMerge() throws {
-        let store = try Self.onboarded()
-        store.submit(quickAdd: "-5.00 pizza #Food")
+    func categoryMergePreviewAndCleanMerge() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-5.00 pizza #Food")
         #expect(store.presentedError == nil)
-        store.loadCategoryManagement()
+        await store.loadCategoryManagement()
         let food = try #require(store.windowCategories.first { $0.name == "Food" })
 
         // Merging a category into itself always conflicts.
-        let selfPreview = store.previewCategoryMerge(sourceId: food.id, targetId: food.id)
+        let selfPreview = await store.previewCategoryMerge(sourceId: food.id, targetId: food.id)
         #expect(selfPreview?.ok == false)
         #expect(selfPreview?.conflicts.contains { $0.kind == .sameCategory } == true)
 
-        store.mergeCategory(sourceId: food.id, targetId: food.id)
+        await store.mergeCategory(sourceId: food.id, targetId: food.id)
         #expect(store.presentedError != nil)
         store.presentedError = nil
 
         // A fresh, unrelated target has no conflicts and the merge repoints
         // the existing transaction (checked via `listTransactions`).
-        store.createCategory(name: "Groceries")
-        store.loadCategoryManagement()
+        await store.createCategory(name: "Groceries")
+        await store.loadCategoryManagement()
         let groceries = try #require(store.windowCategories.first { $0.name == "Groceries" })
 
-        let cleanPreview = store.previewCategoryMerge(sourceId: food.id, targetId: groceries.id)
+        let cleanPreview = await store.previewCategoryMerge(sourceId: food.id, targetId: groceries.id)
         #expect(cleanPreview?.ok == true)
         #expect(cleanPreview?.conflicts.isEmpty == true)
 
-        store.mergeCategory(sourceId: food.id, targetId: groceries.id)
+        await store.mergeCategory(sourceId: food.id, targetId: groceries.id)
 
         #expect(store.presentedError == nil)
         let pizza = try #require(store.transactions.first { $0.note == "pizza" })
@@ -346,8 +350,8 @@ struct AppStoreTests {
     // MARK: - Recurring
 
     @Test("A template due a month ago is pending; executing adds a transaction and clears it, skipping leaves no transaction")
-    func recurringExecuteAndSkip() throws {
-        let store = try Self.onboarded()
+    func recurringExecuteAndSkip() async throws {
+        let store = try await Self.onboarded()
         let now = Date()
         let calendar = Calendar(identifier: .gregorian)
         let dayOfMonth = calendar.component(.day, from: now)
@@ -355,8 +359,9 @@ struct AppStoreTests {
         // The executed transaction lands last month, and the ledger reads one
         // month at a time, so move the window there or `rows` will be empty.
         store.month = MonthKey(monthAgo)
+        await store.settle()
 
-        store.createRecurring(
+        await store.createRecurring(
             kind: .expense,
             amount: 999,
             walletId: nil,
@@ -377,7 +382,7 @@ struct AppStoreTests {
             store.pendingRecurringItems.first { $0.template.id == template.id }?.due.first
         )
 
-        store.executeRecurring(template.id, periodDate: dueDate)
+        await store.executeRecurring(template.id, periodDate: dueDate)
 
         #expect(store.presentedError == nil)
         #expect(!(store.pendingRecurringItems.first { $0.template.id == template.id }?.due.contains(dueDate) ?? false))
@@ -389,7 +394,7 @@ struct AppStoreTests {
         // additional transaction.
         if let nextDue = store.pendingRecurringItems.first(where: { $0.template.id == template.id })?.due.first {
             let countBefore = store.rows.filter { $0.note == "Rent" }.count
-            store.skipRecurring(template.id, periodDate: nextDue)
+            await store.skipRecurring(template.id, periodDate: nextDue)
             #expect(store.presentedError == nil)
             #expect(store.rows.filter { $0.note == "Rent" }.count == countBefore)
         }

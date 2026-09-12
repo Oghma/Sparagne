@@ -33,6 +33,7 @@ L'app lavora su un SQLite locale attraverso un core Rust in-process; ogni scritt
 
 - SwiftUI, `@Observable` store che incapsula il core. Dalla Fase 4 la tabella è una griglia SwiftUI scritta a mano (`Views/Ledger/`), non `Table`: l'editing in cella e il look dei mockup lo richiedono. NSTableView è stata valutata e scartata (`UI.md`).
 - L'app non ha stato di dominio proprio: ogni vista è una query sul core, ogni azione è un comando.
+- Dalla Fase 5 il core sta su un attore dedicato (`Core/CoreActor.swift`), l'unico posto che tocca `CoreHandle`. `AppStore` resta `@MainActor @Observable` ma ogni punto di ingresso che tocca il core è `async`: attende l'attore e scrive lo stato pubblicato sul main actor al ritorno. `SyncEngine` usa lo stesso attore, così il core non è mai chiamato da due domini di isolamento. Il caricamento del mese è una sola visita (`CoreActor.load`), non una dozzina di salti, e una `reload` più vecchia non sovrascrive un mese più recente. I filtri (`month`, `direction`, `person`, i due interruttori) restano proprietà legabili dalle view: il `didSet` non può attendere, quindi accoda il caricamento e `AppStore.settle()` aspetta che la coda si svuoti.
 - Timezone di sistema; i comandi portano `occurred_at` come RFC3339 con offset.
 
 ### 2.3 `sync` (Fase 3)
@@ -139,9 +140,9 @@ Multi-tenant lato server: account utente, vault di proprietà di un account, mem
 | 2 | UniFFI, Swift Package, app con tabella transazioni e quick-add, solo locale | app usabile da un utente | fatta il 2026-09-09: `apple/SparagneCore` + `apple/Sparagne` (tabella, quick-add, void con undo, inspector, gestione wallet/buste/categorie, ricorrenze) |
 | 3 | server `sync`, auth, membership, outbox e pull | secondo utente | fatta il 2026-09-10: `server/` in axum, sync nel core, account e condivisione nell'app; dettagli e rimandi in `SYNC.md` §7 |
 | 4 | libro mastro: griglia editabile, riepilogo e anno, aggregati nel core | l'app dei mockup | fatta il 2026-09-10: `core/src/analytics.rs` e la finestra nuova; design in `UI.md` |
-| 5 | messa in esercizio: app contro il server vero, protocollo senza casi speciali, import v1, deploy, palette ⌘K e colonna wallet, core fuori dal main actor | Sparagne usata tutti i giorni | in corso dal 2026-09-12: pacchetti, ondate e passaggio di consegne in `ROADMAP.md` |
+| 5 | messa in esercizio: app contro il server vero, protocollo senza casi speciali, import v1, deploy, palette ⌘K e colonna wallet, core fuori dal main actor | Sparagne usata tutti i giorni | fatta fra il 2026-09-12 e il 2026-09-13: pacchetti, esiti e passaggio di consegne in `ROADMAP.md` |
 
-Rimandato dalle fasi 1-2: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), un'app che chiama il core da un attore in background invece che dal main actor, firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`.
+Rimandato dalle fasi 1-2: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`. Il core fuori dal main actor è stato fatto il 2026-09-12 (§2.2).
 
 La Fase 1 già scrive il log con i campi di §3, anche se `seq` è locale e `outbox` non esiste.
 

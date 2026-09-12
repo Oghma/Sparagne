@@ -39,7 +39,7 @@ struct ManagementSheet: View {
             Section {
                 Menu {
                     ForEach(store.vaults, id: \.id) { vault in
-                        Button(vault.name) { store.select(vault) }
+                        Button(vault.name) { Task { await store.select(vault) } }
                     }
                     Divider()
                     Button(String(localized: "New Vault…")) { present(.vault) }
@@ -62,14 +62,16 @@ struct ManagementSheet: View {
                         .contextMenu {
                             Button(String(localized: "Rename…")) { present(.renameWallet(wallet)) }
                             Button(String(localized: "Archive"), role: .destructive) {
-                                store.archiveWallet(wallet.id)
+                                Task { await store.archiveWallet(wallet.id) }
                             }
                         }
                 }
                 if !store.archivedWallets.isEmpty {
                     DisclosureGroup(String(localized: "Archived")) {
                         ForEach(store.archivedWallets, id: \.id) { wallet in
-                            ArchivedRow(name: wallet.name) { store.restoreWallet(wallet.id) }
+                            ArchivedRow(name: wallet.name) {
+                                Task { await store.restoreWallet(wallet.id) }
+                            }
                         }
                     }
                 }
@@ -91,7 +93,7 @@ struct ManagementSheet: View {
                             Button(String(localized: "Rename…")) { present(.renameEnvelope(flow)) }
                             Button(String(localized: "Edit…")) { present(.editEnvelope(flow)) }
                             Button(String(localized: "Archive"), role: .destructive) {
-                                store.archiveEnvelope(flow.id)
+                                Task { await store.archiveEnvelope(flow.id) }
                             }
                         }
                     }
@@ -99,7 +101,9 @@ struct ManagementSheet: View {
                 if !store.archivedFlows.isEmpty {
                     DisclosureGroup(String(localized: "Archived")) {
                         ForEach(store.archivedFlows, id: \.id) { flow in
-                            ArchivedRow(name: flow.name) { store.restoreEnvelope(flow.id) }
+                            ArchivedRow(name: flow.name) {
+                                Task { await store.restoreEnvelope(flow.id) }
+                            }
                         }
                     }
                 }

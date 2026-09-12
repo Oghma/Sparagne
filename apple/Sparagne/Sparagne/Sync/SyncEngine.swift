@@ -8,7 +8,9 @@ import SparagneCore
 /// then pull until the core says the server has nothing more; then join
 /// whatever vault the server lists and the database does not have yet. The
 /// core does all the reasoning — the engine only moves opaque JSON between
-/// `CoreHandle` and `ServerAPI` and keeps the status the window shows.
+/// `CoreActor` and `ServerAPI` and keeps the status the window shows. It
+/// shares that one actor with `AppStore`, so the core is never touched from
+/// two isolation domains at once.
 ///
 /// Nothing here throws out of the UI: a failure becomes `status`.
 @Observable
@@ -25,9 +27,11 @@ final class SyncEngine {
     /// One rejected command with the vault it belongs to, so the sheet can
     /// dismiss it.
     struct RejectedChange: Identifiable, Equatable, Sendable {
-        let vaultId: Uuid
-        let vaultName: String
-        let command: RejectedCommand
+        let entry: RejectedEntry
+
+        var vaultId: Uuid { entry.vaultId }
+        var vaultName: String { entry.vaultName }
+        var command: RejectedCommand { entry.command }
 
         var id: Uuid { command.commandId }
         /// The localized headline for the server's code.
@@ -46,7 +50,7 @@ final class SyncEngine {
 
     // MARK: Dependencies
 
-    @ObservationIgnored private let client: CoreClient
+    @ObservationIgnored private let core: CoreActor
     @ObservationIgnored private let store: AppStore
     @ObservationIgnored private let makeTransport: @Sendable (URL) -> SyncTransport
 
@@ -77,18 +81,26 @@ final class SyncEngine {
     @ObservationIgnored private var timerTask: Task<Void, Never>?
 
     init(
-        client: CoreClient,
+        core: CoreActor,
         store: AppStore,
         account: AccountStore,
         makeTransport: @escaping @Sendable (URL) -> SyncTransport = { URLSessionTransport(baseURL: $0) }
     ) {
-        self.client = client
+        self.core = core
         self.store = store
         self.account = account
         self.makeTransport = makeTransport
-        store.setAuthor(account.author)
-        client.onExecuted = { [weak self] in self?.scheduleSync() }
-        refreshLocalState()
+    }
+
+    /// Adopts the account's author, subscribes to applied commands and reads
+    /// the local sync state. `init` cannot await the core actor, so this runs
+    /// once before the first command, ahead of `start()`.
+    func prepare() async {
+        await store.setAuthor(account.author)
+        await core.setOnExecuted { [weak self] in
+            Task { @MainActor in await self?.scheduleSync() }
+        }
+        await refreshLocalState()
     }
 
     // MARK: - Derived
@@ -126,8 +138,8 @@ final class SyncEngine {
     }
 
     /// Called after every command; the last one in a burst wins.
-    func scheduleSync() {
-        pendingCount = localPendingCount()
+    func scheduleSync() async {
+        pendingCount = await core.localState().pending
         guard automaticSync, account.isLoggedIn else { return }
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
@@ -144,7 +156,7 @@ final class SyncEngine {
     func syncNow() async {
         guard !isSyncing else { return }
         guard account.isLoggedIn else {
-            refreshLocalState()
+            await refreshLocalState()
             return
         }
         let api: ServerAPI
@@ -152,7 +164,7 @@ final class SyncEngine {
         do {
             (api, token) = try authorized()
         } catch {
-            settle(failure: asServerError(error), changed: false, rejections: false)
+            await settle(failure: asServerError(error), changed: false, rejections: false)
             return
         }
 
@@ -163,7 +175,7 @@ final class SyncEngine {
         var failure: ServerError?
 
         do {
-            for vault in try client.vaults() {
+            for vault in try await core.vaults() {
                 do {
                     let outcome = try await syncVault(vault.id, api: api, token: token)
                     changed = changed || outcome.changed
@@ -175,7 +187,7 @@ final class SyncEngine {
                 }
             }
             serverVaults = try await api.vaults(token: token)
-            let known = Set(try client.vaults().map(\.id))
+            let known = Set(try await core.vaults().map(\.id))
             for summary in serverVaults where !known.contains(summary.id) {
                 do {
                     let outcome = try await pullLoop(summary.id, api: api, token: token)
@@ -190,7 +202,7 @@ final class SyncEngine {
         }
 
         isSyncing = false
-        settle(failure: failure, changed: changed, rejections: rejections)
+        await settle(failure: failure, changed: changed, rejections: rejections)
     }
 
     /// One vault: push the whole outbox, a batch per request, then pull.
@@ -211,12 +223,12 @@ final class SyncEngine {
     private func pushLoop(_ vaultId: Uuid, api: ServerAPI, token: String) async throws -> Outcome {
         var outcome = Outcome()
         for _ in 0..<Self.maxPages {
-            let pending = try client.syncState(vaultId: vaultId).outbox
+            let pending = try await core.syncState(vaultId: vaultId).outbox
             guard pending > 0 else { break }
-            let body = try client.pushRequestJson(vaultId: vaultId, limit: Self.pushLimit)
+            let body = try await core.pushRequestJson(vaultId: vaultId, limit: Self.pushLimit)
             let response = try await api.push(token: token, vaultId: vaultId, body: body)
-            outcome.absorb(try client.applyPushResponse(vaultId: vaultId, json: response))
-            if try client.syncState(vaultId: vaultId).outbox >= pending { break }
+            outcome.absorb(try await core.applyPushResponse(vaultId: vaultId, json: response))
+            if try await core.syncState(vaultId: vaultId).outbox >= pending { break }
         }
         return outcome
     }
@@ -226,25 +238,25 @@ final class SyncEngine {
     private func pullLoop(_ vaultId: Uuid, api: ServerAPI, token: String) async throws -> Outcome {
         var outcome = Outcome()
         for _ in 0..<Self.maxPages {
-            let since = try client.syncState(vaultId: vaultId).lastServerSeq
+            let since = try await core.syncState(vaultId: vaultId).lastServerSeq
             let page = try await api.pull(
                 token: token,
                 vaultId: vaultId,
                 since: since,
                 limit: Self.pullLimit
             )
-            let report = try client.integratePull(vaultId: vaultId, json: page)
+            let report = try await core.integratePull(vaultId: vaultId, json: page)
             outcome.absorb(report)
-            let reached = try client.syncState(vaultId: vaultId).lastServerSeq
+            let reached = try await core.syncState(vaultId: vaultId).lastServerSeq
             if !report.hasMore || reached <= since { break }
         }
         return outcome
     }
 
     /// Writes the result of a sync round into the observable state.
-    private func settle(failure: ServerError?, changed: Bool, rejections: Bool) {
-        refreshLocalState()
-        if changed { store.refreshAfterSync() }
+    private func settle(failure: ServerError?, changed: Bool, rejections: Bool) async {
+        await refreshLocalState()
+        if changed { await store.refreshAfterSync() }
         if let failure {
             if failure.isUnauthorized { account.signOut() }
             status = failure.isOffline ? .offline : .error(describe(failure))
@@ -255,45 +267,24 @@ final class SyncEngine {
         if rejections && !rejected.isEmpty { showsRejectedAlert = true }
     }
 
-    /// Re-reads the outbox count and the rejected commands from the core.
-    func refreshLocalState() {
-        var pending = 0
-        var list: [RejectedChange] = []
-        for vault in (try? client.vaults()) ?? [] {
-            if let state = try? client.syncState(vaultId: vault.id) {
-                pending += Int(state.outbox)
-            }
-            for command in (try? client.rejectedCommands(vaultId: vault.id)) ?? [] {
-                list.append(
-                    RejectedChange(vaultId: vault.id, vaultName: vault.name, command: command)
-                )
-            }
-        }
-        pendingCount = pending
-        rejected = list
-    }
-
-    private func localPendingCount() -> Int {
-        ((try? client.vaults()) ?? []).reduce(0) { total, vault in
-            total + Int((try? client.syncState(vaultId: vault.id).outbox) ?? 0)
-        }
+    /// Re-reads the outbox count and the rejected commands from the core, in
+    /// one visit to the actor.
+    func refreshLocalState() async {
+        let state = await core.localState()
+        pendingCount = state.pending
+        rejected = state.rejected.map(RejectedChange.init(entry:))
     }
 
     // MARK: - Rejections
 
-    func dismiss(_ change: RejectedChange) {
-        try? client.dismissRejected(vaultId: change.vaultId, commandId: change.command.commandId)
-        refreshLocalState()
+    func dismiss(_ change: RejectedChange) async {
+        await core.dismissAllRejected([change.entry])
+        await refreshLocalState()
     }
 
-    func dismissAllRejected() {
-        for change in rejected {
-            try? client.dismissRejected(
-                vaultId: change.vaultId,
-                commandId: change.command.commandId
-            )
-        }
-        refreshLocalState()
+    func dismissAllRejected() async {
+        await core.dismissAllRejected(rejected.map(\.entry))
+        await refreshLocalState()
     }
 
     // MARK: - Account
@@ -321,11 +312,9 @@ final class SyncEngine {
                 ? try await api.register(username: username, password: password)
                 : try await api.login(username: username, password: password)
             account.signIn(username: response.username, token: response.token)
-            store.setAuthor(response.username)
-            for vault in try client.vaults() {
-                try client.relabelOutbox(vaultId: vault.id, author: response.username)
-            }
-            store.refreshAfterSync()
+            await store.setAuthor(response.username)
+            try await core.relabelEveryOutbox(author: response.username)
+            await store.refreshAfterSync()
             status = .idle
             await syncNow()
             start()
@@ -341,7 +330,7 @@ final class SyncEngine {
         }
         stop()
         account.signOut()
-        store.setAuthor(account.author)
+        await store.setAuthor(account.author)
         serverVaults = []
         status = .idle
         lastSyncAt = nil
@@ -349,8 +338,8 @@ final class SyncEngine {
 
     /// Settings changed the name for the rows written while logged out. An
     /// account, when there is one, keeps precedence (`AccountStore.author`).
-    func adoptLocalAuthor() {
-        store.setAuthor(account.author)
+    func adoptLocalAuthor() async {
+        await store.setAuthor(account.author)
     }
 
     // MARK: - Sharing

@@ -15,9 +15,11 @@ struct PaletteAction: Identifiable {
     /// Extra words the entry can be found by, never displayed. Not localized
     /// for that reason: the title already carries the user's language.
     let keywords: [String]
-    let run: @MainActor () -> Void
+    /// Asynchronous because most of what the app does now goes through the
+    /// core actor (switching vault, say); the rest simply never suspends.
+    let run: @MainActor () async -> Void
 
-    init(id: String, title: String, keywords: [String] = [], run: @escaping @MainActor () -> Void) {
+    init(id: String, title: String, keywords: [String] = [], run: @escaping @MainActor () async -> Void) {
         self.id = id
         self.title = title
         self.keywords = keywords
@@ -129,9 +131,9 @@ final class CommandPaletteModel {
     /// ↩: runs the highlighted entry. `false` when nothing matches, so the
     /// field can stay open instead of closing over a typo.
     @discardableResult
-    func run() -> Bool {
+    func run() async -> Bool {
         guard let action = selected else { return false }
-        action.run()
+        await action.run()
         return true
     }
 }
@@ -193,7 +195,7 @@ extension CommandPaletteModel {
                     title: String(localized: "Vault: \(vault.name)"),
                     keywords: [vault.name]
                 ) {
-                    store.select(vault)
+                    await store.select(vault)
                 }
             )
         }
@@ -229,7 +231,7 @@ extension CommandPaletteModel {
                     title: String(localized: "Sync Now"),
                     keywords: ["sync", "sincronizza", "server"]
                 ) {
-                    Task { await engine.syncNow() }
+                    await engine.syncNow()
                 }
             )
         }
@@ -325,7 +327,7 @@ struct CommandPaletteList: View {
             }
             .onTapGesture {
                 model.select(index)
-                if model.run() { onRun() }
+                Task { if await model.run() { onRun() } }
             }
     }
 

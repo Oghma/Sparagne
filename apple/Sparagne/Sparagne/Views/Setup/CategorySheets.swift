@@ -36,8 +36,12 @@ struct MergeCategorySheet: View {
                     Text(target.name).tag(Optional(target.id))
                 }
             }
-            .onChange(of: targetId) { _, newValue in
-                preview = newValue.flatMap { store.previewCategoryMerge(sourceId: source.id, targetId: $0) }
+            .task(id: targetId) {
+                guard let targetId else {
+                    preview = nil
+                    return
+                }
+                preview = await store.previewCategoryMerge(sourceId: source.id, targetId: targetId)
             }
             if let preview, !preview.conflicts.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -53,7 +57,7 @@ struct MergeCategorySheet: View {
                 Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
                 Button(String(localized: "Merge")) {
                     guard let targetId else { return }
-                    store.mergeCategory(sourceId: source.id, targetId: targetId)
+                    Task { await store.mergeCategory(sourceId: source.id, targetId: targetId) }
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
