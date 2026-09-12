@@ -267,6 +267,12 @@ pub struct SyncReport {
     /// Whether the projection was rebuilt.
     pub rebased: bool,
     pub rejected: Vec<RejectedCommand>,
+    /// The vault's last seq as the server reported it in the body this report
+    /// comes from. The app never reads it out of the JSON itself.
+    pub server_last_seq: i64,
+    /// `true` when the server holds seqs past the local watermark, so another
+    /// page is waiting.
+    pub has_more: bool,
 }
 
 impl Core {
@@ -279,9 +285,21 @@ impl Core {
         )?)
     }
 
+    /// Highest applied seq of every vault at once, for a server listing the
+    /// vaults of one account without a query per vault. Vaults whose log is
+    /// empty are absent.
+    pub fn last_seqs(&self) -> Result<Vec<(Uuid, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT vault_id, MAX(seq) FROM commands
+             WHERE status = 'applied' GROUP BY vault_id",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, Uuid>(0)?, r.get::<_, i64>(1)?)))?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
     /// Where the vault stands with the server. A vault this database has never
-    /// seen reports all zeros rather than failing: the app asks before the
-    /// first pull creates it.
+    /// seen reports all zeros rather than failing: the join flow asks before
+    /// the first pull creates it (`docs/v2/SYNC.md` §4 point 3).
     pub fn sync_state(&self, vault_id: Uuid) -> Result<SyncState> {
         let (outbox, rejected) = self.conn.query_row(
             "SELECT COUNT(*) FILTER (WHERE status = 'applied' AND server_seq IS NULL),
@@ -302,15 +320,19 @@ impl Core {
         outbox_records(&self.conn, vault_id)
     }
 
-    /// The body of `POST /vaults/{id}/push`: the outbox, in local order.
-    pub fn push_request(&self, vault_id: Uuid) -> Result<PushRequest> {
-        Ok(PushRequest {
-            commands: self
-                .outbox(vault_id)?
-                .into_iter()
-                .map(|record| record.envelope)
-                .collect(),
-        })
+    /// The body of `POST /vaults/{id}/push`: the oldest `limit` commands of
+    /// the outbox, in local order.
+    ///
+    /// A batch is capped because the server refuses an oversized body; the
+    /// caller pushes again until [`Self::sync_state`] reports an empty outbox.
+    pub fn push_request(&self, vault_id: Uuid, limit: usize) -> Result<PushRequest> {
+        let mut commands: Vec<CommandEnvelope> = self
+            .outbox(vault_id)?
+            .into_iter()
+            .map(|record| record.envelope)
+            .collect();
+        commands.truncate(limit);
+        Ok(PushRequest { commands })
     }
 
     /// Records what the server did with a push.
@@ -350,7 +372,7 @@ impl Core {
         }
         if refused.is_empty() {
             tx.commit()?;
-            return Ok(report);
+            return self.stamp(vault_id, report, response.last_seq);
         }
 
         let dropped: HashSet<Uuid> = refused.iter().map(|(id, _, _)| *id).collect();
@@ -388,7 +410,7 @@ impl Core {
             .extend(rebuild(&tx, vault_id, &ordered, &retry, keep)?);
         report.rebased = true;
         tx.commit()?;
-        Ok(report)
+        self.stamp(vault_id, report, response.last_seq)
     }
 
     /// Folds a pull into the local log.
@@ -412,7 +434,7 @@ impl Core {
             .collect();
         incoming.sort_by_key(|record| record.seq);
         if incoming.is_empty() {
-            return Ok(SyncReport::default());
+            return self.stamp(vault_id, SyncReport::default(), response.last_seq);
         }
         if let Some(stray) = incoming
             .iter()
@@ -439,10 +461,11 @@ impl Core {
                 )?;
             }
             tx.commit()?;
-            return Ok(SyncReport {
+            let report = SyncReport {
                 confirmed: count_usize(incoming.len()),
                 ..SyncReport::default()
-            });
+            };
+            return self.stamp(vault_id, report, response.last_seq);
         }
 
         let tx = self.conn.transaction()?;
@@ -485,6 +508,20 @@ impl Core {
         report.rejected = rebuild(&tx, vault_id, &ordered, &retry, keep)?;
         report.rebased = true;
         tx.commit()?;
+        self.stamp(vault_id, report, response.last_seq)
+    }
+
+    /// Fills in what the report says about the server: the last seq the body
+    /// carried, and whether it sits past the contiguous local watermark, which
+    /// is how the app knows another page is waiting.
+    fn stamp(
+        &self,
+        vault_id: Uuid,
+        mut report: SyncReport,
+        server_last_seq: i64,
+    ) -> Result<SyncReport> {
+        report.server_last_seq = server_last_seq;
+        report.has_more = server_last_seq > last_server_seq(&self.conn, vault_id)?;
         Ok(report)
     }
 
@@ -551,8 +588,8 @@ impl Core {
     // -- JSON entry points, for the FFI -------------------------------------
 
     /// [`Self::push_request`] as the JSON body to POST.
-    pub fn push_request_json(&self, vault_id: Uuid) -> Result<String> {
-        Ok(serde_json::to_string(&self.push_request(vault_id)?)?)
+    pub fn push_request_json(&self, vault_id: Uuid, limit: usize) -> Result<String> {
+        Ok(serde_json::to_string(&self.push_request(vault_id, limit)?)?)
     }
 
     /// [`Self::apply_push_response`] on a raw push response body.

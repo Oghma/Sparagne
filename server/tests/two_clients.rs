@@ -164,7 +164,7 @@ async fn author_and_permissions() {
     bob.core.relabel_outbox(vault, "mallory").unwrap();
 
     let before_seq = api.state.core().last_seq(vault).unwrap();
-    let request = bob.core.push_request(vault).unwrap();
+    let request = bob.core.push_request(vault, common::BATCH).unwrap();
     let res = api
         .post(&format!("/vaults/{vault}/push"), &bob.token, json!(request))
         .await;
@@ -206,7 +206,7 @@ async fn author_and_permissions() {
     // ...but her push is forbidden, and her local outbox command stays
     // unconfirmed.
     let doomed = carol.exec(vault, expense_cmd(100, wallet, None, "spesa", T0 + 120));
-    let request = carol.core.push_request(vault).unwrap();
+    let request = carol.core.push_request(vault, common::BATCH).unwrap();
     let res = api
         .post(
             &format!("/vaults/{vault}/push"),
@@ -238,7 +238,7 @@ async fn idempotent_push() {
     let (mut alice, _bob, vault, wallet) = basics(&api).await;
 
     alice.exec(vault, expense_cmd(200, wallet, None, "spesa", T0 + 60));
-    let request = alice.core.push_request(vault).unwrap();
+    let request = alice.core.push_request(vault, common::BATCH).unwrap();
 
     let first_res = api
         .post(
@@ -272,7 +272,14 @@ async fn idempotent_push() {
         "the server log must not grow on a replay"
     );
 
-    // And applying the replayed response locally is a no-op.
+    // And applying the replayed response locally is a no-op, apart from the
+    // server position every report carries.
     let noop = alice.core.apply_push_response(vault, &again).unwrap();
-    assert_eq!(noop, SyncReport::default());
+    assert_eq!(
+        noop,
+        SyncReport {
+            server_last_seq: again.last_seq,
+            ..SyncReport::default()
+        }
+    );
 }

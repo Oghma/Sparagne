@@ -130,6 +130,11 @@ impl CoreHandle {
         self.lock()?.vaults()
     }
 
+    /// One vault by id, `nil` when the database does not hold it.
+    pub fn vault(&self, vault_id: Uuid) -> Result<Option<VaultView>, DomainError> {
+        self.lock()?.vault(vault_id)
+    }
+
     /// Wallets and flows of a vault with their balances.
     pub fn snapshot(&self, vault_id: Uuid) -> Result<VaultSnapshot, DomainError> {
         self.lock()?.snapshot(vault_id)
@@ -322,9 +327,11 @@ impl CoreHandle {
         self.lock()?.last_seq(vault_id)
     }
 
-    /// JSON body for `POST /vaults/{id}/push`. Swift only does the HTTP.
-    pub fn push_request_json(&self, vault_id: Uuid) -> Result<String, DomainError> {
-        self.lock()?.push_request_json(vault_id)
+    /// JSON body for `POST /vaults/{id}/push`: at most `limit` commands of
+    /// the outbox, oldest first. Swift only does the HTTP, and pushes again
+    /// while `sync_state` still reports an outbox.
+    pub fn push_request_json(&self, vault_id: Uuid, limit: u32) -> Result<String, DomainError> {
+        self.lock()?.push_request_json(vault_id, to_usize(limit))
     }
 
     /// Folds the server's push response back into the log.

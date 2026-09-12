@@ -20,6 +20,18 @@ use uuid::Uuid;
 // Harness
 // ---------------------------------------------------------------------------
 
+/// A push limit that is no limit: the whole outbox in one body.
+const ALL: usize = usize::MAX;
+
+/// The report of a sync round that changed nothing, carrying the server's
+/// last seq as every report now does.
+fn quiet(server_last_seq: i64) -> SyncReport {
+    SyncReport {
+        server_last_seq,
+        ..SyncReport::default()
+    }
+}
+
 /// The server of `SYNC.md` §3, minus HTTP and permissions.
 struct FakeServer {
     core: Core,
@@ -62,6 +74,11 @@ impl FakeServer {
         }
     }
 
+    /// A capped page, the way `GET /pull?limit=` answers.
+    fn pull_page(&self, vault: Uuid, since: i64, limit: usize) -> PullResponse {
+        self.core.serve_pull(vault, since, limit).unwrap()
+    }
+
     fn pull(&self, vault: Uuid, since: i64) -> PullResponse {
         PullResponse {
             commands: self
@@ -84,7 +101,7 @@ impl FakeServer {
 /// One round of what the app does: push, fold the response back, pull from the
 /// resulting watermark, fold that back.
 fn sync(client: &mut Core, server: &mut FakeServer, vault: Uuid) -> (SyncReport, SyncReport) {
-    let request = client.push_request(vault).unwrap();
+    let request = client.push_request(vault, ALL).unwrap();
     let response = server.push(vault, request);
     let pushed = client.apply_push_response(vault, &response).unwrap();
     let since = client.sync_state(vault).unwrap().last_server_seq;
@@ -225,7 +242,7 @@ fn outbox_holds_the_unconfirmed_commands_in_local_order() {
         vec!["create_vault", "create_wallet", "expense"]
     );
 
-    let request = alice.push_request(vault).unwrap();
+    let request = alice.push_request(vault, ALL).unwrap();
     assert_eq!(
         request.commands.iter().map(|e| e.id).collect::<Vec<_>>(),
         outbox.iter().map(|r| r.envelope.id).collect::<Vec<_>>()
@@ -264,7 +281,7 @@ fn a_pull_of_ones_own_commands_takes_the_fast_path() {
 
     // The push goes through but its response never comes back, so the pull is
     // what confirms the commands.
-    let request = alice.push_request(vault).unwrap();
+    let request = alice.push_request(vault, ALL).unwrap();
     let _lost = server.push(vault, request);
 
     let before = projection(&alice, vault);
@@ -302,7 +319,7 @@ fn pushing_twice_is_idempotent() {
         .unwrap();
     exec(&mut alice, vault, "alice", wallet_cmd("Cash", 10_000));
 
-    let request = alice.push_request(vault).unwrap();
+    let request = alice.push_request(vault, ALL).unwrap();
     let first = server.push(vault, request.clone());
     let second = server.push(vault, request);
     assert_eq!(first, second, "a replayed push answers the same seqs");
@@ -311,7 +328,7 @@ fn pushing_twice_is_idempotent() {
     assert_eq!(report.confirmed, 2);
     // The second response confirms nothing more and changes nothing.
     let again = alice.apply_push_response(vault, &second).unwrap();
-    assert_eq!(again, SyncReport::default());
+    assert_eq!(again, quiet(2));
     assert_eq!(alice.sync_state(vault).unwrap().last_server_seq, 2);
     assert_eq!(server.core.last_seq(vault).unwrap(), 2);
 }
@@ -329,12 +346,12 @@ fn integrate_pull_ignores_records_at_or_below_the_watermark() {
 
     // A full pull from zero: every record is already known.
     let report = alice.integrate_pull(vault, &server.pull(vault, 0)).unwrap();
-    assert_eq!(report, SyncReport::default());
+    assert_eq!(report, quiet(3));
     assert_eq!(projection(&alice, vault), before);
 
     // And so is a pull from the watermark.
     let report = alice.integrate_pull(vault, &server.pull(vault, 3)).unwrap();
-    assert_eq!(report, SyncReport::default());
+    assert_eq!(report, quiet(3));
     assert_eq!(projection(&alice, vault), before);
 
     // Nothing reached the server either.
@@ -445,7 +462,7 @@ fn two_clients_converge_on_the_server_projection() {
     // Bob pushes first, so Alice's command lands after his on the server.
     let (bob_push, bob_pull) = sync(&mut bob, &mut server, vault);
     assert_eq!(bob_push.confirmed, 3);
-    assert_eq!(bob_pull, SyncReport::default());
+    assert_eq!(bob_pull, quiet(server.core.last_seq(vault).unwrap()));
 
     let (alice_push, alice_pull) = sync(&mut alice, &mut server, vault);
     assert_eq!(alice_push.confirmed, 1);
@@ -579,7 +596,7 @@ fn a_server_rejection_leaves_the_projection_and_is_dismissable() {
         "the optimistic spend is in Bob's projection"
     );
 
-    let request = bob.push_request(vault).unwrap();
+    let request = bob.push_request(vault, ALL).unwrap();
     let response = server.push(vault, request);
     let report = bob.apply_push_response(vault, &response).unwrap();
 
@@ -666,7 +683,7 @@ fn an_outbox_command_that_no_longer_applies_is_rejected_by_the_rebase() {
     assert_eq!(report.rejected[0].code, "insufficient_funds");
 
     assert_eq!(bob.sync_state(vault).unwrap().outbox, 0);
-    assert!(bob.push_request(vault).unwrap().commands.is_empty());
+    assert!(bob.push_request(vault, ALL).unwrap().commands.is_empty());
     assert_eq!(projection(&bob, vault), projection(&server.core, vault));
 }
 
@@ -832,7 +849,7 @@ fn the_json_entry_points_round_trip_through_the_wire_types() {
         .unwrap();
     exec(&mut alice, vault, "alice", wallet_cmd("Cash", 10_000));
 
-    let body = alice.push_request_json(vault).unwrap();
+    let body = alice.push_request_json(vault, ALL).unwrap();
     let request: PushRequest = serde_json::from_str(&body).unwrap();
     assert_eq!(request.commands.len(), 2);
 
@@ -841,10 +858,7 @@ fn the_json_entry_points_round_trip_through_the_wire_types() {
     assert_eq!(report.confirmed, 2);
 
     let pull = serde_json::to_string(&server.pull(vault, 0)).unwrap();
-    assert_eq!(
-        alice.integrate_pull_json(vault, &pull).unwrap(),
-        SyncReport::default()
-    );
+    assert_eq!(alice.integrate_pull_json(vault, &pull).unwrap(), quiet(2));
 
     for bad in ["", "{", "{\"nope\":1}"] {
         assert_eq!(
@@ -869,4 +883,106 @@ fn an_unknown_vault_reports_an_empty_sync_state() {
     assert_eq!(state.outbox, 0);
     assert_eq!(state.rejected, 0);
     assert_eq!(core.last_seq(Uuid::now_v7()).unwrap(), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Batches and server-side reads
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_long_outbox_goes_up_in_batches_and_converges() {
+    const BATCH: usize = 500;
+    const TOTAL: i64 = 1_200;
+
+    let mut server = FakeServer::new();
+    let mut alice = Core::open_in_memory().unwrap();
+    let vault = alice
+        .execute(CommandEnvelope::create_vault(
+            "alice",
+            "Casa",
+            Currency::Eur,
+        ))
+        .unwrap()
+        .result_id
+        .unwrap();
+    let wallet = exec(&mut alice, vault, "alice", wallet_cmd("Cash", 1_000_000));
+    let unallocated = unallocated(&alice, vault);
+    // Two commands are already in: fill the outbox up to TOTAL.
+    for i in 0..(TOTAL - 2) {
+        exec(
+            &mut alice,
+            vault,
+            "alice",
+            spend(1_00, wallet, unallocated, "food", T0 + i),
+        );
+    }
+    assert_eq!(
+        alice.sync_state(vault).unwrap().outbox,
+        u32::try_from(TOTAL).unwrap()
+    );
+
+    // What the app does: push a batch, fold the answer back, repeat while the
+    // outbox is not empty.
+    let mut rounds = 0;
+    while alice.sync_state(vault).unwrap().outbox > 0 {
+        rounds += 1;
+        assert!(rounds <= 10, "the push loop must converge");
+        let request = alice.push_request(vault, BATCH).unwrap();
+        assert!(request.commands.len() <= BATCH);
+        let response = server.core.serve_push(vault, &request).unwrap();
+        alice.apply_push_response(vault, &response).unwrap();
+    }
+
+    assert_eq!(rounds, 3, "1200 commands in batches of 500");
+    assert_eq!(server.core.last_seq(vault).unwrap(), TOTAL);
+    assert_eq!(alice.sync_state(vault).unwrap().last_server_seq, TOTAL);
+    assert_eq!(projection(&alice, vault), projection(&server.core, vault));
+}
+
+#[test]
+fn a_report_carries_the_servers_last_seq_and_whether_more_is_waiting() {
+    let Shared { server, vault, .. } = shared();
+    let mut bob = Core::open_in_memory().unwrap();
+
+    // One record per page: the first two leave something behind.
+    for since in 0..2 {
+        let report = bob
+            .integrate_pull(vault, &server.pull_page(vault, since, 1))
+            .unwrap();
+        assert_eq!(report.server_last_seq, 3);
+        assert!(report.has_more, "page from {since} is not the last");
+    }
+    let last = bob
+        .integrate_pull(vault, &server.pull_page(vault, 2, 1))
+        .unwrap();
+    assert_eq!(last.server_last_seq, 3);
+    assert!(!last.has_more);
+    assert_eq!(projection(&bob, vault), projection(&server.core, vault));
+}
+
+#[test]
+fn the_server_reads_one_vault_and_every_last_seq_at_once() {
+    let Shared {
+        mut server, vault, ..
+    } = shared();
+    let casa = server.core.vault(vault).unwrap().expect("Casa");
+    assert_eq!(casa.id, vault);
+    assert_eq!(casa.name, "Casa");
+    assert_eq!(casa.owner, "alice");
+    assert_eq!(server.core.vault(Uuid::now_v7()).unwrap(), None);
+
+    // A second vault, with a log of its own.
+    let other = server
+        .core
+        .execute(CommandEnvelope::create_vault(
+            "bob",
+            "Ufficio",
+            Currency::Eur,
+        ))
+        .unwrap()
+        .result_id
+        .unwrap();
+    let mut seqs = server.core.last_seqs().unwrap();
+    seqs.sort_by_key(|(_, seq)| *seq);
+    assert_eq!(seqs, vec![(other, 1), (vault, 3)]);
 }

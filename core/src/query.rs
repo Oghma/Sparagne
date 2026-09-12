@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowMode, Result, TransactionKind,
+    VaultView,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -184,6 +185,37 @@ pub struct Page {
 }
 
 impl Core {
+    /// One vault by id, `None` when this database does not hold it. Saves a
+    /// caller with an id in hand from scanning [`Core::vaults`].
+    pub fn vault(&self, vault_id: Uuid) -> Result<Option<VaultView>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT id, name, currency, owner_user_id, created_at FROM vaults WHERE id = ?1",
+                params![vault_id],
+                |r| {
+                    Ok((
+                        r.get::<_, Uuid>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, i64>(4)?,
+                    ))
+                },
+            )
+            .optional()?;
+        row.map(|(id, name, currency, owner, created_at)| {
+            Ok(VaultView {
+                id,
+                name,
+                currency: Currency::try_from(currency.as_str())?,
+                owner,
+                created_at,
+            })
+        })
+        .transpose()
+    }
+
     pub fn snapshot(&self, vault_id: Uuid) -> Result<VaultSnapshot> {
         let (name, currency): (String, String) = self
             .conn

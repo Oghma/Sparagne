@@ -8,6 +8,9 @@ import Testing
 /// command, so these tests move the wire JSON around without ever turning it
 /// into a Swift type.
 
+/// The batch size the app pushes with; no test here fills one.
+private let batchLimit: UInt32 = 500
+
 /// The `commands` array of a push body, as raw JSON objects.
 private func commandObjects(in body: String) throws -> [[String: Any]] {
     let root = try #require(
@@ -86,7 +89,7 @@ func pushRoundTripsThroughJson() throws {
     #expect(state.lastServerSeq == 0)
     #expect(state.rejected == 0)
 
-    let body = try client.core.pushRequestJson(vaultId: client.vaultId)
+    let body = try client.core.pushRequestJson(vaultId: client.vaultId, limit: batchLimit)
     #expect(try commandObjects(in: body).count == 2)
 
     let report = try client.core.applyPushResponseJson(
@@ -105,7 +108,7 @@ func pushRoundTripsThroughJson() throws {
 @Test("A pull of one's own commands only stamps them, it does not rebase")
 func pullOfOwnCommandsIsAFastPath() throws {
     let client = try Client()
-    let body = try client.core.pushRequestJson(vaultId: client.vaultId)
+    let body = try client.core.pushRequestJson(vaultId: client.vaultId, limit: batchLimit)
     let before = try client.transactions()
 
     // The push went through but its response was lost, so the pull is what
@@ -128,7 +131,7 @@ func pullOfOwnCommandsIsAFastPath() throws {
 @Test("A rejected push drops the command and lists it until dismissed")
 func aRejectionIsListedAndDismissed() throws {
     let client = try Client()
-    let opening = try client.core.pushRequestJson(vaultId: client.vaultId)
+    let opening = try client.core.pushRequestJson(vaultId: client.vaultId, limit: batchLimit)
     _ = try client.core.applyPushResponseJson(
         vaultId: client.vaultId, json: try acceptAll(opening, firstSeq: 1))
 
@@ -147,7 +150,7 @@ func aRejectionIsListedAndDismissed() throws {
 
     // The server takes the envelope but another member has emptied it in the
     // meantime, so the spend comes back refused.
-    let body = try client.core.pushRequestJson(vaultId: client.vaultId)
+    let body = try client.core.pushRequestJson(vaultId: client.vaultId, limit: batchLimit)
     let ids = try commandObjects(in: body).map { $0["id"] ?? "" }
     #expect(ids.count == 2)
     let response = try encode([

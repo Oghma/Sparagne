@@ -19,7 +19,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use sparagne_core::{
     Command, CommandEnvelope, Core, Currency, Entry, FlowMode, SyncReport, TransactionFilter,
-    sync::{PullResponse, PushOutcome, PushResponse, PushResult, TokenResponse},
+    sync::{PullResponse, PushResponse, TokenResponse},
 };
 use sparagne_server::{AppState, Config, router};
 use tower::ServiceExt;
@@ -27,6 +27,8 @@ use uuid::Uuid;
 
 pub const T0: i64 = 1_700_000_000;
 pub const PASSWORD: &str = "correct horse battery staple";
+/// What the app uses: a push carries at most this many commands.
+pub const BATCH: usize = 500;
 
 // ---------------------------------------------------------------------------
 // HTTP harness
@@ -181,40 +183,16 @@ impl Client {
             .expect("create_vault returns the vault id")
     }
 
-    /// `docs/v2/SYNC.md` §4-§5: create the vault on the server if this is the
-    /// first sync, push the rest of the outbox, then pull until the local
-    /// watermark reaches the server's last seq. Returns every [`SyncReport`]
-    /// produced along the way (the push, then each pull page).
+    /// `docs/v2/SYNC.md` §4-§5: push the outbox in batches until it is empty
+    /// (the first push also creates the vault, when the server has never seen
+    /// it), then pull until the report says nothing more is waiting. Returns
+    /// every [`SyncReport`] produced along the way.
     pub async fn sync(&mut self, api: &Api, vault: Uuid) -> Vec<SyncReport> {
         let mut reports = Vec::new();
 
-        if self.core.sync_state(vault).unwrap().last_server_seq == 0 {
-            let outbox = self.core.push_request(vault).unwrap();
-            if let Some(first) = outbox.commands.first()
-                && matches!(first.command, Command::CreateVault { .. })
-            {
-                let res = api.post("/vaults", &self.token, json!(first)).await;
-                assert_eq!(res.status, StatusCode::CREATED, "{:?}", res.body);
-                let result: PushResult = res.json();
-                let seq = match result.outcome {
-                    PushOutcome::Applied { seq, .. } => seq,
-                    PushOutcome::Rejected {
-                        ref code,
-                        ref message,
-                    } => {
-                        panic!("create_vault rejected: {code}: {message}")
-                    }
-                };
-                let response = PushResponse {
-                    results: vec![result],
-                    last_seq: seq,
-                };
-                reports.push(self.core.apply_push_response(vault, &response).unwrap());
-            }
-        }
-
-        let request = self.core.push_request(vault).unwrap();
-        if !request.commands.is_empty() {
+        while self.core.sync_state(vault).unwrap().outbox > 0 {
+            let before = self.core.sync_state(vault).unwrap().outbox;
+            let request = self.core.push_request(vault, BATCH).unwrap();
             let res = api
                 .post(
                     &format!("/vaults/{vault}/push"),
@@ -225,6 +203,10 @@ impl Client {
             assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
             let response: PushResponse = res.json();
             reports.push(self.core.apply_push_response(vault, &response).unwrap());
+            assert!(
+                self.core.sync_state(vault).unwrap().outbox < before,
+                "a push that confirms nothing would loop forever"
+            );
         }
 
         loop {
@@ -234,9 +216,10 @@ impl Client {
                 .await;
             assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
             let response: PullResponse = res.json();
-            let last_seq = response.last_seq;
-            reports.push(self.core.integrate_pull(vault, &response).unwrap());
-            if self.core.sync_state(vault).unwrap().last_server_seq >= last_seq {
+            let report = self.core.integrate_pull(vault, &response).unwrap();
+            let more = report.has_more;
+            reports.push(report);
+            if !more || self.core.sync_state(vault).unwrap().last_server_seq <= since {
                 break;
             }
         }

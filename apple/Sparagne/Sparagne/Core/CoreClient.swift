@@ -199,9 +199,11 @@ final class CoreClient {
         try handle.syncState(vaultId: vaultId)
     }
 
-    /// The body of `POST /vaults/{id}/push`: the outbox, in local order.
-    func pushRequestJson(vaultId: Uuid) throws -> String {
-        try handle.pushRequestJson(vaultId: vaultId)
+    /// The body of `POST /vaults/{id}/push`: at most `limit` commands of the
+    /// outbox, in local order. The engine pushes again while the outbox is
+    /// not empty (`docs/v2/SYNC.md` §4.1).
+    func pushRequestJson(vaultId: Uuid, limit: UInt32) throws -> String {
+        try handle.pushRequestJson(vaultId: vaultId, limit: limit)
     }
 
     @discardableResult

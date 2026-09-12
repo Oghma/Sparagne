@@ -97,22 +97,6 @@ private struct ErrorBody: Codable, Sendable {
     let error: Detail
 }
 
-/// The `PushResult` that `POST /vaults` answers with, kept as raw JSON.
-///
-/// The core reads push answers itself, so Swift only needs to wrap the single
-/// result into the `PushResponse` shape `applyPushResponseJson` expects.
-struct PushResultJSON: Sendable, Equatable {
-    /// The object exactly as the server wrote it.
-    let raw: String
-    /// The seq the server gave the command, absent when it refused it.
-    let seq: Int64?
-
-    /// `{"results":[<result>],"last_seq":<seq>}`.
-    var pushResponse: String {
-        "{\"results\":[\(raw)],\"last_seq\":\(seq ?? 0)}"
-    }
-}
-
 /// The HTTP API of `docs/v2/SYNC.md` §3, typed.
 ///
 /// Only the small flat wire types are decoded here. Commands, envelopes and
@@ -166,19 +150,10 @@ struct ServerAPI: Sendable {
         try await decode(call(SyncRequest(path: "/vaults", bearer: token)))
     }
 
-    /// `POST /vaults` with one `CreateVault` envelope, exactly as the core
-    /// wrote it inside the push body.
-    func createVault(token: String, envelopeJSON: Data) async throws -> PushResultJSON {
-        let data = try await call(
-            SyncRequest(method: "POST", path: "/vaults", bearer: token, body: envelopeJSON)
-        )
-        struct Peek: Decodable { let seq: Int64? }
-        let peek = try plainDecode(Peek.self, from: data)
-        return PushResultJSON(raw: String(decoding: data, as: UTF8.self), seq: peek.seq)
-    }
-
     /// `body` comes from `pushRequestJson`; the answer goes back to
-    /// `applyPushResponseJson`.
+    /// `applyPushResponseJson`. A vault the server has never seen is created
+    /// by this same call, when the body starts with its `CreateVault`
+    /// (`docs/v2/SYNC.md` §3).
     func push(token: String, vaultId: Uuid, body: String) async throws -> String {
         let data = try await call(
             SyncRequest(
@@ -274,16 +249,6 @@ struct ServerAPI: Sendable {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         do {
             return try decoder.decode(T.self, from: data)
-        } catch {
-            throw ServerError(status: 0, code: "invalid_response", message: "\(error)")
-        }
-    }
-
-    /// For bodies whose keys are single words, where the snake_case strategy
-    /// would only get in the way.
-    private func plainDecode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        do {
-            return try JSONDecoder().decode(type, from: data)
         } catch {
             throw ServerError(status: 0, code: "invalid_response", message: "\(error)")
         }

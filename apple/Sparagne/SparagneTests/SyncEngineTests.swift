@@ -60,7 +60,6 @@ actor FakeServerTransport: SyncTransport {
             return try Self.encode(["username": user])
         }
         if request.method == "GET", path == "/vaults" { return try vaults(request) }
-        if request.method == "POST", path == "/vaults" { return try createVault(request) }
 
         if parts.count == 3, parts[0] == "vaults" {
             let vaultId = parts[1]
@@ -130,51 +129,55 @@ actor FakeServerTransport: SyncTransport {
         return try Self.encode(summaries)
     }
 
-    /// `POST /vaults`: one `CreateVault` envelope through `serve_push`, plus
-    /// the owner membership, answered with the single `PushResult`.
-    private func createVault(_ request: SyncRequest) throws -> SyncResponse {
-        guard let user = caller(request) else { return Self.failure(401, "unauthorized") }
-        guard let body = request.body,
-            let envelope = try JSONSerialization.jsonObject(with: body) as? [String: Any],
-            let vaultId = envelope["vault_id"] as? String,
-            let author = envelope["author"] as? String
-        else { return Self.failure(400, "invalid_request") }
-        guard author == user else { return Self.failure(403, "author_mismatch") }
-        guard memberships[vaultId] == nil else { return Self.failure(409, "already_exists") }
-
-        let pushBody = try JSONSerialization.data(withJSONObject: ["commands": [envelope]])
-        let response = try core.servePushJson(
-            vaultId: vaultId,
-            json: String(decoding: pushBody, as: UTF8.self)
-        )
-        memberships[vaultId] = [user: .owner]
-        guard
-            let root = try JSONSerialization.jsonObject(with: Data(response.utf8)) as? [String: Any],
-            let results = root["results"] as? [[String: Any]],
-            let first = results.first
-        else { return Self.failure(500, "server_error") }
-        return SyncResponse(
-            status: 201,
-            body: try JSONSerialization.data(withJSONObject: first)
-        )
-    }
-
+    /// `POST /vaults/{id}/push`. A vault the server has never seen is created
+    /// by this very request when its first command is the `CreateVault` that
+    /// minted it, together with the caller's `owner` membership
+    /// (`docs/v2/SYNC.md` §3).
     private func push(_ request: SyncRequest, vaultId: Uuid) throws -> SyncResponse {
         guard let user = caller(request) else { return Self.failure(401, "unauthorized") }
-        guard let role = memberships[vaultId]?[user] else { return Self.failure(404, "not_found") }
-        guard role.canWrite else { return Self.failure(403, "forbidden") }
-        guard let body = request.body else { return Self.failure(400, "invalid_request") }
-        let text = String(decoding: body, as: UTF8.self)
-        if let root = try JSONSerialization.jsonObject(with: body) as? [String: Any],
-            let commands = root["commands"] as? [[String: Any]],
-            commands.contains(where: { $0["author"] as? String != user })
-        {
+        guard let body = request.body,
+            let root = try JSONSerialization.jsonObject(with: body) as? [String: Any],
+            let commands = root["commands"] as? [[String: Any]]
+        else { return Self.failure(400, "invalid_request") }
+        guard !commands.contains(where: { $0["author"] as? String != user }) else {
             return Self.failure(403, "author_mismatch")
         }
+
+        switch memberships[vaultId]?[user] {
+        case .none:
+            guard let claim = Self.createVault(in: commands.first, of: vaultId) else {
+                return Self.failure(404, "not_found")
+            }
+            guard try core.vault(vaultId: vaultId) == nil else {
+                return Self.failure(404, "not_found")
+            }
+            let taken = try core.vaults()
+                .contains { $0.owner == user && $0.name.lowercased() == claim.lowercased() }
+            guard !taken else { return Self.failure(409, "already_exists") }
+            memberships[vaultId] = [user: .owner]
+        case .some(let role) where !role.canWrite:
+            return Self.failure(403, "forbidden")
+        default:
+            break
+        }
+
+        let text = String(decoding: body, as: UTF8.self)
         return SyncResponse(
             status: 200,
             body: Data(try core.servePushJson(vaultId: vaultId, json: text).utf8)
         )
+    }
+
+    /// The name of the vault `envelope` creates, when it is the `CreateVault`
+    /// that mints `vaultId`; `nil` for anything else.
+    private static func createVault(in envelope: [String: Any]?, of vaultId: Uuid) -> String? {
+        guard let envelope,
+            envelope["id"] as? String == vaultId,
+            let command = envelope["command"] as? [String: Any],
+            command["kind"] as? String == "create_vault",
+            let name = command["name"] as? String
+        else { return nil }
+        return name
     }
 
     private func pull(_ request: SyncRequest, vaultId: Uuid, query: [String: String]) throws -> SyncResponse {
@@ -364,18 +367,41 @@ struct SyncEngineTests {
         #expect(peer.engine.lastSyncAt != nil)
     }
 
-    @Test("The vault is created on the server once, not on every sync")
-    func createVaultHappensOnce() async throws {
+    @Test("The vault is created by the first push, with no route of its own")
+    func theFirstPushCreatesTheVault() async throws {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())
         let peer = try await Self.alice(server)
+        let vaultId = try #require(peer.vaultId)
 
         peer.store.submit(quickAdd: "-10.00 coffee @Cash >Food")
         await peer.engine.syncNow()
         await peer.engine.syncNow()
 
-        #expect(await server.callCount(method: "POST", path: "/vaults") == 1)
+        // `POST /vaults` is gone: everything went through the push route, and
+        // the seeding sync plus these two are the only pushes.
+        #expect(await server.callCount(method: "POST", path: "/vaults") == 0)
+        #expect(await server.callCount(method: "POST", path: "/vaults/\(vaultId)/push") == 2)
         #expect(try peer.syncState().outbox == 0)
+        #expect(peer.engine.isOwner(ofVault: vaultId))
         #expect(peer.engine.status == .idle)
+    }
+
+    @Test("A vault name the account already used on the server comes back refused")
+    func aDuplicateVaultNameIsRefused() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        _ = try await Self.alice(server)
+
+        // A second machine, same account, a local vault with the same name:
+        // the push that would create it is a conflict, not a silent success.
+        let other = try Peer(server: server)
+        Self.seed(other)
+        let clash = try #require(other.vaultId)
+        await other.engine.logIn(username: "alice", password: "supersecret")
+
+        #expect(other.account.isLoggedIn)
+        #expect(other.engine.status != .idle)
+        #expect(try other.client.syncState(vaultId: clash).outbox > 0)
+        #expect(try other.client.syncState(vaultId: clash).lastServerSeq == 0)
     }
 
     @Test("An editor joins a shared vault and gets the same snapshot")

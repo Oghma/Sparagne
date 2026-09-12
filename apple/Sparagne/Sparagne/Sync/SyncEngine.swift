@@ -4,11 +4,11 @@ import SparagneCore
 
 /// Runs the client half of the sync protocol (`docs/v2/SYNC.md` §4-§5).
 ///
-/// For every local vault: push what the outbox holds, then pull until the
-/// local watermark reaches the server's last seq; then join whatever vault the
-/// server lists and the database does not have yet. The core does all the
-/// reasoning — the engine only moves opaque JSON between `CoreHandle` and
-/// `ServerAPI` and keeps the status the window shows.
+/// For every local vault: push what the outbox holds, a batch per request,
+/// then pull until the core says the server has nothing more; then join
+/// whatever vault the server lists and the database does not have yet. The
+/// core does all the reasoning — the engine only moves opaque JSON between
+/// `CoreHandle` and `ServerAPI` and keeps the status the window shows.
 ///
 /// Nothing here throws out of the UI: a failure becomes `status`.
 @Observable
@@ -35,9 +35,12 @@ final class SyncEngine {
     }
 
     static let pullLimit = 500
-    /// A pull loop that neither finishes nor stalls is a bug; stop rather
-    /// than hammer the server.
-    private static let maxPullPages = 1_000
+    /// How many commands go up in one `POST /push`. The core hands out the
+    /// outbox in slices of this size (`docs/v2/SYNC.md` §4.1).
+    static let pushLimit: UInt32 = 500
+    /// A push or pull loop that neither finishes nor stalls is a bug; stop
+    /// rather than hammer the server.
+    private static let maxPages = 1_000
     static let debounce: Duration = .seconds(2)
     static let interval: Duration = .seconds(60)
 
@@ -190,45 +193,39 @@ final class SyncEngine {
         settle(failure: failure, changed: changed, rejections: rejections)
     }
 
-    /// One vault: the `CreateVault` special case, the push, then the pull.
+    /// One vault: push the whole outbox, a batch per request, then pull.
+    ///
+    /// A vault the server has never seen is created by the first push, whose
+    /// first command is the `CreateVault` that minted it: there is no separate
+    /// route for it (`docs/v2/SYNC.md` §3).
     private func syncVault(_ vaultId: Uuid, api: ServerAPI, token: String) async throws -> Outcome {
         var outcome = Outcome()
-        var state = try client.syncState(vaultId: vaultId)
-
-        // A vault the server has never seen starts with its own creation,
-        // which goes to `POST /vaults` because that is what also writes the
-        // owner membership (`docs/v2/SYNC.md` §3).
-        if state.lastServerSeq == 0 {
-            let body = try client.pushRequestJson(vaultId: vaultId)
-            if let envelope = Self.createVaultEnvelope(inPushBody: body) {
-                do {
-                    let result = try await api.createVault(token: token, envelopeJSON: envelope)
-                    outcome.absorb(
-                        try client.applyPushResponse(vaultId: vaultId, json: result.pushResponse)
-                    )
-                } catch let error as ServerError where error.status == 409 {
-                    // Already on the server: the ordinary push is idempotent
-                    // and will confirm the command anyway.
-                }
-                state = try client.syncState(vaultId: vaultId)
-            }
-        }
-
-        if state.outbox > 0 {
-            let body = try client.pushRequestJson(vaultId: vaultId)
-            let response = try await api.push(token: token, vaultId: vaultId, body: body)
-            outcome.absorb(try client.applyPushResponse(vaultId: vaultId, json: response))
-        }
-
+        outcome.merge(try await pushLoop(vaultId, api: api, token: token))
         outcome.merge(try await pullLoop(vaultId, api: api, token: token))
         return outcome
     }
 
-    /// Pulls pages from the contiguous watermark until it reaches the
-    /// server's last seq, or stops advancing.
+    /// Pushes batches until the outbox is empty. A batch that leaves the
+    /// outbox no shorter made no progress, so it stops instead of looping:
+    /// confirmations and rejections both take commands out of it.
+    private func pushLoop(_ vaultId: Uuid, api: ServerAPI, token: String) async throws -> Outcome {
+        var outcome = Outcome()
+        for _ in 0..<Self.maxPages {
+            let pending = try client.syncState(vaultId: vaultId).outbox
+            guard pending > 0 else { break }
+            let body = try client.pushRequestJson(vaultId: vaultId, limit: Self.pushLimit)
+            let response = try await api.push(token: token, vaultId: vaultId, body: body)
+            outcome.absorb(try client.applyPushResponse(vaultId: vaultId, json: response))
+            if try client.syncState(vaultId: vaultId).outbox >= pending { break }
+        }
+        return outcome
+    }
+
+    /// Pulls pages from the contiguous watermark while the core reports the
+    /// server holds more, or until the watermark stops advancing.
     private func pullLoop(_ vaultId: Uuid, api: ServerAPI, token: String) async throws -> Outcome {
         var outcome = Outcome()
-        for _ in 0..<Self.maxPullPages {
+        for _ in 0..<Self.maxPages {
             let since = try client.syncState(vaultId: vaultId).lastServerSeq
             let page = try await api.pull(
                 token: token,
@@ -236,9 +233,10 @@ final class SyncEngine {
                 since: since,
                 limit: Self.pullLimit
             )
-            outcome.absorb(try client.integratePull(vaultId: vaultId, json: page))
+            let report = try client.integratePull(vaultId: vaultId, json: page)
+            outcome.absorb(report)
             let reached = try client.syncState(vaultId: vaultId).lastServerSeq
-            if reached >= Self.lastSeq(inPullBody: page) || reached <= since { break }
+            if !report.hasMore || reached <= since { break }
         }
         return outcome
     }
@@ -414,29 +412,4 @@ final class SyncEngine {
         }
     }
 
-    // MARK: - Reading the opaque JSON
-
-    /// The first command of a push body when it is the vault's own creation,
-    /// as the envelope `POST /vaults` wants. Read with `JSONSerialization`:
-    /// Swift never decodes a command.
-    static func createVaultEnvelope(inPushBody body: String) -> Data? {
-        guard
-            let root = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any],
-            let commands = root["commands"] as? [[String: Any]],
-            let first = commands.first,
-            let command = first["command"] as? [String: Any],
-            command["kind"] as? String == "create_vault"
-        else { return nil }
-        return try? JSONSerialization.data(withJSONObject: first)
-    }
-
-    /// The `last_seq` of a pull response, which says whether another page is
-    /// waiting.
-    static func lastSeq(inPullBody body: String) -> Int64 {
-        guard
-            let root = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any],
-            let last = root["last_seq"] as? NSNumber
-        else { return 0 }
-        return last.int64Value
-    }
 }

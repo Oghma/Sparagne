@@ -1,6 +1,9 @@
-//! Vault routes: listing, creation, push and pull (`docs/v2/SYNC.md` §3).
+//! Vault routes: listing, push (which also creates a vault) and pull
+//! (`docs/v2/SYNC.md` §3).
 
-use axum::{extract::State, http::StatusCode};
+use std::collections::HashMap;
+
+use axum::extract::State;
 use chrono::Utc;
 use serde::Deserialize;
 use sparagne_core::{
@@ -30,15 +33,14 @@ pub async fn list(
 ) -> ApiResult<Json<Vec<VaultSummary>>> {
     let summaries = state
         .run(move |state| {
+            let roles = state.db().memberships_of_user(user.id)?;
             let core = state.core();
-            let roles: std::collections::HashMap<Uuid, MemberRole> = state
-                .db()
-                .memberships_of_user(user.id)?
-                .into_iter()
-                .collect();
+            // One query for every vault's last seq, then one lookup per
+            // membership: no scan of the whole vault table.
+            let seqs: HashMap<Uuid, i64> = core.last_seqs()?.into_iter().collect();
             let mut out = Vec::with_capacity(roles.len());
-            for vault in core.vaults()? {
-                let Some(role) = roles.get(&vault.id).copied() else {
+            for (vault_id, role) in roles {
+                let Some(vault) = core.vault(vault_id)? else {
                     continue;
                 };
                 out.push(VaultSummary {
@@ -47,65 +49,23 @@ pub async fn list(
                     currency: vault.currency,
                     owner: vault.owner,
                     role,
-                    last_seq: core.last_seq(vault.id)?,
+                    last_seq: seqs.get(&vault_id).copied().unwrap_or(0),
                 });
             }
+            out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
             Ok(out)
         })
         .await?;
     Ok(Json(summaries))
 }
 
-/// `POST /vaults`: a `CreateVault` envelope, plus the owner membership.
-pub async fn create(
-    State(state): State<AppState>,
-    user: CurrentUser,
-    Json(envelope): Json<CommandEnvelope>,
-) -> ApiResult<(StatusCode, Json<PushResult>)> {
-    if envelope.author != user.username {
-        return Err(ApiError::author_mismatch());
-    }
-    if !matches!(envelope.command, Command::CreateVault { .. }) {
-        return Err(ApiError::invalid_request("expected a create_vault command"));
-    }
-    if envelope.vault_id != envelope.id {
-        return Err(ApiError::invalid_request(
-            "create_vault: vault_id must equal the command id",
-        ));
-    }
-    let result = state
-        .run(move |state| {
-            let mut core = state.core();
-            let command_id = envelope.id;
-            let receipt = core.execute(envelope)?;
-            // A command id already in the log gives back the original
-            // receipt; make sure it really is this user's vault.
-            let owned = core
-                .vaults()?
-                .into_iter()
-                .any(|vault| vault.id == command_id && vault.owner == user.username);
-            if !owned {
-                return Err(ApiError::already_exists("command already used"));
-            }
-            state.db().insert_membership(
-                command_id,
-                user.id,
-                MemberRole::Owner,
-                Utc::now().timestamp(),
-            )?;
-            Ok(PushResult {
-                command_id,
-                outcome: PushOutcome::Applied {
-                    seq: receipt.seq,
-                    result_id: receipt.result_id,
-                },
-            })
-        })
-        .await?;
-    Ok((StatusCode::CREATED, Json(result)))
-}
-
 /// `POST /vaults/{vault_id}/push`.
+///
+/// A vault the server has never heard of is created by this very push, when
+/// its first command is the `CreateVault` that mints it: the vault and the
+/// caller's `owner` membership appear together (`docs/v2/SYNC.md` §3). Any
+/// other first command for an unknown vault is a blind 404, exactly like a
+/// vault the caller is not a member of.
 pub async fn push(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -114,10 +74,6 @@ pub async fn push(
 ) -> ApiResult<Json<PushResponse>> {
     let response = state
         .run(move |state| {
-            let role = membership(&state.db(), vault_id, user.id)?;
-            if !role.can_write() {
-                return Err(ApiError::forbidden());
-            }
             // Nothing is applied before the whole batch is addressed to this
             // vault and signed by this user.
             for envelope in &request.commands {
@@ -130,9 +86,19 @@ pub async fn push(
                     return Err(ApiError::author_mismatch());
                 }
             }
+            let mut commands = request.commands;
+            let mut results = Vec::with_capacity(commands.len());
+            // Bound first: holding the membership lock across the match would
+            // deadlock `claim`, which takes it again to write the membership.
+            let role = state.db().membership(vault_id, user.id)?;
+            match role {
+                Some(role) if role.can_write() => {}
+                Some(_) => return Err(ApiError::forbidden()),
+                None => results.push(claim(state, vault_id, &user, &mut commands)?),
+            }
+
             let mut core = state.core();
-            let mut results = Vec::with_capacity(request.commands.len());
-            for envelope in request.commands {
+            for envelope in commands {
                 let command_id = envelope.id;
                 let outcome = match core.execute(envelope) {
                     Ok(receipt) => PushOutcome::Applied {
@@ -157,6 +123,47 @@ pub async fn push(
         })
         .await?;
     Ok(Json(response))
+}
+
+/// Creates a vault the server does not hold yet from the first command of a
+/// push, together with the caller's `owner` membership, and takes that command
+/// out of `commands` so the ordinary loop does not run it twice.
+///
+/// A first command that is not the vault's own `CreateVault`, and a vault that
+/// already exists without a membership for the caller, are both `404`: the
+/// caller may not learn whether the id is taken. A name the caller already
+/// used is `409 already_exists`, straight from the core.
+fn claim(
+    state: &AppState,
+    vault_id: Uuid,
+    user: &CurrentUser,
+    commands: &mut Vec<CommandEnvelope>,
+) -> ApiResult<PushResult> {
+    let first = commands.first().ok_or_else(ApiError::not_found)?;
+    if !matches!(first.command, Command::CreateVault { .. }) || first.id != vault_id {
+        return Err(ApiError::not_found());
+    }
+    let envelope = commands.remove(0);
+    let command_id = envelope.id;
+    let receipt = {
+        let mut core = state.core();
+        if core.vault(vault_id)?.is_some() {
+            // Somebody else's vault, or one whose membership vanished: the
+            // caller is not a member, so it does not exist for them.
+            return Err(ApiError::not_found());
+        }
+        core.execute(envelope)?
+    };
+    state
+        .db()
+        .insert_membership(vault_id, user.id, MemberRole::Owner, Utc::now().timestamp())?;
+    Ok(PushResult {
+        command_id,
+        outcome: PushOutcome::Applied {
+            seq: receipt.seq,
+            result_id: receipt.result_id,
+        },
+    })
 }
 
 /// Query of `GET /vaults/{vault_id}/pull`.

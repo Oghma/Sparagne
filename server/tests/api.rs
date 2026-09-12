@@ -143,12 +143,14 @@ impl Api {
         .await
     }
 
-    /// Creates a vault owned by `author` and returns its id.
+    /// Creates a vault owned by `author` and returns its id: a push whose
+    /// first command is the vault's own `CreateVault`.
     async fn create_vault(&self, token: &str, author: &str, name: &str) -> Uuid {
         let envelope = CommandEnvelope::create_vault(author, name, Currency::Eur);
         let id = envelope.id;
-        let res = self.post("/vaults", token, json!(envelope)).await;
-        assert_eq!(res.status, StatusCode::CREATED, "{:?}", res.body);
+        let res = self.push(token, id, vec![envelope]).await;
+        assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+        assert_eq!(applied(&res.json::<PushResponse>().results[0]), 1);
         id
     }
 
@@ -373,21 +375,30 @@ async fn a_missing_or_unknown_token_is_refused() {
 }
 
 // ---------------------------------------------------------------------------
-// Vault creation
+// Vault creation, inside the first push
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn create_vault_applies_the_command_and_the_owner_membership() {
+async fn the_first_push_creates_the_vault_and_the_owner_membership() {
     let api = Api::new();
     let token = api.register("alice").await;
     let env = CommandEnvelope::create_vault("alice", "Main", Currency::Eur);
     let id = env.id;
 
-    let res = api.post("/vaults", &token, json!(env)).await;
-    assert_eq!(res.status, StatusCode::CREATED);
-    let result: PushResult = res.json();
-    assert_eq!(result.command_id, id);
-    assert_eq!(applied(&result), 1);
+    // The rest of the batch rides along in the same request.
+    let res = api
+        .push(
+            &token,
+            id,
+            vec![env, envelope(id, "alice", wallet("Cash", 10_000))],
+        )
+        .await;
+    assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+    let response: PushResponse = res.json();
+    assert_eq!(response.results[0].command_id, id);
+    assert_eq!(applied(&response.results[0]), 1);
+    assert_eq!(applied(&response.results[1]), 2);
+    assert_eq!(response.last_seq, 2);
 
     let members: Vec<MemberEntry> = api
         .get(&format!("/vaults/{id}/members"), &token)
@@ -396,49 +407,118 @@ async fn create_vault_applies_the_command_and_the_owner_membership() {
     assert_eq!(members.len(), 1);
     assert_eq!(members[0].username, "alice");
     assert_eq!(members[0].role.as_str(), "owner");
+
+    // And the vault shows up in the listing, owned.
+    let listed: Vec<VaultSummary> = api.get("/vaults", &token).await.json();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, id);
+    assert_eq!(listed[0].name, "Main");
+    assert_eq!(listed[0].last_seq, 2);
 }
 
 #[tokio::test]
-async fn create_vault_refuses_another_author() {
+async fn creating_a_vault_again_is_idempotent() {
+    let api = Api::new();
+    let token = api.register("alice").await;
+    let env = CommandEnvelope::create_vault("alice", "Main", Currency::Eur);
+    let id = env.id;
+
+    let first: PushResponse = api.push(&token, id, vec![env.clone()]).await.json();
+    let again = api.push(&token, id, vec![env]).await;
+    assert_eq!(again.status, StatusCode::OK, "{:?}", again.body);
+    assert_eq!(again.json::<PushResponse>(), first);
+    assert_eq!(
+        api.get("/vaults", &token)
+            .await
+            .json::<Vec<VaultSummary>>()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn creating_a_vault_refuses_another_author() {
     let api = Api::new();
     let token = api.register("alice").await;
     let env = CommandEnvelope::create_vault("bob", "Main", Currency::Eur);
-    let res = api.post("/vaults", &token, json!(env)).await;
+    let res = api.push(&token, env.id, vec![env]).await;
     assert_eq!(res.status, StatusCode::FORBIDDEN);
     assert_eq!(res.code(), "author_mismatch");
 }
 
 #[tokio::test]
-async fn create_vault_refuses_a_duplicate_name() {
+async fn creating_a_vault_refuses_a_duplicate_name() {
     let api = Api::new();
     let token = api.register("alice").await;
     api.create_vault(&token, "alice", "Main").await;
     let env = CommandEnvelope::create_vault("alice", "Main", Currency::Eur);
-    let res = api.post("/vaults", &token, json!(env)).await;
+    let res = api.push(&token, env.id, vec![env]).await;
     assert_eq!(res.status, StatusCode::CONFLICT);
     assert_eq!(res.code(), "already_exists");
 }
 
 #[tokio::test]
-async fn create_vault_requires_the_vault_id_to_be_the_command_id() {
+async fn a_push_to_an_unknown_vault_that_does_not_create_it_is_not_found() {
     let api = Api::new();
     let token = api.register("alice").await;
-    let mut env = CommandEnvelope::create_vault("alice", "Main", Currency::Eur);
-    env.vault_id = Uuid::now_v7();
-    let res = api.post("/vaults", &token, json!(env)).await;
-    assert_eq!(res.status, StatusCode::BAD_REQUEST);
-    assert_eq!(res.code(), "invalid_request");
+    let unknown = Uuid::now_v7();
+
+    // No first command at all.
+    let empty = api.push(&token, unknown, vec![]).await;
+    assert_eq!(empty.status, StatusCode::NOT_FOUND);
+    assert_eq!(empty.code(), "not_found");
+
+    // A first command that is not the vault's own creation.
+    let res = api
+        .push(
+            &token,
+            unknown,
+            vec![envelope(unknown, "alice", wallet("Cash", 0))],
+        )
+        .await;
+    assert_eq!(res.status, StatusCode::NOT_FOUND);
+    assert_eq!(res.code(), "not_found");
+
+    // A `create_vault` whose command id is not the vault id: the envelope is
+    // addressed to a vault it does not mint, so it creates nothing.
+    let mut stray = CommandEnvelope::create_vault("alice", "Main", Currency::Eur);
+    stray.vault_id = unknown;
+    let res = api.push(&token, unknown, vec![stray]).await;
+    assert_eq!(res.status, StatusCode::NOT_FOUND);
+    assert_eq!(res.code(), "not_found");
+
+    assert!(
+        api.get("/vaults", &token)
+            .await
+            .json::<Vec<VaultSummary>>()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
-async fn create_vault_refuses_another_command() {
+async fn creating_a_vault_that_already_belongs_to_someone_else_is_not_found() {
+    let api = Api::new();
+    let owner = api.register("alice").await;
+    let stranger = api.register("mallory").await;
+    let vault = api.create_vault(&owner, "alice", "Main").await;
+
+    // Mallory knows the id and tries to claim it with a create_vault of her
+    // own: the vault exists and she is not a member, so it does not exist.
+    let mut forged = CommandEnvelope::create_vault("mallory", "Mine", Currency::Eur);
+    forged.id = vault;
+    forged.vault_id = vault;
+    let res = api.push(&stranger, vault, vec![forged]).await;
+    assert_eq!(res.status, StatusCode::NOT_FOUND);
+    assert_eq!(res.code(), "not_found");
+}
+
+#[tokio::test]
+async fn post_vaults_is_gone() {
     let api = Api::new();
     let token = api.register("alice").await;
-    let vault = api.create_vault(&token, "alice", "Main").await;
-    let env = envelope(vault, "alice", wallet("Cash", 0));
+    let env = CommandEnvelope::create_vault("alice", "Main", Currency::Eur);
     let res = api.post("/vaults", &token, json!(env)).await;
-    assert_eq!(res.status, StatusCode::BAD_REQUEST);
-    assert_eq!(res.code(), "invalid_request");
+    assert_eq!(res.status, StatusCode::METHOD_NOT_ALLOWED);
 }
 
 // ---------------------------------------------------------------------------

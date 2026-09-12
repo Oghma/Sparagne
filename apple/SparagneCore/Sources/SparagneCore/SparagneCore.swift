@@ -673,9 +673,11 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid) throws  -> MergePreview
     
     /**
-     * JSON body for `POST /vaults/{id}/push`. Swift only does the HTTP.
+     * JSON body for `POST /vaults/{id}/push`: at most `limit` commands of
+     * the outbox, oldest first. Swift only does the HTTP, and pushes again
+     * while `sync_state` still reports an outbox.
      */
-    func pushRequestJson(vaultId: Uuid) throws  -> String
+    func pushRequestJson(vaultId: Uuid, limit: UInt32) throws  -> String
     
     /**
      * Ids of the entities used most recently, for picker ordering.
@@ -738,6 +740,11 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * One transaction with its legs, voided included.
      */
     func transaction(vaultId: Uuid, transactionId: Uuid) throws  -> TransactionView
+    
+    /**
+     * One vault by id, `nil` when the database does not hold it.
+     */
+    func vault(vaultId: Uuid) throws  -> VaultView?
     
     /**
      * Every vault in the database, ordered by name.
@@ -1071,14 +1078,17 @@ open func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid)throws  -> 
 }
     
     /**
-     * JSON body for `POST /vaults/{id}/push`. Swift only does the HTTP.
+     * JSON body for `POST /vaults/{id}/push`: at most `limit` commands of
+     * the outbox, oldest first. Swift only does the HTTP, and pushes again
+     * while `sync_state` still reports an outbox.
      */
-open func pushRequestJson(vaultId: Uuid)throws  -> String  {
+open func pushRequestJson(vaultId: Uuid, limit: UInt32)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
         uniffiCallStatus in
     uniffi_sparagne_core_fn_method_corehandle_push_request_json(
             self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterUInt32.lower(limit),uniffiCallStatus
     )
 })
 }
@@ -1252,6 +1262,19 @@ open func transaction(vaultId: Uuid, transactionId: Uuid)throws  -> TransactionV
             self.uniffiCloneHandle(),
         FfiConverterTypeUuid_lower(vaultId),
         FfiConverterTypeUuid_lower(transactionId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * One vault by id, `nil` when the database does not hold it.
+     */
+open func vault(vaultId: Uuid)throws  -> VaultView?  {
+    return try  FfiConverterOptionTypeVaultView.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_vault(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
     )
 })
 }
@@ -3172,6 +3195,16 @@ public struct SyncReport: Equatable, Hashable, Codable {
      */
     public var rebased: Bool
     public var rejected: [RejectedCommand]
+    /**
+     * The vault's last seq as the server reported it in the body this report
+     * comes from. The app never reads it out of the JSON itself.
+     */
+    public var serverLastSeq: Int64
+    /**
+     * `true` when the server holds seqs past the local watermark, so another
+     * page is waiting.
+     */
+    public var hasMore: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -3184,11 +3217,21 @@ public struct SyncReport: Equatable, Hashable, Codable {
          */received: UInt32, 
         /**
          * Whether the projection was rebuilt.
-         */rebased: Bool, rejected: [RejectedCommand]) {
+         */rebased: Bool, rejected: [RejectedCommand], 
+        /**
+         * The vault's last seq as the server reported it in the body this report
+         * comes from. The app never reads it out of the JSON itself.
+         */serverLastSeq: Int64, 
+        /**
+         * `true` when the server holds seqs past the local watermark, so another
+         * page is waiting.
+         */hasMore: Bool) {
         self.confirmed = confirmed
         self.received = received
         self.rebased = rebased
         self.rejected = rejected
+        self.serverLastSeq = serverLastSeq
+        self.hasMore = hasMore
     }
 
     
@@ -3210,7 +3253,9 @@ public struct FfiConverterTypeSyncReport: FfiConverterRustBuffer {
                 confirmed: FfiConverterUInt32.read(from: &buf), 
                 received: FfiConverterUInt32.read(from: &buf), 
                 rebased: FfiConverterBool.read(from: &buf), 
-                rejected: FfiConverterSequenceTypeRejectedCommand.read(from: &buf)
+                rejected: FfiConverterSequenceTypeRejectedCommand.read(from: &buf), 
+                serverLastSeq: FfiConverterInt64.read(from: &buf), 
+                hasMore: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -3219,6 +3264,8 @@ public struct FfiConverterTypeSyncReport: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.received, into: &buf)
         FfiConverterBool.write(value.rebased, into: &buf)
         FfiConverterSequenceTypeRejectedCommand.write(value.rejected, into: &buf)
+        FfiConverterInt64.write(value.serverLastSeq, into: &buf)
+        FfiConverterBool.write(value.hasMore, into: &buf)
     }
 }
 
@@ -5747,6 +5794,30 @@ fileprivate struct FfiConverterOptionTypeSchedule: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeVaultView: FfiConverterRustBuffer {
+    typealias SwiftType = VaultView?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeVaultView.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeVaultView.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeDateSpec: FfiConverterRustBuffer {
     typealias SwiftType = DateSpec?
 
@@ -6809,7 +6880,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_preview_merge() != 37701) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_push_request_json() != 12380) {
+    if (uniffi_sparagne_core_checksum_method_corehandle_push_request_json() != 10230) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_recent_usage() != 39179) {
@@ -6846,6 +6917,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_transaction() != 29047) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_vault() != 58182) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_vaults() != 61325) {

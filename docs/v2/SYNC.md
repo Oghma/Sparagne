@@ -30,8 +30,7 @@ JSON ovunque; autenticazione `Authorization: Bearer <token>` tranne dove indicat
 | `POST /auth/logout` | → 204 | bearer | revoca il token |
 | `GET /me` | → `{ "username" }` | bearer | |
 | `GET /vaults` | → `[VaultSummary]` | bearer | i vault di cui sono owner o membro, con `role` e `last_seq` |
-| `POST /vaults` | `CommandEnvelope` (`CreateVault`, `author` = me, `vault_id` = `id`) → 201 `PushResult` | bearer | crea anche la membership `owner`; `409 already_exists` per nome duplicato |
-| `POST /vaults/{vault_id}/push` | `PushRequest` → 200 `PushResponse` | owner, editor | viewer `403 forbidden`; non membro `404 not_found`; `vault_id` dell'envelope diverso dal path `400 invalid_request`; `author` diverso `403 author_mismatch` |
+| `POST /vaults/{vault_id}/push` | `PushRequest` → 200 `PushResponse` | owner, editor, o chiunque crei il vault | viewer `403 forbidden`; non membro `404 not_found`; `vault_id` dell'envelope diverso dal path `400 invalid_request`; `author` diverso `403 author_mismatch`; nome del vault duplicato `409 already_exists` |
 | `GET /vaults/{vault_id}/pull?since=0&limit=500` | → 200 `PullResponse` | membro | `since` = ultimo seq noto; `limit` massimo 1000; `last_seq` è l'ultimo seq del vault (per sapere se c'è altro) |
 | `GET /vaults/{vault_id}/members` | → `[MemberEntry]` | membro | |
 | `PUT /vaults/{vault_id}/members` | `SetMemberRequest` → 204 | owner | upsert di editor o viewer; `role = owner` è `400 invalid_request`; cambiare il ruolo dell'owner esistente `403 forbidden`; utente inesistente `404 not_found` |
@@ -39,7 +38,9 @@ JSON ovunque; autenticazione `Authorization: Bearer <token>` tranne dove indicat
 
 Codici HTTP: `invalid_request`/`invalid_*` 400, `unauthorized` 401, `forbidden`/`author_mismatch`/`registration_disabled` 403, `not_found` 404, `already_exists` 409, errori di storage 500.
 
-**Push.** I comandi vengono applicati nell'ordine ricevuto, ognuno con `Core::execute`; per ognuno la risposta dice `applied { seq, result_id }` o `rejected { code, message }`; un rifiuto non ferma il lotto (un comando che dipende da uno rifiutato verrà rifiutato a sua volta). Un comando già noto (stesso id) risponde `applied` con il seq originale: il push è idempotente. I comandi rifiutati non entrano nel log del server.
+**Creazione del vault.** Non esiste una rotta per creare un vault: lo crea il suo stesso primo push. Se il `vault_id` del path è ignoto al server e il primo comando del lotto è il `CreateVault` che lo conia (`id` = `vault_id`), il server crea il vault nel core e la membership `owner` di chi chiama, nella stessa richiesta; il `PushResult` di quel comando sta in testa alla risposta come tutti gli altri. Un vault ignoto il cui primo comando non è quel `CreateVault` è `404 not_found`, esattamente come un vault che esiste ma di cui non si è membri: chi chiama non deve poter distinguere i due casi. Un nome di vault che chi chiama ha già usato è `409 already_exists`. Il push resta idempotente: rifarlo risponde gli stessi seq e non crea nulla di nuovo.
+
+**Push.** I comandi vengono applicati nell'ordine ricevuto, ognuno con `Core::execute`; per ognuno la risposta dice `applied { seq, result_id }` o `rejected { code, message }`; un rifiuto non ferma il lotto (un comando che dipende da uno rifiutato verrà rifiutato a sua volta). Un comando già noto (stesso id) risponde `applied` con il seq originale: il push è idempotente. I comandi rifiutati non entrano nel log del server. Il client spezza l'outbox in lotti da 500 comandi (`push_request(vault, limit)`) e ripete finché l'outbox non è vuota.
 
 **Pull.** Restituisce i comandi con `seq > since`, compresi quelli dello stesso client già confermati (il client li riconosce dall'id).
 
@@ -47,9 +48,9 @@ Codici HTTP: `invalid_request`/`invalid_*` 400, `unauthorized` 401, `forbidden`/
 
 Stato per vault: `last_server_seq` = **watermark contiguo** (il più alto `server_seq` tale che tutti i precedenti sono presenti in locale, non il massimo: dopo un push confermato oltre un buco lasciato da un altro membro, il pull deve ripartire dal buco), outbox, righe `rejected`.
 
-1. **Push.** `push_request(vault)` = outbox. `apply_push_response`: per ogni risultato `applied` scrive `server_seq`; per ogni `rejected` marca la riga `status = rejected` con il motivo, poi ricostruisce la proiezione senza di essa. Dopo un push il client fa sempre un pull.
-2. **Pull.** `integrate_pull(vault, response)`: ignora i record con `seq <= last_server_seq`. Se i record restanti sono un **prefisso dell'outbox** (stessi id, stesso ordine, confrontati a coppie) → **fast path**: scrive i `server_seq`. Altrimenti → **rebase**: in una sola transazione SQLite cancella proiezione e log del vault, riapplica nell'ordine del server i comandi confermati locali più quelli ricevuti (devono tutti applicarsi: se uno fallisce è una divergenza, errore `storage`), poi riesegue l'outbox rimasta in ordine locale; i comandi che ora falliscono diventano `rejected` e finiscono nel `SyncReport`. Le righe `rejected` precedenti vengono conservate e reinserite in coda al log rinumerato; se un record in arrivo ha l'id di una riga `rejected` locale, vince il server e la riga viene tolta. I comandi riapplicati conservano il `created_at` originale (quello del server per i confermati), così i timestamp convergono.
-3. **Vault condivisi.** Un vault di cui si diventa membri non esiste in locale: `integrate_pull` da `since = 0` lo crea, perché il primo comando del log è `CreateVault`.
+1. **Push.** `push_request(vault, limit)` = i primi `limit` comandi dell'outbox, in ordine locale; il client spinge a lotti (500) finché `sync_state(vault).outbox` non è zero, fermandosi se un lotto non accorcia l'outbox. `apply_push_response`: per ogni risultato `applied` scrive `server_seq`; per ogni `rejected` marca la riga `status = rejected` con il motivo, poi ricostruisce la proiezione senza di essa. Sia le conferme sia i rifiuti tolgono comandi dall'outbox, quindi il ciclo termina. Dopo un push il client fa sempre un pull.
+2. **Pull.** `integrate_pull(vault, response)`: ignora i record con `seq <= last_server_seq`. Ogni `SyncReport` (di push o di pull) porta `server_last_seq`, l'ultimo seq che il server ha dichiarato nel corpo, e `has_more`, vero quando quel seq sta oltre il watermark locale dopo l'integrazione: è così che l'app sa se chiedere un'altra pagina, senza mai guardare dentro il JSON. Se i record restanti sono un **prefisso dell'outbox** (stessi id, stesso ordine, confrontati a coppie) → **fast path**: scrive i `server_seq`. Altrimenti → **rebase**: in una sola transazione SQLite cancella proiezione e log del vault, riapplica nell'ordine del server i comandi confermati locali più quelli ricevuti (devono tutti applicarsi: se uno fallisce è una divergenza, errore `storage`), poi riesegue l'outbox rimasta in ordine locale; i comandi che ora falliscono diventano `rejected` e finiscono nel `SyncReport`. Le righe `rejected` precedenti vengono conservate e reinserite in coda al log rinumerato; se un record in arrivo ha l'id di una riga `rejected` locale, vince il server e la riga viene tolta. I comandi riapplicati conservano il `created_at` originale (quello del server per i confermati), così i timestamp convergono.
+3. **Vault condivisi.** Un vault di cui si diventa membri non esiste in locale: `integrate_pull` da `since = 0` lo crea, perché il primo comando del log è `CreateVault`. `sync_state` di un vault sconosciuto **risponde zeri invece di errore**, ed è voluto: il join legge lo stato prima che il primo pull crei il vault, e `last_server_seq = 0` è esattamente il punto da cui partire. Lo stesso vale per `last_seq`.
 4. **Login.** `relabel_outbox(vault, username)` aggiorna l'`author` delle righe in outbox e ricostruisce la proiezione.
 5. **Rifiuti.** `rejected_commands(vault)` elenca i comandi rifiutati (id, kind, codice, messaggio) per la UI; `dismiss_rejected` li toglie.
 
@@ -63,16 +64,22 @@ Gli id delle entità derivano dall'id del comando (`ARCH.md` §4), quindi il reb
 
 ## 6. Test di accettazione (in `server/tests`)
 
-Due `Core` in memoria come client A e B contro il router in-process: A registra, crea il vault, un wallet e un'entrata e fa push; B registra e l'owner lo aggiunge come editor (l'utente deve esistere prima); B fa pull da 0 (ottiene il vault), aggiunge una spesa e fa push; A fa pull e ricostruisce (rebase); le proiezioni di A, B e del server coincidono (`snapshot`, `list_transactions`, `categories`). Più: push idempotente; spesa oltre il saldo rifiutata dal server e tolta dalla proiezione di chi l'ha emessa; viewer che non può fare push; non membro che riceve 404; `author` diverso rifiutato; token scaduto o revocato → 401.
+Due `Core` in memoria come client A e B contro il router in-process: A registra, crea il vault, un wallet e un'entrata e li manda con un solo push, che è anche ciò che crea il vault sul server; B registra e l'owner lo aggiunge come editor (l'utente deve esistere prima); B fa pull da 0 (ottiene il vault), aggiunge una spesa e fa push; A fa pull e ricostruisce (rebase); le proiezioni di A, B e del server coincidono (`snapshot`, `list_transactions`, `categories`). Più: push idempotente; spesa oltre il saldo rifiutata dal server e tolta dalla proiezione di chi l'ha emessa; viewer che non può fare push; non membro che riceve 404; `author` diverso rifiutato; token scaduto o revocato → 401.
 
 ## 7. Stato e punti rimandati
 
-Fase 3 completata il 2026-09-10: `server/` (40 test, di cui 4 end-to-end a due client), sync lato client nel core (`core/tests/sync.rs`, 13 test più il finto server), app con account, motore di sync, condivisione e rifiuti (10 test su un finto server fatto da un secondo `CoreHandle`). Emerso dall'integrazione, da fare quando serve:
+Fase 3 completata il 2026-09-10. Protocollo ripulito dai casi speciali il
+2026-09-12 (pacchetto P2 di `ROADMAP.md`): `POST /vaults` non esiste più, il
+push accetta `CreateVault` come primo comando di un vault ignoto, l'outbox sale
+a lotti, il `SyncReport` porta `server_last_seq` e `has_more`, e il core espone
+`vault(id)` e `last_seqs()` per `GET /vaults`. Swift non legge più dentro
+nessun corpo JSON. Copertura: `server/` 42 test (4 end-to-end a due client),
+sync lato client nel core 16 test più il finto server, app 100 test su un finto
+server fatto da un secondo `CoreHandle`.
 
-- `POST /vaults` risponde con un `PushResult` singolo mentre il core consuma un `PushResponse`: l'app lo incarta a mano. Un entry point del core che accetti il singolo risultato, o un `POST /vaults/{id}/push` che accetti `CreateVault` come primo comando di un vault ignoto, toglierebbe il caso speciale dal client.
-- Il client legge `last_seq` e `command.kind` dal JSON con `JSONSerialization`: sono i due soli punti in cui Swift guarda dentro la risposta o il comando. Un accessor del core (`create_vault_envelope_json(vault)`, `last_seq` nel `SyncReport`) li eliminerebbe.
-- `sync_state` di un vault sconosciuto risponde zeri invece di errore; il join si appoggia a questo comportamento, che va reso esplicito nella documentazione dell'API.
+Ancora da fare quando servirà:
+
 - `RejectedCommand.kind` è il nome snake_case del comando; l'app lo mostra tal quale accanto al messaggio localizzato.
 - Il Keychain con firma ad-hoc può rifiutare `SecItemAdd`: il token resta in memoria per la sessione. Con un team Apple il problema sparisce.
-- Il server non tiene i comandi rifiutati (solo la risposta al push); un lotto di push oltre 2 MB (circa 6000 comandi) è `400 invalid_request`: il client deve spezzare i lotti grandi.
-- Manca un `Core::vault(id)` e un `last_seq` in blocco: `GET /vaults` scansiona `vaults()` e fa una query per vault.
+- Il server non tiene i comandi rifiutati, solo la risposta al push.
+- Il percorso HTTP vero fra app e server (`URLSession` verso axum) non è ancora esercitato da un test: lo copre il pacchetto P1.
