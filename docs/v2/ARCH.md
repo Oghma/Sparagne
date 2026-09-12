@@ -139,6 +139,7 @@ Multi-tenant lato server: account utente, vault di proprietà di un account, mem
 | 2 | UniFFI, Swift Package, app con tabella transazioni e quick-add, solo locale | app usabile da un utente | fatta il 2026-09-09: `apple/SparagneCore` + `apple/Sparagne` (tabella, quick-add, void con undo, inspector, gestione wallet/buste/categorie, ricorrenze) |
 | 3 | server `sync`, auth, membership, outbox e pull | secondo utente | fatta il 2026-09-10: `server/` in axum, sync nel core, account e condivisione nell'app; dettagli e rimandi in `SYNC.md` §7 |
 | 4 | libro mastro: griglia editabile, riepilogo e anno, aggregati nel core | l'app dei mockup | fatta il 2026-09-10: `core/src/analytics.rs` e la finestra nuova; design in `UI.md` |
+| 5 | messa in esercizio: app contro il server vero, protocollo senza casi speciali, import v1, deploy, palette ⌘K e colonna wallet, core fuori dal main actor | Sparagne usata tutti i giorni | in corso dal 2026-09-12: pacchetti, ondate e passaggio di consegne in `ROADMAP.md` |
 
 Rimandato dalle fasi 1-2: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), un'app che chiama il core da un attore in background invece che dal main actor, firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`.
 
