@@ -115,15 +115,23 @@ niente intestazione mese. Le archiviate stanno in fondo, in `dim`, con
 "Ripristina" nel menu contestuale. Gli errori del core passano dallo stesso
 alert del mastro.
 
+Ultima colonna di entrambe le tabelle: nessuna intestazione, vuota a riposo,
+mostra l'icona `archivebox`/`tray.and.arrow.up` solo sulla riga sotto il
+puntatore — un click manda lo stesso `ArchiveFlow`/`RestoreFlow` o
+`ArchiveCategory`/`RestoreCategory` del menu contestuale, senza aprirlo.
+Assente sulle righe di sistema (Non allocato, Opening, Uncategorized) e
+durante l'editing della riga (`Views/Setup/EnvelopeTable.swift`,
+`Views/Setup/CategoryTable.swift`).
+
 ```
-┌ BUSTE ─────────────────────────────────────────┐ ┌ CATEGORIE ────────────────────────┐
-│ NOME        TIPO      TETTO     NEG   SALDO    │ │ NOME         ALIAS                 │
-│ Non alloc.  —         —         —     1.250,00 │ │ Casa         mutuo, affitto        │
-│ Cash        nessuno   —         no    3.480,20 │ │ Spesa        coop, esselunga       │
-│ Casa        netto     150.000   no   31.935,00 │ │ Opening      (sistema)             │
-│ Emergenza   entrate   30.000    no   29.931,00 │ │ nome…        simili: Casa          │
-│ nome…       nessuno ▾ tetto…    no   apertura… │ └───────────────────────────────────┘
-└────────────────────────────────────────────────┘
+┌ BUSTE ─────────────────────────────────────────────┐ ┌ CATEGORIE ───────────────────────────┐
+│ NOME        TIPO      TETTO     NEG   SALDO      ⎘ │ │ NOME         ALIAS                  ⎘ │
+│ Non alloc.  —         —         —     1.250,00     │ │ Casa         mutuo, affitto      [📥] │
+│ Cash        nessuno   —         no    3.480,20 [📥] │ │ Spesa        coop, esselunga         │
+│ Casa        netto     150.000   no   31.935,00     │ │ Opening      (sistema)                │
+│ Emergenza   entrate   30.000    no   29.931,00     │ │ nome…        simili: Casa             │
+│ nome…       nessuno ▾ tetto…    no   apertura…     │ └────────────────────────────────────────┘
+└──────────────────────────────────────────────────┘
 ```
 
 | Tabella | Colonne | In posto | Menu contestuale |

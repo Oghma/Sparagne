@@ -87,7 +87,7 @@ struct MainWindow: View {
 
     var body: some View {
         LedgerWindow(store: store, engine: engine, sheet: $sheet)
-            .frame(minWidth: 1080, minHeight: 640)
+            .frame(minWidth: 1176, minHeight: 640)
             .preferredColorScheme(.dark)
             .navigationTitle(title)
             .toolbar { toolbar }

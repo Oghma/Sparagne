@@ -10,6 +10,8 @@ private enum CategoryColumn {
     /// Just wide enough for the SYSTEM badge, which only Opening and
     /// Uncategorized carry.
     static let badge: CGFloat = 72
+    /// The archive/restore icon, empty until the pointer is over the row.
+    static let action: CGFloat = 28
 }
 
 /// The cells a category row is typed into.
@@ -112,6 +114,7 @@ struct CategoryTable: View {
             GridCell(width: CategoryColumn.name) { SectionLabel(text: String(localized: "Name")) }
             GridCell { SectionLabel(text: String(localized: "Aliases")) }
             GridCell(width: CategoryColumn.badge) { Text("") }
+            GridCell(width: CategoryColumn.action) { EmptyView() }
         }
         .frame(height: 24)
     }
@@ -161,10 +164,13 @@ struct CategoryTable: View {
             category: category,
             aliases: aliases(of: category.id),
             draft: isEditing ? $draft : nil,
+            isHovered: hovered == category.id,
             focus: $focus,
             onOpen: { field in Task { await open(category, at: field) } },
             onCommit: { Task { await submit(category.id) } },
-            onCancel: cancel
+            onCancel: cancel,
+            onArchive: { Task { await store.archiveCategory(category.id) } },
+            onRestore: { Task { await store.restoreCategory(category.id) } }
         )
         .background(isEditing || hovered == category.id ? Ink.raised : Color.clear)
         .overlay(alignment: .leading) {
@@ -199,6 +205,7 @@ struct CategoryTable: View {
                     .foregroundStyle(Ink.dim)
             }
             GridCell(width: CategoryColumn.badge) { Text("") }
+            GridCell(width: CategoryColumn.action) { EmptyView() }
         }
         .frame(height: Metrics.rowHeight)
         .background(focus == CategoryCellFocus(row: nil, field: .name) ? Ink.raised : Color.clear)
@@ -330,10 +337,13 @@ private struct CategoryRowView: View {
     let aliases: [String]
     /// Non-nil while this row is the one being edited.
     let draft: Binding<CategoryDraft>?
+    let isHovered: Bool
     @FocusState.Binding var focus: CategoryCellFocus?
     let onOpen: (CategoryField) -> Void
     let onCommit: () -> Void
     let onCancel: () -> Void
+    let onArchive: () -> Void
+    let onRestore: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -353,6 +363,7 @@ private struct CategoryRowView: View {
                     Text("")
                 }
             }
+            actionCell
         }
         .frame(height: Metrics.rowHeight)
         .contentShape(Rectangle())
@@ -361,6 +372,32 @@ private struct CategoryRowView: View {
             onCancel()
             return .handled
         }
+    }
+
+    /// The archive/restore icon, only for the row under the pointer: the same
+    /// command the context menu already sends, one click closer. Hidden while
+    /// editing or for a system category, which the core refuses either way.
+    @ViewBuilder
+    private var actionCell: some View {
+        GridCell(width: CategoryColumn.action) {
+            if draft == nil, isHovered, !category.isSystem {
+                if category.archived {
+                    actionButton(symbol: "tray.and.arrow.up", tooltip: String(localized: "Restore"), action: onRestore)
+                } else {
+                    actionButton(symbol: "archivebox", tooltip: String(localized: "Archive"), action: onArchive)
+                }
+            }
+        }
+    }
+
+    private func actionButton(symbol: String, tooltip: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Ink.dim)
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
     }
 
     /// Archived categories keep their place at the bottom of the list, struck

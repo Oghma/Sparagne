@@ -6,8 +6,8 @@ import SparagneCore
 /// the empty line agree without a layout pass. NOME takes what is left.
 ///
 /// `GridCell` adds the grid's 10 pt of padding on each side of these, so the
-/// table asks for 556 pt at its narrowest: the two setup tables share 1050 pt
-/// at the window's minimum width (`ContentView`: 1080), and the widest cell of
+/// table asks for 604 pt at its narrowest: the two setup tables share 1146 pt
+/// at the window's minimum width (`ContentView`: 1176), and the widest cell of
 /// each column ("income cap", "150.000,00", "€150.000,00") fits with room.
 private enum EnvelopeColumn {
     static let nameMinimum: CGFloat = 140
@@ -15,6 +15,8 @@ private enum EnvelopeColumn {
     static let cap: CGFloat = 92
     static let negative: CGFloat = 48
     static let balance: CGFloat = 104
+    /// The archive/restore icon, empty until the pointer is over the row.
+    static let action: CGFloat = 28
 }
 
 /// The envelopes of the vault as an editable table (`docs/v2/UI.md` §2.3):
@@ -38,28 +40,26 @@ struct EnvelopeTable: View {
     @FocusState private var focus: EnvelopeCell?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: String(localized: "Envelopes"))
-            Panel(padding: 0) {
-                VStack(spacing: 0) {
-                    header
-                    Hairline()
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(store.flows, id: \.id) { flow in
-                                activeRow(flow)
-                                Hairline()
-                            }
-                            newLineRow
-                            archived
+        Panel(padding: 0) {
+            VStack(spacing: 0) {
+                title
+                Hairline()
+                header
+                Hairline()
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(store.flows, id: \.id) { flow in
+                            activeRow(flow)
+                            Hairline()
                         }
+                        newLineRow
+                        archived
                     }
-                    .scrollBounceBehavior(.basedOnSize)
                 }
+                .scrollBounceBehavior(.basedOnSize)
+                Hairline()
+                footnote
             }
-            Text(String(localized: "The balance of a new envelope is moved from Unallocated"))
-                .font(Face.footnote)
-                .foregroundStyle(Ink.dim)
         }
         // A different vault means different envelopes: whatever was half
         // typed belongs to the vault that is gone.
@@ -69,6 +69,31 @@ struct EnvelopeTable: View {
             newLine = EnvelopeDraft()
         }
         .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
+    }
+
+    // MARK: - Chrome
+
+    /// Inside the panel's border, like `CategoryTable.title`: the two setup
+    /// tables share the same frame, not one boxed and one floating above it.
+    private var title: some View {
+        HStack {
+            SectionLabel(text: String(localized: "Envelopes"))
+            Spacer()
+        }
+        .padding(.horizontal, GridColumn.padding)
+        .frame(height: 24)
+    }
+
+    /// SALDO on the empty line is the opening allocation moved out of
+    /// Unallocated; this explains that, inside the same border as the rest
+    /// of the table so the two setup panels close at the same edge.
+    private var footnote: some View {
+        Text(String(localized: "The balance of a new envelope is moved from Unallocated"))
+            .font(Face.footnote)
+            .foregroundStyle(Ink.dim)
+            .padding(.horizontal, GridColumn.padding)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Header
@@ -83,6 +108,7 @@ struct EnvelopeTable: View {
             GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
                 SectionLabel(text: String(localized: "Balance"))
             }
+            GridCell(width: EnvelopeColumn.action) { EmptyView() }
         }
         .frame(height: 24)
     }
@@ -161,6 +187,27 @@ struct EnvelopeTable: View {
         .onTapGesture { open(flow, at: .negative) }
         balanceCell(flow)
             .onTapGesture { open(flow, at: .name) }
+        actionCell(flow, system: system)
+    }
+
+    /// The archive icon, only for the row under the pointer: the same
+    /// `ArchiveFlow` the context menu already sends, one click closer.
+    /// Hidden while editing, so it never fights a row's own commit-on-blur.
+    @ViewBuilder
+    private func actionCell(_ flow: FlowView, system: Bool) -> some View {
+        GridCell(width: EnvelopeColumn.action) {
+            if !system, hovered == flow.id {
+                Button {
+                    Task { await store.archiveEnvelope(flow.id) }
+                } label: {
+                    Image(systemName: "archivebox")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Ink.dim)
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "Archive"))
+            }
+        }
     }
 
     /// The open row. The cap of an unlimited envelope stays editable: typing
@@ -182,6 +229,7 @@ struct EnvelopeTable: View {
         }
         negativeCell($draft)
         balanceCell(flow)
+        GridCell(width: EnvelopeColumn.action) { EmptyView() }
     }
 
     private func balanceCell(_ flow: FlowView) -> some View {
@@ -228,9 +276,30 @@ struct EnvelopeTable: View {
                     GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
                         Text(LedgerMoney.amount(flow.balance)).font(Face.row).foregroundStyle(Ink.dim)
                     }
+                    GridCell(width: EnvelopeColumn.action) {
+                        if hovered == flow.id {
+                            Button {
+                                Task { await store.restoreEnvelope(flow.id) }
+                            } label: {
+                                Image(systemName: "tray.and.arrow.up")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(Ink.dim)
+                            }
+                            .buttonStyle(.plain)
+                            .help(String(localized: "Restore"))
+                        }
+                    }
                 }
                 .frame(height: Metrics.rowHeight)
                 .contentShape(Rectangle())
+                .background(hovered == flow.id ? Ink.raised : Color.clear)
+                .onHover { inside in
+                    if inside {
+                        hovered = flow.id
+                    } else if hovered == flow.id {
+                        hovered = nil
+                    }
+                }
                 .contextMenu {
                     Button(String(localized: "Restore")) {
                         Task { await store.restoreEnvelope(flow.id) }
@@ -273,6 +342,7 @@ struct EnvelopeTable: View {
                     alignment: .trailing
                 )
             }
+            GridCell(width: EnvelopeColumn.action) { EmptyView() }
         }
         .frame(height: Metrics.rowHeight)
         .background(focus?.row == nil && focus != nil ? Ink.raised : Color.clear)
