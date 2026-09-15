@@ -116,6 +116,14 @@ final class SyncEngine {
         role(forVault: vaultId) == .owner
     }
 
+    /// Whether a deletion from me would go through: the server refuses one
+    /// from anyone but the owner, and so does the core (`docs/v2/SYNC.md`
+    /// §3). `true` for a vault the server does not list, which is local-only
+    /// or not pushed yet.
+    func mayDeleteVault(_ vaultId: Uuid) -> Bool {
+        role(forVault: vaultId).map { $0 == .owner } ?? true
+    }
+
     // MARK: - Triggers
 
     /// The initial sync plus the 60 s loop. Safe to call more than once.
@@ -186,8 +194,27 @@ final class SyncEngine {
                     failure = failure ?? error
                 }
             }
+            // A vault deleted here still owes the server its last commands,
+            // the `DeleteVault` among them. Until they are confirmed it syncs
+            // like a live one (so a deletion the server already holds, from
+            // another device, is folded in as well); afterwards it costs
+            // nothing (`docs/v2/SYNC.md` §4.6).
+            for vaultId in try await core.deletedVaults() {
+                guard try await core.syncState(vaultId: vaultId).outbox > 0 else { continue }
+                do {
+                    let outcome = try await syncVault(vaultId, api: api, token: token)
+                    changed = changed || outcome.changed
+                    rejections = rejections || outcome.rejected
+                } catch let error as ServerError where !error.isOffline {
+                    failure = failure ?? error
+                }
+            }
             serverVaults = try await api.vaults(token: token)
-            let known = Set(try await core.vaults().map(\.id))
+            // A deleted vault whose deletion is still on its way up may be
+            // listed by the server; pulling it would only replay what is
+            // already here, so it is not a join either.
+            let live = try await core.vaults().map(\.id)
+            let known = Set(live + (try await core.deletedVaults()))
             for summary in serverVaults where !known.contains(summary.id) {
                 do {
                     let outcome = try await pullLoop(summary.id, api: api, token: token)

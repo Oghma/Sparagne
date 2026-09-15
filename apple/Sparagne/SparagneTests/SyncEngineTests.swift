@@ -42,6 +42,11 @@ actor FakeServerTransport: SyncTransport {
         try core.snapshot(vaultId: vaultId)
     }
 
+    /// The server's own row for a vault; `nil` once it has been deleted.
+    func vault(ofVault vaultId: Uuid) throws -> VaultView? {
+        try core.vault(vaultId: vaultId)
+    }
+
     func send(_ request: SyncRequest) async throws -> SyncResponse {
         log.append("\(request.method) \(Self.route(request.path))")
         if offline { throw ServerError.offline(detail: "the fake server is unreachable") }
@@ -148,7 +153,9 @@ actor FakeServerTransport: SyncTransport {
             guard let claim = Self.createVault(in: commands.first, of: vaultId) else {
                 return Self.failure(404, "not_found")
             }
-            guard try core.vault(vaultId: vaultId) == nil else {
+            // The log outlives the projection: a deleted vault's id stays
+            // taken, as on the real server.
+            guard try core.lastSeq(vaultId: vaultId) == 0 else {
                 return Self.failure(404, "not_found")
             }
             let taken = try core.vaults()

@@ -137,6 +137,13 @@ actor CoreActor {
         try await visit { try $0.vaults() }
     }
 
+    /// The vaults a `DeleteVault` removed whose log is still here. Their
+    /// outbox has to reach the server like any other, the deletion first of
+    /// all (`docs/v2/SYNC.md` §4.6).
+    func deletedVaults() async throws -> [Uuid] {
+        try await visit { try $0.deletedVaults() }
+    }
+
     func snapshot(vaultId: Uuid) async throws -> VaultSnapshot {
         try await visit { try $0.snapshot(vaultId: vaultId) }
     }
@@ -300,11 +307,12 @@ actor CoreActor {
     }
 
     /// After a login: every vault's outbox is re-signed with the account's
-    /// username (`docs/v2/SYNC.md` §4.4).
+    /// username (`docs/v2/SYNC.md` §4.4), the deleted vaults' included, or
+    /// their deletion would be refused as another author's for ever.
     func relabelEveryOutbox(author name: String) async throws {
         try await visit { handle in
-            for vault in try handle.vaults() {
-                try handle.relabelOutbox(vaultId: vault.id, author: name)
+            for vaultId in try handle.vaults().map(\.id) + handle.deletedVaults() {
+                try handle.relabelOutbox(vaultId: vaultId, author: name)
             }
         }
     }
@@ -326,19 +334,28 @@ actor CoreActor {
         await visit { handle in
             var pending = 0
             var rejected: [RejectedEntry] = []
-            for vault in (try? handle.vaults()) ?? [] {
-                if let state = try? handle.syncState(vaultId: vault.id) {
+            // A deleted vault has no name left to show, but its outbox still
+            // counts and its rejections are still the user's to read: a row
+            // refused because the vault went away is exactly the case.
+            var named = ((try? handle.vaults()) ?? []).map { ($0.id, $0.name) }
+            named += ((try? handle.deletedVaults()) ?? []).map { ($0, Self.deletedVaultName) }
+            for (vaultId, name) in named {
+                if let state = try? handle.syncState(vaultId: vaultId) {
                     pending += Int(state.outbox)
                 }
-                for command in (try? handle.rejectedCommands(vaultId: vault.id)) ?? [] {
+                for command in (try? handle.rejectedCommands(vaultId: vaultId)) ?? [] {
                     rejected.append(
-                        RejectedEntry(vaultId: vault.id, vaultName: vault.name, command: command)
+                        RejectedEntry(vaultId: vaultId, vaultName: name, command: command)
                     )
                 }
             }
             return LocalSyncState(pending: pending, rejected: rejected)
         }
     }
+
+    /// What the rejections sheet shows in place of a name the vault no
+    /// longer has.
+    static let deletedVaultName = String(localized: "Deleted vault")
 
     /// Takes every rejected command out of the core, in one visit.
     func dismissAllRejected(_ entries: [RejectedEntry]) async {
