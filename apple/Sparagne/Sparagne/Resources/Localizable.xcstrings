@@ -545,6 +545,102 @@
         }
       }
     },
+    "Delete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina"
+          }
+        }
+      }
+    },
+    "Delete Vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina vault"
+          }
+        }
+      }
+    },
+    "Delete Vault…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Vault…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina vault…"
+          }
+        }
+      }
+    },
+    "Delete “%@”?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete “%@”?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminare “%@”?"
+          }
+        }
+      }
+    },
+    "Deleted vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault eliminato"
+          }
+        }
+      }
+    },
+    "Delete…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina…"
+          }
+        }
+      }
+    },
     "Description": {
       "localizations": {
         "en": {
@@ -813,6 +909,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ogni"
+          }
+        }
+      }
+    },
+    "Every wallet, envelope, transaction and recurring template in it will be deleted, for every member and on every device. This cannot be undone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every wallet, envelope, transaction and recurring template in it will be deleted, for every member and on every device. This cannot be undone."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tutti i wallet, le buste, le transazioni e le ricorrenze che contiene verranno eliminati, per ogni membro e su ogni dispositivo. Non si può annullare."
           }
         }
       }
@@ -2077,6 +2189,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rinomina busta"
+          }
+        }
+      }
+    },
+    "Rename Vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rinomina vault"
+          }
+        }
+      }
+    },
+    "Rename Vault…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Vault…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rinomina vault…"
           }
         }
       }

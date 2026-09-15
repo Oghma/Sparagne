@@ -43,9 +43,19 @@ struct ManagementSheet: View {
                     }
                     Divider()
                     Button(String(localized: "New Vault…")) { present(.vault) }
-                    if let vault = store.currentVault, let engine, engine.isLoggedIn,
-                        engine.isOwner(ofVault: vault.id) {
-                        Button(String(localized: "Share…")) { present(.share(vault)) }
+                    if let vault = store.currentVault {
+                        Button(String(localized: "Rename…")) { present(.renameVault(vault)) }
+                        if let engine, engine.isLoggedIn, engine.isOwner(ofVault: vault.id) {
+                            Button(String(localized: "Share…")) { present(.share(vault)) }
+                        }
+                        // Not offered for a shared vault I do not own: the
+                        // core and the server both refuse the command.
+                        if engine?.mayDeleteVault(vault.id) ?? true {
+                            Divider()
+                            Button(String(localized: "Delete…"), role: .destructive) {
+                                present(.deleteVault(vault))
+                            }
+                        }
                     }
                 } label: {
                     Label(

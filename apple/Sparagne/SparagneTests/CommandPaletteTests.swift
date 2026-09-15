@@ -151,6 +151,22 @@ struct CommandPaletteTests {
         #expect(!ids.contains("vault.\(current.id)"))
     }
 
+    @Test("New Vault is always an entry; Rename and Delete only with a vault on screen")
+    func vaultLifecycleEntries() async throws {
+        let store = try Self.store()
+        await store.bootstrap()
+        let before = CommandPaletteModel.ledgerActions(store: store, engine: nil).map(\.id)
+        #expect(before.contains("vault.new"))
+        #expect(!before.contains("vault.rename"))
+        #expect(!before.contains("vault.delete"))
+
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        let after = CommandPaletteModel.ledgerActions(store: store, engine: nil).map(\.id)
+        #expect(after.contains("vault.new"))
+        #expect(after.contains("vault.rename"))
+        #expect(after.contains("vault.delete"))
+    }
+
     @Test("Running the vault entry switches the vault on screen")
     func vaultEntrySwitches() async throws {
         let store = try Self.store()

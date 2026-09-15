@@ -219,6 +219,39 @@ struct RenameSheet: View {
     }
 }
 
+/// The confirmation before `DeleteVault`, the one action no undo covers: the
+/// vault goes with its wallets, envelopes, transactions and recurring
+/// templates, for every member and on every device once the command has
+/// synced (`docs/v2/SYNC.md` §4.6). Reached from the Vault menu, the palette
+/// and the management sheet, so the wording lives in one place.
+struct DeleteVaultSheet: View {
+    let vault: VaultView
+    let delete: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        SheetLayout(
+            title: String(localized: "Delete Vault"),
+            confirmTitle: String(localized: "Delete"),
+            confirmRole: .destructive,
+            canConfirm: true,
+            showsCancel: true,
+            confirm: {
+                delete()
+                dismiss()
+            },
+            cancel: { dismiss() }
+        ) {
+            Text(String(localized: "Delete \u{201C}\(vault.name)\u{201D}?"))
+            Text(String(localized: "Every wallet, envelope, transaction and recurring template in it will be deleted, for every member and on every device. This cannot be undone."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 /// Mode, cap and allow-negative for an existing envelope (`.updateFlow`).
 /// Renaming is the separate, lighter `RenameSheet`.
 struct EditEnvelopeSheet: View {
@@ -298,6 +331,9 @@ struct EditEnvelopeSheet: View {
 private struct SheetLayout<Content: View>: View {
     let title: String
     let confirmTitle: String
+    /// `.destructive` for the one sheet that deletes: the button is drawn as
+    /// such and ↩ no longer triggers it, so a stray return cannot.
+    var confirmRole: ButtonRole? = nil
     let canConfirm: Bool
     let showsCancel: Bool
     let confirm: () -> Void
@@ -314,8 +350,8 @@ private struct SheetLayout<Content: View>: View {
                     Button(String(localized: "Cancel"), role: .cancel, action: cancel)
                         .keyboardShortcut(.cancelAction)
                 }
-                Button(confirmTitle, action: confirm)
-                    .keyboardShortcut(.defaultAction)
+                Button(confirmTitle, role: confirmRole, action: confirm)
+                    .keyboardShortcut(confirmRole == .destructive ? nil : .defaultAction)
                     .disabled(!canConfirm)
             }
         }

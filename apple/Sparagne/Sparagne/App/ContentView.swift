@@ -59,6 +59,8 @@ struct MainWindow: View {
     /// with the entity being renamed or edited.
     enum SheetKind: Identifiable {
         case vault
+        case renameVault(VaultView)
+        case deleteVault(VaultView)
         case wallet
         case envelope
         case renameWallet(WalletView)
@@ -72,6 +74,8 @@ struct MainWindow: View {
         var id: String {
             switch self {
             case .vault: "vault"
+            case .renameVault(let vault): "renameVault-\(vault.id)"
+            case .deleteVault(let vault): "deleteVault-\(vault.id)"
             case .wallet: "wallet"
             case .envelope: "envelope"
             case .renameWallet(let wallet): "renameWallet-\(wallet.id)"
@@ -108,6 +112,17 @@ struct MainWindow: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .openManagement)) { _ in
                 sheet = .manage
+            }
+            // The Vault menu and the palette act on the vault on screen; the
+            // management sheet seeds the same sheets with the vault it shows.
+            .onReceive(NotificationCenter.default.publisher(for: .newVault)) { _ in
+                sheet = .vault
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .renameVault)) { _ in
+                if let vault = store.currentVault { sheet = .renameVault(vault) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .deleteVault)) { _ in
+                if let vault = store.currentVault { sheet = .deleteVault(vault) }
             }
             .sheet(item: $sheet) { kind in sheetBody(kind) }
             .alert(
@@ -187,6 +202,14 @@ struct MainWindow: View {
                 Task { await store.createVault(name: name, walletName: wallet, openingBalance: opening) }
             }
             .interactiveDismissDisabled(store.needsOnboarding)
+        case .renameVault(let vault):
+            RenameSheet(title: String(localized: "Rename Vault"), name: vault.name) { name in
+                Task { await store.renameVault(vault.id, name: name) }
+            }
+        case .deleteVault(let vault):
+            DeleteVaultSheet(vault: vault) {
+                Task { await store.deleteVault(vault.id) }
+            }
         case .wallet:
             NewWalletSheet(currency: store.currency) { name, opening in
                 Task { await store.createWallet(name: name, openingBalance: opening) }

@@ -76,6 +76,22 @@ struct SparagneApp: App {
             }
 
             CommandMenu(String(localized: "Vault")) {
+                Button(String(localized: "New Vault\u{2026}")) {
+                    NotificationCenter.default.post(name: .newVault, object: nil)
+                }
+                Button(String(localized: "Rename Vault\u{2026}")) {
+                    NotificationCenter.default.post(name: .renameVault, object: nil)
+                }
+                .disabled(store?.currentVault == nil)
+                // Greyed out for a shared vault I do not own: the core and
+                // the server would both refuse the command anyway.
+                Button(String(localized: "Delete Vault\u{2026}")) {
+                    NotificationCenter.default.post(name: .deleteVault, object: nil)
+                }
+                .disabled(!mayDeleteCurrentVault)
+
+                Divider()
+
                 Button(String(localized: "Manage\u{2026}")) {
                     NotificationCenter.default.post(name: .openManagement, object: nil)
                 }
@@ -92,6 +108,13 @@ struct SparagneApp: App {
             SettingsView(engine: engine)
                 .preferredColorScheme(.dark)
         }
+    }
+
+    /// A vault on screen that is mine, or not on the server at all
+    /// (`SyncEngine.mayDeleteVault`).
+    private var mayDeleteCurrentVault: Bool {
+        guard let vault = store?.currentVault else { return false }
+        return engine?.mayDeleteVault(vault.id) ?? true
     }
 }
 
@@ -113,6 +136,13 @@ extension Notification.Name {
     static let exportCSV = Notification.Name("it.oghma.sparagne.exportCSV")
     /// ⌘⇧C: switches to the setup tab, envelopes and categories (§2.3).
     static let openSetup = Notification.Name("it.oghma.sparagne.openSetup")
+    /// Vault menu and palette: the onboarding sheet again, for another vault.
+    static let newVault = Notification.Name("it.oghma.sparagne.newVault")
+    /// Vault menu and palette: rename the vault on screen.
+    static let renameVault = Notification.Name("it.oghma.sparagne.renameVault")
+    /// Vault menu and palette: the confirmation that deletes the vault on
+    /// screen.
+    static let deleteVault = Notification.Name("it.oghma.sparagne.deleteVault")
 }
 
 private struct SettingsView: View {

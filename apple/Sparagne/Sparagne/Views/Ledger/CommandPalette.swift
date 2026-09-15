@@ -200,6 +200,40 @@ extension CommandPaletteModel {
             )
         }
 
+        // The vault's own life cycle, through the Vault menu's notifications
+        // so the sheets are seeded in one place (`MainWindow`).
+        actions.append(
+            PaletteAction(
+                id: "vault.new",
+                title: String(localized: "New Vault\u{2026}"),
+                keywords: ["vault", "nuovo", "create"]
+            ) {
+                NotificationCenter.default.post(name: .newVault, object: nil)
+            }
+        )
+        if let vault = store.currentVault {
+            actions.append(
+                PaletteAction(
+                    id: "vault.rename",
+                    title: String(localized: "Rename Vault\u{2026}"),
+                    keywords: ["vault", "rinomina", "name"]
+                ) {
+                    NotificationCenter.default.post(name: .renameVault, object: nil)
+                }
+            )
+            if engine?.mayDeleteVault(vault.id) ?? true {
+                actions.append(
+                    PaletteAction(
+                        id: "vault.delete",
+                        title: String(localized: "Delete Vault\u{2026}"),
+                        keywords: ["vault", "elimina", "cancella", "remove"]
+                    ) {
+                        NotificationCenter.default.post(name: .deleteVault, object: nil)
+                    }
+                )
+            }
+        }
+
         actions.append(contentsOf: [
             PaletteAction(
                 id: "open.setup",
