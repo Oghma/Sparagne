@@ -119,6 +119,25 @@ struct ManagementSheet: View {
             }
         }
         .listStyle(.inset)
+        // A row that crosses the archive/restore boundary moves between two
+        // separate `ForEach`s (the active `Section` and the archived
+        // `DisclosureGroup`); `List` on macOS is NSTableView-backed and does
+        // not reliably retire the outgoing cell across that boundary, so the
+        // restored row can keep rendering with the archived row's look until
+        // something forces the table to rebuild. Keying the whole `List` on
+        // the active/archived membership does that rebuild automatically,
+        // the same way leaving and reopening the sheet already does by hand.
+        .id(listIdentity)
+    }
+
+    /// One tag per wallet and envelope, active or archived. Changes whenever
+    /// something crosses that boundary, which is exactly when `list` needs a
+    /// fresh `List` identity (see the comment above).
+    private var listIdentity: [String] {
+        store.wallets.map { "wallet:\($0.id)" }
+            + store.archivedWallets.map { "archived-wallet:\($0.id)" }
+            + store.flows.map { "flow:\($0.id)" }
+            + store.archivedFlows.map { "archived-flow:\($0.id)" }
     }
 }
 
