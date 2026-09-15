@@ -147,9 +147,10 @@ fn claim(
     let command_id = envelope.id;
     let receipt = {
         let mut core = state.core();
-        if core.vault(vault_id)?.is_some() {
-            // Somebody else's vault, or one whose membership vanished: the
-            // caller is not a member, so it does not exist for them.
+        if core.last_seq(vault_id)? > 0 {
+            // Somebody else's vault, one whose membership vanished, or one
+            // its owner deleted (the log outlives the projection): the caller
+            // is not a member, so it does not exist for them.
             return Err(ApiError::not_found());
         }
         core.execute(envelope)?
