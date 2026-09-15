@@ -297,22 +297,27 @@ final class AppStore {
     /// sync that rebased the projection, a vault joined from the server, or
     /// a login that relabelled the outbox (`docs/v2/SYNC.md` §5).
     func refreshAfterSync() async {
-        await guarded {
-            vaults = try await core.vaults()
-            guard !vaults.isEmpty else {
-                needsOnboarding = true
-                currentVault = nil
-                await reload()
-                return
-            }
-            needsOnboarding = false
-            if let current = currentVault, let fresh = vaults.first(where: { $0.id == current.id }) {
-                currentVault = fresh
-                await reload()
-            } else {
-                let stored = defaults.string(forKey: Self.lastVaultKey)
-                await select(vaults.first { $0.id == stored } ?? vaults[0])
-            }
+        await guarded { try await adoptVaultList() }
+    }
+
+    /// Re-reads the vault list and keeps the selection where it can: the
+    /// same vault when it still exists (fresh, so a rename shows), the
+    /// remembered one or the first otherwise, onboarding when none is left.
+    private func adoptVaultList() async throws {
+        vaults = try await core.vaults()
+        guard !vaults.isEmpty else {
+            needsOnboarding = true
+            currentVault = nil
+            await reload()
+            return
+        }
+        needsOnboarding = false
+        if let current = currentVault, let fresh = vaults.first(where: { $0.id == current.id }) {
+            currentVault = fresh
+            await reload()
+        } else {
+            let stored = defaults.string(forKey: Self.lastVaultKey)
+            await select(vaults.first { $0.id == stored } ?? vaults[0])
         }
     }
 
@@ -486,6 +491,32 @@ final class AppStore {
             if let created = vaults.first(where: { $0.id == vaultId }) {
                 await select(created)
             }
+        }
+    }
+
+    // MARK: - Vault management
+
+    /// Renames a vault everywhere its name shows: the picker, the title, the
+    /// palette. The name stays unique among the owner's vaults, and the
+    /// currency never changes (`docs/v2/ARCH.md` §4).
+    func renameVault(_ vaultId: Uuid, name: String) async {
+        await guarded {
+            try await core.execute(vaultId: vaultId, .renameVault(name: name))
+            try await adoptVaultList()
+        }
+    }
+
+    /// Deletes a vault with everything in it, for every member and on every
+    /// device once the command has synced (`docs/v2/SYNC.md` §4.6). Only the
+    /// owner may; the core refuses anyone else. The window moves to another
+    /// vault, or back to onboarding when it was the last one.
+    func deleteVault(_ vaultId: Uuid) async {
+        // A row waiting on the undo toast dies with its vault: voiding it
+        // now would only be refused.
+        if vaultId == currentVault?.id { undo() }
+        await guarded {
+            try await core.execute(vaultId: vaultId, .deleteVault)
+            try await adoptVaultList()
         }
     }
 

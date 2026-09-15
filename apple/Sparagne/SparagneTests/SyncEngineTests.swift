@@ -586,4 +586,117 @@ struct SyncEngineTests {
         #expect(peer.engine.authMessage != nil)
         #expect(try await peer.syncState().outbox > 0)
     }
+
+    // MARK: - Renaming and deleting a vault
+
+    @Test("A rename reaches the editor and the server's listing at the next sync")
+    func renameReachesTheEditor() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        await bob.engine.syncNow()
+
+        await alice.store.renameVault(vaultId, name: "Casa")
+        await alice.engine.syncNow()
+        await bob.engine.syncNow()
+
+        #expect(alice.store.currentVault?.name == "Casa")
+        #expect(bob.store.currentVault?.name == "Casa")
+        #expect(bob.engine.serverVaults.first?.name == "Casa")
+        #expect(try await server.vault(ofVault: vaultId)?.name == "Casa")
+        #expect(try await alice.syncState().outbox == 0)
+    }
+
+    @Test("Deleting a vault empties the window, and the next sync deletes it on the server too")
+    func deletionReachesTheServer() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let peer = try await Self.alice(server)
+        let vaultId = try #require(peer.vaultId)
+
+        await peer.store.deleteVault(vaultId)
+        #expect(peer.store.presentedError == nil)
+        #expect(peer.store.needsOnboarding)
+        #expect(peer.store.currentVault == nil)
+        // The deletion waits in the outbox, and is counted even though the
+        // vault is no longer listed.
+        await peer.engine.refreshLocalState()
+        #expect(peer.engine.pendingCount == 1)
+
+        await peer.engine.syncNow()
+
+        #expect(peer.engine.status == .idle)
+        #expect(peer.engine.pendingCount == 0)
+        #expect(try await peer.core.syncState(vaultId: vaultId).outbox == 0)
+        #expect(try await server.vault(ofVault: vaultId) == nil)
+        #expect(peer.engine.serverVaults.isEmpty)
+        // Nothing came back: with no vault listed there is nothing to join.
+        #expect(peer.store.currentVault == nil)
+        #expect(peer.store.needsOnboarding)
+    }
+
+    @Test("The owner's deletion reaches the editor, whose pending row is refused")
+    func deletionReachesTheEditor() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        await bob.engine.syncNow()
+        #expect(bob.store.currentVault?.id == vaultId)
+
+        // bob may not delete it himself: the app does not offer it, and the
+        // core refuses before the server is even asked.
+        #expect(bob.engine.mayDeleteVault(vaultId) == false)
+        #expect(alice.engine.mayDeleteVault(vaultId))
+        await bob.store.deleteVault(vaultId)
+        #expect(bob.store.presentedError?.code == "forbidden")
+        #expect(bob.store.currentVault?.id == vaultId)
+        bob.store.presentedError = nil
+
+        await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
+        await alice.store.deleteVault(vaultId)
+        await alice.engine.syncNow()
+        await bob.engine.syncNow()
+
+        #expect(bob.store.currentVault == nil)
+        #expect(bob.store.needsOnboarding)
+        #expect(bob.store.vaults.isEmpty)
+        #expect(bob.engine.status == .idle)
+        #expect(try await bob.core.syncState(vaultId: vaultId).outbox == 0)
+        // The milk was refused by a server that no longer had the vault, and
+        // is still listed under the vault it can no longer name.
+        let refused = try #require(bob.engine.rejected.first)
+        #expect(bob.engine.rejected.count == 1)
+        #expect(refused.command.code == "not_found")
+        #expect(refused.vaultId == vaultId)
+        #expect(refused.vaultName == CoreActor.deletedVaultName)
+        #expect(bob.engine.showsRejectedAlert)
+
+        await bob.engine.dismiss(refused)
+        #expect(bob.engine.rejected.isEmpty)
+    }
+
+    @Test("A vault deleted while logged out is re-signed at login and deleted on the server")
+    func deletedBeforeLoginStillSyncs() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let peer = try await Peer(server: server)
+        await Self.seed(peer)
+        let vaultId = try #require(peer.vaultId)
+        await peer.store.deleteVault(vaultId)
+        #expect(peer.store.needsOnboarding)
+        #expect(try await peer.core.syncState(vaultId: vaultId).outbox == 4)
+
+        await peer.engine.register(username: "alice", password: "supersecret")
+
+        #expect(peer.engine.status == .idle)
+        #expect(try await peer.core.syncState(vaultId: vaultId).outbox == 0)
+        #expect(try await server.vault(ofVault: vaultId) == nil)
+        #expect(try await server.lastSeq(ofVault: vaultId) == 4)
+        #expect(peer.engine.serverVaults.isEmpty)
+        #expect(peer.engine.pendingCount == 0)
+    }
 }
