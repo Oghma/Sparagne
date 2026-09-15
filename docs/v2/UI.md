@@ -143,6 +143,30 @@ Non allocato e le categorie di sistema (`Opening`, `Uncategorized`) si vedono
 ma non si modificano. ⌘⇧C porta qui; la finestra Categorie separata non c'è
 più. Wallet, vault, ricorrenze e condivisione restano nella gestione ⌘⇧M.
 
+### 2.4 Il vault
+
+> Aggiunto il 2026-09-15: creazione, rinomina e cancellazione del vault.
+
+Tre azioni, raggiungibili da tre posti che condividono un'implementazione
+sola (notifiche del menu Vault, ricevute da `MainWindow`): il menu **Vault**
+(Nuovo vault…, Rinomina vault…, Elimina vault…), la palette `>` (stesse voci)
+e il menu a tendina del vault nella gestione ⌘⇧M (Nuovo…, Rinomina…,
+Condividi…, Elimina…).
+
+| Azione | Foglio | Comando |
+|---|---|---|
+| Nuovo | l'onboarding (`OnboardingSheet`): nome, primo wallet, saldo di apertura | `CreateVault` + `CreateWallet` |
+| Rinomina | `RenameSheet`, come per wallet e buste | `RenameVault` |
+| Elimina | `DeleteVaultSheet`: il nome del vault, una frase che dice che vanno via wallet, buste, transazioni e ricorrenze per ogni membro e su ogni dispositivo, Annulla e un "Elimina" distruttivo che ↩ non attiva | `DeleteVault` |
+
+La valuta non si modifica (`ARCH.md` §4). Elimina non compare per un vault
+condiviso di cui non si è owner (`SyncEngine.mayDeleteVault`); se arriva lo
+stesso, il core risponde `forbidden` e l'alert dice "Non puoi farlo". Dopo la
+cancellazione la finestra passa a un altro vault (quello ricordato, altrimenti
+il primo) o torna all'onboarding se era l'ultimo; una riga in attesa sul toast
+di annullamento muore col vault senza mandare nulla. Ai membri la
+cancellazione arriva col sync (`SYNC.md` §4 punto 6).
+
 ## 3. Mappa mockup → dominio
 
 | Colonna / etichetta | Dominio |
@@ -226,6 +250,7 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | `⌘K` | riga quick-add sopra la griglia (la grammatica di §3.1 del distillato); con `>` in prima posizione è la palette comandi |
 | `⌘E` | esporta CSV: le righe a schermo, RFC 4180, `Support/LedgerCSV.swift` |
 | `⌘⇧M` | gestione: vault, wallet, buste, ricorrenze, condivisione |
+| menu Vault | Nuovo vault…, Rinomina vault…, Elimina vault… (§2.4), senza scorciatoia: rari, e uno distruttivo |
 | `⌘⇧C` | vista SETUP: buste e categorie |
 | `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
 | `⌘⇧W` | mostra / nasconde la colonna WALLET (menu Vista) |
@@ -237,9 +262,11 @@ maiuscole né di accenti: prima il titolo dall'inizio, poi dall'inizio di una
 sua parola, poi ovunque, infine le parole chiave nascoste); ↑↓ scorrono con
 rientro in fondo, ↩ esegue e chiude, esc chiude. Nessuna finestra nuova:
 è lo stesso riquadro. Le azioni sono mese precedente / successivo / corrente,
-vai a RIEPILOGO o MASTRO, un "Vault: nome" per ogni altro vault, SETUP,
-gestione, esporta CSV, sincronizza ora, e i tre interruttori di vista
-(annullate, trasferimenti, colonna wallet). Quelle che hanno già una voce di
+vai a RIEPILOGO o MASTRO, un "Vault: nome" per ogni altro vault, Nuovo vault…,
+Rinomina vault… ed Elimina vault… (§2.4; le ultime due solo con un vault a
+schermo, Elimina solo se lo si può cancellare), SETUP, gestione, esporta CSV,
+sincronizza ora, e i tre interruttori di vista (annullate, trasferimenti,
+colonna wallet). Quelle che hanno già una voce di
 menu ne mandano la notifica, così le due strade condividono una sola
 implementazione; il modello (`Views/Ledger/CommandPalette.swift`) è puro e
 testato senza finestra.

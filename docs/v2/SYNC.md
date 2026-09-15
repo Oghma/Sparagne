@@ -40,6 +40,8 @@ Codici HTTP: `invalid_request`/`invalid_*` 400, `unauthorized` 401, `forbidden`/
 
 **Creazione del vault.** Non esiste una rotta per creare un vault: lo crea il suo stesso primo push. Se il `vault_id` del path è ignoto al server e il primo comando del lotto è il `CreateVault` che lo conia (`id` = `vault_id`), il server crea il vault nel core e la membership `owner` di chi chiama, nella stessa richiesta; il `PushResult` di quel comando sta in testa alla risposta come tutti gli altri. Un vault ignoto il cui primo comando non è quel `CreateVault` è `404 not_found`, esattamente come un vault che esiste ma di cui non si è membri: chi chiama non deve poter distinguere i due casi. Un nome di vault che chi chiama ha già usato è `409 already_exists`. Il push resta idempotente: rifarlo risponde gli stessi seq e non crea nulla di nuovo.
 
+**Rinomina e cancellazione del vault** (2026-09-15). Nessuna rotta: `RenameVault` e `DeleteVault` sono comandi del log del vault e passano dal push come tutti gli altri (`ARCH.md` §4). La rinomina la accetta chiunque possa scrivere; un nome che l'owner usa già su un altro suo vault è `rejected already_exists` per il singolo comando, anche se chi lo manda è un editor che quell'altro vault non lo vede. La cancellazione la accetta solo l'owner: da un editor il core risponde `rejected forbidden` (il client la rifiuta già in locale, il server la rifiuta se arriva lo stesso). Dopo la cancellazione il server tiene il log del vault e **tiene le membership**: `GET /vaults` non lo elenca più (la proiezione non lo ha), ma `pull` continua a rispondere ai membri, ed è così che ricevono il `DeleteVault` e cancellano la loro copia. Un push su un vault cancellato è `200` con ogni comando `rejected not_found`; l'id resta preso per sempre (un `CreateVault` con quell'id da un estraneo è `404` come per qualsiasi vault altrui) e il nome torna libero per l'owner.
+
 **Push.** I comandi vengono applicati nell'ordine ricevuto, ognuno con `Core::execute`; per ognuno la risposta dice `applied { seq, result_id }` o `rejected { code, message }`; un rifiuto non ferma il lotto (un comando che dipende da uno rifiutato verrà rifiutato a sua volta). Un comando già noto (stesso id) risponde `applied` con il seq originale: il push è idempotente. I comandi rifiutati non entrano nel log del server. Il client spezza l'outbox in lotti da 500 comandi (`push_request(vault, limit)`) e ripete finché l'outbox non è vuota.
 
 **Pull.** Restituisce i comandi con `seq > since`, compresi quelli dello stesso client già confermati (il client li riconosce dall'id).
@@ -53,6 +55,7 @@ Stato per vault: `last_server_seq` = **watermark contiguo** (il più alto `serve
 3. **Vault condivisi.** Un vault di cui si diventa membri non esiste in locale: `integrate_pull` da `since = 0` lo crea, perché il primo comando del log è `CreateVault`. `sync_state` di un vault sconosciuto **risponde zeri invece di errore**, ed è voluto: il join legge lo stato prima che il primo pull crei il vault, e `last_server_seq = 0` è esattamente il punto da cui partire. Lo stesso vale per `last_seq`.
 4. **Login.** `relabel_outbox(vault, username)` aggiorna l'`author` delle righe in outbox e ricostruisce la proiezione.
 5. **Rifiuti.** `rejected_commands(vault)` elenca i comandi rifiutati (id, kind, codice, messaggio) per la UI; `dismiss_rejected` li toglie.
+6. **Vault cancellati** (2026-09-15). `DeleteVault` toglie il vault dalla proiezione ma non dal log, quindi `vaults()` non lo elenca più mentre la sua outbox (la cancellazione stessa, e quel che c'era prima se il vault non era mai stato spinto) deve ancora salire. `deleted_vaults()` elenca i vault che stanno nel log e non in `vaults`; l'app li sincronizza come i vivi finché la loro outbox non è vuota, poi non costano più nulla. Anche `relabel_outbox` al login e il conteggio dei pendenti passano da lì, altrimenti un vault creato e cancellato da sloggati resterebbe firmato dal nome locale e il push sarebbe `author_mismatch` per sempre. Un membro che riceve il `DeleteVault` col pull ricostruisce senza il vault; i suoi comandi ancora in outbox vengono rifiutati `not_found` dal server e restano leggibili come rifiuti sotto "Vault eliminato". Dall'altro lato, un `RenameVault` arriva ai membri col pull come qualsiasi comando, e `GET /vaults` mostra il nome nuovo.
 
 Gli id delle entità derivano dall'id del comando (`ARCH.md` §4), quindi il rebase produce gli stessi id su ogni client e sul server.
 
@@ -61,6 +64,7 @@ Gli id delle entità derivano dall'id del comando (`ARCH.md` §4), quindi il reb
 - Impostazioni: URL del server, login e registrazione, logout. Lo username del server diventa l'`author` di ogni nuovo comando.
 - Sync automatica: all'avvio, dopo ogni comando (con un piccolo debounce) e ogni 60 s: per ogni vault locale push poi pull; per i vault del server non ancora locali pull da 0. Stato nella toolbar (in sync, in attesa, offline, errore); i rifiuti in un alert e in un elenco consultabile.
 - Condivisione: foglio "Condividi vault…" (solo owner) con elenco membri, aggiunta per username e ruolo, rimozione.
+- Vault: "Nuovo vault…", "Rinomina vault…" e "Elimina vault…" nel menu Vault, nella palette `>` e nel menu del vault della gestione (`UI.md` §6). Elimina non si offre per un vault condiviso di cui non si è owner (`SyncEngine.mayDeleteVault`, dal ruolo dell'ultimo `GET /vaults`); il foglio di conferma dice che la cancellazione vale per ogni membro e ogni dispositivo e non si annulla.
 
 ## 6. Test di accettazione
 
@@ -109,8 +113,16 @@ correggere. App Transport Security non ha richiesto nulla, perché il loopback
 in chiaro ATS bloccherebbe invece la chiamata, ed è la ragione per cui
 `DEPLOY.md` mette il TLS fra i requisiti.
 
+Rinomina e cancellazione del vault aggiunte il 2026-09-15 (§3, §4 punto 6):
+`RenameVault` e `DeleteVault` nel core, `DomainError::Forbidden`,
+`deleted_vaults()`, il `claim` del server che guarda il log e non la
+proiezione; `core/tests/vault.rs` (10), 4 test in `core/tests/sync.rs`,
+`server/tests/vault_lifecycle.rs` (5), `VaultLifecycleTests.swift` (6) e 4
+test in `SyncEngineTests.swift`.
+
 Ancora da fare quando servirà:
 
 - `RejectedCommand.kind` è il nome snake_case del comando; l'app lo mostra tal quale accanto al messaggio localizzato.
 - Il Keychain con firma ad-hoc può rifiutare `SecItemAdd`: il token resta in memoria per la sessione. Con un team Apple il problema sparisce.
 - Il server non tiene i comandi rifiutati, solo la risposta al push.
+- Il log e le membership di un vault cancellato restano sul server per sempre (servono al pull dei membri); una pulizia dei vault cancellati da più di N giorni non c'è ancora.
