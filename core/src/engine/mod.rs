@@ -150,6 +150,8 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
         Command::CreateVault { name, currency } => {
             create_vault(tx, env, name, currency.code(), now).map(Some)
         }
+        Command::RenameVault { name } => rename_vault(tx, env, name).map(|()| None),
+        Command::DeleteVault => delete_vault(tx, env).map(|()| None),
         Command::CreateWallet {
             name,
             opening_balance,
@@ -356,6 +358,43 @@ fn create_vault(
         OPENING_KEY,
     )?;
     Ok(env.id)
+}
+
+/// The name stays unique among the vaults of the same owner, which on the
+/// server means every vault that account created; the check runs against the
+/// vault's owner, not the author, because an editor may rename too.
+fn rename_vault(tx: &Transaction<'_>, env: &CommandEnvelope, name: &str) -> Result<()> {
+    let owner = vault_owner(tx, env.vault_id)?;
+    let name = normalize_name(name, "vault")?;
+    let taken: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM vaults
+         WHERE owner_user_id = ?1 AND lower(name) = lower(?2) AND id <> ?3)",
+        params![owner, name, env.vault_id],
+        |r| r.get(0),
+    )?;
+    if taken {
+        return Err(DomainError::AlreadyExists(name));
+    }
+    tx.execute(
+        "UPDATE vaults SET name = ?1 WHERE id = ?2",
+        params![name, env.vault_id],
+    )?;
+    Ok(())
+}
+
+/// Only the owner may delete. Deleting the vault row cascades to every
+/// projection table (`schema.sql`); the log is left alone on purpose, so the
+/// command reaches the server and the other members like any other, and so
+/// that a replay ends where this database is now.
+fn delete_vault(tx: &Transaction<'_>, env: &CommandEnvelope) -> Result<()> {
+    let owner = vault_owner(tx, env.vault_id)?;
+    if env.author != owner {
+        return Err(DomainError::Forbidden(format!(
+            "only the owner '{owner}' can delete the vault"
+        )));
+    }
+    tx.execute("DELETE FROM vaults WHERE id = ?1", params![env.vault_id])?;
+    Ok(())
 }
 
 fn create_wallet(
@@ -713,6 +752,17 @@ fn require_vault(tx: &Transaction<'_>, vault_id: Uuid) -> Result<()> {
     } else {
         Err(DomainError::NotFound("vault".to_string()))
     }
+}
+
+/// The `owner_user_id` of a vault: the author of its `CreateVault`.
+fn vault_owner(tx: &Transaction<'_>, vault_id: Uuid) -> Result<String> {
+    tx.query_row(
+        "SELECT owner_user_id FROM vaults WHERE id = ?1",
+        params![vault_id],
+        |r| r.get(0),
+    )
+    .optional()?
+    .ok_or_else(|| DomainError::NotFound("vault".to_string()))
 }
 
 fn name_taken(tx: &Transaction<'_>, table: &str, vault_id: Uuid, name: &str) -> Result<bool> {

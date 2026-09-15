@@ -135,6 +135,12 @@ impl CoreHandle {
         self.lock()?.vault(vault_id)
     }
 
+    /// Vaults a `DeleteVault` removed whose log is still here: their outbox
+    /// has to be pushed like any other, the deletion first of all.
+    pub fn deleted_vaults(&self) -> Result<Vec<Uuid>, DomainError> {
+        self.lock()?.deleted_vaults()
+    }
+
     /// Wallets and flows of a vault with their balances.
     pub fn snapshot(&self, vault_id: Uuid) -> Result<VaultSnapshot, DomainError> {
         self.lock()?.snapshot(vault_id)

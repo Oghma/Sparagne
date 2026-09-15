@@ -623,6 +623,12 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func commandsSince(vaultId: Uuid, sinceSeq: Int64) throws  -> [CommandRecord]
     
     /**
+     * Vaults a `DeleteVault` removed whose log is still here: their outbox
+     * has to be pushed like any other, the deletion first of all.
+     */
+    func deletedVaults() throws  -> [Uuid]
+    
+    /**
      * Forgets one rejected command.
      */
     func dismissRejected(vaultId: Uuid, commandId: Uuid) throws 
@@ -931,6 +937,19 @@ open func commandsSince(vaultId: Uuid, sinceSeq: Int64)throws  -> [CommandRecord
             self.uniffiCloneHandle(),
         FfiConverterTypeUuid_lower(vaultId),
         FfiConverterInt64.lower(sinceSeq),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Vaults a `DeleteVault` removed whose log is still here: their outbox
+     * has to be pushed like any other, the deletion first of all.
+     */
+open func deletedVaults()throws  -> [Uuid]  {
+    return try  FfiConverterSequenceTypeUuid.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_deleted_vaults(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -4106,6 +4125,20 @@ public enum Command: Equatable, Hashable, Codable {
     case createVault(name: String, currency: Currency
     )
     /**
+     * The name must stay unique among the vaults of the same owner. The
+     * currency never changes: every amount in the log is in it.
+     */
+    case renameVault(name: String
+    )
+    /**
+     * Drops the vault with everything in it: wallets, flows, categories,
+     * transactions, recurring templates. The log stays, so the deletion
+     * replicates like any other command and a member's pull applies it.
+     * Only the owner (the author of `CreateVault`) may send it; every later
+     * command on the vault is refused with `not_found`.
+     */
+    case deleteVault
+    /**
      * Non-zero `opening_balance` creates an opening transaction on
      * Unallocated with the system category `opening`.
      */
@@ -4264,88 +4297,93 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         case 1: return .createVault(name: try FfiConverterString.read(from: &buf), currency: try FfiConverterTypeCurrency.read(from: &buf)
         )
         
-        case 2: return .createWallet(name: try FfiConverterString.read(from: &buf), openingBalance: try FfiConverterInt64.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
+        case 2: return .renameVault(name: try FfiConverterString.read(from: &buf)
         )
         
-        case 3: return .renameWallet(walletId: try FfiConverterTypeUuid.read(from: &buf), name: try FfiConverterString.read(from: &buf)
+        case 3: return .deleteVault
+        
+        case 4: return .createWallet(name: try FfiConverterString.read(from: &buf), openingBalance: try FfiConverterInt64.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
         )
         
-        case 4: return .archiveWallet(walletId: try FfiConverterTypeUuid.read(from: &buf)
+        case 5: return .renameWallet(walletId: try FfiConverterTypeUuid.read(from: &buf), name: try FfiConverterString.read(from: &buf)
         )
         
-        case 5: return .restoreWallet(walletId: try FfiConverterTypeUuid.read(from: &buf)
+        case 6: return .archiveWallet(walletId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 6: return .createFlow(name: try FfiConverterString.read(from: &buf), mode: try FfiConverterTypeFlowMode.read(from: &buf), allowNegative: try FfiConverterBool.read(from: &buf), openingAllocation: try FfiConverterInt64.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
+        case 7: return .restoreWallet(walletId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 7: return .updateFlow(flowId: try FfiConverterTypeUuid.read(from: &buf), name: try FfiConverterOptionString.read(from: &buf), mode: try FfiConverterOptionTypeFlowMode.read(from: &buf), allowNegative: try FfiConverterOptionBool.read(from: &buf)
+        case 8: return .createFlow(name: try FfiConverterString.read(from: &buf), mode: try FfiConverterTypeFlowMode.read(from: &buf), allowNegative: try FfiConverterBool.read(from: &buf), openingAllocation: try FfiConverterInt64.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
         )
         
-        case 8: return .archiveFlow(flowId: try FfiConverterTypeUuid.read(from: &buf)
+        case 9: return .updateFlow(flowId: try FfiConverterTypeUuid.read(from: &buf), name: try FfiConverterOptionString.read(from: &buf), mode: try FfiConverterOptionTypeFlowMode.read(from: &buf), allowNegative: try FfiConverterOptionBool.read(from: &buf)
         )
         
-        case 9: return .restoreFlow(flowId: try FfiConverterTypeUuid.read(from: &buf)
+        case 10: return .archiveFlow(flowId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 10: return .createCategory(name: try FfiConverterString.read(from: &buf)
+        case 11: return .restoreFlow(flowId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 11: return .renameCategory(categoryId: try FfiConverterTypeUuid.read(from: &buf), name: try FfiConverterString.read(from: &buf)
+        case 12: return .createCategory(name: try FfiConverterString.read(from: &buf)
         )
         
-        case 12: return .archiveCategory(categoryId: try FfiConverterTypeUuid.read(from: &buf)
+        case 13: return .renameCategory(categoryId: try FfiConverterTypeUuid.read(from: &buf), name: try FfiConverterString.read(from: &buf)
         )
         
-        case 13: return .restoreCategory(categoryId: try FfiConverterTypeUuid.read(from: &buf)
+        case 14: return .archiveCategory(categoryId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 14: return .addAlias(categoryId: try FfiConverterTypeUuid.read(from: &buf), alias: try FfiConverterString.read(from: &buf)
+        case 15: return .restoreCategory(categoryId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 15: return .removeAlias(categoryId: try FfiConverterTypeUuid.read(from: &buf), alias: try FfiConverterString.read(from: &buf)
+        case 16: return .addAlias(categoryId: try FfiConverterTypeUuid.read(from: &buf), alias: try FfiConverterString.read(from: &buf)
         )
         
-        case 16: return .mergeCategory(sourceId: try FfiConverterTypeUuid.read(from: &buf), targetId: try FfiConverterTypeUuid.read(from: &buf)
+        case 17: return .removeAlias(categoryId: try FfiConverterTypeUuid.read(from: &buf), alias: try FfiConverterString.read(from: &buf)
         )
         
-        case 17: return .income(try FfiConverterTypeEntry.read(from: &buf)
+        case 18: return .mergeCategory(sourceId: try FfiConverterTypeUuid.read(from: &buf), targetId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 18: return .expense(try FfiConverterTypeEntry.read(from: &buf)
+        case 19: return .income(try FfiConverterTypeEntry.read(from: &buf)
         )
         
-        case 19: return .refund(try FfiConverterTypeEntry.read(from: &buf)
+        case 20: return .expense(try FfiConverterTypeEntry.read(from: &buf)
         )
         
-        case 20: return .transferWallet(amount: try FfiConverterInt64.read(from: &buf), fromWalletId: try FfiConverterTypeUuid.read(from: &buf), toWalletId: try FfiConverterTypeUuid.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
+        case 21: return .refund(try FfiConverterTypeEntry.read(from: &buf)
         )
         
-        case 21: return .transferFlow(amount: try FfiConverterInt64.read(from: &buf), fromFlowId: try FfiConverterTypeUuid.read(from: &buf), toFlowId: try FfiConverterTypeUuid.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
+        case 22: return .transferWallet(amount: try FfiConverterInt64.read(from: &buf), fromWalletId: try FfiConverterTypeUuid.read(from: &buf), toWalletId: try FfiConverterTypeUuid.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
         )
         
-        case 22: return .updateTransaction(transactionId: try FfiConverterTypeUuid.read(from: &buf), patch: try FfiConverterTypeTransactionPatch.read(from: &buf)
+        case 23: return .transferFlow(amount: try FfiConverterInt64.read(from: &buf), fromFlowId: try FfiConverterTypeUuid.read(from: &buf), toFlowId: try FfiConverterTypeUuid.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
         )
         
-        case 23: return .voidTransaction(transactionId: try FfiConverterTypeUuid.read(from: &buf)
+        case 24: return .updateTransaction(transactionId: try FfiConverterTypeUuid.read(from: &buf), patch: try FfiConverterTypeTransactionPatch.read(from: &buf)
         )
         
-        case 24: return .createRecurring(transactionKind: try FfiConverterTypeTransactionKind.read(from: &buf), amount: try FfiConverterInt64.read(from: &buf), walletId: try FfiConverterOptionTypeUuid.read(from: &buf), flowId: try FfiConverterOptionTypeUuid.read(from: &buf), category: try FfiConverterOptionString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), schedule: try FfiConverterTypeSchedule.read(from: &buf)
+        case 25: return .voidTransaction(transactionId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 25: return .updateRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), patch: try FfiConverterTypeRecurringPatch.read(from: &buf)
+        case 26: return .createRecurring(transactionKind: try FfiConverterTypeTransactionKind.read(from: &buf), amount: try FfiConverterInt64.read(from: &buf), walletId: try FfiConverterOptionTypeUuid.read(from: &buf), flowId: try FfiConverterOptionTypeUuid.read(from: &buf), category: try FfiConverterOptionString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), schedule: try FfiConverterTypeSchedule.read(from: &buf)
         )
         
-        case 26: return .archiveRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf)
+        case 27: return .updateRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), patch: try FfiConverterTypeRecurringPatch.read(from: &buf)
         )
         
-        case 27: return .restoreRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf)
+        case 28: return .archiveRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 28: return .executeRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
+        case 29: return .restoreRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 29: return .skipRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
+        case 30: return .executeRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
+        )
+        
+        case 31: return .skipRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -4362,31 +4400,40 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             FfiConverterTypeCurrency.write(currency, into: &buf)
             
         
-        case let .createWallet(name,openingBalance,occurredAt):
+        case let .renameVault(name):
             writeInt(&buf, Int32(2))
+            FfiConverterString.write(name, into: &buf)
+            
+        
+        case .deleteVault:
+            writeInt(&buf, Int32(3))
+        
+        
+        case let .createWallet(name,openingBalance,occurredAt):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(name, into: &buf)
             FfiConverterInt64.write(openingBalance, into: &buf)
             FfiConverterTypeOffsetDateTime.write(occurredAt, into: &buf)
             
         
         case let .renameWallet(walletId,name):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeUuid.write(walletId, into: &buf)
             FfiConverterString.write(name, into: &buf)
             
         
         case let .archiveWallet(walletId):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeUuid.write(walletId, into: &buf)
             
         
         case let .restoreWallet(walletId):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeUuid.write(walletId, into: &buf)
             
         
         case let .createFlow(name,mode,allowNegative,openingAllocation,occurredAt):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(name, into: &buf)
             FfiConverterTypeFlowMode.write(mode, into: &buf)
             FfiConverterBool.write(allowNegative, into: &buf)
@@ -4395,7 +4442,7 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             
         
         case let .updateFlow(flowId,name,mode,allowNegative):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeUuid.write(flowId, into: &buf)
             FfiConverterOptionString.write(name, into: &buf)
             FfiConverterOptionTypeFlowMode.write(mode, into: &buf)
@@ -4403,71 +4450,71 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             
         
         case let .archiveFlow(flowId):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeUuid.write(flowId, into: &buf)
             
         
         case let .restoreFlow(flowId):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeUuid.write(flowId, into: &buf)
             
         
         case let .createCategory(name):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(12))
             FfiConverterString.write(name, into: &buf)
             
         
         case let .renameCategory(categoryId,name):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeUuid.write(categoryId, into: &buf)
             FfiConverterString.write(name, into: &buf)
             
         
         case let .archiveCategory(categoryId):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeUuid.write(categoryId, into: &buf)
             
         
         case let .restoreCategory(categoryId):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(15))
             FfiConverterTypeUuid.write(categoryId, into: &buf)
             
         
         case let .addAlias(categoryId,alias):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeUuid.write(categoryId, into: &buf)
             FfiConverterString.write(alias, into: &buf)
             
         
         case let .removeAlias(categoryId,alias):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(17))
             FfiConverterTypeUuid.write(categoryId, into: &buf)
             FfiConverterString.write(alias, into: &buf)
             
         
         case let .mergeCategory(sourceId,targetId):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(18))
             FfiConverterTypeUuid.write(sourceId, into: &buf)
             FfiConverterTypeUuid.write(targetId, into: &buf)
             
         
         case let .income(v1):
-            writeInt(&buf, Int32(17))
-            FfiConverterTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .expense(v1):
-            writeInt(&buf, Int32(18))
-            FfiConverterTypeEntry.write(v1, into: &buf)
-            
-        
-        case let .refund(v1):
             writeInt(&buf, Int32(19))
             FfiConverterTypeEntry.write(v1, into: &buf)
             
         
-        case let .transferWallet(amount,fromWalletId,toWalletId,note,occurredAt):
+        case let .expense(v1):
             writeInt(&buf, Int32(20))
+            FfiConverterTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .refund(v1):
+            writeInt(&buf, Int32(21))
+            FfiConverterTypeEntry.write(v1, into: &buf)
+            
+        
+        case let .transferWallet(amount,fromWalletId,toWalletId,note,occurredAt):
+            writeInt(&buf, Int32(22))
             FfiConverterInt64.write(amount, into: &buf)
             FfiConverterTypeUuid.write(fromWalletId, into: &buf)
             FfiConverterTypeUuid.write(toWalletId, into: &buf)
@@ -4476,7 +4523,7 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             
         
         case let .transferFlow(amount,fromFlowId,toFlowId,note,occurredAt):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(23))
             FfiConverterInt64.write(amount, into: &buf)
             FfiConverterTypeUuid.write(fromFlowId, into: &buf)
             FfiConverterTypeUuid.write(toFlowId, into: &buf)
@@ -4485,18 +4532,18 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             
         
         case let .updateTransaction(transactionId,patch):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(24))
             FfiConverterTypeUuid.write(transactionId, into: &buf)
             FfiConverterTypeTransactionPatch.write(patch, into: &buf)
             
         
         case let .voidTransaction(transactionId):
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(25))
             FfiConverterTypeUuid.write(transactionId, into: &buf)
             
         
         case let .createRecurring(transactionKind,amount,walletId,flowId,category,note,schedule):
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(26))
             FfiConverterTypeTransactionKind.write(transactionKind, into: &buf)
             FfiConverterInt64.write(amount, into: &buf)
             FfiConverterOptionTypeUuid.write(walletId, into: &buf)
@@ -4507,30 +4554,30 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             
         
         case let .updateRecurring(recurringId,patch):
-            writeInt(&buf, Int32(25))
+            writeInt(&buf, Int32(27))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             FfiConverterTypeRecurringPatch.write(patch, into: &buf)
             
         
         case let .archiveRecurring(recurringId):
-            writeInt(&buf, Int32(26))
+            writeInt(&buf, Int32(28))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             
         
         case let .restoreRecurring(recurringId):
-            writeInt(&buf, Int32(27))
+            writeInt(&buf, Int32(29))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             
         
         case let .executeRecurring(recurringId,periodDate,occurredAt):
-            writeInt(&buf, Int32(28))
+            writeInt(&buf, Int32(30))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
             FfiConverterTypeOffsetDateTime.write(occurredAt, into: &buf)
             
         
         case let .skipRecurring(recurringId,periodDate):
-            writeInt(&buf, Int32(29))
+            writeInt(&buf, Int32(31))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
             
@@ -4754,6 +4801,12 @@ enum DomainError: Swift.Error, Equatable, Hashable, Codable, Foundation.Localize
     
     case InvalidCursor(message: String)
     
+    /**
+     * The author may not do this: a command reserved to the vault's owner
+     * sent by someone else. Same code the server uses for HTTP 403.
+     */
+    case Forbidden(message: String)
+    
     case Storage(message: String)
     
 
@@ -4825,7 +4878,11 @@ public struct FfiConverterTypeDomainError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 11: return .Storage(
+        case 11: return .Forbidden(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 12: return .Storage(
             message: try FfiConverterString.read(from: &buf)
         )
         
@@ -4860,8 +4917,10 @@ public struct FfiConverterTypeDomainError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(9))
         case .InvalidCursor(_ /* message is ignored*/):
             writeInt(&buf, Int32(10))
-        case .Storage(_ /* message is ignored*/):
+        case .Forbidden(_ /* message is ignored*/):
             writeInt(&buf, Int32(11))
+        case .Storage(_ /* message is ignored*/):
+            writeInt(&buf, Int32(12))
 
         
         }
@@ -6848,6 +6907,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_commands_since() != 55432) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_deleted_vaults() != 28486) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_dismiss_rejected() != 48987) {

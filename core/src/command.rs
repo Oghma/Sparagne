@@ -76,6 +76,17 @@ pub enum Command {
         name: String,
         currency: Currency,
     },
+    /// The name must stay unique among the vaults of the same owner. The
+    /// currency never changes: every amount in the log is in it.
+    RenameVault {
+        name: String,
+    },
+    /// Drops the vault with everything in it: wallets, flows, categories,
+    /// transactions, recurring templates. The log stays, so the deletion
+    /// replicates like any other command and a member's pull applies it.
+    /// Only the owner (the author of `CreateVault`) may send it; every later
+    /// command on the vault is refused with `not_found`.
+    DeleteVault,
 
     // -- Wallet -------------------------------------------------------------
     /// Non-zero `opening_balance` creates an opening transaction on
@@ -333,6 +344,8 @@ impl Command {
     pub const fn kind_name(&self) -> &'static str {
         match self {
             Self::CreateVault { .. } => "create_vault",
+            Self::RenameVault { .. } => "rename_vault",
+            Self::DeleteVault => "delete_vault",
             Self::CreateWallet { .. } => "create_wallet",
             Self::RenameWallet { .. } => "rename_wallet",
             Self::ArchiveWallet { .. } => "archive_wallet",
@@ -376,6 +389,8 @@ impl Command {
             Self::Income(e) | Self::Expense(e) | Self::Refund(e) => Some(e.occurred_at),
             Self::UpdateTransaction { patch, .. } => patch.occurred_at,
             Self::CreateVault { .. }
+            | Self::RenameVault { .. }
+            | Self::DeleteVault
             | Self::RenameWallet { .. }
             | Self::ArchiveWallet { .. }
             | Self::RestoreWallet { .. }

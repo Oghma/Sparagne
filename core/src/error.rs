@@ -29,6 +29,10 @@ pub enum DomainError {
     InvalidCommand(String),
     #[error("invalid cursor: {0}")]
     InvalidCursor(String),
+    /// The author may not do this: a command reserved to the vault's owner
+    /// sent by someone else. Same code the server uses for HTTP 403.
+    #[error("forbidden: {0}")]
+    Forbidden(String),
     #[error("storage error: {0}")]
     Storage(String),
 }
@@ -48,6 +52,7 @@ impl DomainError {
             Self::CurrencyMismatch(_) => "currency_mismatch",
             Self::InvalidCommand(_) => "invalid_command",
             Self::InvalidCursor(_) => "invalid_cursor",
+            Self::Forbidden(_) => "forbidden",
             Self::Storage(_) => "storage_error",
         }
     }

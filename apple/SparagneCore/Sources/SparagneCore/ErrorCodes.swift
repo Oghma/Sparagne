@@ -25,6 +25,7 @@ extension DomainError {
         case .CurrencyMismatch: "currency_mismatch"
         case .InvalidCommand: "invalid_command"
         case .InvalidCursor: "invalid_cursor"
+        case .Forbidden: "forbidden"
         case .Storage: "storage_error"
         }
     }
@@ -42,6 +43,7 @@ extension DomainError {
             .CurrencyMismatch(let message),
             .InvalidCommand(let message),
             .InvalidCursor(let message),
+            .Forbidden(let message),
             .Storage(let message):
             message
         }

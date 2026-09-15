@@ -986,3 +986,197 @@ fn the_server_reads_one_vault_and_every_last_seq_at_once() {
     seqs.sort_by_key(|(_, seq)| *seq);
     assert_eq!(seqs, vec![(other, 1), (vault, 3)]);
 }
+
+// ---------------------------------------------------------------------------
+// Vault deletion and renaming across members
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_deleted_vault_still_pushes_and_the_server_forgets_it() {
+    let Shared {
+        mut server,
+        mut alice,
+        vault,
+        ..
+    } = shared();
+
+    exec(&mut alice, vault, "alice", Command::DeleteVault);
+    assert!(alice.vaults().unwrap().is_empty());
+    assert_eq!(alice.deleted_vaults().unwrap(), vec![vault]);
+    assert_eq!(alice.sync_state(vault).unwrap().outbox, 1);
+    // The push body is built from the log, which the deletion left intact.
+    assert_eq!(alice.push_request(vault, ALL).unwrap().commands.len(), 1);
+
+    let (pushed, pulled) = sync(&mut alice, &mut server, vault);
+    assert_eq!(pushed.confirmed, 1);
+    assert!(pushed.rejected.is_empty());
+    assert!(!pulled.has_more);
+    assert_eq!(alice.sync_state(vault).unwrap().outbox, 0);
+    assert_eq!(alice.sync_state(vault).unwrap().last_server_seq, 4);
+
+    // The server applied the same command with the same outcome.
+    assert_eq!(server.core.vault(vault).unwrap(), None);
+    assert_eq!(server.core.last_seq(vault).unwrap(), 4);
+    assert_eq!(server.core.deleted_vaults().unwrap(), vec![vault]);
+    // And refuses whatever comes after.
+    let late = server.push(
+        vault,
+        PushRequest {
+            commands: vec![CommandEnvelope::new(vault, "alice", wallet_cmd("Late", 0))],
+        },
+    );
+    assert!(matches!(
+        &late.results[0].outcome,
+        PushOutcome::Rejected { code, .. } if code == "not_found"
+    ));
+}
+
+#[test]
+fn the_owners_deletion_reaches_a_member_through_the_pull() {
+    let Shared {
+        mut server,
+        mut alice,
+        vault,
+        wallet,
+        vacanze,
+    } = shared();
+    let mut bob = join(&server, vault);
+
+    // bob writes while alice deletes: his expense is a legitimate command
+    // against the vault as he knows it.
+    let doomed = exec(
+        &mut bob,
+        vault,
+        "bob",
+        spend(1_000, wallet, vacanze, "gelato", T0 + 60),
+    );
+    exec(&mut alice, vault, "alice", Command::DeleteVault);
+    sync(&mut alice, &mut server, vault);
+
+    let (pushed, pulled) = sync(&mut bob, &mut server, vault);
+    // The push meets a vault that no longer exists...
+    assert_eq!(pushed.rejected.len(), 1);
+    assert_eq!(pushed.rejected[0].command_id, doomed);
+    assert_eq!(pushed.rejected[0].code, "not_found");
+    assert!(pushed.rebased);
+    // ...and the pull brings the reason: the projection is rebuilt without
+    // the vault, exactly as on the server.
+    assert_eq!(pulled.received, 1);
+    assert!(pulled.rebased);
+    assert_eq!(bob.vault(vault).unwrap(), None);
+    assert!(bob.vaults().unwrap().is_empty());
+    assert_eq!(bob.deleted_vaults().unwrap(), vec![vault]);
+    let state = bob.sync_state(vault).unwrap();
+    assert_eq!(state.outbox, 0);
+    assert_eq!(state.last_server_seq, 4);
+    // The refused expense is still there for bob to read, even without a
+    // vault to show it under.
+    assert_eq!(state.rejected, 1);
+    let rejected = bob.rejected_commands(vault).unwrap();
+    assert_eq!(rejected.len(), 1);
+    assert_eq!(rejected[0].command_id, doomed);
+    assert_eq!(rejected[0].code, "not_found");
+    bob.dismiss_rejected(vault, doomed).unwrap();
+    assert_eq!(bob.sync_state(vault).unwrap().rejected, 0);
+}
+
+#[test]
+fn a_rename_reaches_the_members_and_a_clash_comes_back_refused() {
+    let Shared {
+        mut server,
+        mut alice,
+        vault,
+        ..
+    } = shared();
+    let mut bob = join(&server, vault);
+
+    exec(
+        &mut alice,
+        vault,
+        "alice",
+        Command::RenameVault {
+            name: "Casa nuova".to_string(),
+        },
+    );
+    sync(&mut alice, &mut server, vault);
+    sync(&mut bob, &mut server, vault);
+    assert_eq!(bob.vault(vault).unwrap().unwrap().name, "Casa nuova");
+    assert_eq!(
+        server.core.vault(vault).unwrap().unwrap().name,
+        "Casa nuova"
+    );
+
+    // alice owns a second vault the server knows and bob does not: bob's
+    // rename to that name applies on his machine and is refused by the
+    // server, which runs the same rule against every vault of the owner.
+    let ufficio = server
+        .core
+        .execute(CommandEnvelope::create_vault(
+            "alice",
+            "Ufficio",
+            Currency::Eur,
+        ))
+        .unwrap()
+        .result_id
+        .unwrap();
+    assert_ne!(ufficio, vault);
+    // A rename creates nothing, so its receipt carries no id: keep the
+    // envelope's own.
+    let envelope = CommandEnvelope::new(
+        vault,
+        "bob",
+        Command::RenameVault {
+            name: "ufficio".to_string(),
+        },
+    );
+    let clash = envelope.id;
+    bob.execute(envelope).unwrap();
+    assert_eq!(bob.vault(vault).unwrap().unwrap().name, "ufficio");
+    let (pushed, _) = sync(&mut bob, &mut server, vault);
+    assert_eq!(pushed.rejected.len(), 1);
+    assert_eq!(pushed.rejected[0].command_id, clash);
+    assert_eq!(pushed.rejected[0].code, "already_exists");
+    // The rebuild put the server's name back.
+    assert_eq!(bob.vault(vault).unwrap().unwrap().name, "Casa nuova");
+    assert_eq!(projection(&bob, vault), projection(&server.core, vault));
+}
+
+#[test]
+fn relabelling_covers_a_deleted_vault_too() {
+    // Offline, "oghma" creates a vault and deletes it; then logs in as alice.
+    // The dead log must be re-signed like a live one, or the push would be
+    // refused with `author_mismatch` for ever.
+    let mut core = Core::open_in_memory().unwrap();
+    let vault = core
+        .execute(CommandEnvelope::create_vault(
+            "oghma",
+            "Vecchio",
+            Currency::Eur,
+        ))
+        .unwrap()
+        .result_id
+        .unwrap();
+    exec(&mut core, vault, "oghma", wallet_cmd("Cash", 1_000));
+    exec(&mut core, vault, "oghma", Command::DeleteVault);
+    assert!(core.vaults().unwrap().is_empty());
+
+    core.relabel_outbox(vault, "alice").unwrap();
+
+    let outbox = core.outbox(vault).unwrap();
+    assert_eq!(outbox.len(), 3);
+    assert!(
+        outbox
+            .iter()
+            .all(|record| record.envelope.author == "alice")
+    );
+    // Relabelling replays the log, and the replay ends where it started:
+    // the owner is now alice, so her deletion still applies.
+    assert_eq!(core.vault(vault).unwrap(), None);
+    assert_eq!(core.deleted_vaults().unwrap(), vec![vault]);
+    assert_eq!(core.sync_state(vault).unwrap().rejected, 0);
+
+    let mut server = FakeServer::new();
+    let (pushed, _) = sync(&mut core, &mut server, vault);
+    assert_eq!(pushed.confirmed, 3);
+    assert_eq!(server.core.vault(vault).unwrap(), None);
+}
