@@ -20,14 +20,27 @@ struct SyncRequest: Sendable, Equatable {
     }
 }
 
-/// The status line and the bytes; the API layer decides what they mean.
+/// The status line, the headers and the bytes; the API layer decides what
+/// they mean.
 struct SyncResponse: Sendable, Equatable {
     var status: Int
     var body: Data
+    /// Header names are case-insensitive in HTTP, so they are kept
+    /// lowercased and looked up through `header(_:)`. The protocol reads one:
+    /// `Retry-After` on a `429` (`docs/v2/SYNC.md` §3).
+    private(set) var headers: [String: String]
 
-    init(status: Int, body: Data = Data()) {
+    init(status: Int, body: Data = Data(), headers: [String: String] = [:]) {
         self.status = status
         self.body = body
+        self.headers = Dictionary(
+            headers.map { ($0.key.lowercased(), $0.value) },
+            uniquingKeysWith: { _, last in last }
+        )
+    }
+
+    func header(_ name: String) -> String? {
+        headers[name.lowercased()]
     }
 }
 
@@ -72,7 +85,11 @@ struct URLSessionTransport: SyncTransport {
             guard let http = response as? HTTPURLResponse else {
                 throw ServerError.offline(detail: url.absoluteString)
             }
-            return SyncResponse(status: http.statusCode, body: data)
+            var headers: [String: String] = [:]
+            for case let (name as String, value) in http.allHeaderFields {
+                headers[name] = "\(value)"
+            }
+            return SyncResponse(status: http.statusCode, body: data, headers: headers)
         } catch let error as ServerError {
             throw error
         } catch {

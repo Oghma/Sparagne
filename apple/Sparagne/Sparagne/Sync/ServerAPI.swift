@@ -11,6 +11,16 @@ struct ServerError: Error, Equatable, Sendable {
     let status: Int
     let code: String
     let message: String
+    /// Seconds the server asked to wait, from the `Retry-After` of a `429`
+    /// (login and register limits, `docs/v2/SYNC.md` §3).
+    let retryAfter: Int?
+
+    init(status: Int, code: String, message: String, retryAfter: Int? = nil) {
+        self.status = status
+        self.code = code
+        self.message = message
+        self.retryAfter = retryAfter
+    }
 
     static let offline = ServerError(status: 0, code: "offline", message: "")
 
@@ -23,9 +33,27 @@ struct ServerError: Error, Equatable, Sendable {
 
     var isOffline: Bool { code == "offline" }
     var isUnauthorized: Bool { status == 401 }
+    /// A `403 forbidden`: the role does not allow it. `author_mismatch` is a
+    /// 403 too, but it means the outbox was not relabelled, not a role.
+    var isForbidden: Bool { status == 403 && code == "forbidden" }
+    var isNotFound: Bool { status == 404 }
+    var isRateLimited: Bool { status == 429 || code == "too_many_requests" }
+
+    /// Nothing more in the round can succeed: the network is gone, or the
+    /// server stopped accepting the token.
+    var endsRound: Bool { isOffline || isUnauthorized }
 
     /// The headline for the alert; `message` stays as the detail line.
-    var summary: String { ErrorMessages.summary(for: code) }
+    var summary: String {
+        isRateLimited ? ErrorMessages.tooManyAttempts(retryAfter: retryAfter) : ErrorMessages.summary(for: code)
+    }
+
+    /// The server's own English words, when they add something to the
+    /// headline: a rate limit's "retry in N seconds" does not.
+    var detail: String? {
+        guard !message.isEmpty, !isRateLimited, message != code else { return nil }
+        return message
+    }
 }
 
 /// Who may do what with a vault (`vault_memberships.role`).
@@ -84,6 +112,11 @@ private struct Credentials: Codable, Sendable {
     let password: String
 }
 
+private struct PasswordChange: Codable, Sendable {
+    let currentPassword: String
+    let newPassword: String
+}
+
 private struct MeResponse: Codable, Sendable {
     let username: String
 }
@@ -137,6 +170,20 @@ struct ServerAPI: Sendable {
 
     func logout(token: String) async throws {
         _ = try await call(SyncRequest(method: "POST", path: "/auth/logout", bearer: token))
+    }
+
+    /// `POST /auth/password`. The token that asks stays valid; every other
+    /// token of the account is revoked. A wrong current password is a `401`
+    /// that counts as a failed login.
+    func changePassword(token: String, currentPassword: String, newPassword: String) async throws {
+        _ = try await call(
+            SyncRequest(
+                method: "POST",
+                path: "/auth/password",
+                bearer: token,
+                body: try encode(PasswordChange(currentPassword: currentPassword, newPassword: newPassword))
+            )
+        )
     }
 
     func me(token: String) async throws -> String {
@@ -196,6 +243,8 @@ struct ServerAPI: Sendable {
         )
     }
 
+    /// The owner removing a member, or a member removing themself: leaving
+    /// the vault (`docs/v2/SYNC.md` §3).
     func removeMember(token: String, vaultId: Uuid, username: String) async throws {
         _ = try await call(
             SyncRequest(
@@ -217,18 +266,29 @@ struct ServerAPI: Sendable {
     }
 
     private static func error(from response: SyncResponse) -> ServerError {
+        let retryAfter = retryAfter(response.header("Retry-After"))
         if let body = try? JSONDecoder().decode(ErrorBody.self, from: response.body) {
             return ServerError(
                 status: response.status,
                 code: body.error.code,
-                message: body.error.message
+                message: body.error.message,
+                retryAfter: retryAfter
             )
         }
         return ServerError(
             status: response.status,
             code: fallbackCode(for: response.status),
-            message: String(decoding: response.body, as: UTF8.self)
+            message: String(decoding: response.body, as: UTF8.self),
+            retryAfter: retryAfter
         )
+    }
+
+    /// `Retry-After` in seconds, the only form the server sends; an HTTP
+    /// date or anything else reads as "no hint".
+    private static func retryAfter(_ value: String?) -> Int? {
+        guard let value, let seconds = Int(value.trimmingCharacters(in: .whitespaces)), seconds >= 0
+        else { return nil }
+        return seconds
     }
 
     /// What a body without an `ErrorBody` means, by status
@@ -240,6 +300,7 @@ struct ServerAPI: Sendable {
         case 403: "forbidden"
         case 404: "not_found"
         case 409: "already_exists"
+        case 429: "too_many_requests"
         default: "server_error"
         }
     }

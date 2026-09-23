@@ -38,7 +38,11 @@ enum ErrorMessages {
         // Server-side codes (`docs/v2/SYNC.md` §3) plus the two the transport
         // itself raises, `offline` and `invalid_server_url`.
         case "offline": String(localized: "The server is unreachable")
-        case "unauthorized": String(localized: "Wrong username or password")
+        // A 401 on a request that carried a token: the token expired or was
+        // revoked (a password change elsewhere). A 401 on the login itself
+        // reads `wrongCredentials` instead.
+        case "unauthorized": sessionExpired
+        case "too_many_requests": String(localized: "Too many attempts. Try again later.")
         case "forbidden": String(localized: "You are not allowed to do that")
         case "author_mismatch": String(localized: "Those changes belong to another account")
         case "registration_disabled": String(localized: "This server is not accepting new accounts")
@@ -48,5 +52,21 @@ enum ErrorMessages {
         case "server_error": String(localized: "The server had a problem")
         default: String(localized: "Something went wrong")
         }
+    }
+
+    /// The status once the server stopped accepting the session's token.
+    static var sessionExpired: String { String(localized: "Session expired — log in again") }
+
+    /// A `401` from `POST /auth/login`: the server answers the same for an
+    /// unknown user and a wrong password, and so does the app.
+    static var wrongCredentials: String { String(localized: "Wrong username or password") }
+
+    /// A `429` from the login or register limits. `Retry-After` is in
+    /// seconds; people think in minutes, rounded up so "try again" is never
+    /// too early.
+    static func tooManyAttempts(retryAfter seconds: Int?) -> String {
+        guard let seconds, seconds > 0 else { return summary(for: "too_many_requests") }
+        let minutes = (seconds + 59) / 60
+        return String(localized: "Too many attempts. Try again in \(minutes) minutes.")
     }
 }
