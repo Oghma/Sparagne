@@ -20,12 +20,14 @@ use chrono::{DateTime, FixedOffset, NaiveDate, SecondsFormat, Utc};
 use uuid::Uuid;
 
 use crate::{
-    AliasView, BucketPersonTotals, CategoryTotals, CategoryView, Command, CommandEnvelope,
-    CommandRecord, Core, Currency, DomainError, FlowPersonTotals, MergePreview, Money, Page,
-    PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView, RecurringView,
-    RejectedCommand, SyncReport, SyncState, TopExpense, TransactionFilter, TransactionView,
-    VaultSnapshot, VaultView,
+    AliasView, BucketPersonTotals, CategorySuggestion, CategoryTotals, CategoryView, Command,
+    CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowPersonTotals, MergePreview,
+    Money, Page, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
+    RecurringView, RejectedCommand, StatementDetection, StatementMapping, StatementOptions,
+    StatementPreset, StatementPreview, StatementReport, StatementRowOverride, SyncReport,
+    SyncState, TopExpense, TransactionFilter, TransactionView, VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
+    statement,
 };
 
 // ---------------------------------------------------------------------------
@@ -125,6 +127,15 @@ impl CoreHandle {
         self.lock()?.execute(envelope)
     }
 
+    /// Applies several commands in one local transaction, all or none. Each
+    /// keeps its own log row and syncs on its own.
+    pub fn execute_batch(
+        &self,
+        envelopes: Vec<CommandEnvelope>,
+    ) -> Result<Vec<Receipt>, DomainError> {
+        self.lock()?.execute_batch(envelopes)
+    }
+
     /// Every vault in the database, ordered by name.
     pub fn vaults(&self) -> Result<Vec<VaultView>, DomainError> {
         self.lock()?.vaults()
@@ -207,6 +218,17 @@ impl CoreHandle {
         limit: u32,
     ) -> Result<RecentUsage, DomainError> {
         self.lock()?.recent_usage(vault_id, since, to_usize(limit))
+    }
+
+    /// The category each note was filed under before, one entry per note
+    /// (`nil` when the history says nothing), looking back to `since`.
+    pub fn suggest_categories(
+        &self,
+        vault_id: Uuid,
+        notes: Vec<String>,
+        since: UtcDateTime,
+    ) -> Result<Vec<Option<CategorySuggestion>>, DomainError> {
+        self.lock()?.suggest_categories(vault_id, &notes, since)
     }
 
     /// Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
@@ -391,6 +413,59 @@ impl CoreHandle {
         self.lock()?.dismiss_rejected(vault_id, command_id)
     }
 
+    /// Refuses the whole outbox locally, as if the server had: used when a
+    /// push comes back `403`, so the vault keeps pulling.
+    pub fn reject_outbox(
+        &self,
+        vault_id: Uuid,
+        code: String,
+        message: String,
+    ) -> Result<SyncReport, DomainError> {
+        self.lock()?.reject_outbox(vault_id, &code, &message)
+    }
+
+    // -- Maintenance ----------------------------------------------------------
+
+    /// Writes a consistent copy of the database to `path`, which must not
+    /// exist yet.
+    pub fn backup_to(&self, path: String) -> Result<(), DomainError> {
+        self.lock()?.backup_to(std::path::Path::new(&path))
+    }
+
+    /// Drops a vault from this device without telling the server. Returns
+    /// how many outbox commands were thrown away.
+    pub fn forget_vault(&self, vault_id: Uuid) -> Result<u32, DomainError> {
+        self.lock()?.forget_vault(vault_id)
+    }
+
+    // -- Statement import -------------------------------------------------
+
+    /// What importing a statement would do, row by row. Writes nothing.
+    pub fn preview_statement(
+        &self,
+        vault_id: Uuid,
+        text: String,
+        mapping: StatementMapping,
+        options: StatementOptions,
+    ) -> Result<StatementPreview, DomainError> {
+        self.lock()?
+            .preview_statement(vault_id, &text, &mapping, &options)
+    }
+
+    /// Imports a statement, one command per row, with the user's overrides.
+    pub fn import_statement(
+        &self,
+        vault_id: Uuid,
+        author: String,
+        text: String,
+        mapping: StatementMapping,
+        options: StatementOptions,
+        overrides: Vec<StatementRowOverride>,
+    ) -> Result<StatementReport, DomainError> {
+        self.lock()?
+            .import_statement(vault_id, &author, &text, &mapping, &options, &overrides)
+    }
+
     /// Resolves the wallet and flow names of a parsed quick-add line against
     /// the vault and returns the command to execute plus the ids the names
     /// resolved to.
@@ -454,6 +529,32 @@ pub fn resolve_date_spec(
     today: NaiveDate,
 ) -> Result<NaiveDate, QuickAddError> {
     spec.resolve(today)
+}
+
+/// The built-in statement presets.
+#[must_use]
+#[uniffi::export]
+pub fn statement_presets() -> Vec<StatementPreset> {
+    statement::presets()
+}
+
+/// Delimiter, header, matching preset and a sample of a statement file.
+#[uniffi::export]
+pub fn detect_statement(text: String) -> Result<StatementDetection, DomainError> {
+    statement::detect(&text)
+}
+
+/// A statement mapping as JSON, for the app to remember.
+#[must_use]
+#[uniffi::export]
+pub fn encode_statement_mapping(mapping: StatementMapping) -> String {
+    statement::encode_mapping(&mapping)
+}
+
+/// A statement mapping back from its JSON.
+#[uniffi::export]
+pub fn decode_statement_mapping(json: String) -> Result<StatementMapping, DomainError> {
+    statement::decode_mapping(&json)
 }
 
 /// Saturating `u32` -> `usize`; the core takes `usize` limits.

@@ -52,7 +52,7 @@ pub async fn list(
                     last_seq: seqs.get(&vault_id).copied().unwrap_or(0),
                 });
             }
-            out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            out.sort_by_cached_key(|v| v.name.to_lowercase());
             Ok(out)
         })
         .await?;

@@ -21,11 +21,14 @@ mod error;
 mod ffi;
 mod flow;
 pub mod import_v1;
+mod maintenance;
 mod money;
 mod query;
 pub mod quick_add;
 pub mod recurring;
+pub mod statement;
 mod store;
+mod suggest;
 pub mod sync;
 mod usage;
 
@@ -39,8 +42,9 @@ pub use currency::Currency;
 pub use engine::entities::{AliasView, MergeConflict, MergeConflictKind, MergePreview};
 pub use error::DomainError;
 pub use ffi::{
-    CoreHandle, create_vault_envelope, format_money, new_envelope, parse_money, parse_quick_add,
-    resolve_date_spec,
+    CoreHandle, create_vault_envelope, decode_statement_mapping, detect_statement,
+    encode_statement_mapping, format_money, new_envelope, parse_money, parse_quick_add,
+    resolve_date_spec, statement_presets,
 };
 pub use flow::{Flow, FlowMode, UNALLOCATED_NAME};
 pub use money::Money;
@@ -51,7 +55,13 @@ pub use query::{
 pub use recurring::{
     Frequency, PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule,
 };
+pub use statement::{
+    AmountSign, StatementAction, StatementDateFormat, StatementDetection, StatementMapping,
+    StatementOptions, StatementPreset, StatementPreview, StatementRejection, StatementReport,
+    StatementRow, StatementRowOverride, StatementRowStatus, StatementTypeRule,
+};
 pub use store::Core;
+pub use suggest::CategorySuggestion;
 pub use sync::{RejectedCommand, SyncReport, SyncState};
 pub use usage::{PeriodTotals, RecentUsage, VaultView};
 

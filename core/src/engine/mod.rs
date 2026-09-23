@@ -3,6 +3,7 @@
 //! Every command runs inside one SQLite transaction: validation, state
 //! changes and the log row commit together or not at all.
 
+mod batch;
 pub(crate) mod entities;
 mod recurring;
 mod update;

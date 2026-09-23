@@ -5,3 +5,8 @@
 /apple/**/*.xcodeproj
 /apple/**/*.xcframework
 /apple/**/.swiftpm
+
+# Personal exports (bank and card statements) never belong in the repo
+/transaction-history-*
+/*.csv
+/*.xlsx

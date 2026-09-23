@@ -793,6 +793,29 @@ fn is_outbox(conn: &Connection, vault_id: Uuid, command_id: Uuid) -> Result<bool
 }
 
 // ---------------------------------------------------------------------------
+// Refusing the whole outbox
+// ---------------------------------------------------------------------------
+
+impl Core {
+    /// Turns every command still in the outbox into a rejected row with
+    /// `code` and `message`, as if the server had refused each of them, and
+    /// rebuilds the projection without them. The app calls it when a push
+    /// comes back `403` (a viewer wrote locally), so the vault can keep
+    /// pulling instead of retrying forever.
+    pub fn reject_outbox(
+        &mut self,
+        vault_id: Uuid,
+        code: &str,
+        message: &str,
+    ) -> Result<SyncReport> {
+        let _ = (vault_id, code, message);
+        Err(DomainError::InvalidCommand(
+            "reject_outbox: not implemented".to_string(),
+        ))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
 
