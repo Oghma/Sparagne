@@ -173,6 +173,48 @@ struct LedgerStoreTests {
         #expect(store.savedAt != nil)
     }
 
+    @Test("A duplicated refund is saved as a refund, not as an expense")
+    func duplicateKeepsTheKind() async throws {
+        let (store, _) = try await Self.household()
+        await store.submit(quickAdd: "r 20.00 rimborso #Spesa >Cash")
+        let refund = try #require(store.rows.first { $0.note == "rimborso" })
+        #expect(refund.kind == .refund)
+
+        let copy = try #require(RowDraft.duplicate(of: refund, store: store))
+        #expect(copy.kind == .refund)
+        let entry = try #require(try copy.entry(store: store))
+        await store.addRow(
+            day: entry.day,
+            flowId: entry.flowId,
+            category: entry.category,
+            note: entry.note,
+            amount: entry.amount,
+            walletId: entry.walletId,
+            kind: entry.kind
+        )
+
+        #expect(store.presentedError == nil)
+        let copies = store.rows.filter { $0.note == "rimborso" }
+        #expect(copies.count == 2)
+        #expect(copies.allSatisfy { $0.kind == .refund })
+    }
+
+    @Test("A transfer offers no duplicate, and ⌘D passes over it")
+    func transfersAreNotDuplicated() async throws {
+        let (store, _) = try await Self.household()
+        await store.createWallet(name: "Contanti", openingBalance: 0)
+        await store.submit(quickAdd: "tw> 10.00 @conto @contanti")
+        store.showTransfers = true
+        await store.settle()
+        #expect(store.presentedError == nil)
+
+        // The transfer is the newest row of the month, so the last on screen.
+        let transfer = try #require(store.rows.last)
+        #expect(transfer.isTransfer)
+        #expect(RowDraft.duplicate(of: transfer, store: store) == nil)
+        #expect(store.lastRow?.note == "coop")
+    }
+
     @Test("A row typed with no amount is not a row")
     func zeroAmountIsIgnored() async throws {
         let (store, _) = try await Self.household()

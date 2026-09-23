@@ -53,7 +53,12 @@ struct LedgerGrid: View {
             resetEditing()
             newRow = RowDraft.blank(in: store)
         }
-        .onChange(of: store.direction) { _, _ in resetEditing() }
+        .onChange(of: store.direction) { _, new in
+            resetEditing()
+            // A duplicated refund belongs to USCITE: saved from ENTRATE it
+            // would vanish from the list it was typed into.
+            if let kind = newRow.kind, !new.kinds.contains(kind) { newRow = RowDraft.blank(in: store) }
+        }
         // Showing the column fills the empty line's cell with the sticky
         // default; hiding it puts that value back out of reach.
         .onChange(of: store.showWalletColumn) { _, _ in
@@ -97,11 +102,17 @@ struct LedgerGrid: View {
             }
         }
         .contextMenu {
-            Button(String(localized: "Duplicate")) { duplicate(row) }
-            Divider()
+            // A transfer's two ends do not fit the empty line, so it has no
+            // copy to offer (`RowDraft.duplicate`).
+            if !row.isTransfer {
+                Button(String(localized: "Duplicate")) { duplicate(row) }
+                    .disabled(store.isReadOnly)
+                Divider()
+            }
             Button(String(localized: "Void"), role: .destructive) {
                 Task { await store.void(transactionId: row.id) }
             }
+            .disabled(store.isReadOnly || row.voided)
         }
     }
 
@@ -202,7 +213,8 @@ struct LedgerGrid: View {
                     category: entry.category,
                     note: entry.note,
                     amount: entry.amount,
-                    walletId: entry.walletId
+                    walletId: entry.walletId,
+                    kind: entry.kind
                 )
             }
             newRow = RowDraft.blank(in: store)
@@ -218,12 +230,13 @@ struct LedgerGrid: View {
     /// ⌘D and the context menu: copy a row into the empty line, ready to be
     /// tweaked and saved.
     private func duplicate(_ row: TransactionRow) {
-        newRow = RowDraft(row: row, store: store)
-        newRow.day = Date()
+        guard !store.isReadOnly, let copy = RowDraft.duplicate(of: row, store: store) else { return }
+        newRow = copy
         focus = CellFocus(row: nil, field: .amount)
     }
 
-    /// ⌘D with nothing selected duplicates the last row of the month.
+    /// ⌘D with nothing selected duplicates the last row of the month that is
+    /// not a transfer (`AppStore.lastRow`).
     private func duplicateLast() {
         guard let last = store.lastRow else { return }
         duplicate(last)
@@ -280,10 +293,15 @@ struct RowDraft {
     var note = ""
     var wallet = ""
     var amount = ""
+    /// What the new line is written as. `nil` is the direction on screen's
+    /// (`LedgerDirection.newRowKind`); a duplicate keeps its source's, so a
+    /// refund copied into the line is saved as a refund, not an expense.
+    var kind: TransactionKind?
 
     nonisolated init() {}
 
     init(row: TransactionRow, store: AppStore) {
+        kind = row.kind
         day = row.occurredAt
         flow = row.envelopeDisplay == TransactionRow.placeholder ? "" : row.envelopeDisplay
         category = row.category
@@ -308,12 +326,30 @@ struct RowDraft {
         return draft
     }
 
+    /// `row` copied into the empty line, dated today, ready to be tweaked and
+    /// saved (⌘D and the context menu). `nil` for a transfer: the line has one
+    /// wallet and one envelope, and a transfer's two ends fit neither.
+    static func duplicate(of row: TransactionRow, store: AppStore) -> RowDraft? {
+        guard !row.isTransfer else { return nil }
+        var draft = RowDraft(row: row, store: store)
+        draft.day = Date()
+        return draft
+    }
+
     /// The fields of a new row, resolved and parsed. `nil` when the amount
     /// cell is still empty: tabbing to the end of a blank line and pressing ↩
     /// is not an error, it is nothing.
     func entry(
         store: AppStore
-    ) throws -> (day: Date, flowId: Uuid?, category: String?, note: String, amount: Int64, walletId: Uuid?)? {
+    ) throws -> (
+        day: Date,
+        flowId: Uuid?,
+        category: String?,
+        note: String,
+        amount: Int64,
+        walletId: Uuid?,
+        kind: TransactionKind?
+    )? {
         guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let resolvedFlow = try cell(.flow) { try store.resolveFlow(named: flow) }
         let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: wallet) }
@@ -325,7 +361,8 @@ struct RowDraft {
             category: trimmed.isEmpty ? nil : trimmed,
             note: note,
             amount: parsedAmount,
-            walletId: resolvedWallet
+            walletId: resolvedWallet,
+            kind: kind
         )
     }
 

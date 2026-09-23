@@ -288,7 +288,9 @@ struct NewRowView: View {
                     .textFieldStyle(.plain)
                     .font(Face.row)
                     .multilineTextAlignment(.trailing)
-                    .foregroundStyle(Ink.text)
+                    // A duplicated refund is saved as one, and says so in the
+                    // green the saved row will have.
+                    .foregroundStyle(draft.kind == .refund ? Ink.positive : Ink.text)
                     .focused($focus, equals: CellFocus(row: nil, field: .amount))
                     .onSubmit(onCommit)
             }

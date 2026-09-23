@@ -874,8 +874,10 @@ final class AppStore {
         return flows.first { !$0.isUnallocated }?.id ?? flows.first?.id
     }
 
-    /// The last row of the loaded month, which ⌘D copies into the new line.
-    var lastRow: TransactionRow? { rows.last }
+    /// The last row of the loaded month that ⌘D can copy into the new line.
+    /// Transfers are passed over: the empty line has one wallet and one
+    /// envelope, and a transfer's two ends fit neither.
+    var lastRow: TransactionRow? { rows.last { !$0.isTransfer } }
 
     /// Appends the row typed in the grid's empty last line. `day` carries the
     /// calendar day the DATA cell shows; the time of day comes from the clock,
@@ -883,16 +885,18 @@ final class AppStore {
     ///
     /// A `nil` envelope means "the sticky default", not Unallocated: an empty
     /// FLOW cell has to behave like the last row, not like a system envelope
-    /// the user never picked.
+    /// the user never picked. A `nil` kind is the direction on screen's; a
+    /// duplicate passes its source's, so a refund copied stays a refund.
     func addRow(
         day: Date,
         flowId: Uuid?,
         category: String?,
         note: String,
         amount: Int64,
-        walletId: Uuid? = nil
+        walletId: Uuid? = nil,
+        kind: TransactionKind? = nil
     ) async {
-        guard let vault = currentVault, amount > 0 else { return }
+        guard let vault = currentVault, amount > 0, !refusedAsReadOnly() else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let envelope = flowId ?? defaultFlowId
         let entry = Entry(
@@ -903,7 +907,14 @@ final class AppStore {
             note: trimmedNote.isEmpty ? nil : trimmedNote,
             occurredAt: Self.combine(day: CoreDate.day(day), timeOf: Date())
         )
-        let command: Command = direction == .income ? .income(entry) : .expense(entry)
+        let command: Command
+        switch kind ?? direction.newRowKind {
+        case .expense: command = .expense(entry)
+        case .income: command = .income(entry)
+        case .refund: command = .refund(entry)
+        // Two ends, not a wallet and an envelope: the grid never writes one.
+        case .transferWallet, .transferFlow: return
+        }
         await guarded {
             try await core.execute(vaultId: vault.id, command)
             lastWalletId = entry.walletId ?? lastWalletId
