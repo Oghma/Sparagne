@@ -181,6 +181,110 @@ fn a_backup_never_overwrites_a_file() {
 }
 
 // ---------------------------------------------------------------------------
+// forget_vault
+// ---------------------------------------------------------------------------
+
+#[test]
+fn forgetting_a_live_vault_drops_projection_log_outbox_and_rejections() {
+    let (_server, mut alice, vault, wallet) = synced();
+    let other = create_vault(&mut alice, "Altro");
+    let other_before = projection(&alice, other);
+
+    // One refused command and two still waiting in the outbox.
+    exec(
+        &mut alice,
+        vault,
+        "alice",
+        spend(3_00, wallet, "Bar", T0 + 1),
+    );
+    alice
+        .reject_outbox(vault, "forbidden", "read only")
+        .unwrap();
+    exec(
+        &mut alice,
+        vault,
+        "alice",
+        spend(4_00, wallet, "Bar", T0 + 2),
+    );
+    exec(&mut alice, vault, "alice", category("Casa"));
+    assert_eq!(alice.sync_state(vault).unwrap().rejected, 1);
+
+    assert_eq!(alice.forget_vault(vault).unwrap(), 2);
+
+    assert!(alice.vaults().unwrap().iter().all(|v| v.id != vault));
+    assert!(alice.deleted_vaults().unwrap().is_empty());
+    assert_eq!(alice.sync_state(vault).unwrap(), zeros());
+    assert!(alice.commands_since(vault, 0).unwrap().is_empty());
+    assert!(alice.rejected_commands(vault).unwrap().is_empty());
+    assert!(alice.categories(vault, true).unwrap().is_empty());
+    assert_eq!(alice.snapshot(vault).unwrap_err().code(), "not_found");
+    // The other vault is untouched.
+    assert_eq!(projection(&alice, other), other_before);
+    assert_eq!(alice.sync_state(other).unwrap().outbox, 1);
+}
+
+#[test]
+fn forgetting_a_deleted_vault_drops_its_pending_deletion() {
+    let (_server, mut alice, vault, _) = synced();
+    exec(&mut alice, vault, "alice", Command::DeleteVault);
+    assert_eq!(alice.deleted_vaults().unwrap(), vec![vault]);
+
+    assert_eq!(alice.forget_vault(vault).unwrap(), 1);
+    assert!(alice.deleted_vaults().unwrap().is_empty());
+    assert!(alice.vaults().unwrap().is_empty());
+    assert_eq!(alice.sync_state(vault).unwrap(), zeros());
+}
+
+#[test]
+fn forgetting_an_unknown_vault_is_quiet() {
+    let (_server, mut alice, vault, _) = synced();
+    let before = projection(&alice, vault);
+    assert_eq!(alice.forget_vault(Uuid::now_v7()).unwrap(), 0);
+    assert_eq!(projection(&alice, vault), before);
+    // A fully pushed vault has nothing to throw away, and forgetting it twice
+    // is quiet.
+    assert_eq!(alice.forget_vault(vault).unwrap(), 0);
+    assert!(alice.vaults().unwrap().is_empty());
+    assert_eq!(alice.forget_vault(vault).unwrap(), 0);
+}
+
+#[test]
+fn a_forgotten_vault_joins_again_with_a_pull_from_zero() {
+    let (server, mut alice, vault, wallet) = synced();
+    // An unpushed spend is lost with the vault: the server never saw it.
+    let lost = exec(
+        &mut alice,
+        vault,
+        "alice",
+        spend(5_00, wallet, "Bar", T0 + 1),
+    );
+    assert_eq!(alice.forget_vault(vault).unwrap(), 1);
+
+    let report = alice
+        .integrate_pull(vault, &server.serve_pull(vault, 0, ALL).unwrap())
+        .unwrap();
+    assert!(report.rebased);
+    assert_eq!(report.received, 3);
+    assert!(!report.has_more);
+    assert_eq!(projection(&alice, vault), projection(&server, vault));
+    assert!(
+        alice
+            .list_transactions(vault, &all(), 50, None)
+            .unwrap()
+            .items
+            .iter()
+            .all(|t| t.id != lost)
+    );
+    assert_eq!(
+        alice.sync_state(vault).unwrap(),
+        SyncState {
+            last_server_seq: server.last_seq(vault).unwrap(),
+            ..zeros()
+        }
+    );
+}
+
+// ---------------------------------------------------------------------------
 // reject_outbox
 // ---------------------------------------------------------------------------
 

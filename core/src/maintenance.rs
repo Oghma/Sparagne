@@ -32,10 +32,26 @@ impl Core {
     /// Drops a vault from this device: projection, log, outbox and rejected
     /// rows. Nothing is sent to the server; a later pull from 0 would join the
     /// vault again. Returns how many outbox commands were thrown away.
+    ///
+    /// Works the same on a live vault and on one a `DeleteVault` already took
+    /// out of the projection ([`Core::deleted_vaults`]); an unknown vault is
+    /// `Ok(0)`. Afterwards [`Core::sync_state`] reports zeros for it.
     pub fn forget_vault(&mut self, vault_id: Uuid) -> Result<u32> {
-        let _ = vault_id;
-        Err(DomainError::InvalidCommand(
-            "forget_vault: not implemented".to_string(),
-        ))
+        let tx = self.conn.transaction()?;
+        let outbox: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM commands
+             WHERE vault_id = ?1 AND status = 'applied' AND server_seq IS NULL",
+            params![vault_id],
+            |r| r.get(0),
+        )?;
+        // Same two steps as a rebase starts with: the vault row cascades to
+        // every projection table, the log has no foreign key.
+        tx.execute("DELETE FROM vaults WHERE id = ?1", params![vault_id])?;
+        tx.execute(
+            "DELETE FROM commands WHERE vault_id = ?1",
+            params![vault_id],
+        )?;
+        tx.commit()?;
+        Ok(u32::try_from(outbox).unwrap_or(u32::MAX))
     }
 }
