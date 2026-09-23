@@ -19,6 +19,9 @@ use crate::{Core, DomainError, Result, TransactionKind};
 #[allow(dead_code)]
 mod amount;
 mod csv;
+// Read by the planner in a later step.
+#[allow(dead_code)]
+mod dates;
 mod presets;
 
 /// Data rows [`detect`] returns in [`StatementDetection::sample`].
