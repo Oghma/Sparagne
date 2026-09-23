@@ -76,8 +76,9 @@ pub enum Command {
         name: String,
         currency: Currency,
     },
-    /// The name must stay unique among the vaults of the same owner. The
-    /// currency never changes: every amount in the log is in it.
+    /// The name is a label: any non-blank name, even one another vault of the
+    /// same owner already has. The currency never changes: every amount in the
+    /// log is in it.
     RenameVault {
         name: String,
     },
