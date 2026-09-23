@@ -13,8 +13,9 @@
 //!
 //! The first reason that applies wins:
 //!
-//! 1. a row whose column count differs from the header's, or that swallowed
-//!    the rest of the file in an unclosed quote: `Invalid` (`invalid_row`);
+//! 1. a row with fewer columns than the header, or more that are not empty,
+//!    or that swallowed the rest of the file in an unclosed quote: `Invalid`
+//!    (`invalid_row`);
 //! 2. its id already in the vault's log: `AlreadyImported`, whatever the
 //!    mapping now says about it;
 //! 3. a `Skip` action, then a status in `skip_statuses`: `Skipped`;

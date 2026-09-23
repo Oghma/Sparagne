@@ -185,7 +185,8 @@ enum Outcome {
 
 /// The indices of the mapped columns in the header.
 struct Columns {
-    /// Columns in the header; a row with another count is invalid.
+    /// Columns in the header; a row with fewer, or with more that are not
+    /// empty, is invalid.
     count: usize,
     date: usize,
     amount: usize,
@@ -355,7 +356,9 @@ impl<'a> Context<'a> {
                     .to_string(),
             );
         }
-        if record.fields.len() != self.columns.count {
+        // Empty cells past the header are the trailing delimiter some banks
+        // end every row with, not a ragged row.
+        if !csv::agrees(record, self.columns.count) {
             return invalid(
                 row,
                 format!(

@@ -146,12 +146,21 @@ pub(super) fn sniff_delimiter(text: &str) -> char {
         if columns < 2 {
             continue;
         }
-        let agreeing = rows.filter(|r| r.fields.len() == columns).count();
+        let agreeing = rows.filter(|r| agrees(r, columns)).count();
         if (agreeing, columns) > (best.1, best.2) {
             best = (delimiter, agreeing, columns);
         }
     }
     best.0
+}
+
+/// The record has the header's `columns`, plus perhaps the empty cells of a
+/// trailing delimiter.
+pub(super) fn agrees(record: &Record, columns: usize) -> bool {
+    record
+        .fields
+        .get(columns..)
+        .is_some_and(|rest| rest.iter().all(String::is_empty))
 }
 
 #[cfg(test)]
@@ -230,6 +239,7 @@ mod tests {
             ';'
         );
         assert_eq!(sniff_delimiter("a\tb\n1\t2\n"), '\t');
+        assert_eq!(sniff_delimiter("a,b;c;d\n1;2,5;3;\n4;5;6;\n"), ';');
         assert_eq!(sniff_delimiter("single\nvalue\n"), ',');
         assert_eq!(sniff_delimiter(""), ',');
     }

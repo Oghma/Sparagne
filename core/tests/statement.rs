@@ -335,6 +335,22 @@ fn a_ragged_row_is_invalid_and_the_others_are_read() {
 }
 
 #[test]
+fn a_trailing_delimiter_is_not_a_ragged_row_but_an_extra_value_is() {
+    let fx = setup();
+    let text = "Data operazione;Descrizione;Importo;Divisa\n\
+                16/09/2026;BAR;-1,20;EUR;\n\
+                15/09/2026;EDICOLA;-2,00;EUR;;\n\
+                14/09/2026;CINEMA;-9,00;EUR;extra\n";
+    let preview = fx
+        .core
+        .preview_statement(fx.vault, text, &bank_mapping(), &options(fx.wallet))
+        .unwrap();
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 3).status, StatementRowStatus::New);
+    assert_eq!(invalid_code(row(&preview, 4)), "invalid_row");
+}
+
+#[test]
 fn an_empty_statement_is_refused() {
     let fx = setup();
     for text in ["", "\u{feff}", "\n\n", ",,,\r\n"] {
