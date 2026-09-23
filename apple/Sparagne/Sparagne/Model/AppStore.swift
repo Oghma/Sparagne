@@ -121,6 +121,9 @@ final class AppStore {
     @ObservationIgnored private let undoWindow: Duration
     /// Injected so tests do not wait out the real undo window.
     @ObservationIgnored private let sleeper: @Sendable (Duration) async throws -> Void
+    /// Edit ▸ Undo and Redo for the ledger's writes, on the window's undo
+    /// manager once the window hands it over (`AppStore+History.swift`).
+    @ObservationIgnored let history = LedgerHistory()
 
     // MARK: Vaults
 
@@ -322,8 +325,9 @@ final class AppStore {
     /// Waits until every queued reload has finished, including any a reload
     /// queued itself (a stale PERSONA being cleared). The views never need
     /// this; anything that reads the store straight after writing a filter
-    /// does.
+    /// does. An undo or redo pressed before is written first.
     func settle() async {
+        await history.settle()
         while queuedLoad != nil {
             let generation = queuedGeneration
             await queuedLoad?.value
@@ -372,6 +376,7 @@ final class AppStore {
         guard !vaults.isEmpty else {
             needsOnboarding = true
             currentVault = nil
+            history.clear()
             await reload()
             return
         }
@@ -400,6 +405,9 @@ final class AppStore {
         // own vault, so it lands where its rows are, and the vault it left
         // is not reloaded for nothing.
         await flushPendingUndo()
+        // The steps name rows of the vault being left: ⌘Z here must not
+        // reach back into it.
+        history.clear()
         await reload()
     }
 
@@ -977,7 +985,10 @@ final class AppStore {
         case .transferWallet, .transferFlow: return
         }
         await guarded {
-            try await core.execute(vaultId: vault.id, command)
+            // Minted first, so undo knows which row to void.
+            let minted = await core.envelope(vaultId: vault.id, command)
+            let receipt = try await core.execute(envelope: minted)
+            recordAddedRow(command, id: receipt.resultId ?? minted.id, vaultId: vault.id)
             lastWalletId = entry.walletId ?? lastWalletId
             lastFlowId = envelope ?? lastFlowId
             savedAt = Date()
@@ -1066,7 +1077,10 @@ final class AppStore {
                 now: Date(),
                 defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId)
             )
-            try await core.execute(vaultId: vault.id, resolved.command)
+            // A row like one typed in the grid, and undone the same way.
+            let minted = await core.envelope(vaultId: vault.id, resolved.command)
+            let receipt = try await core.execute(envelope: minted)
+            recordAddedRow(resolved.command, id: receipt.resultId ?? minted.id, vaultId: vault.id)
             savedAt = Date()
             // The core reports what the names resolved to, so the sticky
             // defaults never depend on the shape of the command.
@@ -1116,6 +1130,8 @@ final class AppStore {
         guard let vault = currentVault, !isReadOnly, !ids.isEmpty else { return }
         await flushPendingUndo()
         pendingUndo = PendingUndo(ids: ids, vaultId: vault.id, startedAt: Date(), duration: undoWindow)
+        // ⌘Z while the toast is up is the toast's own Undo.
+        history.recordPendingVoid(name: String(localized: "Void Transactions")) { [weak self] in self?.undo() }
         let window = undoWindow
         let sleep = sleeper
         undoTask = Task { [weak self] in
@@ -1125,11 +1141,13 @@ final class AppStore {
         }
     }
 
-    /// Cancels the pending void; nothing was ever executed.
+    /// Cancels the pending void; nothing was ever executed. Edit ▸ Undo has
+    /// nothing left to cancel either, however the toast was dismissed.
     func undo() {
         undoTask?.cancel()
         undoTask = nil
         pendingUndo = nil
+        history.forgetPendingVoid()
     }
 
     /// Applies a pending void now, in the vault it was made in: the one on
@@ -1139,17 +1157,22 @@ final class AppStore {
     ///
     /// A vault that no longer exists takes its rows with it, so the void is
     /// dropped without a word rather than refused with a "Not found".
+    ///
+    /// A void written is never undoable: there is no un-void. ⌘Z loses it, and
+    /// every earlier step about its rows, which could only be refused now.
     func flushPendingUndo() async {
         guard let pending = pendingUndo else { return }
         pendingUndo = nil
         undoTask?.cancel()
         undoTask = nil
+        history.forgetPendingVoid()
         await guarded {
             guard try await core.vaults().contains(where: { $0.id == pending.vaultId }) else { return }
             try await core.executeBatch(
                 vaultId: pending.vaultId,
                 pending.ids.map { .voidTransaction(transactionId: $0) }
             )
+            history.forget(rows: Set(pending.ids))
             savedAt = Date()
             // Another vault's void changes nothing on screen: after a switch
             // `select` reloads the vault it moved to by itself.
@@ -1159,22 +1182,37 @@ final class AppStore {
 
     // MARK: - Editing
 
-    /// Sends only the fields that changed.
+    /// Sends only the fields that changed, and makes the edit undoable.
     func update(transactionId: Uuid, patch: TransactionPatch) async {
         guard let vault = currentVault, !patch.isEmpty, !refusedAsReadOnly() else { return }
+        // Read before the write: undo puts back what is stored now.
+        let inverse = storedInverse(of: patch, for: transactionId)
         await guarded {
             try await core.execute(
                 vaultId: vault.id,
                 .updateTransaction(transactionId: transactionId, patch: patch)
             )
+            if let inverse {
+                recordPatches(
+                    [RowPatch(id: transactionId, patch: patch)],
+                    inverse: [RowPatch(id: transactionId, patch: inverse)],
+                    vaultId: vault.id,
+                    name: String(localized: "Edit Row")
+                )
+            }
             savedAt = Date()
             await reload()
         }
     }
 
+    // MARK: - Writes without a step
+    //
+    // What the bulk actions write, and what undo and redo replay: the callers
+    // record their own step, or are one.
+
     /// Applies `commands` to `vaultId` as one batch, all of them or none, then
-    /// reloads: the write under the bulk actions and under undo and redo.
-    /// Says whether it went through; a refusal is already on the alert.
+    /// reloads. Says whether it went through; a refusal is already on the
+    /// alert.
     @discardableResult
     func apply(_ commands: [Command], in vaultId: Uuid) async -> Bool {
         guard !commands.isEmpty, !refusedAsReadOnly() else { return false }
@@ -1186,6 +1224,21 @@ final class AppStore {
             if vaultId == currentVault?.id { await reload() }
         }
         return applied
+    }
+
+    /// Applies `command` under an id minted for it and returns the id of what
+    /// it created: redo adds a row back as a new one, and has to know which.
+    func applyMinted(_ command: Command, in vaultId: Uuid) async -> Uuid? {
+        guard !refusedAsReadOnly() else { return nil }
+        var created: Uuid?
+        await guarded {
+            let minted = await core.envelope(vaultId: vaultId, command)
+            let receipt = try await core.execute(envelope: minted)
+            created = receipt.resultId ?? minted.id
+            savedAt = Date()
+            if vaultId == currentVault?.id { await reload() }
+        }
+        return created
     }
 
     // MARK: - Errors

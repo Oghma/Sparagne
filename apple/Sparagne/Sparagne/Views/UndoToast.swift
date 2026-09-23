@@ -1,8 +1,12 @@
 import SwiftUI
 
 /// The 5-second undo window after a void: the row is already gone, a bar
-/// counts down, and Undo (or ⌘Z) puts it back without ever touching the core
+/// counts down, and Undo puts it back without ever touching the core
 /// (docs/v2/DISTILLATO_V1.md §2.4).
+///
+/// ⌘Z does the same through Edit ▸ Undo, where the store registers the void
+/// (`LedgerHistory.recordPendingVoid`). The button has no shortcut of its own:
+/// one would take ⌘Z away from a cell being typed into while the toast is up.
 ///
 /// Drawn with the ledger's own chrome (`Panel`'s square, hairline-bordered
 /// card) rather than the system material, so it reads as part of the finance
@@ -22,7 +26,6 @@ struct UndoToast: View {
                     .buttonStyle(.plain)
                     .font(Face.row)
                     .foregroundStyle(Ink.accent)
-                    .keyboardShortcut("z", modifiers: .command)
             }
             TimelineView(.animation) { context in
                 MeterBar(fraction: 1 - pending.progress(at: context.date), tint: Ink.accent, height: 2)

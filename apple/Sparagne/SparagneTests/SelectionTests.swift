@@ -171,6 +171,27 @@ struct SelectionTests {
         #expect(store.rows.allSatisfy { $0.voided })
     }
 
+    @Test("A bulk re-categorize is all or nothing: one row refused leaves every row where it was")
+    func bulkRecategorizeIsAtomic() async throws {
+        let store = try await Self.ledger()
+        let manager = try LedgerHistoryTests.attachManager(to: store)
+        let vault = try #require(store.currentVault)
+        store.selectAllRows()
+        // Voided on another device since it was loaded: the grid still shows
+        // it live, the core refuses to update it.
+        try await store.core.execute(vaultId: vault.id, .voidTransaction(transactionId: try Self.id("latte", in: store)))
+        #expect(store.bulkTargets.count == 4)
+
+        await store.setSelectionCategory("Colazione")
+
+        #expect(store.presentedError?.code == "invalid_command")
+        #expect(!manager.canUndo)
+        store.presentedError = nil
+        await store.reload()
+        #expect(store.rows.count == 3)
+        #expect(store.rows.allSatisfy { $0.category == "Spesa" })
+    }
+
     @Test("A read-only vault offers no selection")
     func readOnlyHasNoSelection() async throws {
         let store = try await Self.ledger()

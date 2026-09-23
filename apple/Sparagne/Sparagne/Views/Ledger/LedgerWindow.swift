@@ -12,6 +12,9 @@ struct LedgerWindow: View {
 
     @FocusState private var searchFocused: Bool
     @State private var showsQuickAdd = false
+    /// The window's, shared with its text fields: the ledger's steps go on the
+    /// same stack as the typing, so Edit ▸ Undo takes back whichever came last.
+    @Environment(\.undoManager) private var undoManager
     /// Driven by the two toggles in the Ledger menu.
     @AppStorage("showVoided") private var showVoided = false
     @AppStorage("showTransfers") private var showTransfers = false
@@ -100,7 +103,9 @@ struct LedgerWindow: View {
             store.showVoided = showVoided
             store.showTransfers = showTransfers
             store.showWalletColumn = showWalletColumn
+            store.attach(undoManager: undoManager)
         }
+        .onChange(of: undoManager) { _, new in store.attach(undoManager: new) }
         // Both ways for all three: the menu writes the preference, the
         // palette writes the store, and the shared key keeps them one value.
         .onChange(of: showVoided) { _, new in store.showVoided = new }

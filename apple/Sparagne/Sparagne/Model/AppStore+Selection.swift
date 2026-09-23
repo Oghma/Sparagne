@@ -57,15 +57,18 @@ extension AppStore {
     /// another device since it was loaded), none does. A blank name is
     /// Uncategorized, as in a cell; an unknown one is created by the core.
     ///
-    /// The rows stay selected, so the next action can follow on the same ones.
+    /// One undo step puts every row back where it was. The rows stay selected,
+    /// so the next action can follow on the same ones.
     func setSelectionCategory(_ name: String) async {
         guard let vault = currentVault else { return }
-        let targets = bulkTargets
-        guard !targets.isEmpty else { return }
         let category = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let commands = targets.map {
-            Command.updateTransaction(transactionId: $0.id, patch: TransactionPatch(category: category))
+        let forward = bulkTargets.map { RowPatch(id: $0.id, patch: TransactionPatch(category: category)) }
+        guard !forward.isEmpty else { return }
+        // Read before the write: undo puts back what is stored now.
+        let inverse = forward.compactMap { change in
+            storedInverse(of: change.patch, for: change.id).map { RowPatch(id: change.id, patch: $0) }
         }
-        await apply(commands, in: vault.id)
+        guard await apply(Self.updates(forward), in: vault.id) else { return }
+        recordPatches(forward, inverse: inverse, vaultId: vault.id, name: String(localized: "Category Change"))
     }
 }

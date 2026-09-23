@@ -14,5 +14,9 @@
   "Set Category…": {"en": "Set Category…", "it": "Imposta categoria…"},
   "Set Category": {"en": "Set Category", "it": "Imposta categoria"},
   "void": {"en": "void", "it": "annulla"},
-  "clear": {"en": "clear", "it": "deseleziona"}
+  "clear": {"en": "clear", "it": "deseleziona"},
+  "Edit Row": {"en": "Edit Row", "it": "modifica riga"},
+  "Add Row": {"en": "Add Row", "it": "nuova riga"},
+  "Category Change": {"en": "Category Change", "it": "cambio categoria"},
+  "Void Transactions": {"en": "Void Transactions", "it": "annullamento transazioni"}
 }
