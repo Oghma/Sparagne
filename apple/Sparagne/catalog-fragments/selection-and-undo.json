@@ -1,0 +1,18 @@
+{
+  "%lld rows selected": {
+    "en": {"one": "%lld row selected", "other": "%lld rows selected"},
+    "it": {"one": "%lld riga selezionata", "other": "%lld righe selezionate"}
+  },
+  "Void %lld Rows": {
+    "en": {"one": "Void %lld Row", "other": "Void %lld Rows"},
+    "it": {"one": "Annulla %lld riga", "other": "Annulla %lld righe"}
+  },
+  "Category of %lld rows": {
+    "en": {"one": "Category of %lld row", "other": "Category of %lld rows"},
+    "it": {"one": "Categoria di %lld riga", "other": "Categoria di %lld righe"}
+  },
+  "Set Category…": {"en": "Set Category…", "it": "Imposta categoria…"},
+  "Set Category": {"en": "Set Category", "it": "Imposta categoria"},
+  "void": {"en": "void", "it": "annulla"},
+  "clear": {"en": "clear", "it": "deseleziona"}
+}

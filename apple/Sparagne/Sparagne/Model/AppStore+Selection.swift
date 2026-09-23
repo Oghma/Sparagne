@@ -51,4 +51,21 @@ extension AppStore {
         selection.clear()
         await void(transactionIds: ids)
     }
+
+    /// "Set Category…": every target filed under `name` in one batch, so
+    /// either all of them move or, when one is refused (a row voided on
+    /// another device since it was loaded), none does. A blank name is
+    /// Uncategorized, as in a cell; an unknown one is created by the core.
+    ///
+    /// The rows stay selected, so the next action can follow on the same ones.
+    func setSelectionCategory(_ name: String) async {
+        guard let vault = currentVault else { return }
+        let targets = bulkTargets
+        guard !targets.isEmpty else { return }
+        let category = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let commands = targets.map {
+            Command.updateTransaction(transactionId: $0.id, patch: TransactionPatch(category: category))
+        }
+        await apply(commands, in: vault.id)
+    }
 }

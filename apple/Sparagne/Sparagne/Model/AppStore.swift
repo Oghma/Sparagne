@@ -1172,6 +1172,22 @@ final class AppStore {
         }
     }
 
+    /// Applies `commands` to `vaultId` as one batch, all of them or none, then
+    /// reloads: the write under the bulk actions and under undo and redo.
+    /// Says whether it went through; a refusal is already on the alert.
+    @discardableResult
+    func apply(_ commands: [Command], in vaultId: Uuid) async -> Bool {
+        guard !commands.isEmpty, !refusedAsReadOnly() else { return false }
+        var applied = false
+        await guarded {
+            try await core.executeBatch(vaultId: vaultId, commands)
+            applied = true
+            savedAt = Date()
+            if vaultId == currentVault?.id { await reload() }
+        }
+        return applied
+    }
+
     // MARK: - Errors
 
     /// Says no to a write on a read-only vault before anything reaches the

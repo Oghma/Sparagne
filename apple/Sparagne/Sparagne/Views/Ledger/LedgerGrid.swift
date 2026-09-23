@@ -12,6 +12,12 @@ import SparagneCore
 /// Leaving the row saves it too, the way a spreadsheet does: ⇥ off IMPORTO, a
 /// click on another row or on the search field all commit what was typed. esc
 /// is the only way to lose it.
+///
+/// ⌘-click and ⇧-click pick rows instead of opening one, and ⌘A picks them all
+/// while no cell is being edited: the selection the bulk actions work on
+/// (`SelectionBar`, `AppStore+Selection.swift`). The grid itself takes the
+/// keyboard then, so ⌫ voids what is selected and esc lets it go, while a text
+/// field keeps its own ⌘A and ⌫ as long as it is being typed into.
 struct LedgerGrid: View {
     @Bindable var store: AppStore
 
@@ -23,6 +29,11 @@ struct LedgerGrid: View {
     /// is much wider than a line of text.
     @State private var hovered: Uuid?
     @FocusState private var focus: CellFocus?
+    /// The grid as a whole, when no cell has the caret: what ⌘A, ⌫ and esc
+    /// reach while rows are being picked rather than typed into.
+    @FocusState private var gridFocused: Bool
+    /// "Set Category…", from the selection bar or a selected row's menu.
+    @State private var showsBulkCategory = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,10 +52,31 @@ struct LedgerGrid: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            // The hints are all about typing rows.
+            .focusable()
+            .focusEffectDisabled()
+            .focused($gridFocused)
+            // Reaches the grid only when no text field is first responder: a
+            // cell being typed into selects its own text.
+            .onCommand(#selector(NSResponder.selectAll(_:))) { selectAll() }
+            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                guard focus == nil, !store.selection.isEmpty else { return .ignored }
+                Task { await store.voidSelection() }
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                guard focus == nil, !store.selection.isEmpty else { return .ignored }
+                store.clearSelection()
+                return .handled
+            }
+            // The hints are all about typing rows; with rows picked, the line
+            // says what can be done to them instead.
             if store.canWrite {
                 Hairline()
-                KeyHints()
+                if store.selection.count > 1 {
+                    SelectionBar(store: store, showsCategory: $showsBulkCategory)
+                } else {
+                    KeyHints()
+                }
             }
         }
         .background(Ink.bg)
@@ -74,7 +106,11 @@ struct LedgerGrid: View {
             resetEditing()
             newRow = RowDraft.blank(in: store)
         }
-        .onChange(of: focus) { _, new in commitIfLeft(new) }
+        .onChange(of: focus) { _, new in
+            commitIfLeft(new)
+            // Typing into a cell is editing, not picking: one or the other.
+            if new != nil { store.clearSelection() }
+        }
         .onAppear { newRow = RowDraft.blank(in: store) }
         .onReceive(NotificationCenter.default.publisher(for: .duplicateLastRow)) { _ in
             duplicateLast()
@@ -86,6 +122,7 @@ struct LedgerGrid: View {
     @ViewBuilder
     private func rowView(index: Int, row: TransactionRow) -> some View {
         let isEditing = editing == row.id
+        let isSelected = store.selection.contains(row.id)
         LedgerRowView(
             ordinal: index + 1,
             row: row,
@@ -95,11 +132,11 @@ struct LedgerGrid: View {
             focus: $focus,
             onOpen: { field in open(row, at: field) },
             onCommit: { submit(row.id) },
-            onCancel: resetEditing
+            onCancel: cancelEditing
         )
-        .background(isEditing || hovered == row.id ? Ink.raised : Color.clear)
+        .background(background(editing: isEditing, selected: isSelected, hovered: hovered == row.id))
         .overlay(alignment: .leading) {
-            if isEditing {
+            if isEditing || isSelected {
                 Rectangle().fill(Ink.accent).frame(width: 2)
             }
         }
@@ -111,18 +148,49 @@ struct LedgerGrid: View {
             }
         }
         .contextMenu {
-            // A transfer's two ends do not fit the empty line, so it has no
-            // copy to offer (`RowDraft.duplicate`).
-            if !row.isTransfer {
-                Button(String(localized: "Duplicate")) { duplicate(row) }
-                    .disabled(store.isReadOnly)
-                Divider()
+            // A row inside a selection speaks for all of it; any other row
+            // for itself, as it always has.
+            if isSelected, store.selection.count > 1 {
+                bulkMenu
+            } else {
+                rowMenu(row)
             }
-            Button(String(localized: "Void"), role: .destructive) {
-                Task { await store.void(transactionId: row.id) }
-            }
-            .disabled(store.isReadOnly || row.voided)
         }
+    }
+
+    /// Selected rows are tinted with the accent, the palette's color for a
+    /// selection (`docs/v2/UI.md` §5), a shade deeper under the pointer.
+    private func background(editing: Bool, selected: Bool, hovered: Bool) -> Color {
+        if editing { return Ink.raised }
+        if selected { return Ink.accent.opacity(hovered ? 0.22 : 0.15) }
+        return hovered ? Ink.raised : Color.clear
+    }
+
+    @ViewBuilder
+    private func rowMenu(_ row: TransactionRow) -> some View {
+        // A transfer's two ends do not fit the empty line, so it has no copy
+        // to offer (`RowDraft.duplicate`).
+        if !row.isTransfer {
+            Button(String(localized: "Duplicate")) { duplicate(row) }
+                .disabled(store.isReadOnly)
+            Divider()
+        }
+        Button(String(localized: "Void"), role: .destructive) {
+            Task { await store.void(transactionId: row.id) }
+        }
+        .disabled(store.isReadOnly || row.voided)
+    }
+
+    @ViewBuilder
+    private var bulkMenu: some View {
+        let targets = store.bulkTargets.count
+        Button(String(localized: "Set Category\u{2026}")) { showsBulkCategory = true }
+            .disabled(targets == 0)
+        Divider()
+        Button(String(localized: "Void \(targets) Rows"), role: .destructive) {
+            Task { await store.voidSelection() }
+        }
+        .disabled(targets == 0)
     }
 
     // MARK: - The empty line
@@ -153,7 +221,17 @@ struct LedgerGrid: View {
     /// Opens `row` with the caret in `field`, saving whatever line was open
     /// before. A row that refuses to save stays open and keeps the focus, so
     /// the click that would have left it does not lose it.
+    ///
+    /// The click may have been a ⌘-click or a ⇧-click, which pick the row
+    /// instead. The cells only report a tap, so the modifiers are read off the
+    /// event being handled.
     private func open(_ row: TransactionRow, at field: RowField) {
+        let modifiers = NSEvent.modifierFlags
+        if modifiers.contains(.command) || modifiers.contains(.shift) {
+            pick(row, extending: !modifiers.contains(.command))
+            return
+        }
+        store.clearSelection()
         guard !row.voided, store.canWrite else { return }
         if editing == row.id {
             // Another cell of the row already open: move the caret only, or
@@ -175,9 +253,42 @@ struct LedgerGrid: View {
         focus = nil
     }
 
+    /// esc from a row: the draft goes and the grid keeps the keyboard, so ⌘A
+    /// has somewhere to land.
+    private func cancelEditing() {
+        resetEditing()
+        gridFocused = true
+    }
+
     /// ↩: save the row and close it.
     private func submit(_ rowId: Uuid) {
-        if commit(rowId) { focus = nil }
+        if commit(rowId) {
+            focus = nil
+            gridFocused = true
+        }
+    }
+
+    /// ⌘-click toggles `row`, ⇧-click extends to it. The row being edited is
+    /// saved first, as any click away from it saves it; one that refuses to
+    /// save keeps the caret, and nothing is picked. The grid takes the
+    /// keyboard, so ⌫ and esc reach the selection.
+    private func pick(_ row: TransactionRow, extending: Bool) {
+        guard store.canWrite else { return }
+        if let editing, !commit(editing) { return }
+        focus = nil
+        gridFocused = true
+        if extending {
+            store.extendSelection(to: row.id)
+        } else {
+            store.toggleSelection(row.id)
+        }
+    }
+
+    /// ⌘A with no cell being edited: every row on screen.
+    private func selectAll() {
+        guard focus == nil, store.canWrite else { return }
+        store.selectAllRows()
+        gridFocused = true
     }
 
     /// The commit on blur a spreadsheet does: ⇥ off IMPORTO lands on the empty
