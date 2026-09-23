@@ -1179,3 +1179,188 @@ fn relabelling_covers_a_deleted_vault_too() {
     assert_eq!(pushed.confirmed, 3);
     assert_eq!(server.core.vault(vault).unwrap(), None);
 }
+
+// ---------------------------------------------------------------------------
+// Vault names are labels
+// ---------------------------------------------------------------------------
+//
+// A rebuild replays a vault's whole log, its `CreateVault` included, next to
+// whatever other vaults the device holds by then. While names had to be unique
+// per owner, a name another vault had taken in the meantime made that replay
+// fail for ever.
+
+fn create_vault(core: &mut Core, author: &str, name: &str) -> Uuid {
+    core.execute(CommandEnvelope::create_vault(author, name, Currency::Eur))
+        .unwrap()
+        .result_id
+        .unwrap()
+}
+
+fn rename(core: &mut Core, vault: Uuid, author: &str, name: &str) {
+    exec(
+        core,
+        vault,
+        author,
+        Command::RenameVault {
+            name: name.to_string(),
+        },
+    );
+}
+
+/// `(id, name, owner)` of every vault, in the order `vaults()` lists them.
+fn listing(core: &Core) -> Vec<(Uuid, String, String)> {
+    core.vaults()
+        .unwrap()
+        .into_iter()
+        .map(|v| (v.id, v.name, v.owner))
+        .collect()
+}
+
+#[test]
+fn a_renamed_vault_and_a_new_one_with_its_old_name_both_keep_syncing() {
+    let Shared {
+        mut server,
+        mut alice,
+        vault,
+        wallet,
+        vacanze,
+    } = shared();
+    let mut bob = join(&server, vault);
+
+    rename(&mut alice, vault, "alice", "Casa 2025");
+    sync(&mut alice, &mut server, vault);
+    let casa = create_vault(&mut alice, "alice", "Casa");
+    sync(&mut alice, &mut server, casa);
+
+    exec(
+        &mut bob,
+        vault,
+        "bob",
+        spend(1_000, wallet, vacanze, "gelato", T0 + 60),
+    );
+    sync(&mut bob, &mut server, vault);
+
+    // alice has nothing to push, so bob's expense takes the rebuild path,
+    // which replays the old vault's `CreateVault "Casa"` next to the new one.
+    assert_eq!(alice.sync_state(vault).unwrap().outbox, 0);
+    let (_, pulled) = sync(&mut alice, &mut server, vault);
+    assert!(pulled.rebased);
+    assert_eq!(pulled.received, 1);
+    assert!(pulled.rejected.is_empty());
+
+    let expected = projection(&server.core, vault);
+    assert_eq!(projection(&alice, vault), expected);
+    assert_eq!(projection(&bob, vault), expected);
+    assert_eq!(projection(&alice, casa), projection(&server.core, casa));
+    assert_eq!(
+        listing(&alice),
+        vec![
+            (casa, "Casa".to_string(), "alice".to_string()),
+            (vault, "Casa 2025".to_string(), "alice".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn a_fresh_device_joins_a_vault_whose_old_name_is_reused() {
+    let Shared {
+        mut server,
+        mut alice,
+        vault,
+        ..
+    } = shared();
+    rename(&mut alice, vault, "alice", "Casa 2025");
+    sync(&mut alice, &mut server, vault);
+    let casa = create_vault(&mut alice, "alice", "Casa");
+    sync(&mut alice, &mut server, casa);
+
+    // alice's new device joins in listing order, so the new Casa is already
+    // there when the old vault's log starts over from its `CreateVault`.
+    let mut device = Core::open_in_memory().unwrap();
+    for id in [casa, vault] {
+        let report = device.integrate_pull(id, &server.pull(id, 0)).unwrap();
+        assert!(report.rebased);
+        assert!(report.rejected.is_empty());
+        assert_eq!(projection(&device, id), projection(&server.core, id));
+    }
+    assert_eq!(listing(&device), listing(&alice));
+}
+
+#[test]
+fn two_vaults_swap_names_and_a_member_follows() {
+    let Shared {
+        mut server,
+        mut alice,
+        vault: casa,
+        ..
+    } = shared();
+    let mare = create_vault(&mut alice, "alice", "Mare");
+    sync(&mut alice, &mut server, mare);
+    let mut bob = join(&server, casa);
+    bob.integrate_pull(mare, &server.pull(mare, 0)).unwrap();
+
+    rename(&mut alice, casa, "alice", "tmp");
+    rename(&mut alice, mare, "alice", "Casa");
+    rename(&mut alice, casa, "alice", "Mare");
+    sync(&mut alice, &mut server, casa);
+    sync(&mut alice, &mut server, mare);
+
+    // bob follows in the order a listing by name gives: the vault now called
+    // Casa first, while his copy of the other one still has that name too.
+    for id in [mare, casa] {
+        let (_, pulled) = sync(&mut bob, &mut server, id);
+        assert!(pulled.rejected.is_empty());
+        assert_eq!(projection(&bob, id), projection(&server.core, id));
+    }
+    let swapped = vec![
+        (mare, "Casa".to_string(), "alice".to_string()),
+        (casa, "Mare".to_string(), "alice".to_string()),
+    ];
+    assert_eq!(listing(&bob), swapped);
+    assert_eq!(listing(&alice), swapped);
+}
+
+#[test]
+fn relabel_keeps_a_renamed_never_pushed_vault() {
+    // Logged out, the app creates Casa, renames it Mare, then creates a new
+    // Casa; none of it has reached a server.
+    let mut core = Core::open_in_memory().unwrap();
+    let old = create_vault(&mut core, "local", "Casa");
+    exec(&mut core, old, "local", wallet_cmd("Cash", 1_000));
+    rename(&mut core, old, "local", "Mare");
+    let new = create_vault(&mut core, "local", "Casa");
+
+    // At login every vault is relabelled in listing order: the new Casa
+    // first, so the old one's replay finds alice already owning a Casa.
+    let order: Vec<Uuid> = listing(&core).into_iter().map(|(id, ..)| id).collect();
+    assert_eq!(order, vec![new, old]);
+    for id in order {
+        core.relabel_outbox(id, "alice").unwrap();
+    }
+
+    for id in [new, old] {
+        assert_eq!(core.sync_state(id).unwrap().rejected, 0);
+        assert!(
+            core.outbox(id)
+                .unwrap()
+                .iter()
+                .all(|record| record.envelope.author == "alice")
+        );
+    }
+    assert_eq!(
+        listing(&core),
+        vec![
+            (new, "Casa".to_string(), "alice".to_string()),
+            (old, "Mare".to_string(), "alice".to_string()),
+        ]
+    );
+    assert_eq!(core.snapshot(old).unwrap().wallets.len(), 1);
+
+    // And the server takes both logs, in the same order.
+    let mut server = FakeServer::new();
+    for id in [new, old] {
+        let (pushed, _) = sync(&mut core, &mut server, id);
+        assert!(pushed.rejected.is_empty());
+        assert_eq!(projection(&core, id), projection(&server.core, id));
+    }
+}
