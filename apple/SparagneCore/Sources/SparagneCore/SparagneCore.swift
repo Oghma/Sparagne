@@ -5836,7 +5836,8 @@ public enum DateSpec: Equatable, Hashable, Codable {
     case daysAgo(UInt32
     )
     /**
-     * Day and month, year resolved against a reference date.
+     * Day and month, year resolved against a reference date: the latest
+     * occurrence no more than a month after it.
      */
     case dayMonth(day: UInt8, month: UInt8
     )
