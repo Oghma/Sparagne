@@ -14,7 +14,7 @@ struct UndoToast: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 14) {
-                Text(String(localized: "Transaction voided"))
+                Text(CountText.voided(pending.ids.count))
                     .font(Face.row)
                     .foregroundStyle(Ink.text)
                 Spacer(minLength: 0)

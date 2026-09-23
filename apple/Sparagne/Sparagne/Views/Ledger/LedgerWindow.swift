@@ -206,7 +206,7 @@ struct RecurringBanner: View {
                 Text("\u{25CF}")
                     .font(Face.footnote)
                     .foregroundStyle(Ink.accent)
-                Text("\(count) \(String(localized: "recurring entries are due"))")
+                Text(CountText.recurringDue(count))
                     .font(Face.row)
                     .foregroundStyle(Ink.text)
                 Spacer()

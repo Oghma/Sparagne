@@ -229,7 +229,8 @@ struct CategoryTable: View {
     /// the row is being laid out.
     private var similarHint: String {
         guard !similar.isEmpty else { return "" }
-        return String(localized: "Similar:") + " " + similar.joined(separator: ", ")
+        let names = similar.joined(separator: ", ")
+        return String(localized: "Similar: \(names)")
     }
 
     private func aliases(of categoryId: Uuid) -> [String] {

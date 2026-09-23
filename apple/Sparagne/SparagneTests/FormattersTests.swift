@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SparagneCore
 @testable import Sparagne
 
 struct MoneyFormatterTests {
@@ -53,5 +54,156 @@ struct DateFormattingTests {
         #expect(label != "Today")
         #expect(label != "Yesterday")
         #expect(!label.isEmpty)
+    }
+}
+
+// MARK: - Counts and schedules
+
+/// A string catalog built on disk for one language, holding the plural forms
+/// of `catalog-fragments/recurring-and-read-only.json` as the compiled `Localizable.xcstrings`
+/// will once the fragment is merged. The helpers read it through their
+/// `bundle` parameter, so these tests check the keys and the plural rules
+/// whatever the app's own catalog holds today.
+private enum TestCatalog {
+    static func bundle(
+        language: String,
+        plurals: [String: (one: String, other: String)],
+        strings: [String: String] = [:]
+    ) throws -> Bundle {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "sparagne-catalog-\(UUID().uuidString).bundle", directoryHint: .isDirectory)
+        let contents = root.appending(path: "Contents", directoryHint: .isDirectory)
+        let lproj = contents.appending(path: "Resources/\(language).lproj", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: lproj, withIntermediateDirectories: true)
+        let info: [String: Any] = [
+            "CFBundleIdentifier": "it.oghma.sparagne.tests.catalog.\(language)",
+            "CFBundleDevelopmentRegion": language,
+            "CFBundlePackageType": "BNDL",
+        ]
+        try plist(info).write(to: contents.appending(path: "Info.plist"))
+        var rules: [String: Any] = [:]
+        for (key, forms) in plurals {
+            rules[key] = [
+                "NSStringLocalizedFormatKey": "%#@count@",
+                "count": [
+                    "NSStringFormatSpecTypeKey": "NSStringPluralRuleType",
+                    "NSStringFormatValueTypeKey": "lld",
+                    "one": forms.one,
+                    "other": forms.other,
+                ],
+            ]
+        }
+        try plist(rules).write(to: lproj.appending(path: "Localizable.stringsdict"))
+        try plist(strings).write(to: lproj.appending(path: "Localizable.strings"))
+        return try #require(Bundle(url: root))
+    }
+
+    private static func plist(_ value: Any) throws -> Data {
+        try PropertyListSerialization.data(fromPropertyList: value, format: .xml, options: 0)
+    }
+
+    static func english() throws -> Bundle {
+        try bundle(language: "en", plurals: [
+            "%lld rows": ("%lld row", "%lld rows"),
+            "%lld recurring entries are due": ("%lld recurring entry is due", "%lld recurring entries are due"),
+            "%lld transactions voided": ("Transaction voided", "%lld transactions voided"),
+            "Every %lld days": ("Every day", "Every %lld days"),
+            "Every %lld weeks": ("Every week", "Every %lld weeks"),
+            "Every %lld months": ("Every month", "Every %lld months"),
+            "Every %lld years": ("Every year", "Every %lld years"),
+        ])
+    }
+
+    static func italian() throws -> Bundle {
+        try bundle(
+            language: "it",
+            plurals: [
+                "%lld rows": ("%lld riga", "%lld righe"),
+                "%lld recurring entries are due": ("%lld ricorrenza in attesa", "%lld ricorrenze in attesa"),
+                "%lld transactions voided": ("Transazione annullata", "%lld transazioni annullate"),
+                "Every %lld weeks": ("Ogni settimana", "Ogni %lld settimane"),
+            ],
+            strings: [
+                "Every year on %@ %lld": "Ogni anno il %2$lld %1$@",
+            ]
+        )
+    }
+}
+
+struct CountTextTests {
+    private static let english = Locale(identifier: "en_US")
+    private static let italian = Locale(identifier: "it_IT")
+
+    @Test("A count reads as one or many in English, never \"1 rows\"")
+    func englishCounts() throws {
+        let catalog = try TestCatalog.english()
+        #expect(CountText.rows(1, bundle: catalog, locale: Self.english) == "1 row")
+        #expect(CountText.rows(3, bundle: catalog, locale: Self.english) == "3 rows")
+        #expect(CountText.recurringDue(1, bundle: catalog, locale: Self.english) == "1 recurring entry is due")
+        #expect(CountText.recurringDue(3, bundle: catalog, locale: Self.english) == "3 recurring entries are due")
+        #expect(CountText.voided(1, bundle: catalog, locale: Self.english) == "Transaction voided")
+        #expect(CountText.voided(3, bundle: catalog, locale: Self.english) == "3 transactions voided")
+    }
+
+    @Test("The same counts in Italian")
+    func italianCounts() throws {
+        let catalog = try TestCatalog.italian()
+        #expect(CountText.rows(1, bundle: catalog, locale: Self.italian) == "1 riga")
+        #expect(CountText.rows(3, bundle: catalog, locale: Self.italian) == "3 righe")
+        #expect(CountText.recurringDue(1, bundle: catalog, locale: Self.italian) == "1 ricorrenza in attesa")
+        #expect(CountText.recurringDue(3, bundle: catalog, locale: Self.italian) == "3 ricorrenze in attesa")
+        #expect(CountText.voided(1, bundle: catalog, locale: Self.italian) == "Transazione annullata")
+        #expect(CountText.voided(3, bundle: catalog, locale: Self.italian) == "3 transazioni annullate")
+    }
+}
+
+struct ScheduleFormattingTests {
+    private static let english = Locale(identifier: "en_US")
+
+    private static func schedule(_ frequency: Frequency, every interval: UInt32) -> Schedule {
+        Schedule(frequency: frequency, interval: interval, startDate: "2026-01-01", endDate: nil)
+    }
+
+    @Test("The interval stepper names its unit, singular at one")
+    func intervalWithItsUnit() throws {
+        let catalog = try TestCatalog.english()
+        #expect(ScheduleFormatting.every(1, .week, bundle: catalog, locale: Self.english) == "Every week")
+        #expect(ScheduleFormatting.every(3, .week, bundle: catalog, locale: Self.english) == "Every 3 weeks")
+        #expect(ScheduleFormatting.every(1, .day, bundle: catalog, locale: Self.english) == "Every day")
+        #expect(ScheduleFormatting.every(3, .month, bundle: catalog, locale: Self.english) == "Every 3 months")
+        #expect(ScheduleFormatting.every(3, .year, bundle: catalog, locale: Self.english) == "Every 3 years")
+
+        let italian = try TestCatalog.italian()
+        let locale = Locale(identifier: "it_IT")
+        #expect(ScheduleFormatting.every(1, .week, bundle: italian, locale: locale) == "Ogni settimana")
+        #expect(ScheduleFormatting.every(3, .week, bundle: italian, locale: locale) == "Ogni 3 settimane")
+    }
+
+    @Test("A schedule is described as one sentence, interval included")
+    func describedSchedules() throws {
+        let catalog = try TestCatalog.english()
+        func describe(_ schedule: Schedule) -> String {
+            ScheduleFormatting.describe(schedule, bundle: catalog, locale: Self.english)
+        }
+        #expect(describe(Self.schedule(.daily, every: 1)) == "Every day")
+        #expect(describe(Self.schedule(.daily, every: 3)) == "Every 3 days")
+        #expect(describe(Self.schedule(.weekly(weekday: 1), every: 1)) == "Every Monday")
+        #expect(describe(Self.schedule(.weekly(weekday: 1), every: 3)) == "Every 3 weeks on Monday")
+        #expect(describe(Self.schedule(.monthly(day: 15), every: 1)) == "Every month on day 15")
+        #expect(describe(Self.schedule(.monthly(day: 15), every: 3)) == "Every 3 months on day 15")
+        #expect(describe(Self.schedule(.yearly(month: 9, day: 5), every: 1)) == "Every year on September 5")
+        // The yearly interval used to be dropped from the description.
+        #expect(describe(Self.schedule(.yearly(month: 9, day: 5), every: 3)) == "Every 3 years on September 5")
+    }
+
+    @Test("A translation can put the day before the month")
+    func italianOrder() throws {
+        let catalog = try TestCatalog.italian()
+        let text = ScheduleFormatting.describe(
+            Self.schedule(.yearly(month: 9, day: 5), every: 1),
+            bundle: catalog,
+            locale: Locale(identifier: "it_IT")
+        )
+        #expect(text == "Ogni anno il 5 settembre")
     }
 }

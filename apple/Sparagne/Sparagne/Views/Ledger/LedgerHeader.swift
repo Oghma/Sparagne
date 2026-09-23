@@ -14,7 +14,7 @@ struct LedgerHeader: View {
         HStack(spacing: 14) {
             monthStepper
 
-            Text("\(String(localized: "month"))=\(store.month.month)")
+            Text(String(localized: "month=\(store.month.month)"))
                 .font(Face.footnote)
                 .foregroundStyle(Ink.dim)
 
@@ -42,7 +42,7 @@ struct LedgerHeader: View {
             Spacer(minLength: 8)
 
             if !compact {
-                Text("\(store.rows.count) \(String(localized: "rows"))")
+                Text(CountText.rows(store.rows.count))
                     .font(Face.footnote)
                     .foregroundStyle(Ink.dim)
             }
@@ -154,7 +154,7 @@ struct LedgerStatusBar: View {
                         .font(Face.footnote)
                         .foregroundStyle(Ink.text)
                 }
-                Text("\(store.rows.count) \(String(localized: "rows"))")
+                Text(CountText.rows(store.rows.count))
                     .font(Face.footnote)
                     .foregroundStyle(Ink.dim)
             }
@@ -162,7 +162,7 @@ struct LedgerStatusBar: View {
             Spacer()
 
             if let savedAt = store.savedAt {
-                Text("\(String(localized: "saved")) \(LedgerDate.clock(savedAt))")
+                Text(String(localized: "saved \(LedgerDate.clock(savedAt))"))
                     .font(Face.footnote)
                     .foregroundStyle(Ink.dim)
             }
@@ -175,15 +175,19 @@ struct LedgerStatusBar: View {
         .background(Ink.bg)
     }
 
-    /// `mese=8 flow=uscite persona=tutti`, the mockup's own shorthand. The
-    /// segment values are the localized labels, lowercased, not the enums'
-    /// raw values, so the line reads in the user's language too.
+    /// `mese=8 flow=uscite persona=tutti`, the mockup's own shorthand, as one
+    /// sentence of the catalog so a translation can name and order the keys.
+    /// The segment values are the localized labels, lowercased, not the
+    /// enums' raw values, so the line reads in the user's language too.
     private var filters: String {
+        let month = store.month.month
+        let flow = store.direction.label.lowercased()
         let person = store.person ?? String(localized: "all")
-        let view = store.tab == .ledger ? "" : "\(String(localized: "view"))=\(store.tab.label.lowercased()) "
-        return "\(view)\(String(localized: "month"))=\(store.month.month) "
-            + "\(String(localized: "flow"))=\(store.direction.label.lowercased()) "
-            + "\(String(localized: "person"))=\(person)"
+        guard store.tab != .ledger else {
+            return String(localized: "month=\(month) flow=\(flow) person=\(person)")
+        }
+        let view = store.tab.label.lowercased()
+        return String(localized: "view=\(view) month=\(month) flow=\(flow) person=\(person)")
     }
 
     /// The sum of the rows on screen, which is what the user is looking at:

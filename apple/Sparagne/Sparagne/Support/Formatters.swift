@@ -62,12 +62,90 @@ extension Currency {
     }
 }
 
+/// Sentences that carry a count. Each is one catalog key with a plural
+/// variation (`"%lld rows"`, one and other in English and Italian), never a
+/// number glued to a word: that reads "1 rows", and a translation cannot move
+/// the number.
+///
+/// `bundle` is the catalog to read the key from: the app's own, or one a
+/// test builds so the plural forms can be checked before the catalog has them.
+enum CountText {
+    /// `"37 rows"`, `"1 row"`: the header's and the status bar's count.
+    static func rows(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
+        String(localized: "\(count) rows", bundle: bundle, locale: locale)
+    }
+
+    /// The ledger's recurring banner.
+    static func recurringDue(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
+        String(localized: "\(count) recurring entries are due", bundle: bundle, locale: locale)
+    }
+
+    /// The undo toast, for one row or a selection.
+    static func voided(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
+        String(localized: "\(count) transactions voided", bundle: bundle, locale: locale)
+    }
+}
+
+/// What a schedule's interval counts.
+enum ScheduleUnit {
+    case day
+    case week
+    case month
+    case year
+}
+
 /// Describes a recurring template's `Schedule` (`docs/v2/ARCH.md` §4:
 /// `frequency` + `interval`, day/weekday/month clamped to the calendar by
 /// the core) for the Recurring panel's list and edit form.
+///
+/// Every description is one whole sentence in the catalog. An interval of
+/// one and an interval of more are two sentences rather than one plural key:
+/// a plural key holds a single `%lld` (`scripts/catalog.py`), these hold a
+/// name or a day beside it, and above one both English and Italian use the
+/// same form anyway.
 enum ScheduleFormatting {
-    static func describe(_ schedule: Schedule, locale: Locale = .autoupdatingCurrent) -> String {
-        frequencyText(schedule.frequency, interval: schedule.interval, locale: locale)
+    static func describe(
+        _ schedule: Schedule,
+        bundle: Bundle = .main,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        let interval = Int(schedule.interval)
+        switch schedule.frequency {
+        case .daily:
+            return every(interval, .day, bundle: bundle, locale: locale)
+        case .weekly(let weekday):
+            let name = weekdayName(weekday, locale: locale)
+            return interval == 1
+                ? String(localized: "Every \(name)", bundle: bundle, locale: locale)
+                : String(localized: "Every \(interval) weeks on \(name)", bundle: bundle, locale: locale)
+        case .monthly(let day):
+            let day = Int(day)
+            return interval == 1
+                ? String(localized: "Every month on day \(day)", bundle: bundle, locale: locale)
+                : String(localized: "Every \(interval) months on day \(day)", bundle: bundle, locale: locale)
+        case .yearly(let month, let day):
+            let name = monthName(month, locale: locale)
+            let day = Int(day)
+            return interval == 1
+                ? String(localized: "Every year on \(name) \(day)", bundle: bundle, locale: locale)
+                : String(localized: "Every \(interval) years on \(name) \(day)", bundle: bundle, locale: locale)
+        }
+    }
+
+    /// `"Every day"`, `"Every 3 weeks"`: the interval with its unit, one
+    /// plural key per unit. The edit form's stepper reads it as it counts.
+    static func every(
+        _ interval: Int,
+        _ unit: ScheduleUnit,
+        bundle: Bundle = .main,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        switch unit {
+        case .day: String(localized: "Every \(interval) days", bundle: bundle, locale: locale)
+        case .week: String(localized: "Every \(interval) weeks", bundle: bundle, locale: locale)
+        case .month: String(localized: "Every \(interval) months", bundle: bundle, locale: locale)
+        case .year: String(localized: "Every \(interval) years", bundle: bundle, locale: locale)
+        }
     }
 
     /// The localized weekday name for an ISO weekday (Monday = 1 ... Sunday
@@ -88,26 +166,5 @@ enum ScheduleFormatting {
         let symbols = calendar.monthSymbols
         let index = Int(month) - 1
         return symbols.indices.contains(index) ? symbols[index] : "\(month)"
-    }
-
-    private static func frequencyText(_ frequency: Frequency, interval: UInt32, locale: Locale) -> String {
-        switch frequency {
-        case .daily:
-            return interval == 1
-                ? String(localized: "Daily")
-                : String(localized: "Every") + " \(interval) " + String(localized: "days")
-        case .weekly(let weekday):
-            let name = weekdayName(weekday, locale: locale)
-            return interval == 1
-                ? String(localized: "Weekly on") + " " + name
-                : String(localized: "Every") + " \(interval) " + String(localized: "weeks on") + " " + name
-        case .monthly(let day):
-            return interval == 1
-                ? String(localized: "Monthly on day") + " \(day)"
-                : String(localized: "Every") + " \(interval) " + String(localized: "months on day") + " \(day)"
-        case .yearly(let month, let day):
-            let name = monthName(month, locale: locale)
-            return String(localized: "Yearly on") + " \(name) \(day)"
-        }
     }
 }

@@ -8,5 +8,47 @@
   "income": {"en": "income", "it": "entrata"},
   "refund": {"en": "refund", "it": "rimborso"},
   "transfer": {"en": "transfer", "it": "trasferimento"},
-  "This vault is shared with you to read, not to change.": {"en": "This vault is shared with you to read, not to change.", "it": "Questo vault è condiviso con te in sola lettura."}
+  "This vault is shared with you to read, not to change.": {"en": "This vault is shared with you to read, not to change.", "it": "Questo vault è condiviso con te in sola lettura."},
+  "%lld rows": {
+    "en": {"one": "%lld row", "other": "%lld rows"},
+    "it": {"one": "%lld riga", "other": "%lld righe"}
+  },
+  "%lld recurring entries are due": {
+    "en": {"one": "%lld recurring entry is due", "other": "%lld recurring entries are due"},
+    "it": {"one": "%lld ricorrenza in attesa", "other": "%lld ricorrenze in attesa"}
+  },
+  "%lld transactions voided": {
+    "en": {"one": "Transaction voided", "other": "%lld transactions voided"},
+    "it": {"one": "Transazione annullata", "other": "%lld transazioni annullate"}
+  },
+  "Every %lld days": {
+    "en": {"one": "Every day", "other": "Every %lld days"},
+    "it": {"one": "Ogni giorno", "other": "Ogni %lld giorni"}
+  },
+  "Every %lld weeks": {
+    "en": {"one": "Every week", "other": "Every %lld weeks"},
+    "it": {"one": "Ogni settimana", "other": "Ogni %lld settimane"}
+  },
+  "Every %lld months": {
+    "en": {"one": "Every month", "other": "Every %lld months"},
+    "it": {"one": "Ogni mese", "other": "Ogni %lld mesi"}
+  },
+  "Every %lld years": {
+    "en": {"one": "Every year", "other": "Every %lld years"},
+    "it": {"one": "Ogni anno", "other": "Ogni %lld anni"}
+  },
+  "Every %@": {"en": "Every %@", "it": "Ogni %@"},
+  "Every %lld weeks on %@": {"en": "Every %lld weeks on %@", "it": "Ogni %lld settimane, di %@"},
+  "Every month on day %lld": {"en": "Every month on day %lld", "it": "Ogni mese il giorno %lld"},
+  "Every %lld months on day %lld": {"en": "Every %lld months on day %lld", "it": "Ogni %lld mesi il giorno %lld"},
+  "Every year on %@ %lld": {"en": "Every year on %@ %lld", "it": "Ogni anno il %2$lld %1$@"},
+  "Every %lld years on %@ %lld": {"en": "Every %lld years on %@ %lld", "it": "Ogni %1$lld anni il %3$lld %2$@"},
+  "Day %lld": {"en": "Day %lld", "it": "Giorno %lld"},
+  "month=%lld": {"en": "month=%lld", "it": "mese=%lld"},
+  "month=%lld flow=%@ person=%@": {"en": "month=%lld flow=%@ person=%@", "it": "mese=%lld flow=%@ persona=%@"},
+  "view=%@ month=%lld flow=%@ person=%@": {"en": "view=%@ month=%lld flow=%@ person=%@", "it": "vista=%@ mese=%lld flow=%@ persona=%@"},
+  "saved %@": {"en": "saved %@", "it": "salvato %@"},
+  "Merge “%@” into": {"en": "Merge “%@” into", "it": "Unisci “%@” in"},
+  "“%@” is archived.": {"en": "“%@” is archived.", "it": "“%@” è archiviata."},
+  "Similar: %@": {"en": "Similar: %@", "it": "Simili: %@"}
 }

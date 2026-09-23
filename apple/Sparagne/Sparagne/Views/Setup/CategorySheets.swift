@@ -28,7 +28,7 @@ struct MergeCategorySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "Merge") + " \u{201C}\(source.name)\u{201D} " + String(localized: "into"))
+            Text(String(localized: "Merge \u{201C}\(source.name)\u{201D} into"))
                 .font(.headline)
             Picker(String(localized: "Target category"), selection: $targetId) {
                 Text(String(localized: "Choose…")).tag(Optional<Uuid>.none)
@@ -72,7 +72,7 @@ struct MergeCategorySheet: View {
         switch conflict.kind {
         case .sameCategory: String(localized: "Source and target are the same category.")
         case .sourceSystem: String(localized: "System categories cannot be merged.")
-        case .targetArchived: "\u{201C}" + conflict.value + "\u{201D} " + String(localized: "is archived.")
+        case .targetArchived: String(localized: "\u{201C}\(conflict.value)\u{201D} is archived.")
         }
     }
 }

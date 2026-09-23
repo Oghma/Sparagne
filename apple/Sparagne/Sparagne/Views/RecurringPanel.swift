@@ -159,6 +159,16 @@ struct RecurringTemplateSheet: View {
             case .yearly: String(localized: "Yearly")
             }
         }
+
+        /// What the interval stepper counts: "Every 2 weeks", not "Every 2".
+        var unit: ScheduleUnit {
+            switch self {
+            case .daily: .day
+            case .weekly: .week
+            case .monthly: .month
+            case .yearly: .year
+            }
+        }
     }
 
     init(store: AppStore, template: RecurringView?) {
@@ -278,16 +288,20 @@ struct RecurringTemplateSheet: View {
                             }
                         }
                     case .monthly:
-                        Stepper(String(localized: "Day") + " \(monthDay)", value: $monthDay, in: 1...31)
+                        Stepper(String(localized: "Day \(monthDay)"), value: $monthDay, in: 1...31)
                     case .yearly:
                         Picker(String(localized: "Month"), selection: $yearMonth) {
                             ForEach(1...12, id: \.self) { month in
                                 Text(ScheduleFormatting.monthName(UInt8(month))).tag(month)
                             }
                         }
-                        Stepper(String(localized: "Day") + " \(yearDay)", value: $yearDay, in: 1...31)
+                        Stepper(String(localized: "Day \(yearDay)"), value: $yearDay, in: 1...31)
                     }
-                    Stepper(String(localized: "Every") + " \(interval)", value: $interval, in: 1...365)
+                    Stepper(
+                        ScheduleFormatting.every(interval, frequencyKind.unit),
+                        value: $interval,
+                        in: 1...365
+                    )
 
                     DatePicker(String(localized: "Start date"), selection: $startDate, displayedComponents: .date)
                     Toggle(String(localized: "End date"), isOn: $hasEndDate)
