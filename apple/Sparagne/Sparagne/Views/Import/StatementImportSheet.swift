@@ -20,9 +20,10 @@ struct StatementImportSheet: View {
     /// banks call their exports.
     private static let fileTypes: [UTType] = [.commaSeparatedText, .tabSeparatedText, .plainText, .text]
 
-    init(store: AppStore) {
+    /// `model` is for previews, which open the sheet on a file already read.
+    init(store: AppStore, model: StatementImportModel? = nil) {
         self.store = store
-        _model = State(initialValue: StatementImportModel(store: store))
+        _model = State(initialValue: model ?? StatementImportModel(store: store))
     }
 
     var body: some View {

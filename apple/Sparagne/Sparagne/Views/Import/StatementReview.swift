@@ -35,7 +35,7 @@ struct StatementReview: View {
 
     private var header: some View {
         HStack(spacing: 0) {
-            ReviewCell(width: ReviewColumn.check) { EmptyView() }
+            ReviewCell(width: ReviewColumn.check) { Color.clear.frame(height: 1) }
             ReviewCell(width: ReviewColumn.line, alignment: .trailing) { SectionLabel(text: "#") }
             ReviewCell(width: ReviewColumn.date) { SectionLabel(text: String(localized: "Date")) }
             ReviewCell { SectionLabel(text: String(localized: "Description")) }
@@ -50,15 +50,18 @@ struct StatementReview: View {
     }
 }
 
-/// Column widths of the review; the description takes what is left.
+/// Column widths of the review; the description takes what is left. Kind
+/// and status fit the longest Italian word at the table's 11 pt
+/// ("trasferimento", "Saltata da una regola").
 private enum ReviewColumn {
     static let check: CGFloat = 18
     static let line: CGFloat = 30
-    static let date: CGFloat = 80
-    static let amount: CGFloat = 84
-    static let kind: CGFloat = 84
-    static let status: CGFloat = 150
-    static let category: CGFloat = 160
+    static let date: CGFloat = 76
+    static let amount: CGFloat = 80
+    static let kind: CGFloat = 90
+    static let status: CGFloat = 156
+    static let category: CGFloat = 150
+    static let font = Face.mono(11)
 }
 
 /// One previewed row. Rows that will not be imported are drawn in the dim
@@ -84,6 +87,9 @@ private struct StatementReviewRow: View {
                     .labelsHidden()
                     .toggleStyle(.checkbox)
                     .controlSize(.small)
+                } else {
+                    // An empty cell still holds its width.
+                    Color.clear.frame(height: 1)
                 }
             }
             ReviewCell(width: ReviewColumn.line, alignment: .trailing) {
@@ -113,7 +119,7 @@ private struct StatementReviewRow: View {
             }
             ReviewCell(width: ReviewColumn.category) { category }
         }
-        .font(Face.row)
+        .font(ReviewColumn.font)
         .frame(height: Metrics.rowHeight)
     }
 
@@ -154,10 +160,14 @@ private struct StatementReviewRow: View {
     @ViewBuilder
     private var category: some View {
         if StatementImportModel.takesCategory(row) {
-            TextField(String(localized: "category…"), text: Binding(
-                get: { model.categoryText(for: row) },
-                set: { model.setCategory($0, for: row.line) }
-            ))
+            TextField(
+                String(localized: "Category"),
+                text: Binding(
+                    get: { model.categoryText(for: row) },
+                    set: { model.setCategory($0, for: row.line) }
+                ),
+                prompt: Text(String(localized: "category…")).foregroundStyle(Ink.dim)
+            )
             .textFieldStyle(.plain)
             .foregroundStyle(ink)
             .disabled(!included)
