@@ -31,7 +31,7 @@ struct LedgerWindow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            RecurringBanner(store: store) { sheet = .recurring }
+            RecurringBanner(store: store) { sheet = .dueRecurring }
             // The setup tables are not about a month, so they get no header.
             if store.tab != .setup {
                 LedgerHeader(store: store, searchFocused: $searchFocused, compact: store.tab != .ledger)
@@ -181,7 +181,9 @@ struct CSVDocument: FileDocument {
 // MARK: - Recurring
 
 /// The banner over the grid when a recurring period is waiting for a
-/// decision (`DISTILLATO_V1.md` §2.3). One line, in the ledger's own ink.
+/// decision (`DISTILLATO_V1.md` §2.3). One line, in the ledger's own ink;
+/// Review opens the due sheet (`DueRecurringSheet`), where the periods are
+/// executed or skipped.
 struct RecurringBanner: View {
     let store: AppStore
     let onOpen: () -> Void
@@ -191,7 +193,9 @@ struct RecurringBanner: View {
     }
 
     var body: some View {
-        if count > 0 {
+        // A viewer can neither execute nor skip, so the banner would be a
+        // to-do list with nothing to do on it.
+        if count > 0, !store.isReadOnly {
             HStack(spacing: 10) {
                 Text("\u{25CF}")
                     .font(Face.footnote)

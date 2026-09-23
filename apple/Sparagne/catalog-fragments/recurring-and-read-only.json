@@ -1,0 +1,12 @@
+{
+  "Due Recurring Entries": {"en": "Due Recurring Entries", "it": "Ricorrenze in attesa"},
+  "Nothing is due": {"en": "Nothing is due", "it": "Niente in attesa"},
+  "Execute All": {"en": "Execute All", "it": "Esegui tutte"},
+  "Execute": {"en": "Execute", "it": "Esegui"},
+  "Skip": {"en": "Skip", "it": "Salta"},
+  "expense": {"en": "expense", "it": "uscita"},
+  "income": {"en": "income", "it": "entrata"},
+  "refund": {"en": "refund", "it": "rimborso"},
+  "transfer": {"en": "transfer", "it": "trasferimento"},
+  "This vault is shared with you to read, not to change.": {"en": "This vault is shared with you to read, not to change.", "it": "Questo vault è condiviso con te in sola lettura."}
+}

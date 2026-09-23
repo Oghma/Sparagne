@@ -2,10 +2,10 @@ import SwiftUI
 import SparagneCore
 
 /// Templates the user materializes period by period, never automatically
-/// (docs/v2/DISTILLATO_V1.md §2.3): list, create, edit and archive. The
-/// banner of periods still waiting for a decision lives in the ledger window
-/// (`RecurringBanner`, `LedgerWindow.swift`), since it needs to be visible
-/// without opening this sheet.
+/// (docs/v2/DISTILLATO_V1.md §2.3): list, create, edit, archive and restore.
+/// The banner of periods still waiting for a decision lives in the ledger
+/// window (`RecurringBanner`, `LedgerWindow.swift`), since it needs to be
+/// visible without opening this sheet, and opens `DueRecurringSheet`.
 struct RecurringPanel: View {
     let store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -43,13 +43,17 @@ struct RecurringPanel: View {
                 )
                 .frame(maxHeight: .infinity)
             } else {
-                List(store.recurringTemplates, id: \.id) { template in
+                List(templates, id: \.id) { template in
                     RecurringRow(template: template, store: store)
                         .contentShape(Rectangle())
                         .onTapGesture { sheet = .edit(template) }
                         .contextMenu {
                             Button(String(localized: "Edit…")) { sheet = .edit(template) }
-                            if !template.archived {
+                            if template.archived {
+                                Button(String(localized: "Restore")) {
+                                    Task { await store.restoreRecurring(template.id) }
+                                }
+                            } else {
                                 Button(String(localized: "Archive"), role: .destructive) {
                                     Task { await store.archiveRecurring(template.id) }
                                 }
@@ -69,6 +73,13 @@ struct RecurringPanel: View {
             }
         }
     }
+
+    /// Active templates first, in the core's order, then the archived ones:
+    /// still listed, so they can be restored, but out of the way, the way the
+    /// setup tables keep theirs at the bottom (`docs/v2/UI.md` §2.3).
+    private var templates: [RecurringView] {
+        store.recurringTemplates.filter { !$0.archived } + store.recurringTemplates.filter(\.archived)
+    }
 }
 
 private struct RecurringRow: View {
@@ -84,7 +95,7 @@ private struct RecurringRow: View {
                     MoneyFormatter.format(minorUnits: template.amount, currencyCode: store.currencyCode)
                         + " · " + ScheduleFormatting.describe(template.schedule)
                 )
-                Text(subtitle)
+                Text(DueRecurringText.subject(template))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -96,13 +107,9 @@ private struct RecurringRow: View {
                 Text(String(localized: "Archived")).font(.caption2).foregroundStyle(.secondary)
             }
         }
-    }
-
-    private var subtitle: String {
-        var parts: [String] = []
-        if let note = template.note, !note.isEmpty { parts.append(note) }
-        if let category = template.category, !category.isEmpty { parts.append("#" + category) }
-        return parts.isEmpty ? TransactionRow.placeholder : parts.joined(separator: " · ")
+        // Archived templates stay listed so they can be restored, dimmed the
+        // way the setup tables dim theirs.
+        .opacity(template.archived ? 0.55 : 1)
     }
 }
 

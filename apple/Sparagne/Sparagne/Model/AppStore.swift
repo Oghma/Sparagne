@@ -68,6 +68,15 @@ struct PendingUndo: Identifiable, Equatable, Sendable {
     }
 }
 
+/// One recurring period waiting for a decision: a template and the day it
+/// fell due (`docs/v2/DISTILLATO_V1.md` §2.3).
+struct DuePeriod: Identifiable, Hashable, Sendable {
+    let template: RecurringView
+    let date: NaiveDate
+
+    var id: String { "\(template.id)/\(date)" }
+}
+
 extension TransactionPatch {
     /// A patch that carries no field changes nothing, so it is never sent
     /// (`UpdateTransaction` refuses it, `docs/v2/ARCH.md` §4).
@@ -753,24 +762,59 @@ final class AppStore {
         await recurringCommand(.archiveRecurring(recurringId: recurringId))
     }
 
+    /// Puts an archived template back on the schedule; the periods it missed
+    /// while archived come back as due.
+    func restoreRecurring(_ recurringId: Uuid) async {
+        await recurringCommand(.restoreRecurring(recurringId: recurringId))
+    }
+
+    /// Every period waiting for a decision, oldest first: what the due sheet
+    /// lists and what Execute All runs, in that order.
+    var duePeriods: [DuePeriod] {
+        pendingRecurringItems
+            .flatMap { item in item.due.map { DuePeriod(template: item.template, date: $0) } }
+            .sorted { $0.date < $1.date }
+    }
+
     /// Materializes `periodDate` as a transaction; `occurredAt` is the due
     /// date at the current time of day, in the system offset (team-lead
     /// task 4).
     func executeRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
-        let occurredAt = Self.combine(day: periodDate, timeOf: Date())
-        await recurringCommand(
-            .executeRecurring(recurringId: recurringId, periodDate: periodDate, occurredAt: occurredAt)
-        )
+        await recurringCommand(Self.execution(recurringId, periodDate: periodDate, now: Date()))
     }
 
     func skipRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
         await recurringCommand(.skipRecurring(recurringId: recurringId, periodDate: periodDate))
     }
 
+    /// Executes every period on the due list as one batch: all of them are
+    /// written or, when one is refused (an envelope that would go below zero,
+    /// a wallet archived since), none is, and the alert says which. Half a
+    /// backlog applied would leave the user working out what is still due.
+    func executeAllDueRecurring() async {
+        guard let vault = currentVault, !refusedAsReadOnly() else { return }
+        let now = Date()
+        let commands = duePeriods.map { Self.execution($0.template.id, periodDate: $0.date, now: now) }
+        guard !commands.isEmpty else { return }
+        await guarded {
+            try await core.executeBatch(vaultId: vault.id, commands)
+            savedAt = Date()
+            await reload()
+        }
+    }
+
+    private static func execution(_ recurringId: Uuid, periodDate: NaiveDate, now: Date) -> Command {
+        .executeRecurring(
+            recurringId: recurringId,
+            periodDate: periodDate,
+            occurredAt: combine(day: periodDate, timeOf: now)
+        )
+    }
+
     /// A recurring command, then the template list and the ledger together:
     /// executing a period writes a transaction as well as a run.
     private func recurringCommand(_ command: Command) async {
-        guard let vault = currentVault else { return }
+        guard let vault = currentVault, !refusedAsReadOnly() else { return }
         await guarded {
             try await core.execute(vaultId: vault.id, command)
             await loadRecurringTemplates()
@@ -1055,6 +1099,19 @@ final class AppStore {
     }
 
     // MARK: - Errors
+
+    /// Says no to a write on a read-only vault before anything reaches the
+    /// core, through the same alert a refused command gets. The views already
+    /// hide what would write; this catches what they cannot, like a quick-add
+    /// line typed and sent.
+    private func refusedAsReadOnly() -> Bool {
+        guard isReadOnly else { return false }
+        presentedError = AppError(
+            code: "forbidden",
+            message: String(localized: "This vault is shared with you to read, not to change.")
+        )
+        return true
+    }
 
     /// Runs a piece of work, turning any core error into `presentedError`.
     private func guarded(_ work: () async throws -> Void) async {
