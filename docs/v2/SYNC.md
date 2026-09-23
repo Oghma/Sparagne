@@ -67,9 +67,10 @@ Gli id delle entità derivano dall'id del comando (`ARCH.md` §4), quindi il reb
 ## 5. App
 
 - Impostazioni: URL del server, login e registrazione, logout. Lo username del server diventa l'`author` di ogni nuovo comando.
-- Sync automatica: all'avvio, dopo ogni comando (con un piccolo debounce) e ogni 60 s: per ogni vault locale push poi pull; per i vault del server non ancora locali pull da 0. Stato nella toolbar (in sync, in attesa, offline, errore); i rifiuti in un alert e in un elenco consultabile.
+- Sync automatica: all'avvio, dopo ogni comando (con un piccolo debounce) e ogni 60 s. Il giro comincia da `GET /vaults` (dal 2026-09-23): i ruoli si ricordano in `UserDefaults`, i vault in cui sono `viewer` diventano di sola lettura per lo store e per `CoreActor`, che rifiuta ogni scrittura con `forbidden`. Poi per ogni vault locale push (saltato per un viewer) e pull; un push che torna `403` rifiuta in locale tutta l'outbox (`reject_outbox`) e il pull si fa lo stesso, così il vault continua a ricevere rinomine e cancellazioni. Un errore in un vault non ferma il giro, solo l'essere offline lo ferma. Per i vault del server non ancora locali pull da 0. Un vault cancellato, quando la sua outbox e i suoi rifiuti sono vuoti, sparisce dal dispositivo con `forget_vault`. Stato nella toolbar (in sync, in attesa, offline, errore); i rifiuti in un alert e in un elenco consultabile, con il nome del comando tradotto.
+- Account: registrazione con le stesse regole del server controllate prima della chiamata e username in minuscolo; cambio password dalle Impostazioni (gli altri dispositivi escono); la scadenza del token si ricorda e si mostra ("Collegato fino al …"), un token scaduto all'avvio vale come logout e un `401` durante il giro dice "Sessione scaduta" tenendo lo username; un `429` dice quanti minuti aspettare dal `Retry-After`. Il token sta nel Keychain (aggiornato sul posto, avviso nelle Impostazioni se il salvataggio fallisce), mai in un file.
 - Condivisione: foglio "Condividi vault…" (solo owner) con elenco membri, aggiunta per username e ruolo, rimozione.
-- Vault: "Nuovo vault…", "Rinomina vault…" e "Elimina vault…" nel menu Vault, nella palette `>` e nel menu del vault della gestione (`UI.md` §6). Elimina non si offre per un vault condiviso di cui non si è owner (`SyncEngine.mayDeleteVault`, dal ruolo dell'ultimo `GET /vaults`); il foglio di conferma dice che la cancellazione vale per ogni membro e ogni dispositivo e non si annulla.
+- Vault: "Nuovo vault…", "Rinomina vault…", "Elimina vault…" ed "Esci dal vault…" nel menu Vault, nella palette `>` e nel menu del vault della gestione (`UI.md` §6). Rinomina solo con un ruolo che scrive, Elimina solo all'owner (per un vault che il server non elenca, se l'owner è l'autore con cui firma il core), Esci solo a un membro non owner (`SyncEngine+Permissions.swift`). Uscire manda prima l'outbox (salvo per un viewer), poi `DELETE` della propria membership, poi `forget_vault`: se la `DELETE` fallisce non si dimentica nulla. Un vault che il server non elenca più e il cui pull è `404`, con una storia sul server, non sparisce da solo: diventa di sola lettura e la gestione lo mostra fra i "Non più condivisi con te" con "Rimuovi da questo Mac". Un nome già usato da un altro vault dello stesso owner si può scegliere, con un avviso; dove due vault omonimi stanno in un elenco compare l'owner. Il foglio di cancellazione dice che il vault sparisce da ogni dispositivo di ogni membro man mano che sincronizzano, e che il server ne tiene la storia per la sync.
 
 ## 6. Test di accettazione
 
@@ -84,8 +85,11 @@ dell'app e sincronizza (il push conia il vault); aggiunge B come editor; B
 sincronizza da zero e riceve il vault, scrive una spesa e risincronizza; A
 riconverge. Si confrontano snapshot, elenco completo delle transazioni e
 `GET /vaults` (id, owner, ruolo) fra i due. Un secondo test ripete la
-condivisione con un `viewer`: il push torna `403 forbidden`, l'engine lo
-riporta come stato di errore e il comando resta in outbox.
+condivisione con un `viewer`: dal 2026-09-23 il viewer non spinge nulla,
+continua a ricevere col pull e il suo comando locale finisce fra i rifiutati.
+Altri due test coprono l'uscita di un membro dal vault e il cambio password,
+che fa uscire l'altro dispositivo (4 test in tutto, 7 registrazioni per
+esecuzione, sotto il limite di 10 l'ora per indirizzo).
 
 La suite gira solo se `SPARAGNE_E2E_SERVER` è impostata, altrimenti si salta.
 La imposta `scripts/e2e.sh`, che compila il server, lo avvia su una porta
@@ -131,9 +135,15 @@ in catena, omonimi in ordine di creazione; 4 test di regressione in
 `core/tests/sync.rs`, 2 in `server/tests/vault_lifecycle.rs`, 4 di migrazione
 in `core/src/store.rs`.
 
+Account e permessi nell'app il 2026-09-23 (pacchetti R2 e A1 della Fase 6,
+§3 e §5): cambio password, uscita da un vault, limiti di login con `429`,
+ruoli letti a inizio giro, viewer in sola lettura, `reject_outbox` dopo un
+`403`, `forget_vault` per i vault cancellati e per quelli da cui si esce,
+nomi dei comandi tradotti nei rifiuti, Keychain aggiornato sul posto.
+
 Ancora da fare quando servirà:
 
-- `RejectedCommand.kind` è il nome snake_case del comando; l'app lo mostra tal quale accanto al messaggio localizzato.
-- Il Keychain con firma ad-hoc può rifiutare `SecItemAdd`: il token resta in memoria per la sessione. Con un team Apple il problema sparisce.
+- Il Keychain con firma ad-hoc cambia identità a ogni build: dopo una nuova build può servire un nuovo login. Con un team Apple (o un certificato locale stabile) il problema sparisce.
+- Il ramo che cancella e riscrive un elemento del Keychain scritto da un'altra build non ha un test automatico.
 - Il server non tiene i comandi rifiutati, solo la risposta al push.
 - Il log e le membership di un vault cancellato restano sul server per sempre (servono al pull dei membri); una pulizia dei vault cancellati da più di N giorni non c'è ancora.
