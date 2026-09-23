@@ -6,7 +6,7 @@
 
 mod common;
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 
 use axum::{
     extract::ConnectInfo,
@@ -15,7 +15,13 @@ use axum::{
 use common::{Api, Client, PASSWORD, Res};
 use serde_json::json;
 use sparagne_core::sync::{MemberEntry, TokenResponse};
-use sparagne_server::Config;
+use sparagne_server::{
+    AppState, Config,
+    admin::{self, AdminError},
+    db::ServerDb,
+    router,
+};
+use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -484,4 +490,145 @@ async fn a_member_cannot_remove_another_member() {
     }
     let members: Vec<MemberEntry> = api.get(&uri, &alice.token).await.json();
     assert_eq!(members.len(), 3);
+}
+
+// ---------------------------------------------------------------------------
+// Admin CLI
+// ---------------------------------------------------------------------------
+
+/// A data directory of the test's own, removed afterwards.
+struct DataDir(PathBuf);
+
+impl DataDir {
+    fn new() -> Self {
+        Self(std::env::temp_dir().join(format!("sparagne-accounts-{}", Uuid::now_v7())))
+    }
+}
+
+impl Drop for DataDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// `sparagne-server --data-dir <dir> <args…>` with `stdin`: what it printed.
+fn admin(dir: &DataDir, args: &[&str], stdin: &str) -> Result<String, AdminError> {
+    let mut all = vec!["--data-dir".to_string(), dir.0.display().to_string()];
+    all.extend(args.iter().map(ToString::to_string));
+    let mut output = Vec::new();
+    admin::run(&all, &mut stdin.as_bytes(), &mut output)?;
+    Ok(String::from_utf8(output).unwrap())
+}
+
+#[tokio::test]
+async fn the_cli_manages_the_accounts_of_a_running_server() {
+    let dir = DataDir::new();
+    let closed = Config {
+        allow_registration: false,
+        ..Config::default()
+    };
+    let state = AppState::open(&dir.0, closed).unwrap();
+    let api = Api {
+        app: router(state.clone()),
+        state,
+    };
+    assert_eq!(
+        register_as(&api, "alice", PASSWORD).await.status,
+        StatusCode::FORBIDDEN
+    );
+
+    // add: registration closed or not, the name normalized like everywhere.
+    let out = admin(&dir, &["user", "add", "Alice"], &format!("{PASSWORD}\n")).unwrap();
+    assert_eq!(out, "created user alice\n");
+    let res = api.login("alice", PASSWORD).await;
+    assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+    let first = res.json::<TokenResponse>().token;
+    let taken = admin(&dir, &["user", "add", "alice"], &format!("{PASSWORD}\n"));
+    assert!(matches!(taken, Err(AdminError::Failed(ref m)) if m.contains("taken")));
+
+    // list: one line per account, with its creation time.
+    admin(&dir, &["user", "add", "bob"], &format!("{PASSWORD}\n")).unwrap();
+    let out = admin(&dir, &["user", "list"], "").unwrap();
+    let names: Vec<&str> = out
+        .lines()
+        .map(|line| line.split('\t').next().unwrap())
+        .collect();
+    assert_eq!(names, ["alice", "bob"]);
+    assert!(out.lines().all(|line| line.ends_with('Z')), "{out}");
+
+    // passwd: the old password and every session stop working.
+    let out = admin(&dir, &["user", "passwd", "alice"], "a new passphrase\r\n").unwrap();
+    assert_eq!(out, "changed the password of alice, revoked 1 token\n");
+    assert_eq!(
+        api.get("/me", &first).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        api.login("alice", PASSWORD).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    let res = api.login("alice", "a new passphrase").await;
+    assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+    let second = res.json::<TokenResponse>().token;
+
+    // revoke: logged out everywhere, the password unchanged.
+    let out = admin(&dir, &["user", "revoke", "ALICE"], "").unwrap();
+    assert_eq!(out, "revoked 1 token of alice\n");
+    assert_eq!(
+        api.get("/me", &second).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    let res = api.login("alice", "a new passphrase").await;
+    assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+}
+
+#[test]
+fn the_cli_refuses_what_it_cannot_do() {
+    let dir = DataDir::new();
+    let failed = |result: Result<String, AdminError>, needle: &str| match result {
+        Err(AdminError::Failed(message)) => assert!(message.contains(needle), "{message}"),
+        other => panic!("expected a failure about {needle:?}, got {other:?}"),
+    };
+    let usage = |result: Result<String, AdminError>| {
+        assert!(matches!(result, Err(AdminError::Usage(_))), "{result:?}");
+    };
+
+    // No database yet: nothing is created in a directory that may be wrong.
+    failed(admin(&dir, &["user", "list"], ""), "not found");
+    assert!(!dir.0.exists());
+    std::fs::create_dir_all(&dir.0).unwrap();
+    ServerDb::open(dir.0.join("server.sqlite")).unwrap();
+    assert_eq!(admin(&dir, &["user", "list"], "").unwrap(), "");
+
+    // Validated like POST /auth/register.
+    let password = format!("{PASSWORD}\n");
+    failed(admin(&dir, &["user", "add", "ab"], &password), "username");
+    failed(
+        admin(&dir, &["user", "add", "alice"], "short\n"),
+        "password",
+    );
+    failed(admin(&dir, &["user", "add", "alice"], ""), "stdin");
+    failed(admin(&dir, &["user", "add", "alice"], "\n"), "stdin");
+    failed(
+        admin(&dir, &["user", "passwd", "nobody"], &password),
+        "no user",
+    );
+    failed(admin(&dir, &["user", "revoke", "nobody"], ""), "no user");
+    assert_eq!(admin(&dir, &["user", "list"], "").unwrap(), "");
+
+    usage(admin(&dir, &["user"], ""));
+    usage(admin(&dir, &["user", "add"], ""));
+    usage(admin(&dir, &["frobnicate"], ""));
+    usage(admin(&dir, &["user", "list", "--verbose"], ""));
+    let dangling = admin::run(
+        &["user".to_string(), "--data-dir".to_string()],
+        &mut "".as_bytes(),
+        &mut Vec::new(),
+    );
+    assert!(
+        matches!(dangling, Err(AdminError::Usage(_))),
+        "{dangling:?}"
+    );
+    let help = admin(&dir, &["--help"], "").unwrap();
+    assert!(help.contains("user passwd <name>"), "{help}");
 }

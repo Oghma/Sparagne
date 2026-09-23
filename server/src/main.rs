@@ -1,14 +1,68 @@
-//! `sparagne-server` binary: reads the environment, serves the router.
+//! `sparagne-server` binary. With no arguments, or `serve`, it reads the
+//! environment and serves the router; `sparagne-server user …` manages the
+//! accounts in the same data directory (`admin.rs`).
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, process::ExitCode};
 
-use sparagne_server::{AppState, Config, router};
+use sparagne_server::{
+    AppState, Config,
+    admin::{self, AdminError},
+    router,
+};
+use tracing_subscriber::EnvFilter;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        None | Some("serve") if args.len() <= 1 => serve(),
+        _ => run_admin(&args),
+    }
+}
+
+fn serve() -> ExitCode {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(EnvFilter::from_default_env())
         .init();
+    let result = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(Into::into)
+        .and_then(|runtime| runtime.block_on(serve_until_shutdown()));
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("sparagne-server: {err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Usage mistakes exit with 2, failures with 1.
+fn run_admin(args: &[String]) -> ExitCode {
+    // Stdout is the command's own output; what the storage layer logs (the
+    // detail behind "internal error") goes to stderr.
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .init();
+    match admin::run(
+        args,
+        &mut std::io::stdin().lock(),
+        &mut std::io::stdout().lock(),
+    ) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("sparagne-server: {err}");
+            if matches!(err, AdminError::Usage(_)) {
+                ExitCode::from(2)
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+    }
+}
+
+async fn serve_until_shutdown() -> Result<(), Box<dyn std::error::Error>> {
     let bind: SocketAddr = std::env::var("SPARAGNE_BIND")
         .unwrap_or_else(|_| "127.0.0.1:3000".to_string())
         .parse()?;

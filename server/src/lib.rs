@@ -3,6 +3,7 @@
 //! Accounts, vault memberships and the per-vault command log, applied with
 //! the same `sparagne_core` the app uses. Protocol in `docs/v2/SYNC.md`.
 
+pub mod admin;
 pub mod auth;
 pub mod client_ip;
 pub mod config;

@@ -3,7 +3,7 @@
 //! The vault log and its projection live in the other database, opened as a
 //! [`sparagne_core::Core`]; this one only knows who may touch them.
 
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use rusqlite::{Connection, OptionalExtension, params};
 use sparagne_core::sync::{MemberEntry, MemberRole};
@@ -37,6 +37,7 @@ CREATE TABLE vault_memberships (
 CREATE INDEX ix_memberships_user ON vault_memberships(user_id);
 ";
 const SCHEMA_VERSION: i64 = 1;
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// An account as the API sees it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,6 +69,9 @@ impl ServerDb {
     }
 
     fn init(conn: Connection) -> ApiResult<Self> {
+        // The server and `sparagne-server user …` may hold the file at once:
+        // a writer waits for the other instead of failing with SQLITE_BUSY.
+        conn.busy_timeout(BUSY_TIMEOUT)?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         let _journal: String =
             conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;

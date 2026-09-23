@@ -7,7 +7,10 @@
 
 use std::{net::IpAddr, time::Instant};
 
-use argon2::password_hash::{PasswordHasher, PasswordVerifier};
+use argon2::{
+    Argon2,
+    password_hash::{PasswordHasher, PasswordVerifier},
+};
 use axum::{
     extract::{FromRequestParts, State},
     http::{StatusCode, header::AUTHORIZATION, request::Parts},
@@ -247,8 +250,12 @@ pub fn validate_password(password: &str) -> ApiResult<()> {
 }
 
 fn hash_password(state: &AppState, password: &str) -> ApiResult<String> {
-    state
-        .argon()
+    hash_with(state.argon(), password)
+}
+
+/// An argon2id PHC string for `password`, salted afresh.
+pub fn hash_with(argon: &Argon2<'_>, password: &str) -> ApiResult<String> {
+    argon
         .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|err| ApiError::internal(err.to_string()))
