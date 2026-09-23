@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+use rusqlite::params;
 use uuid::Uuid;
 
 use crate::{Core, DomainError, Result};
@@ -11,11 +12,21 @@ impl Core {
     /// Writes a consistent copy of the whole database to `path` (`VACUUM
     /// INTO`). An existing file at `path` is `AlreadyExists`, never
     /// overwritten.
+    ///
+    /// The copy is a plain database with the same schema version, so
+    /// [`Core::open`] opens it as it is. Anything that stops SQLite from
+    /// writing it (a missing directory, no permission, a full disk) is a
+    /// `Storage` error.
     pub fn backup_to(&self, path: &Path) -> Result<()> {
-        let _ = path;
-        Err(DomainError::InvalidCommand(
-            "backup_to: not implemented".to_string(),
-        ))
+        // `symlink_metadata` so that even a dangling link counts as taken.
+        if std::fs::symlink_metadata(path).is_ok() {
+            return Err(DomainError::AlreadyExists(path.display().to_string()));
+        }
+        let target = path.to_str().ok_or_else(|| {
+            DomainError::Storage(format!("backup path {} is not UTF-8", path.display()))
+        })?;
+        self.conn.execute("VACUUM INTO ?1", params![target])?;
+        Ok(())
     }
 
     /// Drops a vault from this device: projection, log, outbox and rejected

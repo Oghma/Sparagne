@@ -5,10 +5,12 @@
 
 mod common;
 
+use std::path::{Path, PathBuf};
+
 use common::{T0, all, entry, wallet_cmd};
 use sparagne_core::{
-    CategoryView, Command, CommandEnvelope, Core, Currency, SyncReport, SyncState, TransactionView,
-    VaultSnapshot,
+    CategoryView, Command, CommandEnvelope, Core, Currency, DomainError, SyncReport, SyncState,
+    TransactionView, VaultSnapshot,
 };
 use uuid::Uuid;
 
@@ -18,6 +20,27 @@ use uuid::Uuid;
 
 /// A push or pull limit that is no limit.
 const ALL: usize = usize::MAX;
+
+/// A database path in the temp directory, removed with its WAL files on drop.
+struct TempDb(PathBuf);
+
+impl TempDb {
+    fn new(label: &str) -> Self {
+        Self(std::env::temp_dir().join(format!("sparagne-{label}-{}.sqlite", Uuid::now_v7())))
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDb {
+    fn drop(&mut self) {
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", self.0.display()));
+        }
+    }
+}
 
 fn exec(core: &mut Core, vault: Uuid, author: &str, command: Command) -> Uuid {
     core.execute(CommandEnvelope::new(vault, author, command))
@@ -66,6 +89,14 @@ fn projection(core: &Core, vault: Uuid) -> Projection {
     )
 }
 
+fn zeros() -> SyncState {
+    SyncState {
+        last_server_seq: 0,
+        outbox: 0,
+        rejected: 0,
+    }
+}
+
 /// Alice's vault with a wallet and one spend, pushed to `server`.
 fn synced() -> (Core, Core, Uuid, Uuid) {
     let mut server = Core::open_in_memory().unwrap();
@@ -81,6 +112,72 @@ fn synced() -> (Core, Core, Uuid, Uuid) {
     sync(&mut alice, &mut server, vault);
     assert_eq!(alice.sync_state(vault).unwrap().outbox, 0);
     (server, alice, vault, wallet)
+}
+
+// ---------------------------------------------------------------------------
+// backup_to
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_backup_opens_with_the_same_vaults_and_transactions() {
+    let source = TempDb::new("source");
+    let copy = TempDb::new("backup");
+    let mut core = Core::open(source.path()).unwrap();
+    let casa = create_vault(&mut core, "Casa");
+    let wallet = exec(&mut core, casa, "alice", wallet_cmd("Cash", 10_000));
+    exec(&mut core, casa, "alice", spend(12_00, wallet, "Spesa", T0));
+    let viaggi = create_vault(&mut core, "Viaggi");
+    let casa_before = projection(&core, casa);
+
+    core.backup_to(copy.path()).unwrap();
+    // Writing to the source afterwards does not reach the copy.
+    exec(&mut core, casa, "alice", spend(1_00, wallet, "Bar", T0 + 1));
+
+    let restored = Core::open(copy.path()).unwrap();
+    assert_eq!(restored.vaults().unwrap(), core.vaults().unwrap());
+    assert_eq!(projection(&restored, casa), casa_before);
+    assert_eq!(
+        restored.commands_since(casa, 0).unwrap(),
+        core.commands_since(casa, 0).unwrap()[..3]
+    );
+    assert_eq!(
+        restored.snapshot(viaggi).unwrap(),
+        core.snapshot(viaggi).unwrap()
+    );
+    assert_eq!(
+        restored.sync_state(casa).unwrap(),
+        SyncState {
+            outbox: 3,
+            ..zeros()
+        }
+    );
+}
+
+#[test]
+fn a_backup_never_overwrites_a_file() {
+    let core = Core::open_in_memory().unwrap();
+    let taken = TempDb::new("taken");
+    std::fs::write(taken.path(), b"keep me").unwrap();
+    let err = core.backup_to(taken.path()).unwrap_err();
+    assert_eq!(err.code(), "already_exists");
+    assert_eq!(std::fs::read(taken.path()).unwrap(), b"keep me");
+
+    // Even an empty file, which SQLite itself would happily fill.
+    let empty = TempDb::new("empty");
+    std::fs::write(empty.path(), b"").unwrap();
+    assert!(matches!(
+        core.backup_to(empty.path()),
+        Err(DomainError::AlreadyExists(_))
+    ));
+
+    // A directory that does not exist is a storage failure.
+    let nowhere = std::env::temp_dir()
+        .join(format!("sparagne-missing-{}", Uuid::now_v7()))
+        .join("backup.sqlite");
+    assert_eq!(
+        core.backup_to(&nowhere).unwrap_err().code(),
+        "storage_error"
+    );
 }
 
 // ---------------------------------------------------------------------------
