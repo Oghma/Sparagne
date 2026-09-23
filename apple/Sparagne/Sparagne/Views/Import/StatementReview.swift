@@ -157,19 +157,31 @@ private struct StatementReviewRow: View {
 
     /// Editable on a new entry; the other wallet on a transfer; the bank's
     /// match, dimmed, on a row that will not be imported.
+    ///
+    /// The placeholder of an empty field is drawn here in the dim ink, not
+    /// left to the field: the field's own prompt takes the row's text ink
+    /// and would read as a category.
     @ViewBuilder
     private var category: some View {
         if StatementImportModel.takesCategory(row) {
-            TextField(
-                String(localized: "Category"),
-                text: Binding(
-                    get: { model.categoryText(for: row) },
-                    set: { model.setCategory($0, for: row.line) }
-                ),
-                prompt: Text(String(localized: "category…")).foregroundStyle(Ink.dim)
-            )
-            .textFieldStyle(.plain)
-            .foregroundStyle(ink)
+            let text = model.categoryText(for: row)
+            ZStack(alignment: .leading) {
+                if text.isEmpty {
+                    Text(String(localized: "category…"))
+                        .foregroundStyle(Ink.dim)
+                        .allowsHitTesting(false)
+                }
+                TextField(
+                    String(localized: "Category"),
+                    text: Binding(
+                        get: { model.categoryText(for: row) },
+                        set: { model.setCategory($0, for: row.line) }
+                    ),
+                    prompt: Text(verbatim: "")
+                )
+                .textFieldStyle(.plain)
+                .foregroundStyle(ink)
+            }
             .disabled(!included)
         } else if row.kind == .transferWallet, let wallet = names.wallet(row.counterWalletId) {
             Text(verbatim: "\u{21C4} \(wallet)").foregroundStyle(Ink.dim)
