@@ -10,7 +10,8 @@ CREATE TABLE vaults (
     owner_user_id TEXT NOT NULL,
     created_at    INTEGER NOT NULL
 );
-CREATE UNIQUE INDEX ux_vaults_owner_name ON vaults(owner_user_id, lower(name));
+-- No index on the name: vault names are labels and may repeat, even for the
+-- same owner (`docs/v2/SYNC.md` §3).
 
 CREATE TABLE wallets (
     id         BLOB PRIMARY KEY,

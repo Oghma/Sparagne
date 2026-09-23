@@ -73,42 +73,34 @@ fn rename_vault_trims_and_shows_everywhere() {
 }
 
 #[test]
-fn rename_vault_keeps_names_unique_per_owner() {
+fn rename_vault_may_repeat_a_name_the_owner_already_uses() {
     let mut fx = setup();
     let lavoro = create_vault(&mut fx.core, "alice", "Lavoro");
-    // Bob's "Casa" lives next to alice's vaults in the same database, as on
-    // the server: it never gets in alice's way.
-    create_vault(&mut fx.core, "bob", "Casa");
 
-    assert_eq!(
-        try_run(&mut fx.core, lavoro, rename("main")).unwrap_err(),
-        DomainError::AlreadyExists("main".to_string())
-    );
-    run(&mut fx.core, fx.vault, rename("Casa"));
-    // Renaming to one's own name (a different case) is fine.
-    run(&mut fx.core, fx.vault, rename("CASA"));
-    assert_eq!(fx.core.vault(fx.vault).unwrap().unwrap().name, "CASA");
+    // Names are labels: two of alice's vaults may both be called Main.
+    run(&mut fx.core, lavoro, rename("main"));
+    assert_eq!(fx.core.vault(lavoro).unwrap().unwrap().name, "main");
+    assert_eq!(fx.core.vault(fx.vault).unwrap().unwrap().name, "Main");
+    // Renaming to one's own name (a different case) is fine too.
+    run(&mut fx.core, fx.vault, rename("MAIN"));
+    assert_eq!(fx.core.vault(fx.vault).unwrap().unwrap().name, "MAIN");
+    assert_eq!(fx.core.vaults().unwrap().len(), 2);
 }
 
 #[test]
-fn an_editor_may_rename_and_the_check_still_runs_against_the_owner() {
+fn an_editor_may_rename_to_a_name_the_owner_already_uses() {
     let mut fx = setup();
-    create_vault(&mut fx.core, "alice", "Lavoro");
+    let lavoro = create_vault(&mut fx.core, "alice", "Lavoro");
 
-    // bob has no vault called Lavoro, but alice does: the name belongs to
-    // the owner's namespace, not the author's.
-    let err = fx
-        .core
-        .execute(CommandEnvelope::new(fx.vault, "bob", rename("Lavoro")))
-        .unwrap_err();
-    assert_eq!(err, DomainError::AlreadyExists("Lavoro".to_string()));
-
+    // bob cannot see alice's other vaults, and needs not: the rename depends
+    // on this vault alone, so it lands the same here and on the server.
     fx.core
-        .execute(CommandEnvelope::new(fx.vault, "bob", rename("Casa")))
+        .execute(CommandEnvelope::new(fx.vault, "bob", rename("Lavoro")))
         .unwrap();
     let view = fx.core.vault(fx.vault).unwrap().unwrap();
-    assert_eq!(view.name, "Casa");
+    assert_eq!(view.name, "Lavoro");
     assert_eq!(view.owner, "alice", "renaming never changes the owner");
+    assert_eq!(fx.core.vault(lavoro).unwrap().unwrap().name, "Lavoro");
 }
 
 // ---------------------------------------------------------------------------
@@ -239,16 +231,18 @@ fn deleting_is_idempotent_by_command_id() {
 }
 
 #[test]
-fn a_deleted_vaults_name_is_free_again() {
+fn a_new_vault_with_a_deleted_ones_name_is_another_vault() {
     let mut fx = setup();
     run(&mut fx.core, fx.vault, Command::DeleteVault);
 
+    // Same owner, same name: a new id, and nothing of the dead one.
     let reborn = create_vault(&mut fx.core, "alice", "Main");
     assert_ne!(reborn, fx.vault);
     let vaults = fx.core.vaults().unwrap();
     assert_eq!(vaults.len(), 1);
     assert_eq!(vaults[0].id, reborn);
     assert_eq!(vaults[0].name, "Main");
+    assert!(fx.core.snapshot(reborn).unwrap().wallets.is_empty());
     // Only the dead one is reported as deleted.
     assert_eq!(fx.core.deleted_vaults().unwrap(), vec![fx.vault]);
 }

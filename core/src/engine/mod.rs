@@ -314,6 +314,10 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
 // Vault, wallet, flow, category
 // ---------------------------------------------------------------------------
 
+/// The name is a label: any non-blank one will do, even one the author
+/// already gave another vault. Nothing here may depend on the other vaults in
+/// the database, because a rebase replays this command next to whatever
+/// vaults the device holds by then (`docs/v2/SYNC.md` §3).
 fn create_vault(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -327,14 +331,6 @@ fn create_vault(
         ));
     }
     let name = normalize_name(name, "vault")?;
-    let taken: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM vaults WHERE owner_user_id = ?1 AND lower(name) = lower(?2))",
-        params![env.author, name],
-        |r| r.get(0),
-    )?;
-    if taken {
-        return Err(DomainError::AlreadyExists(name));
-    }
     tx.execute(
         "INSERT INTO vaults (id, name, currency, owner_user_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![env.id, name, currency, env.author, now],
@@ -361,21 +357,13 @@ fn create_vault(
     Ok(env.id)
 }
 
-/// The name stays unique among the vaults of the same owner, which on the
-/// server means every vault that account created; the check runs against the
-/// vault's owner, not the author, because an editor may rename too.
+/// Anyone who may write renames, an editor too, and the owner never changes.
+/// Like [`create_vault`] the name is only a label: it may repeat another
+/// vault's, so the outcome depends on this vault alone and a replay on any
+/// device, or on the server, ends the same way.
 fn rename_vault(tx: &Transaction<'_>, env: &CommandEnvelope, name: &str) -> Result<()> {
-    let owner = vault_owner(tx, env.vault_id)?;
+    require_vault(tx, env.vault_id)?;
     let name = normalize_name(name, "vault")?;
-    let taken: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM vaults
-         WHERE owner_user_id = ?1 AND lower(name) = lower(?2) AND id <> ?3)",
-        params![owner, name, env.vault_id],
-        |r| r.get(0),
-    )?;
-    if taken {
-        return Err(DomainError::AlreadyExists(name));
-    }
     tx.execute(
         "UPDATE vaults SET name = ?1 WHERE id = ?2",
         params![name, env.vault_id],

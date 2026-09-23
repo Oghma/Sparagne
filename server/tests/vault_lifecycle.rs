@@ -54,7 +54,7 @@ async fn a_rename_reaches_the_listing_and_the_members() {
 }
 
 #[tokio::test]
-async fn a_rename_to_a_name_the_owner_already_uses_is_refused() {
+async fn a_rename_to_a_name_the_owner_already_uses_is_accepted() {
     let api = Api::new();
     let (mut alice, mut bob, vault, _) = basics(&api).await;
     // A second vault of alice's the server knows and bob has never seen.
@@ -62,20 +62,22 @@ async fn a_rename_to_a_name_the_owner_already_uses_is_refused() {
     alice.sync(&api, lavoro).await;
     assert_eq!(listed(&api, &alice.token).await.len(), 2);
 
-    // bob may rename (he is an editor), but the name belongs to alice's
-    // namespace: fine on his machine, refused by the server.
-    let envelope = CommandEnvelope::new(vault, "bob", rename("lavoro"));
-    let clash = envelope.id;
-    bob.core.execute(envelope).unwrap();
-    assert_eq!(bob.core.vault(vault).unwrap().unwrap().name, "lavoro");
-
+    // bob may rename (he is an editor), and a name is only a label: that
+    // alice already has a Lavoro changes nothing, here or on the server.
+    bob.exec(vault, rename("Lavoro"));
     let reports = bob.sync(&api, vault).await;
-    let rejected: Vec<_> = reports.iter().flat_map(|r| r.rejected.clone()).collect();
-    assert_eq!(rejected.len(), 1);
-    assert_eq!(rejected[0].command_id, clash);
-    assert_eq!(rejected[0].code, "already_exists");
-    assert_eq!(bob.core.vault(vault).unwrap().unwrap().name, "Casa");
-    assert_eq!(api.state.core().vault(vault).unwrap().unwrap().name, "Casa");
+    assert!(reports.iter().all(|r| r.rejected.is_empty()));
+    assert_eq!(bob.core.vault(vault).unwrap().unwrap().name, "Lavoro");
+    assert_eq!(
+        api.state.core().vault(vault).unwrap().unwrap().name,
+        "Lavoro"
+    );
+    let vaults = listed(&api, &alice.token).await;
+    assert_eq!(vaults.len(), 2);
+    assert!(vaults.iter().all(|v| v.name == "Lavoro"));
+
+    alice.sync(&api, vault).await;
+    assert_eq!(alice.core.vault(vault).unwrap().unwrap().name, "Lavoro");
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +170,7 @@ async fn an_editor_cannot_delete_the_vault() {
 }
 
 #[tokio::test]
-async fn a_deleted_vaults_id_cannot_be_claimed_but_its_name_can_be_reused() {
+async fn a_deleted_vaults_id_cannot_be_claimed_but_a_new_vault_may_carry_its_name() {
     let api = Api::new();
     let (mut alice, _bob, vault, _) = basics(&api).await;
     alice.exec(vault, Command::DeleteVault);
@@ -191,7 +193,7 @@ async fn a_deleted_vaults_id_cannot_be_claimed_but_its_name_can_be_reused() {
     assert!(listed(&api, &mallory.token).await.is_empty());
     assert_eq!(mallory.core.vaults().unwrap().len(), 0);
 
-    // The name is free again for its owner.
+    // A new vault may carry the old name: another id, another vault.
     let reborn = alice.create_vault("Casa");
     assert_ne!(reborn, vault);
     alice.sync(&api, reborn).await;

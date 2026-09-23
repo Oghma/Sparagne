@@ -447,14 +447,18 @@ async fn creating_a_vault_refuses_another_author() {
 }
 
 #[tokio::test]
-async fn creating_a_vault_refuses_a_duplicate_name() {
+async fn creating_a_vault_accepts_a_name_the_caller_already_uses() {
     let api = Api::new();
     let token = api.register("alice").await;
-    api.create_vault(&token, "alice", "Main").await;
-    let env = CommandEnvelope::create_vault("alice", "Main", Currency::Eur);
-    let res = api.push(&token, env.id, vec![env]).await;
-    assert_eq!(res.status, StatusCode::CONFLICT);
-    assert_eq!(res.code(), "already_exists");
+    let first = api.create_vault(&token, "alice", "Main").await;
+    // Names are labels: the second Main is a vault of its own, not a 409.
+    let second = api.create_vault(&token, "alice", "Main").await;
+    assert_ne!(first, second);
+    let listed: Vec<VaultSummary> = api.get("/vaults", &token).await.json();
+    assert_eq!(listed.len(), 2);
+    assert!(listed.iter().all(|v| v.name == "Main"));
+    assert!(listed.iter().any(|v| v.id == first));
+    assert!(listed.iter().any(|v| v.id == second));
 }
 
 #[tokio::test]

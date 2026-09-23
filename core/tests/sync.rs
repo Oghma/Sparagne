@@ -1081,7 +1081,7 @@ fn the_owners_deletion_reaches_a_member_through_the_pull() {
 }
 
 #[test]
-fn a_rename_reaches_the_members_and_a_clash_comes_back_refused() {
+fn a_rename_reaches_the_members_even_to_a_name_the_owner_already_uses() {
     let Shared {
         mut server,
         mut alice,
@@ -1106,9 +1106,9 @@ fn a_rename_reaches_the_members_and_a_clash_comes_back_refused() {
         "Casa nuova"
     );
 
-    // alice owns a second vault the server knows and bob does not: bob's
-    // rename to that name applies on his machine and is refused by the
-    // server, which runs the same rule against every vault of the owner.
+    // alice owns a second vault the server knows and bob does not. bob's
+    // rename to that name is no clash: a name is a label, so the server
+    // takes it exactly as bob's machine did.
     let ufficio = server
         .core
         .execute(CommandEnvelope::create_vault(
@@ -1120,25 +1120,24 @@ fn a_rename_reaches_the_members_and_a_clash_comes_back_refused() {
         .result_id
         .unwrap();
     assert_ne!(ufficio, vault);
-    // A rename creates nothing, so its receipt carries no id: keep the
-    // envelope's own.
-    let envelope = CommandEnvelope::new(
+    exec(
+        &mut bob,
         vault,
         "bob",
         Command::RenameVault {
             name: "ufficio".to_string(),
         },
     );
-    let clash = envelope.id;
-    bob.execute(envelope).unwrap();
-    assert_eq!(bob.vault(vault).unwrap().unwrap().name, "ufficio");
     let (pushed, _) = sync(&mut bob, &mut server, vault);
-    assert_eq!(pushed.rejected.len(), 1);
-    assert_eq!(pushed.rejected[0].command_id, clash);
-    assert_eq!(pushed.rejected[0].code, "already_exists");
-    // The rebuild put the server's name back.
-    assert_eq!(bob.vault(vault).unwrap().unwrap().name, "Casa nuova");
+    assert!(pushed.rejected.is_empty());
+    assert_eq!(pushed.confirmed, 1);
+    assert_eq!(bob.vault(vault).unwrap().unwrap().name, "ufficio");
+    assert_eq!(server.core.vault(vault).unwrap().unwrap().name, "ufficio");
+    assert_eq!(server.core.vault(ufficio).unwrap().unwrap().name, "Ufficio");
     assert_eq!(projection(&bob, vault), projection(&server.core, vault));
+
+    sync(&mut alice, &mut server, vault);
+    assert_eq!(projection(&alice, vault), projection(&server.core, vault));
 }
 
 #[test]

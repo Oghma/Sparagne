@@ -30,7 +30,7 @@ fn create_vault_creates_unallocated_and_system_categories() {
 }
 
 #[test]
-fn create_vault_id_is_the_command_id() {
+fn create_vault_id_is_the_command_id_and_the_name_may_repeat() {
     let mut core = Core::open_in_memory().unwrap();
     let env = CommandEnvelope::create_vault("alice", "Main", Currency::Eur);
     let id = env.id;
@@ -51,11 +51,12 @@ fn create_vault_id_is_the_command_id() {
         Err(DomainError::InvalidCommand(_))
     ));
 
-    let dup = CommandEnvelope::create_vault("alice", " main ", Currency::Eur);
-    assert_eq!(
-        core.execute(dup).unwrap_err(),
-        DomainError::AlreadyExists("main".to_string())
-    );
+    // The name is a label: the same owner may give it to a second vault.
+    let twin = CommandEnvelope::create_vault("alice", " main ", Currency::Eur);
+    let twin_id = twin.id;
+    assert_eq!(core.execute(twin).unwrap().result_id, Some(twin_id));
+    assert_eq!(core.vault(twin_id).unwrap().unwrap().name, "main");
+    assert_eq!(core.vault(id).unwrap().unwrap().name, "Main");
 }
 
 #[test]
