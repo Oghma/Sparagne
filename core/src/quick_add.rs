@@ -172,8 +172,8 @@ pub enum DateSpec {
     Yesterday,
     /// `N` days before today, `N >= 1`.
     DaysAgo(u32),
-    /// Day and month, year resolved against a reference date: the occurrence
-    /// nearest to it.
+    /// Day and month, year resolved against a reference date: the latest
+    /// occurrence no more than a month after it.
     DayMonth {
         day: u8,
         month: u8,
@@ -182,11 +182,15 @@ pub enum DateSpec {
 }
 
 impl DateSpec {
-    /// Resolves against `today`. `DayMonth` is the occurrence nearest to
-    /// `today` among last year, this year and next year, a tie going to the
-    /// past: `31/12` typed on 2 January is last year, `02/01` typed on 31
-    /// December is next year. Invalid calendar dates (e.g. 31 February) are
-    /// errors, and so is `29/02` when the nearest February has no 29th.
+    /// Resolves against `today`. `DayMonth` leans on the past, as a ledger
+    /// does: the latest occurrence at most 31 days after `today`, among last
+    /// year, this year and next year. So `12/03` typed on
+    /// 23 September is this March, `31/12` typed on 2 January is last
+    /// December, `02/01` typed on 31 December is next January, and `30/10`
+    /// typed on 23 September (37 days ahead) is last October. A year where the
+    /// date does not exist is skipped (`29/02` typed on 10 March 2029 is 29
+    /// February 2028); when no candidate is left, e.g. `31/04`, the token is
+    /// an invalid date.
     pub fn resolve(self, today: NaiveDate) -> Result<NaiveDate, QuickAddError> {
         match self {
             Self::Today => Ok(today),
@@ -202,32 +206,23 @@ impl DateSpec {
     }
 }
 
-/// The occurrence of `day`/`month` nearest to `today`, a tie going to the
-/// past.
-///
-/// The year is picked by where the day sits in each candidate year (a day the
-/// month lacks counts as the month's last day), and only then is the date
-/// built. So `29/02` resolves to the nearest February and is `invalid_date`
-/// when that February has no 29th, rather than jumping to a leap year further
-/// away; `31/04` is invalid in every year.
+/// How many days after today a `DayMonth` may land; further ahead it means the
+/// year before.
+const DAY_MONTH_DAYS_AHEAD: i64 = 31;
+
+/// `day`/`month` in last year, this year and next year, skipping a year where
+/// it does not exist; of those at most [`DAY_MONTH_DAYS_AHEAD`] days after
+/// `today`, the latest.
 fn resolve_day_month(day: u8, month: u8, today: NaiveDate) -> Result<NaiveDate, QuickAddError> {
-    let invalid = || QuickAddError::invalid_date(format!("{day:02}/{month:02}"));
-    let (day, month) = (u32::from(day), u32::from(month));
-    let position = |year: i32| {
-        (1..=day)
-            .rev()
-            .find_map(|d| NaiveDate::from_ymd_opt(year, month, d))
-    };
     let year = today.year();
-    let (nearest, _) = [year - 1, year, year + 1]
+    [year - 1, year, year + 1]
         .into_iter()
-        .filter_map(|candidate| position(candidate).map(|date| (candidate, date)))
-        .min_by_key(|(_, date)| {
-            let offset = (*date - today).num_days();
-            (offset.abs(), offset > 0)
+        .filter_map(|candidate| {
+            NaiveDate::from_ymd_opt(candidate, u32::from(month), u32::from(day))
         })
-        .ok_or_else(invalid)?;
-    NaiveDate::from_ymd_opt(nearest, month, day).ok_or_else(invalid)
+        .filter(|date| (*date - today).num_days() <= DAY_MONTH_DAYS_AHEAD)
+        .max()
+        .ok_or_else(|| QuickAddError::invalid_date(format!("{day:02}/{month:02}")))
 }
 
 /// A parsed quick-add line, before name resolution.

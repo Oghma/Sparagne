@@ -308,32 +308,36 @@ fn day_month(day: u8, month: u8, today: NaiveDate) -> Result<NaiveDate, QuickAdd
 }
 
 #[test]
-fn a_day_and_month_is_the_nearest_occurrence() {
+fn a_day_and_month_is_the_latest_occurrence_up_to_a_month_ahead() {
+    let today = ymd(2026, 9, 23);
+    // Earlier this year stays in this year, however far back.
+    assert_eq!(day_month(12, 3, today), Ok(ymd(2026, 3, 12)));
+    assert_eq!(day_month(23, 9, today), Ok(ymd(2026, 9, 23)));
+    // A little ahead is still this year...
+    assert_eq!(day_month(24, 9, today), Ok(ymd(2026, 9, 24)));
+    assert_eq!(day_month(20, 10, today), Ok(ymd(2026, 10, 20)));
+    assert_eq!(day_month(24, 10, today), Ok(ymd(2026, 10, 24)));
+    // ...but past 31 days ahead it is last year.
+    assert_eq!(day_month(25, 10, today), Ok(ymd(2025, 10, 25)));
+    assert_eq!(day_month(30, 10, today), Ok(ymd(2025, 10, 30)));
+}
+
+#[test]
+fn a_day_and_month_crosses_the_new_year_both_ways() {
     // Early January looks back at the December just gone.
-    assert_eq!(day_month(31, 12, ymd(2026, 1, 2)), Ok(ymd(2025, 12, 31)));
-    // Today, tomorrow and the months just gone stay in this year.
-    assert_eq!(day_month(23, 9, ymd(2026, 9, 23)), Ok(ymd(2026, 9, 23)));
-    assert_eq!(day_month(24, 9, ymd(2026, 9, 23)), Ok(ymd(2026, 9, 24)));
-    assert_eq!(day_month(12, 4, ymd(2026, 9, 23)), Ok(ymd(2026, 4, 12)));
-    // Nearest means nearest: past half a year back, next year is closer
-    // (12 March 2027 is 170 days away, 12 March 2026 195).
-    assert_eq!(day_month(12, 3, ymd(2026, 9, 23)), Ok(ymd(2027, 3, 12)));
+    assert_eq!(day_month(31, 12, ymd(2027, 1, 2)), Ok(ymd(2026, 12, 31)));
     // Late December looks ahead at the January to come.
     assert_eq!(day_month(2, 1, ymd(2026, 12, 31)), Ok(ymd(2027, 1, 2)));
 }
 
 #[test]
-fn a_tie_between_two_years_goes_to_the_past() {
-    // 2 July 2028 sits 183 days after 1 January 2028 and 183 days before
-    // 1 January 2029 (2028 is a leap year).
-    assert_eq!(day_month(1, 1, ymd(2028, 7, 2)), Ok(ymd(2028, 1, 1)));
-}
-
-#[test]
-fn february_29_needs_the_nearest_february_to_have_it() {
+fn a_year_without_the_date_is_skipped() {
+    // No 29 February in 2029 or 2030: the latest one is 2028's.
+    assert_eq!(day_month(29, 2, ymd(2029, 3, 10)), Ok(ymd(2028, 2, 29)));
     assert_eq!(day_month(29, 2, ymd(2028, 3, 5)), Ok(ymd(2028, 2, 29)));
-    assert_eq!(day_month(29, 2, ymd(2027, 12, 31)), Ok(ymd(2028, 2, 29)));
-    // The nearest February is 2027's: no jump to 2028, a year further on.
+    // Within the month ahead, next year's leap day counts.
+    assert_eq!(day_month(29, 2, ymd(2028, 2, 1)), Ok(ymd(2028, 2, 29)));
+    // The only 29 February around is too far ahead, the others do not exist.
     assert!(matches!(
         day_month(29, 2, ymd(2027, 1, 10)),
         Err(QuickAddError::InvalidDate { .. })
@@ -379,7 +383,7 @@ fn a_two_digit_year_is_this_century_and_other_lengths_are_invalid() {
 }
 
 #[test]
-fn a_day_and_month_on_a_line_lands_in_the_nearest_year() {
+fn a_day_and_month_on_a_line_looks_back_across_the_new_year() {
     let f = build_fixture();
     let now = FixedOffset::east_opt(3600)
         .unwrap()
