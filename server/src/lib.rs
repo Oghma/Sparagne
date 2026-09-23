@@ -32,6 +32,7 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/register", post(auth::register))
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
+        .route("/auth/password", post(auth::change_password))
         .route("/me", get(auth::me))
         .route("/vaults", get(vaults::list))
         .route("/vaults/{vault_id}/push", post(vaults::push))

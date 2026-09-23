@@ -11,7 +11,7 @@ use axum::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use rand::Rng;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sparagne_core::sync::{Credentials, TokenResponse};
 use uuid::Uuid;
@@ -122,6 +122,40 @@ pub async fn login(
 pub async fn logout(State(state): State<AppState>, user: CurrentUser) -> ApiResult<StatusCode> {
     state
         .run(move |state| state.db().delete_token(&user.token_hash))
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Body of `POST /auth/password`. No `Debug`: it holds two passwords.
+#[derive(Clone, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+/// `POST /auth/password`: needs the current password, validates the new one
+/// like register does, and revokes every other token of the account. The
+/// token that made the request stays valid.
+pub async fn change_password(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Json(request): Json<ChangePasswordRequest>,
+) -> ApiResult<StatusCode> {
+    validate_password(&request.new_password)?;
+    state
+        .run(move |state| {
+            let Some((_, hash)) = state.db().user_with_hash(&user.username)? else {
+                return Err(ApiError::unauthorized());
+            };
+            if !verify_password(state, &request.current_password, &hash) {
+                return Err(ApiError::unauthorized());
+            }
+            let new_hash = hash_password(state, &request.new_password)?;
+            let db = state.db();
+            db.set_password_hash(user.id, &new_hash)?;
+            db.delete_tokens_of_user(user.id, Some(&user.token_hash))?;
+            Ok(())
+        })
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

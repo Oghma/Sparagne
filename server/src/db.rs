@@ -122,6 +122,26 @@ impl ServerDb {
         Ok(self.user_with_hash(username)?.map(|(user, _)| user))
     }
 
+    /// Replaces an account's password hash.
+    pub fn set_password_hash(&self, user_id: Uuid, password_hash: &str) -> ApiResult<()> {
+        self.conn.execute(
+            "UPDATE users SET password_hash = ?2 WHERE id = ?1",
+            params![user_id, password_hash],
+        )?;
+        Ok(())
+    }
+
+    /// Every account with its creation time (unix seconds), by username.
+    pub fn users(&self) -> ApiResult<Vec<(String, i64)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT username, created_at FROM users ORDER BY username")?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     // -- Tokens -------------------------------------------------------------
 
     /// Stores a token by its sha256 hex digest.
@@ -172,6 +192,15 @@ impl ServerDb {
         self.conn
             .execute("DELETE FROM tokens WHERE hash = ?1", params![token_hash])?;
         Ok(())
+    }
+
+    /// Revokes every token of an account but `keep` (the digest of the one
+    /// in use, when there is one). Returns how many were revoked.
+    pub fn delete_tokens_of_user(&self, user_id: Uuid, keep: Option<&str>) -> ApiResult<usize> {
+        Ok(self.conn.execute(
+            "DELETE FROM tokens WHERE user_id = ?1 AND hash IS NOT ?2",
+            params![user_id, keep],
+        )?)
     }
 
     /// Drops every token that is already past its expiry.

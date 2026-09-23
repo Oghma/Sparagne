@@ -102,3 +102,99 @@ async fn members_are_named_case_insensitively() {
     let members: Vec<MemberEntry> = api.get(&uri, &alice.token).await.json();
     assert_eq!(members.len(), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Changing the password
+// ---------------------------------------------------------------------------
+
+const NEW_PASSWORD: &str = "a much longer passphrase";
+
+fn change(current: &str, new: &str) -> serde_json::Value {
+    json!({ "current_password": current, "new_password": new })
+}
+
+#[tokio::test]
+async fn changing_the_password_needs_the_current_one() {
+    let api = Api::new();
+    let token = api.register("alice").await;
+
+    let res = api
+        .post(
+            "/auth/password",
+            &token,
+            change("not my password", NEW_PASSWORD),
+        )
+        .await;
+    assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(res.code(), "unauthorized");
+    assert_eq!(api.login("alice", PASSWORD).await.status, StatusCode::OK);
+    assert_eq!(
+        api.login("alice", NEW_PASSWORD).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+
+    // And a token: without one there is nobody to change the password of.
+    let anonymous = api
+        .call(
+            Method::POST,
+            "/auth/password",
+            None,
+            Some(change(PASSWORD, NEW_PASSWORD)),
+        )
+        .await;
+    assert_eq!(anonymous.status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn changing_the_password_validates_the_new_one() {
+    let api = Api::new();
+    let token = api.register("alice").await;
+    let res = api
+        .post("/auth/password", &token, change(PASSWORD, "short"))
+        .await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST);
+    assert_eq!(res.code(), "invalid_request");
+    assert_eq!(api.login("alice", PASSWORD).await.status, StatusCode::OK);
+
+    let malformed = api
+        .post(
+            "/auth/password",
+            &token,
+            json!({ "new_password": NEW_PASSWORD }),
+        )
+        .await;
+    assert_eq!(malformed.status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn changing_the_password_revokes_the_other_tokens_and_keeps_this_one() {
+    let api = Api::new();
+    let laptop = api.register("alice").await;
+    let phone = api
+        .login("alice", PASSWORD)
+        .await
+        .json::<TokenResponse>()
+        .token;
+    let bob = api.register("bob").await;
+
+    let res = api
+        .post("/auth/password", &laptop, change(PASSWORD, NEW_PASSWORD))
+        .await;
+    assert_eq!(res.status, StatusCode::NO_CONTENT, "{:?}", res.body);
+
+    assert_eq!(api.get("/me", &laptop).await.status, StatusCode::OK);
+    let revoked = api.get("/me", &phone).await;
+    assert_eq!(revoked.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(revoked.code(), "unauthorized");
+    // Somebody else's session is not touched.
+    assert_eq!(api.get("/me", &bob).await.status, StatusCode::OK);
+
+    assert_eq!(
+        api.login("alice", PASSWORD).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        api.login("alice", NEW_PASSWORD).await.status,
+        StatusCode::OK
+    );
+}
