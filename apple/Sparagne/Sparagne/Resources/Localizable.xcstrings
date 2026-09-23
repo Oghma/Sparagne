@@ -249,6 +249,70 @@
         }
       }
     },
+    "Add alias": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add alias"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi alias"
+          }
+        }
+      }
+    },
+    "Add expense": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add expense"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi uscita"
+          }
+        }
+      }
+    },
+    "Add income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi entrata"
+          }
+        }
+      }
+    },
+    "Add refund": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add refund"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi rimborso"
+          }
+        }
+      }
+    },
     "Aliases": {
       "localizations": {
         "en": {
@@ -345,6 +409,22 @@
         }
       }
     },
+    "Another vault of the same owner is already called “%@”. The name is allowed, but the two will be hard to tell apart.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another vault of the same owner is already called “%@”. The name is allowed, but the two will be hard to tell apart."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un altro vault dello stesso proprietario si chiama già “%@”. Il nome è consentito, ma sarà difficile distinguerli."
+          }
+        }
+      }
+    },
     "Any active wallet": {
       "localizations": {
         "en": {
@@ -373,6 +453,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Archivia"
+          }
+        }
+      }
+    },
+    "Archive category": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive category"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivia categoria"
+          }
+        }
+      }
+    },
+    "Archive envelope": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive envelope"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivia busta"
+          }
+        }
+      }
+    },
+    "Archive recurring": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive recurring"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivia ricorrenza"
+          }
+        }
+      }
+    },
+    "Archive wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivia wallet"
           }
         }
       }
@@ -537,6 +681,38 @@
         }
       }
     },
+    "Change Password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change Password"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia password"
+          }
+        }
+      }
+    },
+    "Change Password…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change Password…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambia password…"
+          }
+        }
+      }
+    },
     "Choose…": {
       "localizations": {
         "en": {
@@ -565,6 +741,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chiudi"
+          }
+        }
+      }
+    },
+    "Confirm new password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm new password"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conferma la nuova password"
           }
         }
       }
@@ -601,6 +793,86 @@
         }
       }
     },
+    "Create category": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create category"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea categoria"
+          }
+        }
+      }
+    },
+    "Create envelope": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create envelope"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea busta"
+          }
+        }
+      }
+    },
+    "Create recurring": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create recurring"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea ricorrenza"
+          }
+        }
+      }
+    },
+    "Create vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea vault"
+          }
+        }
+      }
+    },
+    "Create wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea wallet"
+          }
+        }
+      }
+    },
     "Currency mismatch": {
       "localizations": {
         "en": {
@@ -629,6 +901,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mese corrente"
+          }
+        }
+      }
+    },
+    "Current password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current password"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password attuale"
           }
         }
       }
@@ -725,6 +1013,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Elimina vault…"
+          }
+        }
+      }
+    },
+    "Delete vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina vault"
           }
         }
       }
@@ -933,6 +1237,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modifica ricorrenza"
+          }
+        }
+      }
+    },
+    "Edit envelope": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit envelope"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica busta"
+          }
+        }
+      }
+    },
+    "Edit recurring": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit recurring"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica ricorrenza"
+          }
+        }
+      }
+    },
+    "Edit transaction": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit transaction"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica transazione"
           }
         }
       }
@@ -1285,22 +1637,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ogni mese il giorno %lld"
-          }
-        }
-      }
-    },
-    "Every wallet, envelope, transaction and recurring template in it will be deleted, for every member and on every device. This cannot be undone.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Every wallet, envelope, transaction and recurring template in it will be deleted, for every member and on every device. This cannot be undone."
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tutti i wallet, le buste, le transazioni e le ricorrenze che contiene verranno eliminati, per ogni membro e su ogni dispositivo. Non si può annullare."
           }
         }
       }
@@ -1689,6 +2025,22 @@
         }
       }
     },
+    "Its wallets, envelopes, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its wallets, envelopes, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con lui se ne vanno i wallet, le buste, le transazioni e le ricorrenze che contiene. Sparisce da ogni dispositivo di ogni membro man mano che si sincronizzano; il server ne conserva la cronologia solo per portare loro la cancellazione. Non si può annullare."
+          }
+        }
+      }
+    },
     "Kind": {
       "localizations": {
         "en": {
@@ -1753,6 +2105,38 @@
         }
       }
     },
+    "Leave": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esci"
+          }
+        }
+      }
+    },
+    "Leave Vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave Vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esci dal vault"
+          }
+        }
+      }
+    },
     "Leave Vault…": {
       "localizations": {
         "en": {
@@ -1765,6 +2149,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esci dal vault…"
+          }
+        }
+      }
+    },
+    "Leave “%@”?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave “%@”?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uscire da “%@”?"
+          }
+        }
+      }
+    },
+    "Leave…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esci…"
           }
         }
       }
@@ -1877,6 +2293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unisci in…"
+          }
+        }
+      }
+    },
+    "Merge categories": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge categories"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unisci categorie"
           }
         }
       }
@@ -2137,6 +2569,54 @@
         }
       }
     },
+    "New accounts need 3 to 32 characters: a–z, 0–9, “_”, “.” or “-”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New accounts need 3 to 32 characters: a–z, 0–9, “_”, “.” or “-”."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I nuovi account richiedono da 3 a 32 caratteri: a–z, 0–9, “_”, “.” o “-”."
+          }
+        }
+      }
+    },
+    "New accounts need a password of at least 8 characters.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New accounts need a password of at least 8 characters."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I nuovi account richiedono una password di almeno 8 caratteri."
+          }
+        }
+      }
+    },
+    "New password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New password"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova password"
+          }
+        }
+      }
+    },
     "New…": {
       "localizations": {
         "en": {
@@ -2213,6 +2693,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessuna busta chiamata “%@”"
+          }
+        }
+      }
+    },
+    "No longer shared with you": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No longer shared with you"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non più condivisi con te"
           }
         }
       }
@@ -2665,6 +3161,38 @@
         }
       }
     },
+    "Remove alias": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove alias"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi alias"
+          }
+        }
+      }
+    },
+    "Remove from This Mac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from This Mac"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi da questo Mac"
+          }
+        }
+      }
+    },
     "Rename Envelope": {
       "localizations": {
         "en": {
@@ -2729,6 +3257,54 @@
         }
       }
     },
+    "Rename category": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename category"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rinomina categoria"
+          }
+        }
+      }
+    },
+    "Rename vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rinomina vault"
+          }
+        }
+      }
+    },
+    "Rename wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rinomina wallet"
+          }
+        }
+      }
+    },
     "Rename…": {
       "localizations": {
         "en": {
@@ -2761,6 +3337,70 @@
         }
       }
     },
+    "Restore category": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore category"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripristina categoria"
+          }
+        }
+      }
+    },
+    "Restore envelope": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore envelope"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripristina busta"
+          }
+        }
+      }
+    },
+    "Restore recurring": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore recurring"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripristina ricorrenza"
+          }
+        }
+      }
+    },
+    "Restore wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripristina wallet"
+          }
+        }
+      }
+    },
     "Review": {
       "localizations": {
         "en": {
@@ -2789,6 +3429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ruolo"
+          }
+        }
+      }
+    },
+    "Run recurring": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run recurring"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esegui ricorrenza"
           }
         }
       }
@@ -2853,6 +3509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Indirizzo del server"
+          }
+        }
+      }
+    },
+    "Session expired — log in again": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session expired — log in again"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessione scaduta — accedi di nuovo"
           }
         }
       }
@@ -2969,6 +3641,22 @@
         }
       }
     },
+    "Signed in until %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed in until %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connesso fino al %@"
+          }
+        }
+      }
+    },
     "Signs the rows you add while logged out; an account's name takes over when you log in.": {
       "localizations": {
         "en": {
@@ -3013,6 +3701,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salta"
+          }
+        }
+      }
+    },
+    "Skip recurring": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip recurring"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salta ricorrenza"
           }
         }
       }
@@ -3385,6 +4089,54 @@
         }
       }
     },
+    "The current password is not correct.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The current password is not correct."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La password attuale non è corretta."
+          }
+        }
+      }
+    },
+    "The new password needs at least 8 characters.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The new password needs at least 8 characters."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La nuova password deve avere almeno 8 caratteri."
+          }
+        }
+      }
+    },
+    "The owner stopped sharing these vaults with you, or they were removed from the server. What was synced before stays here, read-only, until you remove it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The owner stopped sharing these vaults with you, or they were removed from the server. What was synced before stays here, read-only, until you remove it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il proprietario ha smesso di condividere questi vault con te, oppure sono stati tolti dal server. Quello che era già sincronizzato resta qui, in sola lettura, finché non lo rimuovi."
+          }
+        }
+      }
+    },
     "The server answered something unexpected": {
       "localizations": {
         "en": {
@@ -3481,6 +4233,22 @@
         }
       }
     },
+    "The two new passwords do not match.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The two new passwords do not match."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le due nuove password non coincidono."
+          }
+        }
+      }
+    },
     "This server is not accepting new accounts": {
       "localizations": {
         "en": {
@@ -3493,6 +4261,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Questo server non accetta nuovi account"
+          }
+        }
+      }
+    },
+    "This vault is no longer shared with you.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault is no longer shared with you."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo vault non è più condiviso con te."
           }
         }
       }
@@ -3545,6 +4329,62 @@
         }
       }
     },
+    "Too many attempts. Try again in %lld minutes.": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Too many attempts. Try again in %lld minute."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Too many attempts. Try again in %lld minutes."
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Troppi tentativi. Riprova tra %lld minuto."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Troppi tentativi. Riprova tra %lld minuti."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Too many attempts. Try again later.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many attempts. Try again later."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Troppi tentativi. Riprova più tardi."
+          }
+        }
+      }
+    },
     "Total": {
       "localizations": {
         "en": {
@@ -3573,6 +4413,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Risparmio totale"
+          }
+        }
+      }
+    },
+    "Transfer between envelopes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer between envelopes"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento tra buste"
+          }
+        }
+      }
+    },
+    "Transfer between wallets": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer between wallets"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento tra wallet"
           }
         }
       }
@@ -3785,6 +4657,22 @@
         }
       }
     },
+    "Void transaction": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Void transaction"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulla transazione"
+          }
+        }
+      }
+    },
     "Waiting to sync": {
       "localizations": {
         "en": {
@@ -3957,6 +4845,102 @@
           "stringUnit": {
             "state": "translated",
             "value": "Non hai i permessi per farlo"
+          }
+        }
+      }
+    },
+    "You can read this vault but not change it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can read this vault but not change it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puoi leggere questo vault ma non modificarlo."
+          }
+        }
+      }
+    },
+    "Your changes still waiting to sync are sent first. Then the vault is removed from this Mac and you stop receiving its changes. Its owner and the other members keep it; only the owner can share it with you again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your changes still waiting to sync are sent first. Then the vault is removed from this Mac and you stop receiving its changes. Its owner and the other members keep it; only the owner can share it with you again."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prima vengono inviate le tue modifiche ancora in attesa. Poi il vault viene rimosso da questo Mac e smetti di riceverne le modifiche. Il proprietario e gli altri membri lo conservano; solo il proprietario può condividerlo di nuovo con te."
+          }
+        }
+      }
+    },
+    "Your login could not be saved in the Keychain; you'll need to log in again next time.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your login could not be saved in the Keychain; you'll need to log in again next time."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non è stato possibile salvare l'accesso nel Portachiavi; la prossima volta dovrai accedere di nuovo."
+          }
+        }
+      }
+    },
+    "Your other devices will be signed out.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your other devices will be signed out."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I tuoi altri dispositivi verranno disconnessi."
+          }
+        }
+      }
+    },
+    "Your password was changed. Your other devices were signed out and need to log in again with the new password.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your password was changed. Your other devices were signed out and need to log in again with the new password."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La password è stata cambiata. I tuoi altri dispositivi sono stati disconnessi e devono accedere di nuovo con la nuova password."
+          }
+        }
+      }
+    },
+    "Your role in this vault only lets you read it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your role in this vault only lets you read it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il tuo ruolo in questo vault ti permette solo di leggerlo."
           }
         }
       }
