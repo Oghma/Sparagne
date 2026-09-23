@@ -5,10 +5,12 @@ import SparagneCore
 /// (docs/v2/DISTILLATO_V1.md §3.6 introduces the three concepts here).
 struct OnboardingSheet: View {
     let isFirstRun: Bool
-    let create: (_ vaultName: String, _ walletName: String, _ openingBalance: Int64) -> Void
     /// The names of the other vaults the new one's owner already has
-    /// (`VaultNaming.siblingNames`), for the duplicate-name warning.
+    /// (`VaultNaming.siblingNames`), for the duplicate-name warning. Before
+    /// `create`, so a caller can pass it and keep `create` as the trailing
+    /// closure.
     var takenNames: [String] = []
+    let create: (_ vaultName: String, _ walletName: String, _ openingBalance: Int64) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var vaultName = "Main"

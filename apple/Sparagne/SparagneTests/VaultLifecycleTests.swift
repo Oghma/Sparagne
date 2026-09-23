@@ -189,5 +189,12 @@ struct VaultLifecycleTests {
         #expect(VaultNaming.label(for: other, among: all) == "Lavoro")
         #expect(VaultNaming.siblingNames(owner: "alice", excluding: "1", in: all) == ["Lavoro"])
         #expect(VaultNaming.siblingNames(owner: "alice", in: all) == ["Casa", "Lavoro"])
+
+        // The sheets take the names next to their trailing closure, the way
+        // the window presents them.
+        let onboarding = OnboardingSheet(isFirstRun: false, takenNames: ["Casa"]) { _, _, _ in }
+        let rename = RenameSheet(title: "Rename Vault", name: "Lavoro", takenNames: ["Casa"]) { _ in }
+        #expect(onboarding.takenNames == ["Casa"])
+        #expect(rename.takenNames == ["Casa"])
     }
 }
