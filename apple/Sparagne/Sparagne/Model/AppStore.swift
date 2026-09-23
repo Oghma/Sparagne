@@ -189,16 +189,16 @@ final class AppStore {
     ///
     /// A `didSet` cannot await, so it queues the reload; `settle()` is how a
     /// caller waits for the queue to drain.
-    var month = MonthKey(Date()) { didSet { if month != oldValue { scheduleReload() } } }
-    var direction: LedgerDirection = .expenses { didSet { if direction != oldValue { scheduleReload() } } }
+    var month = MonthKey(Date()) { didSet { if month != oldValue { filtersChanged() } } }
+    var direction: LedgerDirection = .expenses { didSet { if direction != oldValue { filtersChanged() } } }
     /// The PERSONA filter: `nil` is everybody.
-    var person: String? { didSet { if person != oldValue { scheduleReload() } } }
+    var person: String? { didSet { if person != oldValue { filtersChanged() } } }
     /// Which of the two views is on screen; no reload, the data is the same.
     /// The window opens on the RIEPILOGO (`docs/v2/UI.md` §2).
     var tab: LedgerTab = .summary
-    var showVoided = false { didSet { if showVoided != oldValue { scheduleReload() } } }
+    var showVoided = false { didSet { if showVoided != oldValue { filtersChanged() } } }
     /// Transfers are in neither direction, so the View menu opts into them.
-    var showTransfers = false { didSet { if showTransfers != oldValue { scheduleReload() } } }
+    var showTransfers = false { didSet { if showTransfers != oldValue { filtersChanged() } } }
     /// The optional WALLET column (`docs/v2/UI.md` §3). Display only: it
     /// changes what the grid draws and what ⌘E writes, never what is loaded,
     /// so it does not reload.
@@ -207,9 +207,19 @@ final class AppStore {
             if showWalletColumn != oldValue { defaults.set(showWalletColumn, forKey: Self.walletColumnKey) }
         }
     }
-    /// Debounced by the view; call `reload()` when it settles.
-    var searchText = ""
+    /// Debounced by the view; call `reload()` when it settles. The selection
+    /// goes at the first keystroke, not with the reload: it named rows of the
+    /// list being narrowed.
+    var searchText = "" { didSet { if searchText != oldValue { selection.clear() } } }
     var quickAddText = ""
+
+    // MARK: Selection
+
+    /// The rows picked for a bulk action, with the gestures and the actions
+    /// in `AppStore+Selection.swift` (which is why the setter is not private).
+    /// It names rows of one list, so the month, the vault and every filter
+    /// clear it.
+    var selection = RowSelection()
 
     // MARK: Transient
 
@@ -289,6 +299,13 @@ final class AppStore {
     }
 
     // MARK: - The load queue
+
+    /// A filter changed: what is selected belonged to the old list, and the
+    /// new one has to be loaded.
+    private func filtersChanged() {
+        selection.clear()
+        scheduleReload()
+    }
 
     /// Queues a reload behind whatever is already loading. The filters are
     /// plain properties so the views can bind to them, and a `didSet` cannot
@@ -378,6 +395,7 @@ final class AppStore {
         windowCategories = []
         categoryAliases = []
         recurringTemplates = []
+        selection.clear()
         // A void still counting down is not undone by leaving: it carries its
         // own vault, so it lands where its rows are, and the vault it left
         // is not reloaded for nothing.
@@ -419,6 +437,9 @@ final class AppStore {
             summary = Self.summary(month: month, from: loaded)
             year = Self.year(month: month, from: loaded, flows: flows)
             rebuildRows()
+            // A sync or a void can take selected rows away: they must not
+            // ride along, unseen, in the next bulk action.
+            selection.retain(Set(rows.map(\.id)))
             // A person who has left the vault's history must not stay
             // selected, or the ledger shows an empty month with no way back.
             // Clearing it queues the reload that fetches the whole month.
