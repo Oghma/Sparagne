@@ -17,6 +17,126 @@
         }
       }
     },
+    "%lld recurring entries are due": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld recurring entry is due"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld recurring entries are due"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ricorrenza in attesa"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ricorrenze in attesa"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld rows": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld row"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rows"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld riga"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld righe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld transactions voided": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Transaction voided"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transactions voided"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Transazione annullata"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transazioni annullate"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "-12.50 pizza #food @cash >groceries": {
       "localizations": {
         "en": {
@@ -545,18 +665,18 @@
         }
       }
     },
-    "Day": {
+    "Day %lld": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Day"
+            "value": "Day %lld"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Giorno"
+            "value": "Giorno %lld"
           }
         }
       }
@@ -737,6 +857,22 @@
         }
       }
     },
+    "Due Recurring Entries": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Due Recurring Entries"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ricorrenze in attesa"
+          }
+        }
+      }
+    },
     "Duplicate": {
       "localizations": {
         "en": {
@@ -913,18 +1049,242 @@
         }
       }
     },
-    "Every": {
+    "Every %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Every"
+            "value": "Every %@"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ogni"
+            "value": "Ogni %@"
+          }
+        }
+      }
+    },
+    "Every %lld days": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Every day"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Every %lld days"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ogni giorno"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ogni %lld giorni"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Every %lld months": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Every month"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Every %lld months"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ogni mese"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ogni %lld mesi"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Every %lld months on day %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld months on day %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni %lld mesi il giorno %lld"
+          }
+        }
+      }
+    },
+    "Every %lld weeks": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Every week"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Every %lld weeks"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ogni settimana"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ogni %lld settimane"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Every %lld weeks on %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld weeks on %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni %lld settimane, di %@"
+          }
+        }
+      }
+    },
+    "Every %lld years": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Every year"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Every %lld years"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ogni anno"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Ogni %lld anni"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Every %lld years on %@ %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld years on %@ %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni %1$lld anni il %3$lld %2$@"
+          }
+        }
+      }
+    },
+    "Every month on day %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every month on day %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni mese il giorno %lld"
           }
         }
       }
@@ -941,6 +1301,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tutti i wallet, le buste, le transazioni e le ricorrenze che contiene verranno eliminati, per ogni membro e su ogni dispositivo. Non si può annullare."
+          }
+        }
+      }
+    },
+    "Every year on %@ %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every year on %@ %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni anno il %2$lld %1$@"
+          }
+        }
+      }
+    },
+    "Execute": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Execute"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esegui"
+          }
+        }
+      }
+    },
+    "Execute All": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Execute All"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esegui tutte"
           }
         }
       }
@@ -1473,6 +1881,22 @@
         }
       }
     },
+    "Merge “%@” into": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge “%@” into"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unisci “%@” in"
+          }
+        }
+      }
+    },
     "Month": {
       "localizations": {
         "en": {
@@ -1501,22 +1925,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mensile"
-          }
-        }
-      }
-    },
-    "Monthly on day": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Monthly on day"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mensile il giorno"
           }
         }
       }
@@ -1949,6 +2357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nota"
+          }
+        }
+      }
+    },
+    "Nothing is due": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing is due"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niente in attesa"
           }
         }
       }
@@ -2561,18 +2985,34 @@
         }
       }
     },
-    "Similar:": {
+    "Similar: %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Similar:"
+            "value": "Similar: %@"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Simili:"
+            "value": "Simili: %@"
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salta"
           }
         }
       }
@@ -3057,6 +3497,22 @@
         }
       }
     },
+    "This vault is shared with you to read, not to change.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault is shared with you to read, not to change."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo vault è condiviso con te in sola lettura."
+          }
+        }
+      }
+    },
     "Those changes belong to another account": {
       "localizations": {
         "en": {
@@ -3117,22 +3573,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Risparmio totale"
-          }
-        }
-      }
-    },
-    "Transaction voided": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Transaction voided"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Transazione annullata"
           }
         }
       }
@@ -3425,22 +3865,6 @@
         }
       }
     },
-    "Weekly on": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Weekly on"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Settimanale il"
-          }
-        }
-      }
-    },
     "Welcome to Sparagne": {
       "localizations": {
         "en": {
@@ -3501,22 +3925,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annuale"
-          }
-        }
-      }
-    },
-    "Yearly on": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yearly on"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Annuale il"
           }
         }
       }
@@ -3601,22 +4009,6 @@
         }
       }
     },
-    "days": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "days"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "giorni"
-          }
-        }
-      }
-    },
     "description…": {
       "localizations": {
         "en": {
@@ -3649,18 +4041,34 @@
         }
       }
     },
-    "flow": {
+    "expense": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "flow"
+            "value": "expense"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "flow"
+            "value": "uscita"
+          }
+        }
+      }
+    },
+    "income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "entrata"
           }
         }
       }
@@ -3681,66 +4089,34 @@
         }
       }
     },
-    "into": {
+    "month=%lld": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "into"
+            "value": "month=%lld"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "in"
+            "value": "mese=%lld"
           }
         }
       }
     },
-    "is archived.": {
+    "month=%lld flow=%@ person=%@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "is archived."
+            "value": "month=%lld flow=%@ person=%@"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "è archiviata."
-          }
-        }
-      }
-    },
-    "month": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "month"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "mese"
-          }
-        }
-      }
-    },
-    "months on day": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "months on day"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "mesi il giorno"
+            "value": "mese=%lld flow=%@ persona=%@"
           }
         }
       }
@@ -3873,50 +4249,18 @@
         }
       }
     },
-    "person": {
+    "refund": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "person"
+            "value": "refund"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "persona"
-          }
-        }
-      }
-    },
-    "recurring entries are due": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "recurring entries are due"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ricorrenze in attesa"
-          }
-        }
-      }
-    },
-    "rows": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "rows"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "righe"
+            "value": "rimborso"
           }
         }
       }
@@ -3953,18 +4297,18 @@
         }
       }
     },
-    "saved": {
+    "saved %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "saved"
+            "value": "saved %@"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "salvato"
+            "value": "salvato %@"
           }
         }
       }
@@ -4001,6 +4345,22 @@
         }
       }
     },
+    "transfer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "transfer"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "trasferimento"
+          }
+        }
+      }
+    },
     "up to": {
       "localizations": {
         "en": {
@@ -4017,18 +4377,18 @@
         }
       }
     },
-    "view": {
+    "view=%@ month=%lld flow=%@ person=%@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "view"
+            "value": "view=%@ month=%lld flow=%@ person=%@"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "vista"
+            "value": "vista=%@ mese=%lld flow=%@ persona=%@"
           }
         }
       }
@@ -4049,22 +4409,6 @@
         }
       }
     },
-    "weeks on": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "weeks on"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "settimane il"
-          }
-        }
-      }
-    },
     "yes": {
       "localizations": {
         "en": {
@@ -4077,6 +4421,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "sì"
+          }
+        }
+      }
+    },
+    "“%@” is archived.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” is archived."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” è archiviata."
           }
         }
       }

@@ -4,6 +4,8 @@ the code, since xcodebuild does not sync it (docs/v2/ROADMAP.md §3).
 
     scripts/catalog.py check              keys used in code but missing, or without Italian
     scripts/catalog.py merge FRAGMENT...  adds each fragment's keys, then deletes the fragment
+    scripts/catalog.py unused             catalog keys no String(localized:) in the code uses
+    scripts/catalog.py remove KEY...      drops keys from the catalog
 
 A fragment is a JSON object {key: {"en": value, "it": value}}. A value is a
 string, or {"one": ..., "other": ...} for a plural (the key then holds one
@@ -83,6 +85,31 @@ def check():
     return 1 if missing or untranslated else 0
 
 
+def used_shapes():
+    return {
+        shape(swift_key(literal))
+        for path in APP.rglob("*.swift")
+        for literal in LITERAL.findall(path.read_text())
+    }
+
+
+def unused():
+    used = used_shapes()
+    keys = sorted(k for k in load()["strings"] if shape(k) not in used)
+    for key in keys:
+        print(key)
+    print(f"{len(keys)} unused", file=sys.stderr)
+    return 0
+
+
+def remove(keys):
+    catalog = load()
+    for key in keys:
+        if catalog["strings"].pop(key, None) is None:
+            print(f"not in catalog: {key}", file=sys.stderr)
+    save(catalog)
+
+
 def unit(value):
     return {"stringUnit": {"state": "translated", "value": value}}
 
@@ -109,6 +136,11 @@ def merge(paths):
 if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == "check":
         sys.exit(check())
+    if len(sys.argv) == 2 and sys.argv[1] == "unused":
+        sys.exit(unused())
+    if len(sys.argv) >= 3 and sys.argv[1] == "remove":
+        remove(sys.argv[2:])
+        sys.exit(0)
     if len(sys.argv) >= 3 and sys.argv[1] == "merge":
         merge(sys.argv[2:])
         sys.exit(0)
