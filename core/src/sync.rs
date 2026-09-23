@@ -802,17 +802,45 @@ impl Core {
     /// rebuilds the projection without them. The app calls it when a push
     /// comes back `403` (a viewer wrote locally), so the vault can keep
     /// pulling instead of retrying forever.
+    ///
+    /// It is [`Self::apply_push_response`] on a response that refuses every
+    /// outbox command, so the report and the rebuild are the ones a real
+    /// refusal gives. The response carries the highest server seq this
+    /// database knows as the server's last seq; with an empty outbox nothing
+    /// changes and the report only carries that seq.
     pub fn reject_outbox(
         &mut self,
         vault_id: Uuid,
         code: &str,
         message: &str,
     ) -> Result<SyncReport> {
-        let _ = (vault_id, code, message);
-        Err(DomainError::InvalidCommand(
-            "reject_outbox: not implemented".to_string(),
-        ))
+        let results = outbox_records(&self.conn, vault_id)?
+            .into_iter()
+            .map(|record| PushResult {
+                command_id: record.envelope.id,
+                outcome: PushOutcome::Rejected {
+                    code: code.to_string(),
+                    message: message.to_string(),
+                },
+            })
+            .collect();
+        let response = PushResponse {
+            results,
+            last_seq: known_server_seq(&self.conn, vault_id)?,
+        };
+        self.apply_push_response(vault_id, &response)
     }
+}
+
+/// The highest server seq the log holds for the vault, holes or not: the last
+/// seq the server is known to have reached. 0 when never synced.
+fn known_server_seq(conn: &Connection, vault_id: Uuid) -> Result<i64> {
+    Ok(conn.query_row(
+        "SELECT COALESCE(MAX(server_seq), 0) FROM commands
+         WHERE vault_id = ?1 AND status = 'applied'",
+        params![vault_id],
+        |r| r.get(0),
+    )?)
 }
 
 // ---------------------------------------------------------------------------
