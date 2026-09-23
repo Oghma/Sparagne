@@ -188,12 +188,14 @@ extension CommandPaletteModel {
             )
         }
 
+        // Two vaults may share a name (`VaultNaming`): the owner tells them
+        // apart, and is a keyword too.
         for vault in store.vaults where vault.id != store.currentVault?.id {
             actions.append(
                 PaletteAction(
                     id: "vault.\(vault.id)",
-                    title: String(localized: "Vault: \(vault.name)"),
-                    keywords: [vault.name]
+                    title: String(localized: "Vault: \(VaultNaming.label(for: vault, among: store.vaults))"),
+                    keywords: [vault.name, vault.owner]
                 ) {
                     await store.select(vault)
                 }

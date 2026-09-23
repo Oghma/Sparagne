@@ -6,6 +6,9 @@ import SparagneCore
 struct OnboardingSheet: View {
     let isFirstRun: Bool
     let create: (_ vaultName: String, _ walletName: String, _ openingBalance: Int64) -> Void
+    /// The names of the other vaults the new one's owner already has
+    /// (`VaultNaming.siblingNames`), for the duplicate-name warning.
+    var takenNames: [String] = []
 
     @Environment(\.dismiss) private var dismiss
     @State private var vaultName = "Main"
@@ -48,6 +51,9 @@ struct OnboardingSheet: View {
             }
             Form {
                 TextField(String(localized: "Vault name"), text: $vaultName)
+                if let taken = VaultNaming.duplicate(of: vaultName, in: takenNames) {
+                    DuplicateNameWarning(name: taken)
+                }
                 TextField(String(localized: "First wallet"), text: $walletName)
                 TextField(String(localized: "Opening balance"), text: $openingBalance)
                     .monospacedDigit()
@@ -181,19 +187,25 @@ struct NewEnvelopeSheet: View {
     }
 }
 
-/// A single text field with Cancel/Save: wallet rename and the envelope
-/// quick-rename. Fuller envelope edits go through `EditEnvelopeSheet`.
+/// A single text field with Cancel/Save: vault and wallet rename and the
+/// envelope quick-rename. Fuller envelope edits go through
+/// `EditEnvelopeSheet`.
 struct RenameSheet: View {
     let title: String
     let name: String
+    /// Names the new one would be confused with, for a warning that never
+    /// blocks: the owner's other vaults when a vault is renamed
+    /// (`VaultNaming.siblingNames`), nothing otherwise.
+    let takenNames: [String]
     let save: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var text: String
 
-    init(title: String, name: String, save: @escaping (String) -> Void) {
+    init(title: String, name: String, takenNames: [String] = [], save: @escaping (String) -> Void) {
         self.title = title
         self.name = name
+        self.takenNames = takenNames
         self.save = save
         _text = State(initialValue: name)
     }
@@ -215,15 +227,19 @@ struct RenameSheet: View {
         ) {
             TextField(String(localized: "Name"), text: $text)
                 .textFieldStyle(.roundedBorder)
+            if trimmed != name, let taken = VaultNaming.duplicate(of: trimmed, in: takenNames) {
+                DuplicateNameWarning(name: taken)
+            }
         }
     }
 }
 
 /// The confirmation before `DeleteVault`, the one action no undo covers: the
 /// vault goes with its wallets, envelopes, transactions and recurring
-/// templates, for every member and on every device once the command has
-/// synced (`docs/v2/SYNC.md` §4.6). Reached from the Vault menu, the palette
-/// and the management sheet, so the wording lives in one place.
+/// templates. It leaves each member's devices as they sync, while the server
+/// keeps its log so the deletion can reach them (`docs/v2/SYNC.md` §3-§4.6).
+/// Reached from the Vault menu, the palette and the management sheet, so the
+/// wording lives in one place.
 struct DeleteVaultSheet: View {
     let vault: VaultView
     let delete: () -> Void
@@ -244,7 +260,7 @@ struct DeleteVaultSheet: View {
             cancel: { dismiss() }
         ) {
             Text(String(localized: "Delete \u{201C}\(vault.name)\u{201D}?"))
-            Text(String(localized: "Every wallet, envelope, transaction and recurring template in it will be deleted, for every member and on every device. This cannot be undone."))
+            Text(String(localized: "Its wallets, envelopes, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -322,6 +338,56 @@ struct EditEnvelopeSheet: View {
             }
             .formStyle(.grouped)
         }
+    }
+}
+
+// MARK: - Vault names
+
+/// Vault names are labels (`docs/v2/SYNC.md` §3, "Nomi dei vault"): two
+/// vaults may share one, even with the same owner. Nothing refuses a repeated
+/// name; the sheets warn, and the lists tell the two apart.
+enum VaultNaming {
+    /// The name as a list shows it, with the owner appended when another
+    /// listed vault has the same name.
+    static func label(for vault: VaultView, among vaults: [VaultView]) -> String {
+        let clashes = vaults.contains { other in
+            other.id != vault.id && same(other.name, vault.name)
+        }
+        return clashes ? "\(vault.name) (\(vault.owner))" : vault.name
+    }
+
+    /// The names of `owner`'s vaults, but `excluding`'s own: what a new or
+    /// renamed vault of theirs would be confused with.
+    static func siblingNames(owner: String, excluding vaultId: Uuid? = nil, in vaults: [VaultView]) -> [String] {
+        vaults.filter { $0.owner == owner && $0.id != vaultId }.map(\.name)
+    }
+
+    /// The name among `names` that `name` repeats, ignoring case and the
+    /// spaces the sheets trim anyway.
+    static func duplicate(of name: String, in names: [String]) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return names.first { same($0, trimmed) }
+    }
+
+    private static func same(_ a: String, _ b: String) -> Bool {
+        a.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(b.trimmingCharacters(in: .whitespaces))
+            == .orderedSame
+    }
+}
+
+/// The non-blocking note under a vault name another vault already has.
+private struct DuplicateNameWarning: View {
+    let name: String
+
+    var body: some View {
+        Label(
+            String(localized: "Another vault of the same owner is already called \u{201C}\(name)\u{201D}. The name is allowed, but the two will be hard to tell apart."),
+            systemImage: "exclamationmark.triangle"
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

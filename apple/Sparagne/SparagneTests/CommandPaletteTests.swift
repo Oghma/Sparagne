@@ -151,6 +151,24 @@ struct CommandPaletteTests {
         #expect(!ids.contains("vault.\(current.id)"))
     }
 
+    @Test("Two vaults with the same name are told apart by their owner")
+    func sameNamedVaultEntries() async throws {
+        let store = try Self.store(author: "matteo")
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        await store.createVault(name: "casa", walletName: "Conto", openingBalance: 0)
+        await store.createVault(name: "Lavoro", walletName: "Conto", openingBalance: 0)
+        let twins = store.vaults.filter { $0.name.lowercased() == "casa" }
+        #expect(twins.count == 2)
+
+        let titles = CommandPaletteModel.ledgerActions(store: store, engine: nil).map(\.title)
+        for twin in twins {
+            #expect(titles.contains(String(localized: "Vault: \("\(twin.name) (matteo)")")))
+        }
+        // A name nobody else has stays as it is.
+        #expect(!titles.contains { $0.contains("Lavoro (") })
+    }
+
     @Test("New Vault is always an entry; Rename and Delete only with a vault on screen")
     func vaultLifecycleEntries() async throws {
         let store = try Self.store()

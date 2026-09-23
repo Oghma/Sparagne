@@ -10,8 +10,9 @@ import SparagneCore
 /// (docs/v2/DISTILLATO_V1.md §3.4).
 struct ManagementSheet: View {
     let store: AppStore
-    /// Says whether this vault is mine on the server, which is what the
-    /// "Share…" entry needs (`docs/v2/SYNC.md` §3).
+    /// Says what the account may do to this vault on the server — share,
+    /// rename, leave, delete (`docs/v2/SYNC.md` §3) — and which vaults are no
+    /// longer shared with it.
     let engine: SyncEngine?
     /// Requests one of `MainWindow`'s sheets; `MainWindow` owns the
     /// presentation state so every sheet, new or management, goes through
@@ -19,6 +20,12 @@ struct ManagementSheet: View {
     let present: (MainWindow.SheetKind) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    /// Why removing a vault no longer shared failed, shown under its row.
+    @State private var removalFailure: String?
+
+    /// Writes are refused on a vault the account only reads, so what would
+    /// write is not offered.
+    private var writable: Bool { store.currentVault != nil && !store.isReadOnly }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,17 +46,25 @@ struct ManagementSheet: View {
             Section {
                 Menu {
                     ForEach(store.vaults, id: \.id) { vault in
-                        Button(vault.name) { Task { await store.select(vault) } }
+                        Button(VaultNaming.label(for: vault, among: store.vaults)) {
+                            Task { await store.select(vault) }
+                        }
                     }
                     Divider()
                     Button(String(localized: "New Vault…")) { present(.vault) }
                     if let vault = store.currentVault {
-                        Button(String(localized: "Rename…")) { present(.renameVault(vault)) }
+                        // Each entry only when it would go through: the core
+                        // and the server refuse the rest anyway.
+                        if engine?.mayRenameVault(vault.id) ?? true {
+                            Button(String(localized: "Rename…")) { present(.renameVault(vault)) }
+                        }
                         if let engine, engine.isLoggedIn, engine.isOwner(ofVault: vault.id) {
                             Button(String(localized: "Share…")) { present(.share(vault)) }
                         }
-                        // Not offered for a shared vault I do not own: the
-                        // core and the server both refuse the command.
+                        if engine?.mayLeaveVault(vault.id) ?? false {
+                            Divider()
+                            Button(String(localized: "Leave…")) { present(.leaveVault(vault)) }
+                        }
                         if engine?.mayDeleteVault(vault.id) ?? true {
                             Divider()
                             Button(String(localized: "Delete…"), role: .destructive) {
@@ -59,27 +74,39 @@ struct ManagementSheet: View {
                     }
                 } label: {
                     Label(
-                        store.currentVault?.name ?? String(localized: "No vault"),
+                        store.currentVault.map { VaultNaming.label(for: $0, among: store.vaults) }
+                            ?? String(localized: "No vault"),
                         systemImage: "chevron.up.chevron.down"
                     )
                 }
                 .menuStyle(.borderlessButton)
+                if store.isReadOnly, let vault = store.currentVault, !(engine?.hasLostAccess(to: vault.id) ?? false) {
+                    Text(String(localized: "You can read this vault but not change it."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let engine, !engine.lostVaults.isEmpty {
+                lostSection(engine)
             }
 
             Section(String(localized: "Wallets")) {
                 ForEach(store.wallets, id: \.id) { wallet in
                     WalletManagementRow(wallet: wallet)
                         .contextMenu {
-                            Button(String(localized: "Rename…")) { present(.renameWallet(wallet)) }
-                            Button(String(localized: "Archive"), role: .destructive) {
-                                Task { await store.archiveWallet(wallet.id) }
+                            if writable {
+                                Button(String(localized: "Rename…")) { present(.renameWallet(wallet)) }
+                                Button(String(localized: "Archive"), role: .destructive) {
+                                    Task { await store.archiveWallet(wallet.id) }
+                                }
                             }
                         }
                 }
                 if !store.archivedWallets.isEmpty {
                     DisclosureGroup(String(localized: "Archived")) {
                         ForEach(store.archivedWallets, id: \.id) { wallet in
-                            ArchivedRow(name: wallet.name) {
+                            ArchivedRow(name: wallet.name, canRestore: writable) {
                                 Task { await store.restoreWallet(wallet.id) }
                             }
                         }
@@ -87,7 +114,7 @@ struct ManagementSheet: View {
                 }
                 Button(String(localized: "New Wallet…")) { present(.wallet) }
                     .buttonStyle(.link)
-                    .disabled(store.currentVault == nil)
+                    .disabled(!writable)
             }
 
             Section(String(localized: "Envelopes")) {
@@ -99,7 +126,7 @@ struct ManagementSheet: View {
                     .contextMenu {
                         // Unallocated is a system envelope: the core
                         // refuses to update or archive it.
-                        if !flow.isUnallocated {
+                        if !flow.isUnallocated, writable {
                             Button(String(localized: "Rename…")) { present(.renameEnvelope(flow)) }
                             Button(String(localized: "Edit…")) { present(.editEnvelope(flow)) }
                             Button(String(localized: "Archive"), role: .destructive) {
@@ -111,7 +138,7 @@ struct ManagementSheet: View {
                 if !store.archivedFlows.isEmpty {
                     DisclosureGroup(String(localized: "Archived")) {
                         ForEach(store.archivedFlows, id: \.id) { flow in
-                            ArchivedRow(name: flow.name) {
+                            ArchivedRow(name: flow.name, canRestore: writable) {
                                 Task { await store.restoreEnvelope(flow.id) }
                             }
                         }
@@ -119,7 +146,7 @@ struct ManagementSheet: View {
                 }
                 Button(String(localized: "New Envelope…")) { present(.envelope) }
                     .buttonStyle(.link)
-                    .disabled(store.currentVault == nil)
+                    .disabled(!writable)
             }
 
             Section(String(localized: "Recurring")) {
@@ -140,6 +167,38 @@ struct ManagementSheet: View {
         .id(listIdentity)
     }
 
+    /// Vaults the server no longer shares with the account. Their copy stays
+    /// here, read-only, until the user removes it: never dropped behind
+    /// their back.
+    private func lostSection(_ engine: SyncEngine) -> some View {
+        Section(String(localized: "No longer shared with you")) {
+            ForEach(engine.lostVaults, id: \.id) { vault in
+                HStack {
+                    Text(VaultNaming.label(for: vault, among: store.vaults))
+                    Spacer()
+                    Button(String(localized: "Remove from This Mac"), role: .destructive) {
+                        Task {
+                            do {
+                                try await engine.removeFromThisMac(vault.id)
+                                removalFailure = nil
+                            } catch {
+                                removalFailure = error.localizedDescription
+                            }
+                        }
+                    }
+                    .buttonStyle(.link)
+                }
+            }
+            Text(String(localized: "The owner stopped sharing these vaults with you, or they were removed from the server. What was synced before stays here, read-only, until you remove it."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let removalFailure {
+                Text(removalFailure).font(.callout).foregroundStyle(.red)
+            }
+        }
+    }
+
     /// One tag per wallet and envelope, active or archived. Changes whenever
     /// something crosses that boundary, which is exactly when `list` needs a
     /// fresh `List` identity (see the comment above).
@@ -151,17 +210,21 @@ struct ManagementSheet: View {
     }
 }
 
-/// One archived wallet or envelope, with its Restore action.
+/// One archived wallet or envelope, with its Restore action when the vault
+/// can be written.
 private struct ArchivedRow: View {
     let name: String
+    let canRestore: Bool
     let restore: () -> Void
 
     var body: some View {
         HStack {
             Text(name).foregroundStyle(.secondary)
             Spacer()
-            Button(String(localized: "Restore"), action: restore)
-                .buttonStyle(.link)
+            if canRestore {
+                Button(String(localized: "Restore"), action: restore)
+                    .buttonStyle(.link)
+            }
         }
     }
 }

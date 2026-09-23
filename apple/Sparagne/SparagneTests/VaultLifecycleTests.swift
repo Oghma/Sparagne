@@ -139,4 +139,55 @@ struct VaultLifecycleTests {
         #expect(store.currentVault?.name == "Casa")
         #expect(store.currentVault?.owner == "tester")
     }
+
+    @Test("The actor refuses every write to a read-only vault, and only to that one")
+    func readOnlyVaultRefusesWrites() async throws {
+        let store = try Self.store()
+        await store.bootstrap()
+        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        let vault = try #require(store.currentVault)
+        let core = store.core
+        await core.setReadOnlyVaults([vault.id])
+
+        await #expect(throws: DomainError.Forbidden(message: "this vault is read-only for your account")) {
+            try await core.execute(vaultId: vault.id, .renameVault(name: "Casa"))
+        }
+        await #expect(throws: DomainError.self) {
+            try await core.executeBatch(vaultId: vault.id, [.renameVault(name: "Casa")])
+        }
+        let envelope = await core.envelope(vaultId: vault.id, .renameVault(name: "Casa"))
+        await #expect(throws: DomainError.self) {
+            try await core.execute(envelope: envelope)
+        }
+        await store.renameVault(vault.id, name: "Casa")
+        #expect(store.presentedError?.code == "forbidden")
+        #expect(store.currentVault?.name == "Main")
+        #expect(try await core.syncState(vaultId: vault.id).outbox == 2)
+
+        // A new vault is not a write to that one.
+        store.presentedError = nil
+        await store.createVault(name: "Other", walletName: "Cash", openingBalance: 0)
+        #expect(store.presentedError == nil)
+
+        await core.setReadOnlyVaults([])
+        try await core.execute(vaultId: vault.id, .renameVault(name: "Casa"))
+        #expect(try await core.vaults().contains { $0.name == "Casa" })
+    }
+
+    @Test("A repeated name is found whatever its case, and lists tell the two vaults apart by owner")
+    func duplicateNames() {
+        #expect(VaultNaming.duplicate(of: " main ", in: ["Casa", "Main"]) == "Main")
+        #expect(VaultNaming.duplicate(of: "Mainly", in: ["Casa", "Main"]) == nil)
+        #expect(VaultNaming.duplicate(of: "  ", in: ["Casa"]) == nil)
+
+        let mine = VaultView(id: "1", name: "Casa", currency: .eur, owner: "alice", createdAt: 0)
+        let theirs = VaultView(id: "2", name: "casa", currency: .eur, owner: "bob", createdAt: 1)
+        let other = VaultView(id: "3", name: "Lavoro", currency: .eur, owner: "alice", createdAt: 2)
+        let all = [mine, theirs, other]
+        #expect(VaultNaming.label(for: mine, among: all) == "Casa (alice)")
+        #expect(VaultNaming.label(for: theirs, among: all) == "casa (bob)")
+        #expect(VaultNaming.label(for: other, among: all) == "Lavoro")
+        #expect(VaultNaming.siblingNames(owner: "alice", excluding: "1", in: all) == ["Lavoro"])
+        #expect(VaultNaming.siblingNames(owner: "alice", in: all) == ["Casa", "Lavoro"])
+    }
 }
