@@ -100,16 +100,19 @@ pub async fn login(
     let username = normalize_username(&credentials.username);
     let response = state
         .run(move |state| {
-            let db = state.db();
-            let found = db.user_with_hash(&username)?;
-            let Some((user, hash)) = found else {
+            let found = state.db().user_with_hash(&username)?;
+            // An unknown username still pays for one verification, against
+            // the dummy hash: the 401 takes as long as a wrong password's.
+            let (user, hash) = match found {
+                Some((user, hash)) => (Some(user), hash),
+                None => (None, state.dummy_hash().to_string()),
+            };
+            let verified = verify_password(state, &credentials.password, &hash);
+            let Some(user) = user.filter(|_| verified) else {
                 return Err(ApiError::unauthorized());
             };
-            if !verify_password(state, &credentials.password, &hash) {
-                return Err(ApiError::unauthorized());
-            }
             let now = Utc::now().timestamp();
-            issue_token(state, &db, &user.id, &user.username, now)
+            issue_token(state, &state.db(), &user.id, &user.username, now)
         })
         .await?;
     Ok(Json(response))

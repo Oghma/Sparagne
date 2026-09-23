@@ -52,6 +52,31 @@ async fn usernames_are_trimmed_and_lowercased() {
 }
 
 #[tokio::test]
+async fn an_unknown_user_gets_the_same_401_as_a_wrong_password() {
+    let api = Api::new();
+    api.register("alice").await;
+
+    let wrong = api.login("alice", "not my password").await;
+    let unknown = api.login("nobody", "not my password").await;
+    assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(unknown.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(wrong.body, unknown.body);
+
+    // The unknown user is checked against a real hash made with the same
+    // parameters as the accounts', so both answers cost one verification.
+    let dummy = api.state.dummy_hash();
+    assert!(dummy.starts_with("$argon2id$"), "{dummy}");
+    let (_, stored) = api
+        .state
+        .db()
+        .user_with_hash("alice")
+        .unwrap()
+        .expect("alice exists");
+    let params = |phc: &str| phc.split('$').nth(3).map(str::to_string);
+    assert_eq!(params(dummy), params(&stored));
+}
+
+#[tokio::test]
 async fn members_are_named_case_insensitively() {
     let api = Api::new();
     let mut alice = Client::register(&api, "alice").await;
