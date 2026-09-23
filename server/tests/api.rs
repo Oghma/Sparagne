@@ -288,7 +288,8 @@ async fn register_refuses_a_taken_username() {
 #[tokio::test]
 async fn register_validates_the_username() {
     let api = Api::new();
-    for username in ["ab", "Alice", "with space", &"a".repeat(33)] {
+    // "Alice" is no longer here: usernames are lowercased before validation.
+    for username in ["ab", "with space", &"a".repeat(33)] {
         let res = api.raw_register(username, PASSWORD).await;
         assert_eq!(res.status, StatusCode::BAD_REQUEST, "{username}");
         assert_eq!(res.code(), "invalid_request");
