@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SparagneCore
 import Testing
@@ -203,6 +204,28 @@ struct AppStoreTests {
         // The pizza is voided in Main, whose wallet has its 12.50 back.
         let snapshot = try await store.core.snapshot(vaultId: main.id)
         #expect(snapshot.wallets.first?.balance == 10_000)
+    }
+
+    @Test("Quitting with a void on the toast writes it before the app goes")
+    func quittingFlushesThePendingVoid() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-12.50 pizza #food")
+        await store.void(transactionId: try Self.pizzaRow(store).id)
+        let delegate = AppDelegate()
+        delegate.store = store
+
+        let replied = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            delegate.replyToTermination = { continuation.resume(returning: $0) }
+            #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        }
+
+        #expect(replied)
+        #expect(store.presentedError == nil)
+        #expect(store.pendingUndo == nil)
+        #expect(store.wallets.first?.balance == 10_000)
+
+        // Nothing waiting: the app quits straight away.
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
     }
 
     @Test("Editing the amount re-applies the legs")
