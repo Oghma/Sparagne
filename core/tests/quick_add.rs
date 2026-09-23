@@ -4,9 +4,9 @@
 
 mod common;
 
-use chrono::{FixedOffset, TimeZone, Utc};
+use chrono::{FixedOffset, NaiveDate, TimeZone, Utc};
 use common::*;
-use sparagne_core::quick_add::{self, QuickAddDefaults, QuickAddError};
+use sparagne_core::quick_add::{self, DateSpec, QuickAdd, QuickAddDefaults, QuickAddError};
 use sparagne_core::{Command, Currency, DomainError, FlowMode, TransactionKind};
 use uuid::Uuid;
 
@@ -293,4 +293,108 @@ fn resolve_quick_add_error_converts_to_domain_error() {
             .unwrap_err();
     let domain: DomainError = err.into();
     assert_eq!(domain.code(), "invalid_command");
+}
+
+// ---------------------------------------------------------------------------
+// Dates
+// ---------------------------------------------------------------------------
+
+fn ymd(year: i32, month: u32, day: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(year, month, day).unwrap()
+}
+
+fn day_month(day: u8, month: u8, today: NaiveDate) -> Result<NaiveDate, QuickAddError> {
+    DateSpec::DayMonth { day, month }.resolve(today)
+}
+
+#[test]
+fn a_day_and_month_is_the_nearest_occurrence() {
+    // Early January looks back at the December just gone.
+    assert_eq!(day_month(31, 12, ymd(2026, 1, 2)), Ok(ymd(2025, 12, 31)));
+    // Today, tomorrow and the months just gone stay in this year.
+    assert_eq!(day_month(23, 9, ymd(2026, 9, 23)), Ok(ymd(2026, 9, 23)));
+    assert_eq!(day_month(24, 9, ymd(2026, 9, 23)), Ok(ymd(2026, 9, 24)));
+    assert_eq!(day_month(12, 4, ymd(2026, 9, 23)), Ok(ymd(2026, 4, 12)));
+    // Nearest means nearest: past half a year back, next year is closer
+    // (12 March 2027 is 170 days away, 12 March 2026 195).
+    assert_eq!(day_month(12, 3, ymd(2026, 9, 23)), Ok(ymd(2027, 3, 12)));
+    // Late December looks ahead at the January to come.
+    assert_eq!(day_month(2, 1, ymd(2026, 12, 31)), Ok(ymd(2027, 1, 2)));
+}
+
+#[test]
+fn a_tie_between_two_years_goes_to_the_past() {
+    // 2 July 2028 sits 183 days after 1 January 2028 and 183 days before
+    // 1 January 2029 (2028 is a leap year).
+    assert_eq!(day_month(1, 1, ymd(2028, 7, 2)), Ok(ymd(2028, 1, 1)));
+}
+
+#[test]
+fn february_29_needs_the_nearest_february_to_have_it() {
+    assert_eq!(day_month(29, 2, ymd(2028, 3, 5)), Ok(ymd(2028, 2, 29)));
+    assert_eq!(day_month(29, 2, ymd(2027, 12, 31)), Ok(ymd(2028, 2, 29)));
+    // The nearest February is 2027's: no jump to 2028, a year further on.
+    assert!(matches!(
+        day_month(29, 2, ymd(2027, 1, 10)),
+        Err(QuickAddError::InvalidDate { .. })
+    ));
+    // A day the month never has is invalid whatever the year.
+    assert!(matches!(
+        day_month(31, 4, ymd(2026, 9, 23)),
+        Err(QuickAddError::InvalidDate { .. })
+    ));
+    assert!(matches!(
+        day_month(1, 13, ymd(2026, 9, 23)),
+        Err(QuickAddError::InvalidDate { .. })
+    ));
+}
+
+#[test]
+fn a_two_digit_year_is_this_century_and_other_lengths_are_invalid() {
+    let date = |input: &str| match quick_add::parse(input, Currency::Eur).unwrap() {
+        QuickAdd::Entry { date, .. } => date,
+        other => panic!("unexpected {other:?}"),
+    };
+    assert_eq!(
+        date("10 pizza 12/03/24"),
+        Some(DateSpec::Date(ymd(2024, 3, 12)))
+    );
+    assert_eq!(
+        date("10 pizza 1/3/99"),
+        Some(DateSpec::Date(ymd(2099, 3, 1)))
+    );
+    assert_eq!(
+        date("10 pizza 12/03/2024"),
+        Some(DateSpec::Date(ymd(2024, 3, 12)))
+    );
+    for token in ["12/03/024", "12/03/2", "12/03/20245"] {
+        assert!(
+            matches!(
+                quick_add::parse(&format!("10 pizza {token}"), Currency::Eur),
+                Err(QuickAddError::InvalidDate { .. })
+            ),
+            "{token}"
+        );
+    }
+}
+
+#[test]
+fn a_day_and_month_on_a_line_lands_in_the_nearest_year() {
+    let f = build_fixture();
+    let now = FixedOffset::east_opt(3600)
+        .unwrap()
+        .with_ymd_and_hms(2026, 1, 2, 9, 30, 0)
+        .unwrap();
+    let parsed = quick_add::parse("15 cenone 31/12", Currency::Eur).unwrap();
+    let resolved =
+        f.fx.core
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .unwrap();
+    match resolved.command {
+        Command::Expense(entry) => {
+            assert_eq!(entry.occurred_at.date_naive(), ymd(2025, 12, 31));
+            assert_eq!(entry.occurred_at.time(), now.time());
+        }
+        other => panic!("unexpected {other:?}"),
+    }
 }
