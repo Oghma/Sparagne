@@ -39,11 +39,18 @@ struct AppError: Identifiable, Equatable, Sendable {
 
 /// A void that has been hidden from the table but not yet applied.
 ///
-/// The row disappears immediately and a toast counts down; `undo()` cancels,
-/// and the window elapsing (or another destructive action) commits the
-/// `VoidTransaction` command (`docs/v2/DISTILLATO_V1.md` §2.4).
+/// The rows disappear immediately and a toast counts down; `undo()` cancels,
+/// and the window elapsing (or another destructive action, or quitting)
+/// commits one `VoidTransaction` per row (`docs/v2/DISTILLATO_V1.md` §2.4).
 struct PendingUndo: Identifiable, Equatable, Sendable {
-    let id: Uuid
+    /// The toast's own identity: a new void is a new toast, even for a row
+    /// that was voided, undone and voided again.
+    let id = UUID()
+    /// The transactions being voided: one for a row, several for a selection.
+    let ids: [Uuid]
+    /// The vault the rows live in. Not necessarily the one on screen by the
+    /// time the window elapses: the user can switch, and a pull can delete it.
+    let vaultId: Uuid
     let startedAt: Date
     let duration: Duration
 
@@ -250,10 +257,11 @@ final class AppStore {
     /// Unallocated is never archived, so it never needs to appear here.
     var archivedFlows: [FlowView] { snapshot?.flows.filter { $0.archived && !$0.isUnallocated } ?? [] }
 
-    /// Loaded rows minus the one waiting on the undo toast.
+    /// Loaded rows minus those waiting on the undo toast.
     var rows: [TransactionRow] {
-        guard let hidden = pendingUndo?.id else { return allRows }
-        return allRows.filter { $0.id != hidden }
+        guard let pending = pendingUndo, pending.vaultId == currentVault?.id else { return allRows }
+        let hidden = Set(pending.ids)
+        return allRows.filter { !hidden.contains($0.id) }
     }
 
     func flowName(_ flow: FlowView) -> String {
@@ -318,6 +326,12 @@ final class AppStore {
     /// remembered one or the first otherwise, onboarding when none is left.
     private func adoptVaultList() async throws {
         vaults = try await core.vaults()
+        // A pull can delete the vault a void is waiting in. Its rows went
+        // with it, so the void has nothing left to do, and flushing it on
+        // the way to another vault would only bring back a "Not found".
+        if let pending = pendingUndo, !vaults.contains(where: { $0.id == pending.vaultId }) {
+            undo()
+        }
         guard !vaults.isEmpty else {
             needsOnboarding = true
             currentVault = nil
@@ -335,7 +349,6 @@ final class AppStore {
     }
 
     func select(_ vault: VaultView) async {
-        await flushPendingUndo()
         currentVault = vault
         defaults.set(vault.id, forKey: Self.lastVaultKey)
         lastWalletId = nil
@@ -345,6 +358,10 @@ final class AppStore {
         windowCategories = []
         categoryAliases = []
         recurringTemplates = []
+        // A void still counting down is not undone by leaving: it carries its
+        // own vault, so it lands where its rows are, and the vault it left
+        // is not reloaded for nothing.
+        await flushPendingUndo()
         await reload()
     }
 
@@ -526,7 +543,7 @@ final class AppStore {
     func deleteVault(_ vaultId: Uuid) async {
         // A row waiting on the undo toast dies with its vault: voiding it
         // now would only be refused.
-        if vaultId == currentVault?.id { undo() }
+        if pendingUndo?.vaultId == vaultId { undo() }
         await guarded {
             try await core.execute(vaultId: vaultId, .deleteVault)
             try await adoptVaultList()
@@ -972,8 +989,15 @@ final class AppStore {
     /// Hides the row and starts the undo window. The command is only sent
     /// when the window elapses or another destructive action starts.
     func void(transactionId: Uuid) async {
+        await void(transactionIds: [transactionId])
+    }
+
+    /// Hides the rows and starts one undo window for all of them; the voids
+    /// go out together, as one batch, when it elapses.
+    func void(transactionIds ids: [Uuid]) async {
+        guard let vault = currentVault, !isReadOnly, !ids.isEmpty else { return }
         await flushPendingUndo()
-        pendingUndo = PendingUndo(id: transactionId, startedAt: Date(), duration: undoWindow)
+        pendingUndo = PendingUndo(ids: ids, vaultId: vault.id, startedAt: Date(), duration: undoWindow)
         let window = undoWindow
         let sleep = sleeper
         undoTask = Task { [weak self] in
@@ -990,16 +1014,28 @@ final class AppStore {
         pendingUndo = nil
     }
 
-    /// Applies a pending void now.
+    /// Applies a pending void now, in the vault it was made in: the one on
+    /// screen may have changed since. Also what quitting awaits
+    /// (`AppDelegate`), so the toast never outlives the app with its rows
+    /// still live.
+    ///
+    /// A vault that no longer exists takes its rows with it, so the void is
+    /// dropped without a word rather than refused with a "Not found".
     func flushPendingUndo() async {
-        guard let pending = pendingUndo, let vault = currentVault else { return }
+        guard let pending = pendingUndo else { return }
         pendingUndo = nil
         undoTask?.cancel()
         undoTask = nil
         await guarded {
-            try await core.execute(vaultId: vault.id, .voidTransaction(transactionId: pending.id))
+            guard try await core.vaults().contains(where: { $0.id == pending.vaultId }) else { return }
+            try await core.executeBatch(
+                vaultId: pending.vaultId,
+                pending.ids.map { .voidTransaction(transactionId: $0) }
+            )
             savedAt = Date()
-            await reload()
+            // Another vault's void changes nothing on screen: after a switch
+            // `select` reloads the vault it moved to by itself.
+            if pending.vaultId == currentVault?.id { await reload() }
         }
     }
 

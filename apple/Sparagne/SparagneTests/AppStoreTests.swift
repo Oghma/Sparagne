@@ -88,7 +88,8 @@ struct AppStoreTests {
         let row = try Self.pizzaRow(store)
 
         await store.void(transactionId: row.id)
-        #expect(store.pendingUndo?.id == row.id)
+        #expect(store.pendingUndo?.ids == [row.id])
+        #expect(store.pendingUndo?.vaultId == store.currentVault?.id)
         #expect(!store.rows.contains { $0.id == row.id })
         // Nothing was sent yet: the balance has not moved back.
         #expect(store.wallets.first?.balance == 8750)
@@ -127,6 +128,81 @@ struct AppStoreTests {
         await store.settle()
         let voided = try #require(store.allRows.first { $0.id == row.id })
         #expect(voided.voided)
+    }
+
+    // MARK: - The void waiting on the toast, when the window moves under it
+
+    /// `Main` with a pizza waiting on the toast, and `Casa` beside it.
+    private static func voidInMainBesideCasa() async throws -> (store: AppStore, main: VaultView, casa: VaultView) {
+        let store = try makeStore()
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 5_000)
+        let casa = try #require(store.currentVault)
+        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        let main = try #require(store.currentVault)
+        await store.submit(quickAdd: "-12.50 pizza #food")
+        await store.void(transactionId: try pizzaRow(store).id)
+        #expect(store.pendingUndo?.vaultId == main.id)
+        return (store, main, casa)
+    }
+
+    @Test("A pull that deletes the vault a void waits in drops the void, with no alert and no toast left")
+    func pulledDeletionDropsThePendingVoid() async throws {
+        let (store, main, casa) = try await Self.voidInMainBesideCasa()
+
+        // What a pull does: the vault goes from the core, then the window
+        // re-reads the vault list.
+        try await store.core.execute(vaultId: main.id, .deleteVault)
+        await store.refreshAfterSync()
+
+        #expect(store.presentedError == nil)
+        #expect(store.pendingUndo == nil)
+        #expect(store.currentVault?.id == casa.id)
+        // Casa was not touched by a void meant for Main.
+        #expect(store.wallets.first?.balance == 5_000)
+    }
+
+    @Test("A pull that deletes the last vault does not leave the toast stuck")
+    func pulledDeletionOfTheLastVaultClearsTheToast() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-12.50 pizza #food")
+        await store.void(transactionId: try Self.pizzaRow(store).id)
+        let vault = try #require(store.currentVault)
+
+        try await store.core.execute(vaultId: vault.id, .deleteVault)
+        await store.refreshAfterSync()
+
+        #expect(store.presentedError == nil)
+        #expect(store.pendingUndo == nil)
+        #expect(store.currentVault == nil)
+        #expect(store.needsOnboarding)
+    }
+
+    @Test("A void whose vault is gone is dropped by the flush itself, silently")
+    func flushingIntoAGoneVaultIsSilent() async throws {
+        let (store, main, _) = try await Self.voidInMainBesideCasa()
+
+        // The undo window elapses before the store has heard of the deletion.
+        try await store.core.execute(vaultId: main.id, .deleteVault)
+        await store.flushPendingUndo()
+
+        #expect(store.presentedError == nil)
+        #expect(store.pendingUndo == nil)
+    }
+
+    @Test("Switching vault applies the void in the vault it was made in")
+    func switchingVaultVoidsInTheRightVault() async throws {
+        let (store, main, casa) = try await Self.voidInMainBesideCasa()
+
+        await store.select(casa)
+
+        #expect(store.presentedError == nil)
+        #expect(store.pendingUndo == nil)
+        #expect(store.currentVault?.id == casa.id)
+        #expect(store.wallets.first?.balance == 5_000)
+        // The pizza is voided in Main, whose wallet has its 12.50 back.
+        let snapshot = try await store.core.snapshot(vaultId: main.id)
+        #expect(snapshot.wallets.first?.balance == 10_000)
     }
 
     @Test("Editing the amount re-applies the legs")
