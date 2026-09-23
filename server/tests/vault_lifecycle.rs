@@ -10,7 +10,7 @@
 mod common;
 
 use axum::http::StatusCode;
-use common::{Api, Client, T0, basics, expense_cmd, wallet_cmd};
+use common::{Api, Client, T0, basics, expense_cmd, projection, wallet_cmd};
 use serde_json::json;
 use sparagne_core::{
     Command, CommandEnvelope, Currency,
@@ -78,6 +78,83 @@ async fn a_rename_to_a_name_the_owner_already_uses_is_accepted() {
 
     alice.sync(&api, vault).await;
     assert_eq!(alice.core.vault(vault).unwrap().unwrap().name, "Lavoro");
+}
+
+// ---------------------------------------------------------------------------
+// Names are labels
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_renamed_vault_and_a_new_one_with_its_old_name_both_keep_syncing() {
+    let api = Api::new();
+    let (mut alice, mut bob, vault, wallet) = basics(&api).await;
+    alice.exec(vault, rename("Casa 2025"));
+    alice.sync(&api, vault).await;
+    let casa = alice.create_vault("Casa");
+    alice.sync(&api, casa).await;
+
+    // bob writes, and alice, with nothing to push, rebuilds the old vault
+    // from its `CreateVault "Casa"` next to the new Casa.
+    bob.exec(vault, expense_cmd(1_000, wallet, None, "bar", T0 + 60));
+    bob.sync(&api, vault).await;
+    let reports = alice.sync(&api, vault).await;
+    assert!(reports.iter().any(|r| r.rebased));
+    assert!(reports.iter().all(|r| r.rejected.is_empty()));
+    let expected = projection(&api.state.core(), vault);
+    assert_eq!(projection(&alice.core, vault), expected);
+    assert_eq!(projection(&bob.core, vault), expected);
+
+    // A new device of alice's joins from zero in listing order: the new Casa
+    // first, then the vault whose log starts with that same name.
+    let vaults = listed(&api, &alice.token).await;
+    assert_eq!(
+        vaults
+            .iter()
+            .map(|v| (v.id, v.name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(casa, "Casa"), (vault, "Casa 2025")]
+    );
+    let mut device = Client::new(alice.token.clone(), "alice");
+    for summary in vaults {
+        let report = device.join(&api, summary.id).await;
+        assert!(report.rejected.is_empty());
+        assert_eq!(
+            projection(&device.core, summary.id),
+            projection(&alice.core, summary.id)
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_never_pushed_vault_whose_old_name_was_reused_is_claimed() {
+    let api = Api::new();
+    let mut alice = Client::register(&api, "alice").await;
+    // Offline, Casa becomes Mare and a new Casa takes its name.
+    let old = alice.create_vault("Casa");
+    alice.exec(old, wallet_cmd("Cash", 1_000));
+    alice.exec(old, rename("Mare"));
+    let new = alice.create_vault("Casa");
+
+    // The app pushes in listing order, the new Casa first: the old vault's
+    // first push then carries a `CreateVault "Casa"` from an owner who
+    // already has one. Every push answers 200 (`Client::sync` checks).
+    for vault in [new, old] {
+        let reports = alice.sync(&api, vault).await;
+        assert!(reports.iter().all(|r| r.rejected.is_empty()));
+        assert_eq!(alice.core.sync_state(vault).unwrap().outbox, 0);
+        assert_eq!(
+            projection(&alice.core, vault),
+            projection(&api.state.core(), vault)
+        );
+    }
+    let vaults = listed(&api, &alice.token).await;
+    assert_eq!(
+        vaults
+            .iter()
+            .map(|v| (v.id, v.name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(new, "Casa"), (old, "Mare")]
+    );
 }
 
 // ---------------------------------------------------------------------------
