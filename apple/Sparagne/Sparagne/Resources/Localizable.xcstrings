@@ -1,6 +1,38 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@, %@ of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@ of %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@ di %@"
+          }
+        }
+      }
+    },
+    "%@, future month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, future month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, mese futuro"
+          }
+        }
+      }
+    },
     "%lld changes waiting": {
       "localizations": {
         "en": {
@@ -3745,6 +3777,38 @@
         }
       }
     },
+    "Opens Sync settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens Sync settings"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apre le impostazioni di sincronizzazione"
+          }
+        }
+      }
+    },
+    "Opens the list of refused changes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens the list of refused changes"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apre l'elenco delle modifiche rifiutate"
+          }
+        }
+      }
+    },
     "Original amount": {
       "localizations": {
         "en": {
@@ -5021,6 +5085,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sincronizzazione…"
+          }
+        }
+      }
+    },
+    "Syncs with the server now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Syncs with the server now"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizza subito con il server"
           }
         }
       }
