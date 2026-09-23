@@ -192,10 +192,13 @@ struct SelectionTests {
         #expect(store.rows.allSatisfy { $0.category == "Spesa" })
     }
 
-    @Test("A read-only vault offers no selection")
+    @Test("A read-only vault offers no selection, and one made read-only loses its selection")
     func readOnlyHasNoSelection() async throws {
         let store = try await Self.ledger()
+        store.selectAllRows()
+        #expect(store.selection.count == 4)
         store.setReadOnlyVaults([try #require(store.currentVault).id])
+        #expect(store.selection.isEmpty)
 
         store.toggleSelection(try Self.id("pane", in: store))
         store.selectAllRows()

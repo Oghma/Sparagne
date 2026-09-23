@@ -138,6 +138,9 @@ final class AppStore {
 
     func setReadOnlyVaults(_ ids: Set<Uuid>) {
         readOnlyVaultIds = ids
+        // Every bulk action writes: rows picked before the role changed have
+        // nothing left to be picked for.
+        if isReadOnly { selection.clear() }
     }
 
     /// Whether the vault on screen is read-only for this account.
