@@ -36,14 +36,21 @@ struct LedgerGrid: View {
                             .onAppear { if index == rows.count - 1 { loadNextPage() } }
                         Hairline()
                     }
-                    newRowView
+                    // A viewer's ledger is a report: nothing to type into.
+                    if store.canWrite { newRowView }
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            Hairline()
-            KeyHints()
+            // The hints are all about typing rows.
+            if store.canWrite {
+                Hairline()
+                KeyHints()
+            }
         }
         .background(Ink.bg)
+        // The vault turned read-only under an open row (the owner changed the
+        // role): the row could not be saved, so it closes.
+        .onChange(of: store.isReadOnly) { _, _ in resetEditing() }
         // The month and the vault change what the empty line means, so its
         // draft starts over with them. A sync landing or a void must not:
         // those move `store.rows` under a line that is being typed.
@@ -147,7 +154,7 @@ struct LedgerGrid: View {
     /// before. A row that refuses to save stays open and keeps the focus, so
     /// the click that would have left it does not lose it.
     private func open(_ row: TransactionRow, at field: RowField) {
-        guard !row.voided else { return }
+        guard !row.voided, store.canWrite else { return }
         if editing == row.id {
             // Another cell of the row already open: move the caret only, or
             // the draft would be rebuilt from the stored row and lose the edit.

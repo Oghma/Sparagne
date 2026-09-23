@@ -29,6 +29,7 @@ struct RecurringPanel: View {
                 Text(String(localized: "Recurring")).font(.headline)
                 Spacer()
                 Button(String(localized: "New…")) { sheet = .new }
+                    .disabled(!store.canWrite)
                 Button(String(localized: "Done")) { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
@@ -49,13 +50,16 @@ struct RecurringPanel: View {
                         .onTapGesture { sheet = .edit(template) }
                         .contextMenu {
                             Button(String(localized: "Edit…")) { sheet = .edit(template) }
-                            if template.archived {
-                                Button(String(localized: "Restore")) {
-                                    Task { await store.restoreRecurring(template.id) }
-                                }
-                            } else {
-                                Button(String(localized: "Archive"), role: .destructive) {
-                                    Task { await store.archiveRecurring(template.id) }
+                            // A viewer's templates are there to be read.
+                            if store.canWrite {
+                                if template.archived {
+                                    Button(String(localized: "Restore")) {
+                                        Task { await store.restoreRecurring(template.id) }
+                                    }
+                                } else {
+                                    Button(String(localized: "Archive"), role: .destructive) {
+                                        Task { await store.archiveRecurring(template.id) }
+                                    }
                                 }
                             }
                         }

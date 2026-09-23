@@ -142,6 +142,11 @@ final class AppStore {
         currentVault.map { readOnlyVaultIds.contains($0.id) } ?? false
     }
 
+    /// Whether the window may offer to write at all: a vault on screen that
+    /// this account does not only read. The grid's empty line, the setup
+    /// tables' add lines and every cell that opens for editing follow it.
+    var canWrite: Bool { currentVault != nil && !isReadOnly }
+
     // MARK: Loaded data
 
     private(set) var snapshot: VaultSnapshot?
@@ -595,7 +600,7 @@ final class AppStore {
     }
 
     func createWallet(name: String, openingBalance: Int64) async {
-        guard let vault = currentVault else { return }
+        guard let vault = currentVault, !refusedAsReadOnly() else { return }
         await guarded {
             try await core.execute(
                 vaultId: vault.id,
@@ -610,7 +615,7 @@ final class AppStore {
     }
 
     func createEnvelope(name: String, mode: FlowMode, allowNegative: Bool, openingAllocation: Int64) async {
-        guard let vault = currentVault else { return }
+        guard let vault = currentVault, !refusedAsReadOnly() else { return }
         await guarded {
             try await core.execute(
                 vaultId: vault.id,
@@ -665,7 +670,7 @@ final class AppStore {
     /// One command against the current vault, then the reload that shows what
     /// it did. The shape every management action has.
     private func command(_ command: Command) async {
-        guard let vault = currentVault else { return }
+        guard let vault = currentVault, !refusedAsReadOnly() else { return }
         await guarded {
             try await core.execute(vaultId: vault.id, command)
             await reload()
@@ -741,7 +746,7 @@ final class AppStore {
     /// repoints them (`docs/v2/DISTILLATO_V1.md` §2.1): the loaded
     /// transactions page can be stale, not just the category lists.
     private func categoryCommand(_ command: Command) async {
-        guard let vault = currentVault else { return }
+        guard let vault = currentVault, !refusedAsReadOnly() else { return }
         await guarded {
             try await core.execute(vaultId: vault.id, command)
             await reload()
@@ -1029,7 +1034,9 @@ final class AppStore {
     func submit(quickAdd input: String) async {
         guard let vault = currentVault else { return }
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        // The line stays as typed, and nothing is resolved against the core:
+        // a viewer is told, not left wondering why the row never came.
+        guard !trimmed.isEmpty, !refusedAsReadOnly() else { return }
         await guarded {
             let parsed = try parseQuickAdd(input: trimmed, currency: currency)
             let resolved = try await core.resolveQuickAdd(
@@ -1133,7 +1140,7 @@ final class AppStore {
 
     /// Sends only the fields that changed.
     func update(transactionId: Uuid, patch: TransactionPatch) async {
-        guard let vault = currentVault, !patch.isEmpty else { return }
+        guard let vault = currentVault, !patch.isEmpty, !refusedAsReadOnly() else { return }
         await guarded {
             try await core.execute(
                 vaultId: vault.id,

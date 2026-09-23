@@ -52,13 +52,16 @@ struct EnvelopeTable: View {
                             activeRow(flow)
                             Hairline()
                         }
-                        newLineRow
+                        // A viewer reads the envelopes; nothing to add.
+                        if store.canWrite { newLineRow }
                         archived
                     }
                 }
                 .scrollBounceBehavior(.basedOnSize)
-                Hairline()
-                footnote
+                if store.canWrite {
+                    Hairline()
+                    footnote
+                }
             }
         }
         // A different vault means different envelopes: whatever was half
@@ -69,6 +72,8 @@ struct EnvelopeTable: View {
             newLine = EnvelopeDraft()
         }
         .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
+        // Turned read-only under an open row: it could not be saved.
+        .onChange(of: store.isReadOnly) { _, _ in cancel() }
     }
 
     // MARK: - Chrome
@@ -146,7 +151,7 @@ struct EnvelopeTable: View {
         .contextMenu {
             // Unallocated is a system envelope: the core refuses to update or
             // archive it (`docs/v2/UI.md` §2.3).
-            if !flow.isUnallocated {
+            if !flow.isUnallocated, store.canWrite {
                 Button(String(localized: "Archive"), role: .destructive) {
                     Task { await store.archiveEnvelope(flow.id) }
                 }
@@ -196,7 +201,7 @@ struct EnvelopeTable: View {
     @ViewBuilder
     private func actionCell(_ flow: FlowView, system: Bool) -> some View {
         GridCell(width: EnvelopeColumn.action) {
-            if !system, hovered == flow.id {
+            if !system, hovered == flow.id, store.canWrite {
                 Button {
                     Task { await store.archiveEnvelope(flow.id) }
                 } label: {
@@ -277,7 +282,7 @@ struct EnvelopeTable: View {
                         Text(LedgerMoney.amount(flow.balance)).font(Face.row).foregroundStyle(Ink.dim)
                     }
                     GridCell(width: EnvelopeColumn.action) {
-                        if hovered == flow.id {
+                        if hovered == flow.id, store.canWrite {
                             Button {
                                 Task { await store.restoreEnvelope(flow.id) }
                             } label: {
@@ -301,8 +306,10 @@ struct EnvelopeTable: View {
                     }
                 }
                 .contextMenu {
-                    Button(String(localized: "Restore")) {
-                        Task { await store.restoreEnvelope(flow.id) }
+                    if store.canWrite {
+                        Button(String(localized: "Restore")) {
+                            Task { await store.restoreEnvelope(flow.id) }
+                        }
                     }
                 }
             }
@@ -435,7 +442,7 @@ struct EnvelopeTable: View {
     /// promises) and a click on TIPO leaves the caret on NOME with the menu
     /// one click away.
     private func open(_ flow: FlowView, at field: EnvelopeField) {
-        guard !flow.isUnallocated else { return }
+        guard !flow.isUnallocated, store.canWrite else { return }
         if editing != flow.id {
             if let editing, !commit(editing) { return }
             editing = flow.id

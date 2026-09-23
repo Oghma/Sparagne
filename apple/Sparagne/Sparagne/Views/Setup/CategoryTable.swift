@@ -73,7 +73,8 @@ struct CategoryTable: View {
                                 Hairline()
                             }
                         }
-                        newLine
+                        // A viewer reads the categories; nothing to add.
+                        if store.canWrite { newLine }
                     }
                 }
                 .scrollBounceBehavior(.basedOnSize)
@@ -86,6 +87,8 @@ struct CategoryTable: View {
             focus = nil
         }
         .onChange(of: focus) { _, new in Task { await commitIfLeft(new) } }
+        // Turned read-only under an open row: it could not be saved.
+        .onChange(of: store.isReadOnly) { _, _ in cancel() }
         .task(id: newName) {
             similar = await store.similarCategories(name: newName).map(\.name)
         }
@@ -134,11 +137,12 @@ struct CategoryTable: View {
     private var archived: [CategoryView] { store.windowCategories.filter { $0.archived } }
 
     /// System categories are read-only: the core refuses to rename, archive or
-    /// merge them, so they carry no menu at all rather than an empty one.
+    /// merge them, so they carry no menu at all rather than an empty one. So
+    /// does every category of a vault this account only reads.
     @ViewBuilder
     private func row(_ category: CategoryView) -> some View {
         let line = line(category)
-        if category.isSystem {
+        if category.isSystem || !store.canWrite {
             line
         } else if category.archived {
             line.contextMenu {
@@ -165,6 +169,7 @@ struct CategoryTable: View {
             aliases: aliases(of: category.id),
             draft: isEditing ? $draft : nil,
             isHovered: hovered == category.id,
+            isWritable: store.canWrite,
             focus: $focus,
             onOpen: { field in Task { await open(category, at: field) } },
             onCommit: { Task { await submit(category.id) } },
@@ -240,7 +245,7 @@ struct CategoryTable: View {
     /// open before. A row the core refuses stays open and keeps the focus, so
     /// the click that would have left it does not lose what was typed.
     private func open(_ category: CategoryView, at field: CategoryField) async {
-        guard CategoryDraft.isEditable(category) else { return }
+        guard CategoryDraft.isEditable(category), store.canWrite else { return }
         if editing == category.id {
             // Another cell of the same row: move the caret only, or the draft
             // would be rebuilt from the store and lose the edit.
@@ -338,6 +343,8 @@ private struct CategoryRowView: View {
     /// Non-nil while this row is the one being edited.
     let draft: Binding<CategoryDraft>?
     let isHovered: Bool
+    /// False on a vault this account only reads: no archive or restore icon.
+    let isWritable: Bool
     @FocusState.Binding var focus: CategoryCellFocus?
     let onOpen: (CategoryField) -> Void
     let onCommit: () -> Void
@@ -380,7 +387,7 @@ private struct CategoryRowView: View {
     @ViewBuilder
     private var actionCell: some View {
         GridCell(width: CategoryColumn.action) {
-            if draft == nil, isHovered, !category.isSystem {
+            if draft == nil, isHovered, isWritable, !category.isSystem {
                 if category.archived {
                     actionButton(symbol: "tray.and.arrow.up", tooltip: String(localized: "Restore"), action: onRestore)
                 } else {
