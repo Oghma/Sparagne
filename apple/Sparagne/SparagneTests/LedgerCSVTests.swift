@@ -141,6 +141,34 @@ struct LedgerCSVTests {
         #expect(!LedgerCSV.header.contains("wallet"))
     }
 
+    // MARK: - Export All Transactions (`Support/VaultExporter.swift`)
+
+    @Test("The full export has its own header, both name columns, and the ledger's quoting and signs")
+    func renderAll() {
+        #expect(LedgerCSV.renderAll([]) == LedgerCSV.allHeader + "\r\n")
+
+        let spend = Self.namedWalletRow(wallet: "Conto")
+        let fields = LedgerCSV.renderAll([spend]).components(separatedBy: "\r\n")[1].components(separatedBy: ",")
+        #expect(fields.count == 9)
+        #expect(fields[1] == "expense")
+        #expect(fields[2] == "-10.00")
+        #expect(fields[3] == "Conto")
+        #expect(fields[4] == TransactionRow.placeholder)
+        #expect(fields[7] == "Matteo")
+        #expect(fields[8] == "false")
+
+        let quoted = LedgerCSV.renderAll([Self.row(note: "bread, milk")])
+        #expect(quoted.contains(",\"bread, milk\","))
+    }
+
+    @Test("The full export is named after the vault and today, without the characters a file name cannot hold")
+    func allFileName() throws {
+        let date = try #require(Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 3)))
+        #expect(LedgerCSV.allFileName(vault: "Casa Nostra", date: date) == "Sparagne Casa Nostra all 2026-09-03.csv")
+        #expect(LedgerCSV.allFileName(vault: "a/b:c", date: date) == "Sparagne a-b-c all 2026-09-03.csv")
+        #expect(LedgerCSV.allFileName(vault: " ", date: date) == "Sparagne all 2026-09-03.csv")
+    }
+
     @Test("With the column on, the wallet name sits between the description and the person")
     func walletFieldPosition() {
         let row = Self.namedWalletRow(wallet: "Conto")

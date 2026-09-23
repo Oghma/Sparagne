@@ -38,6 +38,55 @@ enum LedgerCSV {
         return String(format: "%@-%04d-%02d-%@.csv", slug, month.year, month.month, direction.rawValue)
     }
 
+    // MARK: - Every transaction (File > Export All Transactions…)
+
+    /// The full export (`Support/VaultExporter.swift`): every transaction of
+    /// the vault, whatever the window shows. Wallet and envelope both have a
+    /// column, so a transfer writes `from → to` in the one it moves and the
+    /// placeholder in the other; the note and the author keep the core's
+    /// names.
+    static let allHeader = "date,kind,amount,wallet,envelope,category,note,author,voided"
+
+    /// The full file text, header included, with the conventions of
+    /// `render(_:wallet:)`: CRLF, RFC 4180 quoting, amounts signed by kind.
+    static func renderAll(_ rows: [TransactionRow]) -> String {
+        var text = allHeader + "\r\n"
+        for row in rows {
+            text += allLine(for: row) + "\r\n"
+        }
+        return text
+    }
+
+    /// `Sparagne Casa all 2026-09-23.csv`: the vault's name as it is, less
+    /// the two characters a macOS file name cannot hold, and today's date in
+    /// the local calendar.
+    static func allFileName(vault: String, date: Date = Date()) -> String {
+        let name = vault
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespaces)
+        let parts = ["Sparagne", name, "all", CoreDate.day(date)].filter { !$0.isEmpty }
+        return parts.joined(separator: " ") + ".csv"
+    }
+
+    private static func allLine(for row: TransactionRow) -> String {
+        [
+            CoreDate.day(row.occurredAt),
+            kindText(row.kind),
+            amountText(row),
+            row.walletDisplay,
+            row.envelopeDisplay,
+            row.category,
+            row.note,
+            row.person,
+            row.voided ? "true" : "false",
+        ]
+        .map(quoted)
+        .joined(separator: ",")
+    }
+
+    // MARK: - The ledger's lines, and the fields both exports share
+
     private static func line(for row: TransactionRow, wallet: Bool) -> String {
         // A wallet transfer's `envelopeDisplay` is only the placeholder
         // (`TransactionRow`), so the export falls back to the wallet arrow

@@ -85,5 +85,9 @@
   "Imported": {"en": "Imported", "it": "Importate"},
   "Refused": {"en": "Refused", "it": "Rifiutate"},
   "Rounded rows had more decimals than the currency keeps.": {"en": "Rounded rows had more decimals than the currency keeps.", "it": "Le righe arrotondate avevano più decimali di quanti la valuta ne preveda."},
-  "Line %lld": {"en": "Line %lld", "it": "Riga %lld"}
+  "Line %lld": {"en": "Line %lld", "it": "Riga %lld"},
+
+  "Backup saved": {"en": "Backup saved", "it": "Backup salvato"},
+  "Show in Finder": {"en": "Show in Finder", "it": "Mostra nel Finder"},
+  "To restore it, quit Sparagne, delete sparagne.sqlite-wal and sparagne.sqlite-shm if they are there, and replace sparagne.sqlite with this backup, renamed sparagne.sqlite. The database is in:\n%@": {"en": "To restore it, quit Sparagne, delete sparagne.sqlite-wal and sparagne.sqlite-shm if they are there, and replace sparagne.sqlite with this backup, renamed sparagne.sqlite. The database is in:\n%@", "it": "Per ripristinarlo, esci da Sparagne, cancella sparagne.sqlite-wal e sparagne.sqlite-shm se ci sono, e sostituisci sparagne.sqlite con questo backup, rinominato sparagne.sqlite. Il database è in:\n%@"}
 }
