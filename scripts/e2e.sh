@@ -11,6 +11,9 @@
 #
 # DERIVED_DATA (optional) becomes `-derivedDataPath`, so a run can keep its
 # build products out of the shared DerivedData another build may be using.
+# BUNDLE_ID (optional) gives the test host its own bundle identifier
+# (`$BUNDLE_ID.<target>`), so the run does not wait on a Sparagne already
+# running with the real one, or on another test run.
 
 set -euo pipefail
 
@@ -93,6 +96,10 @@ derived_data_args=()
 if [[ -n "${DERIVED_DATA:-}" ]]; then
     derived_data_args=(-derivedDataPath "${DERIVED_DATA}")
 fi
+bundle_args=()
+if [[ -n "${BUNDLE_ID:-}" ]]; then
+    bundle_args=("PRODUCT_BUNDLE_IDENTIFIER=${BUNDLE_ID}.\$(TARGET_NAME)")
+fi
 
 echo "==> Running SparagneTests/ServerE2ETests against http://127.0.0.1:${port}"
 # xcodebuild forwards a TEST_RUNNER_-prefixed variable of its own environment
@@ -108,6 +115,7 @@ set +e
     "${derived_data_args[@]}" \
     test \
     CODE_SIGNING_ALLOWED=NO \
+    ${bundle_args[@]+"${bundle_args[@]}"} \
     "TEST_RUNNER_SPARAGNE_E2E_SERVER=http://127.0.0.1:${port}")
 status=$?
 set -e
