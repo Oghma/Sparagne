@@ -950,6 +950,43 @@ async fn vaults_lists_owned_and_shared_vaults() {
 }
 
 #[tokio::test]
+async fn vaults_lists_duplicate_names_in_stable_order() {
+    async fn listed(api: &Api, token: &str) -> Vec<Uuid> {
+        api.get("/vaults", token)
+            .await
+            .json::<Vec<VaultSummary>>()
+            .into_iter()
+            .map(|v| v.id)
+            .collect()
+    }
+
+    let api = Api::new();
+    let token = api.register("alice").await;
+    let casa = api.create_vault(&token, "alice", "Casa").await;
+    let banca = api.create_vault(&token, "alice", "Banca").await;
+    let twin = api.create_vault(&token, "alice", "casa").await;
+
+    // By name whatever the case, then by id: a v7 uuid, so by creation.
+    assert_eq!(listed(&api, &token).await, vec![banca, casa, twin]);
+    // A rename puts the vault among its new namesakes by that same order.
+    let res = api
+        .push(
+            &token,
+            banca,
+            vec![envelope(
+                banca,
+                "alice",
+                Command::RenameVault {
+                    name: "CASA".to_string(),
+                },
+            )],
+        )
+        .await;
+    applied(&res.json::<PushResponse>().results[0]);
+    assert_eq!(listed(&api, &token).await, vec![casa, banca, twin]);
+}
+
+#[tokio::test]
 async fn vaults_requires_a_token() {
     let api = Api::new();
     let res = api.call(Method::GET, "/vaults", None, None).await;

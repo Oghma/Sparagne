@@ -52,7 +52,9 @@ pub async fn list(
                     last_seq: seqs.get(&vault_id).copied().unwrap_or(0),
                 });
             }
-            out.sort_by_cached_key(|v| v.name.to_lowercase());
+            // Names may repeat: the id, a v7 uuid minted with the vault, keeps
+            // namesakes in the order they were created.
+            out.sort_by_cached_key(|v| (v.name.to_lowercase(), v.id));
             Ok(out)
         })
         .await?;
@@ -131,8 +133,8 @@ pub async fn push(
 ///
 /// A first command that is not the vault's own `CreateVault`, and a vault that
 /// already exists without a membership for the caller, are both `404`: the
-/// caller may not learn whether the id is taken. A name the caller already
-/// used is `409 already_exists`, straight from the core.
+/// caller may not learn whether the id is taken. The name plays no part: vault
+/// names are labels, so one the caller already used is just another vault.
 fn claim(
     state: &AppState,
     vault_id: Uuid,
