@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use common::{T0, all, entry, wallet_cmd};
 use sparagne_core::{
     CategoryView, Command, CommandEnvelope, Core, Currency, DomainError, SyncReport, SyncState,
-    TransactionView, VaultSnapshot,
+    TransactionView, VaultSnapshot, sync::PushRequest,
 };
 use uuid::Uuid;
 
@@ -351,7 +351,7 @@ fn reject_outbox_turns_the_whole_outbox_into_rejections() {
     server
         .serve_push(
             vault,
-            &sparagne_core::sync::PushRequest {
+            &PushRequest {
                 commands: vec![bob],
             },
         )
