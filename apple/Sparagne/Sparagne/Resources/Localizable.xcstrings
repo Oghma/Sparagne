@@ -273,6 +273,22 @@
         }
       }
     },
+    "Back Up Database…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back Up Database…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backup del database…"
+          }
+        }
+      }
+    },
     "Balance": {
       "localizations": {
         "en": {
@@ -977,6 +993,22 @@
         }
       }
     },
+    "Export All Transactions…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export All Transactions…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esporta tutte le transazioni…"
+          }
+        }
+      }
+    },
     "Export CSV…": {
       "localizations": {
         "en": {
@@ -1117,6 +1149,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nascondi colonna wallet"
+          }
+        }
+      }
+    },
+    "Import Statement…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Statement…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importa estratto conto…"
           }
         }
       }
@@ -1293,6 +1341,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Più tardi"
+          }
+        }
+      }
+    },
+    "Leave Vault…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave Vault…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esci dal vault…"
           }
         }
       }

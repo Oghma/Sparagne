@@ -111,6 +111,19 @@ final class AppStore {
     private(set) var currentVault: VaultView?
     /// True when the account has no vault yet and onboarding must run.
     private(set) var needsOnboarding = false
+    /// Vaults the account may only read (a viewer's): `CoreActor` refuses to
+    /// write to them and the views hide what would write. Fed by the sync
+    /// engine from the server's roles.
+    private(set) var readOnlyVaultIds: Set<Uuid> = []
+
+    func setReadOnlyVaults(_ ids: Set<Uuid>) {
+        readOnlyVaultIds = ids
+    }
+
+    /// Whether the vault on screen is read-only for this account.
+    var isReadOnly: Bool {
+        currentVault.map { readOnlyVaultIds.contains($0.id) } ?? false
+    }
 
     // MARK: Loaded data
 

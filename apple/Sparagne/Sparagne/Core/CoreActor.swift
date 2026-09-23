@@ -131,6 +131,60 @@ actor CoreActor {
         return receipt
     }
 
+    /// Several commands in one local transaction, all or none
+    /// (`Core::execute_batch`). Each keeps its own log row and syncs on its
+    /// own; `onExecuted` fires once for the whole batch.
+    @discardableResult
+    func executeBatch(vaultId: Uuid, _ commands: [Command]) async throws -> [Receipt] {
+        guard !commands.isEmpty else { return [] }
+        let receipts = try await visit { handle in
+            try handle.executeBatch(
+                envelopes: commands.map { newEnvelope(vaultId: vaultId, author: author, command: $0) }
+            )
+        }
+        onExecuted?()
+        return receipts
+    }
+
+    /// An envelope signed with this actor's author, minted before it runs:
+    /// for a caller that needs the command id (and so the id of what it
+    /// creates) up front, like redo re-adding a row.
+    func envelope(vaultId: Uuid, _ command: Command) -> CommandEnvelope {
+        newEnvelope(vaultId: vaultId, author: author, command: command)
+    }
+
+    /// Applies an envelope minted with `envelope(vaultId:_:)`.
+    @discardableResult
+    func execute(envelope: CommandEnvelope) async throws -> Receipt {
+        let receipt = try await visit { try $0.execute(envelope: envelope) }
+        onExecuted?()
+        return receipt
+    }
+
+    /// Imports a bank or card statement, one command per row
+    /// (`core::statement`).
+    @discardableResult
+    func importStatement(
+        vaultId: Uuid,
+        text: String,
+        mapping: StatementMapping,
+        options: StatementOptions,
+        overrides: [StatementRowOverride]
+    ) async throws -> StatementReport {
+        let report = try await visit { handle in
+            try handle.importStatement(
+                vaultId: vaultId,
+                author: author,
+                text: text,
+                mapping: mapping,
+                options: options,
+                overrides: overrides
+            )
+        }
+        onExecuted?()
+        return report
+    }
+
     // MARK: - Reads
 
     func vaults() async throws -> [VaultView] {
@@ -161,6 +215,33 @@ actor CoreActor {
     /// block, `docs/v2/DISTILLATO_V1.md` §2.1).
     func similarCategories(vaultId: Uuid, name: String) async throws -> [CategoryView] {
         try await visit { try $0.similarCategories(vaultId: vaultId, name: name) }
+    }
+
+    /// Ids of the categories, wallets and envelopes used most recently, most
+    /// recent first: the "recent" tier of pickers and completions.
+    func recentUsage(vaultId: Uuid, since: UtcDateTime, limit: UInt32) async throws -> RecentUsage {
+        try await visit { try $0.recentUsage(vaultId: vaultId, since: since, limit: limit) }
+    }
+
+    /// The category each note was filed under before, one entry per note.
+    func suggestCategories(
+        vaultId: Uuid,
+        notes: [String],
+        since: UtcDateTime
+    ) async throws -> [CategorySuggestion?] {
+        try await visit { try $0.suggestCategories(vaultId: vaultId, notes: notes, since: since) }
+    }
+
+    /// What importing a statement would do, row by row. Writes nothing.
+    func previewStatement(
+        vaultId: Uuid,
+        text: String,
+        mapping: StatementMapping,
+        options: StatementOptions
+    ) async throws -> StatementPreview {
+        try await visit {
+            try $0.previewStatement(vaultId: vaultId, text: text, mapping: mapping, options: options)
+        }
     }
 
     /// What `MergeCategory` would refuse, without changing anything.
@@ -315,6 +396,29 @@ actor CoreActor {
                 try handle.relabelOutbox(vaultId: vaultId, author: name)
             }
         }
+    }
+
+    /// Refuses the whole outbox locally, as if the server had: what a push
+    /// that came back `403` does, so the vault keeps pulling.
+    @discardableResult
+    func rejectOutbox(vaultId: Uuid, code: String, message: String) async throws -> SyncReport {
+        try await visit { try $0.rejectOutbox(vaultId: vaultId, code: code, message: message) }
+    }
+
+    /// Drops a vault from this device without telling the server: after
+    /// leaving it, or once a deletion has reached the server. Returns how
+    /// many outbox commands were thrown away.
+    @discardableResult
+    func forgetVault(_ vaultId: Uuid) async throws -> UInt32 {
+        try await visit { try $0.forgetVault(vaultId: vaultId) }
+    }
+
+    // MARK: - Maintenance
+
+    /// A consistent copy of the whole database at `path`, which must not
+    /// exist yet.
+    func backup(to path: String) async throws {
+        try await visit { try $0.backupTo(path: path) }
     }
 
     func rejectedCommands(vaultId: Uuid) async throws -> [RejectedCommand] {

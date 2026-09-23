@@ -67,9 +67,12 @@ struct MainWindow: View {
         case renameEnvelope(FlowView)
         case editEnvelope(FlowView)
         case recurring
+        case dueRecurring
         case share(VaultView)
+        case leaveVault(VaultView)
         case rejected
         case manage
+        case importStatement
 
         var id: String {
             switch self {
@@ -82,9 +85,12 @@ struct MainWindow: View {
             case .renameEnvelope(let flow): "renameEnvelope-\(flow.id)"
             case .editEnvelope(let flow): "editEnvelope-\(flow.id)"
             case .recurring: "recurring"
+            case .dueRecurring: "dueRecurring"
             case .share(let vault): "share-\(vault.id)"
+            case .leaveVault(let vault): "leaveVault-\(vault.id)"
             case .rejected: "rejected"
             case .manage: "manage"
+            case .importStatement: "importStatement"
             }
         }
     }
@@ -124,6 +130,18 @@ struct MainWindow: View {
             .onReceive(NotificationCenter.default.publisher(for: .deleteVault)) { _ in
                 if let vault = store.currentVault { sheet = .deleteVault(vault) }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .leaveVault)) { _ in
+                if let vault = store.currentVault { sheet = .leaveVault(vault) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .importStatement)) { _ in
+                if store.currentVault != nil { sheet = .importStatement }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .reviewDueRecurring)) { _ in
+                sheet = .dueRecurring
+            }
+            // Back Up Database and Export All Transactions: file panels owned
+            // by the exporter (`Support/VaultExporter.swift`).
+            .modifier(VaultExportHandlers(store: store))
             .sheet(item: $sheet) { kind in sheetBody(kind) }
             .alert(
                 String(localized: "Some changes were refused"),
@@ -239,9 +257,15 @@ struct MainWindow: View {
             }
         case .recurring:
             RecurringPanel(store: store)
+        case .dueRecurring:
+            DueRecurringSheet(store: store)
         case .share(let vault):
             if let engine {
                 ShareVaultSheet(engine: engine, vault: vault)
+            }
+        case .leaveVault(let vault):
+            if let engine {
+                LeaveVaultSheet(engine: engine, vault: vault)
             }
         case .rejected:
             if let engine {
@@ -249,6 +273,8 @@ struct MainWindow: View {
             }
         case .manage:
             ManagementSheet(store: store, engine: engine, present: { sheet = $0 })
+        case .importStatement:
+            StatementImportSheet(store: store)
         }
     }
 }

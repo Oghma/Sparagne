@@ -17,10 +17,15 @@ struct SparagneApp: App {
     /// account lives in one place.
     @State private var engine: SyncEngine?
     @State private var launchFailure: String?
+    /// Quitting waits for the pending void to be applied (`AppDelegate`).
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
         WindowGroup {
             ContentView(store: $store, engine: $engine, launchFailure: $launchFailure)
+                .onChange(of: store.map(ObjectIdentifier.init)) {
+                    appDelegate.store = store
+                }
         }
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -43,10 +48,28 @@ struct SparagneApp: App {
             }
 
             CommandGroup(after: .importExport) {
+                Button(String(localized: "Import Statement\u{2026}")) {
+                    NotificationCenter.default.post(name: .importStatement, object: nil)
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
+                .disabled(store?.currentVault == nil || store?.isReadOnly == true)
+
                 Button(String(localized: "Export CSV\u{2026}")) {
                     NotificationCenter.default.post(name: .exportCSV, object: nil)
                 }
                 .keyboardShortcut("e", modifiers: .command)
+
+                Button(String(localized: "Export All Transactions\u{2026}")) {
+                    NotificationCenter.default.post(name: .exportAllTransactions, object: nil)
+                }
+                .disabled(store?.currentVault == nil)
+
+                Divider()
+
+                Button(String(localized: "Back Up Database\u{2026}")) {
+                    NotificationCenter.default.post(name: .backupDatabase, object: nil)
+                }
+                .disabled(store == nil)
             }
 
             CommandMenu(String(localized: "Ledger")) {
@@ -82,13 +105,18 @@ struct SparagneApp: App {
                 Button(String(localized: "Rename Vault\u{2026}")) {
                     NotificationCenter.default.post(name: .renameVault, object: nil)
                 }
-                .disabled(store?.currentVault == nil)
+                .disabled(!mayRenameCurrentVault)
                 // Greyed out for a shared vault I do not own: the core and
                 // the server would both refuse the command anyway.
                 Button(String(localized: "Delete Vault\u{2026}")) {
                     NotificationCenter.default.post(name: .deleteVault, object: nil)
                 }
                 .disabled(!mayDeleteCurrentVault)
+                // A member's way out of a shared vault; the owner deletes it.
+                Button(String(localized: "Leave Vault\u{2026}")) {
+                    NotificationCenter.default.post(name: .leaveVault, object: nil)
+                }
+                .disabled(!mayLeaveCurrentVault)
 
                 Divider()
 
@@ -115,6 +143,20 @@ struct SparagneApp: App {
     private var mayDeleteCurrentVault: Bool {
         guard let vault = store?.currentVault else { return false }
         return engine?.mayDeleteVault(vault.id) ?? true
+    }
+
+    /// A vault on screen this account may write to
+    /// (`SyncEngine.mayRenameVault`).
+    private var mayRenameCurrentVault: Bool {
+        guard let vault = store?.currentVault else { return false }
+        return engine?.mayRenameVault(vault.id) ?? true
+    }
+
+    /// A shared vault on screen that someone else owns
+    /// (`SyncEngine.mayLeaveVault`).
+    private var mayLeaveCurrentVault: Bool {
+        guard let vault = store?.currentVault else { return false }
+        return engine?.mayLeaveVault(vault.id) ?? false
     }
 }
 
@@ -143,6 +185,16 @@ extension Notification.Name {
     /// Vault menu and palette: the confirmation that deletes the vault on
     /// screen.
     static let deleteVault = Notification.Name("it.oghma.sparagne.deleteVault")
+    /// Vault menu and palette: a member leaves the shared vault on screen.
+    static let leaveVault = Notification.Name("it.oghma.sparagne.leaveVault")
+    /// ⌘⇧I: imports a bank or card statement into the vault on screen.
+    static let importStatement = Notification.Name("it.oghma.sparagne.importStatement")
+    /// File menu: every transaction of the vault on screen as CSV.
+    static let exportAllTransactions = Notification.Name("it.oghma.sparagne.exportAllTransactions")
+    /// File menu: a copy of the whole database file.
+    static let backupDatabase = Notification.Name("it.oghma.sparagne.backupDatabase")
+    /// Banner and palette: the recurring periods waiting for a decision.
+    static let reviewDueRecurring = Notification.Name("it.oghma.sparagne.reviewDueRecurring")
 }
 
 private struct SettingsView: View {

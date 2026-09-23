@@ -212,15 +212,28 @@ extension CommandPaletteModel {
             }
         )
         if let vault = store.currentVault {
-            actions.append(
-                PaletteAction(
-                    id: "vault.rename",
-                    title: String(localized: "Rename Vault\u{2026}"),
-                    keywords: ["vault", "rinomina", "name"]
-                ) {
-                    NotificationCenter.default.post(name: .renameVault, object: nil)
-                }
-            )
+            if engine?.mayRenameVault(vault.id) ?? true {
+                actions.append(
+                    PaletteAction(
+                        id: "vault.rename",
+                        title: String(localized: "Rename Vault\u{2026}"),
+                        keywords: ["vault", "rinomina", "name"]
+                    ) {
+                        NotificationCenter.default.post(name: .renameVault, object: nil)
+                    }
+                )
+            }
+            if engine?.mayLeaveVault(vault.id) ?? false {
+                actions.append(
+                    PaletteAction(
+                        id: "vault.leave",
+                        title: String(localized: "Leave Vault\u{2026}"),
+                        keywords: ["vault", "esci", "abbandona", "leave"]
+                    ) {
+                        NotificationCenter.default.post(name: .leaveVault, object: nil)
+                    }
+                )
+            }
             if engine?.mayDeleteVault(vault.id) ?? true {
                 actions.append(
                     PaletteAction(
@@ -255,6 +268,27 @@ extension CommandPaletteModel {
                 keywords: ["csv", "export", "esporta"]
             ) {
                 NotificationCenter.default.post(name: .exportCSV, object: nil)
+            },
+            PaletteAction(
+                id: "export.all",
+                title: String(localized: "Export All Transactions\u{2026}"),
+                keywords: ["csv", "export", "esporta", "tutto"]
+            ) {
+                NotificationCenter.default.post(name: .exportAllTransactions, object: nil)
+            },
+            PaletteAction(
+                id: "import.statement",
+                title: String(localized: "Import Statement\u{2026}"),
+                keywords: ["import", "importa", "estratto", "csv", "banca"]
+            ) {
+                NotificationCenter.default.post(name: .importStatement, object: nil)
+            },
+            PaletteAction(
+                id: "backup.database",
+                title: String(localized: "Back Up Database\u{2026}"),
+                keywords: ["backup", "copia", "salva"]
+            ) {
+                NotificationCenter.default.post(name: .backupDatabase, object: nil)
             },
         ])
 
