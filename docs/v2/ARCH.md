@@ -142,6 +142,7 @@ Multi-tenant lato server: account utente, vault di proprietà di un account, mem
 | 3 | server `sync`, auth, membership, outbox e pull | secondo utente | fatta il 2026-09-10: `server/` in axum, sync nel core, account e condivisione nell'app; dettagli e rimandi in `SYNC.md` §7 |
 | 4 | libro mastro: griglia editabile, riepilogo e anno, aggregati nel core | l'app dei mockup | fatta il 2026-09-10: `core/src/analytics.rs` e la finestra nuova; design in `UI.md` |
 | 5 | messa in esercizio: app contro il server vero, protocollo senza casi speciali, import v1, deploy, palette ⌘K e colonna wallet, core fuori dal main actor | Sparagne usata tutti i giorni | fatta fra il 2026-09-12 e il 2026-09-13: pacchetti, esiti e passaggio di consegne in `ROADMAP.md` |
+| 6 | correzioni dell'audit del 2026-09-23 e funzioni mancanti: nomi dei vault come etichette, account e limiti sul server, permessi e sola lettura nell'app, ricorrenze dovute, import di estratti conto, export completo e backup, selezione e operazioni in blocco, annulla/ripeti, completamento e suggerimento della categoria, icona e VoiceOver | Sparagne senza i buchi trovati dall'audit | fatta il 2026-09-23: pacchetti ed esiti in `ROADMAP.md` §4 |
 
 Rimandato dalle fasi 1-2: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`. Il core fuori dal main actor è stato fatto il 2026-09-12 (§2.2).
 

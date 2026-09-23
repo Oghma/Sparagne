@@ -46,6 +46,39 @@ e ANNO dal nuovo riepilogo.)
 - I trasferimenti non stanno né in USCITE né in ENTRATE: spostano soldi senza
   guadagnarli o spenderli. Il menu Mastro li aggiunge alla lista corrente
   (⌘⇧T), come fa con le annullate (⌘⇧V).
+- **Selezione** (Fase 6, 2026-09-23): ⌘-click aggiunge o toglie una riga,
+  ⇧-click prende l'intervallo, ⌘A tutte le righe visibili quando nessuna cella
+  è in modifica; le righe scelte hanno la tinta dell'accento e un click semplice
+  apre ancora la riga in modifica. Con due o più righe compare la barra della
+  selezione: **Annulla N righe** (un solo toast, un solo `execute_batch` alla
+  scadenza) e **Imposta categoria…** (un solo `execute_batch` di
+  `UpdateTransaction`); ⌫/⌦ annullano la selezione, esc la toglie. Righe
+  annullate e trasferimenti si possono scegliere ma le azioni li saltano. La
+  selezione si svuota cambiando mese, vault o filtro.
+- **Annulla e ripeti** (⌘Z, ⇧⌘Z, menu Modifica, sull'`UndoManager` della
+  finestra, `Model/LedgerHistory.swift`): una modifica di cella (si riscrivono
+  i valori grezzi di prima: `""` per "senza categoria" e per la nota vuota),
+  una riga aggiunta (dalla griglia o dal quick-add: annullarla la annulla
+  subito, ripeterla la riaggiunge con un id nuovo), una categoria impostata in
+  blocco (un passo solo) e l'annullo in attesa sul toast (⌘Z lo ferma). Un
+  annullo già scritto non si disfa, perché non esiste un comando inverso:
+  quando il toast scade il suo passo, e quelli sulle stesse righe, lasciano la
+  pila. Cambiare vault svuota la pila. Dentro una cella ⌘Z disfa ancora la
+  digitazione.
+- **Categoria**: mentre si scrive nella cella CATEGORIA (e in Imposta
+  categoria…) sotto la cella compare un elenco: prima i nomi che cominciano
+  così, poi gli alias (alias → categoria), poi i nomi che lo contengono; in
+  ogni gruppo prima le categorie usate di recente (`recent_usage`, 90 giorni),
+  senza distinguere maiuscole e accenti. ↑↓ scorrono, ↩ o ⇥ scelgono, esc chiude
+  l'elenco (un secondo esc annulla la modifica). Nella riga vuota, scritta la
+  nota con la categoria vuota, la categoria suggerita dallo storico
+  (`suggest_categories`) compare come segnaposto e si salva se la cella resta
+  vuota; nel quick-add compare come suggerimento sotto la riga e solo ⇥ la
+  scrive come `#Categoria` (per un nome di una parola sola).
+- **VoiceOver**: ogni riga è una frase (data, importo col segno, categoria,
+  nota, busta, persona, annullata) con le azioni Modifica, Duplica, Annulla e
+  Seleziona e il tratto "selezionata"; celle, intestazioni, riga nuova, mese e
+  segmenti dei filtri hanno un nome.
 
 ### 2.2 RIEPILOGO
 
@@ -302,7 +335,11 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 |---|---|
 | `⇥` / `⇧⇥` | campo successivo / precedente |
 | `↩` | salva la riga |
-| `esc` | annulla la modifica |
+| `esc` | chiude l'elenco delle categorie, poi annulla la modifica; senza modifica toglie la selezione |
+| `⌘`-click / `⇧`-click / `⌘A` | sceglie righe: una, un intervallo, tutte (§2.1) |
+| `⌫` / `⌦` | annulla le righe scelte (col toast) |
+| `⌘Z` / `⇧⌘Z` | annulla / ripeti: modifica di cella, riga aggiunta, categoria in blocco, annullo in attesa |
+| `↑` `↓` `↩` `⇥` | nell'elenco delle categorie: scorre e sceglie; nel quick-add `⇥` scrive la categoria suggerita |
 | `⌘D` | duplica l'ultima riga (non un trasferimento; il tipo resta, un rimborso duplicato è un rimborso) |
 | `⌥←` `⌥→` | mese precedente / successivo |
 | `⌘F` | fuoco sulla ricerca |
