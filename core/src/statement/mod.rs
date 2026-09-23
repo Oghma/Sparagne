@@ -8,21 +8,71 @@
 //! Re-importing the same statement is a no-op: every row's command id is a
 //! UUID v5 over a frozen namespace and the row's content (status left out, so
 //! a row that went from pending to cleared is still the same row).
+//!
+//! # What becomes of a row
+//!
+//! The first reason that applies wins:
+//!
+//! 1. a row whose column count differs from the header's, or that swallowed
+//!    the rest of the file in an unclosed quote: `Invalid` (`invalid_row`);
+//! 2. its id already in the vault's log: `AlreadyImported`, whatever the
+//!    mapping now says about it;
+//! 3. a `Skip` action, then a status in `skip_statuses`: `Skipped`;
+//! 4. a currency other than the vault's: `Invalid` (`currency_mismatch`),
+//!    then an unreadable date (`invalid_date`) or amount (`invalid_amount`);
+//! 5. a zero amount, or a transfer whose other wallet is not chosen yet:
+//!    `Skipped`;
+//! 6. otherwise `New`.
+//!
+//! The action is the type rule whose value equals the type column
+//! (case-insensitive), else the default action. `BySign` is an expense when
+//! the money goes out and an income when it comes in. A sign that contradicts
+//! the action (a refund written as money out) keeps the action with the
+//! absolute amount: the rule says what the row is, and card exports write
+//! top-ups with the sign of a spend.
+//!
+//! Amounts are read exactly from the text. More decimals than the currency
+//! keeps are rounded half away from zero; [`StatementRow::rounded`] is set
+//! only when that changed the value (`12.500` is not rounded). The original
+//! amount, when the row has one in another currency or with another value,
+//! is appended to the note in parentheses, after the payee or the user's
+//! note.
+//!
+//! A bank category never creates one: it only selects an active category
+//! whose name or alias it equals, with or without a `5462 - ` merchant code in
+//! front. A category typed in a [`StatementRowOverride`] goes through the
+//! normal resolution, so it may create one.
+//!
+//! # Ids
+//!
+//! The key of a row is `v1|vault|wallet|UTC instant|type|amount|payee|n`: the
+//! type column's value (or the kind, without a type column), the amount in
+//! minor units signed as the file wrote it, the payee lowercased, and `n` the
+//! number of rows with the same key earlier in the file, so two identical
+//! rows in the same second both import. Line numbers are those of the file,
+//! header included; a row with a newline inside quotes starts on its first.
+//!
+//! [`Core::import_statement`] runs one command per new row, oldest first,
+//! with the row's id: refused rows land in the report, a storage error stops
+//! the import (every command before it stays, and a new run deduplicates
+//! them).
 
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{Core, DomainError, Result, TransactionKind};
+use crate::{CommandEnvelope, Core, DomainError, Result, TransactionKind};
 
-// Read by the planner in a later step.
-#[allow(dead_code)]
 mod amount;
 mod csv;
-// Read by the planner in a later step.
-#[allow(dead_code)]
 mod dates;
+mod plan;
 mod presets;
+
+/// Namespace of every command id a statement row gets. Generated once for the
+/// statement import and frozen: changing it would make the next import of a
+/// statement duplicate every row.
+pub const STATEMENT_NAMESPACE: Uuid = Uuid::from_u128(0xe21a_7afd_0f46_4de7_8a8f_5524_1a97_b9f5);
 
 /// Data rows [`detect`] returns in [`StatementDetection::sample`].
 const SAMPLE_ROWS: usize = 5;
@@ -277,10 +327,28 @@ impl Core {
         mapping: &StatementMapping,
         options: &StatementOptions,
     ) -> Result<StatementPreview> {
-        let _ = (vault_id, text, mapping, options);
-        Err(DomainError::InvalidCommand(
-            "preview_statement: not implemented".to_string(),
-        ))
+        let planned = plan::plan(self, vault_id, text, mapping, options)?;
+        let mut preview = StatementPreview {
+            rows: Vec::with_capacity(planned.len()),
+            new_rows: 0,
+            already_imported: 0,
+            skipped: 0,
+            invalid: 0,
+            rounded: 0,
+        };
+        for plan::Planned { row, .. } in planned {
+            match row.status {
+                StatementRowStatus::New => {
+                    preview.new_rows += 1;
+                    preview.rounded += u32::from(row.rounded);
+                }
+                StatementRowStatus::AlreadyImported => preview.already_imported += 1,
+                StatementRowStatus::Skipped { .. } => preview.skipped += 1,
+                StatementRowStatus::Invalid { .. } => preview.invalid += 1,
+            }
+            preview.rows.push(row);
+        }
+        Ok(preview)
     }
 
     /// Imports `text`, one command per row, with the user's `overrides`.
@@ -294,9 +362,46 @@ impl Core {
         options: &StatementOptions,
         overrides: &[StatementRowOverride],
     ) -> Result<StatementReport> {
-        let _ = (vault_id, author, text, mapping, options, overrides);
-        Err(DomainError::InvalidCommand(
-            "import_statement: not implemented".to_string(),
-        ))
+        let mut planned = plan::plan(self, vault_id, text, mapping, options)?;
+        plan::apply_overrides(&mut planned, overrides);
+        let mut report = StatementReport {
+            executed: 0,
+            deduplicated: 0,
+            skipped: 0,
+            rounded: 0,
+            rejected: Vec::new(),
+        };
+        let mut new = Vec::new();
+        for plan::Planned { row, command } in planned {
+            match (&row.status, command) {
+                (StatementRowStatus::New, Some(command)) => new.push((row, command)),
+                (StatementRowStatus::AlreadyImported, _) => report.deduplicated += 1,
+                _ => report.skipped += 1,
+            }
+        }
+        // Oldest first, so the log reads in the order things happened.
+        new.sort_by_key(|(row, _)| (row.occurred_at, row.line));
+        for (row, command) in new {
+            let envelope = CommandEnvelope {
+                id: row.command_id,
+                vault_id,
+                author: author.to_string(),
+                command,
+            };
+            match self.execute(envelope) {
+                Ok(receipt) if receipt.deduplicated => report.deduplicated += 1,
+                Ok(_) => {
+                    report.executed += 1;
+                    report.rounded += u32::from(row.rounded);
+                }
+                Err(DomainError::Storage(message)) => return Err(DomainError::Storage(message)),
+                Err(err) => report.rejected.push(StatementRejection {
+                    line: row.line,
+                    code: err.code().to_string(),
+                    message: err.to_string(),
+                }),
+            }
+        }
+        Ok(report)
     }
 }
