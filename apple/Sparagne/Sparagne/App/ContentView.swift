@@ -216,12 +216,19 @@ struct MainWindow: View {
     private func sheetBody(_ kind: SheetKind) -> some View {
         switch kind {
         case .vault:
-            OnboardingSheet(isFirstRun: store.needsOnboarding) { name, wallet, opening in
+            OnboardingSheet(
+                isFirstRun: store.needsOnboarding,
+                takenNames: VaultNaming.siblingNames(owner: store.currentAuthor, in: store.vaults)
+            ) { name, wallet, opening in
                 Task { await store.createVault(name: name, walletName: wallet, openingBalance: opening) }
             }
             .interactiveDismissDisabled(store.needsOnboarding)
         case .renameVault(let vault):
-            RenameSheet(title: String(localized: "Rename Vault"), name: vault.name) { name in
+            RenameSheet(
+                title: String(localized: "Rename Vault"),
+                name: vault.name,
+                takenNames: VaultNaming.siblingNames(owner: vault.owner, excluding: vault.id, in: store.vaults)
+            ) { name in
                 Task { await store.renameVault(vault.id, name: name) }
             }
         case .deleteVault(let vault):
