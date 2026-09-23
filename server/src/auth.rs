@@ -2,6 +2,10 @@
 //!
 //! Passwords are argon2id PHC strings; a token is 32 random bytes shown once
 //! as base64url and stored as its sha256 digest. Neither is ever logged.
+//! Every password check and every registration first goes through
+//! [`crate::ratelimit`].
+
+use std::{net::IpAddr, time::Instant};
 
 use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use axum::{
@@ -17,6 +21,7 @@ use sparagne_core::sync::{Credentials, TokenResponse};
 use uuid::Uuid;
 
 use crate::{
+    client_ip::ClientIp,
     error::{ApiError, ApiResult},
     extract::Json,
     state::AppState,
@@ -69,14 +74,17 @@ pub struct MeResponse {
     pub username: String,
 }
 
-/// `POST /auth/register`.
+/// `POST /auth/register`. Every attempt counts against the caller's address
+/// (`ratelimit`), valid or not.
 pub async fn register(
     State(state): State<AppState>,
+    ClientIp(from): ClientIp,
     Json(credentials): Json<Credentials>,
 ) -> ApiResult<(StatusCode, Json<TokenResponse>)> {
     if !state.config().allow_registration {
         return Err(ApiError::registration_disabled());
     }
+    state.limiter().begin_register(from, Instant::now())?;
     let username = normalize_username(&credentials.username);
     validate_username(&username)?;
     validate_password(&credentials.password)?;
@@ -92,12 +100,15 @@ pub async fn register(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// `POST /auth/login`.
+/// `POST /auth/login`. The limits are checked before any hashing: a locked
+/// username or address is `429` even with the right password.
 pub async fn login(
     State(state): State<AppState>,
+    ClientIp(from): ClientIp,
     Json(credentials): Json<Credentials>,
 ) -> ApiResult<Json<TokenResponse>> {
     let username = normalize_username(&credentials.username);
+    begin_login(&state, &username, from)?;
     let response = state
         .run(move |state| {
             let found = state.db().user_with_hash(&username)?;
@@ -111,11 +122,20 @@ pub async fn login(
             let Some(user) = user.filter(|_| verified) else {
                 return Err(ApiError::unauthorized());
             };
+            state.limiter().login_succeeded(&user.username, from);
             let now = Utc::now().timestamp();
             issue_token(state, &state.db(), &user.id, &user.username, now)
         })
         .await?;
     Ok(Json(response))
+}
+
+/// Counts a password check for `username` from `from`, or refuses it. A name
+/// that fails [`validate_username`] cannot be an account, so it only counts
+/// against the address and never grows the limiter by a bucket of its own.
+fn begin_login(state: &AppState, username: &str, from: IpAddr) -> ApiResult<()> {
+    let key = validate_username(username).is_ok().then_some(username);
+    state.limiter().begin_login(key, from, Instant::now())
 }
 
 /// `POST /auth/logout`.
@@ -135,13 +155,16 @@ pub struct ChangePasswordRequest {
 
 /// `POST /auth/password`: needs the current password, validates the new one
 /// like register does, and revokes every other token of the account. The
-/// token that made the request stays valid.
+/// token that made the request stays valid. The current password is checked
+/// under the same limits as a login, so a stolen token cannot guess it.
 pub async fn change_password(
     State(state): State<AppState>,
+    ClientIp(from): ClientIp,
     user: CurrentUser,
     Json(request): Json<ChangePasswordRequest>,
 ) -> ApiResult<StatusCode> {
     validate_password(&request.new_password)?;
+    begin_login(&state, &user.username, from)?;
     state
         .run(move |state| {
             let Some((_, hash)) = state.db().user_with_hash(&user.username)? else {
@@ -150,6 +173,7 @@ pub async fn change_password(
             if !verify_password(state, &request.current_password, &hash) {
                 return Err(ApiError::unauthorized());
             }
+            state.limiter().login_succeeded(&user.username, from);
             let new_hash = hash_password(state, &request.new_password)?;
             let db = state.db();
             db.set_password_hash(user.id, &new_hash)?;

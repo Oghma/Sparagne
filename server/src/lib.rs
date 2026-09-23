@@ -4,11 +4,13 @@
 //! the same `sparagne_core` the app uses. Protocol in `docs/v2/SYNC.md`.
 
 pub mod auth;
+pub mod client_ip;
 pub mod config;
 pub mod db;
 pub mod error;
 pub mod extract;
 pub mod members;
+pub mod ratelimit;
 pub mod state;
 pub mod vaults;
 

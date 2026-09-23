@@ -6,14 +6,22 @@
 
 mod common;
 
-use axum::http::{Method, StatusCode};
+use std::net::SocketAddr;
+
+use axum::{
+    extract::ConnectInfo,
+    http::{Method, StatusCode, header::RETRY_AFTER},
+};
 use common::{Api, Client, PASSWORD, Res};
 use serde_json::json;
 use sparagne_core::sync::{MemberEntry, TokenResponse};
+use sparagne_server::Config;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const WRONG: &str = "not my password";
 
 /// `POST /auth/register` with any credentials, whatever the outcome.
 async fn register_as(api: &Api, username: &str, password: &str) -> Res {
@@ -24,6 +32,65 @@ async fn register_as(api: &Api, username: &str, password: &str) -> Res {
         Some(json!({ "username": username, "password": password })),
     )
     .await
+}
+
+/// Where a request claims to come from: the TCP peer axum records when
+/// serving for real, and an `X-Forwarded-For` header.
+#[derive(Clone, Copy, Default)]
+struct Origin {
+    peer: Option<&'static str>,
+    forwarded_for: Option<&'static str>,
+}
+
+impl Origin {
+    fn peer(addr: &'static str) -> Self {
+        Self {
+            peer: Some(addr),
+            forwarded_for: None,
+        }
+    }
+
+    /// Through the proxy: the peer is always the proxy itself.
+    fn forwarded(value: &'static str) -> Self {
+        Self {
+            peer: Some("10.0.0.2:41000"),
+            forwarded_for: Some(value),
+        }
+    }
+}
+
+async fn post_from(api: &Api, from: Origin, uri: &str, body: serde_json::Value) -> Res {
+    let mut request = Api::request(Method::POST, uri, None, Some(body));
+    if let Some(peer) = from.peer {
+        let addr: SocketAddr = peer.parse().expect("socket address");
+        request.extensions_mut().insert(ConnectInfo(addr));
+    }
+    if let Some(value) = from.forwarded_for {
+        request
+            .headers_mut()
+            .insert("x-forwarded-for", value.parse().expect("header value"));
+    }
+    api.send(request).await
+}
+
+async fn login_from(api: &Api, from: Origin, username: &str, password: &str) -> Res {
+    let body = json!({ "username": username, "password": password });
+    post_from(api, from, "/auth/login", body).await
+}
+
+/// A `429` with a `Retry-After` of at most `max` seconds.
+fn assert_limited(res: &Res, max: u64) {
+    assert_eq!(res.status, StatusCode::TOO_MANY_REQUESTS, "{:?}", res.body);
+    assert_eq!(res.code(), "too_many_requests");
+    let seconds: u64 = res
+        .headers
+        .get(RETRY_AFTER)
+        .expect("Retry-After")
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((1..=max).contains(&seconds), "{seconds}");
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +264,153 @@ async fn changing_the_password_revokes_the_other_tokens_and_keeps_this_one() {
         api.login("alice", NEW_PASSWORD).await.status,
         StatusCode::OK
     );
+}
+
+// ---------------------------------------------------------------------------
+// Rate limits
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn failed_logins_lock_the_username_with_retry_after() {
+    let api = Api::new();
+    api.register("alice").await;
+    for _ in 0..5 {
+        let res = api.login("alice", WRONG).await;
+        assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    }
+    let locked = api.login("alice", WRONG).await;
+    assert_limited(&locked, 900);
+    // The lock is on the account, not on how its name is spelled.
+    assert_limited(&api.login(" Alice", WRONG).await, 900);
+}
+
+#[tokio::test]
+async fn a_locked_username_refuses_even_the_right_password() {
+    let api = Api::new();
+    api.register("alice").await;
+    api.register("bob").await;
+    for _ in 0..5 {
+        api.login("alice", WRONG).await;
+    }
+    assert_limited(&api.login("alice", PASSWORD).await, 900);
+    // Nobody else is locked out, from the same address either.
+    assert_eq!(api.login("bob", PASSWORD).await.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn unknown_usernames_lock_like_real_ones() {
+    let api = Api::new();
+    for _ in 0..5 {
+        let res = api.login("nobody", WRONG).await;
+        assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    }
+    // Otherwise the lock would tell which accounts exist.
+    assert_limited(&api.login("nobody", WRONG).await, 900);
+}
+
+#[tokio::test]
+async fn a_successful_login_resets_the_failures() {
+    let api = Api::new();
+    api.register("alice").await;
+    for round in 0..3 {
+        for _ in 0..4 {
+            let res = api.login("alice", WRONG).await;
+            assert_eq!(res.status, StatusCode::UNAUTHORIZED, "round {round}");
+        }
+        let res = api.login("alice", PASSWORD).await;
+        assert_eq!(res.status, StatusCode::OK, "round {round}");
+    }
+}
+
+#[tokio::test]
+async fn wrong_current_passwords_count_as_failed_logins() {
+    let api = Api::new();
+    let token = api.register("alice").await;
+    for _ in 0..5 {
+        let res = api
+            .post("/auth/password", &token, change(WRONG, NEW_PASSWORD))
+            .await;
+        assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    }
+    let res = api
+        .post("/auth/password", &token, change(PASSWORD, NEW_PASSWORD))
+        .await;
+    assert_limited(&res, 900);
+    assert_limited(&api.login("alice", PASSWORD).await, 900);
+}
+
+#[tokio::test]
+async fn the_address_limit_uses_the_rightmost_forwarded_for_when_trusted() {
+    let api = Api::with_config(Config {
+        trust_forwarded_for: true,
+        ip_max_failures: 3,
+        ..Config::default()
+    });
+    api.register("alice").await;
+    // Three different usernames, one client: whatever it puts in front of
+    // the header, the proxy appends the real address last.
+    let client = Origin::forwarded("203.0.113.7");
+    let spoofing = Origin::forwarded("198.51.100.1, 203.0.113.7");
+    for (i, from) in [client, spoofing, client].into_iter().enumerate() {
+        let res = login_from(&api, from, &format!("user{i}"), WRONG).await;
+        assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    }
+    assert_limited(&login_from(&api, client, "alice", PASSWORD).await, 900);
+    assert_limited(&login_from(&api, spoofing, "alice", PASSWORD).await, 900);
+
+    // Another client behind the same proxy is not affected.
+    let neighbour = Origin::forwarded("203.0.113.8");
+    let res = login_from(&api, neighbour, "alice", PASSWORD).await;
+    assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+}
+
+#[tokio::test]
+async fn an_untrusted_forwarded_for_is_ignored() {
+    let api = Api::with_config(Config {
+        ip_max_failures: 3,
+        ..Config::default()
+    });
+    api.register("alice").await;
+    // A client rotating the header gets nowhere: the peer is the key.
+    for (i, forged) in ["203.0.113.1", "203.0.113.2", "203.0.113.3"]
+        .into_iter()
+        .enumerate()
+    {
+        let from = Origin {
+            peer: Some("192.0.2.10:50000"),
+            forwarded_for: Some(forged),
+        };
+        let res = login_from(&api, from, &format!("user{i}"), WRONG).await;
+        assert_eq!(res.status, StatusCode::UNAUTHORIZED);
+    }
+    let from = Origin {
+        peer: Some("192.0.2.10:50001"),
+        forwarded_for: Some("203.0.113.4"),
+    };
+    assert_limited(&login_from(&api, from, "alice", PASSWORD).await, 900);
+
+    // Another peer is another client.
+    let other = Origin::peer("192.0.2.11:50000");
+    let res = login_from(&api, other, "alice", PASSWORD).await;
+    assert_eq!(res.status, StatusCode::OK, "{:?}", res.body);
+}
+
+#[tokio::test]
+async fn registration_is_limited_per_address() {
+    let api = Api::new();
+    // Ten attempts an hour, valid or not.
+    for i in 0..9 {
+        let res = register_as(&api, &format!("user{i}"), PASSWORD).await;
+        assert_eq!(res.status, StatusCode::CREATED, "{:?}", res.body);
+    }
+    let invalid = register_as(&api, "x", PASSWORD).await;
+    assert_eq!(invalid.status, StatusCode::BAD_REQUEST);
+    assert_limited(&register_as(&api, "user10", PASSWORD).await, 3_600);
+
+    let elsewhere = Origin::peer("192.0.2.20:50000");
+    let body = json!({ "username": "user10", "password": PASSWORD });
+    let res = post_from(&api, elsewhere, "/auth/register", body).await;
+    assert_eq!(res.status, StatusCode::CREATED, "{:?}", res.body);
 }
 
 // ---------------------------------------------------------------------------

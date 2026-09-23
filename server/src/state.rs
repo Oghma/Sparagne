@@ -1,4 +1,5 @@
-//! Shared state: the two databases, the configuration and the hasher.
+//! Shared state: the two databases, the configuration, the hasher and the
+//! rate limiter.
 //!
 //! SQLite has a single writer, so both handles sit behind a `Mutex` and every
 //! piece of work that touches them runs on a blocking task through
@@ -17,6 +18,7 @@ use crate::{
     config::Config,
     db::ServerDb,
     error::{ApiError, ApiResult},
+    ratelimit::{Limits, RateLimiter},
 };
 
 const VAULTS_DB: &str = "vaults.sqlite";
@@ -31,6 +33,7 @@ struct Inner {
     config: Config,
     argon: Argon2<'static>,
     dummy_hash: String,
+    limiter: RateLimiter,
 }
 
 /// Handle passed to every route.
@@ -82,6 +85,7 @@ impl AppState {
                 config,
                 argon,
                 dummy_hash,
+                limiter: RateLimiter::new(Limits::from(&config)),
             }),
         })
     }
@@ -102,6 +106,12 @@ impl AppState {
     #[must_use]
     pub fn dummy_hash(&self) -> &str {
         &self.inner.dummy_hash
+    }
+
+    /// Login and registration limits, shared by every request.
+    #[must_use]
+    pub fn limiter(&self) -> &RateLimiter {
+        &self.inner.limiter
     }
 
     /// The vault log and projection. A poisoned lock is recovered: every

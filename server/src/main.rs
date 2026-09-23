@@ -21,9 +21,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         data_dir,
         allow_registration = config.allow_registration,
         token_ttl_days = config.token_ttl_days,
+        trust_proxy = config.trust_forwarded_for,
+        login_max_failures = config.login_max_failures,
+        login_window_secs = config.login_window_secs,
+        ip_max_failures = config.ip_max_failures,
         "listening"
     );
-    axum::serve(listener, router(state))
+    // The peer address is what the rate limits key on (`client_ip.rs`).
+    let app = router(state).into_make_service_with_connect_info::<SocketAddr>();
+    axum::serve(listener, app)
         .with_graceful_shutdown(shutdown())
         .await?;
     tracing::info!("stopped");
