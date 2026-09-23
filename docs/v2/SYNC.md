@@ -16,7 +16,7 @@ Due file SQLite in `SPARAGNE_DATA_DIR`:
 - `vaults.sqlite`: il `Core` (schema del core, `commands.seq` è il seq del server).
 - `server.sqlite`: `users(id, username UNIQUE, password_hash argon2id, created_at)`, `tokens(hash sha256 PK, user_id, created_at, expires_at)`, `vault_memberships(vault_id, user_id, role, created_at, PK(vault_id, user_id))`.
 
-Un `Mutex<Core>` serializza tutti i comandi (SQLite ha un solo scrittore); le chiamate al core stanno in `spawn_blocking`. Configurazione via ambiente: `SPARAGNE_BIND` (default `127.0.0.1:3000`), `SPARAGNE_DATA_DIR` (default `./data`), `SPARAGNE_ALLOW_REGISTRATION` (default `true`), `SPARAGNE_TOKEN_TTL_DAYS` (default `30`), `RUST_LOG`. TLS e rate limiting li fa il reverse proxy.
+Un `Mutex<Core>` serializza tutti i comandi (SQLite ha un solo scrittore); le chiamate al core stanno in `spawn_blocking`. Configurazione via ambiente: `SPARAGNE_BIND` (default `127.0.0.1:3000`), `SPARAGNE_DATA_DIR` (default `./data`), `SPARAGNE_ALLOW_REGISTRATION` (default `true`), `SPARAGNE_TOKEN_TTL_DAYS` (default `30`), `SPARAGNE_TRUST_PROXY` (default `false`: con `true` l'indirizzo del client è l'ultimo di `X-Forwarded-For`, quello che aggiunge Caddy), `SPARAGNE_LOGIN_MAX_FAILURES` (default `5`), `SPARAGNE_LOGIN_WINDOW_SECS` (default `900`), `SPARAGNE_IP_MAX_FAILURES` (default `30`), `RUST_LOG`. Il TLS lo fa il reverse proxy; i limiti sui tentativi di login e di registrazione stanno nel server (dal 2026-09-23, `server/src/ratelimit.rs`). Gli account si gestiscono anche da riga di comando: `sparagne-server user add|passwd|list|revoke`, password dalla prima riga di stdin (`DEPLOY.md`).
 
 ## 3. API HTTP
 
@@ -25,8 +25,9 @@ JSON ovunque; autenticazione `Authorization: Bearer <token>` tranne dove indicat
 | Metodo e path | Corpo → risposta | Chi | Note |
 |---|---|---|---|
 | `GET /health` | → `{"status":"ok"}` | nessuno | |
-| `POST /auth/register` | `Credentials` → 201 `TokenResponse` | nessuno | `403 registration_disabled`, `409 already_exists`, `400 invalid_request` (username 3-32 `[a-z0-9_.-]`, password ≥ 8) |
-| `POST /auth/login` | `Credentials` → 200 `TokenResponse` | nessuno | `401 unauthorized` |
+| `POST /auth/register` | `Credentials` → 201 `TokenResponse` | nessuno | `403 registration_disabled`, `409 already_exists`, `400 invalid_request` (username 3-32 `[a-z0-9_.-]` dopo trim e minuscole, password ≥ 8), `429 too_many_requests` con `Retry-After` (10 registrazioni l'ora per indirizzo) |
+| `POST /auth/login` | `Credentials` → 200 `TokenResponse` | nessuno | `401 unauthorized` (stessa risposta e stesso tempo per utente ignoto e password sbagliata); `429 too_many_requests` con `Retry-After` dopo 5 errori in 15 minuti per username o 30 per indirizzo; username con trim e minuscole |
+| `POST /auth/password` | `{current_password, new_password}` → 204 | bearer | password attuale sbagliata `401 unauthorized` (conta fra gli errori di login); nuova password come nella registrazione, altrimenti `400 invalid_request`; revoca tutti gli altri token dell'account, quello usato resta valido |
 | `POST /auth/logout` | → 204 | bearer | revoca il token |
 | `GET /me` | → `{ "username" }` | bearer | |
 | `GET /vaults` | → `[VaultSummary]` | bearer | i vault di cui sono owner o membro, con `role` e `last_seq` |
@@ -34,9 +35,9 @@ JSON ovunque; autenticazione `Authorization: Bearer <token>` tranne dove indicat
 | `GET /vaults/{vault_id}/pull?since=0&limit=500` | → 200 `PullResponse` | membro | `since` = ultimo seq noto; `limit` massimo 1000; `last_seq` è l'ultimo seq del vault (per sapere se c'è altro) |
 | `GET /vaults/{vault_id}/members` | → `[MemberEntry]` | membro | |
 | `PUT /vaults/{vault_id}/members` | `SetMemberRequest` → 204 | owner | upsert di editor o viewer; `role = owner` è `400 invalid_request`; cambiare il ruolo dell'owner esistente `403 forbidden`; utente inesistente `404 not_found` |
-| `DELETE /vaults/{vault_id}/members/{username}` | → 204 | owner | l'owner non si rimuove |
+| `DELETE /vaults/{vault_id}/members/{username}` | → 204 | owner, o il membro stesso | un editor o un viewer che rimuove sé stesso esce dal vault; l'owner non si rimuove (`403 forbidden`); un non owner che rimuove un altro `403 forbidden`; dopo l'uscita il pull di quel vault è `404 not_found` |
 
-Codici HTTP: `invalid_request`/`invalid_*` 400, `unauthorized` 401, `forbidden`/`author_mismatch`/`registration_disabled` 403, `not_found` 404, `already_exists` 409, errori di storage 500.
+Codici HTTP: `invalid_request`/`invalid_*` 400, `unauthorized` 401, `forbidden`/`author_mismatch`/`registration_disabled` 403 (anche un `DomainError::Forbidden` a livello di richiesta), `not_found` 404, `already_exists` 409, `too_many_requests` 429 con l'header `Retry-After` in secondi, errori di storage 500.
 
 **Creazione del vault.** Non esiste una rotta per creare un vault: lo crea il suo stesso primo push. Se il `vault_id` del path è ignoto al server e il primo comando del lotto è il `CreateVault` che lo conia (`id` = `vault_id`), il server crea il vault nel core e la membership `owner` di chi chiama, nella stessa richiesta; il `PushResult` di quel comando sta in testa alla risposta come tutti gli altri. Un vault ignoto il cui primo comando non è quel `CreateVault` è `404 not_found`, esattamente come un vault che esiste ma di cui non si è membri: chi chiama non deve poter distinguere i due casi. Il nome non conta: un nome che chi chiama ha già usato crea un vault come un altro (vedi "Nomi dei vault" sotto). Il push resta idempotente: rifarlo risponde gli stessi seq e non crea nulla di nuovo.
 
