@@ -198,3 +198,76 @@ async fn changing_the_password_revokes_the_other_tokens_and_keeps_this_one() {
         StatusCode::OK
     );
 }
+
+// ---------------------------------------------------------------------------
+// Leaving a vault
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn an_editor_or_a_viewer_can_leave_a_vault() {
+    let api = Api::new();
+    let (alice, bob, vault, _) = common::basics(&api).await;
+    let carol = api.register("carol").await;
+    let uri = format!("/vaults/{vault}/members");
+    let set = api
+        .put(
+            &uri,
+            &alice.token,
+            json!({ "username": "carol", "role": "viewer" }),
+        )
+        .await;
+    assert_eq!(set.status, StatusCode::NO_CONTENT);
+
+    // bob (editor) leaves, carol (viewer) leaves by a differently spelled name.
+    let left = api.delete(&format!("{uri}/bob"), &bob.token).await;
+    assert_eq!(left.status, StatusCode::NO_CONTENT, "{:?}", left.body);
+    let left = api.delete(&format!("{uri}/Carol"), &carol).await;
+    assert_eq!(left.status, StatusCode::NO_CONTENT, "{:?}", left.body);
+
+    let members: Vec<MemberEntry> = api.get(&uri, &alice.token).await.json();
+    assert_eq!(members.len(), 1);
+    assert_eq!(members[0].username, "alice");
+    // The vault is gone for bob: blind 404s, and no longer listed.
+    let pull = api
+        .get(&format!("/vaults/{vault}/pull?since=0"), &bob.token)
+        .await;
+    assert_eq!(pull.status, StatusCode::NOT_FOUND);
+    let listed: Vec<serde_json::Value> = api.get("/vaults", &bob.token).await.json();
+    assert!(listed.is_empty());
+    // Leaving twice is leaving a vault one is not a member of.
+    let again = api.delete(&format!("{uri}/bob"), &bob.token).await;
+    assert_eq!(again.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn the_owner_cannot_leave_a_vault() {
+    let api = Api::new();
+    let (alice, _bob, vault, _) = common::basics(&api).await;
+    let res = api
+        .delete(&format!("/vaults/{vault}/members/alice"), &alice.token)
+        .await;
+    assert_eq!(res.status, StatusCode::FORBIDDEN);
+    assert_eq!(res.code(), "forbidden");
+}
+
+#[tokio::test]
+async fn a_member_cannot_remove_another_member() {
+    let api = Api::new();
+    let (alice, bob, vault, _) = common::basics(&api).await;
+    api.register("carol").await;
+    let uri = format!("/vaults/{vault}/members");
+    api.put(
+        &uri,
+        &alice.token,
+        json!({ "username": "carol", "role": "viewer" }),
+    )
+    .await;
+
+    for target in ["carol", "alice"] {
+        let res = api.delete(&format!("{uri}/{target}"), &bob.token).await;
+        assert_eq!(res.status, StatusCode::FORBIDDEN, "{target}");
+        assert_eq!(res.code(), "forbidden");
+    }
+    let members: Vec<MemberEntry> = api.get(&uri, &alice.token).await.json();
+    assert_eq!(members.len(), 3);
+}

@@ -1,7 +1,7 @@
 //! Membership routes: who may read and write a vault (`docs/v2/SYNC.md` §3).
 //!
 //! The owner's row is written when the vault is created and can never be
-//! changed or removed.
+//! changed or removed. Everyone else can leave on their own.
 
 use axum::{extract::State, http::StatusCode};
 use chrono::Utc;
@@ -59,7 +59,9 @@ pub async fn set(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `DELETE /vaults/{vault_id}/members/{username}`.
+/// `DELETE /vaults/{vault_id}/members/{username}`: the owner removes an
+/// editor or a viewer, or an editor or a viewer leaves (their own username).
+/// The owner cannot leave, and nobody else removes anyone.
 pub async fn remove(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -69,6 +71,12 @@ pub async fn remove(
     state
         .run(move |state| {
             let db = state.db();
+            if username == user.username {
+                return match membership(&db, vault_id, user.id)? {
+                    MemberRole::Owner => Err(ApiError::forbidden()),
+                    _ => db.remove_membership(vault_id, user.id).map(|_| ()),
+                };
+            }
             require_owner(&db, vault_id, user.id)?;
             let Some(target) = db.user_by_username(&username)? else {
                 return Err(ApiError::not_found());
