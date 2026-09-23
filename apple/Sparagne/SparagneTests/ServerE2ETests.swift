@@ -206,7 +206,7 @@ struct ServerE2ETests {
         #expect(bob.engine.serverVaults.first?.name == alice.store.currentVault?.name)
     }
 
-    @Test("A viewer's push comes back refused and the change survives")
+    @Test("A viewer writes nothing, a demoted editor's change is refused, and the owner's changes still arrive")
     func viewerCannotPush() async throws {
         let server = try #require(E2EServer.url)
         let root = try Self.temporaryRoot()
@@ -218,29 +218,121 @@ struct ServerE2ETests {
         let alice = try await Self.owner(server: server, root: root, suffix: suffix)
         let vaultId = try #require(alice.vaultId)
 
-        try await alice.engine.setMember(vaultId: vaultId, username: carol.username, role: .viewer)
+        try await alice.engine.setMember(vaultId: vaultId, username: carol.username, role: .editor)
         await carol.engine.syncNow()
         #expect(carol.store.currentVault?.id == vaultId)
-        #expect(carol.serverRole(vaultId) == .viewer)
+        #expect(carol.serverRole(vaultId) == .editor)
 
+        // Written as an editor, still unsent when the owner demotes carol and
+        // renames the vault.
         await carol.store.submit(quickAdd: "-1.00 gum @Cash >Food")
         #expect(carol.store.presentedError == nil)
+        try await alice.engine.setMember(vaultId: vaultId, username: carol.username, role: .viewer)
+        await alice.store.renameVault(vaultId, name: "Renamed \(suffix)")
+        await alice.engine.syncNow()
+
         await carol.engine.syncNow()
 
-        // The engine reports the refusal instead of crashing, and the command
-        // stays in the outbox: nothing is lost by a 403.
-        switch carol.engine.status {
-        // The 403 the server really sent, mapped to its localized headline.
-        case .error(let text): #expect(text.contains(ErrorMessages.summary(for: "forbidden")))
-        default: Issue.record("expected an error status, got \(carol.engine.status)")
-        }
-        #expect(try await carol.syncState().outbox == 1)
-        #expect(carol.engine.pendingCount == 1)
-        #expect(carol.engine.rejected.isEmpty)
+        // The roles came first: no push, the change is refused here as the
+        // server would, and the pull still brought the rename.
+        #expect(carol.engine.status == .idle)
+        #expect(carol.serverRole(vaultId) == .viewer)
+        #expect(try await carol.syncState().outbox == 0)
+        #expect(try await carol.syncState().rejected == 1)
+        #expect(carol.engine.pendingCount == 0)
+        #expect(carol.engine.rejected.first?.command.code == "forbidden")
+        #expect(carol.store.currentVault?.name == "Renamed \(suffix)")
+        #expect(try await carol.notes().contains("gum") == false)
 
-        // The owner never sees the change.
+        // From now on the vault is read-only on carol's side.
+        #expect(carol.store.isReadOnly)
+        await carol.store.submit(quickAdd: "-2.00 mints @Cash >Food")
+        #expect(carol.store.presentedError?.code == "forbidden")
+        #expect(try await carol.syncState().outbox == 0)
+
+        // The owner never sees either.
         await alice.engine.syncNow()
         #expect(try await alice.notes().contains("gum") == false)
         #expect(alice.engine.status == .idle)
+        #expect(alice.store.snapshot == carol.store.snapshot)
+    }
+
+    @Test("A member leaves: the pending change goes up first, then the vault leaves the device")
+    func memberLeaves() async throws {
+        let server = try #require(E2EServer.url)
+        let root = try Self.temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suffix = E2EServer.suffix()
+
+        let bob = try await E2EPeer(server: server, root: root, name: "bob", username: "b\(suffix)")
+        try await bob.register()
+        let alice = try await Self.owner(server: server, root: root, suffix: suffix)
+        let vaultId = try #require(alice.vaultId)
+        try await alice.engine.setMember(vaultId: vaultId, username: bob.username, role: .editor)
+        await bob.engine.syncNow()
+        #expect(bob.store.currentVault?.id == vaultId)
+        #expect(bob.engine.mayLeaveVault(vaultId))
+        #expect(!alice.engine.mayLeaveVault(vaultId))
+
+        await bob.store.submit(quickAdd: "-12.50 pizza @Cash >Food")
+        try await bob.engine.leaveVault(vaultId)
+
+        #expect(bob.store.vaults.isEmpty)
+        #expect(try await bob.core.vaults().isEmpty)
+        #expect(bob.engine.pendingCount == 0)
+        let members = try await alice.engine.members(ofVault: vaultId)
+        #expect(members.map(\.username) == [alice.username])
+        await alice.engine.syncNow()
+        #expect(try await alice.notes().contains("pizza"))
+
+        // Nothing brings it back, and the owner cannot leave their own.
+        await bob.engine.syncNow()
+        #expect(bob.engine.status == .idle)
+        #expect(bob.store.vaults.isEmpty)
+        do {
+            try await alice.engine.leaveVault(vaultId)
+            Issue.record("the owner should not be able to leave")
+        } catch let error as ServerError {
+            #expect(error.status == 403)
+        }
+        #expect(alice.store.currentVault?.id == vaultId)
+    }
+
+    @Test("Changing the password keeps this session and revokes the other device's")
+    func changePasswordRevokesOtherDevices() async throws {
+        let server = try #require(E2EServer.url)
+        let root = try Self.temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suffix = E2EServer.suffix()
+
+        let alice = try await Self.owner(server: server, root: root, suffix: suffix)
+        let vaultId = try #require(alice.vaultId)
+        let laptop = try await E2EPeer(server: server, root: root, name: "laptop", username: alice.username)
+        await laptop.engine.logIn(username: alice.username, password: E2EPeer.password)
+        #expect(laptop.account.isLoggedIn)
+        #expect(laptop.store.currentVault?.id == vaultId)
+        #expect(laptop.account.expiresAt.map { $0 > Date() } == true)
+
+        do {
+            try await alice.engine.changePassword(current: "not-the-password", new: "brandnewsecret")
+            Issue.record("a wrong current password should be refused")
+        } catch let error as ServerError {
+            #expect(error.status == 401)
+        }
+        #expect(alice.account.isLoggedIn)
+
+        try await alice.engine.changePassword(current: E2EPeer.password, new: "brandnewsecret")
+        await alice.engine.syncNow()
+        #expect(alice.account.isLoggedIn)
+        #expect(alice.engine.status == .idle)
+
+        await laptop.engine.syncNow()
+        #expect(!laptop.account.isLoggedIn)
+        #expect(laptop.account.lastUsername == alice.username)
+        #expect(laptop.engine.status == .error(ErrorMessages.sessionExpired))
+
+        await laptop.engine.logIn(username: alice.username, password: "brandnewsecret")
+        #expect(laptop.account.isLoggedIn)
+        #expect(laptop.engine.status == .idle)
     }
 }
