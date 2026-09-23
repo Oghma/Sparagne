@@ -15,6 +15,12 @@ use uuid::Uuid;
 
 use crate::{Core, DomainError, Result, TransactionKind};
 
+mod csv;
+mod presets;
+
+/// Data rows [`detect`] returns in [`StatementDetection::sample`].
+const SAMPLE_ROWS: usize = 5;
+
 /// How the columns of a statement map to a transaction.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct StatementMapping {
@@ -208,15 +214,40 @@ pub struct StatementDetection {
 /// The built-in presets.
 #[must_use]
 pub fn presets() -> Vec<StatementPreset> {
-    Vec::new()
+    presets::all()
 }
 
 /// Delimiter, header, matching preset and a sample of a statement.
+///
+/// The delimiter is the one among `,`, `;` and tab the first rows agree on;
+/// the header is the first non-blank row. A file with no row, or whose header
+/// never closes a quote, is an [`DomainError::InvalidCommand`].
 pub fn detect(text: &str) -> Result<StatementDetection> {
-    let _ = text;
-    Err(DomainError::InvalidCommand(
-        "detect_statement: not implemented".to_string(),
-    ))
+    let delimiter = csv::sniff_delimiter(text);
+    let mut records = csv::records(text, delimiter);
+    let header = records
+        .next()
+        .ok_or_else(|| DomainError::InvalidCommand("the statement is empty".to_string()))?;
+    if header.unclosed_quote {
+        return Err(DomainError::InvalidCommand(
+            "the header of the statement never closes a quote".to_string(),
+        ));
+    }
+    let mut rows = 0u32;
+    let mut sample = Vec::new();
+    for record in records {
+        rows = rows.saturating_add(1);
+        if sample.len() < SAMPLE_ROWS {
+            sample.push(record.fields);
+        }
+    }
+    Ok(StatementDetection {
+        delimiter: delimiter.to_string(),
+        preset_id: presets::matching(&header.fields).map(str::to_string),
+        headers: header.fields,
+        rows,
+        sample,
+    })
 }
 
 /// A mapping as JSON, for the app to remember.
