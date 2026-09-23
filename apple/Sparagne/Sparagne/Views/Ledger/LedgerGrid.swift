@@ -15,9 +15,10 @@ import SparagneCore
 ///
 /// ⌘-click and ⇧-click pick rows instead of opening one, and ⌘A picks them all
 /// while no cell is being edited: the selection the bulk actions work on
-/// (`SelectionBar`, `AppStore+Selection.swift`). The grid itself takes the
-/// keyboard then, so ⌫ voids what is selected and esc lets it go, while a text
-/// field keeps its own ⌘A and ⌫ as long as it is being typed into.
+/// (`SelectionBar`, `AppStore+Selection.swift`). The grid takes the keyboard
+/// then (`selectionKeys`), so ⌫ voids what is selected and esc lets it go,
+/// while a text field keeps its own ⌘A and ⌫ as long as it is being typed
+/// into.
 struct LedgerGrid: View {
     @Bindable var store: AppStore
 
@@ -55,22 +56,7 @@ struct LedgerGrid: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .focusable()
-            .focusEffectDisabled()
-            .focused($gridFocused)
-            // Reaches the grid only when no text field is first responder: a
-            // cell being typed into selects its own text.
-            .onCommand(#selector(NSResponder.selectAll(_:))) { selectAll() }
-            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
-                guard focus == nil, !store.selection.isEmpty else { return .ignored }
-                Task { await store.voidSelection() }
-                return .handled
-            }
-            .onKeyPress(.escape) {
-                guard focus == nil, !store.selection.isEmpty else { return .ignored }
-                store.clearSelection()
-                return .handled
-            }
+            .background { selectionKeys }
             // The hints are all about typing rows; with rows picked, the line
             // says what can be done to them instead.
             if store.canWrite {
@@ -117,11 +103,47 @@ struct LedgerGrid: View {
             // Typing into a cell is editing, not picking: one or the other.
             if new != nil { store.clearSelection() }
         }
-        .onAppear { newRow = RowDraft.blank(in: store) }
+        .onAppear {
+            newRow = RowDraft.blank(in: store)
+            // ⌘A works from the start, before any row was clicked.
+            if focus == nil { gridFocused = true }
+        }
         .task(id: newRow.note) { await suggestCategory() }
         .onReceive(NotificationCenter.default.publisher(for: .duplicateLastRow)) { _ in
             duplicateLast()
         }
+    }
+
+    // MARK: - The keys of a selection
+
+    /// Where the keyboard goes while rows are picked rather than typed into:
+    /// ⌘A takes every row, ⌫ and ⌦ void the selection, esc lets it go.
+    ///
+    /// An invisible view behind the rows, not the scroll view itself: a
+    /// focusable container would take the focus on every click inside it,
+    /// before the click reached a cell, and so close the row being edited
+    /// under the pointer. Nothing here can be clicked, only focused from code
+    /// (`pick`, `submit`, `cancelEditing`); and since no cell is inside it, a
+    /// key typed into a cell never reaches these handlers, which only ever see
+    /// keys while no cell has the caret.
+    private var selectionKeys: some View {
+        Color.clear
+            .focusable()
+            .focusEffectDisabled()
+            .focused($gridFocused)
+            // Menu's Select All, which a focused text field would take first.
+            .onCommand(#selector(NSResponder.selectAll(_:))) { selectAll() }
+            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                guard focus == nil, !store.selection.isEmpty else { return .ignored }
+                Task { await store.voidSelection() }
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                guard focus == nil, !store.selection.isEmpty else { return .ignored }
+                store.clearSelection()
+                return .handled
+            }
+            .accessibilityHidden(true)
     }
 
     // MARK: - Existing rows
