@@ -311,7 +311,9 @@ final class SyncEngine {
         // members still pull the deletion) or no longer shared with me (the
         // pull answers 404).
         let mayBeLost = unlisted && state.lastServerSeq > 0
-        if mayBeLost, hasLostAccess(to: vaultId) { return Outcome() }
+        // Still lost: a listing that has it again took it off the lost list
+        // before this, so there is nothing to ask the server.
+        if hasLostAccess(to: vaultId) { return Outcome() }
 
         var outcome = Outcome()
         var pushFailure: ServerError?
