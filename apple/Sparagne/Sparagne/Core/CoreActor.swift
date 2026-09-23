@@ -37,6 +37,12 @@ actor CoreActor {
     /// push. Set by the engine, never by the views.
     private var onExecuted: (@Sendable () -> Void)?
 
+    /// Vaults the account may only read: a viewer's, or one no longer shared
+    /// with it. Set by `SyncEngine` from the server's roles. The core itself
+    /// would apply the command, and the server would refuse it at the next
+    /// push; refusing here keeps it from ever entering the log.
+    private var readOnlyVaults: Set<Uuid> = []
+
     /// Awaited before every call into the core. `nil` in the app; the tests
     /// pass one to hold a call in flight and prove that a caller on the main
     /// actor is not blocked while the core works.
@@ -109,11 +115,23 @@ actor CoreActor {
         onExecuted = hook
     }
 
+    func setReadOnlyVaults(_ ids: Set<Uuid>) {
+        readOnlyVaults = ids
+    }
+
+    /// The same refusal the server would send, before anything is written.
+    private func ensureWritable(_ vaultId: Uuid) throws {
+        guard !readOnlyVaults.contains(vaultId) else {
+            throw DomainError.Forbidden(message: "this vault is read-only for your account")
+        }
+    }
+
     // MARK: - Writes
 
     /// Addresses a command to a vault and applies it.
     @discardableResult
     func execute(vaultId: Uuid, _ command: Command) async throws -> Receipt {
+        try ensureWritable(vaultId)
         let receipt = try await visit { handle in
             try handle.execute(envelope: newEnvelope(vaultId: vaultId, author: author, command: command))
         }
@@ -137,6 +155,7 @@ actor CoreActor {
     @discardableResult
     func executeBatch(vaultId: Uuid, _ commands: [Command]) async throws -> [Receipt] {
         guard !commands.isEmpty else { return [] }
+        try ensureWritable(vaultId)
         let receipts = try await visit { handle in
             try handle.executeBatch(
                 envelopes: commands.map { newEnvelope(vaultId: vaultId, author: author, command: $0) }
@@ -156,6 +175,7 @@ actor CoreActor {
     /// Applies an envelope minted with `envelope(vaultId:_:)`.
     @discardableResult
     func execute(envelope: CommandEnvelope) async throws -> Receipt {
+        try ensureWritable(envelope.vaultId)
         let receipt = try await visit { try $0.execute(envelope: envelope) }
         onExecuted?()
         return receipt
@@ -171,6 +191,7 @@ actor CoreActor {
         options: StatementOptions,
         overrides: [StatementRowOverride]
     ) async throws -> StatementReport {
+        try ensureWritable(vaultId)
         let report = try await visit { handle in
             try handle.importStatement(
                 vaultId: vaultId,
