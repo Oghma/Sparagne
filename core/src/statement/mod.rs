@@ -15,6 +15,9 @@ use uuid::Uuid;
 
 use crate::{Core, DomainError, Result, TransactionKind};
 
+// Read by the planner in a later step.
+#[allow(dead_code)]
+mod amount;
 mod csv;
 mod presets;
 
