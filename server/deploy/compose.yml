@@ -7,7 +7,12 @@
 # Backups: `docker compose exec sparagne backup.sh` writes straight to
 # ./backups on the host (server/deploy/backup.sh ships inside the image).
 #
-# See docs/v2/DEPLOY.md for the full first-run flow, backups and upgrades.
+# Accounts, with registration closed or open:
+#   printf '%s\n' "$PW" | docker compose exec -T sparagne sparagne-server user add alice
+#   docker compose exec sparagne sparagne-server user list
+#
+# See docs/v2/DEPLOY.md for the full first-run flow, accounts, backups and
+# upgrades.
 
 services:
   sparagne:
@@ -22,6 +27,13 @@ services:
     environment:
       SPARAGNE_ALLOW_REGISTRATION: ${SPARAGNE_ALLOW_REGISTRATION:-true}
       SPARAGNE_TOKEN_TTL_DAYS: ${SPARAGNE_TOKEN_TTL_DAYS:-30}
+      # Port 3000 is not published: only Caddy reaches this container, and
+      # Caddy sets X-Forwarded-For to the real client, which the login and
+      # registration limits then key on. Publish the port and this must go.
+      SPARAGNE_TRUST_PROXY: ${SPARAGNE_TRUST_PROXY:-true}
+      SPARAGNE_LOGIN_MAX_FAILURES: ${SPARAGNE_LOGIN_MAX_FAILURES:-5}
+      SPARAGNE_LOGIN_WINDOW_SECS: ${SPARAGNE_LOGIN_WINDOW_SECS:-900}
+      SPARAGNE_IP_MAX_FAILURES: ${SPARAGNE_IP_MAX_FAILURES:-30}
       RUST_LOG: ${RUST_LOG:-info}
     expose:
       - "3000"

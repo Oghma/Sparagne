@@ -52,7 +52,15 @@ reach the server at the first sync.
 cd server/deploy && cp .env.example .env && docker compose up -d
 ```
 
-See `docs/v2/DEPLOY.md` for the full setup (TLS via Caddy, backups,
-upgrades).
+See `docs/v2/DEPLOY.md` for the full setup (TLS via Caddy, login limits,
+backups, upgrades).
+
+Accounts can also be managed from the command line, which is the way to add
+them once registration is closed: `sparagne-server user add <name>` and
+`user passwd <name>` read the password from the first line of stdin
+(`passwd` also logs the account out everywhere), `user list` prints every
+account, `user revoke <name>` revokes its tokens. They work on the data
+directory of a running server, e.g.
+`printf '%s\n' "$PW" | docker compose exec -T sparagne sparagne-server user add alice`.
 
 The design is in `docs/v2/ARCH.md`.

@@ -2,6 +2,12 @@
 # you template this file yourself; Caddy's own env substitution only expands
 # {$VAR} inside the Caddyfile, which compose does not preprocess, so this file
 # is meant to be edited once per deployment).
+#
+# reverse_proxy sets X-Forwarded-For to the client's address (a value sent by
+# the client itself is dropped, no trusted_proxies here): with
+# SPARAGNE_TRUST_PROXY=true in compose.yml the server's login and
+# registration limits count per real client. Rate limiting lives in the
+# server, not here.
 sparagne.example.com {
 	reverse_proxy sparagne:3000
 }
