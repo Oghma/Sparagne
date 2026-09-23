@@ -167,6 +167,65 @@ il primo) o torna all'onboarding se era l'ultimo; una riga in attesa sul toast
 di annullamento muore col vault senza mandare nulla. Ai membri la
 cancellazione arriva col sync (`SYNC.md` §4 punto 6).
 
+**Fase 6 (2026-09-23).** Una quarta azione, **Esci dal vault…**, per un membro
+che non è l'owner (menu Vault, palette, gestione): `LeaveVaultSheet` spiega
+che le modifiche in attesa partono prima e che la copia locale sparisce, poi
+il sync toglie la membership e `forget_vault` il vault (`SYNC.md` §5). Rinomina
+compare solo a chi può scrivere, Elimina solo all'owner, Esci solo a un membro
+(`SyncEngine+Permissions.swift`). I nomi sono etichette: un nome che l'owner
+usa già si può scegliere, con un avviso sotto il campo, e dove due vault
+omonimi stanno nello stesso elenco compare l'owner fra parentesi. Il foglio di
+cancellazione dice che il vault sparisce da ogni dispositivo di ogni membro man
+mano che sincronizzano e che il server ne tiene la storia per la sync. Un vault
+in **sola lettura** (ruolo `viewer`) non offre la riga vuota, le celle non si
+modificano, Duplica e Annulla sono spenti, il quick-add risponde con un
+messaggio, SETUP non si edita, e `CoreActor` rifiuta comunque ogni scrittura.
+Un vault che non è più condiviso con me resta leggibile e la gestione lo
+elenca fra i "Non più condivisi con te" con **Rimuovi da questo Mac**. La riga
+in attesa sul toast di annullamento porta il suo vault: se un pull cancella
+quel vault il toast sparisce senza avvisi, e chiudere l'app scrive l'annullo
+prima di uscire.
+
+### 2.5 Ricorrenze dovute
+
+> Aggiunto il 2026-09-23 (Fase 6): dal ridisegno del 2026-09-10 il banner
+> "N ricorrenze da confermare" apriva un pannello che non sapeva eseguirle.
+
+"Rivedi" sul banner apre `DueRecurringSheet`: ogni modello con i suoi periodi
+dovuti in ordine di data, importo, tipo, wallet e busta; per ogni periodo
+**Esegui** o **Salta**, e **Esegui tutte** che manda ogni periodo in un solo
+`execute_batch` (tutto o niente: se uno non passa, per esempio per fondi
+insufficienti in una busta, non si scrive nulla e l'alert lo dice). Il pannello
+delle ricorrenze mostra anche le archiviate e le **ripristina**. Le frasi di
+cadenza sono intere e al plurale giusto ("Ogni 2 settimane il lunedì").
+
+### 2.6 Estratti conto, export completo e backup
+
+> Aggiunto il 2026-09-23 (Fase 6).
+
+- **File › Importa estratto conto…** (⇧⌘I, anche dalla palette) apre un foglio
+  a quattro passi: FILE, COLONNE, ANTEPRIMA, REPORT. Il file è letto in UTF-8
+  (poi Windows-1252/Latin-1); `detect_statement` sceglie il separatore e, se
+  l'intestazione corrisponde, il preset `card-transactions`; altrimenti si
+  riapre la mappatura usata l'ultima volta per lo stesso vault e la stessa
+  intestazione (`StatementMappingStore`). COLONNE: data, importo, descrizione,
+  tipo, stato, valuta, categoria e importo originale; formato della data, segno
+  delle uscite, virgola decimale; per ogni tipo cosa diventa (uscita, entrata,
+  rimborso, trasferimento da o verso un altro wallet, salta, secondo il segno);
+  stati da saltare; wallet e busta di destinazione. ANTEPRIMA: ogni riga con
+  data, descrizione, importo, tipo, esito tradotto dal codice del core (nuova,
+  già importata, saltata per stato/regola/da te, senza wallet, importo zero,
+  non valida) e categoria; per le nuove una casella per escluderle e una
+  categoria modificabile, precompilata da `suggest_categories` sullo storico.
+  Reimportare lo stesso file non aggiunge nulla (id stabili per riga). Il foglio
+  è più largo degli altri (880 × 640) perché la tabella ha otto colonne.
+- **File › Esporta tutte le transazioni…**: un CSV con ogni transazione del
+  vault, tutte le date, annullate e trasferimenti compresi, con tipo, wallet e
+  busta (da → a per i trasferimenti), categoria, nota, autore, annullata.
+  ⌘E resta l'export delle righe a schermo, ma legge tutte le pagine del mese.
+- **File › Backup del database…**: una copia coerente (`VACUUM INTO`) salvata
+  dove si sceglie; l'avviso finale spiega come ripristinarla (README).
+
 ## 3. Mappa mockup → dominio
 
 | Colonna / etichetta | Dominio |
@@ -244,13 +303,15 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | `⇥` / `⇧⇥` | campo successivo / precedente |
 | `↩` | salva la riga |
 | `esc` | annulla la modifica |
-| `⌘D` | duplica l'ultima riga |
+| `⌘D` | duplica l'ultima riga (non un trasferimento; il tipo resta, un rimborso duplicato è un rimborso) |
 | `⌥←` `⌥→` | mese precedente / successivo |
 | `⌘F` | fuoco sulla ricerca |
 | `⌘K` | riga quick-add sopra la griglia (la grammatica di §3.1 del distillato); con `>` in prima posizione è la palette comandi |
-| `⌘E` | esporta CSV: le righe a schermo, RFC 4180, `Support/LedgerCSV.swift` |
+| `⌘E` | esporta CSV: le righe a schermo (tutte le pagine del mese), RFC 4180, `Support/LedgerCSV.swift` |
+| `⇧⌘I` | importa un estratto conto (§2.6) |
+| menu File | Esporta tutte le transazioni…, Backup del database… (§2.6) |
 | `⌘⇧M` | gestione: vault, wallet, buste, ricorrenze, condivisione |
-| menu Vault | Nuovo vault…, Rinomina vault…, Elimina vault… (§2.4), senza scorciatoia: rari, e uno distruttivo |
+| menu Vault | Nuovo vault…, Rinomina vault…, Elimina vault…, Esci dal vault… (§2.4), senza scorciatoia: rari, e due distruttivi |
 | `⌘⇧C` | vista SETUP: buste e categorie |
 | `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
 | `⌘⇧W` | mostra / nasconde la colonna WALLET (menu Vista) |
@@ -266,7 +327,9 @@ vai a RIEPILOGO o MASTRO, un "Vault: nome" per ogni altro vault, Nuovo vault…,
 Rinomina vault… ed Elimina vault… (§2.4; le ultime due solo con un vault a
 schermo, Elimina solo se lo si può cancellare), SETUP, gestione, esporta CSV,
 sincronizza ora, e i tre interruttori di vista (annullate, trasferimenti,
-colonna wallet). Quelle che hanno già una voce di
+colonna wallet); dal 2026-09-23 anche Esci dal vault… (solo a un membro),
+Importa estratto conto…, Esporta tutte le transazioni… e Backup del
+database…, e Rinomina vault… solo a chi può scrivere. Quelle che hanno già una voce di
 menu ne mandano la notifica, così le due strade condividono una sola
 implementazione; il modello (`Views/Ledger/CommandPalette.swift`) è puro e
 testato senza finestra.
