@@ -192,6 +192,7 @@ struct CategoryCell: View {
             .textFieldStyle(.plain)
             .font(Face.row)
             .foregroundStyle(Ink.text)
+            .accessibilityLabel(RowField.category.label)
             .focused($focus, equals: key)
             .onSubmit(onSubmit)
             .completing(text: $text, owner: key, isFocused: focus == key, store: store, completion: completion) {

@@ -17,6 +17,9 @@ struct LedgerHeader: View {
             Text(String(localized: "month=\(store.month.month)"))
                 .font(Face.footnote)
                 .foregroundStyle(Ink.dim)
+                // The month's number again, in the mockup's shorthand: the
+                // title beside it already says it in words.
+                .accessibilityHidden(true)
 
             // No person filter in the summary: there the people are columns,
             // so filtering would blank all of them but one
@@ -60,6 +63,9 @@ struct LedgerHeader: View {
                 .foregroundStyle(Ink.text)
                 .tracking(0.5)
                 .frame(minWidth: 150, alignment: .leading)
+                // The page's title for VoiceOver: the month everything below
+                // is about.
+                .accessibilityAddTraits(.isHeader)
             stepButton("chevron.right", months: 1)
         }
     }
@@ -75,6 +81,9 @@ struct LedgerHeader: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // The chevron alone reads as "go back" / "forward"; the menu items'
+        // names say what they step.
+        .accessibilityLabel(months < 0 ? String(localized: "Previous Month") : String(localized: "Next Month"))
     }
 
     private var search: some View {

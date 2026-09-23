@@ -47,19 +47,63 @@ struct GridHeader: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            GridCell(width: GridColumn.ordinal, alignment: .trailing) { SectionLabel(text: "#") }
-            GridCell(width: GridColumn.date) { SectionLabel(text: String(localized: "Date")) }
-            GridCell(width: GridColumn.flow) { SectionLabel(text: String(localized: "Envelope")) }
-            GridCell(width: GridColumn.category) { SectionLabel(text: String(localized: "Category")) }
-            GridCell { SectionLabel(text: String(localized: "Description")) }
-            if showsWallet {
-                GridCell(width: GridColumn.wallet) { SectionLabel(text: String(localized: "Wallet")) }
+            GridCell(width: GridColumn.ordinal, alignment: .trailing) {
+                heading("#").accessibilityLabel(String(localized: "Number"))
             }
-            GridCell(width: GridColumn.person) { SectionLabel(text: String(localized: "Person")) }
-            GridCell(width: GridColumn.amount, alignment: .trailing) { SectionLabel(text: String(localized: "Amount")) }
+            GridCell(width: GridColumn.date) { heading(RowField.date.label) }
+            GridCell(width: GridColumn.flow) { heading(RowField.flow.label) }
+            GridCell(width: GridColumn.category) { heading(RowField.category.label) }
+            GridCell { heading(RowField.note.label) }
+            if showsWallet {
+                GridCell(width: GridColumn.wallet) { heading(RowField.wallet.label) }
+            }
+            GridCell(width: GridColumn.person) { heading(String(localized: "Person")) }
+            GridCell(width: GridColumn.amount, alignment: .trailing) { heading(RowField.amount.label) }
         }
         .frame(height: 24)
         .background(Ink.bg)
+    }
+
+    /// A column heading, announced as one: VoiceOver reads the upper-case
+    /// label as the word it is, not letter by letter.
+    private func heading(_ text: String) -> some View {
+        SectionLabel(text: text)
+            .accessibilityLabel(text)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// What VoiceOver reads for a row of the grid: its cells as one sentence, in
+/// the order the eye scans them, so the grid is walked a row at a time rather
+/// than a cell at a time. The amount says its kind, which the grid shows only
+/// by color.
+enum LedgerAccessibility {
+    static func label(for row: TransactionRow, showsWallet: Bool = false, locale: Locale = .autoupdatingCurrent) -> String {
+        var parts = [
+            row.occurredAt.formatted(Date.FormatStyle(date: .long, time: .omitted).locale(locale)),
+            amount(row),
+            row.category,
+        ]
+        if !row.note.isEmpty { parts.append(row.note) }
+        if row.envelopeDisplay != TransactionRow.placeholder {
+            parts.append(String(localized: "envelope \(row.envelopeDisplay)"))
+        }
+        if showsWallet, row.walletDisplay != TransactionRow.placeholder {
+            parts.append(String(localized: "wallet \(row.walletDisplay)"))
+        }
+        parts.append(String(localized: "by \(row.person)"))
+        if row.voided { parts.append(String(localized: "voided")) }
+        return parts.joined(separator: ", ")
+    }
+
+    private static func amount(_ row: TransactionRow) -> String {
+        let value = LedgerMoney.amount(row.absoluteAmount)
+        return switch row.kind {
+        case .expense: String(localized: "expense \(value)")
+        case .income: String(localized: "income \(value)")
+        case .refund: String(localized: "refund \(value)")
+        case .transferWallet, .transferFlow: String(localized: "transfer \(value)")
+        }
     }
 }
 
@@ -209,6 +253,7 @@ struct LedgerRowView: View {
                 .textFieldStyle(.plain)
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
+                .accessibilityLabel(field.label)
                 .focused($focus, equals: key(field))
                 .onSubmit(onCommit)
         }
@@ -221,6 +266,7 @@ struct LedgerRowView: View {
                 .font(Face.row)
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(Ink.text)
+                .accessibilityLabel(RowField.amount.label)
                 .focused($focus, equals: key(.amount))
                 .onSubmit(onCommit)
         }
@@ -314,6 +360,7 @@ struct NewRowView: View {
                     .textFieldStyle(.plain)
                     .font(Face.row)
                     .multilineTextAlignment(.trailing)
+                    .accessibilityLabel(RowField.amount.label)
                     // A duplicated refund is saved as one, and says so in the
                     // green the saved row will have.
                     .foregroundStyle(draft.kind == .refund ? Ink.positive : Ink.text)
@@ -322,6 +369,9 @@ struct NewRowView: View {
             }
         }
         .frame(height: Metrics.rowHeight)
+        // One group VoiceOver can name, with the cells inside it.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "New row"))
         .onKeyPress(.escape) {
             draft = RowDraft.blank(in: store)
             focus = nil
@@ -340,6 +390,7 @@ struct NewRowView: View {
                 .textFieldStyle(.plain)
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
+                .accessibilityLabel(field.label)
                 .focused($focus, equals: CellFocus(row: nil, field: field))
                 .onSubmit(onCommit)
         }
@@ -372,6 +423,7 @@ struct DayCell: View {
                 .textFieldStyle(.plain)
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
+                .accessibilityLabel(RowField.date.label)
                 .focused($focus, equals: key)
                 // Clicking the DATA cell of a closed row focuses it in the
                 // same update that builds this view, so `onChange(of: focus)`

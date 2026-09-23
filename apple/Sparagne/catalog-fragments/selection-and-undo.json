@@ -19,5 +19,18 @@
   "Add Row": {"en": "Add Row", "it": "nuova riga"},
   "Category Change": {"en": "Category Change", "it": "cambio categoria"},
   "Void Transactions": {"en": "Void Transactions", "it": "annullamento transazioni"},
-  "Suggested category %@, tab to add it": {"en": "Suggested category %@, tab to add it", "it": "Categoria suggerita %@, tab per aggiungerla"}
+  "Suggested category %@, tab to add it": {"en": "Suggested category %@, tab to add it", "it": "Categoria suggerita %@, tab per aggiungerla"},
+  "Edit": {"en": "Edit", "it": "Modifica"},
+  "Select": {"en": "Select", "it": "Seleziona"},
+  "Deselect": {"en": "Deselect", "it": "Deseleziona"},
+  "New row": {"en": "New row", "it": "Nuova riga"},
+  "Number": {"en": "Number", "it": "Numero"},
+  "expense %@": {"en": "expense %@", "it": "uscita %@"},
+  "income %@": {"en": "income %@", "it": "entrata %@"},
+  "refund %@": {"en": "refund %@", "it": "rimborso %@"},
+  "transfer %@": {"en": "transfer %@", "it": "trasferimento %@"},
+  "envelope %@": {"en": "envelope %@", "it": "busta %@"},
+  "wallet %@": {"en": "wallet %@", "it": "wallet %@"},
+  "by %@": {"en": "by %@", "it": "di %@"},
+  "voided": {"en": "voided", "it": "annullata"}
 }

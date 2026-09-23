@@ -386,6 +386,27 @@ struct LedgerStoreTests {
         #expect(QuickAddSummary.accepting("Spesa casa", into: "-1.00 coop") == nil)
     }
 
+    // MARK: - VoiceOver
+
+    @Test("VoiceOver reads a row as one sentence: the amount with its kind, the category, the note, the envelope, who, and voided")
+    func rowReadsAsOneSentence() async throws {
+        let (store, envelope) = try await Self.household()
+        let row = try #require(store.rows.first { $0.note == "mutuo" })
+
+        let label = LedgerAccessibility.label(for: row)
+        #expect(label.hasPrefix(row.occurredAt.formatted(date: .long, time: .omitted)))
+        #expect(label.contains(String(localized: "expense \(LedgerMoney.amount(95_000))")))
+        #expect(label.contains("Casa, mutuo"))
+        #expect(label.contains(String(localized: "envelope \(envelope.name)")))
+        #expect(label.hasSuffix(String(localized: "by \("matteo")")))
+
+        try await store.core.execute(vaultId: try #require(store.currentVault).id, .voidTransaction(transactionId: row.id))
+        store.showVoided = true
+        await store.settle()
+        let voided = try #require(store.rows.first { $0.id == row.id })
+        #expect(LedgerAccessibility.label(for: voided).hasSuffix(String(localized: "voided")))
+    }
+
     // MARK: - The optional WALLET column (`docs/v2/UI.md` §3)
 
     @Test("The wallet column is off until it is asked for, and the choice is remembered")

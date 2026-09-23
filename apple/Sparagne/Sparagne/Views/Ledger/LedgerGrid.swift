@@ -155,6 +155,12 @@ struct LedgerGrid: View {
                 hovered = nil
             }
         }
+        // VoiceOver reads a closed row as one sentence; an open one is a group
+        // of fields, each with its column's name.
+        .accessibilityElement(children: isEditing ? .contain : .ignore)
+        .accessibilityLabel(LedgerAccessibility.label(for: row, showsWallet: store.showWalletColumn))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityActions { rowActions(row, selected: isSelected) }
         .contextMenu {
             // A row inside a selection speaks for all of it; any other row
             // for itself, as it always has.
@@ -187,6 +193,27 @@ struct LedgerGrid: View {
             Task { await store.void(transactionId: row.id) }
         }
         .disabled(store.isReadOnly || row.voided)
+    }
+
+    /// What VoiceOver offers on a row: the context menu's actions, the click
+    /// that opens it, and the ⌘-click that picks it, since neither gesture is
+    /// at hand without a pointer.
+    @ViewBuilder
+    private func rowActions(_ row: TransactionRow, selected: Bool) -> some View {
+        if store.canWrite {
+            if !row.voided {
+                Button(String(localized: "Edit")) { open(row, at: .note) }
+            }
+            if !row.isTransfer {
+                Button(String(localized: "Duplicate")) { duplicate(row) }
+            }
+            if !row.voided {
+                Button(String(localized: "Void")) { Task { await store.void(transactionId: row.id) } }
+            }
+            Button(selected ? String(localized: "Deselect") : String(localized: "Select")) {
+                store.toggleSelection(row.id)
+            }
+        }
     }
 
     @ViewBuilder
@@ -438,6 +465,19 @@ enum RowField: Hashable, CaseIterable {
     /// Only in the hierarchy while the optional WALLET column is on.
     case wallet
     case amount
+
+    /// The column heading, which is what VoiceOver calls the cell: an open
+    /// row's fields have no placeholder to be read instead.
+    var label: String {
+        switch self {
+        case .date: String(localized: "Date")
+        case .flow: String(localized: "Envelope")
+        case .category: String(localized: "Category")
+        case .note: String(localized: "Description")
+        case .wallet: String(localized: "Wallet")
+        case .amount: String(localized: "Amount")
+        }
+    }
 }
 
 // MARK: - The draft behind an edited row
