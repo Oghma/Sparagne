@@ -327,6 +327,65 @@ struct LedgerStoreTests {
         #expect(past.flow == envelope.name)
     }
 
+    // MARK: - A category suggested by the note
+
+    @Test("The empty line shows the category its note was filed under, and saves it while the cell stays empty")
+    func noteSuggestsACategory() async throws {
+        let (store, _) = try await Self.household()
+        #expect(await store.suggestedCategory(forNote: "ferramenta") == nil)
+        let suggested = try #require(await store.suggestedCategory(forNote: "coop"))
+        #expect(suggested == "Spesa")
+
+        var draft = RowDraft.blank(in: store)
+        draft.note = "coop"
+        draft.amount = "4"
+        draft.suggestion = NoteSuggestion(note: "coop", category: suggested)
+        #expect(draft.suggestedCategory == "Spesa")
+        #expect(try draft.entry(store: store)?.category == "Spesa")
+
+        // Typed over, the cell wins.
+        draft.category = "Casa"
+        #expect(try draft.entry(store: store)?.category == "Casa")
+
+        // Another note: the suggestion was about the old one.
+        draft.category = ""
+        draft.note = "coop e forno"
+        #expect(draft.suggestedCategory == nil)
+        #expect(try draft.entry(store: store)?.category == nil)
+    }
+
+    @Test("The quick-add hint changes nothing until ⇥ writes it into the line")
+    func quickAddHintIsNeverSilent() async throws {
+        let (store, _) = try await Self.household()
+        guard case .success(let parsed) = store.preview(quickAdd: "-4.00 coop") else {
+            Issue.record("expected the line to parse")
+            return
+        }
+        let note = try #require(QuickAddSummary.noteWithoutCategory(parsed))
+        let hint = try #require(await store.suggestedCategory(forNote: note))
+        #expect(hint == "Spesa")
+
+        // Sent as typed: no category, whatever the hint said.
+        await store.submit(quickAdd: "-4.00 coop")
+        #expect(store.presentedError == nil)
+        #expect(store.rows.first { $0.absoluteAmount == 400 }?.category == String(localized: "Uncategorized"))
+
+        // Accepted: the line says it, and the row is filed there.
+        let accepted = try #require(QuickAddSummary.accepting(hint, into: "-3.00 coop "))
+        #expect(accepted == "-3.00 coop #Spesa")
+        await store.submit(quickAdd: accepted)
+        #expect(store.rows.first { $0.absoluteAmount == 300 }?.category == "Spesa")
+
+        // A line that names its category asks for nothing, and a name `#`
+        // cannot carry is not offered.
+        guard case .success(let named) = store.preview(quickAdd: "-4.00 coop #Casa") else {
+            Issue.record("expected the line to parse")
+            return
+        }
+        #expect(QuickAddSummary.noteWithoutCategory(named) == nil)
+        #expect(QuickAddSummary.accepting("Spesa casa", into: "-1.00 coop") == nil)
+    }
+
     // MARK: - The optional WALLET column (`docs/v2/UI.md` §3)
 
     @Test("The wallet column is off until it is asked for, and the choice is remembered")

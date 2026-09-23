@@ -118,6 +118,7 @@ struct LedgerGrid: View {
             if new != nil { store.clearSelection() }
         }
         .onAppear { newRow = RowDraft.blank(in: store) }
+        .task(id: newRow.note) { await suggestCategory() }
         .onReceive(NotificationCenter.default.publisher(for: .duplicateLastRow)) { _ in
             duplicateLast()
         }
@@ -382,6 +383,19 @@ struct LedgerGrid: View {
         }
     }
 
+    /// The empty line's note has been still for a moment: ask the core what
+    /// the vault files it under, for the CATEGORY cell to show while it is
+    /// empty. An answer that comes back after the note moved on is dropped.
+    private func suggestCategory() async {
+        let note = newRow.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard store.canWrite, !note.isEmpty, newRow.suggestion?.note != note else { return }
+        guard (try? await Task.sleep(for: .milliseconds(250))) != nil else { return }
+        guard let category = await store.suggestedCategory(forNote: note),
+              newRow.note.trimmingCharacters(in: .whitespacesAndNewlines) == note
+        else { return }
+        newRow.suggestion = NoteSuggestion(note: note, category: category)
+    }
+
     /// ⌘D and the context menu: copy a row into the empty line, ready to be
     /// tweaked and saved.
     private func duplicate(_ row: TransactionRow) {
@@ -428,6 +442,13 @@ enum RowField: Hashable, CaseIterable {
 
 // MARK: - The draft behind an edited row
 
+/// A category the core suggested for a note (`AppStore.suggestedCategory`),
+/// and the note it was for.
+struct NoteSuggestion: Equatable, Sendable {
+    let note: String
+    let category: String
+}
+
 /// A cell that refused what was typed. The grid reports `underlying`, which
 /// carries the core's own message, and puts the focus back on `field`.
 struct RowDraftError: Error {
@@ -452,8 +473,21 @@ struct RowDraft {
     /// (`LedgerDirection.newRowKind`); a duplicate keeps its source's, so a
     /// refund copied into the line is saved as a refund, not an expense.
     var kind: TransactionKind?
+    /// The category the vault's history files the note under, as the core
+    /// suggested it for the note it was asked about. The empty line shows it
+    /// in its CATEGORY cell while that is empty, and saves it if it still is.
+    var suggestion: NoteSuggestion?
 
     nonisolated init() {}
+
+    /// The suggestion, while it is still about the note in the cell: one
+    /// keystroke in DESCRIZIONE and it no longer is.
+    var suggestedCategory: String? {
+        guard let suggestion, suggestion.note == note.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return nil
+        }
+        return suggestion.category
+    }
 
     init(row: TransactionRow, store: AppStore) {
         kind = row.kind
@@ -513,7 +547,8 @@ struct RowDraft {
         return (
             day: day,
             flowId: resolvedFlow ?? store.defaultFlowId,
-            category: trimmed.isEmpty ? nil : trimmed,
+            // An empty cell showing a suggestion saves what it shows.
+            category: trimmed.isEmpty ? suggestedCategory : trimmed,
             note: note,
             amount: parsedAmount,
             walletId: resolvedWallet,

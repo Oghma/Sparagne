@@ -285,7 +285,9 @@ struct NewRowView: View {
             GridCell(width: GridColumn.category) {
                 CategoryCell(
                     text: $draft.category,
-                    placeholder: String(localized: "Category"),
+                    // The history's guess for the note, saved if the cell is
+                    // left empty (`RowDraft.suggestedCategory`).
+                    placeholder: draft.suggestedCategory ?? String(localized: "Category"),
                     store: store,
                     completion: completion,
                     focus: $focus,
