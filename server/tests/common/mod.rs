@@ -11,7 +11,7 @@
 use axum::{
     Router,
     body::Body,
-    http::{Method, Request, StatusCode, header},
+    http::{HeaderMap, Method, Request, StatusCode, header},
 };
 use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 use http_body_util::BodyExt;
@@ -41,6 +41,7 @@ pub struct Api {
 
 pub struct Res {
     pub status: StatusCode,
+    pub headers: HeaderMap,
     pub body: Value,
 }
 
@@ -66,33 +67,42 @@ impl Default for Api {
 
 impl Api {
     pub fn new() -> Self {
-        let state = AppState::in_memory(Config::default()).expect("state");
+        Self::with_config(Config::default())
+    }
+
+    pub fn with_config(config: Config) -> Self {
+        let state = AppState::in_memory(config).expect("state");
         Self {
             app: router(state.clone()),
             state,
         }
     }
 
-    pub async fn call(
-        &self,
+    /// A request as [`Api::call`] sends it, for tests that add headers or
+    /// extensions (the peer address) before [`Api::send`].
+    pub fn request(
         method: Method,
         uri: &str,
         token: Option<&str>,
         body: Option<Value>,
-    ) -> Res {
+    ) -> Request<Body> {
         let mut request = Request::builder().method(method).uri(uri);
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
-        let request = match body {
+        match body {
             Some(value) => request
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(value.to_string())),
             None => request.body(Body::empty()),
         }
-        .expect("request");
+        .expect("request")
+    }
+
+    pub async fn send(&self, request: Request<Body>) -> Res {
         let response = self.app.clone().oneshot(request).await.expect("response");
         let status = response.status();
+        let headers = response.headers().clone();
         let bytes = response
             .into_body()
             .collect()
@@ -104,7 +114,21 @@ impl Api {
         } else {
             serde_json::from_slice(&bytes).unwrap_or(Value::Null)
         };
-        Res { status, body }
+        Res {
+            status,
+            headers,
+            body,
+        }
+    }
+
+    pub async fn call(
+        &self,
+        method: Method,
+        uri: &str,
+        token: Option<&str>,
+        body: Option<Value>,
+    ) -> Res {
+        self.send(Self::request(method, uri, token, body)).await
     }
 
     pub async fn get(&self, uri: &str, token: &str) -> Res {
@@ -117,6 +141,10 @@ impl Api {
 
     pub async fn put(&self, uri: &str, token: &str, body: Value) -> Res {
         self.call(Method::PUT, uri, Some(token), Some(body)).await
+    }
+
+    pub async fn delete(&self, uri: &str, token: &str) -> Res {
+        self.call(Method::DELETE, uri, Some(token), None).await
     }
 
     /// Registers `username` with the fixed test [`PASSWORD`] and returns its
@@ -132,6 +160,17 @@ impl Api {
             .await;
         assert_eq!(res.status, StatusCode::CREATED, "{:?}", res.body);
         res.json::<TokenResponse>().token
+    }
+
+    /// `POST /auth/login`, whatever the outcome.
+    pub async fn login(&self, username: &str, password: &str) -> Res {
+        self.call(
+            Method::POST,
+            "/auth/login",
+            None,
+            Some(json!({ "username": username, "password": password })),
+        )
+        .await
     }
 }
 

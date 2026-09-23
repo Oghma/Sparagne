@@ -9,7 +9,7 @@ use sparagne_core::sync::{MemberEntry, MemberRole, SetMemberRequest};
 use uuid::Uuid;
 
 use crate::{
-    auth::CurrentUser,
+    auth::{CurrentUser, normalize_username},
     error::{ApiError, ApiResult},
     extract::{Json, Path},
     state::AppState,
@@ -42,11 +42,12 @@ pub async fn set(
     if request.role == MemberRole::Owner {
         return Err(ApiError::invalid_request("the owner cannot be changed"));
     }
+    let username = normalize_username(&request.username);
     state
         .run(move |state| {
             let db = state.db();
             require_owner(&db, vault_id, user.id)?;
-            let Some(target) = db.user_by_username(&request.username)? else {
+            let Some(target) = db.user_by_username(&username)? else {
                 return Err(ApiError::not_found());
             };
             if db.membership(vault_id, target.id)? == Some(MemberRole::Owner) {
@@ -64,6 +65,7 @@ pub async fn remove(
     user: CurrentUser,
     Path((vault_id, username)): Path<(Uuid, String)>,
 ) -> ApiResult<StatusCode> {
+    let username = normalize_username(&username);
     state
         .run(move |state| {
             let db = state.db();

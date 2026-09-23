@@ -77,14 +77,15 @@ pub async fn register(
     if !state.config().allow_registration {
         return Err(ApiError::registration_disabled());
     }
-    validate_username(&credentials.username)?;
+    let username = normalize_username(&credentials.username);
+    validate_username(&username)?;
     validate_password(&credentials.password)?;
     let response = state
         .run(move |state| {
             let hash = hash_password(state, &credentials.password)?;
             let now = Utc::now().timestamp();
             let db = state.db();
-            let user = db.insert_user(&credentials.username, &hash, now)?;
+            let user = db.insert_user(&username, &hash, now)?;
             issue_token(state, &db, &user.id, &user.username, now)
         })
         .await?;
@@ -96,10 +97,11 @@ pub async fn login(
     State(state): State<AppState>,
     Json(credentials): Json<Credentials>,
 ) -> ApiResult<Json<TokenResponse>> {
+    let username = normalize_username(&credentials.username);
     let response = state
         .run(move |state| {
             let db = state.db();
-            let found = db.user_with_hash(&credentials.username)?;
+            let found = db.user_with_hash(&username)?;
             let Some((user, hash)) = found else {
                 return Err(ApiError::unauthorized());
             };
@@ -146,7 +148,15 @@ fn issue_token(
     })
 }
 
-/// Username rules: 3 to 32 characters of `[a-z0-9_.-]`.
+/// Usernames are compared trimmed and lowercased everywhere (register, login,
+/// members, the admin CLI): "Alice " and "alice" are the same account.
+#[must_use]
+pub fn normalize_username(raw: &str) -> String {
+    raw.trim().to_lowercase()
+}
+
+/// Username rules, after [`normalize_username`]: 3 to 32 characters of
+/// `[a-z0-9_.-]`.
 pub fn validate_username(username: &str) -> ApiResult<()> {
     let length = username.chars().count();
     if !(USERNAME_MIN..=USERNAME_MAX).contains(&length) {
