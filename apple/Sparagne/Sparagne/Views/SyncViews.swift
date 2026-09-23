@@ -29,6 +29,15 @@ struct SyncStatusButton: View {
         .help(tooltip)
         .accessibilityLabel(Text(String(localized: "Sync")))
         .accessibilityValue(Text(tooltip))
+        .accessibilityHint(Text(hint))
+    }
+
+    /// What activating the button does right now: three different things
+    /// depending on what needs the user's attention (see `body`'s `Button`).
+    private var hint: String {
+        if !engine.rejected.isEmpty { return String(localized: "Opens the list of refused changes") }
+        if !engine.isLoggedIn { return String(localized: "Opens Sync settings") }
+        return String(localized: "Syncs with the server now")
     }
 
     @ViewBuilder
@@ -192,6 +201,9 @@ struct ShareVaultSheet: View {
                     Text(MemberRole.viewer.label).tag(MemberRole.viewer)
                 }
                 .labelsHidden()
+                // `labelsHidden()` only hides the visible title next to the
+                // field; VoiceOver still needs to be told what the picker is.
+                .accessibilityLabel(String(localized: "Role"))
                 .frame(width: 110)
                 Button(String(localized: "Add")) {
                     let username = trimmedUsername

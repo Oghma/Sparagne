@@ -1,0 +1,22 @@
+{
+  "%@, %@ of %@": {
+    "en": "%@, %@ of %@",
+    "it": "%@, %@ di %@"
+  },
+  "%@, future month": {
+    "en": "%@, future month",
+    "it": "%@, mese futuro"
+  },
+  "Opens Sync settings": {
+    "en": "Opens Sync settings",
+    "it": "Apre le impostazioni di sincronizzazione"
+  },
+  "Opens the list of refused changes": {
+    "en": "Opens the list of refused changes",
+    "it": "Apre l'elenco delle modifiche rifiutate"
+  },
+  "Syncs with the server now": {
+    "en": "Syncs with the server now",
+    "it": "Sincronizza subito con il server"
+  }
+}

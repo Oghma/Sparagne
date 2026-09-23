@@ -210,6 +210,19 @@ struct MainWindow: View {
             selection: $store.tab,
             label: { $0.label.uppercased() }
         )
+        // `SegmentedStrip` (`Views/Ledger/LedgerHeader.swift`) draws its own
+        // buttons and is owned by another package right now, so its own
+        // accessibility can't be touched from here; this substitutes an
+        // equivalent tree — one real button per tab, the one on screen
+        // marked selected — for VoiceOver.
+        .accessibilityRepresentation {
+            HStack(spacing: 0) {
+                ForEach(LedgerTab.allCases) { tab in
+                    Button(tab.label) { store.tab = tab }
+                        .accessibilityAddTraits(tab == store.tab ? .isSelected : [])
+                }
+            }
+        }
     }
 
     @ViewBuilder

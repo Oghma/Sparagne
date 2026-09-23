@@ -167,6 +167,32 @@ struct SummaryView: View {
         }
         .frame(height: 22)
         .background(onScreen ? Ink.raised : Color.clear)
+        // One row, one stop: "September, Income €9,200.00, Expenses …" rather
+        // than a dozen separate cells with no idea which month they belong to.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(monthRowLabel(month))
+    }
+
+    /// "September, Income €9,200.00, Expenses €3,100.00, …", or "October,
+    /// future month" for a month past the one on screen (`docs/v2/UI.md`
+    /// §2.2: a future month is drawn blank).
+    private func monthRowLabel(_ month: YearMonth) -> String {
+        let name = LedgerDate.fullMonth(month.month.month)
+        guard !month.isFuture else {
+            return String(localized: "\(name), future month")
+        }
+        var figures: [(String, String)] = [
+            (String(localized: "Income"), LedgerMoney.amount(month.income)),
+            (String(localized: "Expenses"), LedgerMoney.amount(month.cashExpense)),
+            (String(localized: "Savings"), LedgerMoney.amount(month.savings)),
+            (String(localized: "Cash fund"), LedgerMoney.amount(month.carried)),
+            (String(localized: "Fund expenses"), LedgerMoney.amount(month.fundExpense)),
+            (String(localized: "Total"), LedgerMoney.amount(month.total)),
+        ]
+        for (index, person) in year.people.enumerated() where month.totalByPerson.indices.contains(index) {
+            figures.append((person, LedgerMoney.amount(month.totalByPerson[index])))
+        }
+        return AccessibilityText.monthRow(month: name, figures: figures)
     }
 
     /// The widths after MESE, in order: the six figures plus one per person.
@@ -211,6 +237,18 @@ struct SummaryView: View {
             }
         }
         .frame(height: 22)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            AccessibilityText.monthRow(
+                month: "\(year.year)",
+                figures: [
+                    (String(localized: "Income"), LedgerMoney.amount(income)),
+                    (String(localized: "Expenses"), LedgerMoney.amount(expenses)),
+                    (String(localized: "Savings"), LedgerMoney.amount(income - expenses)),
+                    (String(localized: "Fund expenses"), LedgerMoney.amount(fundExpenses)),
+                ]
+            )
+        )
     }
 
     // MARK: - Charts
@@ -330,6 +368,11 @@ private struct StatCard: View {
                 }
             }
         }
+        // One card, one stop: the title already names the month, so VoiceOver
+        // reads it as "Income · September, €1,234.56, 2 people" instead of
+        // three separate swipes.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(AccessibilityText.card(title: title, value: value, caption: caption))
     }
 }
 
@@ -384,6 +427,18 @@ private struct FundGauges: View {
             }
             .frame(maxWidth: .infinity)
         }
+        // The ring itself is a drawn arc with no text of its own to read; the
+        // gauge's name is the label, and the fill fraction its value, exactly
+        // as `docs/v2/UI.md` §2.2 defines it.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(fund.name)
+        .accessibilityValue(
+            AccessibilityText.fundGauge(
+                percent: LedgerMoney.percent(fund.filled, of: fund.cap) ?? TransactionRow.placeholder,
+                filled: LedgerMoney.amount(fund.filled),
+                cap: LedgerMoney.amount(fund.cap)
+            )
+        )
     }
 
     private func ring(_ fund: FundGauge) -> some View {
@@ -421,6 +476,26 @@ private struct CashFlowChart: View {
         .chartYAxis { YearAxis.money() }
         .chartLegend(.hidden)
         .frame(height: 200)
+        // No `accessibilityChartDescriptor`: with three series and up to a
+        // year of points it would be a lot of machinery for what a single
+        // spoken transcript already gives a screen-reader user.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "Cash flow"))
+        .accessibilityValue(summary)
+    }
+
+    /// "Jan Income €9,200.00, Expenses €3,100.00, Savings €6,100.00; Feb …".
+    private var summary: String {
+        months.map { month in
+            AccessibilityText.monthRow(
+                month: LedgerDate.shortMonth(month.month.month),
+                figures: [
+                    (String(localized: "Income"), LedgerMoney.amount(month.income)),
+                    (String(localized: "Expenses"), LedgerMoney.amount(month.cashExpense)),
+                    (String(localized: "Savings"), LedgerMoney.amount(month.savings)),
+                ]
+            )
+        }.joined(separator: "; ")
     }
 
     /// `key` keeps the three lines apart: without a series of its own, Charts
@@ -479,6 +554,17 @@ private struct CashFundChart: View {
         .chartYAxis { YearAxis.money() }
         .chartLegend(.hidden)
         .frame(height: 200)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "Cash fund"))
+        .accessibilityValue(summary)
+    }
+
+    /// "Jan €32,221.00, Feb €34,000.00, …": the TOTALE line, one point per
+    /// spoken word instead of a shape with no numbers of its own.
+    private var summary: String {
+        months
+            .map { "\(LedgerDate.shortMonth($0.month.month)) \(LedgerMoney.amount($0.total))" }
+            .joined(separator: ", ")
     }
 }
 

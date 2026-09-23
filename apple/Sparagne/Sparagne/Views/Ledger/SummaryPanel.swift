@@ -41,6 +41,7 @@ struct PersonMatrix: View {
                     text: "\(String(localized: "Summary")) \(LedgerDate.fullMonth(summary.month.month))",
                     tint: Ink.accent
                 )
+                .accessibilityAddTraits(.isHeader)
 
                 if people.isEmpty {
                     Text(String(localized: "No activity this month"))
@@ -101,11 +102,22 @@ struct PersonMatrix: View {
                 .foregroundStyle(emphasis ? Ink.text : Ink.text.opacity(0.85))
                 .lineLimit(1)
             Spacer(minLength: 6)
-            ForEach(Array(values.enumerated()), id: \.offset) { _, value in
+            ForEach(Array(values.enumerated()), id: \.offset) { index, value in
                 Text(LedgerMoney.bare(value))
                     .font(font)
                     .foregroundStyle(value == 0 ? Ink.dim : (compact ? tint : Ink.text))
                     .frame(width: columnWidth, alignment: .trailing)
+                    // The grid gives every other figure a row and a column;
+                    // this one only has a row label, so the person's name has
+                    // to travel with the amount for VoiceOver to make sense
+                    // of it (`docs/v2/UI.md` §2.1).
+                    .accessibilityLabel(
+                        AccessibilityText.figure(
+                            label,
+                            person: people.indices.contains(index) ? people[index] : nil,
+                            amount: LedgerMoney.amount(value)
+                        )
+                    )
             }
             if showsTotal {
                 let total = values.reduce(0, +)
@@ -113,6 +125,9 @@ struct PersonMatrix: View {
                     .font(font)
                     .foregroundStyle(total == 0 ? Ink.dim : tint)
                     .frame(width: columnWidth, alignment: .trailing)
+                    .accessibilityLabel(
+                        AccessibilityText.figure(label, person: String(localized: "Total"), amount: LedgerMoney.amount(total))
+                    )
             }
         }
         .frame(height: 21)
@@ -136,9 +151,13 @@ struct SavingsCard: View {
             Rectangle().fill(Ink.positive).frame(width: 3)
             VStack(alignment: .leading, spacing: 4) {
                 SectionLabel(text: String(localized: "Total savings"))
+                    .accessibilityAddTraits(.isHeader)
                 Text(LedgerMoney.amount(summary.savings))
                     .font(Face.headline)
                     .foregroundStyle(Ink.positive)
+                    .accessibilityLabel(
+                        AccessibilityText.figure(String(localized: "Total savings"), amount: LedgerMoney.amount(summary.savings))
+                    )
                 Text(subtitle)
                     .font(Face.footnote)
                     .foregroundStyle(Ink.dim)
@@ -180,6 +199,7 @@ struct CategoryBreakdown: View {
         Panel {
             VStack(alignment: .leading, spacing: 9) {
                 SectionLabel(text: String(localized: "Expenses by category"))
+                    .accessibilityAddTraits(.isHeader)
                 if shown.isEmpty {
                     Text(String(localized: "Nothing spent this month"))
                         .font(Face.row)
@@ -199,6 +219,12 @@ struct CategoryBreakdown: View {
                             }
                             MeterBar(fraction: fraction(category))
                         }
+                        // The bar under the name is decoration for the same
+                        // figure, not a second one: one stop, "Casa: €480.00".
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(
+                            AccessibilityText.figure(category.name, amount: LedgerMoney.amount(category.netExpense))
+                        )
                     }
                 }
             }
@@ -221,15 +247,33 @@ struct TrailingMonths: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "\(String(localized: "Last 12 months")) \u{00B7} \(String(localized: "Savings"))")
+                SectionLabel(text: heading)
+                    .accessibilityAddTraits(.isHeader)
                 BarStrip(
                     values: summary.trailing.map(LedgerSummary.savings),
                     labels: summary.trailingMonths.map { LedgerDate.monthInitial($0.month) },
                     highlighted: summary.trailing.count - 1
                 )
                 .frame(height: 74)
+                // Twelve bars with a one-letter label each: a screen reader
+                // gets the whole strip as one figure instead.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(heading)
+                .accessibilityValue(monthlySavings)
             }
         }
+    }
+
+    private var heading: String {
+        "\(String(localized: "Last 12 months")) \u{00B7} \(String(localized: "Savings"))"
+    }
+
+    /// "Oct €600.00, Nov €200.00, …": the full month name, unlike the bar
+    /// strip's own single-letter labels.
+    private var monthlySavings: String {
+        zip(summary.trailingMonths, summary.trailing.map(LedgerSummary.savings))
+            .map { month, value in "\(LedgerDate.shortMonth(month.month)) \(LedgerMoney.amount(value))" }
+            .joined(separator: ", ")
     }
 }
 
