@@ -38,6 +38,7 @@ struct SparagneApp: App {
                     NotificationCenter.default.post(name: .duplicateLastRow, object: nil)
                 }
                 .keyboardShortcut("d", modifiers: .command)
+                .disabled(store?.canWrite == false)
             }
 
             // The standard View menu, beside "Show Toolbar": the column is a
