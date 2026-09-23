@@ -19,6 +19,15 @@ actor FakeServerTransport: SyncTransport {
     private var issued = 0
     private var offline = false
     private var log: [String] = []
+    /// Vaults whose push answers `403 forbidden` whatever the role: a role
+    /// changed between `GET /vaults` and the push.
+    private var refusedPushes: Set<Uuid> = []
+    /// Vaults whose pull answers a body the core cannot read.
+    private var garbledPulls: Set<Uuid> = []
+    /// Seconds of `Retry-After` on every login and register, when set.
+    private var rateLimit: Int?
+    /// Membership removals answer `500`.
+    private var failingRemovals = false
 
     init(core: CoreHandle) {
         self.core = core
@@ -29,9 +38,39 @@ actor FakeServerTransport: SyncTransport {
         offline = value
     }
 
+    func refusePushes(to vaultId: Uuid) {
+        refusedPushes.insert(vaultId)
+    }
+
+    func garblePulls(of vaultId: Uuid) {
+        garbledPulls.insert(vaultId)
+    }
+
+    func setRateLimit(retryAfter seconds: Int?) {
+        rateLimit = seconds
+    }
+
+    func setFailingRemovals(_ value: Bool) {
+        failingRemovals = value
+    }
+
+    /// Every token of `username` stops working, as when it expires.
+    func revokeTokens(of username: String) {
+        sessions = sessions.filter { $0.value != username }
+    }
+
     /// How many times a route was called, for "this happens only once".
     func callCount(method: String, path: String) -> Int {
         log.filter { $0 == "\(method) \(path)" }.count
+    }
+
+    /// Every request so far, as `METHOD /path`, oldest first.
+    func requests() -> [String] {
+        log
+    }
+
+    func role(of username: String, inVault vaultId: Uuid) -> MemberRole? {
+        memberships[vaultId]?[username]
     }
 
     func lastSeq(ofVault vaultId: Uuid) throws -> Int64 {
@@ -54,8 +93,12 @@ actor FakeServerTransport: SyncTransport {
         let query = Self.query(request.path)
         let parts = path.split(separator: "/").map(String.init)
 
+        if request.method == "POST", path == "/auth/register" || path == "/auth/login", let rateLimit {
+            return Self.failure(429, "too_many_requests", headers: ["Retry-After": "\(rateLimit)"])
+        }
         if request.method == "POST", path == "/auth/register" { return try register(request) }
         if request.method == "POST", path == "/auth/login" { return try login(request) }
+        if request.method == "POST", path == "/auth/password" { return changePassword(request) }
         if request.method == "POST", path == "/auth/logout" {
             if let bearer = request.bearer { sessions.removeValue(forKey: bearer) }
             return SyncResponse(status: 204)
@@ -85,18 +128,46 @@ actor FakeServerTransport: SyncTransport {
 
     // MARK: - Auth
 
+    /// Usernames are trimmed and lowercased, as the real server does.
     private func register(_ request: SyncRequest) throws -> SyncResponse {
         guard let credentials = Self.credentials(request) else { return Self.failure(400, "invalid_request") }
-        guard passwords[credentials.username] == nil else { return Self.failure(409, "already_exists") }
-        passwords[credentials.username] = credentials.password
-        return try token(for: credentials.username, status: 201)
+        let username = AccountRules.normalize(username: credentials.username)
+        guard AccountRules.isValidUsername(username), AccountRules.isValidPassword(credentials.password) else {
+            return Self.failure(400, "invalid_request")
+        }
+        guard passwords[username] == nil else { return Self.failure(409, "already_exists") }
+        passwords[username] = credentials.password
+        return try token(for: username, status: 201)
     }
 
     private func login(_ request: SyncRequest) throws -> SyncResponse {
-        guard let credentials = Self.credentials(request),
-            passwords[credentials.username] == credentials.password
-        else { return Self.failure(401, "unauthorized") }
-        return try token(for: credentials.username, status: 200)
+        guard let credentials = Self.credentials(request) else { return Self.failure(400, "invalid_request") }
+        let username = AccountRules.normalize(username: credentials.username)
+        guard passwords[username] == credentials.password else { return Self.failure(401, "unauthorized") }
+        return try token(for: username, status: 200)
+    }
+
+    private struct PasswordBody: Decodable {
+        let currentPassword: String
+        let newPassword: String
+    }
+
+    /// `POST /auth/password`: the asking token stays, every other token of
+    /// the account goes.
+    private func changePassword(_ request: SyncRequest) -> SyncResponse {
+        guard let user = caller(request), let bearer = request.bearer else {
+            return Self.failure(401, "unauthorized")
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let body = request.body, let change = try? decoder.decode(PasswordBody.self, from: body) else {
+            return Self.failure(400, "invalid_request")
+        }
+        guard passwords[user] == change.currentPassword else { return Self.failure(401, "unauthorized") }
+        guard AccountRules.isValidPassword(change.newPassword) else { return Self.failure(400, "invalid_request") }
+        passwords[user] = change.newPassword
+        sessions = sessions.filter { $0.value != user || $0.key == bearer }
+        return SyncResponse(status: 204)
     }
 
     private func token(for username: String, status: Int) throws -> SyncResponse {
@@ -164,6 +235,7 @@ actor FakeServerTransport: SyncTransport {
         default:
             break
         }
+        if refusedPushes.contains(vaultId) { return Self.failure(403, "forbidden") }
 
         let text = String(decoding: body, as: UTF8.self)
         return SyncResponse(
@@ -187,6 +259,7 @@ actor FakeServerTransport: SyncTransport {
     private func pull(_ request: SyncRequest, vaultId: Uuid, query: [String: String]) throws -> SyncResponse {
         guard let user = caller(request) else { return Self.failure(401, "unauthorized") }
         guard memberships[vaultId]?[user] != nil else { return Self.failure(404, "not_found") }
+        if garbledPulls.contains(vaultId) { return SyncResponse(status: 200, body: Data(#"{"garbled":true}"#.utf8)) }
         let since = Int64(query["since"] ?? "0") ?? 0
         let limit = UInt32(query["limit"] ?? "500") ?? 500
         return SyncResponse(
@@ -223,9 +296,13 @@ actor FakeServerTransport: SyncTransport {
         return SyncResponse(status: 204)
     }
 
+    /// The owner removes a member; a member other than the owner removes
+    /// themself, which is leaving.
     private func removeMember(_ request: SyncRequest, vaultId: Uuid, username: String) throws -> SyncResponse {
         guard let user = caller(request) else { return Self.failure(401, "unauthorized") }
-        guard memberships[vaultId]?[user] == .owner else { return Self.failure(403, "forbidden") }
+        if failingRemovals { return Self.failure(500, "storage_error") }
+        guard let mine = memberships[vaultId]?[user] else { return Self.failure(404, "not_found") }
+        guard mine == .owner || username == user else { return Self.failure(403, "forbidden") }
         switch memberships[vaultId]?[username] {
         case .none: return Self.failure(404, "not_found")
         case .some(.owner): return Self.failure(403, "forbidden")
@@ -266,9 +343,9 @@ actor FakeServerTransport: SyncTransport {
         return SyncResponse(status: status, body: try encoder.encode(value))
     }
 
-    private static func failure(_ status: Int, _ code: String) -> SyncResponse {
+    private static func failure(_ status: Int, _ code: String, headers: [String: String] = [:]) -> SyncResponse {
         let body = #"{"error":{"code":"\#(code)","message":"\#(code)"}}"#
-        return SyncResponse(status: status, body: Data(body.utf8))
+        return SyncResponse(status: status, body: Data(body.utf8), headers: headers)
     }
 }
 
@@ -280,9 +357,11 @@ private struct Peer {
     let store: AppStore
     let account: AccountStore
     let engine: SyncEngine
+    /// The peer's own preferences, where the account keeps the roles.
+    let defaults: UserDefaults
 
     init(server: FakeServerTransport) async throws {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.sync.\(UUID().uuidString)"))
+        defaults = try #require(UserDefaults(suiteName: "sparagne.sync.\(UUID().uuidString)"))
         core = try CoreActor.inMemory(author: "local")
         store = AppStore(core: core, defaults: defaults, undoWindow: .seconds(60))
         account = AccountStore(defaults: defaults, tokens: MemoryTokenStore())
@@ -531,8 +610,8 @@ struct SyncEngineTests {
         #expect(peer.notes().contains("bus"))
     }
 
-    @Test("A viewer cannot push, and the failure does not lose the change")
-    func viewerCannotPush() async throws {
+    @Test("A viewer's vault is read-only here too: the write is refused before it enters the log")
+    func viewerCannotWrite() async throws {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())
         let alice = try await Self.alice(server)
         let vaultId = try #require(alice.vaultId)
@@ -542,12 +621,187 @@ struct SyncEngineTests {
         await carol.engine.syncNow()
 
         #expect(carol.store.currentVault?.id == vaultId)
+        #expect(carol.store.isReadOnly)
         await carol.store.submit(quickAdd: "-1.00 gum @Cash >Food")
+
+        #expect(carol.store.presentedError?.code == "forbidden")
+        #expect(try await carol.syncState().outbox == 0)
+        await carol.engine.syncNow()
+        #expect(carol.engine.status == .idle)
+        #expect(carol.engine.pendingCount == 0)
+        #expect(await server.callCount(method: "POST", path: "/vaults/\(vaultId)/push") == 1)
+    }
+
+    @Test("A vault whose role became viewer skips the push, refuses its outbox and keeps pulling")
+    func viewerSkipsThePush() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let carol = try await Peer(server: server)
+        await carol.engine.register(username: "carol", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "carol", role: .editor)
         await carol.engine.syncNow()
 
-        #expect(carol.engine.status != .idle)
+        // Written while still an editor, not sent before the demotion.
+        await carol.store.submit(quickAdd: "-1.00 gum @Cash >Food")
         #expect(try await carol.syncState().outbox == 1)
-        #expect(carol.engine.pendingCount == 1)
+        try await alice.engine.setMember(vaultId: vaultId, username: "carol", role: .viewer)
+        await alice.store.renameVault(vaultId, name: "Casa")
+        await alice.engine.syncNow()
+        let pushes = await server.callCount(method: "POST", path: "/vaults/\(vaultId)/push")
+
+        await carol.engine.syncNow()
+
+        #expect(await server.callCount(method: "POST", path: "/vaults/\(vaultId)/push") == pushes)
+        #expect(try await carol.syncState().outbox == 0)
+        #expect(try await carol.syncState().rejected == 1)
+        #expect(carol.engine.rejected.first?.command.code == "forbidden")
+        #expect(carol.engine.showsRejectedAlert)
+        #expect(carol.engine.status == .idle)
+        // The pull still ran: the owner's rename is here, the gum is not.
+        #expect(carol.store.currentVault?.name == "Casa")
+        #expect(carol.notes().contains("gum") == false)
+        #expect(carol.store.isReadOnly)
+    }
+
+    @Test("A push refused with 403 refuses the outbox locally, and the vault still pulls")
+    func refusedPushStillPulls() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        await bob.engine.syncNow()
+
+        await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
+        await alice.store.renameVault(vaultId, name: "Casa")
+        await alice.engine.syncNow()
+        await server.refusePushes(to: vaultId)
+        await bob.engine.syncNow()
+
+        #expect(try await bob.syncState().outbox == 0)
+        #expect(try await bob.syncState().rejected == 1)
+        let refused = try #require(bob.engine.rejected.first)
+        #expect(refused.command.code == "forbidden")
+        #expect(refused.command.message == SyncEngine.readOnlyMessage)
+        #expect(refused.kindName == CommandKindNames.name(for: "expense"))
+        #expect(bob.engine.showsRejectedAlert)
+        #expect(bob.engine.status == .idle)
+        #expect(bob.store.currentVault?.name == "Casa")
+        #expect(bob.notes().contains("milk") == false)
+
+        // Nothing is retried: the next round pushes nothing.
+        let pushes = await server.callCount(method: "POST", path: "/vaults/\(vaultId)/push")
+        await bob.engine.syncNow()
+        #expect(await server.callCount(method: "POST", path: "/vaults/\(vaultId)/push") == pushes)
+    }
+
+    @Test("A core error in one vault does not stop the round for the others")
+    func roundContinuesPastAFailingVault() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let peer = try await Peer(server: server)
+        await peer.store.createVault(name: "Alpha", walletName: "Cash", openingBalance: 1_000)
+        let alpha = try #require(peer.vaultId)
+        await peer.store.createVault(name: "Beta", walletName: "Cash", openingBalance: 2_000)
+        let beta = try #require(peer.vaultId)
+        await peer.engine.register(username: "alice", password: "supersecret")
+        #expect(peer.engine.status == .idle)
+
+        // Alpha comes first in the round; its pull now breaks in the core.
+        await server.garblePulls(of: alpha)
+        await peer.store.submit(quickAdd: "-1.00 tea @Cash")
+        #expect(peer.store.currentVault?.id == beta)
+        await peer.engine.syncNow()
+
+        #expect(try await peer.core.syncState(vaultId: beta).outbox == 0)
+        switch peer.engine.status {
+        case .error(let text): #expect(text.contains(ErrorMessages.summary(for: "invalid_command")))
+        default: Issue.record("expected an error status, got \(peer.engine.status)")
+        }
+    }
+
+    @Test("The round asks for the roles first and hands the read-only vaults to the store and the actor")
+    func rolesComeFirst() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let carol = try await Peer(server: server)
+        await carol.engine.register(username: "carol", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "carol", role: .viewer)
+
+        let before = await server.requests().count
+        await carol.engine.syncNow()
+        let round = Array(await server.requests().dropFirst(before))
+
+        #expect(round.first == "GET /vaults")
+        #expect(carol.engine.role(forVault: vaultId) == .viewer)
+        #expect(carol.engine.readOnlyVaultIds == [vaultId])
+        #expect(carol.store.readOnlyVaultIds == [vaultId])
+        // The actor has the same set: a write that skips the store is refused.
+        await #expect(throws: DomainError.self) {
+            try await carol.core.execute(vaultId: vaultId, .renameVault(name: "Mine"))
+        }
+
+        // Remembered for the next launch, offline included.
+        let relaunched = AccountStore(defaults: carol.defaults, tokens: MemoryTokenStore())
+        #expect(relaunched.vaultRoles[vaultId] == .viewer)
+    }
+
+    @Test("Rename, delete and leave are offered exactly when they would go through")
+    func permissionTruthTable() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        // Logged out, a local vault: mine to rename and delete, nothing to
+        // leave.
+        let alice = try await Peer(server: server)
+        await Self.seed(alice)
+        let vaultId = try #require(alice.vaultId)
+        #expect(alice.engine.mayRenameVault(vaultId))
+        #expect(alice.engine.mayDeleteVault(vaultId))
+        #expect(!alice.engine.mayLeaveVault(vaultId))
+
+        // Logged in and listed as the owner.
+        await alice.engine.register(username: "alice", password: "supersecret")
+        #expect(alice.engine.role(forVault: vaultId) == .owner)
+        #expect(alice.engine.mayRenameVault(vaultId))
+        #expect(alice.engine.mayDeleteVault(vaultId))
+        #expect(!alice.engine.mayLeaveVault(vaultId))
+
+        // Logged in, not listed yet: a vault created since the last sync.
+        await alice.store.createVault(name: "Draft", walletName: "Cash", openingBalance: 0)
+        let draft = try #require(alice.vaultId)
+        #expect(alice.engine.role(forVault: draft) == nil)
+        #expect(alice.engine.mayRenameVault(draft))
+        #expect(alice.engine.mayDeleteVault(draft))
+        #expect(!alice.engine.mayLeaveVault(draft))
+
+        // An editor and a viewer of alice's vault.
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+        let carol = try await Peer(server: server)
+        await carol.engine.register(username: "carol", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        try await alice.engine.setMember(vaultId: vaultId, username: "carol", role: .viewer)
+        await bob.engine.syncNow()
+        await carol.engine.syncNow()
+
+        #expect(bob.engine.mayRenameVault(vaultId))
+        #expect(!bob.engine.mayDeleteVault(vaultId))
+        #expect(bob.engine.mayLeaveVault(vaultId))
+        #expect(!carol.engine.mayRenameVault(vaultId))
+        #expect(!carol.engine.mayDeleteVault(vaultId))
+        #expect(carol.engine.mayLeaveVault(vaultId))
+
+        // Logged out, the viewer's vault stays read-only and there is no
+        // membership to leave; the editor's vault is not his to delete.
+        await carol.engine.logOut()
+        await bob.engine.logOut()
+        #expect(!carol.engine.mayRenameVault(vaultId))
+        #expect(!carol.engine.mayDeleteVault(vaultId))
+        #expect(!carol.engine.mayLeaveVault(vaultId))
+        #expect(bob.engine.mayRenameVault(vaultId))
+        #expect(!bob.engine.mayDeleteVault(vaultId))
+        #expect(!bob.engine.mayLeaveVault(vaultId))
     }
 
     @Test("Logging out drops the token and stops signing commands as the account")
@@ -674,6 +928,246 @@ struct SyncEngineTests {
 
         await bob.engine.dismiss(refused)
         #expect(bob.engine.rejected.isEmpty)
+        // With nothing left to send or to read, the next round lets the
+        // deleted vault's log go.
+        #expect(try await bob.core.deletedVaults() == [vaultId])
+        await bob.engine.syncNow()
+        #expect(try await bob.core.deletedVaults().isEmpty)
+        #expect(bob.store.vaults.isEmpty)
+    }
+
+    @Test("A deleted vault leaves the device once its deletion is confirmed")
+    func deletedVaultIsForgotten() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        await bob.engine.syncNow()
+
+        await alice.store.deleteVault(vaultId)
+        #expect(try await alice.core.deletedVaults() == [vaultId])
+        await alice.engine.syncNow()
+        await bob.engine.syncNow()
+
+        // Both logs are gone, and nothing joins the vault back.
+        for peer in [alice, bob] {
+            #expect(try await peer.core.deletedVaults().isEmpty)
+            #expect(try await peer.core.syncState(vaultId: vaultId).lastServerSeq == 0)
+            #expect(peer.engine.role(forVault: vaultId) == nil)
+            #expect(peer.engine.status == .idle)
+        }
+        await alice.engine.syncNow()
+        #expect(alice.store.vaults.isEmpty)
+        #expect(try await alice.core.syncState(vaultId: vaultId).lastServerSeq == 0)
+    }
+
+    @Test("A vault no longer shared is kept read-only and marked, never dropped behind the user's back")
+    func lostAccessIsMarked() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        await bob.engine.syncNow()
+
+        await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
+        try await alice.engine.removeMember(vaultId: vaultId, username: "bob")
+        await bob.engine.syncNow()
+
+        #expect(bob.store.vaults.map(\.id) == [vaultId])
+        #expect(bob.engine.hasLostAccess(to: vaultId))
+        #expect(bob.engine.lostVaults.map(\.id) == [vaultId])
+        #expect(bob.store.readOnlyVaultIds.contains(vaultId))
+        #expect(bob.store.isReadOnly)
+        #expect(!bob.engine.mayRenameVault(vaultId))
+        #expect(!bob.engine.mayDeleteVault(vaultId))
+        #expect(!bob.engine.mayLeaveVault(vaultId))
+        #expect(bob.engine.status == .idle)
+        // The milk could never go up: it is refused, readable, not pending.
+        #expect(try await bob.syncState().outbox == 0)
+        #expect(bob.engine.rejected.first?.command.code == "not_found")
+        #expect(bob.engine.rejected.first?.command.message == SyncEngine.noLongerSharedMessage)
+
+        // Later rounds leave it alone.
+        let pulls = await server.callCount(method: "GET", path: "/vaults/\(vaultId)/pull")
+        await bob.engine.syncNow()
+        #expect(await server.callCount(method: "GET", path: "/vaults/\(vaultId)/pull") == pulls)
+        #expect(bob.store.vaults.map(\.id) == [vaultId])
+
+        try await bob.engine.removeFromThisMac(vaultId)
+        #expect(bob.store.vaults.isEmpty)
+        #expect(bob.store.needsOnboarding)
+        #expect(try await bob.core.vaults().isEmpty)
+        #expect(!bob.engine.hasLostAccess(to: vaultId))
+        #expect(bob.store.readOnlyVaultIds.isEmpty)
+    }
+
+    @Test("Shared again, a lost vault is writable again")
+    func regainedAccess() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        await bob.engine.syncNow()
+        try await alice.engine.removeMember(vaultId: vaultId, username: "bob")
+        await bob.engine.syncNow()
+        #expect(bob.engine.hasLostAccess(to: vaultId))
+
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        await bob.engine.syncNow()
+
+        #expect(!bob.engine.hasLostAccess(to: vaultId))
+        #expect(!bob.store.isReadOnly)
+        await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
+        await bob.engine.syncNow()
+        #expect(try await bob.syncState().outbox == 0)
+        await alice.engine.syncNow()
+        #expect(alice.notes().contains("milk"))
+    }
+
+    // MARK: - Leaving a vault
+
+    @Test("Leaving sends what is pending, drops the membership and the local copy")
+    func leaveVault() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        await bob.engine.syncNow()
+        #expect(bob.engine.mayLeaveVault(vaultId))
+
+        await bob.store.submit(quickAdd: "-3.00 milk @Cash >Food")
+        try await bob.engine.leaveVault(vaultId)
+
+        #expect(await server.role(of: "bob", inVault: vaultId) == nil)
+        #expect(bob.store.vaults.isEmpty)
+        #expect(bob.store.needsOnboarding)
+        #expect(try await bob.core.vaults().isEmpty)
+        #expect(try await bob.core.syncState(vaultId: vaultId).lastServerSeq == 0)
+        #expect(bob.engine.role(forVault: vaultId) == nil)
+        #expect(bob.engine.serverVaults.isEmpty)
+        #expect(bob.engine.pendingCount == 0)
+
+        // The milk went up before bob left; the vault does not come back.
+        await alice.engine.syncNow()
+        #expect(alice.notes().contains("milk"))
+        await bob.engine.syncNow()
+        #expect(bob.store.vaults.isEmpty)
+        #expect(bob.engine.status == .idle)
+    }
+
+    @Test("A leave the server refuses forgets nothing and says why")
+    func failedLeaveKeepsTheVault() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .viewer)
+        await bob.engine.syncNow()
+
+        await server.setFailingRemovals(true)
+        await #expect(throws: ServerError.self) {
+            try await bob.engine.leaveVault(vaultId)
+        }
+
+        #expect(await server.role(of: "bob", inVault: vaultId) == .viewer)
+        #expect(bob.store.vaults.map(\.id) == [vaultId])
+        #expect(bob.engine.role(forVault: vaultId) == .viewer)
+        #expect(try await bob.syncState().lastServerSeq > 0)
+
+        // The owner cannot leave their own vault: the server says so.
+        await server.setFailingRemovals(false)
+        #expect(!alice.engine.mayLeaveVault(vaultId))
+        await #expect(throws: ServerError.self) {
+            try await alice.engine.leaveVault(vaultId)
+        }
+        #expect(alice.store.vaults.map(\.id) == [vaultId])
+    }
+
+    // MARK: - Password and session
+
+    @Test("Changing the password keeps this session and signs the other devices out")
+    func changePassword() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let laptop = try await Peer(server: server)
+        await laptop.engine.logIn(username: "alice", password: "supersecret")
+        #expect(laptop.account.isLoggedIn)
+
+        // A wrong current password is refused and ends nothing.
+        await #expect(throws: ServerError.self) {
+            try await alice.engine.changePassword(current: "wrong-one", new: "brandnewsecret")
+        }
+        #expect(alice.account.isLoggedIn)
+
+        try await alice.engine.changePassword(current: "supersecret", new: "brandnewsecret")
+        await alice.engine.syncNow()
+        #expect(alice.account.isLoggedIn)
+        #expect(alice.engine.status == .idle)
+
+        await laptop.engine.syncNow()
+        #expect(!laptop.account.isLoggedIn)
+        #expect(laptop.account.lastUsername == "alice")
+        #expect(laptop.account.sessionExpired)
+        #expect(laptop.engine.status == .error(ErrorMessages.sessionExpired))
+
+        await laptop.engine.logIn(username: "alice", password: "supersecret")
+        #expect(!laptop.account.isLoggedIn)
+        #expect(laptop.engine.authMessage == ErrorMessages.wrongCredentials)
+        await laptop.engine.logIn(username: "alice", password: "brandnewsecret")
+        #expect(laptop.account.isLoggedIn)
+        #expect(!laptop.account.sessionExpired)
+    }
+
+    @Test("A 401 during a round signs out, keeps the name and says the session expired")
+    func expiredSessionDuringSync() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        #expect(alice.account.expiresAt == Date(timeIntervalSince1970: 4_102_444_800))
+
+        await server.revokeTokens(of: "alice")
+        await alice.store.submit(quickAdd: "-5.00 bus @Cash >Food")
+        await alice.engine.syncNow()
+
+        #expect(!alice.account.isLoggedIn)
+        #expect(alice.account.lastUsername == "alice")
+        #expect(alice.engine.status == .error(ErrorMessages.sessionExpired))
+        #expect(try await alice.syncState().outbox == 1)
+    }
+
+    @Test("A rate-limited login says how many minutes to wait")
+    func rateLimitedLogin() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let peer = try await Peer(server: server)
+        await server.setRateLimit(retryAfter: 125)
+
+        await peer.engine.logIn(username: "alice", password: "supersecret")
+
+        #expect(!peer.account.isLoggedIn)
+        #expect(peer.engine.authMessage == ErrorMessages.tooManyAttempts(retryAfter: 125))
+        #expect(peer.engine.authMessage == String(localized: "Too many attempts. Try again in \(3) minutes."))
+        #expect(peer.engine.authDetail == nil)
+    }
+
+    @Test("Register trims and lowercases the name the server gets")
+    func registerNormalizesTheName() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let peer = try await Peer(server: server)
+
+        await peer.engine.register(username: "  Alice ", password: "supersecret")
+
+        #expect(peer.account.username == "alice")
+        let other = try await Peer(server: server)
+        await other.engine.logIn(username: "ALICE", password: "supersecret")
+        #expect(other.account.username == "alice")
     }
 
     @Test("A vault deleted while logged out is re-signed at login and deleted on the server")
