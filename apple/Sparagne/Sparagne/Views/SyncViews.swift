@@ -70,7 +70,9 @@ struct SyncStatusButton: View {
         case .offline: return String(localized: "Offline")
         case .error(let message): return message
         case .idle:
-            if !engine.isLoggedIn { return String(localized: "Not signed in") }
+            if !engine.isLoggedIn {
+                return engine.account.sessionExpired ? ErrorMessages.sessionExpired : String(localized: "Not signed in")
+            }
             if engine.pendingCount > 0 {
                 return String(localized: "\(engine.pendingCount) changes waiting")
             }
@@ -134,7 +136,7 @@ private struct RejectedRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(change.vaultName) · \(change.command.kind)")
+                Text("\(change.vaultName) · \(change.kindName)")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -246,7 +248,7 @@ struct ShareVaultSheet: View {
 
     private static func describe(_ error: some Error) -> String {
         guard let server = error as? ServerError else { return error.localizedDescription }
-        return server.message.isEmpty ? server.summary : "\(server.summary): \(server.message)"
+        return server.detail.map { "\(server.summary): \($0)" } ?? server.summary
     }
 }
 
@@ -257,6 +259,7 @@ struct AccountSettingsView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var busy = false
+    @State private var changingPassword = false
 
     var body: some View {
         @Bindable var account = engine.account
@@ -270,11 +273,36 @@ struct AccountSettingsView: View {
             if let name = account.username {
                 Section(String(localized: "Account")) {
                     LabeledContent(String(localized: "Signed in as"), value: name)
-                    Button(String(localized: "Log Out")) {
-                        busy = true
-                        Task {
-                            await engine.logOut()
-                            busy = false
+                    if let expiry = account.expiresAt {
+                        Text(String(localized: "Signed in until \(expiry.formatted(date: .long, time: .shortened))"))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let failure = account.tokenSaveFailure {
+                        // Not an error: this session works, the next launch
+                        // will ask for the password again.
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label(
+                                String(localized: "Your login could not be saved in the Keychain; you'll need to log in again next time."),
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .font(.callout)
+                            .foregroundStyle(Ink.warning)
+                            Text(failure)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack {
+                        Button(String(localized: "Change Password…")) { changingPassword = true }
+                        Spacer()
+                        Button(String(localized: "Log Out")) {
+                            busy = true
+                            Task {
+                                await engine.logOut()
+                                busy = false
+                            }
                         }
                     }
                     .disabled(busy)
@@ -296,15 +324,19 @@ struct AccountSettingsView: View {
 
                 Section(String(localized: "Account")) {
                     TextField(String(localized: "Username"), text: $username)
+                    if let hint = usernameHint { Self.hint(hint) }
                     SecureField(String(localized: "Password"), text: $password)
+                    if let hint = passwordHint { Self.hint(hint) }
                     HStack {
                         Button(String(localized: "Log In")) { authenticate(registering: false) }
                             .keyboardShortcut(.defaultAction)
+                            .disabled(!canLogIn)
                         Button(String(localized: "Register")) { authenticate(registering: true) }
+                            .disabled(!canRegister)
                         Spacer()
                         if busy { ProgressView().controlSize(.small) }
                     }
-                    .disabled(busy || !canSubmit)
+                    .disabled(busy)
                 }
             }
 
@@ -317,22 +349,56 @@ struct AccountSettingsView: View {
                     )
                 }
                 if let message = engine.authMessage {
-                    Text(message).font(.callout).foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(message).font(.callout).foregroundStyle(.red)
+                        // The server's own English, as the detail.
+                        if let detail = engine.authDetail {
+                            Text(detail).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
         .formStyle(.grouped)
         .frame(width: 420)
         .onAppear { username = account.lastUsername }
+        .sheet(isPresented: $changingPassword) { ChangePasswordSheet(engine: engine) }
     }
 
-    private var canSubmit: Bool {
-        !username.trimmingCharacters(in: .whitespaces).isEmpty && !password.isEmpty
+    /// The name as the server will read it: trimmed and lowercased.
+    private var normalizedUsername: String { AccountRules.normalize(username: username) }
+
+    private var canLogIn: Bool { !normalizedUsername.isEmpty && !password.isEmpty }
+
+    /// Register holds the server's rules up front; logging in only needs
+    /// something in both fields.
+    private var canRegister: Bool {
+        AccountRules.isValidUsername(normalizedUsername) && AccountRules.isValidPassword(password)
+    }
+
+    /// Shown once something is typed, as a rule for a new account: an
+    /// existing one logs in whatever the form thinks of its name.
+    private var usernameHint: String? {
+        guard !normalizedUsername.isEmpty, !AccountRules.isValidUsername(normalizedUsername) else { return nil }
+        return String(localized: "New accounts need 3 to 32 characters: a–z, 0–9, “_”, “.” or “-”.")
+    }
+
+    private var passwordHint: String? {
+        guard !password.isEmpty, !AccountRules.isValidPassword(password) else { return nil }
+        return String(localized: "New accounts need a password of at least 8 characters.")
+    }
+
+    private static func hint(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @MainActor
     private func authenticate(registering: Bool) {
-        let name = username.trimmingCharacters(in: .whitespaces)
+        let name = normalizedUsername
         let secret = password
         busy = true
         Task {
@@ -349,10 +415,17 @@ struct AccountSettingsView: View {
     private var statusText: String {
         switch engine.status {
         case .idle:
-            engine.isLoggedIn ? String(localized: "In sync") : String(localized: "Not signed in")
+            if engine.isLoggedIn {
+                String(localized: "In sync")
+            } else if engine.account.sessionExpired {
+                ErrorMessages.sessionExpired
+            } else {
+                String(localized: "Not signed in")
+            }
         case .syncing: String(localized: "Syncing…")
         case .offline: String(localized: "Offline")
         case .error(let message): message
         }
     }
 }
+
