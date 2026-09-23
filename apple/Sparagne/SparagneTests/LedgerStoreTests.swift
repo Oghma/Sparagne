@@ -69,6 +69,31 @@ struct LedgerStoreTests {
         #expect(days == [3, 12, 27])
     }
 
+    @Test("A month longer than a page is loaded page by page, and loadAll reads every one")
+    func loadAllReadsEveryPage() async throws {
+        let store = try Self.makeStore()
+        await store.bootstrap()
+        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let vault = try #require(store.currentVault)
+        // 1100 expenses of a cent each, written in one visit.
+        let now = CoreDate.offset(Date())
+        let entries: [Command] = (1...1100).map { index in
+            .expense(Entry(amount: 1, walletId: nil, flowId: nil, category: "Spesa", note: "row \(index)", occurredAt: now))
+        }
+        try await store.core.executeBatch(vaultId: vault.id, entries)
+        await store.reload()
+
+        #expect(store.rows.count == Int(AppStore.pageSize))
+        #expect(store.nextCursor != nil)
+
+        await store.loadAll()
+
+        #expect(store.presentedError == nil)
+        #expect(store.nextCursor == nil)
+        #expect(store.rows.count == 1100)
+        #expect(Set(store.rows.map(\.id)).count == 1100)
+    }
+
     // MARK: - Filters
 
     @Test("The direction switch shows expenses or income, never both")

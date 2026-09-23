@@ -30,8 +30,10 @@ struct LedgerGrid: View {
             Hairline()
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(store.rows.enumerated()), id: \.element.id) { index, row in
+                    let rows = store.rows
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         rowView(index: index, row: row)
+                            .onAppear { if index == rows.count - 1 { loadNextPage() } }
                         Hairline()
                     }
                     newRowView
@@ -133,6 +135,13 @@ struct LedgerGrid: View {
     }
 
     // MARK: - Actions
+
+    /// The last row loaded has scrolled into view: a month longer than a
+    /// page goes on with the next one, so it is never silently cut short.
+    private func loadNextPage() {
+        guard store.nextCursor != nil else { return }
+        Task { await store.loadMore() }
+    }
 
     /// Opens `row` with the caret in `field`, saving whatever line was open
     /// before. A row that refuses to save stays open and keeps the focus, so

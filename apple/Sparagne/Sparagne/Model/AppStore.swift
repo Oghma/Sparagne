@@ -103,8 +103,9 @@ extension RecurringPatch {
 @Observable
 @MainActor
 final class AppStore {
-    /// A month of a personal ledger fits in one page, so the grid never
-    /// paginates in practice; `loadMore` stays for the pathological month.
+    /// A month of a personal ledger fits in one page in practice. A month that
+    /// does not goes on page by page as the grid scrolls to its end
+    /// (`loadMore`), and the export reads every page first (`loadAll`).
     static let pageSize: UInt32 = 1000
     static let lastVaultKey = "lastVaultId"
     /// Shared with the View menu's `@AppStorage` toggle, so the preference
@@ -222,6 +223,11 @@ final class AppStore {
     /// Which reload may write the state: a slower one that started earlier
     /// must not overwrite a newer month with what it found.
     @ObservationIgnored private var loadGeneration = 0
+    /// The filter the rows on screen were loaded with. The next page has to
+    /// continue that query, not whatever the search field says now.
+    @ObservationIgnored private var loadedFilter: TransactionFilter?
+    /// The next page on its way, if any (`loadMore`).
+    @ObservationIgnored private var pageLoad: Task<Void, Never>?
 
     init(
         core: CoreActor,
@@ -383,6 +389,7 @@ final class AppStore {
             transactions = []
             allRows = []
             nextCursor = nil
+            loadedFilter = nil
             authors = []
             summary = nil
             year = nil
@@ -401,6 +408,7 @@ final class AppStore {
             categories = loaded.categories
             transactions = loaded.page.items
             nextCursor = loaded.page.nextCursor
+            loadedFilter = request.filter
             authors = loaded.authors
             pendingRecurringItems = loaded.pendingRecurring
             summary = Self.summary(month: month, from: loaded)
@@ -462,19 +470,46 @@ final class AppStore {
         return YearSummary.build(year: month.year, upTo: month, rows: rows, flows: flows)
     }
 
-    /// Appends the next page, if any.
+    /// Appends the next page, if any: the grid asks when its last row comes
+    /// into view. A caller that arrives while a page is already on its way
+    /// waits for that one instead of asking twice for the same cursor.
     func loadMore() async {
-        guard let vault = currentVault, let cursor = nextCursor else { return }
-        await guarded {
-            let page = try await core.transactions(
-                vaultId: vault.id,
-                filter: filter,
-                limit: Self.pageSize,
-                cursor: cursor
-            )
-            transactions.append(contentsOf: page.items)
-            nextCursor = page.nextCursor
-            rebuildRows()
+        if let inFlight = pageLoad {
+            await inFlight.value
+            return
+        }
+        guard let vault = currentVault, let cursor = nextCursor, let filter = loadedFilter else { return }
+        let generation = loadGeneration
+        let load = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await guarded {
+                let page = try await core.transactions(
+                    vaultId: vault.id,
+                    filter: filter,
+                    limit: Self.pageSize,
+                    cursor: cursor
+                )
+                // A reload landed meanwhile: its first page replaced the rows
+                // this one would continue.
+                guard generation == loadGeneration, cursor == nextCursor else { return }
+                transactions.append(contentsOf: page.items)
+                nextCursor = page.nextCursor
+                rebuildRows()
+            }
+        }
+        pageLoad = load
+        await load.value
+        pageLoad = nil
+    }
+
+    /// Every remaining page of the month, for what must see all of it and
+    /// not just what has been scrolled to: the ⌘E export.
+    func loadAll() async {
+        while let cursor = nextCursor {
+            await loadMore()
+            // A refused page (the alert is up) or a reload that took over:
+            // stop rather than ask for the same cursor for ever.
+            if nextCursor == cursor { return }
         }
     }
 

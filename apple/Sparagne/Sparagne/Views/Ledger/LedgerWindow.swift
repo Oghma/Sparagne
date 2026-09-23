@@ -80,15 +80,21 @@ struct LedgerWindow: View {
             store.month = store.month.adding(months: months)
         }
         .onReceive(NotificationCenter.default.publisher(for: .exportCSV)) { _ in
-            // The export carries the columns the grid is showing, so a file
-            // opened next to the window has the same shape (`UI.md` §6).
-            exportDocument = CSVDocument(text: LedgerCSV.render(store.rows, wallet: store.showWalletColumn))
-            exportFileName = LedgerCSV.fileName(
-                vault: store.currentVault?.name ?? "",
-                month: store.month,
-                direction: store.direction
-            )
-            showsCSVExporter = true
+            Task {
+                // Every row of the month, not only the pages scrolled to so
+                // far: a month past one page would otherwise be cut short.
+                await store.loadAll()
+                // The export carries the columns the grid is showing, so a
+                // file opened next to the window has the same shape
+                // (`UI.md` §6).
+                exportDocument = CSVDocument(text: LedgerCSV.render(store.rows, wallet: store.showWalletColumn))
+                exportFileName = LedgerCSV.fileName(
+                    vault: store.currentVault?.name ?? "",
+                    month: store.month,
+                    direction: store.direction
+                )
+                showsCSVExporter = true
+            }
         }
         .onAppear {
             store.showVoided = showVoided
