@@ -33,8 +33,8 @@ struct VaultLifecycleTests {
         #expect(store.wallets.first?.balance == 10_000)
     }
 
-    @Test("A name another of my vaults already has is refused, and nothing changes")
-    func renameClash() async throws {
+    @Test("A name another of my vaults already has is accepted: names are labels")
+    func renameToATakenName() async throws {
         let store = try Self.store()
         await store.bootstrap()
         await store.createVault(name: "Main", walletName: "Cash", openingBalance: 0)
@@ -44,9 +44,10 @@ struct VaultLifecycleTests {
 
         await store.renameVault(casa.id, name: "main")
 
-        #expect(store.presentedError?.code == "already_exists")
-        #expect(store.currentVault?.name == "Casa")
-        #expect(store.vaults.map(\.name).sorted() == ["Casa", "Main"])
+        #expect(store.presentedError == nil)
+        #expect(store.currentVault?.id == casa.id)
+        #expect(store.currentVault?.name == "main")
+        #expect(store.vaults.map { $0.name.lowercased() } == ["main", "main"])
     }
 
     @Test("Deleting the last vault empties the window and asks for onboarding again")

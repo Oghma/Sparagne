@@ -510,7 +510,7 @@ final class AppStore {
     // MARK: - Vault management
 
     /// Renames a vault everywhere its name shows: the picker, the title, the
-    /// palette. The name stays unique among the owner's vaults, and the
+    /// palette. The name is a label, so two vaults may share it, and the
     /// currency never changes (`docs/v2/ARCH.md` §4).
     func renameVault(_ vaultId: Uuid, name: String) async {
         await guarded {

@@ -150,7 +150,7 @@ actor FakeServerTransport: SyncTransport {
 
         switch memberships[vaultId]?[user] {
         case .none:
-            guard let claim = Self.createVault(in: commands.first, of: vaultId) else {
+            guard Self.createVault(in: commands.first, of: vaultId) != nil else {
                 return Self.failure(404, "not_found")
             }
             // The log outlives the projection: a deleted vault's id stays
@@ -158,9 +158,6 @@ actor FakeServerTransport: SyncTransport {
             guard try core.lastSeq(vaultId: vaultId) == 0 else {
                 return Self.failure(404, "not_found")
             }
-            let taken = try core.vaults()
-                .contains { $0.owner == user && $0.name.lowercased() == claim.lowercased() }
-            guard !taken else { return Self.failure(409, "already_exists") }
             memberships[vaultId] = [user: .owner]
         case .some(let role) where !role.canWrite:
             return Self.failure(403, "forbidden")
@@ -399,22 +396,21 @@ struct SyncEngineTests {
         #expect(peer.engine.status == .idle)
     }
 
-    @Test("A vault name the account already used on the server comes back refused")
-    func aDuplicateVaultNameIsRefused() async throws {
+    @Test("A vault name the account already used on the server is accepted: names are labels")
+    func aDuplicateVaultNameIsAccepted() async throws {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())
         _ = try await Self.alice(server)
 
         // A second machine, same account, a local vault with the same name:
-        // the push that would create it is a conflict, not a silent success.
+        // the push creates a second vault, not a conflict.
         let other = try await Peer(server: server)
         await Self.seed(other)
-        let clash = try #require(other.vaultId)
+        let twin = try #require(other.vaultId)
         await other.engine.logIn(username: "alice", password: "supersecret")
 
         #expect(other.account.isLoggedIn)
-        #expect(other.engine.status != .idle)
-        #expect(try await other.core.syncState(vaultId: clash).outbox > 0)
-        #expect(try await other.core.syncState(vaultId: clash).lastServerSeq == 0)
+        #expect(try await other.core.syncState(vaultId: twin).outbox == 0)
+        #expect(try await other.core.syncState(vaultId: twin).lastServerSeq > 0)
     }
 
     @Test("An editor joins a shared vault and gets the same snapshot")
