@@ -7,14 +7,13 @@
 
 use std::collections::HashMap;
 
-use chrono::{DateTime, FixedOffset, SecondsFormat, Utc};
 use chrono_tz::Tz;
 use rusqlite::params;
 use uuid::Uuid;
 
 use super::amount::{Amount, parse_amount};
 use super::csv::{self, Record};
-use super::dates::parse_date;
+use super::dates::{StatementDate, parse_date};
 use super::{
     AmountSign, STATEMENT_NAMESPACE, StatementAction, StatementDateFormat, StatementMapping,
     StatementOptions, StatementRow, StatementRowOverride, StatementRowStatus,
@@ -173,7 +172,7 @@ struct Cells<'r> {
     type_value: Option<&'r str>,
     status: Option<&'r str>,
     currency: Option<&'r str>,
-    date: std::result::Result<DateTime<FixedOffset>, String>,
+    date: std::result::Result<StatementDate, String>,
     amount: std::result::Result<Amount, String>,
 }
 
@@ -389,7 +388,7 @@ impl<'a> Context<'a> {
         };
         let action = self.action(cells.type_value);
 
-        row.occurred_at = cells.date.as_ref().ok().copied();
+        row.occurred_at = cells.date.as_ref().ok().map(|date| date.at);
         if let Ok(amount) = &cells.amount {
             row.amount = amount.minor.abs();
             row.rounded = amount.rounded;
@@ -405,7 +404,9 @@ impl<'a> Context<'a> {
             cells.amount.as_ref().ok(),
         );
         let key = match (&cells.date, &cells.amount) {
-            (Ok(_), Ok(amount)) => Some(self.key(&row, cells.type_value, amount.minor)),
+            (Ok(date), Ok(amount)) => {
+                Some(self.key(&row, &date.stamp, cells.type_value, amount.minor))
+            }
             _ => None,
         };
         let outcome = self.outcome(&row, action, cells);
@@ -450,7 +451,7 @@ impl<'a> Context<'a> {
             );
         }
         let occurred_at = match cells.date {
-            Ok(at) => at,
+            Ok(date) => date.at,
             Err(message) => return Outcome::Invalid("invalid_date", message),
         };
         let minor = match cells.amount {
@@ -519,25 +520,25 @@ impl<'a> Context<'a> {
             .map_or(&self.mapping.default_action, |rule| &rule.action)
     }
 
-    /// `v1|vault|wallet|UTC instant|type|signed minor units|payee`: what the
-    /// row is, never what the mapping does with it. The type is the type
-    /// column's value, or the kind when there is none; the amount is signed
-    /// as the file wrote it; the payee is lowercased. The status is left out
-    /// on purpose.
-    fn key(&self, row: &StatementRow, type_value: Option<&str>, signed: i64) -> String {
+    /// `v1|vault|wallet|date|type|signed minor units|payee`: what the row
+    /// is, never what the mapping does with it. The date is the
+    /// [`StatementDate::stamp`] (the UTC instant for a timestamp); the type
+    /// is the type column's value, or the kind when there is none; the amount
+    /// is signed as the file wrote it; the payee is lowercased. The status is
+    /// left out on purpose.
+    fn key(
+        &self,
+        row: &StatementRow,
+        stamp: &str,
+        type_value: Option<&str>,
+        signed: i64,
+    ) -> String {
         let what = type_value.map_or_else(
             || row.kind.map_or("skip", TransactionKind::as_str).to_string(),
             str::to_lowercase,
         );
-        let instant = row
-            .occurred_at
-            .map(|at| {
-                at.with_timezone(&Utc)
-                    .to_rfc3339_opts(SecondsFormat::Secs, true)
-            })
-            .unwrap_or_default();
         format!(
-            "{KEY_VERSION}|{}|{}|{instant}|{what}|{signed}|{}",
+            "{KEY_VERSION}|{}|{}|{stamp}|{what}|{signed}|{}",
             self.vault_id,
             self.wallet_id,
             row.payee.to_lowercase()

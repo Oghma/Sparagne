@@ -45,12 +45,15 @@
 //!
 //! # Ids
 //!
-//! The key of a row is `v1|vault|wallet|UTC instant|type|amount|payee|n`: the
-//! type column's value (or the kind, without a type column), the amount in
-//! minor units signed as the file wrote it, the payee lowercased, and `n` the
-//! number of rows with the same key earlier in the file, so two identical
-//! rows in the same second both import. Line numbers are those of the file,
-//! header included; a row with a newline inside quotes starts on its first.
+//! The key of a row is `v1|vault|wallet|date|type|amount|payee|n`: the UTC
+//! instant (`2026-09-16T08:54:40Z`) when the date column fixes one, else the
+//! wall-clock time or the day as written, so importing from another timezone
+//! finds the same rows; the type column's value (or the kind, without a type
+//! column); the amount in minor units signed as the file wrote it; the payee
+//! lowercased; and `n` the number of rows with the same key earlier in the
+//! file, so two identical rows in the same second both import. Line numbers
+//! are those of the file, header included; a row with a newline inside quotes
+//! starts on its first.
 //!
 //! [`Core::import_statement`] runs one command per new row, oldest first,
 //! with the row's id: refused rows land in the report, a storage error stops

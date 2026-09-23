@@ -6,7 +6,8 @@
 //! the accounting day never shifts.
 
 use chrono::{
-    DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, TimeZone, Utc,
+    DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, SecondsFormat, TimeDelta, TimeZone,
+    Utc,
 };
 use chrono_tz::Tz;
 
@@ -21,9 +22,6 @@ const OFFSET_FORMATS: [&str; 4] = [
     "%Y-%m-%d %H:%M:%S%.f%z",
 ];
 
-/// Where a date without a time is placed.
-const NOON: NaiveTime = NaiveTime::from_hms_opt(12, 0, 0).expect("noon is a valid time");
-
 /// Date-times without an offset.
 const LOCAL_FORMATS: [&str; 4] = [
     "%Y-%m-%dT%H:%M:%S%.f",
@@ -32,34 +30,76 @@ const LOCAL_FORMATS: [&str; 4] = [
     "%Y-%m-%d %H:%M",
 ];
 
+/// Where a date without a time is placed.
+const NOON: NaiveTime = NaiveTime::from_hms_opt(12, 0, 0).expect("noon is a valid time");
+
+/// A date of the statement.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct StatementDate {
+    /// When the transaction happened, with the offset it keeps.
+    pub at: DateTime<FixedOffset>,
+    /// What the file says, for the row's id: the UTC instant when the text
+    /// fixes one (`2026-09-16T08:54:40Z`), else the wall-clock time
+    /// (`2026-09-16T10:54:40`) or the date (`2026-09-16`). It does not depend
+    /// on the timezone of the import, so importing the same file from another
+    /// timezone still finds the rows already imported.
+    pub stamp: String,
+}
+
+/// What the text of a date fixes.
+enum Written {
+    /// An instant shown in the user's timezone.
+    Utc(DateTime<Utc>),
+    /// An instant with the offset it was written with.
+    Offset(DateTime<FixedOffset>),
+    /// A wall-clock time in the user's timezone.
+    Local(NaiveDateTime),
+    /// A day, placed at local noon.
+    Day(NaiveDate),
+}
+
 /// Reads `text` as `format`; the error is a message for the preview.
 pub(super) fn parse_date(
     text: &str,
     format: &StatementDateFormat,
     tz: Tz,
-) -> Result<DateTime<FixedOffset>, String> {
+) -> Result<StatementDate, String> {
     let text = text.trim();
-    let parsed = match format {
-        StatementDateFormat::DateTimeUtc => utc(text).map(|instant| in_zone(instant, tz)),
+    let written = match format {
+        StatementDateFormat::DateTimeUtc => utc(text).map(Written::Utc),
         StatementDateFormat::IsoDate => NaiveDate::parse_from_str(text, "%Y-%m-%d")
             .ok()
-            .map(|date| noon(date, tz)),
-        StatementDateFormat::IsoDateTime => iso_date_time(text, tz),
+            .map(Written::Day),
+        StatementDateFormat::IsoDateTime => iso_date_time(text),
         StatementDateFormat::DayMonthYear => {
-            numeric_date(text).and_then(|(day, month, year)| date(year, month, day, tz))
+            numeric_date(text).and_then(|(day, month, year)| day_of(year, month, day))
         }
         StatementDateFormat::MonthDayYear => {
-            numeric_date(text).and_then(|(month, day, year)| date(year, month, day, tz))
+            numeric_date(text).and_then(|(month, day, year)| day_of(year, month, day))
         }
-        StatementDateFormat::Custom { pattern } => custom(text, pattern, tz),
+        StatementDateFormat::Custom { pattern } => custom(text, pattern),
     };
-    parsed.ok_or_else(|| {
-        if text.is_empty() {
-            "the date is empty".to_string()
-        } else {
-            format!("'{text}' is not a date in the chosen format")
-        }
-    })
+    let utc_stamp = |instant: DateTime<Utc>| instant.to_rfc3339_opts(SecondsFormat::Secs, true);
+    match written {
+        Some(Written::Utc(instant)) => Ok(StatementDate {
+            at: in_zone(instant, tz),
+            stamp: utc_stamp(instant),
+        }),
+        Some(Written::Offset(at)) => Ok(StatementDate {
+            at,
+            stamp: utc_stamp(at.with_timezone(&Utc)),
+        }),
+        Some(Written::Local(naive)) => Ok(StatementDate {
+            at: local(naive, tz),
+            stamp: naive.format("%Y-%m-%dT%H:%M:%S").to_string(),
+        }),
+        Some(Written::Day(date)) => Ok(StatementDate {
+            at: local(date.and_time(NOON), tz),
+            stamp: date.format("%Y-%m-%d").to_string(),
+        }),
+        None if text.is_empty() => Err("the date is empty".to_string()),
+        None => Err(format!("'{text}' is not a date in the chosen format")),
+    }
 }
 
 /// `2026-09-16 08:54:40 UTC`; the ` UTC` or `Z` suffix may be missing, an
@@ -80,37 +120,37 @@ fn utc(text: &str) -> Option<DateTime<Utc>> {
         .map(|naive| Utc.from_utc_datetime(&naive))
 }
 
-fn iso_date_time(text: &str, tz: Tz) -> Option<DateTime<FixedOffset>> {
+fn iso_date_time(text: &str) -> Option<Written> {
     if let Ok(parsed) = DateTime::parse_from_rfc3339(text) {
-        return Some(parsed);
+        return Some(Written::Offset(parsed));
     }
     if let Some(parsed) = OFFSET_FORMATS
         .iter()
         .find_map(|format| DateTime::parse_from_str(text, format).ok())
     {
-        return Some(parsed);
+        return Some(Written::Offset(parsed));
     }
     LOCAL_FORMATS
         .iter()
         .find_map(|format| NaiveDateTime::parse_from_str(text, format).ok())
-        .map(|naive| local(naive, tz))
+        .map(Written::Local)
 }
 
 /// A chrono pattern, tried with an offset, then as a local date-time, then
 /// as a date.
-fn custom(text: &str, pattern: &str, tz: Tz) -> Option<DateTime<FixedOffset>> {
+fn custom(text: &str, pattern: &str) -> Option<Written> {
     if pattern.trim().is_empty() {
         return None;
     }
     if let Ok(parsed) = DateTime::parse_from_str(text, pattern) {
-        return Some(parsed);
+        return Some(Written::Offset(parsed));
     }
     if let Ok(naive) = NaiveDateTime::parse_from_str(text, pattern) {
-        return Some(local(naive, tz));
+        return Some(Written::Local(naive));
     }
     NaiveDate::parse_from_str(text, pattern)
         .ok()
-        .map(|date| noon(date, tz))
+        .map(Written::Day)
 }
 
 /// Three numbers split by the same `/`, `.` or `-`, in file order. A
@@ -141,16 +181,12 @@ fn numeric_date(text: &str) -> Option<(u32, u32, i32)> {
     ))
 }
 
-fn date(year: i32, month: u32, day: u32, tz: Tz) -> Option<DateTime<FixedOffset>> {
-    NaiveDate::from_ymd_opt(year, month, day).map(|date| noon(date, tz))
+fn day_of(year: i32, month: u32, day: u32) -> Option<Written> {
+    NaiveDate::from_ymd_opt(year, month, day).map(Written::Day)
 }
 
 fn in_zone(instant: DateTime<Utc>, tz: Tz) -> DateTime<FixedOffset> {
     instant.with_timezone(&tz).fixed_offset()
-}
-
-fn noon(date: NaiveDate, tz: Tz) -> DateTime<FixedOffset> {
-    local(date.and_time(NOON), tz)
 }
 
 /// A wall-clock time in `tz`. The repeated hour of a DST change resolves to
@@ -178,7 +214,45 @@ mod tests {
     const ROME: Tz = chrono_tz::Europe::Rome;
 
     fn parse(text: &str, format: &StatementDateFormat) -> String {
-        parse_date(text, format, ROME).unwrap().to_rfc3339()
+        parse_date(text, format, ROME).unwrap().at.to_rfc3339()
+    }
+
+    fn stamp(text: &str, format: &StatementDateFormat, tz: Tz) -> String {
+        parse_date(text, format, tz).unwrap().stamp
+    }
+
+    #[test]
+    fn the_stamp_is_what_the_file_says_whatever_the_timezone() {
+        let new_york = chrono_tz::America::New_York;
+        for tz in [ROME, new_york] {
+            assert_eq!(
+                stamp(
+                    "2026-09-16 08:54:40 UTC",
+                    &StatementDateFormat::DateTimeUtc,
+                    tz
+                ),
+                "2026-09-16T08:54:40Z"
+            );
+            assert_eq!(
+                stamp(
+                    "2026-09-16T10:54:40.5+02:00",
+                    &StatementDateFormat::IsoDateTime,
+                    tz
+                ),
+                "2026-09-16T08:54:40Z"
+            );
+            assert_eq!(
+                stamp("2026-09-16T10:54:40", &StatementDateFormat::IsoDateTime, tz),
+                "2026-09-16T10:54:40"
+            );
+            assert_eq!(
+                stamp("16/09/2026", &StatementDateFormat::DayMonthYear, tz),
+                "2026-09-16"
+            );
+        }
+        let rome = parse_date("16/09/2026", &StatementDateFormat::DayMonthYear, ROME).unwrap();
+        let ny = parse_date("16/09/2026", &StatementDateFormat::DayMonthYear, new_york).unwrap();
+        assert_ne!(rome.at, ny.at);
     }
 
     #[test]

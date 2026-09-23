@@ -290,6 +290,34 @@ fn date_only_rows_sit_at_local_noon() {
 }
 
 #[test]
+fn a_bank_export_imported_from_another_timezone_is_already_imported() {
+    let mut fx = setup();
+    fx.core
+        .import_statement(
+            fx.vault,
+            "alice",
+            BANK,
+            &bank_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
+        .unwrap();
+    let abroad = StatementOptions {
+        timezone: "America/New_York".to_string(),
+        ..options(fx.wallet)
+    };
+    let preview = fx
+        .core
+        .preview_statement(fx.vault, BANK, &bank_mapping(), &abroad)
+        .unwrap();
+    assert_eq!((preview.new_rows, preview.already_imported), (0, 3));
+    assert_eq!(
+        row(&preview, 2).occurred_at.unwrap().to_rfc3339(),
+        "2026-09-16T12:00:00-04:00"
+    );
+}
+
+#[test]
 fn a_ragged_row_is_invalid_and_the_others_are_read() {
     let fx = setup();
     let text = card_csv(&[
