@@ -7071,8 +7071,23 @@ public enum StatementRowStatus: Equatable, Hashable, Codable {
     
     case new
     case alreadyImported
-    case skipped(reason: String
+    /**
+     * Not imported on purpose. `code` is stable and meant for the app to
+     * translate; `reason` is the English detail:
+     *
+     * - `skipped_by_rule`: a type rule or the default action says `Skip`;
+     * - `skipped_status`: the status is in `skip_statuses` (the reason
+     * names it);
+     * - `needs_wallet`: a transfer whose other wallet is not chosen yet;
+     * - `zero_amount`: the amount is zero;
+     * - `skipped_by_you`: a [`StatementRowOverride`] with `skip`.
+     */
+    case skipped(code: String, reason: String
     )
+    /**
+     * Cannot be imported as it is: `invalid_row`, `invalid_date`,
+     * `invalid_amount` or `currency_mismatch`, with an English message.
+     */
     case invalid(code: String, message: String
     )
 
@@ -7100,7 +7115,7 @@ public struct FfiConverterTypeStatementRowStatus: FfiConverterRustBuffer {
         
         case 2: return .alreadyImported
         
-        case 3: return .skipped(reason: try FfiConverterString.read(from: &buf)
+        case 3: return .skipped(code: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
         )
         
         case 4: return .invalid(code: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
@@ -7122,8 +7137,9 @@ public struct FfiConverterTypeStatementRowStatus: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case let .skipped(reason):
+        case let .skipped(code,reason):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(code, into: &buf)
             FfiConverterString.write(reason, into: &buf)
             
         
