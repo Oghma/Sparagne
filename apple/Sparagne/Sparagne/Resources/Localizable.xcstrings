@@ -185,6 +185,22 @@
         }
       }
     },
+    "A strftime pattern, for example:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A strftime pattern, for example:"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uno schema strftime, per esempio:"
+          }
+        }
+      }
+    },
     "A transfer needs two targets": {
       "localizations": {
         "en": {
@@ -245,6 +261,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aggiungi"
+          }
+        }
+      }
+    },
+    "Add Rule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Rule"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi regola"
           }
         }
       }
@@ -377,6 +409,22 @@
         }
       }
     },
+    "Already imported": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already imported"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Già importate"
+          }
+        }
+      }
+    },
     "Amount": {
       "localizations": {
         "en": {
@@ -393,6 +441,22 @@
         }
       }
     },
+    "Amount sign": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amount sign"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segno dell’importo"
+          }
+        }
+      }
+    },
     "An amount is required": {
       "localizations": {
         "en": {
@@ -405,6 +469,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "È richiesto un importo"
+          }
+        }
+      }
+    },
+    "Another currency": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another currency"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altra valuta"
           }
         }
       }
@@ -437,6 +517,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qualsiasi wallet attivo"
+          }
+        }
+      }
+    },
+    "Any other row": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Any other row"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni altra riga"
           }
         }
       }
@@ -537,6 +633,70 @@
         }
       }
     },
+    "As expense": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As expense"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Come uscita"
+          }
+        }
+      }
+    },
+    "As income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Come entrata"
+          }
+        }
+      }
+    },
+    "As refund": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As refund"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Come rimborso"
+          }
+        }
+      }
+    },
+    "Back": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indietro"
+          }
+        }
+      }
+    },
     "Back Up Database…": {
       "localizations": {
         "en": {
@@ -553,6 +713,22 @@
         }
       }
     },
+    "Backup saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backup saved"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backup salvato"
+          }
+        }
+      }
+    },
     "Balance": {
       "localizations": {
         "en": {
@@ -565,6 +741,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saldo"
+          }
+        }
+      }
+    },
+    "Bank category": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bank category"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Categoria della banca"
+          }
+        }
+      }
+    },
+    "By sign": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By sign"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secondo il segno"
           }
         }
       }
@@ -613,6 +821,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importo del limite"
+          }
+        }
+      }
+    },
+    "Card transactions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Card transactions"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transazioni della carta"
           }
         }
       }
@@ -713,6 +937,86 @@
         }
       }
     },
+    "Choose Another File…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Another File…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli un altro file…"
+          }
+        }
+      }
+    },
+    "Choose File…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose File…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli file…"
+          }
+        }
+      }
+    },
+    "Choose a CSV file exported by your bank or card. Nothing is imported before you have reviewed every row.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a CSV file exported by your bank or card. Nothing is imported before you have reviewed every row."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli un file CSV esportato dalla banca o dalla carta. Non si importa niente prima che tu abbia rivisto ogni riga."
+          }
+        }
+      }
+    },
+    "Choose the date and amount columns": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the date and amount columns"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli le colonne della data e dell’importo"
+          }
+        }
+      }
+    },
+    "Choose the wallet the statement belongs to": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the wallet the statement belongs to"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli il wallet a cui appartiene l’estratto conto"
+          }
+        }
+      }
+    },
     "Choose…": {
       "localizations": {
         "en": {
@@ -741,6 +1045,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chiudi"
+          }
+        }
+      }
+    },
+    "Columns": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Columns"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colonne"
           }
         }
       }
@@ -873,6 +1193,22 @@
         }
       }
     },
+    "Currency": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Currency"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valuta"
+          }
+        }
+      }
+    },
     "Currency mismatch": {
       "localizations": {
         "en": {
@@ -921,6 +1257,22 @@
         }
       }
     },
+    "Custom pattern": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom pattern"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formato personalizzato"
+          }
+        }
+      }
+    },
     "Daily": {
       "localizations": {
         "en": {
@@ -953,6 +1305,22 @@
         }
       }
     },
+    "Date format": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date format"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formato della data"
+          }
+        }
+      }
+    },
     "Day %lld": {
       "localizations": {
         "en": {
@@ -965,6 +1333,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Giorno %lld"
+          }
+        }
+      }
+    },
+    "Decimal comma": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decimal comma"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Virgola decimale"
           }
         }
       }
@@ -1077,6 +1461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Elimina…"
+          }
+        }
+      }
+    },
+    "Delimiter": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delimiter"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Separatore"
           }
         }
       }
@@ -1641,6 +2041,22 @@
         }
       }
     },
+    "Every row": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every row"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni riga"
+          }
+        }
+      }
+    },
     "Every year on %@ %lld": {
       "localizations": {
         "en": {
@@ -1769,6 +2185,22 @@
         }
       }
     },
+    "File": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File"
+          }
+        }
+      }
+    },
     "Find…": {
       "localizations": {
         "en": {
@@ -1797,6 +2229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Primo wallet"
+          }
+        }
+      }
+    },
+    "Format": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formato"
           }
         }
       }
@@ -1897,6 +2345,78 @@
         }
       }
     },
+    "Import": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importa"
+          }
+        }
+      }
+    },
+    "Import %lld rows": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Import %lld row"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Import %lld rows"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Importa %lld riga"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Importa %lld righe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Import Statement": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Statement"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importa estratto conto"
+          }
+        }
+      }
+    },
     "Import Statement…": {
       "localizations": {
         "en": {
@@ -1909,6 +2429,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importa estratto conto…"
+          }
+        }
+      }
+    },
+    "Import finished": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import finished"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importazione completata"
+          }
+        }
+      }
+    },
+    "Imported": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importate"
+          }
+        }
+      }
+    },
+    "Imported before": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported before"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Già importata"
           }
         }
       }
@@ -1957,6 +2525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limite sulle entrate"
+          }
+        }
+      }
+    },
+    "Invalid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non valide"
           }
         }
       }
@@ -2021,6 +2605,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome non valido"
+          }
+        }
+      }
+    },
+    "Invalid row": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid row"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riga non valida"
           }
         }
       }
@@ -2201,6 +2801,22 @@
         }
       }
     },
+    "Line %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Line %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riga %lld"
+          }
+        }
+      }
+    },
     "Log In": {
       "localizations": {
         "en": {
@@ -2233,6 +2849,22 @@
         }
       }
     },
+    "Malformed row": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Malformed row"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riga malformata"
+          }
+        }
+      }
+    },
     "Manage Recurring…": {
       "localizations": {
         "en": {
@@ -2261,6 +2893,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gestisci…"
+          }
+        }
+      }
+    },
+    "Mapping": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mapping"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mappatura"
           }
         }
       }
@@ -2425,6 +3073,22 @@
         }
       }
     },
+    "Needs the other wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs the other wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manca l’altro wallet"
+          }
+        }
+      }
+    },
     "Neg": {
       "localizations": {
         "en": {
@@ -2453,6 +3117,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limite sul saldo"
+          }
+        }
+      }
+    },
+    "New": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova"
           }
         }
       }
@@ -2617,6 +3297,22 @@
         }
       }
     },
+    "New: choose the columns below": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New: choose the columns below"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova: scegli le colonne qui sotto"
+          }
+        }
+      }
+    },
     "New…": {
       "localizations": {
         "en": {
@@ -2677,6 +3373,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessun movimento quest'anno"
+          }
+        }
+      }
+    },
+    "No column": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No column"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna colonna"
           }
         }
       }
@@ -2825,6 +3537,22 @@
         }
       }
     },
+    "Not imported": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not imported"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non importata"
+          }
+        }
+      }
+    },
     "Not signed in": {
       "localizations": {
         "en": {
@@ -2853,6 +3581,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nota"
+          }
+        }
+      }
+    },
+    "Nothing can be imported into it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing can be imported into it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non vi si può importare nulla."
           }
         }
       }
@@ -3001,6 +3745,54 @@
         }
       }
     },
+    "Original amount": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original amount"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importo originale"
+          }
+        }
+      }
+    },
+    "Original currency": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original currency"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valuta originale"
+          }
+        }
+      }
+    },
+    "Other Value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other Value"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altro valore"
+          }
+        }
+      }
+    },
     "Owner": {
       "localizations": {
         "en": {
@@ -3033,6 +3825,22 @@
         }
       }
     },
+    "Pattern": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pattern"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schema"
+          }
+        }
+      }
+    },
     "Person": {
       "localizations": {
         "en": {
@@ -3045,6 +3853,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Persona"
+          }
+        }
+      }
+    },
+    "Preset: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preset: %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preset: %@"
+          }
+        }
+      }
+    },
+    "Preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anteprima"
           }
         }
       }
@@ -3113,6 +3953,22 @@
         }
       }
     },
+    "Refused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rifiutate"
+          }
+        }
+      }
+    },
     "Refused changes": {
       "localizations": {
         "en": {
@@ -3141,6 +3997,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Registrati"
+          }
+        }
+      }
+    },
+    "Remembered from the last import": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remembered from the last import"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ricordata dall’ultimo import"
           }
         }
       }
@@ -3321,6 +4193,22 @@
         }
       }
     },
+    "Report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esito"
+          }
+        }
+      }
+    },
     "Restore": {
       "localizations": {
         "en": {
@@ -3433,6 +4321,54 @@
         }
       }
     },
+    "Rounded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rounded"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrotondate"
+          }
+        }
+      }
+    },
+    "Rounded rows had more decimals than the currency keeps.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rounded rows had more decimals than the currency keeps."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le righe arrotondate avevano più decimali di quanti la valuta ne preveda."
+          }
+        }
+      }
+    },
+    "Rows": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rows"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Righe"
+          }
+        }
+      }
+    },
     "Run recurring": {
       "localizations": {
         "en": {
@@ -3445,6 +4381,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esegui ricorrenza"
+          }
+        }
+      }
+    },
+    "Sample": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sample"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esempio"
           }
         }
       }
@@ -3625,6 +4577,22 @@
         }
       }
     },
+    "Show in Finder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show in Finder"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra nel Finder"
+          }
+        }
+      }
+    },
     "Signed in as": {
       "localizations": {
         "en": {
@@ -3717,6 +4685,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salta ricorrenza"
+          }
+        }
+      }
+    },
+    "Skip rows with status": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip rows with status"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salta le righe con stato"
+          }
+        }
+      }
+    },
+    "Skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saltate"
+          }
+        }
+      }
+    },
+    "Skipped by a rule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped by a rule"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saltata da una regola"
+          }
+        }
+      }
+    },
+    "Skipped by you": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped by you"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esclusa da te"
+          }
+        }
+      }
+    },
+    "Skipped for its status": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped for its status"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saltata per lo stato"
           }
         }
       }
@@ -3833,6 +4881,38 @@
         }
       }
     },
+    "Spending is negative": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spending is negative"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spese negative"
+          }
+        }
+      }
+    },
+    "Spending is positive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spending is positive"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spese positive"
+          }
+        }
+      }
+    },
     "Start date": {
       "localizations": {
         "en": {
@@ -3845,6 +4925,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Data di inizio"
+          }
+        }
+      }
+    },
+    "Statement": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statement"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estratto conto"
           }
         }
       }
@@ -3957,6 +5053,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le categorie di sistema non possono essere unite."
+          }
+        }
+      }
+    },
+    "Tab": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab"
+          }
+        }
+      }
+    },
+    "Target": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Target"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Destinazione"
           }
         }
       }
@@ -4089,6 +5217,22 @@
         }
       }
     },
+    "The bank’s category only picks one of yours with the same name or alias; it never creates one.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The bank’s category only picks one of yours with the same name or alias; it never creates one."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La categoria della banca sceglie solo una delle tue con lo stesso nome o alias; non ne crea mai una."
+          }
+        }
+      }
+    },
     "The current password is not correct.": {
       "localizations": {
         "en": {
@@ -4101,6 +5245,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La password attuale non è corretta."
+          }
+        }
+      }
+    },
+    "The first row of the file names no column": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first row of the file names no column"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La prima riga del file non nomina nessuna colonna"
           }
         }
       }
@@ -4249,6 +5409,22 @@
         }
       }
     },
+    "This file is not text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is not text"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo file non è testo"
+          }
+        }
+      }
+    },
     "This server is not accepting new accounts": {
       "localizations": {
         "en": {
@@ -4309,6 +5485,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quelle modifiche appartengono a un altro account"
+          }
+        }
+      }
+    },
+    "Time zone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time zone"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fuso orario"
+          }
+        }
+      }
+    },
+    "To import": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To import"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da importare"
+          }
+        }
+      }
+    },
+    "To restore it, quit Sparagne, delete sparagne.sqlite-wal and sparagne.sqlite-shm if they are there, and replace sparagne.sqlite with this backup, renamed sparagne.sqlite. The database is in:\n%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To restore it, quit Sparagne, delete sparagne.sqlite-wal and sparagne.sqlite-shm if they are there, and replace sparagne.sqlite with this backup, renamed sparagne.sqlite. The database is in:\n%@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per ripristinarlo, esci da Sparagne, cancella sparagne.sqlite-wal e sparagne.sqlite-shm se ci sono, e sostituisci sparagne.sqlite con questo backup, rinominato sparagne.sqlite. Il database è in:\n%@"
           }
         }
       }
@@ -4449,6 +5673,38 @@
         }
       }
     },
+    "Transfer in from…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer in from…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento da…"
+          }
+        }
+      }
+    },
+    "Transfer out to…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer out to…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento verso…"
+          }
+        }
+      }
+    },
     "Type": {
       "localizations": {
         "en": {
@@ -4477,6 +5733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scrivi qualcosa prima"
+          }
+        }
+      }
+    },
+    "Types": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Types"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipi"
           }
         }
       }
@@ -4557,6 +5829,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Illimitata"
+          }
+        }
+      }
+    },
+    "Unreadable amount": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unreadable amount"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importo illeggibile"
+          }
+        }
+      }
+    },
+    "Unreadable date": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unreadable date"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data illeggibile"
           }
         }
       }
@@ -4945,6 +6249,22 @@
         }
       }
     },
+    "Zero amount": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zero amount"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importo zero"
+          }
+        }
+      }
+    },
     "all": {
       "localizations": {
         "en": {
@@ -4989,6 +6309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "tetto…"
+          }
+        }
+      }
+    },
+    "category…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "category…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "categoria…"
           }
         }
       }
@@ -5329,6 +6665,22 @@
         }
       }
     },
+    "status…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "status…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "stato…"
+          }
+        }
+      }
+    },
     "transfer": {
       "localizations": {
         "en": {
@@ -5357,6 +6709,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "fino a"
+          }
+        }
+      }
+    },
+    "value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "value"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "valore"
           }
         }
       }
