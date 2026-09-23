@@ -5,11 +5,13 @@ import SparagneCore
 /// stable code of `StatementRowStatus` translated (the English reason stays
 /// as the detail), the kinds, the actions and the date formats.
 enum StatementText {
-    /// The status badge of a previewed row.
+    /// The status badge of a previewed row. The badges speak of one row and
+    /// the counts of many, so they never share a key: Italian agrees the
+    /// adjective in number ("importata", "importate").
     static func status(_ status: StatementRowStatus) -> String {
         switch status {
         case .new: String(localized: "New")
-        case .alreadyImported: String(localized: "Already imported")
+        case .alreadyImported: String(localized: "Imported before")
         case .skipped(let code, _): skipped(code)
         case .invalid(let code, _): invalid(code)
         }
@@ -31,7 +33,7 @@ enum StatementText {
         case "needs_wallet": String(localized: "Needs the other wallet")
         case "zero_amount": String(localized: "Zero amount")
         case "skipped_by_you": String(localized: "Skipped by you")
-        default: String(localized: "Skipped")
+        default: String(localized: "Not imported")
         }
     }
 

@@ -202,7 +202,7 @@ struct StatementCountsStrip: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            item(String(localized: "New"), counts.new, Ink.positive)
+            item(String(localized: "To import"), counts.new, Ink.positive)
             item(String(localized: "Already imported"), counts.alreadyImported, Ink.text)
             item(String(localized: "Skipped"), counts.skipped, Ink.warning)
             item(String(localized: "Invalid"), counts.invalid, Ink.negative)
