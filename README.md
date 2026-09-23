@@ -28,6 +28,27 @@ cargo test
 cargo clippy --workspace --all-targets
 ```
 
+### Statements, full export and backup
+
+File › Import Statement… (⇧⌘I) reads a bank or card CSV (UTF-8, falling back
+to Windows-1252/Latin-1). It recognises the built-in `card-transactions`
+preset from the header, or reopens the mapping last used for the same vault
+and header. Pick the columns, the date and amount format, what each row type
+becomes (expense, income, refund, transfer from or to another wallet, skip, by
+sign), the statuses to skip, and the target wallet and envelope. The preview
+shows what happens to every row; new rows can be left out or given a category,
+prefilled from the vault's history. Importing the same file again adds
+nothing.
+
+File › Export All Transactions… writes every transaction of the vault as CSV,
+voided rows and transfers included. File › Back Up Database… saves a
+consistent copy, `Sparagne <date>.sqlite`. To restore it, quit Sparagne,
+delete `sparagne.sqlite-wal` and `sparagne.sqlite-shm` if present, and replace
+`sparagne.sqlite` with the backup renamed. The database lives in
+`~/Library/Containers/it.oghma.sparagne/Data/Library/Application Support/Sparagne/`
+for a signed (sandboxed) build and in `~/Library/Application Support/Sparagne/`
+for an unsigned one; `lsof -p $(pgrep -x Sparagne) | grep sqlite` tells which.
+
 ### Import from v1
 
 A Sparagne v1 database is replayed into a v2 one as commands, so the history
