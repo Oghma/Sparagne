@@ -2,7 +2,7 @@
 
 use axum::{
     Json,
-    http::StatusCode,
+    http::{HeaderValue, StatusCode, header::RETRY_AFTER},
     response::{IntoResponse, Response},
 };
 use sparagne_core::{
@@ -22,6 +22,8 @@ pub struct ApiError {
     pub status: StatusCode,
     pub code: &'static str,
     pub message: String,
+    /// Seconds before trying again, sent as `Retry-After`.
+    pub retry_after: Option<u64>,
 }
 
 impl ApiError {
@@ -31,6 +33,7 @@ impl ApiError {
             status,
             code,
             message: message.into(),
+            retry_after: None,
         }
     }
 
@@ -82,6 +85,21 @@ impl ApiError {
         Self::new(StatusCode::CONFLICT, "already_exists", message)
     }
 
+    /// A rate limit tripped: `429` with `Retry-After`, never less than a
+    /// second.
+    #[must_use]
+    pub fn too_many_requests(retry_after: u64) -> Self {
+        let retry_after = retry_after.max(1);
+        Self {
+            retry_after: Some(retry_after),
+            ..Self::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                "too_many_requests",
+                format!("too many attempts, retry in {retry_after} seconds"),
+            )
+        }
+    }
+
     /// Logs the detail and answers with a generic message.
     #[must_use]
     pub fn internal(detail: impl AsRef<str>) -> Self {
@@ -99,6 +117,7 @@ impl From<DomainError> for ApiError {
         let status = match err {
             DomainError::NotFound(_) => StatusCode::NOT_FOUND,
             DomainError::AlreadyExists(_) => StatusCode::CONFLICT,
+            DomainError::Forbidden(_) => StatusCode::FORBIDDEN,
             DomainError::Storage(_) => return Self::internal(err.to_string()),
             _ => StatusCode::BAD_REQUEST,
         };
@@ -120,6 +139,60 @@ impl IntoResponse for ApiError {
                 message: self.message,
             },
         };
-        (self.status, Json(body)).into_response()
+        let mut response = (self.status, Json(body)).into_response();
+        if let Some(seconds) = self.retry_after {
+            response
+                .headers_mut()
+                .insert(RETRY_AFTER, HeaderValue::from(seconds));
+        }
+        response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_forbidden_domain_error_is_403() {
+        let err = ApiError::from(DomainError::Forbidden("only the owner".into()));
+        assert_eq!(err.status, StatusCode::FORBIDDEN);
+        assert_eq!(err.code, "forbidden");
+    }
+
+    #[test]
+    fn other_domain_errors_keep_their_status() {
+        let cases = [
+            (DomainError::NotFound("x".into()), StatusCode::NOT_FOUND),
+            (DomainError::AlreadyExists("x".into()), StatusCode::CONFLICT),
+            (
+                DomainError::InvalidName("x".into()),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                DomainError::Storage("x".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ];
+        for (err, status) in cases {
+            assert_eq!(ApiError::from(err).status, status);
+        }
+    }
+
+    #[test]
+    fn too_many_requests_sends_retry_after() {
+        let response = ApiError::too_many_requests(42).into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            response.headers().get(RETRY_AFTER),
+            Some(&HeaderValue::from(42_u64))
+        );
+        assert_eq!(ApiError::too_many_requests(0).retry_after, Some(1));
+    }
+
+    #[test]
+    fn other_errors_send_no_retry_after() {
+        let response = ApiError::forbidden().into_response();
+        assert!(response.headers().get(RETRY_AFTER).is_none());
     }
 }
