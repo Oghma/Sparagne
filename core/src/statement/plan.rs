@@ -72,7 +72,10 @@ pub(super) fn plan(
                     command = Some(planned_command);
                     StatementRowStatus::New
                 }
-                Outcome::Skip(reason) => StatementRowStatus::Skipped { reason },
+                Outcome::Skip(code, reason) => StatementRowStatus::Skipped {
+                    code: code.to_string(),
+                    reason,
+                },
                 Outcome::Invalid(code, message) => StatementRowStatus::Invalid {
                     code: code.to_string(),
                     message,
@@ -99,6 +102,7 @@ pub(super) fn apply_overrides(planned: &mut [Planned], overrides: &[StatementRow
         }
         if user.skip {
             item.row.status = StatementRowStatus::Skipped {
+                code: "skipped_by_you".to_string(),
                 reason: "skipped by you".to_string(),
             };
             item.command = None;
@@ -176,10 +180,11 @@ struct Cells<'r> {
     amount: std::result::Result<Amount, String>,
 }
 
-/// What a row becomes when its id is not in the log yet.
+/// What a row becomes when its id is not in the log yet. `Skip` and
+/// `Invalid` carry the code of [`StatementRowStatus`] and the English detail.
 enum Outcome {
     Import(Command),
-    Skip(String),
+    Skip(&'static str, String),
     Invalid(&'static str, String),
 }
 
@@ -431,7 +436,7 @@ impl<'a> Context<'a> {
         let outflow = self.outflow(&cells);
         let type_value = cells.type_value;
         if *action == StatementAction::Skip {
-            return Outcome::Skip(skip_reason(type_value));
+            return Outcome::Skip("skipped_by_rule", skip_reason(type_value));
         }
         if let Some(status) = cells.status
             && self
@@ -440,7 +445,7 @@ impl<'a> Context<'a> {
                 .iter()
                 .any(|skipped| same_text(skipped, status))
         {
-            return Outcome::Skip(format!("status {status} is skipped"));
+            return Outcome::Skip("skipped_status", format!("status {status} is skipped"));
         }
         if let Some(currency) = cells.currency
             && !currency.eq_ignore_ascii_case(self.currency.code())
@@ -462,7 +467,7 @@ impl<'a> Context<'a> {
             Err(message) => return Outcome::Invalid("invalid_amount", message),
         };
         if minor == 0 {
-            return Outcome::Skip("the amount is zero".to_string());
+            return Outcome::Skip("zero_amount", "the amount is zero".to_string());
         }
 
         let note = compose_note(&row.payee, row.original.as_deref());
@@ -492,14 +497,18 @@ impl<'a> Context<'a> {
             } => transfer(*from, self.wallet_id),
             StatementAction::TransferIn {
                 from_wallet_id: None,
-            } => Outcome::Skip("choose the wallet the money came from".to_string()),
+            } => Outcome::Skip(
+                "needs_wallet",
+                "choose the wallet the money came from".to_string(),
+            ),
             StatementAction::TransferOut {
                 to_wallet_id: Some(to),
             } => transfer(self.wallet_id, *to),
-            StatementAction::TransferOut { to_wallet_id: None } => {
-                Outcome::Skip("choose the wallet the money went to".to_string())
-            }
-            StatementAction::Skip => Outcome::Skip(skip_reason(type_value)),
+            StatementAction::TransferOut { to_wallet_id: None } => Outcome::Skip(
+                "needs_wallet",
+                "choose the wallet the money went to".to_string(),
+            ),
+            StatementAction::Skip => Outcome::Skip("skipped_by_rule", skip_reason(type_value)),
             StatementAction::BySign if outflow == Some(true) => {
                 Outcome::Import(Command::Expense(entry()))
             }
@@ -678,4 +687,51 @@ fn strip_mcc(value: &str) -> Option<&str> {
 
 fn same_text(left: &str, right: &str) -> bool {
     left.trim().to_lowercase() == right.trim().to_lowercase()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn planned(line: u32) -> Planned {
+        Planned {
+            row: StatementRow {
+                line,
+                command_id: Uuid::nil(),
+                status: StatementRowStatus::New,
+                kind: Some(TransactionKind::Expense),
+                occurred_at: None,
+                amount: 120,
+                rounded: false,
+                payee: "BAR".to_string(),
+                bank_category: None,
+                matched_category: None,
+                counter_wallet_id: None,
+                original: None,
+            },
+            command: None,
+        }
+    }
+
+    #[test]
+    fn an_override_skip_carries_its_own_code() {
+        let mut rows = [planned(2), planned(3)];
+        apply_overrides(
+            &mut rows,
+            &[StatementRowOverride {
+                line: 3,
+                category: None,
+                note: None,
+                skip: true,
+            }],
+        );
+        assert_eq!(rows[0].row.status, StatementRowStatus::New);
+        assert_eq!(
+            rows[1].row.status,
+            StatementRowStatus::Skipped {
+                code: "skipped_by_you".to_string(),
+                reason: "skipped by you".to_string(),
+            }
+        );
+    }
 }

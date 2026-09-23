@@ -111,7 +111,14 @@ fn row(preview: &StatementPreview, line: u32) -> &StatementRow {
 
 fn skip_reason(row: &StatementRow) -> &str {
     match &row.status {
-        StatementRowStatus::Skipped { reason } => reason,
+        StatementRowStatus::Skipped { reason, .. } => reason,
+        other => panic!("line {} is {other:?}, not skipped", row.line),
+    }
+}
+
+fn skip_code(row: &StatementRow) -> &str {
+    match &row.status {
+        StatementRowStatus::Skipped { code, .. } => code,
         other => panic!("line {} is {other:?}, not skipped", row.line),
     }
 }
@@ -251,6 +258,7 @@ fn a_semicolon_bank_export_with_decimal_commas_and_negative_spending() {
     assert_eq!(row(&preview, 4).payee, "BONIFICO A \"MARIO ROSSI\"");
     assert_eq!(row(&preview, 4).amount, 12_000);
     assert_eq!(skip_reason(row(&preview, 5)), "the amount is zero");
+    assert_eq!(skip_code(row(&preview, 5)), "zero_amount");
     assert_eq!(
         (preview.new_rows, preview.skipped, preview.invalid),
         (3, 1, 0)
@@ -413,6 +421,9 @@ fn pending_and_cancelled_rows_are_skipped_and_cleared_ones_are_new() {
     assert_eq!(skip_reason(row(&preview, 2)), "status PENDING is skipped");
     assert_eq!(skip_reason(row(&preview, 3)), "status CANCELLED is skipped");
     assert_eq!(skip_reason(row(&preview, 4)), "status declined is skipped");
+    for line in 2..=4 {
+        assert_eq!(skip_code(row(&preview, line)), "skipped_status");
+    }
     assert_eq!(row(&preview, 5).status, StatementRowStatus::New);
     assert_eq!(row(&preview, 5).kind, Some(TransactionKind::Expense));
     assert_eq!((preview.new_rows, preview.skipped), (1, 3));
@@ -463,6 +474,7 @@ fn a_topup_waits_for_its_source_wallet_then_becomes_a_transfer() {
         .unwrap();
     let topup = row(&preview, 8);
     assert_eq!(skip_reason(topup), "choose the wallet the money came from");
+    assert_eq!(skip_code(topup), "needs_wallet");
     assert_eq!(topup.kind, Some(TransactionKind::TransferWallet));
     assert_eq!(topup.counter_wallet_id, None);
 
@@ -522,6 +534,7 @@ fn liquid_deposits_are_skipped() {
         .unwrap();
     let deposit = row(&preview, 9);
     assert_eq!(skip_reason(deposit), "type liquid_deposit is skipped");
+    assert_eq!(skip_code(deposit), "skipped_by_rule");
     assert_eq!(deposit.kind, None);
 }
 

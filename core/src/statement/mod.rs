@@ -192,8 +192,25 @@ pub struct StatementRowOverride {
 pub enum StatementRowStatus {
     New,
     AlreadyImported,
-    Skipped { reason: String },
-    Invalid { code: String, message: String },
+    /// Not imported on purpose. `code` is stable and meant for the app to
+    /// translate; `reason` is the English detail:
+    ///
+    /// - `skipped_by_rule`: a type rule or the default action says `Skip`;
+    /// - `skipped_status`: the status is in `skip_statuses` (the reason
+    ///   names it);
+    /// - `needs_wallet`: a transfer whose other wallet is not chosen yet;
+    /// - `zero_amount`: the amount is zero;
+    /// - `skipped_by_you`: a [`StatementRowOverride`] with `skip`.
+    Skipped {
+        code: String,
+        reason: String,
+    },
+    /// Cannot be imported as it is: `invalid_row`, `invalid_date`,
+    /// `invalid_amount` or `currency_mismatch`, with an English message.
+    Invalid {
+        code: String,
+        message: String,
+    },
 }
 
 /// One row of a [`StatementPreview`].
