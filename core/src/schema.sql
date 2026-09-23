@@ -1,4 +1,4 @@
--- Sparagne v2 core schema, version 1.
+-- Sparagne v2 core schema, version 3 (`store.rs` migrates older files).
 -- UUIDs are 16-byte BLOBs (v7 for entities, v5-derived for entities created
 -- inside a command). Timestamps are unix seconds (UTC); `occurred_offset` keeps
 -- the user's UTC offset in seconds.
