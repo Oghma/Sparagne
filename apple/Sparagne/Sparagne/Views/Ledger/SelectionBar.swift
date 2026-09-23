@@ -52,14 +52,20 @@ struct SelectionBar: View {
     }
 }
 
-/// "Set Category…": one field, the category every selected row moves to. Empty
-/// is Uncategorized, which the placeholder says; a name nobody has used yet
-/// becomes a new category, as it does in a cell.
+/// "Set Category…": one field, the category every selected row moves to, with
+/// the same completion as a CATEGORY cell. Empty is Uncategorized, which the
+/// placeholder says; a name nobody has used yet becomes a new category, as it
+/// does in a cell.
+///
+/// ↩ and esc belong to the field: with the list open they pick and close it,
+/// otherwise they apply and dismiss. The buttons carry no shortcut of their
+/// own, which would take the keys before the field saw them.
 struct BulkCategoryPopover: View {
     @Bindable var store: AppStore
     @Binding var isPresented: Bool
 
     @State private var name = ""
+    @State private var completion = CategoryCompletionModel()
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -70,23 +76,26 @@ struct BulkCategoryPopover: View {
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
                 .focused($focused)
+                .completing(text: $name, owner: "bulk", isFocused: focused, store: store, completion: completion)
                 .padding(.horizontal, 8)
                 .frame(height: 24)
                 .background(Ink.bg)
                 .overlay(Rectangle().strokeBorder(Ink.line, lineWidth: 1))
                 .onSubmit(apply)
+            if completion.isOpen {
+                CategoryCompletionList(completion: completion)
+            }
             HStack {
                 Spacer()
                 Button(String(localized: "Cancel"), role: .cancel) { isPresented = false }
-                    .keyboardShortcut(.cancelAction)
                 Button(String(localized: "Set Category"), action: apply)
-                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(14)
-        .frame(width: 280)
+        .frame(width: CategoryCompletionList.width + 28)
         .background(Ink.panel)
         .onAppear { focused = true }
+        .task { await store.loadCategoryCompletion() }
     }
 
     private func apply() {

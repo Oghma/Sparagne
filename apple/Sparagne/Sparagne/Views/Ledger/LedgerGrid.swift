@@ -34,6 +34,9 @@ struct LedgerGrid: View {
     @FocusState private var gridFocused: Bool
     /// "Set Category…", from the selection bar or a selected row's menu.
     @State private var showsBulkCategory = false
+    /// The list under the CATEGORY cell being typed into: one for the whole
+    /// grid, drawn over it rather than inside a row (`completionList`).
+    @State private var completion = CategoryCompletionModel()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,6 +81,9 @@ struct LedgerGrid: View {
                     KeyHints()
                 }
             }
+        }
+        .overlayPreferenceValue(CategoryCompletionAnchor.self) { anchor in
+            completionList(at: anchor)
         }
         .background(Ink.bg)
         // The vault turned read-only under an open row (the owner changed the
@@ -130,6 +136,7 @@ struct LedgerGrid: View {
             showsWallet: store.showWalletColumn,
             draft: isEditing ? $draft : nil,
             focus: $focus,
+            completion: completion,
             onOpen: { field in open(row, at: field) },
             onCommit: { submit(row.id) },
             onCancel: cancelEditing
@@ -200,6 +207,7 @@ struct LedgerGrid: View {
             store: store,
             draft: $newRow,
             focus: $focus,
+            completion: completion,
             onCommit: commitNewRow,
             showsWallet: store.showWalletColumn
         )
@@ -207,6 +215,26 @@ struct LedgerGrid: View {
             .overlay(alignment: .leading) {
                 Rectangle().fill(Ink.accent).frame(width: 2)
             }
+    }
+
+    // MARK: - The completion list
+
+    /// The CATEGORY cell's list, hung from the bottom of its row, or from the
+    /// top when there is no room below (the empty line, a row at the bottom
+    /// of the window). Drawn over the whole grid, outside the scroll view, so
+    /// no later row covers it, the scroll view does not clip it, and a click
+    /// on it is not a click on the grid that would close the row.
+    @ViewBuilder
+    private func completionList(at anchor: Anchor<CGRect>?) -> some View {
+        if let anchor, completion.isOpen {
+            GeometryReader { proxy in
+                let cell = proxy[anchor]
+                let height = CategoryCompletionList.height(for: completion.candidates.count)
+                let fitsBelow = cell.maxY + height <= proxy.size.height
+                CategoryCompletionList(completion: completion)
+                    .offset(x: cell.minX - GridColumn.padding, y: fitsBelow ? cell.maxY : cell.minY - height)
+            }
+        }
     }
 
     // MARK: - Actions

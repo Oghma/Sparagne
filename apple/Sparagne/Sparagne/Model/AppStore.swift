@@ -174,6 +174,15 @@ final class AppStore {
     private(set) var windowCategories: [CategoryView] = []
     private(set) var categoryAliases: [AliasView] = []
 
+    // MARK: Category completion
+
+    /// The categories used in the last 90 days, most recent first: the tier
+    /// the CATEGORY cells' list puts first (`CategoryCompletion`).
+    private(set) var recentCategoryIds: [Uuid] = []
+    /// Whether a write may have changed what is recent since the last load
+    /// (`loadCategoryCompletion`).
+    @ObservationIgnored private var completionIsStale = true
+
     // MARK: Recurring
 
     /// Periods still waiting for a decision, refreshed on every `reload()`
@@ -399,6 +408,7 @@ final class AppStore {
         // the Recurring panel load on appear, not eagerly.
         windowCategories = []
         categoryAliases = []
+        recentCategoryIds = []
         recurringTemplates = []
         selection.clear()
         // A void still counting down is not undone by leaving: it carries its
@@ -429,6 +439,7 @@ final class AppStore {
         }
         loadGeneration += 1
         let generation = loadGeneration
+        completionIsStale = true
         let request = loadRequest(vaultId: vault.id)
         await guarded {
             let loaded = try await core.load(request)
@@ -721,6 +732,43 @@ final class AppStore {
             windowCategories = management.categories
             categoryAliases = management.aliases
         }
+    }
+
+    /// What the CATEGORY cells complete from besides `categories`: the aliases,
+    /// and the categories used in the last 90 days (`DISTILLATO_V1.md` §3.2).
+    /// Loaded when a cell takes the caret, and only again after a reload:
+    /// most reloads are never followed by typing a category.
+    ///
+    /// Silent on failure, like `similarCategories`: the list is a hint, and a
+    /// cell without it still takes any name.
+    func loadCategoryCompletion() async {
+        guard completionIsStale, let vault = currentVault else { return }
+        completionIsStale = false
+        let since = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
+        guard let usage = try? await core.recentUsage(vaultId: vault.id, since: CoreDate.utcString(since), limit: 50),
+              let aliases = try? await core.aliases(vaultId: vault.id),
+              currentVault?.id == vault.id
+        else {
+            completionIsStale = true
+            return
+        }
+        recentCategoryIds = usage.categories
+        categoryAliases = aliases
+    }
+
+    /// The category the vault's history files `note` under, learned by the
+    /// core from past notes over the last year (`suggest_categories`); `nil`
+    /// when it has nothing to say. Only ever offered, never applied unseen.
+    func suggestedCategory(forNote note: String) async -> String? {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let vault = currentVault, !trimmed.isEmpty else { return nil }
+        let since = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
+        let suggestions = try? await core.suggestCategories(
+            vaultId: vault.id,
+            notes: [trimmed],
+            since: CoreDate.utcString(since)
+        )
+        return suggestions?.first.flatMap { $0?.name }
     }
 
     /// Active categories near `name`, nearest first; empty on a blank name

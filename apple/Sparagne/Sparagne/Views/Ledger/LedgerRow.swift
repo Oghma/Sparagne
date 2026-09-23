@@ -97,6 +97,8 @@ struct LedgerRowView: View {
     /// Non-nil while this row is the one being edited.
     let draft: Binding<RowDraft>?
     @FocusState.Binding var focus: CellFocus?
+    /// The grid's one completion list, for the CATEGORY cell.
+    let completion: CategoryCompletionModel
     let onOpen: (RowField) -> Void
     let onCommit: () -> Void
     let onCancel: () -> Void
@@ -118,7 +120,17 @@ struct LedgerRowView: View {
             if let draft {
                 DayCell(day: draft.day, month: store.month, focus: $focus, key: key(.date))
                 textCell(.flow, width: GridColumn.flow)
-                textCell(.category, width: GridColumn.category)
+                GridCell(width: GridColumn.category) {
+                    CategoryCell(
+                        text: draft.category,
+                        placeholder: "",
+                        store: store,
+                        completion: completion,
+                        focus: $focus,
+                        key: key(.category),
+                        onSubmit: onCommit
+                    )
+                }
                 textCell(.note, width: nil)
                 if showsWallet { walletCell }
                 personCell
@@ -258,6 +270,8 @@ struct NewRowView: View {
     @Bindable var store: AppStore
     @Binding var draft: RowDraft
     @FocusState.Binding var focus: CellFocus?
+    /// The grid's one completion list, for the CATEGORY cell.
+    let completion: CategoryCompletionModel
     let onCommit: () -> Void
     /// With the column hidden the new row still lands on the sticky default
     /// wallet; showing it lets the wallet be picked per row (`UI.md` §3).
@@ -268,7 +282,17 @@ struct NewRowView: View {
             GridCell(width: GridColumn.ordinal, alignment: .trailing) { Text("").font(Face.row) }
             DayCell(day: $draft.day, month: store.month, focus: $focus, key: CellFocus(row: nil, field: .date))
             field($draft.flow, .flow, String(localized: "Envelope"), width: GridColumn.flow)
-            field($draft.category, .category, String(localized: "Category"), width: GridColumn.category)
+            GridCell(width: GridColumn.category) {
+                CategoryCell(
+                    text: $draft.category,
+                    placeholder: String(localized: "Category"),
+                    store: store,
+                    completion: completion,
+                    focus: $focus,
+                    key: CellFocus(row: nil, field: .category),
+                    onSubmit: onCommit
+                )
+            }
             field($draft.note, .note, String(localized: "description…"), width: nil)
             if showsWallet {
                 field(
