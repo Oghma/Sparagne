@@ -48,7 +48,7 @@ struct GridHeader: View {
     var body: some View {
         HStack(spacing: 0) {
             GridCell(width: GridColumn.ordinal, alignment: .trailing) {
-                heading("#").accessibilityLabel(String(localized: "Number"))
+                heading("#", spoken: String(localized: "Number"))
             }
             GridCell(width: GridColumn.date) { heading(RowField.date.label) }
             GridCell(width: GridColumn.flow) { heading(RowField.flow.label) }
@@ -65,10 +65,10 @@ struct GridHeader: View {
     }
 
     /// A column heading, announced as one: VoiceOver reads the upper-case
-    /// label as the word it is, not letter by letter.
-    private func heading(_ text: String) -> some View {
+    /// label as the word it is, not letter by letter, and `#` as a word.
+    private func heading(_ text: String, spoken: String? = nil) -> some View {
         SectionLabel(text: text)
-            .accessibilityLabel(text)
+            .accessibilityLabel(spoken ?? text)
             .accessibilityAddTraits(.isHeader)
     }
 }

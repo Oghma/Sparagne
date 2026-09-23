@@ -135,6 +135,12 @@ struct SegmentedStrip<Option: Hashable>: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // One button per segment for VoiceOver, saying which one is
+                // on: the fill that says it on screen is not read.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(label(option))
+                .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+                .accessibilityAction { selection = option }
             }
         }
         .overlay(Rectangle().strokeBorder(Ink.line, lineWidth: 1))
