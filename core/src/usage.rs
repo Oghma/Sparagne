@@ -40,10 +40,12 @@ pub struct PeriodTotals {
 }
 
 impl Core {
-    /// Every vault in the database, ordered by name.
+    /// Every vault in the database, ordered by name. Names are labels and may
+    /// repeat: namesakes follow the order they were created in.
     pub fn vaults(&self) -> Result<Vec<VaultView>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, currency, owner_user_id, created_at FROM vaults ORDER BY lower(name)",
+            "SELECT id, name, currency, owner_user_id, created_at FROM vaults
+             ORDER BY lower(name), created_at, id",
         )?;
         let rows = stmt
             .query_map([], |r| {

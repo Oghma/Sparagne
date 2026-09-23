@@ -274,6 +274,33 @@ fn other_vaults_survive_a_deletion() {
 }
 
 // ---------------------------------------------------------------------------
+// Listing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn vaults_lists_duplicate_names_in_stable_order() {
+    let mut core = Core::open_in_memory().unwrap();
+    let casa = create_vault(&mut core, "alice", "Casa");
+    let banca = create_vault(&mut core, "alice", "Banca");
+    let twin = create_vault(&mut core, "alice", "casa");
+    let bobs = create_vault(&mut core, "bob", "CASA");
+    let listed = |core: &Core| {
+        core.vaults()
+            .unwrap()
+            .into_iter()
+            .map(|v| v.id)
+            .collect::<Vec<_>>()
+    };
+
+    // By name whatever the case, then in the order the vaults were created.
+    assert_eq!(listed(&core), vec![banca, casa, twin, bobs]);
+    // A rename moves the vault among its new namesakes by its creation, not
+    // by when it was renamed.
+    run(&mut core, banca, rename("CASA"));
+    assert_eq!(listed(&core), vec![casa, banca, twin, bobs]);
+}
+
+// ---------------------------------------------------------------------------
 // Replay
 // ---------------------------------------------------------------------------
 
