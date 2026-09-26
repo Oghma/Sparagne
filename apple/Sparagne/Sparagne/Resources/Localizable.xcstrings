@@ -5617,6 +5617,22 @@
         }
       }
     },
+    "The opening balance of a new wallet goes to Unallocated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The opening balance of a new wallet goes to Unallocated"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il saldo di apertura di un wallet nuovo va in Non allocato"
+          }
+        }
+      }
+    },
     "The owner stopped sharing these vaults with you, or they were removed from the server. What was synced before stays here, read-only, until you remove it.": {
       "localizations": {
         "en": {

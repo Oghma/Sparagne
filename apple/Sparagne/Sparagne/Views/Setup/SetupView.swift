@@ -1,14 +1,20 @@
 import SwiftUI
 import SparagneCore
 
-/// The SETUP view (`docs/v2/UI.md` §2.3): the vault's envelopes and its
-/// categories as two editable tables side by side, drawn like the ledger.
+/// The SETUP view (`docs/v2/UI.md` §2.3): the vault's wallets above its
+/// envelopes on the left, its categories on the right, all editable tables
+/// drawn like the ledger.
 struct SetupView: View {
     let store: AppStore
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            EnvelopeTable(store: store)
+            VStack(spacing: 10) {
+                // As tall as its rows: the envelopes' scroll view gets the rest.
+                WalletTable(store: store)
+                    .fixedSize(horizontal: false, vertical: true)
+                EnvelopeTable(store: store)
+            }
             CategoryTable(store: store)
         }
         .padding(10)
