@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Keeps apple/Sparagne/Sparagne/Resources/Localizable.xcstrings in step with
-the code, since xcodebuild does not sync it (docs/v2/ROADMAP.md §3).
+the code, since xcodebuild does not sync it.
 
     scripts/catalog.py check              keys used in code but missing, or without Italian
     scripts/catalog.py merge FRAGMENT...  adds each fragment's keys, then deletes the fragment

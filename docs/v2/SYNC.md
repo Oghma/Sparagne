@@ -105,22 +105,21 @@ l'ultimo passo del job `apple`.
 ## 7. Stato e punti rimandati
 
 Fase 3 completata il 2026-09-10. Protocollo ripulito dai casi speciali il
-2026-09-12 (pacchetto P2 di `ROADMAP.md`): `POST /vaults` non esiste più, il
-push accetta `CreateVault` come primo comando di un vault ignoto, l'outbox sale
-a lotti, il `SyncReport` porta `server_last_seq` e `has_more`, e il core espone
-`vault(id)` e `last_seqs()` per `GET /vaults`. Swift non legge più dentro
-nessun corpo JSON. Copertura: `server/` 42 test (4 end-to-end a due client),
-sync lato client nel core 16 test più il finto server, app 102 test su un finto
-server fatto da un secondo `CoreHandle`, di cui i 2 end-to-end di §6 girano
-solo contro un server vero.
+2026-09-12: `POST /vaults` non esiste più, il push accetta `CreateVault` come
+primo comando di un vault ignoto, l'outbox sale a lotti, il `SyncReport` porta
+`server_last_seq` e `has_more`, e il core espone `vault(id)` e `last_seqs()`
+per `GET /vaults`. Swift non legge più dentro nessun corpo JSON. Copertura:
+`server/` 42 test (4 end-to-end a due client), sync lato client nel core 16
+test più il finto server, app 102 test su un finto server fatto da un secondo
+`CoreHandle`, di cui i 2 end-to-end di §6 girano solo contro un server vero.
 
 Il percorso HTTP vero fra app e server (`URLSession` verso axum) è esercitato
-dal 2026-09-12 (pacchetto P1): `URLSessionTransport`, `ServerAPI` e le rotte
-del server si sono trovati d'accordo al primo colpo, nessuna divergenza da
-correggere. App Transport Security non ha richiesto nulla, perché il loopback
-è esente: `project.yml` resta senza blocco `info`. Verso un server non locale
-in chiaro ATS bloccherebbe invece la chiamata, ed è la ragione per cui
-`DEPLOY.md` mette il TLS fra i requisiti.
+dal 2026-09-12: `URLSessionTransport`, `ServerAPI` e le rotte del server si
+sono trovati d'accordo al primo colpo, nessuna divergenza da correggere. App
+Transport Security non ha richiesto nulla, perché il loopback è esente:
+`project.yml` resta senza blocco `info`. Verso un server non locale in chiaro
+ATS bloccherebbe invece la chiamata, ed è la ragione per cui `DEPLOY.md` mette
+il TLS fra i requisiti.
 
 Rinomina e cancellazione del vault aggiunte il 2026-09-15 (§3, §4 punto 6):
 `RenameVault` e `DeleteVault` nel core, `DomainError::Forbidden`,
@@ -129,17 +128,16 @@ proiezione; `core/tests/vault.rs` (10), 4 test in `core/tests/sync.rs`,
 `server/tests/vault_lifecycle.rs` (5), `VaultLifecycleTests.swift` (6) e 4
 test in `SyncEngineTests.swift`.
 
-Nomi dei vault come etichette il 2026-09-23 (pacchetto R1 della Fase 6, §3
-"Nomi dei vault"): niente più controllo di unicità, schema v3 con migrazioni
-in catena, omonimi in ordine di creazione; 4 test di regressione in
-`core/tests/sync.rs`, 2 in `server/tests/vault_lifecycle.rs`, 4 di migrazione
-in `core/src/store.rs`.
+Nomi dei vault come etichette il 2026-09-23 (§3 "Nomi dei vault"): niente più
+controllo di unicità, schema v3 con migrazioni in catena, omonimi in ordine di
+creazione; 4 test di regressione in `core/tests/sync.rs`, 2 in
+`server/tests/vault_lifecycle.rs`, 4 di migrazione in `core/src/store.rs`.
 
-Account e permessi nell'app il 2026-09-23 (pacchetti R2 e A1 della Fase 6,
-§3 e §5): cambio password, uscita da un vault, limiti di login con `429`,
-ruoli letti a inizio giro, viewer in sola lettura, `reject_outbox` dopo un
-`403`, `forget_vault` per i vault cancellati e per quelli da cui si esce,
-nomi dei comandi tradotti nei rifiuti, Keychain aggiornato sul posto.
+Account e permessi nell'app il 2026-09-23 (§3 e §5): cambio password, uscita da
+un vault, limiti di login con `429`, ruoli letti a inizio giro, viewer in sola
+lettura, `reject_outbox` dopo un `403`, `forget_vault` per i vault cancellati e
+per quelli da cui si esce, nomi dei comandi tradotti nei rifiuti, Keychain
+aggiornato sul posto.
 
 Ancora da fare quando servirà:
 
