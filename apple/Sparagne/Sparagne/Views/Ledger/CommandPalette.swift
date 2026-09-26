@@ -252,8 +252,8 @@ extension CommandPaletteModel {
         actions.append(contentsOf: [
             PaletteAction(
                 id: "open.setup",
-                title: String(localized: "Envelopes & Categories\u{2026}"),
-                keywords: ["setup", "flow", "buste", "categorie"]
+                title: String(localized: "Wallets, Envelopes & Categories\u{2026}"),
+                keywords: ["setup", "wallet", "flow", "buste", "categorie"]
             ) {
                 NotificationCenter.default.post(name: .openSetup, object: nil)
             },

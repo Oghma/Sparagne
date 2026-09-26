@@ -126,7 +126,7 @@ struct SparagneApp: App {
                 }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
 
-                Button(String(localized: "Envelopes & Categories\u{2026}")) {
+                Button(String(localized: "Wallets, Envelopes & Categories\u{2026}")) {
                     NotificationCenter.default.post(name: .openSetup, object: nil)
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])

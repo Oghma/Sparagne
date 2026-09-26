@@ -1977,22 +1977,6 @@
         }
       }
     },
-    "Envelopes & Categories…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Envelopes & Categories…"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Buste e categorie…"
-          }
-        }
-      }
-    },
     "Every %@": {
       "localizations": {
         "en": {
@@ -6429,6 +6413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wallet"
+          }
+        }
+      }
+    },
+    "Wallets, Envelopes & Categories…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallets, Envelopes & Categories…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet, buste e categorie…"
           }
         }
       }
