@@ -140,41 +140,57 @@ Definizioni (dell'utente, 2026-09-11), per il mese `m`:
 
 > Aggiunta il 2026-09-12 su richiesta: "sezioni per aggiungere le categorie
 > e gli envelope", l'equivalente del foglio "Categorie e flow" dell'Excel.
+> Il 2026-09-23 si aggiunge la tabella dei wallet, che prima si vedevano solo
+> nella gestione ⌘⇧M.
 
-Due tabelle affiancate nello stile del mastro (stesse celle, stesse
-intestazioni, stessa riga vuota in fondo per aggiungere: ⇥ tra i campi, ↩
-salva, esc annulla), buste a sinistra e categorie a destra. Nessun mese, quindi
+Tre tabelle nello stile del mastro (stesse celle, stesse intestazioni, stessa
+riga vuota in fondo per aggiungere: ⇥ tra i campi, ↩ salva, esc annulla):
+a sinistra i wallet sopra le buste, a destra le categorie. La tabella dei
+wallet è alta quanto le sue righe (sono pochi, niente scroll) e le buste sotto
+prendono il resto; le due hanno la stessa larghezza, così i SALDO sono in
+colonna. Nessun mese, quindi
 niente intestazione mese. Le archiviate stanno in fondo, in `dim`, con
 "Ripristina" nel menu contestuale. Gli errori del core passano dallo stesso
 alert del mastro.
 
 Ultima colonna di entrambe le tabelle: nessuna intestazione, vuota a riposo,
 mostra l'icona `archivebox`/`tray.and.arrow.up` solo sulla riga sotto il
-puntatore — un click manda lo stesso `ArchiveFlow`/`RestoreFlow` o
-`ArchiveCategory`/`RestoreCategory` del menu contestuale, senza aprirlo.
-Assente sulle righe di sistema (Non allocato, Opening, Uncategorized) e
-durante l'editing della riga (`Views/Setup/EnvelopeTable.swift`,
+puntatore — un click manda lo stesso `ArchiveWallet`/`RestoreWallet`,
+`ArchiveFlow`/`RestoreFlow` o `ArchiveCategory`/`RestoreCategory` del menu
+contestuale, senza aprirlo. Assente sulle righe di sistema (Non allocato,
+Opening, Uncategorized) e durante l'editing della riga
+(`Views/Setup/WalletTable.swift`, `Views/Setup/EnvelopeTable.swift`,
 `Views/Setup/CategoryTable.swift`).
 
 ```
-┌ BUSTE ─────────────────────────────────────────────┐ ┌ CATEGORIE ───────────────────────────┐
-│ NOME        TIPO      TETTO     NEG   SALDO      ⎘ │ │ NOME         ALIAS                  ⎘ │
-│ Non alloc.  —         —         —     1.250,00     │ │ Casa         mutuo, affitto      [📥] │
-│ Cash        nessuno   —         no    3.480,20 [📥] │ │ Spesa        coop, esselunga         │
-│ Casa        netto     150.000   no   31.935,00     │ │ Opening      (sistema)                │
-│ Emergenza   entrate   30.000    no   29.931,00     │ │ nome…        simili: Casa             │
-│ nome…       nessuno ▾ tetto…    no   apertura…     │ └────────────────────────────────────────┘
+┌ WALLET ────────────────────────────────────────────┐ ┌ CATEGORIE ───────────────────────────┐
+│ NOME                                   SALDO     ⎘ │ │ NOME         ALIAS                  ⎘ │
+│ Conto                               4.120,50 [📥] │ │ Casa         mutuo, affitto      [📥] │
+│ Carta                                 -310,00     │ │ Spesa        coop, esselunga         │
+│ nome…                                   0,00      │ │ Opening      (sistema)                │
+│ Il saldo di apertura di un wallet nuovo va in     │ │ nome…        simili: Casa             │
+│ Non allocato                                      │ └────────────────────────────────────────┘
+└──────────────────────────────────────────────────┘
+┌ BUSTE ─────────────────────────────────────────────┐
+│ NOME        TIPO      TETTO     NEG   SALDO      ⎘ │
+│ Non alloc.  —         —         —     1.250,00     │
+│ Cash        nessuno   —         no    3.480,20 [📥] │
+│ Casa        netto     150.000   no   31.935,00     │
+│ Emergenza   entrate   30.000    no   29.931,00     │
+│ nome…       nessuno ▾ tetto…    no   apertura…     │
 └──────────────────────────────────────────────────┘
 ```
 
 | Tabella | Colonne | In posto | Menu contestuale |
 |---|---|---|---|
+| WALLET | NOME, SALDO | nome → `RenameWallet`; SALDO segue le transazioni e si scrive solo nella riga vuota, dove è il saldo di apertura (negativo per una carta che parte in rosso), che va in Non allocato → `CreateWallet` | archivia (il core vuole saldo zero) / ripristina |
 | BUSTE | NOME, TIPO (nessuno / netto / entrate), TETTO, NEG (sì/no, un click), SALDO | nome, tipo, tetto, negativo → `UpdateFlow` con i soli campi cambiati; nella riga vuota SALDO è l'allocazione iniziale da Non allocato → `CreateFlow` | archivia / ripristina |
 | CATEGORIE | NOME, ALIAS (lista separata da virgole) | nome → `RenameCategory`; alias → la differenza fra la lista di prima e quella nuova, un `AddAlias`/`RemoveAlias` per voce; nella riga vuota, sotto il nome, "simili: …" suggerisce e non blocca (`similar_categories`) | unisci in… (anteprima con `preview_merge`), archivia / ripristina |
 
 Non allocato e le categorie di sistema (`Opening`, `Uncategorized`) si vedono
-ma non si modificano. ⌘⇧C porta qui; la finestra Categorie separata non c'è
-più. Wallet, vault, ricorrenze e condivisione restano nella gestione ⌘⇧M.
+ma non si modificano. ⌘⇧C ("Wallet, buste e categorie…") porta qui; la
+finestra Categorie separata non c'è più. Vault, ricorrenze e condivisione
+restano nella gestione ⌘⇧M, che elenca ancora anche wallet e buste.
 
 ### 2.4 Il vault
 
@@ -349,7 +365,7 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | menu File | Esporta tutte le transazioni…, Backup del database… (§2.6) |
 | `⌘⇧M` | gestione: vault, wallet, buste, ricorrenze, condivisione |
 | menu Vault | Nuovo vault…, Rinomina vault…, Elimina vault…, Esci dal vault… (§2.4), senza scorciatoia: rari, e due distruttivi |
-| `⌘⇧C` | vista SETUP: buste e categorie |
+| `⌘⇧C` | vista SETUP: wallet, buste e categorie |
 | `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
 | `⌘⇧W` | mostra / nasconde la colonna WALLET (menu Vista) |
 
