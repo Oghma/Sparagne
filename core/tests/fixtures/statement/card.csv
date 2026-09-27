@@ -1,0 +1,10 @@
+timestamp,type,description,status,amount,currency,card,card holder name,original amount,original currency,cashback earned,cashback currency,category,spending mode
+2026-09-18 19:42:07 UTC,card_spend,TRATTORIA DA MARIO       ,PENDING,42.50,EUR,4821,ALEX RIVERA,42.50,EUR,0.43,EUR,5812 - Restaurants,standard
+2026-09-17 08:15:33 UTC,card_spend,"BOOKS, MAPS & MORE       ",CLEARED,18.90,EUR,4821,ALEX RIVERA,18.90,EUR,0.19,EUR,Book Stores,standard
+2026-09-16 12:03:10 UTC,card_spend,SKYLINE AIR              ,CLEARED,11.37,EUR,4821,ALEX RIVERA,12.34,USD,0.11,EUR,4511 - Airlines,standard
+2026-09-15 07:48:55 UTC,card_spend,FORNO BIANCO             ,CLEARED,3.20,EUR,4821,ALEX RIVERA,3.20,EUR,0.03,EUR,5462 - Bakeries,standard
+2026-09-14 16:20:00 UTC,card_refund,SHOEBOX ONLINE           ,CLEARED,-24.99,EUR,4821,ALEX RIVERA,-24.99,EUR,,,5661 - Shoe Stores,standard
+2026-09-13 21:05:12 UTC,card_spend,CINEMA ODEON             ,CANCELLED,9.00,EUR,4821,ALEX RIVERA,9.00,EUR,0.09,EUR,7832 - Motion Picture Theaters,standard
+2026-09-12 10:00:00 UTC,topup,Top-up from EURC,,126.017164395008,EUR,,,126.017164395008,EURC,,,,
+2026-09-11 09:30:00 UTC,liquid_deposit,Liquid deposit,,50.123456789012,USD,,,50.123456789012,USDC,,,,
+2026-09-10 18:22:41 UTC,card_spend,GREEN GROCER             ,CLEARED,14.75,EUR,4821,ALEX RIVERA,14.75,EUR,0.15,EUR,"5411 - Grocery Stores, Supermarkets",standard

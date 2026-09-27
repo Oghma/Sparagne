@@ -1,0 +1,88 @@
+name: Sparagne
+options:
+  bundleIdPrefix: it.oghma
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_UPCOMING_FEATURE_DISABLE_OUTWARD_ACTOR_ISOLATION: YES
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # No Apple Developer team is configured for this scaffold; ad-hoc sign so
+    # entitlements (app sandbox) still apply to local `xcodebuild build` runs.
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: YES
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  Sparagne:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Sparagne
+        excludes:
+          - "Resources/**"
+    resources:
+      - path: Sparagne/Resources
+    settings:
+      base:
+        PRODUCT_NAME: Sparagne
+        PRODUCT_BUNDLE_IDENTIFIER: it.oghma.sparagne
+        CODE_SIGN_ENTITLEMENTS: Sparagne/Sparagne.entitlements
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.finance
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    dependencies:
+      - package: SparagneCore
+        product: SparagneCore
+
+  SparagneTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: SparagneTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: it.oghma.sparagne.tests
+    dependencies:
+      - target: Sparagne
+      - package: SparagneCore
+        product: SparagneCore
+
+packages:
+  SparagneCore:
+    path: ../SparagneCore
+
+schemes:
+  Sparagne:
+    build:
+      targets:
+        Sparagne: all
+        SparagneTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - SparagneTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

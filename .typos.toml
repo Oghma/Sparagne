@@ -1,3 +1,7 @@
+[files]
+# Italian design documents.
+extend-exclude = ["docs/v2/**"]
+
 [default]
 extend-ignore-re = [
   # Project name / brand.
@@ -6,23 +10,3 @@ extend-ignore-re = [
 
 [default.extend-words]
 sparagne = "sparagne"
-ratatui = "ratatui"
-
-# Italian UI strings.
-applicato = "applicato"
-categorie = "categorie"
-comando = "comando"
-contanti = "contanti"
-dedicato = "dedicato"
-determinare = "determinare"
-eliminato = "eliminato"
-impossibile = "impossibile"
-limite = "limite"
-possibile = "possibile"
-preferenze = "preferenze"
-successivo = "successivo"
-trasport = "trasport"
-Vai = "Vai"
-visibile = "visibile"
-Visuale = "Visuale"
-visuale = "visuale"

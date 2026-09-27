@@ -1,0 +1,221 @@
+import SwiftUI
+import SparagneCore
+
+/// The line above the grid: month stepper, PERSONA, direction, search and the
+/// row count (`docs/v2/UI.md` §2.1).
+struct LedgerHeader: View {
+    @Bindable var store: AppStore
+    @FocusState.Binding var searchFocused: Bool
+    /// The summary is not a list, so it gets the month stepper alone: no
+    /// person, no direction, no search, no row count.
+    var compact = false
+
+    var body: some View {
+        HStack(spacing: 14) {
+            monthStepper
+
+            Text(String(localized: "month=\(store.month.month)"))
+                .font(Face.footnote)
+                .foregroundStyle(Ink.dim)
+                // The month's number again, in the mockup's shorthand: the
+                // title beside it already says it in words.
+                .accessibilityHidden(true)
+
+            // No person filter in the summary: there the people are columns,
+            // so filtering would blank all of them but one
+            // (`docs/v2/UI.md` §2.2).
+            if !compact, store.authors.count > 1 {
+                SegmentedStrip(
+                    options: [nil] + store.authors.map(Optional.some),
+                    selection: $store.person,
+                    label: { $0?.uppercased() ?? String(localized: "All").uppercased() }
+                )
+            }
+
+            if !compact {
+                SegmentedStrip(
+                    options: LedgerDirection.allCases,
+                    selection: $store.direction,
+                    label: { $0.label.uppercased() }
+                )
+
+                search
+            }
+
+            Spacer(minLength: 8)
+
+            if !compact {
+                Text(CountText.rows(store.rows.count))
+                    .font(Face.footnote)
+                    .foregroundStyle(Ink.dim)
+            }
+        }
+        .padding(.horizontal, Metrics.gutter)
+        .frame(height: 40)
+        .background(Ink.bg)
+    }
+
+    private var monthStepper: some View {
+        HStack(spacing: 8) {
+            stepButton("chevron.left", months: -1)
+            Text(store.month.title())
+                .font(Face.mono(13, .semibold))
+                .foregroundStyle(Ink.text)
+                .tracking(0.5)
+                .frame(minWidth: 150, alignment: .leading)
+                // The page's title for VoiceOver: the month everything below
+                // is about.
+                .accessibilityAddTraits(.isHeader)
+            stepButton("chevron.right", months: 1)
+        }
+    }
+
+    private func stepButton(_ symbol: String, months: Int) -> some View {
+        Button {
+            store.month = store.month.adding(months: months)
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Ink.dim)
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // The chevron alone reads as "go back" / "forward"; the menu items'
+        // names say what they step.
+        .accessibilityLabel(months < 0 ? String(localized: "Previous Month") : String(localized: "Next Month"))
+    }
+
+    private var search: some View {
+        HStack(spacing: 6) {
+            Text("/")
+                .font(Face.row)
+                .foregroundStyle(Ink.dim)
+            TextField(String(localized: "search description…"), text: $store.searchText)
+                .textFieldStyle(.plain)
+                .font(Face.row)
+                .foregroundStyle(Ink.text)
+                .focused($searchFocused)
+                // esc clears and drops focus; ⌘F (the menu) focuses it again.
+                .onExitCommand {
+                    store.searchText = ""
+                    searchFocused = false
+                }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 24)
+        .frame(maxWidth: 320)
+        .background(Ink.panel)
+        .overlay(Rectangle().strokeBorder(Ink.line, lineWidth: 1))
+    }
+}
+
+/// The flat segmented control of the mockups: the active segment is filled
+/// with the accent, the others are bare. `Picker(.segmented)` cannot be made
+/// to look like this, so it is drawn by hand.
+struct SegmentedStrip<Option: Hashable>: View {
+    let options: [Option]
+    @Binding var selection: Option
+    let label: (Option) -> String
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(options, id: \.self) { option in
+                let active = option == selection
+                Button {
+                    selection = option
+                } label: {
+                    Text(label(option))
+                        .font(Face.label)
+                        .tracking(0.6)
+                        .foregroundStyle(active ? Ink.bg : Ink.dim)
+                        .padding(.horizontal, 10)
+                        .frame(height: 22)
+                        .background(active ? Ink.accent : Ink.panel)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                // One button per segment for VoiceOver, saying which one is
+                // on: the fill that says it on screen is not read.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(label(option))
+                .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+                .accessibilityAction { selection = option }
+            }
+        }
+        .overlay(Rectangle().strokeBorder(Ink.line, lineWidth: 1))
+    }
+}
+
+/// The bottom line of the window: the filters in force, the total of what is
+/// on screen, and where the database is.
+struct LedgerStatusBar: View {
+    let store: AppStore
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Circle()
+                .fill(store.pendingUndo == nil ? Ink.positive : Ink.accent)
+                .frame(width: 6, height: 6)
+
+            Text(filters)
+                .font(Face.footnote)
+                .foregroundStyle(Ink.dim)
+
+            if store.tab == .ledger {
+                HStack(spacing: 6) {
+                    Text("\u{03A3}").font(Face.footnote).foregroundStyle(Ink.dim)
+                    Text(LedgerMoney.amount(visibleTotal))
+                        .font(Face.footnote)
+                        .foregroundStyle(Ink.text)
+                }
+                Text(CountText.rows(store.rows.count))
+                    .font(Face.footnote)
+                    .foregroundStyle(Ink.dim)
+            }
+
+            Spacer()
+
+            if let savedAt = store.savedAt {
+                Text(String(localized: "saved \(LedgerDate.clock(savedAt))"))
+                    .font(Face.footnote)
+                    .foregroundStyle(Ink.dim)
+            }
+            Text(store.currentVault?.name ?? "—")
+                .font(Face.footnote)
+                .foregroundStyle(Ink.dim)
+        }
+        .padding(.horizontal, Metrics.gutter)
+        .frame(height: 28)
+        .background(Ink.bg)
+    }
+
+    /// `mese=8 flow=uscite persona=tutti`, the mockup's own shorthand, as one
+    /// sentence of the catalog so a translation can name and order the keys.
+    /// The segment values are the localized labels, lowercased, not the
+    /// enums' raw values, so the line reads in the user's language too.
+    private var filters: String {
+        let month = store.month.month
+        let flow = store.direction.label.lowercased()
+        let person = store.person ?? String(localized: "all")
+        guard store.tab != .ledger else {
+            return String(localized: "month=\(month) flow=\(flow) person=\(person)")
+        }
+        let view = store.tab.label.lowercased()
+        return String(localized: "view=\(view) month=\(month) flow=\(flow) person=\(person)")
+    }
+
+    /// The sum of the rows on screen, which is what the user is looking at:
+    /// not the month's total, which the panel already shows. A refund sits in
+    /// the USCITE list and has to come off it, or the sum reads higher than
+    /// what was actually spent.
+    private var visibleTotal: Int64 {
+        store.rows.reduce(0) { total, row in
+            switch row.kind {
+            case .refund: total - row.absoluteAmount
+            case .income, .expense: total + row.absoluteAmount
+            case .transferWallet, .transferFlow: total
+            }
+        }
+    }
+}

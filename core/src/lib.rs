@@ -1,0 +1,71 @@
+//! Sparagne v2 core.
+//!
+//! Domain rules, a per-vault command log and a SQLite projection of it.
+//! Every write goes through [`Core::execute`] as a [`Command`]; state tables
+//! are derived and can be rebuilt with [`replay`].
+//!
+//! Design rules:
+//! - amounts are `i64` minor units, one currency per vault;
+//! - the command id is the idempotency key, and every entity created by a
+//!   command gets an id derived from the command id (equal to it, or a UUID v5
+//!   of it), so replaying the log is deterministic;
+//! - domain checks (flow caps, non-negativity) run on create and update, never
+//!   on void.
+
+mod analytics;
+mod category;
+mod command;
+mod currency;
+mod engine;
+mod error;
+mod ffi;
+mod flow;
+pub mod import_v1;
+mod maintenance;
+mod money;
+mod query;
+pub mod quick_add;
+pub mod recurring;
+pub mod statement;
+mod store;
+mod suggest;
+pub mod sync;
+mod usage;
+
+pub use analytics::{BucketPersonTotals, CategoryTotals, FlowPersonTotals, TopExpense};
+pub use category::{normalize_category_display, normalize_category_key, validate_category_name};
+pub use command::{
+    Command, CommandEnvelope, CommandRecord, Entry, Receipt, RecurringPatch, TransactionKind,
+    TransactionPatch,
+};
+pub use currency::Currency;
+pub use engine::entities::{AliasView, MergeConflict, MergeConflictKind, MergePreview};
+pub use error::DomainError;
+pub use ffi::{
+    CoreHandle, create_vault_envelope, decode_statement_mapping, detect_statement,
+    encode_statement_mapping, format_money, new_envelope, parse_money, parse_quick_add,
+    resolve_date_spec, statement_presets,
+};
+pub use flow::{Flow, FlowMode, UNALLOCATED_NAME};
+pub use money::Money;
+pub use query::{
+    CategoryView, FlowView, LegTarget, LegView, Page, TransactionFilter, TransactionView,
+    VaultSnapshot, WalletView, replay,
+};
+pub use recurring::{
+    Frequency, PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule,
+};
+pub use statement::{
+    AmountSign, StatementAction, StatementDateFormat, StatementDetection, StatementMapping,
+    StatementOptions, StatementPreset, StatementPreview, StatementRejection, StatementReport,
+    StatementRow, StatementRowOverride, StatementRowStatus, StatementTypeRule,
+};
+pub use store::Core;
+pub use suggest::CategorySuggestion;
+pub use sync::{RejectedCommand, SyncReport, SyncState};
+pub use usage::{PeriodTotals, RecentUsage, VaultView};
+
+/// Result alias used across the crate.
+pub type Result<T> = std::result::Result<T, DomainError>;
+
+uniffi::setup_scaffolding!();

@@ -1,4 +1,11 @@
 /target
-migration/target/
 /data
-config/telegram_bot_state.json
+/apple/**/DerivedData
+/apple/**/.build
+/apple/**/*.xcodeproj
+/apple/**/*.xcframework
+/apple/**/.swiftpm
+
+# Personal exports (bank and card statements) never belong in the repo
+/*.csv
+/*.xlsx

@@ -2,15 +2,22 @@ name: Docker
 
 on:
   push:
-    branches: [master]
-    paths: &docker_paths
-      - Dockerfile
-      - Cargo.toml
-      - Cargo.lock
-      - crates/**
-      - config/**
+    branches: [master, v2]
+    paths:
+      - "server/**"
+      - "core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".dockerignore"
+      - ".github/workflows/docker.yml"
   pull_request:
-    paths: *docker_paths
+    paths:
+      - "server/**"
+      - "core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".dockerignore"
+      - ".github/workflows/docker.yml"
 
 concurrency:
   group: docker-${{ github.ref }}
@@ -26,5 +33,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build image
-        run: docker build --pull --tag sparagne:ci .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
