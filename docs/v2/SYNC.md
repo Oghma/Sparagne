@@ -1,4 +1,4 @@
-# Sparagne v2 — Sincronizzazione (Fase 3)
+# Sparagne v2 — Sincronizzazione
 
 > Bozza 1, 2026-09-10. Server in Rust con axum (deciso il 2026-09-10; Elixir scartato per ora). Riferimenti: `ARCH.md` §3, §5, §6. I tipi di wire stanno in `core/src/sync.rs` e sono gli stessi per client e server.
 
@@ -104,7 +104,7 @@ l'ultimo passo del job `apple`.
 
 ## 7. Stato e punti rimandati
 
-Fase 3 completata il 2026-09-10. Protocollo ripulito dai casi speciali il
+Sync completato il 2026-09-10. Protocollo ripulito dai casi speciali il
 2026-09-12: `POST /vaults` non esiste più, il push accetta `CreateVault` come
 primo comando di un vault ignoto, l'outbox sale a lotti, il `SyncReport` porta
 `server_last_seq` e `has_more`, e il core espone `vault(id)` e `last_seqs()`

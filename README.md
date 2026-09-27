@@ -17,8 +17,8 @@ Version 1 (Rust engine, HTTP server, Telegram bot, terminal UI) lives at tag
 | Path | What |
 |---|---|
 | `core/` | Rust crate: domain, commands, log, projection, queries, quick-add |
-| `apple/` | Swift package generated from the core and the macOS app (phase 2) |
-| `server/` | sync server (phase 3) |
+| `apple/` | Swift package generated from the core and the macOS app |
+| `server/` | sync server |
 | `docs/v2/` | architecture, v1 distillation, inventories |
 
 ## Build

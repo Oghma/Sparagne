@@ -1,4 +1,4 @@
-# Sparagne v2 — UI (Fase 4)
+# Sparagne v2 — UI
 
 > Deciso il 2026-09-10 sui mockup forniti (libro mastro + riepilogo). Sostituisce
 > la griglia di dashboard di `DISTILLATO_V1.md` §3.4, che è stata scartata: le
@@ -46,7 +46,7 @@ e ANNO dal nuovo riepilogo.)
 - I trasferimenti non stanno né in USCITE né in ENTRATE: spostano soldi senza
   guadagnarli o spenderli. Il menu Mastro li aggiunge alla lista corrente
   (⌘⇧T), come fa con le annullate (⌘⇧V).
-- **Selezione** (Fase 6, 2026-09-23): ⌘-click aggiunge o toglie una riga,
+- **Selezione** (2026-09-23): ⌘-click aggiunge o toglie una riga,
   ⇧-click prende l'intervallo, ⌘A tutte le righe visibili quando nessuna cella
   è in modifica; le righe scelte hanno la tinta dell'accento e un click semplice
   apre ancora la riga in modifica. Con due o più righe compare la barra della
@@ -216,7 +216,7 @@ il primo) o torna all'onboarding se era l'ultimo; una riga in attesa sul toast
 di annullamento muore col vault senza mandare nulla. Ai membri la
 cancellazione arriva col sync (`SYNC.md` §4 punto 6).
 
-**Fase 6 (2026-09-23).** Una quarta azione, **Esci dal vault…**, per un membro
+**Dal 2026-09-23.** Una quarta azione, **Esci dal vault…**, per un membro
 che non è l'owner (menu Vault, palette, gestione): `LeaveVaultSheet` spiega
 che le modifiche in attesa partono prima e che la copia locale sparisce, poi
 il sync toglie la membership e `forget_vault` il vault (`SYNC.md` §5). Rinomina
@@ -237,7 +237,7 @@ prima di uscire.
 
 ### 2.5 Ricorrenze dovute
 
-> Aggiunto il 2026-09-23 (Fase 6): dal ridisegno del 2026-09-10 il banner
+> Aggiunto il 2026-09-23: dal ridisegno del 2026-09-10 il banner
 > "N ricorrenze da confermare" apriva un pannello che non sapeva eseguirle.
 
 "Rivedi" sul banner apre `DueRecurringSheet`: ogni modello con i suoi periodi
@@ -250,7 +250,7 @@ cadenza sono intere e al plurale giusto ("Ogni 2 settimane il lunedì").
 
 ### 2.6 Estratti conto, export completo e backup
 
-> Aggiunto il 2026-09-23 (Fase 6).
+> Aggiunto il 2026-09-23.
 
 - **File › Importa estratto conto…** (⇧⌘I, anche dalla palette) apre un foglio
   a quattro passi: FILE, COLONNE, ANTEPRIMA, REPORT. Il file è letto in UTF-8
@@ -387,21 +387,16 @@ menu ne mandano la notifica, così le due strade condividono una sola
 implementazione; il modello (`Views/Ledger/CommandPalette.swift`) è puro e
 testato senza finestra.
 
-## 7. Tappe
+## 7. Cronologia
 
-| # | Cosa | Esito |
-|---|---|---|
-| A | `core::analytics` + filtro per autore e ordine crescente | query testate |
-| B | palette, shell della finestra, switcher, barra di stato | finestra nuova, contenuto vecchio |
-| C | vista MASTRO: intestazione mese, griglia, editing in cella | il primo mockup |
-| D | pannello riepilogo a destra | il primo mockup completo |
-| E | viste RIEPILOGO e ANNO | il secondo mockup |
-| F | gestione (vault, wallet, buste, categorie, ricorrenze, sync) in menu e finestre; rimozione delle view vecchie | fine fase 4 |
-
-Stato al 2026-09-10: A-F fatte in due commit (`core/src/analytics.rs` con 10
-test; la finestra nuova con 47 test dell'app). `SidebarView` è diventata
-`ManagementSheet`, `DetailView` e `InspectorView` sono state cancellate
-insieme a `Period` e ad `AppTheme` (la palette li sostituisce).
+Finestra nuova del 2026-09-10, in due commit: `core::analytics` con il
+filtro per autore e l'ordine crescente (`core/src/analytics.rs`, 10 test),
+poi palette, shell della finestra, switcher, barra di stato, vista MASTRO
+con editing in cella, pannello riepilogo, viste RIEPILOGO e ANNO, gestione
+in menu e finestre al posto delle view vecchie (47 test dell'app).
+`SidebarView` è diventata `ManagementSheet`, `DetailView` e `InspectorView`
+sono state cancellate insieme a `Period` e ad `AppTheme` (la palette li
+sostituisce).
 
 Riepilogo ridisegnato il 2026-09-11 (§2.2): `core::analytics::year_breakdown`,
 `Model/YearModel.swift` (`YearSummary.build`, aritmetica pura testata),
@@ -417,7 +412,7 @@ hanno una linea di base per i mesi in rosso; il toast di annullamento e il
 bottone di sync usano la palette; le finestre secondarie forzano il tema
 scuro.
 
-Chiusura del 2026-09-12 (P3, 124 test dell'app): i due buchi lasciati aperti
+Chiusura del 2026-09-12 (124 test dell'app): i due buchi lasciati aperti
 il 2026-09-11 sono chiusi. Il campo ⌘K è anche una palette comandi quando la
 riga comincia con `>` (§6), e il wallet ha la sua colonna opzionale, spenta
 di default, accesa da ⌘⇧W e ricordata in `UserDefaults` (§3). Codice nuovo:

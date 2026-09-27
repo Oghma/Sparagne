@@ -1,6 +1,6 @@
 # Sparagne v2 — Architettura
 
-> Bozza 1, 2026-09-09. Decisioni prese: branch `v2` in questo repo; UI Swift/SwiftUI solo macOS; server di sync in una fase successiva. Il dominio è quello del `DISTILLATO_V1.md` §1, salvo dove indicato.
+> Bozza 1, 2026-09-09. Decisioni prese: branch `v2` in questo repo; UI Swift/SwiftUI solo macOS; server di sync dopo l'app locale. Il dominio è quello del `DISTILLATO_V1.md` §1, salvo dove indicato.
 
 ## 1. Idea in una frase
 
@@ -10,7 +10,7 @@ L'app lavora su un SQLite locale attraverso un core Rust in-process; ogni scritt
 
 ```
 ┌──────────────────────────────┐        ┌──────────────────────────────┐
-│  App macOS (Swift/SwiftUI)   │        │  sync (Fase 3)               │
+│  App macOS (Swift/SwiftUI)   │        │  sync                        │
 │  tabella, quick-add, dash    │        │  auth · membership           │
 │         │ UniFFI (in-process)│  HTTP  │  log per vault · push/pull   │
 │  ┌──────▼───────┐            │◄──────►│  ┌──────────────┐            │
@@ -27,16 +27,16 @@ L'app lavora su un SQLite locale attraverso un core Rust in-process; ogni scritt
 - Contiene: tipi di dominio, `Money`, normalizzazione categorie, `apply_leg_change`, i comandi, la proiezione (tabelle di stato), le query per la UI, il parser quick-add, le aggregazioni del mastro (`analytics.rs`).
 - Esposto a Swift con **UniFFI** (Swift Package generato). Swift non fa mai SQL e non conosce le regole: chiama `execute(cmd)` e `query_*`.
 - Stato (2026-09-09): i derive UniFFI stanno sui tipi di dominio reali (nessun DTO specchio); `Uuid`, date e date-time viaggiano come stringhe; `CoreHandle` serializza l'accesso al `Core` con un mutex; gli id degli envelope si generano solo in Rust. `apple/build-core.sh` produce `apple/SparagneCore` (XCFramework non versionato più `SparagneCore.swift` generato e versionato). Il crate `core` ammette `unsafe_code` solo per lo scaffolding generato. `DomainError` attraversa l'FFI come *flat error* (un case per variante con il messaggio) e `ErrorCodes.swift` riporta il `code()` stabile a mano; `QuickAddError` invece è strutturato, così `ambiguous_name` porta i candidati e la UI può proporli. `resolve_quick_add` restituisce il comando insieme agli id risolti (`ResolvedQuickAdd`), `TransactionView` espone wallet, busta, sorgente e destinazione oltre alle leg, e gli `Update*` portano un record `*Patch` con default.
-- Lo stesso crate gira nel server (Fase 3) come dipendenza di axum o come NIF Rustler dentro Elixir. Il linguaggio del server è una decisione rimandata (§9).
+- Lo stesso crate gira nel server come dipendenza di axum o come NIF Rustler dentro Elixir. Il linguaggio del server è una decisione rimandata (§9).
 
 ### 2.2 App macOS
 
-- SwiftUI, `@Observable` store che incapsula il core. Dalla Fase 4 la tabella è una griglia SwiftUI scritta a mano (`Views/Ledger/`), non `Table`: l'editing in cella e il look dei mockup lo richiedono. NSTableView è stata valutata e scartata (`UI.md`).
+- SwiftUI, `@Observable` store che incapsula il core. Dal 2026-09-10 la tabella è una griglia SwiftUI scritta a mano (`Views/Ledger/`), non `Table`: l'editing in cella e il look dei mockup lo richiedono. NSTableView è stata valutata e scartata (`UI.md`).
 - L'app non ha stato di dominio proprio: ogni vista è una query sul core, ogni azione è un comando.
-- Dalla Fase 5 il core sta su un attore dedicato (`Core/CoreActor.swift`), l'unico posto che tocca `CoreHandle`. `AppStore` resta `@MainActor @Observable` ma ogni punto di ingresso che tocca il core è `async`: attende l'attore e scrive lo stato pubblicato sul main actor al ritorno. `SyncEngine` usa lo stesso attore, così il core non è mai chiamato da due domini di isolamento. Il caricamento del mese è una sola visita (`CoreActor.load`), non una dozzina di salti, e una `reload` più vecchia non sovrascrive un mese più recente. I filtri (`month`, `direction`, `person`, i due interruttori) restano proprietà legabili dalle view: il `didSet` non può attendere, quindi accoda il caricamento e `AppStore.settle()` aspetta che la coda si svuoti.
+- Dal 2026-09-12 il core sta su un attore dedicato (`Core/CoreActor.swift`), l'unico posto che tocca `CoreHandle`. `AppStore` resta `@MainActor @Observable` ma ogni punto di ingresso che tocca il core è `async`: attende l'attore e scrive lo stato pubblicato sul main actor al ritorno. `SyncEngine` usa lo stesso attore, così il core non è mai chiamato da due domini di isolamento. Il caricamento del mese è una sola visita (`CoreActor.load`), non una dozzina di salti, e una `reload` più vecchia non sovrascrive un mese più recente. I filtri (`month`, `direction`, `person`, i due interruttori) restano proprietà legabili dalle view: il `didSet` non può attendere, quindi accoda il caricamento e `AppStore.settle()` aspetta che la coda si svuoti.
 - Timezone di sistema; i comandi portano `occurred_at` come RFC3339 con offset.
 
-### 2.3 `sync` (Fase 3)
+### 2.3 `sync`
 
 - Autentica (argon2 + token opachi), mantiene il log di ogni vault, espone `push(vault, comandi)` e `pull(vault, since_seq)`.
 - Applica ogni comando ricevuto con `core` prima di accettarlo: è l'unico punto dove le regole vengono fatte rispettare tra utenti diversi.
@@ -51,7 +51,7 @@ Il log è la verità; le tabelle di stato (wallet, buste, transazioni, leg, sald
 commands
   id              BLOB(16) PK   -- UUID v7 generato dal client; è anche la idempotency key
   vault_id        BLOB(16)
-  seq             INTEGER       -- ordine totale nel vault; assegnato dal server (Fase 1: locale)
+  seq             INTEGER       -- ordine totale nel vault; assegnato dal server (locale prima del sync)
   author_user_id  TEXT
   kind            TEXT          -- vedi §4
   payload         TEXT (JSON)
@@ -62,7 +62,7 @@ commands
 UNIQUE(vault_id, seq)
 ```
 
-Stato locale aggiuntivo (Fase 3): `outbox` (comandi emessi e non ancora confermati dal server) e `vault_sync(vault_id, last_server_seq)`.
+Stato locale aggiuntivo per il sync: `outbox` (comandi emessi e non ancora confermati dal server) e `vault_sync(vault_id, last_server_seq)`.
 
 **Applicazione.** `execute(cmd)`: valida contro la proiezione corrente, scrive comando e proiezione nella stessa transazione SQLite. Se una regola fallisce, non viene scritto nulla e il chiamante riceve un `DomainError` con codice stabile (stessa famiglia di codici della v1).
 
@@ -97,7 +97,7 @@ Regole di dominio: invarianti 1-11 del distillato §1.3. Cambiamenti rispetto al
 - I saldi di apertura restano transazioni reali, ma con una categoria di sistema `opening`.
 - Split di una spesa su più buste: ammesso dal modello a leg, rimandato alla UI.
 
-## 5. Sincronizzazione e conflitti (Fase 3)
+## 5. Sincronizzazione e conflitti
 
 1. Il client applica il comando in locale (ottimistico) e lo mette in `outbox`.
 2. `push` al server. Il server assegna `seq`, applica con `core`, salva `applied` o `rejected`.
@@ -132,21 +132,18 @@ Multi-tenant lato server: account utente, vault di proprietà di un account, mem
 | Errori | enum con codici stabili, esposto a Swift tal quale via UniFFI |
 | Test | i 44 test dell'engine v1 riportati come acceptance test del core, più test di replay (stato = fold del log) |
 
-## 8. Fasi
+## 8. Cronologia
 
-| Fase | Cosa | Esito | Stato |
-|---|---|---|---|
-| 0 | SPEC v2 breve (dominio v1 + §3-§4 di questo documento) | documento | assorbita dal distillato §1 e da questo documento |
-| 1 | crate `core`: modello, comandi, log, proiezione, query, test | libreria testata, nessuna UI | fatta il 2026-09-09 (154 test) |
-| 2 | UniFFI, Swift Package, app con tabella transazioni e quick-add, solo locale | app usabile da un utente | fatta il 2026-09-09: `apple/SparagneCore` + `apple/Sparagne` (tabella, quick-add, void con undo, inspector, gestione wallet/buste/categorie, ricorrenze) |
-| 3 | server `sync`, auth, membership, outbox e pull | secondo utente | fatta il 2026-09-10: `server/` in axum, sync nel core, account e condivisione nell'app; dettagli e rimandi in `SYNC.md` §7 |
-| 4 | libro mastro: griglia editabile, riepilogo e anno, aggregati nel core | l'app dei mockup | fatta il 2026-09-10: `core/src/analytics.rs` e la finestra nuova; design in `UI.md` |
-| 5 | messa in esercizio: app contro il server vero, protocollo senza casi speciali, import v1, deploy, palette ⌘K e colonna wallet, core fuori dal main actor | Sparagne usata tutti i giorni | fatta fra il 2026-09-12 e il 2026-09-13 |
-| 6 | correzioni dell'audit del 2026-09-23 e funzioni mancanti: nomi dei vault come etichette, account e limiti sul server, permessi e sola lettura nell'app, ricorrenze dovute, import di estratti conto, export completo e backup, selezione e operazioni in blocco, annulla/ripeti, completamento e suggerimento della categoria, icona e VoiceOver | Sparagne senza i buchi trovati dall'audit | fatta il 2026-09-23 |
+| Data | Cosa |
+|---|---|
+| 2026-09-09 | crate `core`: modello, comandi, log, proiezione, query, 154 test |
+| 2026-09-09 | UniFFI e app solo locale: `apple/SparagneCore` + `apple/Sparagne` (tabella, quick-add, void con undo, inspector, gestione wallet/buste/categorie, ricorrenze) |
+| 2026-09-10 | server `sync` in axum (auth, membership, outbox e pull), sync nel core, account e condivisione nell'app; dettagli e rimandi in `SYNC.md` §7 |
+| 2026-09-10 | libro mastro: griglia editabile, riepilogo e anno, aggregati nel core (`core/src/analytics.rs`); design in `UI.md` |
+| 2026-09-12 e 13 | uso quotidiano: app contro il server vero, protocollo senza casi speciali, import v1, deploy, palette ⌘K e colonna wallet, core fuori dal main actor |
+| 2026-09-23 | correzioni dell'audit dello stesso giorno e funzioni mancanti: nomi dei vault come etichette, account e limiti sul server, permessi e sola lettura nell'app, ricorrenze dovute, import di estratti conto, export completo e backup, selezione e operazioni in blocco, annulla/ripeti, completamento e suggerimento della categoria, icona e VoiceOver |
 
-Rimandato dalle fasi 1-2: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`. Il core fuori dal main actor è stato fatto il 2026-09-12 (§2.2).
-
-La Fase 1 già scrive il log con i campi di §3, anche se `seq` è locale e `outbox` non esiste.
+Rimandato: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`. Il core fuori dal main actor è stato fatto il 2026-09-12 (§2.2).
 
 La griglia di dashboard di `DISTILLATO_V1.md` §3.4 è stata scartata il
 2026-09-10 a favore dei mockup: il riepilogo sta **accanto** alle righe, il
@@ -156,5 +153,5 @@ restano e vivono in `core::analytics`. Design e tastiera in `UI.md`.
 ## 9. Punti aperti
 
 - **Linguaggio del server: axum** (deciso il 2026-09-10; Elixir/Phoenix con NIF Rustler scartato per ora). Protocollo, API e algoritmo del client in `SYNC.md`.
-- **Layout del repo.** Workspace Cargo alla radice con `core/` (e `server/` in Fase 3); `apple/` contiene il Swift Package generato e il progetto Xcode (Fase 2). I crate v1 sono stati rimossi il 2026-09-09, chiuso il port dei test dell'engine; restano al tag `v0.93.0`.
+- **Layout del repo.** Workspace Cargo alla radice con `core/` e `server/`; `apple/` contiene il Swift Package generato e il progetto Xcode. I crate v1 sono stati rimossi il 2026-09-09, chiuso il port dei test dell'engine; restano al tag `v0.93.0`.
 - **Erlang/BEAM come core in-process: scartato.** La BEAM non si linka in un processo Swift; servirebbe un runtime da 40-50 MB lanciato come processo figlio e un IPC scritto a mano al posto di UniFFI.

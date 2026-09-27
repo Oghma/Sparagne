@@ -1,7 +1,7 @@
 # Sparagne v2 — Messa in produzione del server
 
-> 2026-09-12, aggiornato il 2026-09-23 (Fase 6: limiti ai tentativi, account
-> da riga di comando). Riferimenti: `SYNC.md` §2-3 (storage e API),
+> 2026-09-12, aggiornato il 2026-09-23 (limiti ai tentativi, account da
+> riga di comando). Riferimenti: `SYNC.md` §2-3 (storage e API),
 > `server/Dockerfile`, `server/deploy/`.
 
 ## 1. TLS obbligatorio
@@ -193,11 +193,12 @@ migrazione manuale serve per usarlo, a parte l'avvio normale (§6).
    backup precedente.
 3. Fare comunque un backup (§4) prima di un aggiornamento importante.
 
-### 6.1 Rilascio della Fase 6
+### 6.1 Passaggio allo schema v3
 
-La Fase 6 porta lo schema del core alla versione 3 (i nomi dei vault
-diventano etichette e possono ripetersi) e aggiunge all'API il cambio
-password, l'uscita da un vault e i `429` dei limiti (§2.1). L'ordine conta:
+La versione del 2026-09-23 porta lo schema del core alla versione 3 (i nomi
+dei vault diventano etichette e possono ripetersi) e aggiunge all'API il
+cambio password, l'uscita da un vault e i `429` dei limiti (§2.1). L'ordine
+conta:
 
 1. **Backup del server** (§4): `docker compose exec sparagne backup.sh`, o
    `backup.sh` su bare metal.
