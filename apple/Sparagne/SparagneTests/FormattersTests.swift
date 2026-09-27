@@ -60,10 +60,9 @@ struct DateFormattingTests {
 // MARK: - Counts and schedules
 
 /// A string catalog built on disk for one language, holding the plural forms
-/// of `catalog-fragments/recurring-and-read-only.json` as the compiled `Localizable.xcstrings`
-/// will once the fragment is merged. The helpers read it through their
-/// `bundle` parameter, so these tests check the keys and the plural rules
-/// whatever the app's own catalog holds today.
+/// these tests need. The helpers read it through their `bundle` parameter, so
+/// these tests check the keys and the plural rules whatever the app's own
+/// catalog holds.
 private enum TestCatalog {
     static func bundle(
         language: String,
