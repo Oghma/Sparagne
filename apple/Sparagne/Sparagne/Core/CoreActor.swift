@@ -181,6 +181,19 @@ actor CoreActor {
         return receipt
     }
 
+    /// Envelopes minted with `envelope(vaultId:_:)`, as one batch like
+    /// `executeBatch(vaultId:_:)`: for commands that name what an earlier one
+    /// in the same batch creates, like an alias and its new category. The
+    /// core refuses a batch that spans two vaults.
+    @discardableResult
+    func executeBatch(envelopes: [CommandEnvelope]) async throws -> [Receipt] {
+        guard let first = envelopes.first else { return [] }
+        try ensureWritable(first.vaultId)
+        let receipts = try await visit { try $0.executeBatch(envelopes: envelopes) }
+        onExecuted?()
+        return receipts
+    }
+
     /// Imports a bank or card statement, one command per row
     /// (`core::statement`).
     @discardableResult

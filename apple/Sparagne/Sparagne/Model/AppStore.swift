@@ -121,6 +121,11 @@ final class AppStore {
     @ObservationIgnored private let undoWindow: Duration
     /// Injected so tests do not wait out the real undo window.
     @ObservationIgnored private let sleeper: @Sendable (Duration) async throws -> Void
+    /// What `createVault` gives a new vault (`DefaultCategories`). The app
+    /// passes the list for its language; the tests leave it empty, so their
+    /// vaults hold only the system categories and every `#name` they type is
+    /// new.
+    @ObservationIgnored private let defaultCategories: [DefaultCategory]
     /// Edit ▸ Undo and Redo for the ledger's writes, on the window's undo
     /// manager once the window hands it over (`AppStore+History.swift`).
     @ObservationIgnored let history = LedgerHistory()
@@ -263,12 +268,14 @@ final class AppStore {
         core: CoreActor,
         defaults: UserDefaults = .standard,
         undoWindow: Duration = .seconds(5),
-        sleeper: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        sleeper: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        defaultCategories: [DefaultCategory] = []
     ) {
         self.core = core
         self.defaults = defaults
         self.undoWindow = undoWindow
         self.sleeper = sleeper
+        self.defaultCategories = defaultCategories
         showWalletColumn = defaults.bool(forKey: Self.walletColumnKey)
         currentAuthor = core.initialAuthor
     }
@@ -590,30 +597,47 @@ final class AppStore {
 
     // MARK: - Vault and entity creation
 
-    /// Onboarding: a vault plus its first wallet, as two commands.
+    /// Onboarding: a vault, then what it starts with (`firstContents`) as one
+    /// batch.
     func createVault(name: String, walletName: String, openingBalance: Int64) async {
         await guarded {
             let receipt = try await core.createVault(name: name)
             guard let vaultId = receipt.resultId else {
                 throw DomainError.InvalidCommand(message: "the vault command returned no id")
             }
-            let wallet = walletName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !wallet.isEmpty {
-                try await core.execute(
-                    vaultId: vaultId,
-                    .createWallet(
-                        name: wallet,
-                        openingBalance: openingBalance,
-                        occurredAt: CoreDate.offset(Date())
-                    )
-                )
-            }
+            try await core.executeBatch(
+                envelopes: await firstContents(of: vaultId, walletName: walletName, openingBalance: openingBalance)
+            )
             vaults = try await core.vaults()
             needsOnboarding = false
             if let created = vaults.first(where: { $0.id == vaultId }) {
                 await select(created)
             }
         }
+    }
+
+    /// The first wallet, when the sheet named one, and `defaultCategories`
+    /// with their aliases. Minted up front: an alias names its category by
+    /// id, and the id is the command's.
+    private func firstContents(of vaultId: Uuid, walletName: String, openingBalance: Int64) async -> [CommandEnvelope] {
+        var envelopes: [CommandEnvelope] = []
+        let wallet = walletName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !wallet.isEmpty {
+            let command = Command.createWallet(
+                name: wallet,
+                openingBalance: openingBalance,
+                occurredAt: CoreDate.offset(Date())
+            )
+            envelopes.append(await core.envelope(vaultId: vaultId, command))
+        }
+        for category in defaultCategories {
+            let created = await core.envelope(vaultId: vaultId, .createCategory(name: category.name))
+            envelopes.append(created)
+            for alias in category.aliases {
+                envelopes.append(await core.envelope(vaultId: vaultId, .addAlias(categoryId: created.id, alias: alias)))
+            }
+        }
+        return envelopes
     }
 
     // MARK: - Vault management

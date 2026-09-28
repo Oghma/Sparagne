@@ -204,7 +204,7 @@ Condividi…, Elimina…).
 
 | Azione | Foglio | Comando |
 |---|---|---|
-| Nuovo | l'onboarding (`OnboardingSheet`): nome, primo wallet, saldo di apertura | `CreateVault` + `CreateWallet` |
+| Nuovo | l'onboarding (`OnboardingSheet`): nome, primo wallet, saldo di apertura | `CreateVault`, poi un batch con `CreateWallet` e le categorie di partenza (`CreateCategory`, `AddAlias`) |
 | Rinomina | `RenameSheet`, come per wallet e buste | `RenameVault` |
 | Elimina | `DeleteVaultSheet`: il nome del vault, una frase che dice che vanno via wallet, buste, transazioni e ricorrenze per ogni membro e su ogni dispositivo, Annulla e un "Elimina" distruttivo che ↩ non attiva | `DeleteVault` |
 
@@ -234,6 +234,19 @@ elenca fra i "Non più condivisi con te" con **Rimuovi da questo Mac**. La riga
 in attesa sul toast di annullamento porta il suo vault: se un pull cancella
 quel vault il toast sparisce senza avvisi, e chiudere l'app scrive l'annullo
 prima di uscire.
+
+**Dal 2026-09-28.** Un vault nuovo nasce con 16 categorie, 14 di uscita e 2
+di entrata, ognuna di una parola sola così che il quick-add la raggiunga con
+`#Nome`, e con qualche alias (`#pizza` finisce in Ristoranti). La lista è
+nell'app (`DefaultCategories.swift`), nella lingua in cui l'app mostra le sue
+stringhe, italiano o inglese, e il core non ne sa nulla: l'app la manda come
+comandi normali nello stesso batch del primo wallet. Cambiarla cambia solo i
+vault creati dopo, e il replay di un log vecchio finisce dove finiva. Mancano
+di proposito una categoria "Varie", perché c'è già Senza categoria, una
+"Risparmio", perché a quello servono le buste, e una "Rimborsi": un rimborso è
+un tipo di transazione (`r30 #Salute`) che si netta sulla categoria della
+spesa, e una categoria di entrata con quel nome inviterebbe a registrarlo come
+entrata, gonfiando entrate e uscite.
 
 ### 2.5 Ricorrenze dovute
 

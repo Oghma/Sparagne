@@ -30,7 +30,7 @@ struct ContentView: View {
         guard store == nil, launchFailure == nil else { return }
         do {
             let core = try CoreActor.onDisk()
-            let opened = AppStore(core: core)
+            let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
             // The engine adopts the account's username as the author and
             // starts the first sync right after bootstrap
             // (`docs/v2/SYNC.md` §5). It prepares before the bootstrap so the
