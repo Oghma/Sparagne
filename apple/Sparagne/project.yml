@@ -30,12 +30,11 @@ targets:
     type: application
     platform: macOS
     deploymentTarget: "15.0"
+    # The string catalog and the asset catalog go through `sources` like the
+    # code: XcodeGen files them under Resources by their type, and has no
+    # `resources` key of its own.
     sources:
       - path: Sparagne
-        excludes:
-          - "Resources/**"
-    resources:
-      - path: Sparagne/Resources
     settings:
       base:
         PRODUCT_NAME: Sparagne
