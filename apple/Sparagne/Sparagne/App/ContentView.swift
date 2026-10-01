@@ -29,8 +29,18 @@ struct ContentView: View {
     private func open() async {
         guard store == nil, launchFailure == nil else { return }
         do {
+            if let database = LaunchOptions.database {
+                // Another database, with no engine: nothing in it is pushed,
+                // and the window has no account or sharing to offer. New rows
+                // are signed with the name chosen for rows written offline.
+                let core = try CoreActor.onDisk(named: database, author: AccountStore.loggedOutAuthor())
+                let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
+                store = opened
+                await opened.bootstrap()
+                return
+            }
             let core = try CoreActor.onDisk()
-            let opened = AppStore(core: core)
+            let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
             // The engine adopts the account's username as the author and
             // starts the first sync right after bootstrap
             // (`docs/v2/SYNC.md` §5). It prepares before the bootstrap so the
@@ -67,6 +77,7 @@ struct MainWindow: View {
         case renameEnvelope(FlowView)
         case editEnvelope(FlowView)
         case recurring
+        case newRecurring
         case dueRecurring
         case share(VaultView)
         case leaveVault(VaultView)
@@ -85,6 +96,7 @@ struct MainWindow: View {
             case .renameEnvelope(let flow): "renameEnvelope-\(flow.id)"
             case .editEnvelope(let flow): "editEnvelope-\(flow.id)"
             case .recurring: "recurring"
+            case .newRecurring: "newRecurring"
             case .dueRecurring: "dueRecurring"
             case .share(let vault): "share-\(vault.id)"
             case .leaveVault(let vault): "leaveVault-\(vault.id)"
@@ -100,6 +112,9 @@ struct MainWindow: View {
             .frame(minWidth: 1176, minHeight: 640)
             .preferredColorScheme(.dark)
             .navigationTitle(title)
+            // The file's name when it is not the real database, so rows made
+            // up for a try are never mistaken for the ledger.
+            .navigationSubtitle(Text(verbatim: LaunchOptions.database ?? ""))
             .toolbar { toolbar }
             .toolbarBackground(Ink.bg, for: .windowToolbar)
             .overlay(alignment: .bottom) {
@@ -138,6 +153,9 @@ struct MainWindow: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .reviewDueRecurring)) { _ in
                 sheet = .dueRecurring
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .newRecurring)) { _ in
+                if store.canWrite { sheet = .newRecurring }
             }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
@@ -277,6 +295,8 @@ struct MainWindow: View {
             }
         case .recurring:
             RecurringPanel(store: store)
+        case .newRecurring:
+            RecurringTemplateSheet(store: store, template: nil)
         case .dueRecurring:
             DueRecurringSheet(store: store)
         case .share(let vault):

@@ -1,0 +1,27 @@
+import Foundation
+
+/// What the command line can change about one launch.
+///
+/// `-SparagneDatabase demo.sqlite` opens another database in the app's folder
+/// instead of the real one, for trying the app on made-up rows: the
+/// development fixture writes one (`core/examples/seed.rs`). A value that
+/// starts with `/` or `~` is a path, which the sandbox of a signed build will
+/// not let the app open. Nothing in that database is synced, so its rows,
+/// signed by people who are not the account, never reach a server.
+///
+/// Read from the arguments alone, never from the saved preferences, so the
+/// option lasts one launch and cannot leave the app on the wrong file.
+enum LaunchOptions {
+    static let databaseKey = "SparagneDatabase"
+
+    /// The other database, `nil` for the real one.
+    static var database: String? {
+        database(in: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
+    }
+
+    static func database(in arguments: [String: Any]) -> String? {
+        guard let value = arguments[databaseKey] as? String else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}

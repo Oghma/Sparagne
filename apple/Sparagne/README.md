@@ -65,3 +65,19 @@ xcodebuild -project Sparagne.xcodeproj -scheme Sparagne -destination 'platform=m
 The generated `Sparagne.xcodeproj`, build products and `.build` directories
 are git-ignored; regenerate the project with `xcodegen generate` any time
 `project.yml` changes.
+
+## Demo data
+
+The core's fixture writes a year of a two-person household, up to today,
+into a database of its own. The app opens it with `-SparagneDatabase
+demo.sqlite` (the **Sparagne Demo** scheme passes it) and never syncs it:
+
+```sh
+# Run from Xcode, sandboxed:
+cargo run -p sparagne_core --example seed -- \
+  "$HOME/Library/Containers/it.oghma.sparagne/Data/Library/Application Support/Sparagne/demo.sqlite" --replace
+# Built with CODE_SIGNING_ALLOWED=NO:
+cargo run -p sparagne_core --example seed -- \
+  "$HOME/Library/Application Support/Sparagne/demo.sqlite" --replace
+open Sparagne.app --args -SparagneDatabase demo.sqlite
+```

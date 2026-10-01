@@ -130,6 +130,11 @@ struct SparagneApp: App {
                     NotificationCenter.default.post(name: .openSetup, object: nil)
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
+
+                Button(String(localized: "New Recurring\u{2026}")) {
+                    NotificationCenter.default.post(name: .newRecurring, object: nil)
+                }
+                .disabled(store?.canWrite != true)
             }
         }
 
@@ -196,6 +201,9 @@ extension Notification.Name {
     static let backupDatabase = Notification.Name("it.oghma.sparagne.backupDatabase")
     /// Banner and palette: the recurring periods waiting for a decision.
     static let reviewDueRecurring = Notification.Name("it.oghma.sparagne.reviewDueRecurring")
+    /// Vault menu and palette: the sheet of a new recurring template, without
+    /// going through the management sheet and its recurring panel.
+    static let newRecurring = Notification.Name("it.oghma.sparagne.newRecurring")
 }
 
 private struct SettingsView: View {
