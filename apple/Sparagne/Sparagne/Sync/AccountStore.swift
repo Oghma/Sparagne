@@ -209,9 +209,19 @@ final class AccountStore {
     /// The author to stamp on new commands: the account when there is one,
     /// else the name chosen in Settings, else the macOS account.
     var author: String {
-        if let username { return username }
-        let chosen = localAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
-        return chosen.isEmpty ? Self.systemAuthor : chosen
+        username ?? Self.author(chosen: localAuthor)
+    }
+
+    /// Who signs the rows of a launch that never logs in (`LaunchOptions`):
+    /// `author` while logged out. Read from the defaults alone, so the
+    /// Keychain is not asked for a token nobody will use.
+    static func loggedOutAuthor(defaults: UserDefaults = .standard) -> String {
+        author(chosen: defaults.string(forKey: localAuthorKey) ?? "")
+    }
+
+    private static func author(chosen: String) -> String {
+        let trimmed = chosen.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? systemAuthor : trimmed
     }
 
     func signIn(username: String, token: String, expiresAt: Date? = nil) {

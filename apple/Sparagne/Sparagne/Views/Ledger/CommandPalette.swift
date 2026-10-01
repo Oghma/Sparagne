@@ -264,6 +264,21 @@ extension CommandPaletteModel {
             ) {
                 NotificationCenter.default.post(name: .openManagement, object: nil)
             },
+        ])
+
+        if store.canWrite {
+            actions.append(
+                PaletteAction(
+                    id: "recurring.new",
+                    title: String(localized: "New Recurring\u{2026}"),
+                    keywords: ["recurring", "ricorrenza", "ricorrente", "abbonamento", "subscription"]
+                ) {
+                    NotificationCenter.default.post(name: .newRecurring, object: nil)
+                }
+            )
+        }
+
+        actions.append(contentsOf: [
             PaletteAction(
                 id: "export.csv",
                 title: String(localized: "Export CSV\u{2026}"),

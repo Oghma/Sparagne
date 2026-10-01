@@ -3361,6 +3361,22 @@
         }
       }
     },
+    "New Recurring…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Recurring…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova ricorrenza…"
+          }
+        }
+      }
+    },
     "New Vault": {
       "localizations": {
         "en": {

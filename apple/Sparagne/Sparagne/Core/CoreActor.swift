@@ -59,10 +59,14 @@ actor CoreActor {
         self.probe = probe
     }
 
-    /// Opens the database in `~/Library/Application Support/Sparagne`, which
-    /// the sandbox resolves inside the app container.
-    static func onDisk(author: String = NSUserName()) throws -> CoreActor {
-        let url = try databaseURL()
+    /// The real database's file name.
+    static let databaseName = "sparagne.sqlite"
+
+    /// Opens `name` in `~/Library/Application Support/Sparagne`, which the
+    /// sandbox resolves inside the app container: the real database, unless
+    /// a launch option names another (`LaunchOptions`).
+    static func onDisk(named name: String = databaseName, author: String = NSUserName()) throws -> CoreActor {
+        let url = try databaseURL(named: name)
         return CoreActor(
             handle: try CoreHandle.open(path: url.path(percentEncoded: false)),
             author: author
@@ -77,7 +81,12 @@ actor CoreActor {
         CoreActor(handle: try CoreHandle.openInMemory(), author: author, probe: probe)
     }
 
-    static func databaseURL() throws -> URL {
+    /// `name` in the app's folder; a name that starts with `/` or `~` is a
+    /// path, taken as it is.
+    static func databaseURL(named name: String = databaseName) throws -> URL {
+        if name.hasPrefix("/") || name.hasPrefix("~") {
+            return URL(filePath: (name as NSString).expandingTildeInPath, directoryHint: .notDirectory)
+        }
         let support = try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -86,7 +95,7 @@ actor CoreActor {
         )
         let directory = support.appending(path: "Sparagne", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory.appending(path: "sparagne.sqlite", directoryHint: .notDirectory)
+        return directory.appending(path: name, directoryHint: .notDirectory)
     }
 
     // MARK: - The funnel
