@@ -261,6 +261,11 @@ insufficienti in una busta, non si scrive nulla e l'alert lo dice). Il pannello
 delle ricorrenze mostra anche le archiviate e le **ripristina**. Le frasi di
 cadenza sono intere e al plurale giusto ("Ogni 2 settimane il lunedì").
 
+**Dal 2026-09-29.** Creare un modello chiedeva tre passaggi (⌘⇧M, Gestisci
+ricorrenze…, Nuova…). **Nuova ricorrenza…** nel menu Vault e nella palette apre
+subito lo stesso foglio del pannello (`RecurringTemplateSheet`), spenta per un
+vault in sola lettura.
+
 ### 2.6 Estratti conto, export completo e backup
 
 > Aggiunto il 2026-09-23.
@@ -377,7 +382,7 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | `⇧⌘I` | importa un estratto conto (§2.6) |
 | menu File | Esporta tutte le transazioni…, Backup del database… (§2.6) |
 | `⌘⇧M` | gestione: vault, wallet, buste, ricorrenze, condivisione |
-| menu Vault | Nuovo vault…, Rinomina vault…, Elimina vault…, Esci dal vault… (§2.4), senza scorciatoia: rari, e due distruttivi |
+| menu Vault | Nuovo vault…, Rinomina vault…, Elimina vault…, Esci dal vault… (§2.4), senza scorciatoia: rari, e due distruttivi; dal 2026-09-29 anche Nuova ricorrenza… (§2.5) |
 | `⌘⇧C` | vista SETUP: wallet, buste e categorie |
 | `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
 | `⌘⇧W` | mostra / nasconde la colonna WALLET (menu Vista) |
@@ -395,7 +400,8 @@ schermo, Elimina solo se lo si può cancellare), SETUP, gestione, esporta CSV,
 sincronizza ora, e i tre interruttori di vista (annullate, trasferimenti,
 colonna wallet); dal 2026-09-23 anche Esci dal vault… (solo a un membro),
 Importa estratto conto…, Esporta tutte le transazioni… e Backup del
-database…, e Rinomina vault… solo a chi può scrivere. Quelle che hanno già una voce di
+database…, e Rinomina vault… solo a chi può scrivere; dal 2026-09-29 Nuova
+ricorrenza…, solo a chi può scrivere. Quelle che hanno già una voce di
 menu ne mandano la notifica, così le due strade condividono una sola
 implementazione; il modello (`Views/Ledger/CommandPalette.swift`) è puro e
 testato senza finestra.
@@ -439,3 +445,21 @@ Per guardare la UI con dei dati veri c'è una fixture:
 ```text
 cargo run -p sparagne_core --example seed -- <db path> --replace
 ```
+
+**Dal 2026-09-28.** La fixture scrive i dodici mesi che finiscono con quello
+corrente, fino a oggi, così l'app apre sempre su un mese pieno. Il vault parte
+con le categorie e gli alias di un vault nuovo in italiano, poi ha due wallet
+(Conto, Contanti), tre buste (Cash, Casa, e Vacanze con un tetto), gli stipendi
+di due persone, la spesa della settimana, bollette, trasferimenti fra wallet e
+fra buste, rimborsi, righe senza categoria, una riga annullata e tre
+ricorrenze: il mutuo con la rata del mese ancora da confermare, Netflix, e la
+palestra archiviata dopo sei mesi. Le righe sono firmate da due persone, che un
+server rifiuterebbe da un solo account, per cui il file non va nel database
+vero. L'app lo apre a parte con `-SparagneDatabase demo.sqlite`, che legge un
+altro file nella stessa cartella e non crea il `SyncEngine`: niente sync,
+niente account, e il nome del file come sottotitolo della finestra
+(`LaunchOptions.swift`). Lo schema **Sparagne Demo** di Xcode passa già
+l'opzione. La cartella dipende dalla firma: una build da Xcode gira nella
+sandbox e legge
+`~/Library/Containers/it.oghma.sparagne/Data/Library/Application Support/Sparagne/`,
+una build con `CODE_SIGNING_ALLOWED=NO` legge `~/Library/Application Support/Sparagne/`.
