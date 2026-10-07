@@ -28,13 +28,16 @@ enum ChartScale {
         return (lower, upper, step)
     }
 
-    /// `12k`, `1,5k`, `840`: built with integers, so no rounding surprises.
-    static func compact(_ major: Int) -> String {
+    /// `12k`, `1,5k` (`1.5k` in English), `840`: built with integers, so no
+    /// rounding surprises. Only the separator comes from the locale, like
+    /// every other figure the app prints.
+    static func compact(_ major: Int, locale: Locale = .autoupdatingCurrent) -> String {
+        let separator = locale.decimalSeparator ?? "."
         let sign = major < 0 ? "-" : ""
         let value = abs(major)
         guard value >= 1_000 else { return "\(sign)\(value)" }
         let thousands = value / 1_000
         let tenth = (value % 1_000) / 100
-        return tenth == 0 ? "\(sign)\(thousands)k" : "\(sign)\(thousands),\(tenth)k"
+        return tenth == 0 ? "\(sign)\(thousands)k" : "\(sign)\(thousands)\(separator)\(tenth)k"
     }
 }

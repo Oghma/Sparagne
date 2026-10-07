@@ -400,10 +400,14 @@ struct YearModelTests {
 
     @Test("Axis labels are compact")
     func compactLabels() {
-        #expect(ChartScale.compact(840) == "840")
-        #expect(ChartScale.compact(12_000) == "12k")
-        #expect(ChartScale.compact(1_500) == "1,5k")
-        #expect(ChartScale.compact(-2_500) == "-2,5k")
+        let it = Locale(identifier: "it_IT")
+        let en = Locale(identifier: "en_US")
+        #expect(ChartScale.compact(840, locale: it) == "840")
+        #expect(ChartScale.compact(12_000, locale: it) == "12k")
+        #expect(ChartScale.compact(1_500, locale: it) == "1,5k")
+        #expect(ChartScale.compact(-2_500, locale: it) == "-2,5k")
+        #expect(ChartScale.compact(1_500, locale: en) == "1.5k")
+        #expect(ChartScale.compact(-2_500, locale: en) == "-2.5k")
     }
 
     @Test("Month names keep the locale's casing")
