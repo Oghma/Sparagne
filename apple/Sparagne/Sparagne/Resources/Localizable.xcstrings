@@ -33,6 +33,22 @@
         }
       }
     },
+    "%@ of the cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of the cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ del tetto"
+          }
+        }
+      }
+    },
     "%@ since the start of the year": {
       "localizations": {
         "en": {
@@ -897,6 +913,22 @@
         }
       }
     },
+    "Archive %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivia %@"
+          }
+        }
+      }
+    },
     "Archive category": {
       "localizations": {
         "en": {
@@ -1165,6 +1197,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importo del limite"
+          }
+        }
+      }
+    },
+    "Cap type": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tetto"
           }
         }
       }
@@ -3441,6 +3489,22 @@
         }
       }
     },
+    "Limit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limit"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limite"
+          }
+        }
+      }
+    },
     "Line %lld": {
       "localizations": {
         "en": {
@@ -3597,6 +3661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mappatura"
+          }
+        }
+      }
+    },
+    "Members": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Members"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Membri"
           }
         }
       }
@@ -3809,6 +3889,22 @@
         }
       }
     },
+    "Neg.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neg."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neg."
+          }
+        }
+      }
+    },
     "Net cap": {
       "localizations": {
         "en": {
@@ -4001,6 +4097,38 @@
         }
       }
     },
+    "New category…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New category…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova categoria…"
+          }
+        }
+      }
+    },
+    "New envelope…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New envelope…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova busta…"
+          }
+        }
+      }
+    },
     "New password": {
       "localizations": {
         "en": {
@@ -4029,6 +4157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nuova riga"
+          }
+        }
+      }
+    },
+    "New wallet…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New wallet…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuovo wallet…"
           }
         }
       }
@@ -4109,6 +4253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessun movimento quest'anno"
+          }
+        }
+      }
+    },
+    "No cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun tetto"
           }
         }
       }
@@ -4253,6 +4413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessun wallet chiamato “%@”"
+          }
+        }
+      }
+    },
+    "None": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuno"
           }
         }
       }
@@ -4445,6 +4621,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Offline"
+          }
+        }
+      }
+    },
+    "On balance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On balance"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sul saldo"
+          }
+        }
+      }
+    },
+    "On income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sulle entrate"
+          }
+        }
+      }
+    },
+    "Only on this Mac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only on this Mac"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo su questo Mac"
           }
         }
       }
@@ -5041,6 +5265,22 @@
         }
       }
     },
+    "Restore %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripristina %@"
+          }
+        }
+      }
+    },
     "Restore category": {
       "localizations": {
         "en": {
@@ -5181,6 +5421,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Righe"
+          }
+        }
+      }
+    },
+    "Rows 90 d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rows 90 d"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Righe 90 gg"
           }
         }
       }
@@ -7505,6 +7761,54 @@
         }
       }
     },
+    "a cap makes it a fund in the summary": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a cap makes it a fund in the summary"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "un tetto la rende un fondo nel riepilogo"
+          }
+        }
+      }
+    },
+    "aliases take quick-add to the category: #pizza → Restaurants": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aliases take quick-add to the category: #pizza → Restaurants"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gli alias portano il quick-add alla categoria: #pizza → Ristoranti"
+          }
+        }
+      }
+    },
+    "aliases, comma-separated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aliases, comma-separated"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alias, separati da virgole"
+          }
+        }
+      }
+    },
     "all": {
       "localizations": {
         "en": {
@@ -7521,6 +7825,38 @@
         }
       }
     },
+    "allocation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "allocation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "allocazione"
+          }
+        }
+      }
+    },
+    "archived": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "archived"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "archiviata"
+          }
+        }
+      }
+    },
     "by %@": {
       "localizations": {
         "en": {
@@ -7533,6 +7869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "di %@"
+          }
+        }
+      }
+    },
+    "can't be changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "can't be changed"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "non si cambia"
           }
         }
       }
@@ -7953,6 +8305,22 @@
         }
       }
     },
+    "opening balance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "opening balance"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "saldo di apertura"
+          }
+        }
+      }
+    },
     "people": {
       "localizations": {
         "en": {
@@ -8125,6 +8493,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "stato…"
+          }
+        }
+      }
+    },
+    "system": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "system"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sistema"
           }
         }
       }
