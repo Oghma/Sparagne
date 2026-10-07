@@ -109,21 +109,32 @@ struct YearTableRow: Hashable, Sendable {
 /// The four numbers of the month on screen (`docs/v2/UI.md` §2.2), with the
 /// month before and the year so far for their sub-lines. Plain figures, so
 /// the deltas the cards print are checked without a window.
+///
+/// They come from the same `YearMonth`s as the table under them, so a card
+/// and its row never disagree: expenses are USCITE (envelopes without a cap),
+/// not the Mastro's net expense on every envelope.
 struct MonthKPIs: Hashable, Sendable {
     let income: Int64
     let expenses: Int64
-    let previousIncome: Int64
-    let previousExpenses: Int64
+    /// The month before, `nil` for January: what precedes it is the opening
+    /// balance (bucket 0), which is everything before the year, not a month
+    /// that could be compared.
+    let previous: Previous?
     /// Income and savings of the year up to and including this month.
     let yearIncome: Int64
     let yearSavings: Int64
 
+    struct Previous: Hashable, Sendable {
+        let income: Int64
+        let expenses: Int64
+        var savings: Int64 { income - expenses }
+    }
+
     var savings: Int64 { income - expenses }
-    var previousSavings: Int64 { previousIncome - previousExpenses }
 
     /// Savings against the month before, in money rather than percent: the
-    /// sign decides the arrow and its color.
-    var savingsDelta: Int64 { savings - previousSavings }
+    /// sign decides the arrow and its color. `nil` without a month before.
+    var savingsDelta: Int64? { previous.map { savings - $0.savings } }
 
     /// This month's savings over its income, `nil` with no income.
     var rate: Double? {
@@ -176,6 +187,23 @@ struct YearSummary: Sendable {
     var yearRate: Double? {
         guard yearIncome > 0 else { return nil }
         return Double(yearSavings) / Double(yearIncome)
+    }
+
+    /// The cards of the month on screen, read from the table's own months so
+    /// both count USCITE the same way. The month is the last one drawn, which
+    /// is `upTo` in its year and December in a past one; `nil` in a year
+    /// still to come.
+    var kpis: MonthKPIs? {
+        let elapsed = self.elapsed
+        guard let month = elapsed.last else { return nil }
+        let before = elapsed.dropLast().last
+        return MonthKPIs(
+            income: month.income,
+            expenses: month.cashExpense,
+            previous: before.map { .init(income: $0.income, expenses: $0.cashExpense) },
+            yearIncome: yearIncome,
+            yearSavings: yearSavings
+        )
     }
 
     /// The table of `docs/v2/UI.md` §2.2, top to bottom: the opening cash

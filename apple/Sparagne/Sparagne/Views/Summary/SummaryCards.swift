@@ -17,19 +17,19 @@ struct MonthCards: View {
             KPICard(
                 title: String(localized: "Income \u{00B7} \(name)"),
                 value: LedgerMoney.bare(kpis.income),
-                caption: String(localized: "\(LedgerMoney.bare(kpis.previousIncome)) in \(previousName)")
+                caption: kpis.previous.map { String(localized: "\(LedgerMoney.bare($0.income)) in \(previousName)") }
             )
             KPICard(
                 title: String(localized: "Expenses \u{00B7} \(name)"),
                 value: LedgerMoney.bare(kpis.expenses),
-                caption: String(localized: "\(LedgerMoney.bare(kpis.previousExpenses)) in \(previousName)")
+                caption: kpis.previous.map { String(localized: "\(LedgerMoney.bare($0.expenses)) in \(previousName)") }
             )
             KPICard(
                 title: String(localized: "Savings \u{00B7} \(name)"),
                 value: LedgerMoney.bare(kpis.savings),
                 tint: kpis.savings >= 0 ? Ink.positive : Ink.negative,
                 caption: deltaCaption,
-                captionTint: kpis.savingsDelta >= 0 ? Ink.positive : Ink.negative
+                captionTint: (kpis.savingsDelta ?? 0) >= 0 ? Ink.positive : Ink.negative
             )
             KPICard(
                 title: String(localized: "Savings rate"),
@@ -44,9 +44,11 @@ struct MonthCards: View {
     private var previousName: String { SummaryText.monthName(month.adding(months: -1).month) }
 
     /// "▼ 180,14 vs September": the arrow says which way, the figure how much.
-    private var deltaCaption: String {
-        let arrow = kpis.savingsDelta >= 0 ? "\u{25B2}" : "\u{25BC}"
-        return String(localized: "\(arrow) \(LedgerMoney.bare(abs(kpis.savingsDelta))) vs \(previousName)")
+    /// January has no month to compare with, so no line.
+    private var deltaCaption: String? {
+        guard let delta = kpis.savingsDelta else { return nil }
+        let arrow = delta >= 0 ? "\u{25B2}" : "\u{25BC}"
+        return String(localized: "\(arrow) \(LedgerMoney.bare(abs(delta))) vs \(previousName)")
     }
 
     /// A rate over no income is a dash, never a fake 0%.
@@ -61,7 +63,8 @@ private struct KPICard: View {
     let title: String
     let value: String
     var tint: Color = Ink.text
-    let caption: String
+    /// `nil` leaves the line blank, so the cards keep their height.
+    let caption: String?
     var captionTint: Color = Ink.text2
 
     var body: some View {
@@ -73,7 +76,7 @@ private struct KPICard: View {
                 Text(value)
                     .font(Face.display)
                     .foregroundStyle(tint)
-                Text(caption)
+                Text(caption ?? " ")
                     .font(Face.row)
                     .foregroundStyle(captionTint)
             }
@@ -82,7 +85,7 @@ private struct KPICard: View {
         // reads "Income · September, 1,234.56, 4,250.00 in August" instead of
         // three separate swipes.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(AccessibilityText.card(title: title, value: value, caption: caption))
+        .accessibilityLabel(AccessibilityText.card(title: title, value: value, caption: caption ?? ""))
     }
 }
 

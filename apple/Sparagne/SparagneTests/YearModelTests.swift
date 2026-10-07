@@ -42,7 +42,9 @@ struct YearModelTests {
         ]
     }
 
-    private static func build(year: Int = 2026, rows: [YearRow], flows: [FlowView] = []) -> YearSummary {
+    private static func build(
+        year: Int = 2026, rows: [YearRow], flows: [FlowView] = [], upTo: MonthKey = upTo
+    ) -> YearSummary {
         YearSummary.build(year: year, upTo: upTo, rows: rows, flows: flows)
     }
 
@@ -305,24 +307,65 @@ struct YearModelTests {
     @Test("Savings are income less expenses, and the delta is against the month before")
     func kpiDelta() {
         let kpis = MonthKPIs(
-            income: 185_000, expenses: 61_994, previousIncome: 425_000, previousExpenses: 284_000,
+            income: 185_000, expenses: 61_994, previous: .init(income: 425_000, expenses: 284_000),
             yearIncome: 1_000_000, yearSavings: 290_000
         )
         #expect(kpis.savings == 123_006)
-        #expect(kpis.previousSavings == 141_000)
+        #expect(kpis.previous?.savings == 141_000)
         #expect(kpis.savingsDelta == -17_994)
+    }
+
+    @Test("The cards are the table's rows: expenses are USCITE, fund expenses apart")
+    func cardsAreTheRows() throws {
+        // August: 920,00 spent from a fund, 300,00 from the cash envelopes.
+        let august = MonthKey(year: 2026, month: 8)
+        let year = Self.build(
+            rows: [
+                Self.row(7, "matteo", income: 400_000, cashExpense: 250_000),
+                Self.row(8, "matteo", income: 500_000, cashExpense: 30_000, fundExpense: 92_000),
+            ],
+            upTo: august
+        )
+        let kpis = try #require(year.kpis)
+        let row = try #require(year.tableRows.first { $0.kind == .month(august) })
+        #expect(kpis.income == row.income)
+        #expect(kpis.expenses == row.cashExpense)
+        #expect(kpis.savings == row.savings)
+        #expect(kpis.expenses == 30_000)
+        #expect(kpis.previous == .init(income: 400_000, expenses: 250_000))
+        #expect(kpis.savingsDelta == Int64(320_000))
+        // The year to date counts the same way.
+        #expect(kpis.yearSavings == year.yearSavings)
+        #expect(kpis.yearRate == Double(year.yearSavings) / Double(year.yearIncome))
+    }
+
+    @Test("January has no month before it to compare with")
+    func januaryHasNoPrevious() throws {
+        let year = Self.build(
+            rows: [Self.row(0, "matteo", opening: 100_000), Self.row(1, "matteo", income: 50_000, cashExpense: 20_000)],
+            upTo: MonthKey(year: 2026, month: 1)
+        )
+        let kpis = try #require(year.kpis)
+        #expect(kpis.savings == 30_000)
+        #expect(kpis.previous == nil)
+        #expect(kpis.savingsDelta == nil)
+    }
+
+    @Test("A year to come has no cards")
+    func noCardsInTheFuture() {
+        #expect(Self.build(year: 2027, rows: []).kpis == nil)
     }
 
     @Test("The rates are over income, and absent without any")
     func kpiRates() {
         let kpis = MonthKPIs(
-            income: 200_000, expenses: 50_000, previousIncome: 0, previousExpenses: 0,
+            income: 200_000, expenses: 50_000, previous: nil,
             yearIncome: 1_000_000, yearSavings: 290_000
         )
         #expect(kpis.rate == 0.75)
         #expect(kpis.yearRate == 0.29)
         let none = MonthKPIs(
-            income: 0, expenses: 10, previousIncome: 0, previousExpenses: 0, yearIncome: 0, yearSavings: 0
+            income: 0, expenses: 10, previous: nil, yearIncome: 0, yearSavings: 0
         )
         #expect(none.rate == nil)
         #expect(none.yearRate == nil)

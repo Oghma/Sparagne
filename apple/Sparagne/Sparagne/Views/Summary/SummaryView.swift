@@ -10,14 +10,14 @@ import SparagneCore
 struct SummaryView: View {
     let year: YearSummary
     /// Kept for the chrome that will need the vault (names, filters); the
-    /// numbers all come from `year` and the month's summary.
+    /// numbers all come from `year`.
     let store: AppStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             heading
 
-            if let kpis {
+            if let kpis = year.kpis {
                 MonthCards(kpis: kpis, month: year.upTo)
             }
 
@@ -59,19 +59,5 @@ struct SummaryView: View {
                     .foregroundStyle(Ink.text2)
             }
         }
-    }
-
-    /// The month's totals, from the same visit as the year. `nil` while the
-    /// vault is loading, so the cards simply are not there yet.
-    private var kpis: MonthKPIs? {
-        guard let summary = store.summary else { return nil }
-        return MonthKPIs(
-            income: summary.totals.income,
-            expenses: summary.totals.netExpense,
-            previousIncome: summary.previous.income,
-            previousExpenses: summary.previous.netExpense,
-            yearIncome: year.yearIncome,
-            yearSavings: year.yearSavings
-        )
     }
 }
