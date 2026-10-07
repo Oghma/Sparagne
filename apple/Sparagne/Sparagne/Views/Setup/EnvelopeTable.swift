@@ -6,10 +6,10 @@ import SparagneCore
 /// line agree without a layout pass. NOME takes what is left.
 private enum EnvelopeColumn {
     static let nameMinimum: CGFloat = 100
-    static let type: CGFloat = 116
-    static let cap: CGFloat = 96
-    static let negative: CGFloat = 56
-    static let balance: CGFloat = 140
+    static let type: CGFloat = 104
+    static let cap: CGFloat = 84
+    static let negative: CGFloat = 44
+    static let balance: CGFloat = 120
 }
 
 /// The envelopes of the vault as an editable table (`docs/v2/UI.md` §2.3):

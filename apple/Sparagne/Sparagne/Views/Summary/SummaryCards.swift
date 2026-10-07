@@ -11,7 +11,9 @@ struct MonthCards: View {
     let month: MonthKey
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 8)], spacing: 8) {
+        // Always four across: an adaptive grid opens a fifth, empty column on
+        // a wide window, and the window is never narrower than four cards.
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 160), spacing: 8), count: 4), spacing: 8) {
             KPICard(
                 title: String(localized: "Income \u{00B7} \(name)"),
                 value: LedgerMoney.bare(kpis.income),
