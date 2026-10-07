@@ -266,6 +266,12 @@ actor CoreActor {
         try await visit { try $0.recentUsage(vaultId: vaultId, since: since, limit: limit) }
     }
 
+    /// Per-category totals over `[from, to)` for everybody, each with the
+    /// number of rows behind it: the usage column of the SETUP categories.
+    func categoryTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) async throws -> [CategoryTotals] {
+        try await visit { try $0.categoryTotals(vaultId: vaultId, from: from, to: to, person: nil) }
+    }
+
     /// The category each note was filed under before, one entry per note.
     func suggestCategories(
         vaultId: Uuid,
@@ -473,7 +479,7 @@ actor CoreActor {
     }
 
     /// The outbox count over every vault and everything still held as
-    /// rejected: what the toolbar and the rejections sheet show.
+    /// rejected: what the top bar's sync pill and the rejections sheet show.
     ///
     /// Best effort, like the status line it feeds: a vault whose state cannot
     /// be read contributes nothing rather than blanking the whole count.

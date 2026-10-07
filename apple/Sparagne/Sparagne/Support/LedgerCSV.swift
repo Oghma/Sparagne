@@ -123,7 +123,7 @@ enum LedgerCSV {
     /// only, never through `Double` (the same pattern as
     /// `LedgerMoney.editable`). Expenses export negative; income, refunds and
     /// transfers positive, the same sign convention the ledger's totals use
-    /// (`LedgerStatusBar.visibleTotal`).
+    /// (`SheetStats`).
     private static func amountText(_ row: TransactionRow) -> String {
         let magnitude = row.absoluteAmount.magnitude
         let text = String(format: "%llu.%02llu", magnitude / 100, magnitude % 100)

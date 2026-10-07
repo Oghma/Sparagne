@@ -7,31 +7,70 @@
 ## 1. Idea in una frase
 
 Un foglio di calcolo per le righe, un terminale finanziario per i numeri: una
-sola finestra scura, monospazio, con il mese come unità di lettura e gli
-aggregati sempre a fianco delle righe.
+sola finestra scura, con il mese come unità di lettura e gli aggregati sempre
+a fianco delle righe. Dal 2026-10-07 ha l'aspetto di un terminale finanziario
+moderno e non più di un'interfaccia a testo: SF Pro con cifre tabulari al
+posto del monospazio, angoli arrotondati, etichette in minuscolo (§5).
 
-## 2. Le due viste
+## 2. Le viste
 
-Uno switcher in barra titolo: `RIEPILOGO · MASTRO · SETUP`. Il riepilogo è
-la vista di apertura. (Fino al 2026-09-11 le viste erano tre, `MASTRO · RIEPILOGO ·
-ANNO`: il riepilogo mensile è stato assorbito dal pannello destro del mastro
-e ANNO dal nuovo riepilogo.)
+La finestra disegna da sé la barra in alto (44 pt, al posto di barra titolo e
+toolbar, che non ci sono più), mostra la vista scelta e in fondo ha le schede,
+come i fogli di Excel: `Riepilogo · Mastro · Ricorrenze · Setup`, che si
+cambiano con un click o con ⌘1–⌘4 (menu Vista). Il riepilogo è la vista di
+apertura; `-SparagneTab summary|ledger|recurring|setup` apre la finestra su
+un'altra, per un solo avvio. (Fino al 2026-09-11 le viste erano tre,
+`MASTRO · RIEPILOGO · ANNO`: il riepilogo mensile è stato assorbito dal
+pannello destro del mastro e ANNO dal nuovo riepilogo. Fino al 2026-10-07
+uno switcher in barra titolo, `RIEPILOGO · MASTRO · SETUP`, sceglieva la
+vista, il titolo diceva "vault — vista — anno" e un banner avvisava delle
+ricorrenze dovute: la barra in alto e le schede li hanno sostituiti.)
+
+**La barra in alto** (`Views/Chrome/TopBar.swift`, `App/WindowChrome.swift`),
+da sinistra: i semafori della finestra, spostati dentro la barra; il
+**selettore del vault** (l'iniziale in un riquadro, il nome, un menu con gli
+altri vault e le azioni di §2.4) e, se l'app gira su un database di prova, il
+badge **DEMO**; solo in Riepilogo e Mastro lo **stepper del mese**
+`‹ Ottobre 2026 ›` con "Oggi" quando il mese a schermo non è quello corrente
+(⌥← e ⌥→ lo muovono dal menu Mastro); a destra, solo nel Mastro, la ricerca
+"Cerca nel mese" (⌘F), poi la pillola **"N da confermare"** (§2.5), il
+bottone **"Aggiungi ⌘K"** e la **pillola di sync**. Le aree vuote della
+barra trascinano la finestra.
+
+**La pillola di sync** (`Views/Chrome/SyncPill.swift`,
+`Model/SyncPillState.swift`) dice dove sta il sync: sincronizzato, in corso,
+N in attesa, offline, errore, N rifiutate, sessione scaduta, solo locale
+(nessun account, e anche il database di prova). Vince lo stato più urgente,
+nell'ordine rifiutate, sessione scaduta, solo locale, errore, offline, in
+corso, in attesa, sincronizzato. Un click apre un popover con la frase dello
+stato, per un account il server, l'utente, l'ultimo sync e le modifiche in
+attesa, e i bottoni che servono: Sincronizza ora, Account e server… (⌘,),
+Rivedi (le modifiche rifiutate), Collega un server….
+
+**Le schede** (`Views/Chrome/SheetTabBar.swift`, 27 pt) sono parole semplici,
+la scheda attiva sottolineata in ambra; Ricorrenze porta accanto il numero dei
+periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
+**riga di stato** del suo foglio:
+
+| Scheda | Riga di stato |
+|---|---|
+| Riepilogo | Risparmio dell'anno · Totale · salvato alle … |
+| Mastro | Media · Conteggio · Somma delle righe a schermo, o `Selezione: Media …` quando se ne scelgono due o più; poi salvato alle … |
+| Ricorrenze | Attive · Archiviate · Uscite fisse al mese ≈ · Entrate fisse ≈ · salvato alle … |
+| Setup | Wallet · Buste · Categorie (le archiviate non contano) · salvato alle … |
 
 ### 2.1 MASTRO
 
 ```
-‹ AGOSTO 2026 ›  mese=8   [TUTTI|ELISA|MATTEO]  [USCITE|ENTRATE]  / cerca…   37 righe
-┌───┬────────┬────────┬───────────┬─────────────────┬─────────┬──────────┐┌───────────┐
-│ # │ DATA   │ FLOW   │ CATEGORIA │ DESCRIZIONE     │ PERSONA │  IMPORTO ││ RIEPILOGO │
-├───┼────────┼────────┼───────────┼─────────────────┼─────────┼──────────┤│  per      │
-│002│ 01 ago │ Cash   │ Casa      │ mutuo           │ Matteo  │  €950,00 ││  persona  │
-│003│ 02 ago │ Cash   │ Computer  │ Claude          │ Matteo  │   €74,33 ││───────────│
-│ … │        │        │           │                 │         │          ││ RISPARMIO │
-│   │ 29 ago │ Cash   │ Categoria │ descrizione…    │ Persona │     0,00 ││  TOTALE   │
-└───┴────────┴────────┴───────────┴─────────────────┴─────────┴──────────┘│───────────│
- ⇥ campo successivo   ↩ salva riga   esc annulla   ⌘D duplica ultima      │ USCITE PER│
-● mese=8 flow=uscite persona=tutti    Σ €5.735,98   37 righe   salvato 12:04│ CATEGORIA │
-                                                                           │ 12 MESI   │
+(●●●) [C] Casa ▾ DEMO │ ‹ Ottobre 2026 › Oggi   Cerca nel mese ⌘F  ● 1 da confermare  + Aggiungi ⌘K  ● Sincronizzato
+[Uscite|Entrate] [Tutti|Elisa|Matteo] │ (Trasferimenti) (Annullate) (Colonna wallet)
+ #   Data    Busta   Categoria   Descrizione                 Persona      Importo ┃ ┌ Risparmio di ottobre ┐
+ 02  01 gio  Cash    Casa        mutuo                       Matteo        950,00 ┃ │ 1.250,00 €           │
+ 03  02 ven  Cash    Computer    Claude                      Matteo         74,33 ┃ │ 66% delle entrate    │
+ …                                                                                ┃ ├ Per persona ─────────┤
+ ⟳   05 mar  Cash    Svago       Netflix [da confermare]  Salta Registra   12,99 ┃ ├ Uscite per categoria ┤
+     29 ott  Busta   Categoria   descrizione…               Persona               ┃ └ Risparmio · 12 mesi ─┘
+ Riepilogo  Mastro  Ricorrenze 1  Setup              Media 47,69 · Conteggio 13 · Somma 619,94 · salvato alle 12:04
 ```
 
 - `#` è l'ordinale della riga nel mese, non un id: la tabella si legge come un
@@ -41,8 +80,36 @@ e ANNO dal nuovo riepilogo.)
 - Ogni cella delle righe esistenti è editabile in posto; ↩ emette un
   `UpdateTransaction` con i soli campi cambiati, esc ripristina. Lasciare la
   riga (⇥ oltre IMPORTO, click altrove) salva come in un foglio di calcolo.
-- Il pannello destro (284 pt) è il riepilogo del mese: tabella per persona,
-  card risparmio, uscite per categoria, 12 mesi.
+- **Barra dei filtri** (`Views/Ledger/FilterBar.swift`): sopra la griglia,
+  due controlli segmentati, la direzione (Uscite / Entrate) e la persona
+  (Tutti e un segmento per autore, solo se gli autori sono più d'uno), poi tre
+  chip per ciò che di solito è spento: Trasferimenti, Annullate, Colonna wallet
+  (tratteggiato da spento, pieno da acceso). I chip e le voci del menu (⌘⇧T,
+  ⌘⇧V, ⌘⇧W) sono lo stesso valore. Mese e ricerca stanno nella barra in alto.
+- **La griglia è un foglio a righe**: intestazioni da 26 pt e righe da 24 pt
+  con filetti, colonne `#`, Data (giorno e giorno della settimana), Busta,
+  Categoria, Descrizione, Wallet se acceso, Persona, Importo; etichette in
+  minuscolo, cifre tabulari.
+- **Ricorrenze dovute nella griglia**: i periodi dovuti del mese a schermo
+  stanno fra le righe, alla loro data, come righe tratteggiate con l'icona
+  delle ricorrenze e il tag "da confermare"; **Salta** e **Registra** nella
+  cella Descrizione (non in un vault in sola lettura). Non sono righe: non si
+  aprono, non si scelgono e non entrano nella riga di stato. Seguono il filtro
+  direzione (un modello d'entrata sta sotto Entrate) e la ricerca; non hanno
+  autore, quindi la persona non li filtra. Nulla si scrive finché non si
+  preme uno dei due bottoni (`Model/LedgerLines.swift`).
+- **Riga di stato**: la media, il conteggio e la somma delle righe a schermo,
+  o di quelle scelte quando sono due o più, come la barra di stato di un
+  foglio di calcolo (`Model/SheetStats.swift`). Annullate e trasferimenti non
+  contano, un rimborso toglie. I totali del mese sono il pannello destro.
+- **Pannello destro** (300 pt, `Views/Ledger/SummaryPanel.swift`): quattro
+  card, la più importante per prima. Il **risparmio del mese** in grande, con
+  il tag "in corso" se il mese è quello corrente, la quota sulle entrate, la
+  differenza col mese prima (▲ o ▼) e sotto entrate e uscite; **per persona**
+  (entrate, uscite per busta, risparmio, una colonna per autore); le **uscite
+  per categoria** (le sei maggiori, con quota e barra; la quota è su ciò che
+  le categorie hanno speso, così un rimborso del mese scorso non porta la
+  somma oltre il 100%); il **risparmio degli ultimi 12 mesi**.
 - I trasferimenti non stanno né in USCITE né in ENTRATE: spostano soldi senza
   guadagnarli o spenderli. Il menu Mastro li aggiunge alla lista corrente
   (⌘⇧T), come fa con le annullate (⌘⇧V).
@@ -75,10 +142,19 @@ e ANNO dal nuovo riepilogo.)
   (`suggest_categories`) compare come segnaposto e si salva se la cella resta
   vuota; nel quick-add compare come suggerimento sotto la riga e solo ⇥ la
   scrive come `#Categoria` (per un nome di una parola sola).
+- **Aggiunta rapida (⌘K)**: un riquadro arrotondato sotto la barra, sopra le
+  prime righe. Sotto il campo la riga letta compare a **chip**, uno per campo
+  che scriverà (tipo, importo, categoria, busta, wallet, quando), con la parola
+  piccola davanti; un valore che la riga non dice e il default riempie
+  (Senza categoria) è più chiaro. Chi ha scritto una riga che si legge in modo
+  diverso da come voleva lo vede prima di ↩. Con `>` il riquadro elenca i
+  comandi (§6). I chip li compone `Model/QuickAddTokens.swift`; il parsing
+  resta del core.
 - **VoiceOver**: ogni riga è una frase (data, importo col segno, categoria,
   nota, busta, persona, annullata) con le azioni Modifica, Duplica, Annulla e
   Seleziona e il tratto "selezionata"; celle, intestazioni, riga nuova, mese e
-  segmenti dei filtri hanno un nome.
+  segmenti dei filtri hanno un nome. Un periodo dovuto si legge come una
+  frase, con le azioni Registra e Salta.
 
 ### 2.2 RIEPILOGO
 
@@ -86,26 +162,35 @@ e ANNO dal nuovo riepilogo.)
 > dall'utente: l'anno fino al mese a schermo, con le definizioni sue.
 
 ```
-‹ SETTEMBRE 2026 ›                                    2026 · fino a settembre
-┌ FONDO EMERGENZA ─┐ ┌ FONDO VARIE ─────┐ ┌ FONDO CASA ──────┐
-│      ◯ 99,8%     │ │      ◯ 92,2%     │ │      ◯ 21,3%     │   una gauge per
-│ 29.931 / 30.000  │ │  4.611 / 5.000   │ │ 31.935 / 150.000 │   busta con tetto
-└──────────────────┘ └──────────────────┘ └──────────────────┘
-FONDO CASSA INIZIALE      ELISA 14.275,60    MATTEO 17.946,20    TOTALE 32.221,80
-MESE  ENTRATE  USCITE  RISPARMIO  FONDO CASSA  USCITE FONDI   TOTALE    ELISA   MATTEO
-gen   9.200    3.100     6.100      32.221        1.500      36.934   18.100   18.834
-feb   …
-set   …
-ott   (vuoto: mese futuro)
-┌ CASH FLOW ────────────────────────┐ ┌ FONDO CASSA ─────────────────────┐
-│ linee entrate / uscite / risparmio│ │ linea del TOTALE, mese per mese  │
+2026  fino a ottobre
+┌ Entrate · ottobre ┐ ┌ Uscite · ottobre ┐ ┌ Risparmio · ottobre ┐ ┌ Tasso di risparmio ┐
+│ 9.200,00          │ │ 3.100,00         │ │ 6.100,00            │ │ 66%                │
+│ 9.000,00 a sett.  │ │ 2.800,00 a sett. │ │ ▲ 180,14 su settem. │ │ 64% da inizio anno │
+└───────────────────┘ └──────────────────┘ └─────────────────────┘ └────────────────────┘
+Fondi  buste con un tetto
+┌ Fondo emergenza ───────────────┐ ┌ Fondo varie ───────────────────┐
+│ 29.931,00      di 30.000 · 99,8% │ │ 4.611,00        di 5.000 · 92,2% │   una card con barra
+│ ████████████████████████████░ │ │ ██████████████████████░░ │   per busta con tetto
+└────────────────────────────────┘ └────────────────────────────────┘
+Mese per mese                          Totale = risparmio + fondo cassa − uscite dei fondi
+Mese          Entrate  Uscite  Risparmio  Fondo cassa  Uscite fondi   Totale   Elisa   Matteo
+Inizio anno                                                       32.221,80 14.275,60 17.946,20
+Gennaio        9.200    3.100     6.100    32.221          1.500     36.934   18.100  18.834
+…
+Ottobre [in corso]
+2026 (le somme)
+┌ Cash flow ────────────────────────┐ ┌ Fondo cassa · totale a fine mese ┐
+│ entrate / uscite / risparmio      │ │ linea del TOTALE, mese per mese  │
 └───────────────────────────────────┘ └──────────────────────────────────┘
 ```
 
-In cima, prima dell'intestazione, le quattro card del primo riepilogo
-(richieste di nuovo il 2026-09-12): entrate, uscite, risparmio e tasso del
-mese a schermo, col nome del mese nel titolo perché non si leggano come
-valori dell'anno.
+In cima, sotto l'anno, le quattro card del primo riepilogo (richieste di nuovo
+il 2026-09-12), ridisegnate come **KPI** il 2026-10-07: entrate, uscite,
+risparmio e tasso del mese a schermo, col nome del mese nel titolo perché non
+si leggano come valori dell'anno, e sotto ciascuna un confronto, col mese
+prima (entrate, uscite, risparmio con ▲ o ▼) o con l'anno finora (il tasso).
+Solo il risparmio è colorato: le uscite sono l'andamento normale di un mese,
+non un allarme. Un tasso senza entrate è un trattino, mai uno 0% finto.
 
 Definizioni (dell'utente, 2026-09-11), per il mese `m`:
 
@@ -128,12 +213,21 @@ Definizioni (dell'utente, 2026-09-11), per il mese `m`:
 - TOTALE è `positive` se non è sceso rispetto al mese prima, `negative` se è
   sceso. Il mese a schermo è evidenziato.
 - "Fondo" è una busta con tetto (`netCapped` o `incomeCapped`), il che rende
-  la classificazione un dato del vault e non un nome. Una gauge per ogni busta
-  attiva con tetto: riempimento = saldo/tetto (net) o entrate cumulative/tetto
-  (income), sotto `saldo / tetto`. Senza buste con tetto la fila di gauge non
-  c'è.
-- CASH FLOW e FONDO CASSA sono grafici a linee (Swift Charts, palette): il
-  primo entrate, uscite e risparmio per mese; il secondo il TOTALE.
+  la classificazione un dato del vault e non un nome. Una card per ogni busta
+  attiva con tetto, con una **barra**: riempimento = saldo/tetto (net) o
+  entrate cumulative/tetto (income), e sotto `di tetto · percentuale` e
+  "tetto sul saldo" o "tetto sulle entrate". Senza buste con tetto la fila di
+  card non c'è.
+- La tabella ha una riga **"Inizio anno"** (il TOTALE e i totali per persona
+  di prima dell'anno), una riga per mese col tag
+  **"in corso"** sul mese a schermo, e in fondo le somme dell'anno. I mesi
+  dopo quello a schermo sono trattini opachi (non ancora), non zeri.
+- CASH FLOW e FONDO CASSA sono due grafici a linee (Swift Charts, colori
+  della serie di §5): il primo entrate, uscite e risparmio per mese, col
+  segmento verso il mese in corso tratteggiato (non è finito) e, passando il
+  puntatore, una scheda con le tre cifre del mese; il secondo il TOTALE a fine
+  mese dall'inizio dell'anno, coi mesi in cui è sceso segnati. Un anno senza
+  movimenti dice "Nessun movimento quest'anno" invece di tabella e grafici.
 - Nessun filtro persona nel riepilogo: le persone sono colonne.
 
 ### 2.3 SETUP
@@ -141,19 +235,27 @@ Definizioni (dell'utente, 2026-09-11), per il mese `m`:
 > Aggiunta il 2026-09-12 su richiesta: "sezioni per aggiungere le categorie
 > e gli envelope", l'equivalente del foglio "Categorie e flow" dell'Excel.
 > Il 2026-09-23 si aggiunge la tabella dei wallet, che prima si vedevano solo
-> nella gestione ⌘⇧M.
+> nella gestione ⌘⇧M. Il 2026-10-07 la vista diventa una pagina di card, con
+> la card del vault in cima.
 
-Tre tabelle nello stile del mastro (stesse celle, stesse intestazioni, stessa
-riga vuota in fondo per aggiungere: ⇥ tra i campi, ↩ salva, esc annulla):
-a sinistra i wallet sopra le buste, a destra le categorie. La tabella dei
-wallet è alta quanto le sue righe (sono pochi, niente scroll) e le buste sotto
-prendono il resto; le due hanno la stessa larghezza, così i SALDO sono in
-colonna. Nessun mese, quindi
-niente intestazione mese. Le archiviate stanno in fondo, in `dim`, con
-"Ripristina" nel menu contestuale. Gli errori del core passano dallo stesso
-alert del mastro.
+Una pagina di card sul foglio (`Views/Setup/SetupView.swift`): a sinistra la
+**card del vault** sopra i wallet e le buste, a destra le categorie; due
+colonne quando la finestra ne ha lo spazio (520 pt l'una), una sotto l'altra
+altrimenti. Le tabelle hanno lo stile del mastro (stesse celle, stesse
+intestazioni, stessa riga vuota in fondo per aggiungere: ⇥ tra i campi, ↩
+salva, esc annulla). La tabella dei wallet è alta quanto le sue righe (sono
+pochi, niente scroll) e ha una riga Totale. Nessun mese, quindi niente
+intestazione mese. Le archiviate stanno in fondo, in `dim`, con "Ripristina"
+nel menu contestuale. Gli errori del core passano dallo stesso alert del
+mastro.
 
-Ultima colonna di entrambe le tabelle: nessuna intestazione, vuota a riposo,
+La **card del vault** (`Views/Setup/VaultCard.swift`): nome, valuta ("non si
+cambia"), membri (l'elenco del server per un vault di un account, altrimenti
+"Solo su questo Mac") e, a destra del titolo, **Condividi…** per l'owner con un
+account. Nome e valuta si leggono e basta: si rinomina dal menu Vault o dal
+selettore in alto (§2.4).
+
+Ultima colonna di ogni tabella: nessuna intestazione, vuota a riposo,
 mostra l'icona `archivebox`/`tray.and.arrow.up` solo sulla riga sotto il
 puntatore — un click manda lo stesso `ArchiveWallet`/`RestoreWallet`,
 `ArchiveFlow`/`RestoreFlow` o `ArchiveCategory`/`RestoreCategory` del menu
@@ -163,44 +265,50 @@ Opening, Uncategorized) e durante l'editing della riga
 `Views/Setup/CategoryTable.swift`).
 
 ```
-┌ WALLET ────────────────────────────────────────────┐ ┌ CATEGORIE ───────────────────────────┐
-│ NOME                                   SALDO     ⎘ │ │ NOME         ALIAS                  ⎘ │
-│ Conto                               4.120,50 [📥] │ │ Casa         mutuo, affitto      [📥] │
-│ Carta                                 -310,00     │ │ Spesa        coop, esselunga         │
-│ nome…                                   0,00      │ │ Opening      (sistema)                │
-│ Il saldo di apertura di un wallet nuovo va in     │ │ nome…        simili: Casa             │
-│ Non allocato                                      │ └────────────────────────────────────────┘
-└──────────────────────────────────────────────────┘
-┌ BUSTE ─────────────────────────────────────────────┐
-│ NOME        TIPO      TETTO     NEG   SALDO      ⎘ │
-│ Non alloc.  —         —         —     1.250,00     │
-│ Cash        nessuno   —         no    3.480,20 [📥] │
-│ Casa        netto     150.000   no   31.935,00     │
-│ Emergenza   entrate   30.000    no   29.931,00     │
-│ nome…       nessuno ▾ tetto…    no   apertura…     │
-└──────────────────────────────────────────────────┘
+┌ Vault ─────────────────────────────────┐ ┌ Categorie ─────────────────────────────────┐
+│ Nome        Casa                Condividi… │ │ Nome        Alias                 Righe 90 gg │
+│ Valuta      EUR · €   non si cambia      │ │ Casa        [mutuo] [affitto]       4  [📥] │
+│ Membri      Elisa, Matteo                │ │ Spesa       [coop] [esselunga]     21      │
+└──────────────────────────────────────────┘ │ Opening     system                  —      │
+┌ Wallet ────────────────────────────────┐   │ nome…       Simili: Casa                   │
+│ Nome                              Saldo  │   └────────────────────────────────────────────┘
+│ Conto                      4.120,50      │
+│ nome…                      saldo apertura│
+│ Totale                     3.810,50      │
+└──────────────────────────────────────────┘
+┌ Buste ─ un tetto la rende un fondo ────┐
+│ Nome        Tetto      Limite Neg. Saldo │
+│ Cash        Nessuno         —   no  3.480,20 │
+│ Casa        Sul saldo 150.000   no 31.935,00 │
+│                                  ▓▓▓░░ │   barra: quanto del tetto è usato
+│ nome…       Nessuno ▾  limite…  no  allocazione │
+└──────────────────────────────────────────┘
 ```
 
 | Tabella | Colonne | In posto | Menu contestuale |
 |---|---|---|---|
-| WALLET | NOME, SALDO | nome → `RenameWallet`; SALDO segue le transazioni e si scrive solo nella riga vuota, dove è il saldo di apertura (negativo per una carta che parte in rosso), che va in Non allocato → `CreateWallet` | archivia (il core vuole saldo zero) / ripristina |
-| BUSTE | NOME, TIPO (nessuno / netto / entrate), TETTO, NEG (sì/no, un click), SALDO | nome, tipo, tetto, negativo → `UpdateFlow` con i soli campi cambiati; nella riga vuota SALDO è l'allocazione iniziale da Non allocato → `CreateFlow` | archivia / ripristina |
-| CATEGORIE | NOME, ALIAS (lista separata da virgole) | nome → `RenameCategory`; alias → la differenza fra la lista di prima e quella nuova, un `AddAlias`/`RemoveAlias` per voce; nella riga vuota, sotto il nome, "simili: …" suggerisce e non blocca (`similar_categories`) | unisci in… (anteprima con `preview_merge`), archivia / ripristina |
+| WALLET | NOME, SALDO (e una riga Totale) | nome → `RenameWallet`; SALDO segue le transazioni e si scrive solo nella riga vuota, dove è il saldo di apertura (negativo per una carta che parte in rosso), che va in Non allocato → `CreateWallet` | archivia (il core vuole saldo zero) / ripristina |
+| BUSTE | NOME, TETTO (nessuno / sul saldo / sulle entrate), LIMITE, NEG (sì/no, un click), SALDO con, per una busta con tetto, una barra sottile di quanto del tetto è usato | nome, tipo, tetto, negativo → `UpdateFlow` con i soli campi cambiati; nella riga vuota SALDO è l'allocazione iniziale da Non allocato → `CreateFlow` | archivia / ripristina |
+| CATEGORIE | NOME, ALIAS (a riposo chip, in modifica una lista separata da virgole), RIGHE 90 GG (quante righe ha avuto la categoria negli ultimi 90 giorni: `category_totals`, zero in `dim`, per accorgersi di una categoria che non si usa prima di archiviarla; `Model/AppStore+Usage.swift`) | nome → `RenameCategory`; alias → la differenza fra la lista di prima e quella nuova, un `AddAlias`/`RemoveAlias` per voce; nella riga vuota, sotto il nome, "simili: …" suggerisce e non blocca (`similar_categories`) | unisci in… (anteprima con `preview_merge`), archivia / ripristina |
 
 Non allocato e le categorie di sistema (`Opening`, `Uncategorized`) si vedono
-ma non si modificano. ⌘⇧C ("Wallet, buste e categorie…") porta qui; la
-finestra Categorie separata non c'è più. Vault, ricorrenze e condivisione
-restano nella gestione ⌘⇧M, che elenca ancora anche wallet e buste.
+ma non si modificano. ⌘⇧C ("Wallet, buste e categorie…") porta qui, come
+⌘4; la finestra Categorie separata non c'è più. Vault, ricorrenze e
+condivisione restano anche nella gestione ⌘⇧M, che elenca ancora wallet e
+buste.
 
 ### 2.4 Il vault
 
 > Aggiunto il 2026-09-15: creazione, rinomina e cancellazione del vault.
 
-Tre azioni, raggiungibili da tre posti che condividono un'implementazione
+Tre azioni, raggiungibili da quattro posti che condividono un'implementazione
 sola (notifiche del menu Vault, ricevute da `MainWindow`): il menu **Vault**
-(Nuovo vault…, Rinomina vault…, Elimina vault…), la palette `>` (stesse voci)
-e il menu a tendina del vault nella gestione ⌘⇧M (Nuovo…, Rinomina…,
-Condividi…, Elimina…).
+(Nuovo vault…, Rinomina vault…, Elimina vault…), la palette `>` (stesse voci),
+il menu a tendina del vault nella gestione ⌘⇧M (Nuovo…, Rinomina…,
+Condividi…, Elimina…) e, dal 2026-10-07, il **selettore del vault nella barra
+in alto** (§2): gli altri vault, poi Nuovo vault…, Rinomina…, Condividi…,
+Elimina… ed Esci dal vault…, spenti dalle stesse regole (`VaultPermissions`)
+del menu e della palette.
 
 | Azione | Foglio | Comando |
 |---|---|---|
@@ -248,23 +356,58 @@ un tipo di transazione (`r30 #Salute`) che si netta sulla categoria della
 spesa, e una categoria di entrata con quel nome inviterebbe a registrarlo come
 entrata, gonfiando entrate e uscite.
 
-### 2.5 Ricorrenze dovute
+### 2.5 Ricorrenze
 
 > Aggiunto il 2026-09-23: dal ridisegno del 2026-09-10 il banner
 > "N ricorrenze da confermare" apriva un pannello che non sapeva eseguirle.
+> Dal 2026-10-07 sono una scheda, la terza: banner, `DueRecurringSheet` e
+> `RecurringPanel` non ci sono più.
 
-"Rivedi" sul banner apre `DueRecurringSheet`: ogni modello con i suoi periodi
-dovuti in ordine di data, importo, tipo, wallet e busta; per ogni periodo
-**Esegui** o **Salta**, e **Esegui tutte** che manda ogni periodo in un solo
-`execute_batch` (tutto o niente: se uno non passa, per esempio per fondi
-insufficienti in una busta, non si scrive nulla e l'alert lo dice). Il pannello
-delle ricorrenze mostra anche le archiviate e le **ripristina**. Le frasi di
-cadenza sono intere e al plurale giusto ("Ogni 2 settimane il lunedì").
+La scheda **Ricorrenze** (`Views/Recurring/RecurringTab.swift`, ⌘3) ha a
+sinistra tre card in colonna e a destra l'inspector (340 pt):
 
-**Dal 2026-09-29.** Creare un modello chiedeva tre passaggi (⌘⇧M, Gestisci
-ricorrenze…, Nuova…). **Nuova ricorrenza…** nel menu Vault e nella palette apre
-subito lo stesso foglio del pannello (`RecurringTemplateSheet`), spenta per un
-vault in sola lettura.
+- **Da confermare**: ogni periodo dovuto, compresi gli arretrati, in ordine di
+  data, con importo, tipo, wallet e busta; per ogni periodo **Salta** o
+  **Registra**, e **Registra tutte** che manda ogni periodo in un solo
+  `execute_batch` (tutto o niente: se uno non passa, per esempio per fondi
+  insufficienti in una busta, non si scrive nulla e l'alert lo dice). Un vault
+  in sola lettura li mostra senza bottoni. Gli stessi periodi stanno anche
+  nel mese del Mastro, alla loro data (§2.1), e la pillola "N da confermare"
+  della barra in alto porta qui. Un modello non scrive mai una transazione da
+  solo.
+- **Prossimi 30 giorni**: una tessera per ogni periodo da domani in poi
+  (giorno, titolo, importo col segno), con le uscite e le entrate previste
+  della finestra. Sola lettura: un periodo si registra quando è dovuto, mai
+  prima. Oggi sta in "Da confermare", e un giorno non si conta in tutte e due.
+  Le date le calcola il core (`schedule_occurrences`, sotto).
+- **Modelli**: ogni modello in una riga da 26 pt (Attiva, Descrizione,
+  Importo, Cadenza, Prossima, Wallet, Busta, Categoria), le archiviate in
+  fondo in `dim` con **Ripristina**, una riga vuota per aggiungerne uno. Un
+  click su una riga la apre nell'inspector; l'interruttore Attiva mette in
+  pausa o riprende il modello sul posto. Le frasi di cadenza sono intere e al
+  plurale giusto ("Ogni 2 settimane il lunedì").
+
+L'**inspector** (`Views/Recurring/RecurringInspector.swift`) modifica un
+modello o ne scrive uno nuovo: importo e tipo (uscita o entrata), Dove
+(wallet, busta, categoria, nota), Quando (frequenza, ogni N, il giorno della
+settimana, del mese o dell'anno, inizio, fine) e **Prossime date**, le
+prossime quattro, che seguono ogni tasto e che il core calcola anche per un
+modello non ancora salvato. **Salva** manda un `UpdateRecurring` con i soli
+campi cambiati, Annulla rimette i valori salvati; un modello archiviato si
+ripristina prima di modificarlo. L'inspector non offre ciò che
+`RecurringPatch` non sa dire: il tipo non cambia una volta creato il modello,
+e un modello con un wallet o una busta non torna a "qualsiasi wallet" né a
+Non allocato (quelle voci sono spente).
+
+**Nuova ricorrenza…** (menu Vault e palette; dal 2026-09-29, prima erano tre
+passaggi) passa alla scheda e apre l'inspector su un modello nuovo; spenta per
+un vault in sola lettura.
+
+**Core** (2026-10-07): `schedule_occurrences(schedule, from, limit)`
+(`core/src/recurring.rs`, `core/src/ffi.rs`) restituisce le prime `limit` date
+di una pianificazione da `from` in poi, validandola come `CreateRecurring`;
+`end_date` la limita. Non tocca il database, e serve all'agenda e all'anteprima
+dell'inspector.
 
 ### 2.6 Estratti conto, export completo e backup
 
@@ -294,6 +437,9 @@ vault in sola lettura.
   dove si sceglie; l'avviso finale spiega come ripristinarla (README).
 
 ## 3. Mappa mockup → dominio
+
+(Le etichette in maiuscolo sono quelle dei mockup; dal 2026-10-07 l'app le
+scrive in minuscolo, e `FLOW` si legge "Busta".)
 
 | Colonna / etichetta | Dominio |
 |---|---|
@@ -347,21 +493,47 @@ sistema, così il core non conosce fusi né calendari.
 
 ## 5. Aspetto
 
-Palette fissa scura, non i colori di sistema (`AppTheme` viene sostituito).
+Palette fissa scura, non i colori di sistema: la finestra forza il tema scuro
+e dipinge il suo fondo (`Support/Palette.swift`, enum `Ink`). I fondi salgono
+di luminosità da `bg` a `hi`. L'**ambra** (`accent`) segna solo l'interazione:
+selezione, focus, scheda attiva, bottoni, tag "da confermare". Non è mai il
+colore di una spesa o di un errore, che hanno il loro, così un numero non
+sembra cliccabile per il solo colore.
 
 | Token | Valore | Uso |
 |---|---|---|
-| `bg` | `#0D0D0D` | fondo finestra |
-| `panel` | `#141414` | card e pannello destro |
-| `line` | `#242424` | separatori |
-| `text` | `#E6E6E6` | testo |
-| `dim` | `#7A7A7A` | intestazioni, placeholder, zeri |
-| `accent` | `#FF5A3C` | selezione, filtri attivi, barre uscite |
+| `bg` | `#0A0A0B` | barre della finestra (alta, schede, pannello destro) |
+| `sheet` | `#0E0E10` | fondo del foglio, un passo sopra le barre |
+| `card` | `#131316` | card |
+| `raised` | `#1B1B20` | riga sotto il puntatore, chip acceso |
+| `hi` | `#2A2A31` | segmento attivo di un controllo segmentato |
+| `line` | `#1E1E23` | filetti e bordi delle card |
+| `line2` | `#2B2B32` | bordi più forti: controlli, tasti |
+| `rowLine` | `#18181C` | filetto fra le righe, più tenue di `line` |
+| `text` | `#EDEDEF` | testo |
+| `text2` | `#A3A3AB` | testo secondario |
+| `text3` | `#80808A` | intestazioni di colonna, segnaposto, zeri |
+| `accent` | `#FF9A2E` | ambra: solo interazione |
 | `positive` | `#3ECF8E` | entrate, risparmio |
-| `negative` | `#FF5A3C` | uscite |
+| `negative` | `#FF6B6B` | importi e saldi negativi, errori |
+| `warning` | `#E8A33D` | modifica rifiutata dal sync, fascia di mezzo di una barra |
+| `muted`, `mutedPositive` | `#4A2A12`, `#1D5340` | metà scura di una barra a due toni |
+| `chartIncome` | `#5A8CF0` | serie entrate |
+| `chartExpense` | `#D6742A` | serie uscite, barre delle categorie |
+| `chartSavings` | `#25A26C` | serie risparmio |
 
-Tipografia: SF Mono ovunque, 11-12 pt nelle tabelle, cifre tabulari. Le
-intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
+I colori delle serie sono scelti perché si distinguano anche a chi non vede
+bene i colori, su `#111113`. Una barra di avanzamento passa da `positive` a
+`warning` a `negative` oltre il 70% e il 90%.
+
+Tipografia: SF Pro con cifre tabulari ovunque (`Face.ui`), così le colonne di
+numeri stanno in colonna senza trucchi; il monospazio resta solo per i tasti
+(`Face.key`, le sigle ⌘K ⌘F). 12 pt nelle righe, 11 pt medium nelle intestazioni
+di colonna e di sezione, che sono in minuscolo (sentence case) e in `text3`,
+non più maiuscole spaziate; 22 e 24 pt per il numero di una card e per il
+risparmio del pannello. Le card hanno angoli di 8 pt e un bordo da 1 pt.
+`Metrics`: righe da 24 pt, intestazioni da 26, barra in alto da 44, barra
+delle schede da 27.
 
 ## 6. Tastiera
 
@@ -376,14 +548,15 @@ intestazioni di colonna e di sezione sono maiuscole, 10 pt, `dim`, spaziate.
 | `↑` `↓` `↩` `⇥` | nell'elenco delle categorie: scorre e sceglie; nel quick-add `⇥` scrive la categoria suggerita |
 | `⌘D` | duplica l'ultima riga (non un trasferimento; il tipo resta, un rimborso duplicato è un rimborso) |
 | `⌥←` `⌥→` | mese precedente / successivo |
-| `⌘F` | fuoco sulla ricerca |
-| `⌘K` | riga quick-add sopra la griglia (la grammatica di §3.1 del distillato); con `>` in prima posizione è la palette comandi |
+| `⌘F` | passa al Mastro e dà il fuoco alla ricerca nella barra in alto |
+| `⌘K` | riquadro quick-add sopra la griglia (la grammatica di §3.1 del distillato, con la riga letta a chip, §2.1); con `>` in prima posizione è la palette comandi |
 | `⌘E` | esporta CSV: le righe a schermo (tutte le pagine del mese), RFC 4180, `Support/LedgerCSV.swift` |
 | `⇧⌘I` | importa un estratto conto (§2.6) |
 | menu File | Esporta tutte le transazioni…, Backup del database… (§2.6) |
 | `⌘⇧M` | gestione: vault, wallet, buste, ricorrenze, condivisione |
 | menu Vault | Nuovo vault…, Rinomina vault…, Elimina vault…, Esci dal vault… (§2.4), senza scorciatoia: rari, e due distruttivi; dal 2026-09-29 anche Nuova ricorrenza… (§2.5) |
-| `⌘⇧C` | vista SETUP: wallet, buste e categorie |
+| `⌘1` `⌘2` `⌘3` `⌘4` | schede Riepilogo, Mastro, Ricorrenze, Setup (menu Vista) |
+| `⌘⇧C` | scheda Setup: wallet, buste e categorie (menu Vault, "Wallet, buste e categorie…") |
 | `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
 | `⌘⇧W` | mostra / nasconde la colonna WALLET (menu Vista) |
 
@@ -394,9 +567,9 @@ maiuscole né di accenti: prima il titolo dall'inizio, poi dall'inizio di una
 sua parola, poi ovunque, infine le parole chiave nascoste); ↑↓ scorrono con
 rientro in fondo, ↩ esegue e chiude, esc chiude. Nessuna finestra nuova:
 è lo stesso riquadro. Le azioni sono mese precedente / successivo / corrente,
-vai a RIEPILOGO o MASTRO, un "Vault: nome" per ogni altro vault, Nuovo vault…,
+"Vai a" ciascuna delle quattro schede (Riepilogo, Mastro, Ricorrenze, Setup), un "Vault: nome" per ogni altro vault, Nuovo vault…,
 Rinomina vault… ed Elimina vault… (§2.4; le ultime due solo con un vault a
-schermo, Elimina solo se lo si può cancellare), SETUP, gestione, esporta CSV,
+schermo, Elimina solo se lo si può cancellare), "Wallet, buste e categorie…", gestione, esporta CSV,
 sincronizza ora, e i tre interruttori di vista (annullate, trasferimenti,
 colonna wallet); dal 2026-09-23 anche Esci dal vault… (solo a un membro),
 Importa estratto conto…, Esporta tutte le transazioni… e Backup del
@@ -457,9 +630,38 @@ palestra archiviata dopo sei mesi. Le righe sono firmate da due persone, che un
 server rifiuterebbe da un solo account, per cui il file non va nel database
 vero. L'app lo apre a parte con `-SparagneDatabase demo.sqlite`, che legge un
 altro file nella stessa cartella e non crea il `SyncEngine`: niente sync,
-niente account, e il nome del file come sottotitolo della finestra
-(`LaunchOptions.swift`). Lo schema **Sparagne Demo** di Xcode passa già
+niente account, e il badge **DEMO** accanto al vault nella barra in alto, col
+nome del file nel suggerimento (`LaunchOptions.swift`; fino al 2026-10-07 il
+nome del file era il sottotitolo della finestra, che non c'è più). La pillola
+di sync dice "Solo locale". Con `-SparagneTab summary|ledger|recurring|setup`
+la finestra si apre su una scheda, per guardarla senza guidare la tastiera. Lo schema **Sparagne Demo** di Xcode passa già
 l'opzione. La cartella dipende dalla firma: una build da Xcode gira nella
 sandbox e legge
 `~/Library/Containers/it.oghma.sparagne/Data/Library/Application Support/Sparagne/`,
 una build con `CODE_SIGNING_ALLOWED=NO` legge `~/Library/Application Support/Sparagne/`.
+
+**2026-10-07: finestra da terminale finanziario.** L'aspetto cambia in tutta
+l'app e le viste di §2 si riorganizzano. Aspetto: `Support/Palette.swift` ha la
+palette nuova (fondi a gradini, ambra solo per l'interazione, rosso diverso
+dall'ambra, tre colori di serie), `Face` passa a SF Pro con cifre tabulari
+(`Face.key` resta l'unico monospazio) e `Metrics` fissa righe da 24 pt,
+intestazioni da 26, barra in alto da 44 e schede da 27. Finestra:
+`App/WindowChrome.swift` e `Views/Chrome/TopBar.swift` disegnano la barra in
+alto (semafori, `VaultSelector` col badge DEMO, `MonthStepper`, ricerca,
+`DuePill`, "Aggiungi ⌘K", `SyncPill` con popover da `Model/SyncPillState.swift`),
+`Views/Chrome/SheetTabBar.swift` le schede con le righe di stato
+(`StatusLine`, ⌘1–⌘4); titolo, sottotitolo demo, toolbar con lo switcher e banner
+delle ricorrenze sono tolti. Mastro: `Views/Ledger/FilterBar.swift`, griglia a
+foglio, periodi dovuti fra le righe (`Model/LedgerLines.swift`, `PendingRowView`),
+`Model/SheetStats.swift` per media, conteggio e somma, pannello destro rifatto,
+quick-add a chip (`Model/QuickAddTokens.swift`). Riepilogo: card KPI, fondi a
+barre, riga "Inizio anno" e tag "in corso" (`Views/Summary/`,
+`Model/YearModel.swift`), grafici con scheda al passaggio del puntatore.
+Ricorrenze, scheda nuova: `Views/Recurring/` (`DueRecurringCard`,
+`RecurringAgendaCard`, `RecurringTemplateTable`, `RecurringInspector`) con
+`Model/RecurringAgenda.swift`, `RecurringDraft.swift`, `RecurringNext.swift` e
+`RecurringMonthly.swift`; `RecurringPanel` e `DueRecurringSheet` cancellati; nel
+core `schedule_occurrences` (`core/src/recurring.rs`, `core/src/ffi.rs`).
+Setup: `Views/Setup/VaultCard.swift`, tabelle ridisegnate, barre di riempimento
+delle buste e colonna "Righe 90 gg" (`Model/AppStore+Usage.swift`). Avvio:
+`-SparagneTab` (`App/LaunchOptions.swift`).

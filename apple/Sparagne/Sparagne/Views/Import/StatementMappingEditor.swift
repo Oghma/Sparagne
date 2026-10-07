@@ -40,7 +40,7 @@ struct StatementMappingEditor: View {
                         Text(StatementText.delimiter(model.detection?.delimiter ?? model.mapping.delimiter))
                     }
                     FieldRow(label: String(localized: "Mapping")) {
-                        Text(sourceText).foregroundStyle(Ink.dim)
+                        Text(sourceText).foregroundStyle(Ink.text3)
                     }
                 }
             }
@@ -79,7 +79,7 @@ struct StatementMappingEditor: View {
                         .fieldPicker()
                     }
                     FieldRow(label: String(localized: "Time zone")) {
-                        Text(model.timezone).foregroundStyle(Ink.dim)
+                        Text(model.timezone).foregroundStyle(Ink.text3)
                     }
                 }
             }
@@ -281,7 +281,7 @@ struct StatementMappingEditor: View {
                                 : String(localized: "Any other row")
                         )
                         .font(Face.row)
-                        .foregroundStyle(Ink.dim)
+                        .foregroundStyle(Ink.text3)
                         .frame(width: ImportMetrics.fieldWidth, alignment: .leading)
                         actionPicker($model.mapping.defaultAction)
                         transferWalletPicker($model.mapping.defaultAction)
@@ -323,7 +323,7 @@ struct StatementMappingEditor: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.borderless)
-                .foregroundStyle(Ink.dim)
+                .foregroundStyle(Ink.text3)
                 .help(String(localized: "Remove"))
                 .frame(width: 16)
             }
@@ -400,7 +400,7 @@ struct StatementMappingEditor: View {
                         }
                         .buttonStyle(.borderless)
                             .font(Face.footnote)
-                            .foregroundStyle(Ink.dim)
+                            .foregroundStyle(Ink.text3)
                     }
                 }
             }
@@ -426,7 +426,7 @@ private struct FieldRow<Content: View>: View {
         GridRow {
             Text(required ? label + " *" : label)
                 .font(Face.row)
-                .foregroundStyle(Ink.dim)
+                .foregroundStyle(Ink.text3)
                 .frame(width: ImportMetrics.labelWidth, alignment: .leading)
             content
                 .font(Face.row)
@@ -455,7 +455,7 @@ private struct FlowTokens: View {
         if tokens.isEmpty {
             Text(TransactionRow.placeholder)
                 .font(Face.row)
-                .foregroundStyle(Ink.dim)
+                .foregroundStyle(Ink.text3)
         } else {
             HStack(spacing: 6) {
                 ForEach(tokens, id: \.self) { token in

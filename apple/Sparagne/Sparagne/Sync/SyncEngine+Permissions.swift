@@ -30,3 +30,28 @@ extension SyncEngine {
         return role != .owner
     }
 }
+
+/// What the vault on screen allows, for the three places that offer the
+/// vault's life cycle: the Vault menu, the top bar's vault selector and the
+/// command palette (`docs/v2/UI.md` §2.4). One set of rules, so the three
+/// never disagree about an entry.
+///
+/// Without an engine (a demo database) nothing is on a server: the core
+/// alone decides, so rename and delete are offered and leave and share are
+/// not.
+struct VaultPermissions: Equatable {
+    var mayRename = false
+    var mayDelete = false
+    var mayLeave = false
+    /// Owner only, and only with an account the server can share through.
+    var mayShare = false
+
+    @MainActor
+    init(vault: VaultView?, engine: SyncEngine?) {
+        guard let vault else { return }
+        mayRename = engine?.mayRenameVault(vault.id) ?? true
+        mayDelete = engine?.mayDeleteVault(vault.id) ?? true
+        mayLeave = engine?.mayLeaveVault(vault.id) ?? false
+        mayShare = engine.map { $0.isLoggedIn && $0.isOwner(ofVault: vault.id) } ?? false
+    }
+}

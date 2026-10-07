@@ -46,9 +46,12 @@ struct MonthKey: Hashable, Sendable, Identifiable {
         return MonthKey(moved, calendar: calendar)
     }
 
-    /// `"AGOSTO 2026"`.
+    /// `"Agosto 2026"`: the top bar's month, in sentence case like every
+    /// other label of the window (`docs/v2/UI.md` §5), whatever case the
+    /// locale gives its month names.
     func title(locale: Locale = .autoupdatingCurrent) -> String {
-        "\(LedgerDate.fullMonth(month, locale: locale)) \(year)"
+        let name = LedgerDate.fullMonth(month, locale: locale).lowercased(with: locale)
+        return "\(name.prefix(1).uppercased(with: locale))\(name.dropFirst()) \(year)"
     }
 
     /// The twelve months of this month's year, January first.
@@ -169,11 +172,15 @@ struct RowSelection: Equatable, Sendable {
     }
 }
 
-/// The three views behind the title-bar switcher (`docs/v2/UI.md` §2), in
-/// the switcher's order; the first is the one the window opens on.
+/// The sheets of the tab bar at the bottom of the window (`docs/v2/UI.md`
+/// §2), in the bar's order, which is also ⌘1 to ⌘4; the window opens on the
+/// first.
 enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
     case summary
     case ledger
+    /// The recurring templates and the periods waiting for a decision
+    /// (§2.5).
+    case recurring
     /// Envelopes and categories, as two editable tables (§2.3).
     case setup
 
@@ -183,8 +190,22 @@ enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .summary: String(localized: "Summary")
         case .ledger: String(localized: "Ledger")
+        case .recurring: String(localized: "Recurring")
         case .setup: String(localized: "Setup")
         }
+    }
+
+    /// The digit of its ⌘-shortcut in the View menu: its place in the bar,
+    /// from 1.
+    var shortcut: Int {
+        (Self.allCases.firstIndex(of: self) ?? 0) + 1
+    }
+
+    /// The tab ⌘`shortcut` selects; `nil` past the last one.
+    init?(shortcut: Int) {
+        let tabs = Self.allCases
+        guard tabs.indices.contains(shortcut - 1) else { return nil }
+        self = tabs[shortcut - 1]
     }
 }
 

@@ -4,9 +4,10 @@ import Testing
 
 @testable import Sparagne
 
-/// The due sheet (`DueRecurringSheet`): the periods a template is waiting
-/// on, and what Execute, Skip and Execute All leave behind. Every assertion
-/// reads the core's own answer after the command, not the sheet.
+/// "Da confermare" on the Ricorrenze tab (`DueRecurringCard`): the periods
+/// a template is waiting on, and what Registra, Salta and Registra tutte
+/// leave behind. Every assertion reads the core's own answer after the
+/// command, not the card.
 @MainActor
 struct RecurringDueTests {
     /// Vault `Main`, wallet `Cash` holding 100.00.
@@ -146,6 +147,49 @@ struct RecurringDueTests {
         #expect(store.presentedError == nil)
         #expect(store.recurringTemplates.first { $0.id == rent.id }?.archived == false)
         #expect(Self.due(store, rent).count == 3)
+    }
+
+    @Test("Creating a template answers with its id, whatever else the list holds")
+    func createAnswersWithTheNewId() async throws {
+        let store = try await Self.onboarded()
+        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100)
+        let today = CoreDate.day(Date())
+
+        let created = await store.createRecurring(
+            kind: .income,
+            amount: 2_000,
+            walletId: nil,
+            flowId: nil,
+            category: "Salary",
+            note: "Payroll",
+            schedule: Schedule(frequency: .monthly(day: 27), interval: 1, startDate: today, endDate: nil)
+        )
+
+        #expect(store.presentedError == nil)
+        let id = try #require(created)
+        #expect(id != rent.id)
+        #expect(store.recurringTemplates.first { $0.id == id }?.note == "Payroll")
+    }
+
+    @Test("A refused template answers with no id")
+    func refusedCreateAnswersNil() async throws {
+        let store = try await Self.onboarded()
+        let vault = try #require(store.currentVault)
+        store.setReadOnlyVaults([vault.id])
+
+        let created = await store.createRecurring(
+            kind: .expense,
+            amount: 100,
+            walletId: nil,
+            flowId: nil,
+            category: "Bills",
+            note: "Rent",
+            schedule: Schedule(frequency: .daily, interval: 1, startDate: CoreDate.day(Date()), endDate: nil)
+        )
+
+        #expect(created == nil)
+        #expect(store.presentedError?.code == "forbidden")
+        #expect(store.recurringTemplates.isEmpty)
     }
 
     @Test("A read-only vault refuses Execute All before it reaches the core")

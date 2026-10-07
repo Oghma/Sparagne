@@ -1,9 +1,10 @@
 import Foundation
 import SparagneCore
 
-/// Renders a parsed quick-add line as the live preview the v1 TUI showed:
-/// `▼ 15.00 EUR │ pizza │ #food │ >groceries │ @cash │ Today`
-/// (docs/v2/DISTILLATO_V1.md §3.1).
+/// Renders a parsed quick-add line as one line of text, the preview the v1
+/// TUI showed: `▼ 15.00 EUR │ pizza │ #food │ >groceries │ @cash │ Today`
+/// (docs/v2/DISTILLATO_V1.md §3.1), and owns the category hint's rules. The
+/// ⌘K panel draws the parsed line as chips instead (`QuickAddTokens`).
 ///
 /// Parsing itself belongs to the core (`parseQuickAdd`); this only formats
 /// what came back.

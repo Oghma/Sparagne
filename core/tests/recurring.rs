@@ -734,3 +734,109 @@ fn replay_rebuilds_templates_runs_and_transactions() {
     );
     assert_eq!(fx.core.recurring_runs(fx.vault, id).unwrap().len(), 3);
 }
+
+// ---------------------------------------------------------------------------
+// Schedule previews
+// ---------------------------------------------------------------------------
+
+fn schedule(frequency: Frequency, interval: u32, start: NaiveDate) -> Schedule {
+    Schedule {
+        frequency,
+        interval,
+        start_date: start,
+        end_date: None,
+    }
+}
+
+#[test]
+fn preview_monthly_31st_across_february() {
+    let s = monthly(31, date(2027, 1, 1), None);
+    assert_eq!(
+        s.occurrences_from(date(2027, 1, 1), 4).unwrap(),
+        [
+            date(2027, 1, 31),
+            date(2027, 2, 28),
+            date(2027, 3, 31),
+            date(2027, 4, 30)
+        ]
+    );
+    let leap = monthly(31, date(2028, 1, 1), None);
+    assert_eq!(
+        leap.occurrences_from(date(2028, 1, 1), 3).unwrap(),
+        [date(2028, 1, 31), date(2028, 2, 29), date(2028, 3, 31)]
+    );
+}
+
+#[test]
+fn preview_end_date_cuts_the_list() {
+    let s = monthly(15, date(2026, 1, 1), Some(date(2026, 3, 20)));
+    assert_eq!(
+        s.occurrences_from(date(2026, 1, 1), 10).unwrap(),
+        [date(2026, 1, 15), date(2026, 2, 15), date(2026, 3, 15)]
+    );
+}
+
+#[test]
+fn preview_weekly_every_two_weeks() {
+    // 2026-03-02 is a Monday.
+    let s = schedule(Frequency::Weekly { weekday: 1 }, 2, date(2026, 3, 2));
+    assert_eq!(
+        s.occurrences_from(date(2026, 3, 2), 3).unwrap(),
+        [date(2026, 3, 2), date(2026, 3, 16), date(2026, 3, 30)]
+    );
+}
+
+#[test]
+fn preview_yearly_feb_29() {
+    let s = schedule(Frequency::Yearly { month: 2, day: 29 }, 1, date(2027, 1, 1));
+    assert_eq!(
+        s.occurrences_from(date(2027, 1, 1), 3).unwrap(),
+        [date(2027, 2, 28), date(2028, 2, 29), date(2029, 2, 28)]
+    );
+}
+
+#[test]
+fn preview_from_before_start_begins_at_first_occurrence() {
+    let s = monthly(10, date(2026, 5, 20), None);
+    assert_eq!(
+        s.occurrences_from(date(2020, 1, 1), 2).unwrap(),
+        [date(2026, 6, 10), date(2026, 7, 10)]
+    );
+}
+
+#[test]
+fn preview_from_on_an_occurrence_includes_it() {
+    let s = monthly(10, date(2026, 1, 1), None);
+    assert_eq!(
+        s.occurrences_from(date(2026, 4, 10), 2).unwrap(),
+        [date(2026, 4, 10), date(2026, 5, 10)]
+    );
+    assert_eq!(
+        s.occurrences_from(date(2026, 4, 11), 1).unwrap(),
+        [date(2026, 5, 10)]
+    );
+}
+
+#[test]
+fn preview_limit_zero_is_empty() {
+    let s = monthly(10, date(2026, 1, 1), None);
+    assert!(s.occurrences_from(date(2026, 1, 1), 0).unwrap().is_empty());
+}
+
+#[test]
+fn preview_rejects_invalid_schedules() {
+    let from = date(2026, 1, 1);
+    let start = date(2026, 1, 1);
+    for bad in [
+        schedule(Frequency::Daily, 0, start),
+        monthly(0, start, None),
+        monthly(32, start, None),
+        schedule(Frequency::Weekly { weekday: 8 }, 1, start),
+        monthly(5, start, Some(date(2025, 1, 1))),
+    ] {
+        assert!(matches!(
+            bad.occurrences_from(from, 3),
+            Err(DomainError::InvalidCommand(_))
+        ));
+    }
+}

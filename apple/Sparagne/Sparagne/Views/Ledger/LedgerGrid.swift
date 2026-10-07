@@ -2,12 +2,13 @@ import SwiftUI
 import SparagneCore
 
 /// The spreadsheet (`docs/v2/UI.md` §2.1): one row per transaction, oldest
-/// first, with an always-empty last line for the next one.
+/// first, the recurring periods due this month among them at their date
+/// (`PendingRowView`), and an always-empty last line for the next one.
 ///
 /// Editing is per row, not per cell: clicking a cell opens the whole row for
 /// editing with the focus on that cell, ⇥ walks the fields, ↩ commits the diff
-/// as one `UpdateTransaction` and esc throws the draft away. That is what the
-/// footer hints promise, and it means a row is never half-written.
+/// as one `UpdateTransaction` and esc throws the draft away, so a row is never
+/// half-written.
 ///
 /// Leaving the row saves it too, the way a spreadsheet does: ⇥ off IMPORTO, a
 /// click on another row or on the search field all commit what was typed. esc
@@ -29,6 +30,9 @@ struct LedgerGrid: View {
     /// The row under the pointer, so the eye can follow it across a grid that
     /// is much wider than a line of text.
     @State private var hovered: Uuid?
+    /// The lines as last worked out: the body runs again on every pointer
+    /// move and keystroke, and the lines change only with their input.
+    @State private var linesCache = LedgerLines.Cache()
     @FocusState private var focus: CellFocus?
     /// The grid as a whole, when no cell has the caret: what ⌘A, ⌫ and esc
     /// reach while rows are being picked rather than typed into.
@@ -42,36 +46,24 @@ struct LedgerGrid: View {
     var body: some View {
         VStack(spacing: 0) {
             GridHeader(showsWallet: store.showWalletColumn)
-            Hairline()
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    let rows = store.rows
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        rowView(index: index, row: row)
-                            .onAppear { if index == rows.count - 1 { loadNextPage() } }
-                        Hairline()
-                    }
-                    // A viewer's ledger is a report: nothing to type into.
-                    if store.canWrite { newRowView }
+                .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
+            GeometryReader { viewport in
+                ScrollView {
+                    lines(viewportHeight: viewport.size.height)
                 }
+                .scrollBounceBehavior(.basedOnSize)
+                .background { selectionKeys }
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .background { selectionKeys }
-            // The hints are all about typing rows; with rows picked, the line
-            // says what can be done to them instead.
-            if store.canWrite {
-                Hairline()
-                if store.selection.count > 1 {
-                    SelectionBar(store: store, showsCategory: $showsBulkCategory)
-                } else {
-                    KeyHints()
-                }
+            // With rows picked, a line under the sheet says what can be done
+            // to all of them at once.
+            if store.canWrite, store.selection.count > 1 {
+                SelectionBar(store: store, showsCategory: $showsBulkCategory)
             }
         }
         .overlayPreferenceValue(CategoryCompletionAnchor.self) { anchor in
             completionList(at: anchor)
         }
-        .background(Ink.bg)
+        .background(Ink.sheet)
         // The vault turned read-only under an open row (the owner changed the
         // role): the row could not be saved, so it closes.
         .onChange(of: store.isReadOnly) { _, _ in resetEditing() }
@@ -146,6 +138,41 @@ struct LedgerGrid: View {
             .accessibilityHidden(true)
     }
 
+    // MARK: - The lines
+
+    /// The rows with the due periods among them (`AppStore.ledgerLinesInput`),
+    /// the empty line, and ruled lines down to the bottom of the window: the
+    /// sheet's pitch is fixed, so how much is left to rule is known without
+    /// measuring anything.
+    private func lines(viewportHeight: CGFloat) -> some View {
+        let input = store.ledgerLinesInput
+        linesCache.update(input)
+        let rows = input.rows
+        let lines = linesCache.lines
+        // The # column numbers the stored rows only: a due period is not one
+        // yet, and gets a symbol instead.
+        let ordinals = linesCache.ordinals
+        let drawn = CGFloat(lines.count + (store.canWrite ? 1 : 0)) * Metrics.rowHeight
+        return LazyVStack(spacing: 0) {
+            ForEach(lines) { line in
+                switch line {
+                case .row(let row):
+                    let index = ordinals[row.id] ?? 0
+                    rowView(index: index, row: row)
+                        .rowRule()
+                        .onAppear { if index == rows.count - 1 { loadNextPage() } }
+                case .pending(let period):
+                    PendingRowView(period: period, store: store, showsWallet: store.showWalletColumn)
+                        .rowRule()
+                }
+            }
+            // A viewer's ledger is a report: nothing to type into.
+            if store.canWrite { newRowView.rowRule() }
+            EmptyRowLines()
+                .frame(height: max(2 * Metrics.rowHeight, viewportHeight - drawn))
+        }
+    }
+
     // MARK: - Existing rows
 
     @ViewBuilder
@@ -165,11 +192,6 @@ struct LedgerGrid: View {
             onCancel: cancelEditing
         )
         .background(background(editing: isEditing, selected: isSelected, hovered: hovered == row.id))
-        .overlay(alignment: .leading) {
-            if isEditing || isSelected {
-                Rectangle().fill(Ink.accent).frame(width: 2)
-            }
-        }
         .onHover { inside in
             if inside {
                 hovered = row.id
@@ -195,11 +217,13 @@ struct LedgerGrid: View {
     }
 
     /// Selected rows are tinted with the accent, the palette's color for a
-    /// selection (`docs/v2/UI.md` §5), a shade deeper under the pointer.
+    /// selection (`docs/v2/UI.md` §5), a shade deeper under the pointer. The
+    /// row being edited and the one under the pointer step up to the card
+    /// ground; the focused cell carries its own ring (`cellFocusRing`).
     private func background(editing: Bool, selected: Bool, hovered: Bool) -> Color {
-        if editing { return Ink.raised }
-        if selected { return Ink.accent.opacity(hovered ? 0.22 : 0.15) }
-        return hovered ? Ink.raised : Color.clear
+        if editing { return Ink.card }
+        if selected { return Ink.accent.opacity(hovered ? 0.2 : 0.14) }
+        return hovered ? Ink.card : Color.clear
     }
 
     @ViewBuilder
@@ -261,10 +285,7 @@ struct LedgerGrid: View {
             onCommit: commitNewRow,
             showsWallet: store.showWalletColumn
         )
-            .background(focus?.row == nil && focus != nil ? Ink.raised : Color.clear)
-            .overlay(alignment: .leading) {
-                Rectangle().fill(Ink.accent).frame(width: 2)
-            }
+            .background(focus?.row == nil && focus != nil ? Ink.card : Color.clear)
     }
 
     // MARK: - The completion list
@@ -279,10 +300,15 @@ struct LedgerGrid: View {
         if let anchor, completion.isOpen {
             GeometryReader { proxy in
                 let cell = proxy[anchor]
-                let height = CategoryCompletionList.height(for: completion.candidates.count)
+                let height = CategoryCompletionList.height(for: completion.candidates)
                 let fitsBelow = cell.maxY + height <= proxy.size.height
+                // Three points in from the cell's edge and one up into its
+                // row, as the canvas hangs it (`.ac`).
                 CategoryCompletionList(completion: completion)
-                    .offset(x: cell.minX - GridColumn.padding, y: fitsBelow ? cell.maxY : cell.minY - height)
+                    .offset(
+                        x: cell.minX - GridColumn.padding + 3,
+                        y: fitsBelow ? cell.maxY - 1 : cell.minY - height + 1
+                    )
             }
         }
     }

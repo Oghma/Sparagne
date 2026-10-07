@@ -1,98 +1,6 @@
 import SwiftUI
 import SparagneCore
 
-/// The toolbar's sync state: an icon, a tooltip, and the number of changes
-/// still waiting to reach the server.
-///
-/// Clicking it syncs; when the core is holding rejected commands it opens the
-/// list instead, because that is what needs a decision, and while nobody is
-/// logged in it opens Settings, because there is nothing to sync with yet.
-struct SyncStatusButton: View {
-    let engine: SyncEngine
-    let showRejected: () -> Void
-    @Environment(\.openSettings) private var openSettings
-
-    var body: some View {
-        Button {
-            if !engine.rejected.isEmpty {
-                showRejected()
-            } else if !engine.isLoggedIn {
-                openSettings()
-            } else {
-                Task { await engine.syncNow() }
-            }
-        } label: {
-            Image(systemName: symbol)
-                .foregroundStyle(tint)
-                .overlay(alignment: .topTrailing) { badge }
-        }
-        .help(tooltip)
-        .accessibilityLabel(Text(String(localized: "Sync")))
-        .accessibilityValue(Text(tooltip))
-        .accessibilityHint(Text(hint))
-    }
-
-    /// What activating the button does right now: three different things
-    /// depending on what needs the user's attention (see `body`'s `Button`).
-    private var hint: String {
-        if !engine.rejected.isEmpty { return String(localized: "Opens the list of refused changes") }
-        if !engine.isLoggedIn { return String(localized: "Opens Sync settings") }
-        return String(localized: "Syncs with the server now")
-    }
-
-    @ViewBuilder
-    private var badge: some View {
-        if engine.pendingCount > 0 {
-            Text(engine.pendingCount, format: .number)
-                .font(.system(size: 9, weight: .semibold))
-                .monospacedDigit()
-                .padding(.horizontal, 3)
-                .background(Capsule().fill(Ink.accent))
-                .foregroundStyle(Ink.bg)
-                .offset(x: 8, y: -6)
-        }
-    }
-
-    private var symbol: String {
-        if !engine.rejected.isEmpty { return "exclamationmark.triangle" }
-        switch engine.status {
-        case .idle: return engine.isLoggedIn ? "checkmark.icloud" : "person.crop.circle.badge.questionmark"
-        case .syncing: return "arrow.triangle.2.circlepath"
-        case .offline: return "icloud.slash"
-        case .error: return "exclamationmark.icloud"
-        }
-    }
-
-    private var tint: Color {
-        if !engine.rejected.isEmpty { return Ink.warning }
-        switch engine.status {
-        case .error: return Ink.negative
-        case .offline: return Ink.dim
-        case .idle, .syncing: return Ink.text
-        }
-    }
-
-    private var tooltip: String {
-        if !engine.rejected.isEmpty { return String(localized: "Some changes were refused") }
-        switch engine.status {
-        case .syncing: return String(localized: "Syncing…")
-        case .offline: return String(localized: "Offline")
-        case .error(let message): return message
-        case .idle:
-            if !engine.isLoggedIn {
-                return engine.account.sessionExpired ? ErrorMessages.sessionExpired : String(localized: "Not signed in")
-            }
-            if engine.pendingCount > 0 {
-                return String(localized: "\(engine.pendingCount) changes waiting")
-            }
-            if let last = engine.lastSyncAt {
-                return String(localized: "Last synced at \(last.formatted(date: .omitted, time: .shortened))")
-            }
-            return String(localized: "In sync")
-        }
-    }
-}
-
 /// What the server refused, kept by the core until it is dismissed
 /// (`docs/v2/SYNC.md` §4.5).
 struct RejectedChangesSheet: View {
@@ -424,20 +332,9 @@ struct AccountSettingsView: View {
         }
     }
 
+    /// The top bar's pill says the same, in the same words.
     private var statusText: String {
-        switch engine.status {
-        case .idle:
-            if engine.isLoggedIn {
-                String(localized: "In sync")
-            } else if engine.account.sessionExpired {
-                ErrorMessages.sessionExpired
-            } else {
-                String(localized: "Not signed in")
-            }
-        case .syncing: String(localized: "Syncing…")
-        case .offline: String(localized: "Offline")
-        case .error(let message): message
-        }
+        SyncPillState(engine: engine).settingsText
     }
 }
 

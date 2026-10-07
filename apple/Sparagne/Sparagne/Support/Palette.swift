@@ -3,28 +3,51 @@ import SwiftUI
 /// The fixed dark palette of `docs/v2/UI.md` §5.
 ///
 /// These are constants, not system colors: the window forces `.dark` and
-/// paints its own ground, because the ledger is a designed surface (a finance
-/// terminal) rather than a document that should follow the system tint.
+/// paints its own ground, because the ledger is a designed surface (a dark
+/// finance terminal) rather than a document that should follow the system
+/// tint. Grounds step up in lightness from `bg` to `hi`; amber (`accent`) is
+/// reserved for interaction, so a number never looks clickable by color alone.
 enum Ink {
-    static let bg = Color(hex: 0x0D0D0D)
-    static let panel = Color(hex: 0x141414)
-    /// One step above `panel`, for a hovered or focused row.
-    static let raised = Color(hex: 0x1C1C1C)
-    static let line = Color(hex: 0x242424)
-    static let text = Color(hex: 0xE6E6E6)
+    /// The window chrome bars (toolbar, tab bar, status bar).
+    static let bg = Color(hex: 0x0A0A0B)
+    /// The main content ground, one step above the chrome.
+    static let sheet = Color(hex: 0x0E0E10)
+    /// A card on the sheet.
+    static let card = Color(hex: 0x131316)
+    /// One step above `card`, for a hovered or focused row.
+    static let raised = Color(hex: 0x1B1B20)
+    /// The selected segment of a segmented control.
+    static let hi = Color(hex: 0x2A2A31)
+    /// Hairlines and card borders.
+    static let line = Color(hex: 0x1E1E23)
+    /// Stronger borders: control outlines, key caps.
+    static let line2 = Color(hex: 0x2B2B32)
+    /// The hairline between table rows, fainter than `line`.
+    static let rowLine = Color(hex: 0x18181C)
+    static let text = Color(hex: 0xEDEDEF)
+    /// Secondary text: values that support a heading.
+    static let text2 = Color(hex: 0xA3A3AB)
     /// Column headings, placeholders and zero amounts.
-    static let dim = Color(hex: 0x7A7A7A)
-    /// Active filters, the caret row, expense bars.
-    static let accent = Color(hex: 0xFF5A3C)
+    static let text3 = Color(hex: 0x80808A)
+    /// Amber: interaction, selection, focus and active states only. Expenses
+    /// and errors have their own colors, so amber never means "bad".
+    static let accent = Color(hex: 0xFF9A2E)
     static let positive = Color(hex: 0x3ECF8E)
-    static let negative = Color(hex: 0xFF5A3C)
-    /// The darker half of a two-tone bar (the second person, last year).
-    static let muted = Color(hex: 0x5C2318)
+    /// Errors and negative balances. Deliberately not the accent.
+    static let negative = Color(hex: 0xFF6B6B)
+    /// The darker half of a two-tone bar (the second person, last year): a
+    /// dark step of `chartExpense`.
+    static let muted = Color(hex: 0x4A2A12)
     static let mutedPositive = Color(hex: 0x1D5340)
-    /// Amber: a refused sync change, the mid band of a budget bar. Not in
-    /// `docs/v2/UI.md` §5's table, but used consistently wherever the ledger
-    /// needs a caution color instead of system orange.
+    /// Amber-yellow: a refused sync change, the mid band of a budget bar
+    /// (`docs/v2/UI.md` §5's table). Used wherever the ledger needs a caution
+    /// color instead of system orange.
     static let warning = Color(hex: 0xE8A33D)
+
+    /// Chart series, validated for color-blind separation on `#111113`.
+    static let chartIncome = Color(hex: 0x5A8CF0)
+    static let chartExpense = Color(hex: 0xD6742A)
+    static let chartSavings = Color(hex: 0x25A26C)
 
     /// Traffic light for a budget bar at a given fill fraction
     /// (`DISTILLATO_V1.md` §3.4: thresholds at 70% and 90%).
@@ -50,59 +73,79 @@ extension Color {
     }
 }
 
-/// Type scale. Everything is monospaced with tabular figures, so columns of
-/// numbers line up without per-column formatting tricks.
+/// Type scale. SF Pro with tabular figures, so columns of numbers line up
+/// without per-column formatting tricks; the one monospaced face left is the
+/// key cap.
 enum Face {
-    static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .monospaced)
+    /// SF Pro at `size`, digits monospaced.
+    static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight).monospacedDigit()
     }
 
     /// Table rows and most body text.
-    static let row = mono(12)
-    /// Column headings and section titles: small, uppercase, tracked.
-    static let label = mono(10, .medium)
+    static let row = ui(12)
+    /// Column headings and section titles: small, sentence case.
+    static let label = ui(11, .medium)
     /// The status bar and the keyboard hints.
-    static let footnote = mono(10)
+    static let footnote = ui(11)
+    /// Captions under a figure, chart axes.
+    static let small = ui(10.5)
     /// A KPI card's number.
-    static let display = mono(30, .medium)
+    static let display = ui(22, .semibold)
     /// The savings figure in the summary panel.
-    static let headline = mono(20, .medium)
+    static let headline = ui(24, .semibold)
+    /// Key caps: the only monospaced face.
+    static let key = Font.system(size: 10.5, design: .monospaced)
 }
 
 /// Fixed metrics, so the grid, its header and the footer totals all agree on
 /// column widths without a layout pass.
 enum Metrics {
-    static let rowHeight: CGFloat = 27
-    static let sidebarWidth: CGFloat = 284
+    static let rowHeight: CGFloat = 24
+    /// A table's column-heading row.
+    static let headerHeight: CGFloat = 26
+    static let topBar: CGFloat = 44
+    static let tabBar: CGFloat = 27
+    /// A text field or segmented control.
+    static let control: CGFloat = 26
+    /// A pill button.
+    static let pill: CGFloat = 24
+    /// Horizontal padding inside a table cell.
+    static let cellPad: CGFloat = 8
+    static let cardPad: CGFloat = 12
+    static let cardRadius: CGFloat = 8
     static let gutter: CGFloat = 16
 }
 
 // MARK: - Shared chrome
 
-/// A section heading: uppercase, tracked, dim (`docs/v2/UI.md` §5).
+/// A section heading: sentence case, `text3` (`docs/v2/UI.md` §5).
 struct SectionLabel: View {
     let text: String
-    var tint: Color = Ink.dim
+    var tint: Color = Ink.text3
 
     var body: some View {
-        Text(text.uppercased())
+        Text(text)
             .font(Face.label)
-            .tracking(0.8)
             .foregroundStyle(tint)
     }
 }
 
-/// A bordered card on the panel ground. Every box in the mockups is one.
+/// A rounded card with a hairline border. Every box in the mockups is one.
 struct Panel<Content: View>: View {
-    var padding: CGFloat = 14
+    var padding: CGFloat = Metrics.cardPad
     @ViewBuilder var content: Content
 
     var body: some View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Ink.panel)
-            .overlay(Rectangle().strokeBorder(Ink.line, lineWidth: 1))
+            .background(Ink.card, in: shape)
+            .overlay(shape.strokeBorder(Ink.line, lineWidth: 1))
+    }
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Metrics.cardRadius)
     }
 }
 
@@ -110,7 +153,7 @@ struct Panel<Content: View>: View {
 struct MeterBar: View {
     /// 0...1; values outside are clamped.
     let fraction: Double
-    var tint: Color = Ink.accent
+    var tint: Color = Ink.chartExpense
     var height: CGFloat = 3
 
     var body: some View {

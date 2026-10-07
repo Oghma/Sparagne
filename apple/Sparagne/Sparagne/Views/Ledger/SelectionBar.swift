@@ -2,8 +2,8 @@ import SwiftUI
 import SparagneCore
 
 /// The line under the grid while two or more rows are selected: how many, and
-/// what can be done to all of them at once. It takes the place of the key
-/// hints, which are about typing a row, not about picking several.
+/// what can be done to all of them at once. The status line beside the tabs
+/// sums the same rows (`SheetStats`); this bar is for acting on them.
 ///
 /// The counts on the buttons are the rows the action will touch
 /// (`AppStore.bulkTargets`), which can be fewer than the rows selected: a
@@ -15,40 +15,30 @@ struct SelectionBar: View {
 
     var body: some View {
         let targets = store.bulkTargets.count
-        HStack(spacing: 18) {
+        HStack(spacing: 8) {
             Text(String(localized: "\(store.selection.count) rows selected"))
-                .font(Face.footnote)
+                .font(Face.ui(11.5, .medium))
                 .foregroundStyle(Ink.accent)
-            action(String(localized: "Void \(targets) Rows")) {
+                .padding(.trailing, 4)
+            Button(String(localized: "Void \(targets) Rows")) {
                 Task { await store.voidSelection() }
             }
+            .buttonStyle(RowButtonStyle())
             .disabled(targets == 0)
-            action(String(localized: "Set Category\u{2026}")) { showsCategory = true }
+            Button(String(localized: "Set Category\u{2026}")) { showsCategory = true }
+                .buttonStyle(RowButtonStyle())
                 .disabled(targets == 0)
                 .popover(isPresented: $showsCategory, arrowEdge: .top) {
                     BulkCategoryPopover(store: store, isPresented: $showsCategory)
                 }
             Spacer()
-            hint("\u{232B}", String(localized: "void"))
-            hint("esc", String(localized: "clear"))
+            KeyHint(key: "\u{232B}", label: String(localized: "void"))
+            KeyHint(key: "esc", label: String(localized: "clear"))
         }
-        .padding(.horizontal, GridColumn.padding)
-        .frame(height: 26)
+        .padding(.horizontal, 12)
+        .frame(height: 30)
         .background(Ink.bg)
-    }
-
-    private func action(_ title: String, perform: @escaping () -> Void) -> some View {
-        Button(title, action: perform)
-            .buttonStyle(.plain)
-            .font(Face.footnote)
-            .foregroundStyle(Ink.text)
-    }
-
-    private func hint(_ key: String, _ label: String) -> some View {
-        HStack(spacing: 5) {
-            Text(key).font(Face.footnote).foregroundStyle(Ink.text)
-            Text(label).font(Face.footnote).foregroundStyle(Ink.dim)
-        }
+        .overlay(alignment: .top) { Hairline() }
     }
 }
 
@@ -79,8 +69,8 @@ struct BulkCategoryPopover: View {
                 .completing(text: $name, owner: "bulk", isFocused: focused, store: store, completion: completion)
                 .padding(.horizontal, 8)
                 .frame(height: 24)
-                .background(Ink.bg)
-                .overlay(Rectangle().strokeBorder(Ink.line, lineWidth: 1))
+                .background(Ink.bg, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Ink.line2, lineWidth: 1))
                 .onSubmit(apply)
             if completion.isOpen {
                 CategoryCompletionList(completion: completion)
@@ -93,7 +83,7 @@ struct BulkCategoryPopover: View {
         }
         .padding(14)
         .frame(width: CategoryCompletionList.width + 28)
-        .background(Ink.panel)
+        .background(Ink.card)
         .onAppear { focused = true }
         .task { await store.loadCategoryCompletion() }
     }

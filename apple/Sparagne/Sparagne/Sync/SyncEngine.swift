@@ -19,7 +19,8 @@ import SparagneCore
 @Observable
 @MainActor
 final class SyncEngine {
-    /// What the toolbar shows.
+    /// Where the last round stands; the top bar's pill words it
+    /// (`SyncPillState`).
     enum Status: Equatable, Sendable {
         case idle
         case syncing

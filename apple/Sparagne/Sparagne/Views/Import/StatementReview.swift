@@ -46,7 +46,7 @@ struct StatementReview: View {
             ReviewCell(width: ReviewColumn.status) { SectionLabel(text: String(localized: "Status")) }
             ReviewCell(width: ReviewColumn.category) { SectionLabel(text: String(localized: "Category")) }
         }
-        .frame(height: 24)
+        .frame(height: Metrics.headerHeight)
     }
 }
 
@@ -61,7 +61,7 @@ private enum ReviewColumn {
     static let kind: CGFloat = 90
     static let status: CGFloat = 156
     static let category: CGFloat = 150
-    static let font = Face.mono(11)
+    static let font = Face.ui(11)
 }
 
 /// One previewed row. Rows that will not be imported are drawn in the dim
@@ -93,7 +93,7 @@ private struct StatementReviewRow: View {
                 }
             }
             ReviewCell(width: ReviewColumn.line, alignment: .trailing) {
-                Text(verbatim: String(row.line)).foregroundStyle(Ink.dim)
+                Text(verbatim: String(row.line)).foregroundStyle(Ink.text3)
             }
             ReviewCell(width: ReviewColumn.date) { Text(verbatim: date).foregroundStyle(ink) }
             ReviewCell {
@@ -101,13 +101,13 @@ private struct StatementReviewRow: View {
                     Text(verbatim: row.payee.isEmpty ? TransactionRow.placeholder : row.payee)
                         .foregroundStyle(ink)
                     if let original = row.original {
-                        Text(verbatim: original).foregroundStyle(Ink.dim)
+                        Text(verbatim: original).foregroundStyle(Ink.text3)
                     }
                 }
                 .help(row.payee)
             }
             ReviewCell(width: ReviewColumn.amount, alignment: .trailing) {
-                Text(verbatim: LedgerMoney.bare(signedAmount)).foregroundStyle(live ? amountTint : Ink.dim)
+                Text(verbatim: LedgerMoney.bare(signedAmount)).foregroundStyle(live ? amountTint : Ink.text3)
             }
             ReviewCell(width: ReviewColumn.kind) {
                 Text(verbatim: StatementText.kind(row.kind)).foregroundStyle(ink)
@@ -123,7 +123,7 @@ private struct StatementReviewRow: View {
         .frame(height: Metrics.rowHeight)
     }
 
-    private var ink: Color { live ? Ink.text : Ink.dim }
+    private var ink: Color { live ? Ink.text : Ink.text3 }
 
     private var date: String {
         guard let stamp = row.occurredAt, let date = CoreDate.date(stamp) else { return TransactionRow.placeholder }
@@ -149,7 +149,7 @@ private struct StatementReviewRow: View {
     private var statusTint: Color {
         switch row.status {
         case .new: included ? Ink.positive : Ink.warning
-        case .alreadyImported: Ink.dim
+        case .alreadyImported: Ink.text3
         case .skipped: Ink.warning
         case .invalid: Ink.negative
         }
@@ -168,7 +168,7 @@ private struct StatementReviewRow: View {
             ZStack(alignment: .leading) {
                 if text.isEmpty {
                     Text(String(localized: "category…"))
-                        .foregroundStyle(Ink.dim)
+                        .foregroundStyle(Ink.text3)
                         .allowsHitTesting(false)
                 }
                 TextField(
@@ -184,9 +184,9 @@ private struct StatementReviewRow: View {
             }
             .disabled(!included)
         } else if row.kind == .transferWallet, let wallet = names.wallet(row.counterWalletId) {
-            Text(verbatim: "\u{21C4} \(wallet)").foregroundStyle(Ink.dim)
+            Text(verbatim: "\u{21C4} \(wallet)").foregroundStyle(Ink.text3)
         } else {
-            Text(verbatim: row.matchedCategory ?? "").foregroundStyle(Ink.dim)
+            Text(verbatim: row.matchedCategory ?? "").foregroundStyle(Ink.text3)
         }
     }
 }
@@ -227,7 +227,7 @@ struct StatementCountsStrip: View {
             SectionLabel(text: label)
             Text(verbatim: String(value))
                 .font(Face.row)
-                .foregroundStyle(value == 0 ? Ink.dim : tint)
+                .foregroundStyle(value == 0 ? Ink.text3 : tint)
         }
     }
 }
@@ -252,7 +252,7 @@ struct StatementReportView: View {
                     if report.rounded > 0 {
                         Text(String(localized: "Rounded rows had more decimals than the currency keeps."))
                             .font(Face.footnote)
-                            .foregroundStyle(Ink.dim)
+                            .foregroundStyle(Ink.text3)
                     }
                 }
             }
@@ -266,12 +266,12 @@ struct StatementReportView: View {
                         ForEach(Array(report.rejected.enumerated()), id: \.offset) { _, rejection in
                             HStack(spacing: 10) {
                                 Text(String(localized: "Line \(Int(rejection.line))"))
-                                    .foregroundStyle(Ink.dim)
+                                    .foregroundStyle(Ink.text3)
                                     .frame(width: 70, alignment: .leading)
                                 Text(ErrorMessages.summary(for: rejection.code))
                                     .foregroundStyle(Ink.negative)
                                 Text(verbatim: rejection.message)
-                                    .foregroundStyle(Ink.dim)
+                                    .foregroundStyle(Ink.text3)
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                                     .help(rejection.message)
@@ -293,7 +293,7 @@ struct StatementReportView: View {
             SectionLabel(text: label)
             Text(verbatim: String(value))
                 .font(Face.headline)
-                .foregroundStyle(value == 0 ? Ink.dim : tint)
+                .foregroundStyle(value == 0 ? Ink.text3 : tint)
         }
     }
 }

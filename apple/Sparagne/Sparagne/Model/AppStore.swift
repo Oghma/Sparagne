@@ -77,6 +77,16 @@ struct DuePeriod: Identifiable, Hashable, Sendable {
     var id: String { "\(template.id)/\(date)" }
 }
 
+/// One recurring period still ahead: a template and a day it will fall due,
+/// from `scheduleOccurrences`. What the Ricorrenze tab's agenda lists; never
+/// executed from there, since a period only becomes actionable once due.
+struct UpcomingPeriod: Identifiable, Hashable, Sendable {
+    let template: RecurringView
+    let date: NaiveDate
+
+    var id: String { "\(template.id)/\(date)" }
+}
+
 extension TransactionPatch {
     /// A patch that carries no field changes nothing, so it is never sent
     /// (`UpdateTransaction` refuses it, `docs/v2/ARCH.md` §4).
@@ -194,12 +204,24 @@ final class AppStore {
     // MARK: Recurring
 
     /// Periods still waiting for a decision, refreshed on every `reload()`
-    /// so the ledger window's banner (`RecurringBanner`, `LedgerWindow.swift`)
-    /// stays current without a separate poll.
+    /// so the top bar's due pill (`DuePill`, `Views/Chrome/TopBar.swift`), the
+    /// Ricorrenze tab and the Mastro's pending rows stay current without a
+    /// separate poll.
     private(set) var pendingRecurringItems: [PendingRecurring] = []
     /// Every template, active and archived; loaded on demand when the
     /// Recurring panel opens.
     private(set) var recurringTemplates: [RecurringView] = []
+    /// The periods of the next days, soonest first, for the Ricorrenze tab's
+    /// agenda. Written only by that tab's loader (`AppStore+Recurring.swift`),
+    /// hence not `private(set)`: an extension in another file has to set it.
+    var upcomingRecurring: [UpcomingPeriod] = []
+
+    // MARK: Setup
+
+    /// Rows per category id over the last 90 days, voided excluded: the
+    /// usage column of the SETUP categories. Written only by its loader
+    /// (`AppStore+Usage.swift`), so not `private(set)` for the same reason.
+    var categoryUsage: [Uuid: Int] = [:]
 
     // MARK: Filters and view state
 
@@ -420,6 +442,8 @@ final class AppStore {
         categoryAliases = []
         recentCategoryIds = []
         recurringTemplates = []
+        upcomingRecurring = []
+        categoryUsage = [:]
         selection.clear()
         // A void still counting down is not undone by leaving: it carries its
         // own vault, so it lands where its rows are, and the vault it left
@@ -871,10 +895,20 @@ final class AppStore {
             return
         }
         await guarded {
-            recurringTemplates = try await core.listRecurring(vaultId: vault.id, includeArchived: true)
+            let templates = try await core.listRecurring(vaultId: vault.id, includeArchived: true)
+            // Another vault opened while the list was on its way: it belongs
+            // to the vault that is gone, and would sit under the new one's
+            // name until the next load.
+            guard currentVault?.id == vault.id else { return }
+            recurringTemplates = templates
         }
     }
 
+    /// Returns the new template's id, from the core's receipt, or `nil` when
+    /// it was refused: the inspector selects what it created by that id, not
+    /// by what the list gained, which a sync landing at the same time could
+    /// also have added to.
+    @discardableResult
     func createRecurring(
         kind: TransactionKind,
         amount: Int64,
@@ -883,18 +917,28 @@ final class AppStore {
         category: String?,
         note: String?,
         schedule: Schedule
-    ) async {
-        await recurringCommand(
-            .createRecurring(
-                transactionKind: kind,
-                amount: amount,
-                walletId: walletId,
-                flowId: flowId,
-                category: category,
-                note: note,
-                schedule: schedule
+    ) async -> Uuid? {
+        guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
+        var created: Uuid?
+        // `recurringCommand`'s steps, keeping the receipt it drops.
+        await guarded {
+            let receipt = try await core.execute(
+                vaultId: vault.id,
+                .createRecurring(
+                    transactionKind: kind,
+                    amount: amount,
+                    walletId: walletId,
+                    flowId: flowId,
+                    category: category,
+                    note: note,
+                    schedule: schedule
+                )
             )
-        )
+            created = receipt.resultId
+            await loadRecurringTemplates()
+            await reload()
+        }
+        return created
     }
 
     func updateRecurring(_ recurringId: Uuid, patch: RecurringPatch) async {

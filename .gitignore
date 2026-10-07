@@ -9,3 +9,6 @@
 # Personal exports (bank and card statements) never belong in the repo
 /*.csv
 /*.xlsx
+
+# macOS Finder metadata
+.DS_Store

@@ -9,10 +9,15 @@ import Foundation
 /// not let the app open. Nothing in that database is synced, so its rows,
 /// signed by people who are not the account, never reach a server.
 ///
+/// `-SparagneTab ledger` opens the window on one sheet tab (`summary`,
+/// `ledger`, `recurring`, `setup`), so a screenshot of a tab needs no
+/// keyboard driving.
+///
 /// Read from the arguments alone, never from the saved preferences, so the
 /// option lasts one launch and cannot leave the app on the wrong file.
 enum LaunchOptions {
     static let databaseKey = "SparagneDatabase"
+    static let tabKey = "SparagneTab"
 
     /// The other database, `nil` for the real one.
     static var database: String? {
@@ -23,5 +28,15 @@ enum LaunchOptions {
         guard let value = arguments[databaseKey] as? String else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// The tab to open on, `nil` for the usual one.
+    static var tab: LedgerTab? {
+        tab(in: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
+    }
+
+    static func tab(in arguments: [String: Any]) -> LedgerTab? {
+        guard let value = arguments[tabKey] as? String else { return nil }
+        return LedgerTab(rawValue: value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
     }
 }

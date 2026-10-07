@@ -103,8 +103,7 @@ private enum TestCatalog {
 
     static func english() throws -> Bundle {
         try bundle(language: "en", plurals: [
-            "%lld rows": ("%lld row", "%lld rows"),
-            "%lld recurring entries are due": ("%lld recurring entry is due", "%lld recurring entries are due"),
+            "%lld to confirm": ("%lld to confirm", "%lld to confirm"),
             "%lld transactions voided": ("Transaction voided", "%lld transactions voided"),
             "Every %lld days": ("Every day", "Every %lld days"),
             "Every %lld weeks": ("Every week", "Every %lld weeks"),
@@ -117,8 +116,7 @@ private enum TestCatalog {
         try bundle(
             language: "it",
             plurals: [
-                "%lld rows": ("%lld riga", "%lld righe"),
-                "%lld recurring entries are due": ("%lld ricorrenza in attesa", "%lld ricorrenze in attesa"),
+                "%lld to confirm": ("%lld da confermare", "%lld da confermare"),
                 "%lld transactions voided": ("Transazione annullata", "%lld transazioni annullate"),
                 "Every %lld weeks": ("Ogni settimana", "Ogni %lld settimane"),
             ],
@@ -136,10 +134,8 @@ struct CountTextTests {
     @Test("A count reads as one or many in English, never \"1 rows\"")
     func englishCounts() throws {
         let catalog = try TestCatalog.english()
-        #expect(CountText.rows(1, bundle: catalog, locale: Self.english) == "1 row")
-        #expect(CountText.rows(3, bundle: catalog, locale: Self.english) == "3 rows")
-        #expect(CountText.recurringDue(1, bundle: catalog, locale: Self.english) == "1 recurring entry is due")
-        #expect(CountText.recurringDue(3, bundle: catalog, locale: Self.english) == "3 recurring entries are due")
+        #expect(CountText.toConfirm(1, bundle: catalog, locale: Self.english) == "1 to confirm")
+        #expect(CountText.toConfirm(3, bundle: catalog, locale: Self.english) == "3 to confirm")
         #expect(CountText.voided(1, bundle: catalog, locale: Self.english) == "Transaction voided")
         #expect(CountText.voided(3, bundle: catalog, locale: Self.english) == "3 transactions voided")
     }
@@ -147,10 +143,8 @@ struct CountTextTests {
     @Test("The same counts in Italian")
     func italianCounts() throws {
         let catalog = try TestCatalog.italian()
-        #expect(CountText.rows(1, bundle: catalog, locale: Self.italian) == "1 riga")
-        #expect(CountText.rows(3, bundle: catalog, locale: Self.italian) == "3 righe")
-        #expect(CountText.recurringDue(1, bundle: catalog, locale: Self.italian) == "1 ricorrenza in attesa")
-        #expect(CountText.recurringDue(3, bundle: catalog, locale: Self.italian) == "3 ricorrenze in attesa")
+        #expect(CountText.toConfirm(1, bundle: catalog, locale: Self.italian) == "1 da confermare")
+        #expect(CountText.toConfirm(3, bundle: catalog, locale: Self.italian) == "3 da confermare")
         #expect(CountText.voided(1, bundle: catalog, locale: Self.italian) == "Transazione annullata")
         #expect(CountText.voided(3, bundle: catalog, locale: Self.italian) == "3 transazioni annullate")
     }

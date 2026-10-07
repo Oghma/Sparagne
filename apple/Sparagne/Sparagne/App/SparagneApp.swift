@@ -27,9 +27,19 @@ struct SparagneApp: App {
                     appDelegate.store = store
                 }
         }
+        // No system title bar and no toolbar: the window draws its own top
+        // bar (`TopBar`), and `WindowChrome` moves the traffic lights into it.
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button(String(localized: "Quick Add\u{2026}")) {
+                // ⌘K is the only way into the command palette, so a vault
+                // that is only read keeps it, under the name of what the
+                // panel then is (`QuickAddOverlay.commandsOnly`).
+                Button(
+                    store?.canWrite == false
+                        ? String(localized: "Command Palette\u{2026}")
+                        : String(localized: "Quick Add\u{2026}")
+                ) {
                     NotificationCenter.default.post(name: .focusQuickAdd, object: nil)
                 }
                 .keyboardShortcut("k", modifiers: .command)
@@ -41,11 +51,22 @@ struct SparagneApp: App {
                 .disabled(store?.canWrite == false)
             }
 
-            // The standard View menu, beside "Show Toolbar": the column is a
-            // property of the view, not of the ledger's filters.
+            // The standard View menu: the column is a property of the view,
+            // not of the ledger's filters.
             CommandGroup(after: .toolbar) {
                 Toggle(String(localized: "Show Wallet Column"), isOn: $showWalletColumn)
                     .keyboardShortcut("w", modifiers: [.command, .shift])
+
+                Divider()
+
+                // The sheet tabs, ⌘1 to ⌘4 in the tab bar's order, as a
+                // browser's tabs.
+                ForEach(LedgerTab.allCases) { tab in
+                    Button(tab.label) {
+                        NotificationCenter.default.post(name: .selectTab, object: tab)
+                    }
+                    .keyboardShortcut(KeyEquivalent(Character(String(tab.shortcut))), modifiers: .command)
+                }
             }
 
             CommandGroup(after: .importExport) {
@@ -106,18 +127,18 @@ struct SparagneApp: App {
                 Button(String(localized: "Rename Vault\u{2026}")) {
                     NotificationCenter.default.post(name: .renameVault, object: nil)
                 }
-                .disabled(!mayRenameCurrentVault)
+                .disabled(!permissions.mayRename)
                 // Greyed out for a shared vault I do not own: the core and
                 // the server would both refuse the command anyway.
                 Button(String(localized: "Delete Vault\u{2026}")) {
                     NotificationCenter.default.post(name: .deleteVault, object: nil)
                 }
-                .disabled(!mayDeleteCurrentVault)
+                .disabled(!permissions.mayDelete)
                 // A member's way out of a shared vault; the owner deletes it.
                 Button(String(localized: "Leave Vault\u{2026}")) {
                     NotificationCenter.default.post(name: .leaveVault, object: nil)
                 }
-                .disabled(!mayLeaveCurrentVault)
+                .disabled(!permissions.mayLeave)
 
                 Divider()
 
@@ -144,25 +165,10 @@ struct SparagneApp: App {
         }
     }
 
-    /// A vault on screen that is mine, or not on the server at all
-    /// (`SyncEngine.mayDeleteVault`).
-    private var mayDeleteCurrentVault: Bool {
-        guard let vault = store?.currentVault else { return false }
-        return engine?.mayDeleteVault(vault.id) ?? true
-    }
-
-    /// A vault on screen this account may write to
-    /// (`SyncEngine.mayRenameVault`).
-    private var mayRenameCurrentVault: Bool {
-        guard let vault = store?.currentVault else { return false }
-        return engine?.mayRenameVault(vault.id) ?? true
-    }
-
-    /// A shared vault on screen that someone else owns
-    /// (`SyncEngine.mayLeaveVault`).
-    private var mayLeaveCurrentVault: Bool {
-        guard let vault = store?.currentVault else { return false }
-        return engine?.mayLeaveVault(vault.id) ?? false
+    /// The same rules as the top bar's vault selector and the palette
+    /// (`VaultPermissions`).
+    private var permissions: VaultPermissions {
+        VaultPermissions(vault: store?.currentVault, engine: engine)
     }
 }
 
@@ -184,6 +190,8 @@ extension Notification.Name {
     static let exportCSV = Notification.Name("it.oghma.sparagne.exportCSV")
     /// ⌘⇧C: switches to the setup tab, envelopes and categories (§2.3).
     static let openSetup = Notification.Name("it.oghma.sparagne.openSetup")
+    /// ⌘1 to ⌘4: switches to a sheet tab; the object is the `LedgerTab`.
+    static let selectTab = Notification.Name("it.oghma.sparagne.selectTab")
     /// Vault menu and palette: the onboarding sheet again, for another vault.
     static let newVault = Notification.Name("it.oghma.sparagne.newVault")
     /// Vault menu and palette: rename the vault on screen.
@@ -199,7 +207,8 @@ extension Notification.Name {
     static let exportAllTransactions = Notification.Name("it.oghma.sparagne.exportAllTransactions")
     /// File menu: a copy of the whole database file.
     static let backupDatabase = Notification.Name("it.oghma.sparagne.backupDatabase")
-    /// Banner and palette: the recurring periods waiting for a decision.
+    /// The top bar's due pill: the Ricorrenze tab, where the periods waiting
+    /// for a decision are confirmed or skipped.
     static let reviewDueRecurring = Notification.Name("it.oghma.sparagne.reviewDueRecurring")
     /// Vault menu and palette: the sheet of a new recurring template, without
     /// going through the management sheet and its recurring panel.

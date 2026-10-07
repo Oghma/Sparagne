@@ -35,12 +35,14 @@ struct ContentView: View {
                 // are signed with the name chosen for rows written offline.
                 let core = try CoreActor.onDisk(named: database, author: AccountStore.loggedOutAuthor())
                 let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
+                if let tab = LaunchOptions.tab { opened.tab = tab }
                 store = opened
                 await opened.bootstrap()
                 return
             }
             let core = try CoreActor.onDisk()
             let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
+            if let tab = LaunchOptions.tab { opened.tab = tab }
             // The engine adopts the account's username as the author and
             // starts the first sync right after bootstrap
             // (`docs/v2/SYNC.md` §5). It prepares before the bootstrap so the
@@ -57,8 +59,8 @@ struct ContentView: View {
     }
 }
 
-/// The single window: the ledger and its two summary views, plus the sheets,
-/// the alerts and the undo toast (`docs/v2/UI.md` §2).
+/// The single window: the four sheets behind the tab bar, plus the modal
+/// sheets, the alerts and the undo toast (`docs/v2/UI.md` §2).
 struct MainWindow: View {
     @Bindable var store: AppStore
     /// `nil` only before the database is open.
@@ -76,9 +78,6 @@ struct MainWindow: View {
         case renameWallet(WalletView)
         case renameEnvelope(FlowView)
         case editEnvelope(FlowView)
-        case recurring
-        case newRecurring
-        case dueRecurring
         case share(VaultView)
         case leaveVault(VaultView)
         case rejected
@@ -95,9 +94,6 @@ struct MainWindow: View {
             case .renameWallet(let wallet): "renameWallet-\(wallet.id)"
             case .renameEnvelope(let flow): "renameEnvelope-\(flow.id)"
             case .editEnvelope(let flow): "editEnvelope-\(flow.id)"
-            case .recurring: "recurring"
-            case .newRecurring: "newRecurring"
-            case .dueRecurring: "dueRecurring"
             case .share(let vault): "share-\(vault.id)"
             case .leaveVault(let vault): "leaveVault-\(vault.id)"
             case .rejected: "rejected"
@@ -109,14 +105,16 @@ struct MainWindow: View {
 
     var body: some View {
         LedgerWindow(store: store, engine: engine, sheet: $sheet)
+            // The scene hides the system title bar; the window's own top bar
+            // takes its place, from the window's top edge, with the traffic
+            // lights inside it (`TopBar`, `WindowChrome`).
+            .ignoresSafeArea(.container, edges: .top)
             .frame(minWidth: 1176, minHeight: 640)
             .preferredColorScheme(.dark)
+            // Not drawn, but the Window menu lists the window by it. Only the
+            // vault: AppKit lays the title bar out again on every new title,
+            // and puts the zoom button back where it was for a frame.
             .navigationTitle(title)
-            // The file's name when it is not the real database, so rows made
-            // up for a try are never mistaken for the ledger.
-            .navigationSubtitle(Text(verbatim: LaunchOptions.database ?? ""))
-            .toolbar { toolbar }
-            .toolbarBackground(Ink.bg, for: .windowToolbar)
             .overlay(alignment: .bottom) {
                 if let pending = store.pendingUndo {
                     UndoToast(pending: pending) { store.undo() }
@@ -151,11 +149,14 @@ struct MainWindow: View {
             .onReceive(NotificationCenter.default.publisher(for: .importStatement)) { _ in
                 if store.currentVault != nil { sheet = .importStatement }
             }
+            // The due pill: the periods are decided on the Ricorrenze tab.
             .onReceive(NotificationCenter.default.publisher(for: .reviewDueRecurring)) { _ in
-                sheet = .dueRecurring
+                store.tab = .recurring
             }
+            // The Vault menu and the palette: the Ricorrenze tab, its
+            // inspector on a new template.
             .onReceive(NotificationCenter.default.publisher(for: .newRecurring)) { _ in
-                if store.canWrite { sheet = .newRecurring }
+                RecurringTab.requestCreate(store: store)
             }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
@@ -199,48 +200,9 @@ struct MainWindow: View {
             }
     }
 
-    /// `Sparagne — libro mastro — 2026`, as in the mockups.
+    /// The vault's name, for the Window menu.
     private var title: String {
-        let vault = store.currentVault?.name ?? String(localized: "Sparagne")
-        return "\(vault) \u{2014} \(store.tab.label.lowercased()) \u{2014} \(store.month.year)"
-    }
-
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        if #available(macOS 26.0, *) {
-            // macOS 26 wraps every toolbar item in a glass capsule; the strip
-            // is square by design (`docs/v2/UI.md` §2) and sits badly in one.
-            ToolbarItem(placement: .principal) { switcher }
-                .sharedBackgroundVisibility(.hidden)
-        } else {
-            ToolbarItem(placement: .principal) { switcher }
-        }
-        if let engine {
-            ToolbarItem(placement: .primaryAction) {
-                SyncStatusButton(engine: engine) { sheet = .rejected }
-            }
-        }
-    }
-
-    private var switcher: some View {
-        SegmentedStrip(
-            options: LedgerTab.allCases,
-            selection: $store.tab,
-            label: { $0.label.uppercased() }
-        )
-        // `SegmentedStrip` (`Views/Ledger/LedgerHeader.swift`) draws its own
-        // buttons and is owned by another package right now, so its own
-        // accessibility can't be touched from here; this substitutes an
-        // equivalent tree — one real button per tab, the one on screen
-        // marked selected — for VoiceOver.
-        .accessibilityRepresentation {
-            HStack(spacing: 0) {
-                ForEach(LedgerTab.allCases) { tab in
-                    Button(tab.label) { store.tab = tab }
-                        .accessibilityAddTraits(tab == store.tab ? .isSelected : [])
-                }
-            }
-        }
+        store.currentVault?.name ?? String(localized: "Sparagne")
     }
 
     @ViewBuilder
@@ -293,12 +255,6 @@ struct MainWindow: View {
             EditEnvelopeSheet(flow: flow, currency: store.currency) { mode, allowNegative in
                 Task { await store.updateEnvelope(flow.id, mode: mode, allowNegative: allowNegative) }
             }
-        case .recurring:
-            RecurringPanel(store: store)
-        case .newRecurring:
-            RecurringTemplateSheet(store: store, template: nil)
-        case .dueRecurring:
-            DueRecurringSheet(store: store)
         case .share(let vault):
             if let engine {
                 ShareVaultSheet(engine: engine, vault: vault)

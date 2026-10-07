@@ -145,7 +145,7 @@ extension CommandPaletteModel {
     ///
     /// The entries that have a menu item post that item's notification, so
     /// the two ways in share one implementation; the rest write the same
-    /// state the header and the switcher write. The three view toggles write
+    /// state the top bar and the tab bar write. The three view toggles write
     /// the store, which the window mirrors back into the menu's preference.
     static func ledgerActions(store: AppStore, engine: SyncEngine?) -> [PaletteAction] {
         var actions: [PaletteAction] = [
@@ -176,7 +176,9 @@ extension CommandPaletteModel {
             },
         ]
 
-        for tab in [LedgerTab.summary, .ledger] {
+        // Every sheet of the tab bar, in its order (⌘1 to ⌘4 from the View
+        // menu do the same).
+        for tab in LedgerTab.allCases {
             actions.append(
                 PaletteAction(
                     id: "tab.\(tab.rawValue)",
@@ -213,40 +215,41 @@ extension CommandPaletteModel {
                 NotificationCenter.default.post(name: .newVault, object: nil)
             }
         )
-        if let vault = store.currentVault {
-            if engine?.mayRenameVault(vault.id) ?? true {
-                actions.append(
-                    PaletteAction(
-                        id: "vault.rename",
-                        title: String(localized: "Rename Vault\u{2026}"),
-                        keywords: ["vault", "rinomina", "name"]
-                    ) {
-                        NotificationCenter.default.post(name: .renameVault, object: nil)
-                    }
-                )
-            }
-            if engine?.mayLeaveVault(vault.id) ?? false {
-                actions.append(
-                    PaletteAction(
-                        id: "vault.leave",
-                        title: String(localized: "Leave Vault\u{2026}"),
-                        keywords: ["vault", "esci", "abbandona", "leave"]
-                    ) {
-                        NotificationCenter.default.post(name: .leaveVault, object: nil)
-                    }
-                )
-            }
-            if engine?.mayDeleteVault(vault.id) ?? true {
-                actions.append(
-                    PaletteAction(
-                        id: "vault.delete",
-                        title: String(localized: "Delete Vault\u{2026}"),
-                        keywords: ["vault", "elimina", "cancella", "remove"]
-                    ) {
-                        NotificationCenter.default.post(name: .deleteVault, object: nil)
-                    }
-                )
-            }
+        // The Vault menu's rules (`VaultPermissions`): no vault on screen,
+        // none of these.
+        let permissions = VaultPermissions(vault: store.currentVault, engine: engine)
+        if permissions.mayRename {
+            actions.append(
+                PaletteAction(
+                    id: "vault.rename",
+                    title: String(localized: "Rename Vault\u{2026}"),
+                    keywords: ["vault", "rinomina", "name"]
+                ) {
+                    NotificationCenter.default.post(name: .renameVault, object: nil)
+                }
+            )
+        }
+        if permissions.mayLeave {
+            actions.append(
+                PaletteAction(
+                    id: "vault.leave",
+                    title: String(localized: "Leave Vault\u{2026}"),
+                    keywords: ["vault", "esci", "abbandona", "leave"]
+                ) {
+                    NotificationCenter.default.post(name: .leaveVault, object: nil)
+                }
+            )
+        }
+        if permissions.mayDelete {
+            actions.append(
+                PaletteAction(
+                    id: "vault.delete",
+                    title: String(localized: "Delete Vault\u{2026}"),
+                    keywords: ["vault", "elimina", "cancella", "remove"]
+                ) {
+                    NotificationCenter.default.post(name: .deleteVault, object: nil)
+                }
+            )
         }
 
         actions.append(contentsOf: [
@@ -357,8 +360,10 @@ extension CommandPaletteModel {
 
 // MARK: - The list under the field
 
-/// The rows under the ⌘K field while it is in command mode. Same ink as the
-/// grid: this is a list of choices, not a dialog.
+/// The rows of the ⌘K panel while its line starts with `>`
+/// (`QuickAddOverlay`): a list of choices inside the same panel, not a second
+/// dialog. The active row is tinted with the accent rather than filled with
+/// it, as the completion list's is; the panel's footer carries the keys.
 struct CommandPaletteList: View {
     let model: CommandPaletteModel
     /// Called after an entry ran, so the field can close itself.
@@ -366,14 +371,14 @@ struct CommandPaletteList: View {
 
     var body: some View {
         let results = model.results
-        VStack(alignment: .leading, spacing: 0) {
-            Hairline()
+        Group {
             if results.isEmpty {
                 Text(String(localized: "No matching command"))
                     .font(Face.row)
-                    .foregroundStyle(Ink.dim)
-                    .padding(.horizontal, 4)
-                    .frame(height: Metrics.rowHeight, alignment: .leading)
+                    .foregroundStyle(Ink.text3)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: Metrics.rowHeight)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -382,44 +387,39 @@ struct CommandPaletteList: View {
                         }
                     }
                 }
-                .frame(maxHeight: Metrics.rowHeight * 8)
+                .frame(maxHeight: Metrics.rowHeight * 10)
                 .scrollBounceBehavior(.basedOnSize)
             }
-            Hairline()
-            HStack(spacing: 16) {
-                hint("\u{2191}\u{2193}", String(localized: "select"))
-                hint("\u{21A9}", String(localized: "run"))
-                hint("esc", String(localized: "cancel"))
-            }
-            .frame(height: 22)
         }
+        .padding(6)
     }
 
     private func row(index: Int, action: PaletteAction) -> some View {
         let active = index == model.selection
         return Text(action.title)
             .font(Face.row)
-            .foregroundStyle(active ? Ink.bg : Ink.text)
+            .foregroundStyle(Ink.text)
             .lineLimit(1)
             .truncationMode(.tail)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: Metrics.rowHeight)
-            .background(active ? Ink.accent : Color.clear)
+            .background(active ? Ink.accent.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
             .contentShape(Rectangle())
             .onHover { inside in
                 if inside { model.select(index) }
             }
-            .onTapGesture {
-                model.select(index)
-                Task { if await model.run() { onRun() } }
-            }
+            .onTapGesture { activate(index) }
+            .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+            // A tap gesture is not an action VoiceOver can press: the row
+            // says it is a button, so it has to act like one.
+            .accessibilityAction { activate(index) }
     }
 
-    private func hint(_ key: String, _ label: String) -> some View {
-        HStack(spacing: 5) {
-            Text(key).font(Face.footnote).foregroundStyle(Ink.text)
-            Text(label).font(Face.footnote).foregroundStyle(Ink.dim)
-        }
+    /// A click on a row, or VoiceOver pressing it: the entry runs as ↩ would
+    /// run it with the row highlighted.
+    private func activate(_ index: Int) {
+        model.select(index)
+        Task { if await model.run() { onRun() } }
     }
 }

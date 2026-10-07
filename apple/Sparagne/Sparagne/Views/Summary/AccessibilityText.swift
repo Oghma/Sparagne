@@ -7,7 +7,7 @@ import Foundation
 ///
 /// Every piece handed in here (labels, amounts) is already localized or
 /// formatted; joining them with punctuation needs no further localization,
-/// the same way `SavingsCard.subtitle` joins its own parts. A phrase that
+/// the same way the summary panel's cards join their own parts. A phrase that
 /// adds a real word of its own (`fundGauge`'s "of") goes through
 /// `String(localized:)` instead.
 enum AccessibilityText {

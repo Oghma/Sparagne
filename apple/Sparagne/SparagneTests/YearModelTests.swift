@@ -42,7 +42,9 @@ struct YearModelTests {
         ]
     }
 
-    private static func build(year: Int = 2026, rows: [YearRow], flows: [FlowView] = []) -> YearSummary {
+    private static func build(
+        year: Int = 2026, rows: [YearRow], flows: [FlowView] = [], upTo: MonthKey = upTo
+    ) -> YearSummary {
         YearSummary.build(year: year, upTo: upTo, rows: rows, flows: flows)
     }
 
@@ -215,5 +217,203 @@ struct YearModelTests {
         #expect(year.months.count == 12)
         let blank = year.months.allSatisfy { $0.total == 0 && $0.carried == 0 && $0.totalByPerson.isEmpty }
         #expect(blank)
+    }
+
+    // MARK: - The table
+
+    @Test("The table is the opening row, twelve months and the sum")
+    func tableShape() {
+        let rows = Self.build(rows: Self.household).tableRows
+        #expect(rows.count == 14)
+        #expect(rows.first?.kind == .opening)
+        #expect(rows.last?.kind == .sum)
+        #expect(rows[1].kind == .month(MonthKey(year: 2026, month: 1)))
+        #expect(rows[12].kind == .month(MonthKey(year: 2026, month: 12)))
+    }
+
+    @Test("The opening row carries only TOTALE, in total and per person")
+    func openingRow() {
+        let opening = Self.build(rows: Self.household).tableRows[0]
+        #expect(opening.total == 750_000)
+        #expect(opening.totalByPerson == [200_000, 550_000])
+        #expect(opening.income == nil)
+        #expect(opening.cashExpense == nil)
+        #expect(opening.savings == nil)
+        #expect(opening.carried == nil)
+        #expect(opening.fundExpense == nil)
+        #expect(!opening.isFuture)
+        #expect(!opening.isCurrent)
+    }
+
+    @Test("Only the month on screen is current, and the later ones are blank")
+    func currentAndFutureFlags() {
+        let months = Array(Self.build(rows: Self.household).tableRows[1...12])
+        #expect(months.filter(\.isCurrent).map(\.kind) == [.month(Self.upTo)])
+        #expect(months.filter(\.isFuture).count == 3)
+        let blank = months.filter(\.isFuture).allSatisfy { $0.total == nil && $0.income == nil && !$0.isCurrent }
+        #expect(blank)
+    }
+
+    @Test("A past year has no current month and no blank one, a year ahead only blank ones")
+    func flagsInOtherYears() {
+        let past = Array(Self.build(year: 2025, rows: Self.household).tableRows[1...12])
+        #expect(past.allSatisfy { !$0.isCurrent && !$0.isFuture })
+        let coming = Array(Self.build(year: 2027, rows: Self.household).tableRows[1...12])
+        #expect(coming.allSatisfy { $0.isFuture && !$0.isCurrent })
+    }
+
+    @Test("TOTALE goes up or down against the line before, January against the opening fund")
+    func trend() {
+        // February spends 1.000 with nothing coming in: down. March earns.
+        let rows = Self.build(rows: Self.household + [Self.row(2, "matteo", cashExpense: 100_000)]).tableRows
+        #expect(rows[1].trendUp)
+        #expect(!rows[2].trendUp)
+        #expect(rows[3].trendUp)
+        let january = Self.build(rows: [Self.row(0, "elisa", opening: 100_000), Self.row(1, "elisa", cashExpense: 1)])
+        #expect(!january.tableRows[1].trendUp)
+    }
+
+    @Test("A month that changes nothing is not a drop")
+    func flatIsUp() {
+        let rows = Self.build(rows: Self.household).tableRows
+        #expect(rows[2].total == rows[1].total)
+        #expect(rows[2].trendUp)
+    }
+
+    @Test("The sum adds the flows of the months up to the one on screen and closes on TOTALE")
+    func sumRow() {
+        let year = Self.build(rows: Self.household)
+        let sum = year.tableRows[13]
+        #expect(sum.income == 900_000)
+        #expect(sum.cashExpense == 245_000)
+        #expect(sum.savings == 655_000)
+        #expect(sum.fundExpense == 25_000)
+        #expect(sum.carried == nil)
+        #expect(sum.total == 1_480_000)
+        #expect(sum.totalByPerson == year.months[8].totalByPerson)
+        #expect(year.growth == 730_000)
+    }
+
+    @Test("A year with nothing elapsed sums to zero and closes on the opening fund")
+    func sumOfAYearAhead() {
+        let sum = Self.build(year: 2027, rows: Self.household).tableRows[13]
+        #expect(sum.income == 0)
+        #expect(sum.total == 750_000)
+        #expect(sum.totalByPerson == [200_000, 550_000])
+    }
+
+    // MARK: - The month's cards
+
+    @Test("Savings are income less expenses, and the delta is against the month before")
+    func kpiDelta() {
+        let kpis = MonthKPIs(
+            income: 185_000, expenses: 61_994, previous: .init(income: 425_000, expenses: 284_000),
+            yearIncome: 1_000_000, yearSavings: 290_000
+        )
+        #expect(kpis.savings == 123_006)
+        #expect(kpis.previous?.savings == 141_000)
+        #expect(kpis.savingsDelta == -17_994)
+    }
+
+    @Test("The cards are the table's rows: expenses are USCITE, fund expenses apart")
+    func cardsAreTheRows() throws {
+        // August: 920,00 spent from a fund, 300,00 from the cash envelopes.
+        let august = MonthKey(year: 2026, month: 8)
+        let year = Self.build(
+            rows: [
+                Self.row(7, "matteo", income: 400_000, cashExpense: 250_000),
+                Self.row(8, "matteo", income: 500_000, cashExpense: 30_000, fundExpense: 92_000),
+            ],
+            upTo: august
+        )
+        let kpis = try #require(year.kpis)
+        let row = try #require(year.tableRows.first { $0.kind == .month(august) })
+        #expect(kpis.income == row.income)
+        #expect(kpis.expenses == row.cashExpense)
+        #expect(kpis.savings == row.savings)
+        #expect(kpis.expenses == 30_000)
+        #expect(kpis.previous == .init(income: 400_000, expenses: 250_000))
+        #expect(kpis.savingsDelta == Int64(320_000))
+        // The year to date counts the same way.
+        #expect(kpis.yearSavings == year.yearSavings)
+        #expect(kpis.yearRate == Double(year.yearSavings) / Double(year.yearIncome))
+    }
+
+    @Test("January has no month before it to compare with")
+    func januaryHasNoPrevious() throws {
+        let year = Self.build(
+            rows: [Self.row(0, "matteo", opening: 100_000), Self.row(1, "matteo", income: 50_000, cashExpense: 20_000)],
+            upTo: MonthKey(year: 2026, month: 1)
+        )
+        let kpis = try #require(year.kpis)
+        #expect(kpis.savings == 30_000)
+        #expect(kpis.previous == nil)
+        #expect(kpis.savingsDelta == nil)
+    }
+
+    @Test("A year to come has no cards")
+    func noCardsInTheFuture() {
+        #expect(Self.build(year: 2027, rows: []).kpis == nil)
+    }
+
+    @Test("The rates are over income, and absent without any")
+    func kpiRates() {
+        let kpis = MonthKPIs(
+            income: 200_000, expenses: 50_000, previous: nil,
+            yearIncome: 1_000_000, yearSavings: 290_000
+        )
+        #expect(kpis.rate == 0.75)
+        #expect(kpis.yearRate == 0.29)
+        let none = MonthKPIs(
+            income: 0, expenses: 10, previous: nil, yearIncome: 0, yearSavings: 0
+        )
+        #expect(none.rate == nil)
+        #expect(none.yearRate == nil)
+    }
+
+    @Test("A fund knows whether its cap is on the balance or on the income")
+    func fundKind() {
+        let year = Self.build(
+            rows: [],
+            flows: [
+                Self.flow("Vacanze", balance: 1, mode: .netCapped(cap: 100)),
+                Self.flow("Casa", balance: 1, mode: .incomeCapped(cap: 100), incomeTotal: 50),
+            ]
+        )
+        #expect(year.funds.map(\.kind) == [.balance, .income])
+    }
+
+    // MARK: - Chart scale
+
+    @Test("The axis covers the data on a 1-2-5 step, and a flow chart keeps its zero")
+    func niceScale() {
+        let flow = ChartScale.nice([-420, 4_250, 1_850], includeZero: true)
+        #expect(flow.lower == -2_000)
+        #expect(flow.upper == 6_000)
+        #expect(flow.step == 2_000)
+        let fund = ChartScale.nice([12_410, 21_550], includeZero: false)
+        #expect(fund.lower <= 12_410)
+        #expect(fund.upper >= 21_550)
+        let flat = ChartScale.nice([500, 500], includeZero: false)
+        #expect(flat.upper > flat.lower)
+    }
+
+    @Test("Axis labels are compact")
+    func compactLabels() {
+        let it = Locale(identifier: "it_IT")
+        let en = Locale(identifier: "en_US")
+        #expect(ChartScale.compact(840, locale: it) == "840")
+        #expect(ChartScale.compact(12_000, locale: it) == "12k")
+        #expect(ChartScale.compact(1_500, locale: it) == "1,5k")
+        #expect(ChartScale.compact(-2_500, locale: it) == "-2,5k")
+        #expect(ChartScale.compact(1_500, locale: en) == "1.5k")
+        #expect(ChartScale.compact(-2_500, locale: en) == "-2.5k")
+    }
+
+    @Test("Month names keep the locale's casing")
+    func monthNames() {
+        #expect(SummaryText.monthName(10, locale: Locale(identifier: "it_IT")) == "ottobre")
+        #expect(SummaryText.monthName(10, locale: Locale(identifier: "en_US")) == "October")
+        #expect(SummaryText.monthTitle(8, year: 2026, locale: Locale(identifier: "it_IT")) == "Agosto 2026")
     }
 }

@@ -11,6 +11,9 @@ struct CategoryCandidate: Identifiable, Equatable, Sendable {
     /// The alias the text matched, shown as `alias → name`; `nil` when the
     /// name itself matched.
     let alias: String?
+    /// Used in the last 90 days (`AppStore.recentCategoryIds`): the list says
+    /// "recent" beside it, which is why it came first.
+    var isRecent = false
 
     var id: String { alias.map { "\(categoryId)/\($0)" } ?? categoryId }
 }
@@ -59,7 +62,13 @@ enum CategoryCompletion {
                 else if let innerAlias { (3, innerAlias.alias) }
                 else { nil }
             guard let match else { continue }
-            ranked.append((match.tier, CategoryCandidate(categoryId: category.id, name: category.name, alias: match.alias)))
+            let candidate = CategoryCandidate(
+                categoryId: category.id,
+                name: category.name,
+                alias: match.alias,
+                isRecent: recency[category.id] != nil
+            )
+            ranked.append((match.tier, candidate))
         }
         return ranked
             .sorted { lhs, rhs in
@@ -114,13 +123,17 @@ final class CategoryCompletionModel {
             return
         }
         picked = nil
-        candidates = CategoryCompletion.candidates(
+        let ranked = CategoryCompletion.candidates(
             for: text,
             categories: store.categories,
             aliases: store.categoryAliases,
             recent: store.recentCategoryIds
         )
-        selection = 0
+        // Drawn in two groups, names then aliases (`CategoryCompletionList`),
+        // and the arrows walk them in that order; the highlight still starts
+        // on the best match, wherever its group put it.
+        candidates = ranked.filter { $0.alias == nil } + ranked.filter { $0.alias != nil }
+        selection = ranked.first.flatMap { best in candidates.firstIndex(of: best) } ?? 0
         self.owner = candidates.isEmpty ? nil : owner
         self.write = candidates.isEmpty ? nil : write
     }
@@ -181,6 +194,7 @@ struct CategoryCompletionAnchor: PreferenceKey {
 struct CategoryCell: View {
     @Binding var text: String
     let placeholder: String
+    var placeholderTint: Color = Ink.text3
     let store: AppStore
     let completion: CategoryCompletionModel
     @FocusState.Binding var focus: CellFocus?
@@ -188,13 +202,14 @@ struct CategoryCell: View {
     let onSubmit: () -> Void
 
     var body: some View {
-        TextField(placeholder, text: $text)
+        TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(placeholderTint))
             .textFieldStyle(.plain)
             .font(Face.row)
             .foregroundStyle(Ink.text)
             .accessibilityLabel(RowField.category.label)
             .focused($focus, equals: key)
             .onSubmit(onSubmit)
+            .cellFocusRing(focus == key)
             .completing(text: $text, owner: key, isFocused: focus == key, store: store, completion: completion) {
                 // ⇥ picks and moves on to DESCRIZIONE, as it would have. After
                 // the pick has reached the field, or leaving it would write
@@ -278,54 +293,147 @@ extension View {
 
 // MARK: - The list
 
-/// The entries under the cell, in the grid's own ink: a list of choices, not a
-/// menu. A click picks, the pointer highlights.
+/// The entries under the cell (`.ac`): a floating list of choices, not a
+/// menu. Names first, then aliases, each group under a small upper-case
+/// label; the highlighted entry is tinted with the accent rather than filled
+/// with it, so its text stays legible. A click picks, the pointer highlights,
+/// and the footer says which keys do the same.
 struct CategoryCompletionList: View {
     let completion: CategoryCompletionModel
 
-    static let rowHeight: CGFloat = 22
-    static let width: CGFloat = 240
+    static let rowHeight: CGFloat = 24
+    static let width: CGFloat = 244
+    private static let groupHeight: CGFloat = 20
+    private static let footerHeight: CGFloat = 32
+    /// `#18181C`: a step above the raised ground of the focused cell it
+    /// hangs from, so the list reads as floating over the grid.
+    private static let ground = Color(hex: 0x18181C)
 
     /// What the list will measure, for the grid to decide whether it fits
     /// under the cell or has to open upwards.
-    static func height(for count: Int) -> CGFloat { CGFloat(count) * rowHeight + 2 }
+    static func height(for candidates: [CategoryCandidate]) -> CGFloat {
+        let groups = (candidates.contains { $0.alias == nil } ? 1 : 0) + (candidates.contains { $0.alias != nil } ? 1 : 0)
+        return 2 + 8 + CGFloat(groups) * groupHeight + CGFloat(candidates.count) * rowHeight + footerHeight
+    }
 
     var body: some View {
+        let entries = Array(completion.candidates.enumerated())
+        let names = entries.filter { $0.element.alias == nil }
+        let aliases = entries.filter { $0.element.alias != nil }
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(completion.candidates.enumerated()), id: \.element.id) { index, candidate in
-                row(index: index, candidate: candidate)
+            if !names.isEmpty {
+                group(String(localized: "Categories"))
+                ForEach(names, id: \.element.id) { index, candidate in
+                    row(index: index, candidate: candidate)
+                }
             }
+            if !aliases.isEmpty {
+                group(String(localized: "Aliases"))
+                ForEach(aliases, id: \.element.id) { index, candidate in
+                    row(index: index, candidate: candidate)
+                }
+            }
+            footer
         }
-        .padding(.vertical, 1)
+        .padding(4)
         .frame(width: Self.width, alignment: .leading)
-        .background(Ink.panel)
-        .overlay(Rectangle().strokeBorder(Ink.accent, lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 8, y: 4)
+        .background(Self.ground, in: shape)
+        .overlay(shape.strokeBorder(Ink.line2, lineWidth: 1))
+        .shadow(color: .black.opacity(0.6), radius: 18, y: 14)
+    }
+
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 8) }
+
+    private func group(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(Face.ui(10, .semibold))
+            .tracking(0.5)
+            .foregroundStyle(Ink.text3)
+            .padding(.horizontal, 7)
+            .padding(.bottom, 2)
+            .frame(height: Self.groupHeight, alignment: .bottomLeading)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func row(index: Int, candidate: CategoryCandidate) -> some View {
         let active = index == completion.selection
-        return HStack(spacing: 6) {
+        return HStack(spacing: 8) {
             if let alias = candidate.alias {
-                Text(alias).foregroundStyle(active ? Ink.bg : Ink.dim)
-                Text("\u{2192}").foregroundStyle(active ? Ink.bg : Ink.dim)
+                Text(alias).foregroundStyle(Ink.text3)
+                Spacer(minLength: 0)
+                Text("\u{2192} \(candidate.name)")
+                    .font(Face.small)
+                    .foregroundStyle(Ink.text3)
+            } else {
+                Text(candidate.name).foregroundStyle(Ink.text)
+                Spacer(minLength: 0)
+                if candidate.isRecent {
+                    Text(String(localized: "recent"))
+                        .font(Face.small)
+                        .foregroundStyle(Ink.text3)
+                }
             }
-            Text(candidate.name).foregroundStyle(active ? Ink.bg : Ink.text)
-            Spacer(minLength: 0)
         }
         .font(Face.row)
         .lineLimit(1)
         .truncationMode(.tail)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 7)
         .frame(height: Self.rowHeight)
-        .background(active ? Ink.accent : Color.clear)
+        .background(active ? Ink.accent.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
         .contentShape(Rectangle())
         .onHover { inside in
             if inside { completion.highlight(index) }
         }
-        .onTapGesture {
-            completion.highlight(index)
-            completion.pick()
+        .onTapGesture { choose(index) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(candidate.alias.map { "\($0) \u{2192} \(candidate.name)" } ?? candidate.name)
+        .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+        // A tap gesture is not an action VoiceOver can press: the row says it
+        // is a button, so it has to act like one.
+        .accessibilityAction { choose(index) }
+    }
+
+    /// A click on a row, or VoiceOver pressing it: that candidate goes into
+    /// the cell and the list closes (`CategoryCompletionModel.pick`).
+    private func choose(_ index: Int) {
+        completion.highlight(index)
+        completion.pick()
+    }
+
+    /// The keys the cell takes while the list is open.
+    private var footer: some View {
+        VStack(spacing: 0) {
+            Hairline()
+            HStack(spacing: 10) {
+                KeyHint(key: "\u{2191}\u{2193}", label: String(localized: "scroll"))
+                KeyHint(key: "\u{21E5}", label: String(localized: "select"))
+                KeyHint(key: "esc", label: String(localized: "close"))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 7)
+            .padding(.top, 6)
         }
+        .padding(.top, 4)
+        .frame(height: Self.footerHeight, alignment: .top)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A key cap and what it does, as the hint lines of the completion list and
+/// of the ⌘K panel write them: `[esc] close`.
+struct KeyHint: View {
+    let key: String
+    let label: String
+    var font: Font = Face.small
+
+    var body: some View {
+        HStack(spacing: 5) {
+            KeyCap(text: key)
+            Text(label)
+                .font(font)
+                .foregroundStyle(Ink.text3)
+        }
+        .lineLimit(1)
+        .fixedSize()
     }
 }

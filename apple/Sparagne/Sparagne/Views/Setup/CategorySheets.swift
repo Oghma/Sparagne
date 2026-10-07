@@ -47,7 +47,7 @@ struct MergeCategorySheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(preview.conflicts.enumerated()), id: \.offset) { _, conflict in
                         Label(conflictText(conflict), systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(Ink.accent)
+                            .foregroundStyle(Ink.warning)
                             .font(.caption)
                     }
                 }
