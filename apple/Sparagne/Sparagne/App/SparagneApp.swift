@@ -32,7 +32,14 @@ struct SparagneApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button(String(localized: "Quick Add\u{2026}")) {
+                // ⌘K is the only way into the command palette, so a vault
+                // that is only read keeps it, under the name of what the
+                // panel then is (`QuickAddOverlay.commandsOnly`).
+                Button(
+                    store?.canWrite == false
+                        ? String(localized: "Command Palette\u{2026}")
+                        : String(localized: "Quick Add\u{2026}")
+                ) {
                     NotificationCenter.default.post(name: .focusQuickAdd, object: nil)
                 }
                 .keyboardShortcut("k", modifiers: .command)

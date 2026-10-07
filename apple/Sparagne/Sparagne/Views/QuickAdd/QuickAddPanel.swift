@@ -9,7 +9,9 @@ import SparagneCore
 /// whole row is one line of text and the fingers never leave the keyboard.
 /// One field, two grammars: a transaction, or a command. Under the field the
 /// parsed line is laid out as chips (`QuickAddTokens`), one per field it will
-/// write, so a line read differently from what was meant shows before ↩.
+/// write, so a line read differently from what was meant shows before ↩. On
+/// a vault that is only read, the field is the palette alone
+/// (`commandsOnly`).
 struct QuickAddOverlay: View {
     @Bindable var store: AppStore
     let engine: SyncEngine?
@@ -25,8 +27,22 @@ struct QuickAddOverlay: View {
     /// `#17171B`: a step above the cards, so the panel floats over the sheet.
     private static let ground = Color(hex: 0x17171B)
 
+    /// An account that only reads the vault cannot add a row, so for it the
+    /// panel is the palette and nothing else: the list shows from the start,
+    /// whatever is typed filters it, and the `>` may be typed or not. ⌘K
+    /// stays the one way into the palette (`SparagneApp`, File menu).
+    private var commandsOnly: Bool { !store.canWrite }
+
     /// `>` in first position turns the field into the palette.
-    private var isCommand: Bool { CommandPaletteModel.isCommand(store.quickAddText) }
+    private var isCommand: Bool { commandsOnly || CommandPaletteModel.isCommand(store.quickAddText) }
+
+    /// What filters the palette: the text after the `>`, or the whole line
+    /// when the panel is only the palette and no `>` was typed.
+    private var query: String {
+        let text = store.quickAddText
+        guard commandsOnly, !CommandPaletteModel.isCommand(text) else { return CommandPaletteModel.query(in: text) }
+        return text.trimmingCharacters(in: .whitespaces)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,8 +72,8 @@ struct QuickAddOverlay: View {
         .onChange(of: isCommand) { _, now in
             if now { refreshActions() }
         }
-        .onChange(of: store.quickAddText) { _, new in
-            palette.query = CommandPaletteModel.query(in: new)
+        .onChange(of: store.quickAddText) { _, _ in
+            palette.query = query
         }
         .task(id: store.quickAddText) { await suggestCategory() }
         .onExitCommand(perform: close)
@@ -81,20 +97,21 @@ struct QuickAddOverlay: View {
 
     private var input: some View {
         HStack(spacing: 10) {
-            Image(systemName: "plus")
+            // A plus would promise a row the panel cannot add.
+            Image(systemName: commandsOnly ? "chevron.right" : "plus")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Ink.accent)
                 .accessibilityHidden(true)
             TextField(
                 "",
                 text: $store.quickAddText,
-                prompt: Text(String(localized: "-12.50 pizza #food @cash >groceries")).foregroundStyle(Ink.text3)
+                prompt: Text(placeholder).foregroundStyle(Ink.text3)
             )
             .textFieldStyle(.plain)
             .font(Face.ui(16))
             .foregroundStyle(Ink.text)
             .focused($focused)
-            .accessibilityLabel(String(localized: "Quick Add"))
+            .accessibilityLabel(commandsOnly ? String(localized: "Command Palette") : String(localized: "Quick Add"))
             // The arrows belong to the list while the field is a palette; the
             // caret gets them back as soon as the `>` is gone.
             .onKeyPress(.upArrow) {
@@ -120,6 +137,14 @@ struct QuickAddOverlay: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
+    }
+
+    /// The grammar by example, or for a vault that is only read, why the
+    /// panel lists commands and takes no line.
+    private var placeholder: String {
+        commandsOnly
+            ? String(localized: "Type a command: this vault is read-only")
+            : String(localized: "-12.50 pizza #food @cash >groceries")
     }
 
     private func submit() {
@@ -203,7 +228,7 @@ struct QuickAddOverlay: View {
 
     private func refreshActions() {
         palette.actions = CommandPaletteModel.ledgerActions(store: store, engine: engine)
-        palette.query = CommandPaletteModel.query(in: store.quickAddText)
+        palette.query = query
     }
 
     /// The note of the line as typed, when the line parses and names no

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The window's own top bar, in place of the system title bar and toolbar
 /// (`docs/v2/UI.md` §2): the vault, the month, then on the trailing side the
-/// search, what is due, the add button and the sync state. The scene hides
+/// search, what is due, what the tab adds and the sync state. The scene hides
 /// the title bar (`.windowStyle(.hiddenTitleBar)`); the traffic lights sit at
 /// the bar's leading end, centred by `WindowChrome`, which also makes the
 /// bar's empty areas drag the window.
@@ -39,8 +39,12 @@ struct TopBar: View {
             if store.tab == .ledger {
                 MonthSearchField(store: store, focused: $searchFocused)
             }
-            DuePill(store: store)
-            AddButton()
+            // The pill leads to the Ricorrenze tab, where the periods are
+            // decided: on that tab they are already on screen.
+            if store.tab != .recurring {
+                DuePill(store: store)
+            }
+            addButton
             SyncPill(engine: engine, present: present)
         }
         .padding(.leading, isFullScreen ? 14 : 78)
@@ -49,6 +53,21 @@ struct TopBar: View {
         .frame(height: Metrics.topBar)
         .background { background }
         .overlay(alignment: .bottom) { Hairline() }
+    }
+
+    /// What the tab on screen adds: a row on the Riepilogo and the Mastro, a
+    /// template on the Ricorrenze; the Setup tab adds in its tables' own
+    /// empty lines. Nothing for an account that only reads the vault, which
+    /// could not save what it typed.
+    @ViewBuilder
+    private var addButton: some View {
+        if store.canWrite {
+            switch store.tab {
+            case .summary, .ledger: AddButton()
+            case .recurring: NewRecurringButton()
+            case .setup: EmptyView()
+            }
+        }
     }
 
     /// The ground, and over it the AppKit view that the bar's empty areas
@@ -205,6 +224,25 @@ struct AddButton: View {
                 Text(String(localized: "Add"))
                 KeyCap(text: "\u{2318}K")
                     .accessibilityHidden(true)
+            }
+        }
+        .buttonStyle(.chrome())
+    }
+}
+
+/// The Ricorrenze tab's add button: the inspector on a new template, through
+/// `.newRecurring` as the Vault menu and the palette do. No key cap: the menu
+/// item has no shortcut, and ⌘K adds a row, not a template.
+struct NewRecurringButton: View {
+    var body: some View {
+        Button {
+            NotificationCenter.default.post(name: .newRecurring, object: nil)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text(String(localized: "New recurring entry"))
             }
         }
         .buttonStyle(.chrome())
