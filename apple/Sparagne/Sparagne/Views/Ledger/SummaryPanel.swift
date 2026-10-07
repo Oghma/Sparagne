@@ -297,6 +297,14 @@ struct CategoryBreakdown: View {
         Array(summary.categories.filter { $0.netExpense > 0 }.prefix(limit))
     }
 
+    /// What the categories spent between them, the base of each share. Not
+    /// the month's net expense: a refund filed in a category with nothing
+    /// spent (a reimbursement of last month's bill) lowers that total but no
+    /// category's figure, and the shares would add up to more than 100%.
+    private var spent: Int64 {
+        summary.categories.reduce(0) { $0 + max($1.netExpense, 0) }
+    }
+
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 0) {
@@ -318,7 +326,7 @@ struct CategoryBreakdown: View {
 
     private func line(_ category: CategoryTotals) -> some View {
         let name = Self.name(category)
-        let share = LedgerMoney.percent(category.netExpense, of: summary.totals.netExpense, decimals: 0)
+        let share = LedgerMoney.percent(category.netExpense, of: spent, decimals: 0)
         return VStack(spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(name)
