@@ -7,7 +7,7 @@ import SwiftUI
 /// the bar's leading end, centred by `WindowChrome`, which also makes the
 /// bar's empty areas drag the window.
 struct TopBar: View {
-    @Bindable var store: AppStore
+    let store: AppStore
     let engine: SyncEngine?
     /// Owned by the window, which focuses it on ⌘F after switching to the
     /// Mastro tab.
@@ -70,7 +70,7 @@ struct TopBar: View {
 /// another (`docs/v2/UI.md` §2.1). ⌥← and ⌥→ step it too, from the Ledger
 /// menu.
 struct MonthStepper: View {
-    @Bindable var store: AppStore
+    let store: AppStore
 
     private var isCurrent: Bool { store.month == MonthKey(Date()) }
 

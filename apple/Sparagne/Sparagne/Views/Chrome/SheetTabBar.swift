@@ -6,7 +6,7 @@ import SwiftUI
 /// line of the sheet on screen. ⌘1 to ⌘4 select the same tabs from the View
 /// menu.
 struct SheetTabBar<Status: View>: View {
-    @Bindable var store: AppStore
+    let store: AppStore
     /// The active tab's own figures (`StatusLine`).
     @ViewBuilder let status: () -> Status
 
@@ -54,7 +54,9 @@ private struct SheetTab: View {
                 }
             }
             .font(Face.ui(12, .medium))
-            .frame(height: Metrics.tabBar - 1)
+            // The bar's whole height, so the underline sits on its bottom
+            // edge; the top hairline is drawn over the first point.
+            .frame(height: Metrics.tabBar)
             .overlay(alignment: .bottom) {
                 if isActive {
                     Rectangle().fill(Ink.accent).frame(height: 2)

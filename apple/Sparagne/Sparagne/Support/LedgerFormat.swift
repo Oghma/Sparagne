@@ -125,7 +125,7 @@ enum LedgerDate {
         return date
     }
 
-    /// `"12:04"`, for the "saved at" corner of the status bar.
+    /// `"12:04"`, for the "saved at" of the tab bar's status line.
     static func clock(_ date: Date, locale: Locale = .autoupdatingCurrent) -> String {
         date.formatted(
             Date.FormatStyle(date: .omitted, time: .shortened, locale: locale)

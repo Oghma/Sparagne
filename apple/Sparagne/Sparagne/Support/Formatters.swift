@@ -70,7 +70,7 @@ extension Currency {
 /// `bundle` is the catalog to read the key from: the app's own, or one a
 /// test builds so the plural forms can be checked before the catalog has them.
 enum CountText {
-    /// `"37 rows"`, `"1 row"`: the header's and the status bar's count.
+    /// `"37 rows"`, `"1 row"`.
     static func rows(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
         String(localized: "\(count) rows", bundle: bundle, locale: locale)
     }
