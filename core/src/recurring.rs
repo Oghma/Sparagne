@@ -126,7 +126,9 @@ impl Schedule {
     /// The first `limit` period dates on or after `from`, ascending. Meant
     /// for previews of a template that may not be saved yet, so the schedule
     /// is validated like `CreateRecurring` does it; `end_date` still bounds
-    /// the list.
+    /// the list. Without an `end_date` the list is as long as `limit`, so a
+    /// caller reachable from outside the crate must cap it (the FFI export
+    /// does).
     pub fn occurrences_from(&self, from: NaiveDate, limit: usize) -> Result<Vec<NaiveDate>> {
         self.validate()?;
         Ok(self

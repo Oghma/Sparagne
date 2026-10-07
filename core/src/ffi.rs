@@ -560,16 +560,49 @@ pub fn decode_statement_mapping(json: String) -> Result<StatementMapping, Domain
 
 /// The next `limit` dates of a schedule on or after `from`, for previewing a
 /// saved or unsaved template (agenda, editor inspector). No database access.
+///
+/// `limit` is capped at [`MAX_OCCURRENCES_PREVIEW`]: a schedule without an
+/// `end_date` never runs out, so an unbounded `limit` (`u32::MAX`) would
+/// allocate until memory does. A caller that asks for more gets that many.
 #[uniffi::export]
 pub fn schedule_occurrences(
     schedule: Schedule,
     from: NaiveDate,
     limit: u32,
 ) -> Result<Vec<NaiveDate>, DomainError> {
-    schedule.occurrences_from(from, to_usize(limit))
+    schedule.occurrences_from(from, to_usize(limit.min(MAX_OCCURRENCES_PREVIEW)))
 }
+
+/// The most dates `schedule_occurrences` returns: far more than any preview
+/// shows, far less than a memory problem.
+const MAX_OCCURRENCES_PREVIEW: u32 = 1_000;
 
 /// Saturating `u32` -> `usize`; the core takes `usize` limits.
 fn to_usize(value: u32) -> usize {
     usize::try_from(value).unwrap_or(usize::MAX)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::recurring::Frequency;
+
+    fn open_ended_daily() -> Schedule {
+        Schedule {
+            frequency: Frequency::Daily,
+            interval: 1,
+            start_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            end_date: None,
+        }
+    }
+
+    #[test]
+    fn occurrences_preview_is_capped() {
+        let from = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let all = schedule_occurrences(open_ended_daily(), from, u32::MAX).unwrap();
+        assert_eq!(all.len(), MAX_OCCURRENCES_PREVIEW as usize);
+        let few = schedule_occurrences(open_ended_daily(), from, 3).unwrap();
+        assert_eq!(few.len(), 3);
+    }
 }
