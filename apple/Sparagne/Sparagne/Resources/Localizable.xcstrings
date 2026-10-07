@@ -49,6 +49,86 @@
         }
       }
     },
+    "%lld changes were refused": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "One change was refused"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld changes were refused"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Una modifica non è passata"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld modifiche non sono passate"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld pending": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld pending"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld pending"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld in attesa"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld in attesa"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld recurring entries are due": {
       "localizations": {
         "en": {
@@ -82,6 +162,46 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld ricorrenze in attesa"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld refused": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld refused"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld refused"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rifiutata"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rifiutate"
                 }
               }
             }
@@ -162,6 +282,46 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld righe selezionate"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld to confirm": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld to confirm"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld to confirm"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld da confermare"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld da confermare"
                 }
               }
             }
@@ -317,6 +477,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Account"
+          }
+        }
+      }
+    },
+    "Account & Server…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account & Server…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account e server…"
+          }
+        }
+      }
+    },
+    "Active": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attive"
           }
         }
       }
@@ -1081,6 +1273,38 @@
         }
       }
     },
+    "Changes wait on this Mac and go up when the server is back.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes wait on this Mac and go up when the server is back."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le modifiche aspettano su questo Mac e partono quando il server torna raggiungibile."
+          }
+        }
+      }
+    },
+    "Changes waiting to be sent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes waiting to be sent"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifiche in attesa di invio"
+          }
+        }
+      }
+    },
     "Choose Another File…": {
       "localizations": {
         "en": {
@@ -1225,6 +1449,22 @@
         }
       }
     },
+    "Connect a Server…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect a Server…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collega un server…"
+          }
+        }
+      }
+    },
     "Could not load more": {
       "localizations": {
         "en": {
@@ -1237,6 +1477,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossibile caricare altro"
+          }
+        }
+      }
+    },
+    "Count": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Count"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conteggio"
           }
         }
       }
@@ -1621,6 +1877,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Separatore"
+          }
+        }
+      }
+    },
+    "Demo database": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demo database"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Database demo"
+          }
+        }
+      }
+    },
+    "Demo database %@: it never syncs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demo database %@: it never syncs"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Database demo %@: non si sincronizza mai"
           }
         }
       }
@@ -2249,6 +2537,22 @@
         }
       }
     },
+    "Everything is synced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything is synced"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tutto sincronizzato"
+          }
+        }
+      }
+    },
     "Execute": {
       "localizations": {
         "en": {
@@ -2657,6 +2961,22 @@
         }
       }
     },
+    "In archive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In archive"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiviate"
+          }
+        }
+      }
+    },
     "In sync": {
       "localizations": {
         "en": {
@@ -2849,6 +3169,22 @@
         }
       }
     },
+    "Last sync": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last sync"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ultima volta"
+          }
+        }
+      }
+    },
     "Last synced at %@": {
       "localizations": {
         "en": {
@@ -2993,6 +3329,22 @@
         }
       }
     },
+    "Local only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local only"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo locale"
+          }
+        }
+      }
+    },
     "Log In": {
       "localizations": {
         "en": {
@@ -3025,6 +3377,22 @@
         }
       }
     },
+    "Log in again to resume syncing; your changes wait on this Mac.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log in again to resume syncing; your changes wait on this Mac."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accedi di nuovo per riprendere la sincronizzazione; le modifiche aspettano su questo Mac."
+          }
+        }
+      }
+    },
     "Malformed row": {
       "localizations": {
         "en": {
@@ -3053,6 +3421,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gestisci ricorrenze…"
+          }
+        }
+      }
+    },
+    "Manage Templates…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage Templates…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestisci modelli…"
           }
         }
       }
@@ -3665,6 +4049,22 @@
         }
       }
     },
+    "No server connected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No server connected"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun server collegato"
+          }
+        }
+      }
+    },
     "No vault": {
       "localizations": {
         "en": {
@@ -3900,7 +4300,7 @@
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Non in linea"
+            "value": "Offline"
           }
         }
       }
@@ -4093,6 +4493,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schema"
+          }
+        }
+      }
+    },
+    "Pending": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In attesa"
           }
         }
       }
@@ -4689,6 +5105,22 @@
         }
       }
     },
+    "Search the month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search the month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca nel mese"
+          }
+        }
+      }
+    },
     "Select": {
       "localizations": {
         "en": {
@@ -4733,6 +5165,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Indirizzo del server"
+          }
+        }
+      }
+    },
+    "Session expired": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session expired"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessione scaduta"
           }
         }
       }
@@ -5281,6 +5729,22 @@
         }
       }
     },
+    "Sum": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sum"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somma"
+          }
+        }
+      }
+    },
     "Summary": {
       "localizations": {
         "en": {
@@ -5329,6 +5793,54 @@
         }
       }
     },
+    "Sync error": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync error"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Errore di sync"
+          }
+        }
+      }
+    },
+    "Synced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synced"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizzato"
+          }
+        }
+      }
+    },
+    "Syncing with the server…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Syncing with the server…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizzo con il server…"
+          }
+        }
+      }
+    },
     "Syncing…": {
       "localizations": {
         "en": {
@@ -5340,7 +5852,7 @@
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sincronizzazione…"
+            "value": "Sincronizzo…"
           }
         }
       }
@@ -5601,6 +6113,22 @@
         }
       }
     },
+    "The last sync failed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The last sync failed"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'ultima sincronizzazione non è riuscita"
+          }
+        }
+      }
+    },
     "The new password needs at least 8 characters.": {
       "localizations": {
         "en": {
@@ -5661,6 +6189,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Il server ha risposto in modo imprevisto"
+          }
+        }
+      }
+    },
+    "The server can't be reached": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server can't be reached"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il server non è raggiungibile"
           }
         }
       }
@@ -5761,6 +6305,38 @@
         }
       }
     },
+    "The vault lives on this Mac only. Connect a server to have it on other devices or to share it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vault lives on this Mac only. Connect a server to have it on other devices or to share it."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il vault vive solo su questo Mac. Collega un server per averlo su altri dispositivi o condividerlo."
+          }
+        }
+      }
+    },
+    "This database is for trying the app: it never syncs.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This database is for trying the app: it never syncs."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo database serve a provare l'app: non si sincronizza mai."
+          }
+        }
+      }
+    },
     "This file is not text": {
       "localizations": {
         "en": {
@@ -5853,6 +6429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fuso orario"
+          }
+        }
+      }
+    },
+    "To confirm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To confirm"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da confermare"
           }
         }
       }
@@ -7149,6 +7741,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "salvato %@"
+          }
+        }
+      }
+    },
+    "saved at %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "saved at %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "salvato alle %@"
           }
         }
       }
