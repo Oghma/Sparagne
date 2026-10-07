@@ -1,0 +1,515 @@
+import SwiftUI
+import SparagneCore
+
+/// The Ricorrenze tab's inspector (`docs/v2/UI.md` §2.5): one template's
+/// fields, edited in place, or a new template written from scratch. The
+/// fields are a `RecurringDraft`; Salva sends only what changed, Annulla
+/// puts the saved values back, and the next four dates follow every
+/// keystroke, asked of the core.
+///
+/// What `RecurringPatch` cannot say is not offered: the kind is fixed once a
+/// template exists, and "any wallet" or Unallocated are greyed out once it
+/// has a wallet or an envelope. A vault the account only reads shows the
+/// fields without letting them change.
+struct RecurringInspector: View {
+    let store: AppStore
+    /// `nil` = a new template.
+    let template: RecurringView?
+    let today: NaiveDate
+    /// A new template was created and should be selected, or the user gave
+    /// up on one (`nil`).
+    let finishedCreating: (Uuid?) -> Void
+
+    @State private var draft: RecurringDraft
+    /// A command in flight: Salva, Crea and the rest wait for it.
+    @State private var working = false
+
+    init(store: AppStore, template: RecurringView?, today: NaiveDate, finishedCreating: @escaping (Uuid?) -> Void) {
+        self.store = store
+        self.template = template
+        self.today = today
+        self.finishedCreating = finishedCreating
+        _draft = State(initialValue: template.map(RecurringDraft.init(template:)) ?? RecurringDraft(today: today))
+    }
+
+    private var currency: Currency { store.currency }
+    private var isNew: Bool { template == nil }
+    /// Archived templates are restored before they are edited.
+    private var editable: Bool { store.canWrite && !(template?.archived ?? false) && !working }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    title
+                    amountAndKind
+                    whereGroup
+                    whenGroup
+                    nextDates
+                }
+                .disabled(!editable)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            footer
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Ink.bg)
+        // The saved template moved under the open draft (a save, the table's
+        // switch, a sync): an untouched draft follows it, an edited one keeps
+        // the user's edits and takes the switch only.
+        .onChange(of: template) { old, new in
+            guard let new else { return }
+            let untouched = old.map { !draft.isDirty(against: $0, currency: currency) } ?? true
+            if untouched || !draft.isDirty(against: new, currency: currency) {
+                draft = RecurringDraft(template: new)
+            } else {
+                draft.enabled = new.enabled
+            }
+        }
+    }
+
+    // MARK: - Heading
+
+    private var title: some View {
+        let cadence = ScheduleFormatting.describe(draft.schedule)
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(template.map(RecurringTitle.of) ?? String(localized: "New recurring entry"))
+                .font(Face.ui(16, .semibold))
+                .foregroundStyle(Ink.text)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            Text(String(localized: "\(cadence) \u{00B7} from \(RecurringDayText.full(draft.startDate))"))
+            .font(Face.ui(12))
+            .foregroundStyle(Ink.text2)
+            .lineLimit(2)
+        }
+    }
+
+    // MARK: - Amount and kind
+
+    private var amountAndKind: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                TextField(String(localized: "Amount"), text: $draft.amountText, prompt: Text(verbatim: "0,00"))
+                    .textFieldStyle(.plain)
+                    .labelsHidden()
+                    .font(Face.ui(22, .semibold))
+                    .foregroundStyle(Ink.text)
+                    .accessibilityLabel(String(localized: "Amount"))
+                Text(verbatim: "€")
+                    .font(Face.ui(13))
+                    .foregroundStyle(Ink.text3)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 40)
+            .background(Ink.card, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Ink.accent, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 11).fill(Ink.accent.opacity(0.14)).padding(-3))
+            .padding(3)
+
+            RecurringSegments(
+                options: [TransactionKind.expense, .income],
+                selection: draft.kind,
+                label: Self.kindLabel,
+                select: { draft.kind = $0 },
+                name: String(localized: "Kind")
+            )
+            // A patch has no kind: once the template exists, it is what it is.
+            .disabled(!isNew)
+        }
+    }
+
+    /// Uscita / Entrata. The income key is not "Income", whose Italian is
+    /// the plural "Entrate" of the summary's columns.
+    private static func kindLabel(_ kind: TransactionKind) -> String {
+        kind == .income
+            ? String(localized: "recurring.kind.income", defaultValue: "Income")
+            : String(localized: "Expense")
+    }
+
+    // MARK: - Dove
+
+    private var whereGroup: some View {
+        let names = NameBook(snapshot: store.snapshot)
+        return VStack(alignment: .leading, spacing: 5) {
+            groupLabel(String(localized: "Where"))
+            field(String(localized: "Wallet")) {
+                InspectorMenu(
+                    label: String(localized: "Wallet"),
+                    value: draft.walletId.map { names.wallet($0) ?? TransactionRow.placeholder }
+                        ?? String(localized: "Any wallet")
+                ) {
+                    Button(String(localized: "Any wallet")) { draft.setWallet(nil, template: template) }
+                        .disabled(!RecurringDraft.mayClearWallet(template))
+                    Divider()
+                    ForEach(store.wallets, id: \.id) { wallet in
+                        Button(wallet.name) { draft.setWallet(wallet.id, template: template) }
+                    }
+                }
+            }
+            field(String(localized: "Envelope")) {
+                InspectorMenu(
+                    label: String(localized: "Envelope"),
+                    value: draft.flowId.map { names.flow($0) ?? TransactionRow.placeholder }
+                        ?? NameBook.unallocatedLabel
+                ) {
+                    Button(NameBook.unallocatedLabel) { draft.setFlow(nil, template: template) }
+                        .disabled(!RecurringDraft.mayClearFlow(template))
+                    Divider()
+                    ForEach(store.flows.filter { !$0.isUnallocated }, id: \.id) { flow in
+                        Button(flow.name) { draft.setFlow(flow.id, template: template) }
+                    }
+                }
+            }
+            field(String(localized: "Category")) {
+                InspectorTextField(label: String(localized: "Category"), text: $draft.category)
+            }
+            field(String(localized: "Note")) {
+                InspectorTextField(label: String(localized: "Note"), text: $draft.note)
+            }
+        }
+    }
+
+    // MARK: - Quando
+
+    private var whenGroup: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            groupLabel(String(localized: "When"))
+            RecurringSegments(
+                options: RecurringDraft.Cadence.allCases,
+                selection: draft.cadence,
+                label: Self.cadenceLabel,
+                select: { draft.cadence = $0 },
+                name: String(localized: "Frequency")
+            )
+            .padding(.bottom, 2)
+            field(String(localized: "Repeat")) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        every
+                        on
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        every
+                        on
+                    }
+                }
+            }
+            field(String(localized: "Start")) {
+                DayField(label: String(localized: "Start"), day: $draft.startDate)
+            }
+            field(String(localized: "End")) {
+                HStack(spacing: 8) {
+                    RecurringSegments(
+                        options: [false, true],
+                        selection: draft.hasEndDate,
+                        label: { $0 ? String(localized: "On a day\u{2026}") : String(localized: "Never") },
+                        select: { draft.hasEndDate = $0 },
+                        name: String(localized: "End")
+                    )
+                    if draft.hasEndDate {
+                        DayField(label: String(localized: "End"), day: $draft.endDate)
+                    }
+                }
+            }
+        }
+    }
+
+    private static func cadenceLabel(_ cadence: RecurringDraft.Cadence) -> String {
+        switch cadence {
+        case .daily: String(localized: "Day")
+        case .weekly: String(localized: "Week")
+        case .monthly: String(localized: "Month")
+        case .yearly: String(localized: "Year")
+        }
+    }
+
+    /// "ogni [1] mese,"
+    private var every: some View {
+        HStack(spacing: 6) {
+            Text(String(localized: "every"))
+            MiniNumberField(label: String(localized: "Interval"), value: $draft.interval)
+            Text(unitWord + (draft.cadence == .daily ? "" : ","))
+        }
+        .font(Face.ui(12))
+        .foregroundStyle(Ink.text)
+        .fixedSize()
+    }
+
+    /// The unit after the interval, singular for one. Two plain words rather
+    /// than a plural key: the number is in the box before it, not in the
+    /// sentence.
+    private var unitWord: String {
+        let one = draft.interval == 1
+        switch draft.cadence {
+        case .daily: return one ? String(localized: "day") : String(localized: "days")
+        case .weekly: return one ? String(localized: "week") : String(localized: "weeks")
+        case .monthly: return one ? String(localized: "month") : String(localized: "months")
+        case .yearly: return one ? String(localized: "year") : String(localized: "years")
+        }
+    }
+
+    /// The day the cadence falls on: a weekday, a day of the month, or a
+    /// day and a month.
+    @ViewBuilder
+    private var on: some View {
+        HStack(spacing: 6) {
+            switch draft.cadence {
+            case .daily:
+                EmptyView()
+            case .weekly:
+                Text(String(localized: "on"))
+                compactMenu(
+                    label: String(localized: "Weekday"),
+                    value: ScheduleFormatting.weekdayName(UInt8(clamping: draft.weekday))
+                ) {
+                    ForEach(1...7, id: \.self) { day in
+                        Button(ScheduleFormatting.weekdayName(UInt8(day))) { draft.weekday = day }
+                    }
+                }
+            case .monthly:
+                Text(String(localized: "on day"))
+                MiniNumberField(label: String(localized: "Day of the month"), value: $draft.monthDay)
+            case .yearly:
+                Text(String(localized: "on the"))
+                MiniNumberField(label: String(localized: "Day of the month"), value: $draft.yearDay)
+                compactMenu(
+                    label: String(localized: "Month"),
+                    value: ScheduleFormatting.monthName(UInt8(clamping: draft.yearMonth))
+                ) {
+                    ForEach(1...12, id: \.self) { month in
+                        Button(ScheduleFormatting.monthName(UInt8(month))) { draft.yearMonth = month }
+                    }
+                }
+            }
+        }
+        .font(Face.ui(12))
+        .foregroundStyle(Ink.text)
+        .fixedSize()
+    }
+
+    private func compactMenu<Items: View>(label: String, value: String, @ViewBuilder items: () -> Items) -> some View {
+        InspectorMenu(label: label, value: value) { items() }
+            .fixedSize()
+    }
+
+    // MARK: - Prossime date
+
+    private var nextDates: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            groupLabel(String(localized: "Next dates"))
+            switch preview {
+            case .success(let dates):
+                VStack(spacing: 0) {
+                    ForEach(dates, id: \.self) { line in
+                        previewLine(line)
+                    }
+                }
+                if dates.isEmpty {
+                    Text(String(localized: "No dates left: the end date has passed"))
+                        .font(Face.ui(12))
+                        .foregroundStyle(Ink.text3)
+                }
+            case .failure:
+                Text(String(localized: "These settings do not make a schedule"))
+                    .font(Face.ui(12))
+                    .foregroundStyle(Ink.negative)
+            }
+        }
+    }
+
+    /// The next four dates of the schedule on screen, saved or not. The due
+    /// periods lead while the schedule is the saved one; and today, for a
+    /// running template, counts as decided when it is not among them
+    /// (`RecurringNext.of`).
+    private var preview: Result<[RecurringNext.Preview], Error> {
+        let schedule = draft.schedule
+        let unchanged = template.map { $0.schedule == schedule } ?? false
+        let due = unchanged ? template.map { store.dueDates(of: $0.id) } ?? [] : []
+        let running = template.map { $0.enabled && !$0.archived } ?? false
+        let from = running ? (NaiveDay.adding(1, to: today) ?? today) : today
+        return Result {
+            try RecurringNext.preview(
+                schedule: schedule,
+                due: due,
+                from: from,
+                count: 4,
+                occurrences: CoreSchedule.occurrences
+            )
+        }
+    }
+
+    private func previewLine(_ line: RecurringNext.Preview) -> some View {
+        HStack {
+            Text(RecurringDayText.weekdayWithYear(line.date))
+                .foregroundStyle(Ink.text)
+            Spacer(minLength: 8)
+            if line.isDue {
+                Text(String(localized: "to confirm"))
+                    .font(Face.ui(10, .semibold))
+                    .foregroundStyle(Ink.accent)
+                    .padding(.horizontal, 5)
+                    .frame(height: 16)
+                    .background(Ink.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
+            } else if let amount = draft.amount(currency: currency) ?? template?.amount {
+                Text(LedgerMoney.bare(amount)).foregroundStyle(Ink.text3)
+            }
+        }
+        .font(Face.ui(12))
+        .frame(height: 22)
+        .overlay(alignment: .bottom) {
+            Line()
+                .stroke(Ink.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .frame(height: 1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            if let template {
+                if store.canWrite {
+                    RecurringSwitch(label: String(localized: "Enabled"), isOn: draft.enabled && !template.archived) { on in
+                        run { await store.setRecurringEnabled(template.id, on) }
+                    }
+                    .disabled(template.archived || working)
+                    // The switch speaks for itself; the word beside it would
+                    // be a second stop saying the same.
+                    Text(String(localized: "Enabled"))
+                        .font(Face.ui(12))
+                        .foregroundStyle(Ink.text2)
+                        .accessibilityHidden(true)
+                }
+                Spacer(minLength: 8)
+                if store.canWrite {
+                    if template.archived {
+                        Button(String(localized: "Restore")) {
+                            run { await store.restoreRecurring(template.id) }
+                        }
+                        .buttonStyle(.chrome(.ghost, small: true))
+                    } else if !isDirty {
+                        Button {
+                            run { await store.archiveRecurring(template.id) }
+                        } label: {
+                            Text(String(localized: "Archive")).foregroundStyle(Ink.negative)
+                        }
+                        .buttonStyle(.chrome(.ghost, small: true))
+                    }
+                    if isDirty {
+                        Button(String(localized: "Cancel")) { draft = RecurringDraft(template: template) }
+                            .buttonStyle(.chrome(.ghost, small: true))
+                            .keyboardShortcut(.cancelAction)
+                        if draft.isValid(currency: currency), isPreviewValid {
+                            Button(String(localized: "Save")) { save(template) }
+                                .buttonStyle(.chrome(.primary, small: true))
+                                .keyboardShortcut(.defaultAction)
+                        }
+                    }
+                }
+            } else {
+                Spacer(minLength: 8)
+                Button(String(localized: "Cancel")) { finishedCreating(nil) }
+                    .buttonStyle(.chrome(.ghost, small: true))
+                    .keyboardShortcut(.cancelAction)
+                Button(String(localized: "Create")) { create() }
+                    .buttonStyle(.chrome(.primary, small: true))
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!draft.isValid(currency: currency) || !isPreviewValid)
+            }
+        }
+        .disabled(working)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minHeight: 44)
+        .overlay(alignment: .top) { Hairline() }
+        .background(Ink.bg)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var isDirty: Bool {
+        guard let template else { return false }
+        return draft.isDirty(against: template, currency: currency)
+    }
+
+    private var isPreviewValid: Bool {
+        if case .success = preview { return true }
+        return false
+    }
+
+    // MARK: - Actions
+
+    private func save(_ template: RecurringView) {
+        let patch = draft.patch(against: template, currency: currency)
+        run { await store.updateRecurring(template.id, patch: patch) }
+    }
+
+    /// Crea, then the new template selected in the table. A refused one (an
+    /// envelope gone since) keeps the draft, so it can be fixed.
+    private func create() {
+        guard let creation = draft.creation(currency: currency) else { return }
+        let before = Set(store.recurringTemplates.map(\.id))
+        run {
+            await store.createRecurring(
+                kind: creation.kind,
+                amount: creation.amount,
+                walletId: creation.walletId,
+                flowId: creation.flowId,
+                category: creation.category,
+                note: creation.note,
+                schedule: creation.schedule
+            )
+            if let created = store.recurringTemplates.first(where: { !before.contains($0.id) }) {
+                finishedCreating(created.id)
+            }
+        }
+    }
+
+    private func run(_ work: @escaping @MainActor () async -> Void) {
+        working = true
+        Task {
+            await work()
+            working = false
+        }
+    }
+
+    // MARK: - Pieces
+
+    /// `DOVE`, `QUANDO`: small capitals in `text3`.
+    private func groupLabel(_ text: String) -> some View {
+        Text(text)
+            .font(Face.ui(10.5, .semibold))
+            .tracking(0.5)
+            .textCase(.uppercase)
+            .foregroundStyle(Ink.text3)
+            .padding(.bottom, 1)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// A labelled row: the label in an 80-point column, the control after it.
+    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .font(Face.ui(12))
+                .foregroundStyle(Ink.text2)
+                .frame(width: 80, alignment: .leading)
+                .accessibilityHidden(true)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: 26)
+    }
+}
+
+/// A horizontal line through the middle of its frame, for a dashed rule.
+private struct Line: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        return path
+    }
+}

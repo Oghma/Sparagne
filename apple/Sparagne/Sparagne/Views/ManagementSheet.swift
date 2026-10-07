@@ -150,7 +150,12 @@ struct ManagementSheet: View {
             }
 
             Section(String(localized: "Recurring")) {
-                Button(String(localized: "Manage Recurring…")) { present(.recurring) }
+                // The templates live on the Ricorrenze tab now; the sheet
+                // gets out of its way.
+                Button(String(localized: "Manage Recurring…")) {
+                    store.tab = .recurring
+                    dismiss()
+                }
                     .buttonStyle(.link)
                     .disabled(store.currentVault == nil)
             }

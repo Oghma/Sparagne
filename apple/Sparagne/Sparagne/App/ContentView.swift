@@ -78,9 +78,6 @@ struct MainWindow: View {
         case renameWallet(WalletView)
         case renameEnvelope(FlowView)
         case editEnvelope(FlowView)
-        case recurring
-        case newRecurring
-        case dueRecurring
         case share(VaultView)
         case leaveVault(VaultView)
         case rejected
@@ -97,9 +94,6 @@ struct MainWindow: View {
             case .renameWallet(let wallet): "renameWallet-\(wallet.id)"
             case .renameEnvelope(let flow): "renameEnvelope-\(flow.id)"
             case .editEnvelope(let flow): "editEnvelope-\(flow.id)"
-            case .recurring: "recurring"
-            case .newRecurring: "newRecurring"
-            case .dueRecurring: "dueRecurring"
             case .share(let vault): "share-\(vault.id)"
             case .leaveVault(let vault): "leaveVault-\(vault.id)"
             case .rejected: "rejected"
@@ -159,8 +153,10 @@ struct MainWindow: View {
             .onReceive(NotificationCenter.default.publisher(for: .reviewDueRecurring)) { _ in
                 store.tab = .recurring
             }
+            // The Vault menu and the palette: the Ricorrenze tab, its
+            // inspector on a new template.
             .onReceive(NotificationCenter.default.publisher(for: .newRecurring)) { _ in
-                if store.canWrite { sheet = .newRecurring }
+                RecurringTab.requestCreate(store: store)
             }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
@@ -259,12 +255,6 @@ struct MainWindow: View {
             EditEnvelopeSheet(flow: flow, currency: store.currency) { mode, allowNegative in
                 Task { await store.updateEnvelope(flow.id, mode: mode, allowNegative: allowNegative) }
             }
-        case .recurring:
-            RecurringPanel(store: store)
-        case .newRecurring:
-            RecurringTemplateSheet(store: store, template: nil)
-        case .dueRecurring:
-            DueRecurringSheet(store: store)
         case .share(let vault):
             if let engine {
                 ShareVaultSheet(engine: engine, vault: vault)
