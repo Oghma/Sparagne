@@ -1601,6 +1601,38 @@
         }
       }
     },
+    "Command Palette": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command Palette"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Palette comandi"
+          }
+        }
+      }
+    },
+    "Command Palette…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command Palette…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Palette comandi…"
+          }
+        }
+      }
+    },
     "Confirm new password": {
       "localizations": {
         "en": {
@@ -7341,6 +7373,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tipo"
+          }
+        }
+      }
+    },
+    "Type a command: this vault is read-only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type a command: this vault is read-only"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi un comando: questo vault è in sola lettura"
           }
         }
       }
