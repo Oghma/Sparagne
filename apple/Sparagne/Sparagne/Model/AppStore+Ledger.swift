@@ -7,9 +7,17 @@ import SparagneCore
 /// nothing here is stored or written.
 extension AppStore {
     /// The grid's lines: the rows on screen with the periods due this month
-    /// slotted in at their date (`LedgerLines`).
+    /// slotted in at their date (`LedgerLines`). While a next page is still
+    /// to come, the periods past the last row loaded wait for it.
     var ledgerLines: [LedgerLine] {
-        LedgerLines.interleave(rows: rows, due: duePeriods, month: month, direction: direction, search: searchText)
+        LedgerLines.interleave(
+            rows: rows,
+            due: duePeriods,
+            month: month,
+            direction: direction,
+            search: searchText,
+            hasMoreRows: nextCursor != nil
+        )
     }
 
     /// The status line's average, count and sum (`SheetStats`).

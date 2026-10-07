@@ -75,9 +75,20 @@ struct LedgerLinesTests {
         _ rows: [TransactionRow],
         _ due: [DuePeriod],
         direction: LedgerDirection = .expenses,
-        search: String = ""
+        search: String = "",
+        hasMoreRows: Bool = false
     ) -> [String] {
-        names(LedgerLines.interleave(rows: rows, due: due, month: october, direction: direction, search: search, timeZone: zone))
+        names(
+            LedgerLines.interleave(
+                rows: rows,
+                due: due,
+                month: october,
+                direction: direction,
+                search: search,
+                hasMoreRows: hasMoreRows,
+                timeZone: zone
+            )
+        )
     }
 
     @Test("A due period sits at its date among the rows, in ascending order")
@@ -93,6 +104,24 @@ struct LedgerLinesTests {
         let due = [Self.due("2026-10-31", note: "affitto"), Self.due("2026-10-01", note: "mutuo")]
         #expect(Self.interleave(rows, due) == ["p:mutuo", "r:coop", "p:affitto"])
         #expect(Self.interleave([], due) == ["p:mutuo", "p:affitto"])
+    }
+
+    @Test("With another page to come, the periods past the last row loaded wait for it")
+    func morePages() {
+        let firstPage = [Self.row(day: 2, note: "coop"), Self.row(day: 10, note: "bar")]
+        let due = [
+            Self.due("2026-10-05", note: "mutuo"),
+            Self.due("2026-10-10", note: "luce"),
+            Self.due("2026-10-25", note: "affitto"),
+        ]
+        // The next page may still hold rows of the 10th, and the 25th's
+        // period would sit above every one of them.
+        #expect(Self.interleave(firstPage, due, hasMoreRows: true) == ["r:coop", "p:mutuo", "r:bar"])
+        let lastPage = firstPage + [Self.row(day: 10, hour: 20, note: "cena"), Self.row(day: 28, note: "cinema")]
+        #expect(
+            Self.interleave(lastPage, due)
+                == ["r:coop", "p:mutuo", "r:bar", "r:cena", "p:luce", "p:affitto", "r:cinema"]
+        )
     }
 
     @Test("Only the month on screen: a period of September or November stays off October's sheet")

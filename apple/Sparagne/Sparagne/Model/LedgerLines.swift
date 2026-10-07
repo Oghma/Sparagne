@@ -34,12 +34,18 @@ enum LedgerLines {
     /// Same day as stored rows: the period goes after them. It is not written
     /// yet, so it comes last among the day's entries, where the next row
     /// typed that day would land.
+    ///
+    /// `hasMoreRows` says the month goes on past `rows` (the store has a next
+    /// page). A period dated after the last row loaded then waits for the
+    /// page that reaches its date: shown now, at the bottom, it would sit
+    /// above rows of its own month that only arrive with that page.
     static func interleave(
         rows: [TransactionRow],
         due: [DuePeriod],
         month: MonthKey,
         direction: LedgerDirection,
         search: String = "",
+        hasMoreRows: Bool = false,
         timeZone: TimeZone = .current
     ) -> [LedgerLine] {
         let prefix = String(format: "%04d-%02d-", month.year, month.month)
@@ -65,7 +71,9 @@ enum LedgerLines {
             }
             lines.append(.row(row))
         }
-        lines.append(contentsOf: pending[next...].map(LedgerLine.pending))
+        if !hasMoreRows {
+            lines.append(contentsOf: pending[next...].map(LedgerLine.pending))
+        }
         return lines
     }
 
