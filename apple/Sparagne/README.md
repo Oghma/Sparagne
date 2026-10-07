@@ -17,17 +17,21 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Model/AppStore.swift` | `@Observable` store: vaults, snapshot, transactions, filters, deferred undo, errors |
 | `Sparagne/Model/TransactionRow.swift` | Table row derived from a `TransactionView` plus the vault snapshot |
 | `Sparagne/Model/LedgerModel.swift` | `MonthKey` and the calendar arithmetic behind it, `LedgerDirection`, `LedgerTab` and `LedgerSummary` |
-| `Sparagne/Views/Ledger/` | The single window: `LedgerWindow` (month header, view switcher, status bar), `LedgerHeader`, the `LedgerGrid` spreadsheet, `LedgerRow`, `SummaryPanel` |
-| `Sparagne/Views/Summary/` | The RIEPILOGO view (`SummaryView`): the year up to the month on screen |
-| `Sparagne/Views/Setup/` | The SETUP view (⌘⇧C): envelopes and categories as two editable tables, the merge sheet |
-| `Sparagne/Model/YearModel.swift` | `YearSummary.build`, the arithmetic behind the RIEPILOGO |
+| `Sparagne/App/` | The app entry (`SparagneApp`: menus and shortcuts), `ContentView`, `WindowChrome` (the traffic lights inside the top bar, a draggable bar) and `LaunchOptions` (`-SparagneDatabase`, `-SparagneTab`) |
+| `Sparagne/Views/Chrome/` | The window's own chrome: the 44 pt `TopBar` (vault selector, month stepper, search, due pill, Add, `SyncPill`), the `SheetTabBar` along the bottom with each tab's `StatusLine` |
+| `Sparagne/Views/Ledger/` | The Mastro tab: `LedgerWindow` (top bar, sheet, tab bar), `FilterBar`, the `LedgerGrid` ruled sheet, `LedgerRow` (with the pending recurring rows), `SelectionBar`, `SummaryPanel`, the command palette |
+| `Sparagne/Views/QuickAdd/` | The ⌘K panel: the parsed line as chips, and the command palette after `>` |
+| `Sparagne/Views/Summary/` | The Riepilogo tab: KPI cards, fund bars, the month-by-month table, two charts |
+| `Sparagne/Views/Recurring/` | The Ricorrenze tab: to confirm, next 30 days, templates table and inspector |
+| `Sparagne/Views/Setup/` | The Setup tab (⌘4, ⌘⇧C): vault card, wallets, envelopes and categories as editable tables, the merge sheet |
+| `Sparagne/Model/YearModel.swift` | `YearSummary.build`, the arithmetic behind the Riepilogo |
+| `Sparagne/Model/` (other) | Pure models, tested without a window: `LedgerLines` (due periods among the rows), `SheetStats`, `QuickAddTokens`, `SyncPillState`, `RecurringAgenda` / `RecurringDraft` / `RecurringNext` / `RecurringMonthly` |
 | `Sparagne/Views/ManagementSheet.swift` | Vault picker plus wallet and envelope balances and management (⌘⇧M); the window has no sidebar |
-| `Sparagne/Views/RecurringPanel.swift` | Recurring templates: list, create, edit, archive |
 | `Sparagne/Views/Sheets.swift` | Onboarding, new wallet/envelope, rename and edit-envelope sheets |
-| `Sparagne/Views/SyncViews.swift` | The toolbar's sync status button and the rejected-changes and share sheets |
+| `Sparagne/Views/SyncViews.swift` | The rejected-changes and share sheets (the sync status is the top bar's `SyncPill`) |
 | `Sparagne/Views/UndoToast.swift` | The undo bar after a void |
 | `Sparagne/Sync/` | Transport, typed HTTP API, account and token store, and the sync engine (`docs/v2/SYNC.md` §5) |
-| `Sparagne/Support/` | Money and date formatting (`Formatters.swift`), the mockup's own money format (`LedgerFormat.swift`), the fixed dark palette (`Palette.swift`), the quick-add preview line (`QuickAddSummary.swift`), error headlines (`ErrorMessages.swift`) |
+| `Sparagne/Support/` | Money and date formatting (`Formatters.swift`), the mockup's own money format (`LedgerFormat.swift`), the fixed dark palette, type scale and metrics (`Palette.swift`), the quick-add preview line (`QuickAddSummary.swift`), error headlines (`ErrorMessages.swift`) |
 
 Sync is off until an account is set up in Settings: server address, then
 Register or Log In. From then on the account's username signs every command,
@@ -40,17 +44,20 @@ resolves inside the app container.
 
 ## Keyboard
 
-The full table is `docs/v2/UI.md` §6; the shortcuts that reach across the
-whole window (`SparagneApp.swift`'s menu commands) are:
+The window has no toolbar: the top bar and the sheet tabs along the bottom
+(Riepilogo · Mastro · Ricorrenze · Setup) are drawn by the app. The full table
+is `docs/v2/UI.md` §6; the shortcuts that reach across the whole window
+(`SparagneApp.swift`'s menu commands) are:
 
 | Key | Action |
 |---|---|
-| `⌘K` | quick-add line over the grid |
+| `⌘1` `⌘2` `⌘3` `⌘4` | the Riepilogo, Mastro, Ricorrenze and Setup tabs (View menu) |
+| `⌘K` | quick-add panel over the sheet; a leading `>` turns it into the command palette |
 | `⌘D` | duplicate the last row |
-| `⌘F` | focus the search field |
+| `⌘F` | go to the Mastro and focus the search field in the top bar |
 | `⌘E` | export the rows on screen as CSV |
 | `⌘⇧M` | management sheet: vault, wallets, envelopes, recurring |
-| `⌘⇧C` | Setup view: envelopes and categories |
+| `⌘⇧C` | the Setup tab: wallets, envelopes and categories |
 | `⌘⇧V` / `⌘⇧T` | show voided rows / show transfers |
 | `⌥←` / `⌥→` | previous / next month |
 
@@ -70,7 +77,10 @@ are git-ignored; regenerate the project with `xcodegen generate` any time
 
 The core's fixture writes a year of a two-person household, up to today,
 into a database of its own. The app opens it with `-SparagneDatabase
-demo.sqlite` (the **Sparagne Demo** scheme passes it) and never syncs it:
+demo.sqlite` (the **Sparagne Demo** scheme passes it) and never syncs it; the
+top bar shows a DEMO badge next to the vault and the sync pill says "Local
+only". `-SparagneTab summary|ledger|recurring|setup` opens the window on one
+tab:
 
 ```sh
 # Run from Xcode, sandboxed:
@@ -79,5 +89,5 @@ cargo run -p sparagne_core --example seed -- \
 # Built with CODE_SIGNING_ALLOWED=NO:
 cargo run -p sparagne_core --example seed -- \
   "$HOME/Library/Application Support/Sparagne/demo.sqlite" --replace
-open Sparagne.app --args -SparagneDatabase demo.sqlite
+open Sparagne.app --args -SparagneDatabase demo.sqlite -SparagneTab ledger
 ```
