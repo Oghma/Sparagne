@@ -39,9 +39,9 @@ enum Ink {
     /// dark step of `chartExpense`.
     static let muted = Color(hex: 0x4A2A12)
     static let mutedPositive = Color(hex: 0x1D5340)
-    /// Amber-yellow: a refused sync change, the mid band of a budget bar. Not
-    /// in `docs/v2/UI.md` §5's table, but used consistently wherever the
-    /// ledger needs a caution color instead of system orange.
+    /// Amber-yellow: a refused sync change, the mid band of a budget bar
+    /// (`docs/v2/UI.md` §5's table). Used wherever the ledger needs a caution
+    /// color instead of system orange.
     static let warning = Color(hex: 0xE8A33D)
 
     /// Chart series, validated for color-blind separation on `#111113`.
@@ -114,7 +114,6 @@ enum Metrics {
     static let cellPad: CGFloat = 8
     static let cardPad: CGFloat = 12
     static let cardRadius: CGFloat = 8
-    static let sidebarWidth: CGFloat = 284
     static let gutter: CGFloat = 16
 }
 
