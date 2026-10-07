@@ -95,7 +95,7 @@ enum LedgerAccessibility {
             parts.append(String(localized: "wallet \(row.walletDisplay)"))
         }
         parts.append(String(localized: "by \(row.person)"))
-        if row.voided { parts.append(String(localized: "voided")) }
+        if row.voided { parts.append(String(localized: "deleted")) }
         return parts.joined(separator: ", ")
     }
 

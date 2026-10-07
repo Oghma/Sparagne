@@ -226,6 +226,11 @@ struct LedgerGrid: View {
         return hovered ? Ink.card : Color.clear
     }
 
+    /// "Delete" is what the window calls a void. The core's log is
+    /// append-only and synced, so nothing is removed: the row stays in the
+    /// history, struck through when the chip shows it and out of every total.
+    /// "Annulla", the old Italian word for it, was also Cancel and the
+    /// system's Undo.
     @ViewBuilder
     private func rowMenu(_ row: TransactionRow) -> some View {
         // A transfer's two ends do not fit the empty line, so it has no copy
@@ -235,7 +240,7 @@ struct LedgerGrid: View {
                 .disabled(store.isReadOnly)
             Divider()
         }
-        Button(String(localized: "Void"), role: .destructive) {
+        Button(String(localized: "Delete"), role: .destructive) {
             Task { await store.void(transactionId: row.id) }
         }
         .disabled(store.isReadOnly || row.voided)
@@ -254,7 +259,7 @@ struct LedgerGrid: View {
                 Button(String(localized: "Duplicate")) { duplicate(row) }
             }
             if !row.voided {
-                Button(String(localized: "Void")) { Task { await store.void(transactionId: row.id) } }
+                Button(String(localized: "Delete")) { Task { await store.void(transactionId: row.id) } }
             }
             Button(selected ? String(localized: "Deselect") : String(localized: "Select")) {
                 store.toggleSelection(row.id)
@@ -268,7 +273,7 @@ struct LedgerGrid: View {
         Button(String(localized: "Set Category\u{2026}")) { showsBulkCategory = true }
             .disabled(targets == 0)
         Divider()
-        Button(String(localized: "Void \(targets) Rows"), role: .destructive) {
+        Button(String(localized: "Delete \(targets) Rows"), role: .destructive) {
             Task { await store.voidSelection() }
         }
         .disabled(targets == 0)

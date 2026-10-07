@@ -39,7 +39,7 @@ struct FilterBar: View {
                 .accessibilityHidden(true)
 
             FilterChip(title: String(localized: "Transfers"), isOn: $store.showTransfers)
-            FilterChip(title: String(localized: "Voided"), isOn: $store.showVoided)
+            FilterChip(title: String(localized: "Deleted"), isOn: $store.showVoided)
             FilterChip(title: String(localized: "Wallet column"), isOn: $store.showWalletColumn)
 
             Spacer(minLength: 0)

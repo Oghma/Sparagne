@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The 5-second undo window after a void: the row is already gone, a bar
-/// counts down, and Undo puts it back without ever touching the core
-/// (docs/v2/DISTILLATO_V1.md §2.4).
+/// The 5-second undo window after a void, which the window calls a delete:
+/// the row is already gone, a bar counts down, and Undo ("Ripristina")
+/// puts it back without ever touching the core (docs/v2/DISTILLATO_V1.md
+/// §2.4).
 ///
 /// ⌘Z does the same through Edit ▸ Undo, where the store registers the void
 /// (`LedgerHistory.recordPendingVoid`). The button has no shortcut of its own:
