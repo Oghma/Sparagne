@@ -77,7 +77,7 @@ enum CountText {
 
     /// The undo toast, for one row or a selection.
     static func voided(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
-        String(localized: "\(count) transactions voided", bundle: bundle, locale: locale)
+        String(localized: "\(count) transactions deleted", bundle: bundle, locale: locale)
     }
 
     /// `"5 days ago"` under a due period's date, `"today"` for one due today.

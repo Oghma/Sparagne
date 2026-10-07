@@ -417,7 +417,7 @@
         }
       }
     },
-    "%lld transactions voided": {
+    "%lld transactions deleted": {
       "localizations": {
         "en": {
           "variations": {
@@ -425,13 +425,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "Transaction voided"
+                  "value": "Transaction deleted"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld transactions voided"
+                  "value": "%lld transactions deleted"
                 }
               }
             }
@@ -443,13 +443,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "Transazione annullata"
+                  "value": "Transazione eliminata"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld transazioni annullate"
+                  "value": "%lld transazioni eliminate"
                 }
               }
             }
@@ -1969,6 +1969,78 @@
         }
       }
     },
+    "Delete %lld Rows": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Delete %lld Row"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Delete %lld Rows"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Elimina %lld riga"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Elimina %lld righe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Delete Transaction": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Transaction"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elimina transazione"
+          }
+        }
+      }
+    },
+    "Delete Transactions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Transactions"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "eliminazione transazioni"
+          }
+        }
+      }
+    },
     "Delete Vault": {
       "localizations": {
         "en": {
@@ -2029,6 +2101,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eliminare “%@”?"
+          }
+        }
+      }
+    },
+    "Deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminate"
           }
         }
       }
@@ -3057,6 +3145,22 @@
         }
       }
     },
+    "Hide Deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Deleted"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nascondi eliminate"
+          }
+        }
+      }
+    },
     "Hide Transfers": {
       "localizations": {
         "en": {
@@ -3069,22 +3173,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nascondi trasferimenti"
-          }
-        }
-      }
-    },
-    "Hide Voided": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide Voided"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nascondi annullate"
           }
         }
       }
@@ -5961,6 +6049,22 @@
         }
       }
     },
+    "Show Deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Deleted"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra eliminate"
+          }
+        }
+      }
+    },
     "Show Transfers": {
       "localizations": {
         "en": {
@@ -5973,22 +6077,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mostra trasferimenti"
-          }
-        }
-      }
-    },
-    "Show Voided": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Voided"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mostra annullate"
           }
         }
       }
@@ -7617,110 +7705,6 @@
         }
       }
     },
-    "Void": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Void"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Annulla"
-          }
-        }
-      }
-    },
-    "Void %lld Rows": {
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Void %lld Row"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Void %lld Rows"
-                }
-              }
-            }
-          }
-        },
-        "it": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Annulla %lld riga"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Annulla %lld righe"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Void Transactions": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Void Transactions"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "annullamento transazioni"
-          }
-        }
-      }
-    },
-    "Void transaction": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Void transaction"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Annulla transazione"
-          }
-        }
-      }
-    },
-    "Voided": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Voided"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Annullate"
-          }
-        }
-      }
-    },
     "Waiting to sync": {
       "localizations": {
         "en": {
@@ -8393,6 +8377,38 @@
         }
       }
     },
+    "delete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "delete"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "elimina"
+          }
+        }
+      }
+    },
+    "deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "deleted"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "eliminata"
+          }
+        }
+      }
+    },
     "ended": {
       "localizations": {
         "en": {
@@ -8997,38 +9013,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "valore"
-          }
-        }
-      }
-    },
-    "void": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "void"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "annulla"
-          }
-        }
-      }
-    },
-    "voided": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "voided"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "annullata"
           }
         }
       }

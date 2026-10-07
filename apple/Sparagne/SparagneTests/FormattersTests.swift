@@ -104,7 +104,7 @@ private enum TestCatalog {
     static func english() throws -> Bundle {
         try bundle(language: "en", plurals: [
             "%lld to confirm": ("%lld to confirm", "%lld to confirm"),
-            "%lld transactions voided": ("Transaction deleted", "%lld transactions deleted"),
+            "%lld transactions deleted": ("Transaction deleted", "%lld transactions deleted"),
             "Every %lld days": ("Every day", "Every %lld days"),
             "Every %lld weeks": ("Every week", "Every %lld weeks"),
             "Every %lld months": ("Every month", "Every %lld months"),
@@ -117,7 +117,7 @@ private enum TestCatalog {
             language: "it",
             plurals: [
                 "%lld to confirm": ("%lld da confermare", "%lld da confermare"),
-                "%lld transactions voided": ("Transazione eliminata", "%lld transazioni eliminate"),
+                "%lld transactions deleted": ("Transazione eliminata", "%lld transazioni eliminate"),
                 "Every %lld weeks": ("Ogni settimana", "Ogni %lld settimane"),
             ],
             strings: [

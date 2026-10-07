@@ -43,7 +43,7 @@ extension AppStore {
         selection.clear()
     }
 
-    /// "Void N Rows", ⌫ and ⌦: one pending void for every target, so one toast
+    /// "Delete N Rows", ⌫ and ⌦: one pending void for every target, so one toast
     /// to take it back and, when it elapses, one batch.
     func voidSelection() async {
         let ids = bulkTargets.map(\.id)

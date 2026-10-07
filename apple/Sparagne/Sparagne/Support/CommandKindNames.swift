@@ -33,7 +33,7 @@ enum CommandKindNames {
         case "transfer_wallet": String(localized: "Transfer between wallets")
         case "transfer_flow": String(localized: "Transfer between envelopes")
         case "update_transaction": String(localized: "Edit transaction")
-        case "void_transaction": String(localized: "Void transaction")
+        case "void_transaction": String(localized: "Delete Transaction")
         case "create_recurring": String(localized: "Create recurring")
         case "update_recurring": String(localized: "Edit recurring")
         case "archive_recurring": String(localized: "Archive recurring")
