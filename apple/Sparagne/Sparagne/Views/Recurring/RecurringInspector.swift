@@ -185,7 +185,7 @@ struct RecurringInspector: View {
                 name: String(localized: "Frequency")
             )
             .padding(.bottom, 2)
-            field(String(localized: "Repeat")) {
+            field(String(localized: "Repeat"), alignment: .firstTextBaseline) {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
                         every
@@ -490,8 +490,13 @@ struct RecurringInspector: View {
     }
 
     /// A labelled row: the label in an 80-point column, the control after it.
-    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+    /// Centered on a one-line control; on the first line of one that wraps.
+    private func field<Content: View>(
+        _ label: String,
+        alignment: VerticalAlignment = .center,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: alignment, spacing: 8) {
             Text(label)
                 .font(Face.ui(12))
                 .foregroundStyle(Ink.text2)

@@ -79,7 +79,9 @@ struct RecurringSegments<Option: Hashable>: View {
         .padding(1)
         .background(Ink.bg, in: RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Ink.line2, lineWidth: 1))
-        .opacity(isEnabled ? 1 : 0.6)
+        // Dimmed less than a disabled button: a fixed choice (the kind of a
+        // saved template) still has to be read.
+        .opacity(isEnabled ? 1 : 0.75)
         .fixedSize()
         .accessibilityElement(children: .contain)
         .accessibilityLabel(name)
@@ -137,7 +139,9 @@ struct MiniNumberField: View {
             .accessibilityLabel(label)
             .onAppear { text = String(value) }
             .onChange(of: value) { _, new in
-                if Int(text) != new { text = String(new) }
+                // An empty box already means zero: rewriting it as "0" would
+                // get in the way of the number being typed.
+                if (Int(text) ?? 0) != new { text = String(new) }
             }
             .onChange(of: text) { _, new in
                 let digits = new.filter(\.isNumber)

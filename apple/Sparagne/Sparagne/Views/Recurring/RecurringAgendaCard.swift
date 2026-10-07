@@ -35,11 +35,14 @@ struct RecurringAgendaCard: View {
     private func totals(_ agenda: RecurringAgenda) -> some View {
         HStack(spacing: 4) {
             Text(String(localized: "Expected expenses")).foregroundStyle(Ink.text3)
-            Text(LedgerMoney.bare(agenda.expenses)).foregroundStyle(Ink.text)
+            // A zero reads as background (`docs/v2/UI.md` §5).
+            Text(LedgerMoney.bare(agenda.expenses))
+                .foregroundStyle(agenda.expenses == 0 ? Ink.text3 : Ink.text)
             Text(String(localized: "Expected income"))
                 .foregroundStyle(Ink.text3)
                 .padding(.leading, 10)
-            Text(LedgerMoney.bare(agenda.income)).foregroundStyle(Ink.positive)
+            Text(LedgerMoney.bare(agenda.income))
+                .foregroundStyle(agenda.income == 0 ? Ink.text3 : Ink.positive)
         }
         .font(Face.ui(11.5, .medium))
         .accessibilityElement(children: .combine)

@@ -4,9 +4,10 @@ import Testing
 
 @testable import Sparagne
 
-/// The due sheet (`DueRecurringSheet`): the periods a template is waiting
-/// on, and what Execute, Skip and Execute All leave behind. Every assertion
-/// reads the core's own answer after the command, not the sheet.
+/// "Da confermare" on the Ricorrenze tab (`DueRecurringCard`): the periods
+/// a template is waiting on, and what Registra, Salta and Registra tutte
+/// leave behind. Every assertion reads the core's own answer after the
+/// command, not the card.
 @MainActor
 struct RecurringDueTests {
     /// Vault `Main`, wallet `Cash` holding 100.00.

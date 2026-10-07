@@ -12,8 +12,10 @@ enum RecurringSelection: Hashable {
 /// three text columns take what is left, down to their minimums, which fit
 /// the window's narrowest width beside the inspector.
 private enum TemplateColumn {
-    static let enabled: CGFloat = 44
-    static let descriptionMinimum: CGFloat = 130
+    /// Wide enough for "Enabled", which is longer than the canvas's
+    /// "Attiva".
+    static let enabled: CGFloat = 60
+    static let descriptionMinimum: CGFloat = 120
     static let amount: CGFloat = 96
     static let cadenceMinimum: CGFloat = 150
     static let next: CGFloat = 100
