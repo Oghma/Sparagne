@@ -145,7 +145,7 @@ extension CommandPaletteModel {
     ///
     /// The entries that have a menu item post that item's notification, so
     /// the two ways in share one implementation; the rest write the same
-    /// state the header and the switcher write. The three view toggles write
+    /// state the top bar and the tab bar write. The three view toggles write
     /// the store, which the window mirrors back into the menu's preference.
     static func ledgerActions(store: AppStore, engine: SyncEngine?) -> [PaletteAction] {
         var actions: [PaletteAction] = [
@@ -176,7 +176,9 @@ extension CommandPaletteModel {
             },
         ]
 
-        for tab in [LedgerTab.summary, .ledger] {
+        // Every sheet of the tab bar, in its order (⌘1 to ⌘4 from the View
+        // menu do the same).
+        for tab in LedgerTab.allCases {
             actions.append(
                 PaletteAction(
                     id: "tab.\(tab.rawValue)",

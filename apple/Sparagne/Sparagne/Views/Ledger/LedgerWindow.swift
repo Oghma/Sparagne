@@ -80,6 +80,9 @@ struct LedgerWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .openSetup)) { _ in
             store.tab = .setup
         }
+        .onReceive(NotificationCenter.default.publisher(for: .selectTab)) { note in
+            if let tab = note.object as? LedgerTab { store.tab = tab }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .stepMonth)) { note in
             let months = note.object as? Int ?? 1
             store.month = store.month.adding(months: months)

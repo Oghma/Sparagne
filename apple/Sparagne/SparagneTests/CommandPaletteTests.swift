@@ -199,17 +199,23 @@ struct CommandPaletteTests {
         #expect(store.currentVault?.id == other.id)
     }
 
-    @Test("The tab entries switch the view")
+    @Test("Every sheet tab is an entry, in the tab bar's order, and switches to it")
     func tabEntries() async throws {
         let store = try Self.store()
         await store.bootstrap()
         await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
-        store.tab = .summary
 
         let actions = CommandPaletteModel.ledgerActions(store: store, engine: nil)
-        let entry = try #require(actions.first { $0.id == "tab.ledger" })
-        await entry.run()
-        #expect(store.tab == .ledger)
+        let tabIds = actions.map(\.id).filter { $0.hasPrefix("tab.") }
+        #expect(tabIds == ["tab.summary", "tab.ledger", "tab.recurring", "tab.setup"])
+
+        // From another tab each time, so the run is what moved it.
+        for tab in LedgerTab.allCases {
+            store.tab = tab == .summary ? .ledger : .summary
+            let entry = try #require(actions.first { $0.id == "tab.\(tab.rawValue)" })
+            await entry.run()
+            #expect(store.tab == tab)
+        }
     }
 
     @Test("The three view toggles are entries, and flip the state they name")

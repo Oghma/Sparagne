@@ -44,11 +44,22 @@ struct SparagneApp: App {
                 .disabled(store?.canWrite == false)
             }
 
-            // The standard View menu, beside "Show Toolbar": the column is a
-            // property of the view, not of the ledger's filters.
+            // The standard View menu: the column is a property of the view,
+            // not of the ledger's filters.
             CommandGroup(after: .toolbar) {
                 Toggle(String(localized: "Show Wallet Column"), isOn: $showWalletColumn)
                     .keyboardShortcut("w", modifiers: [.command, .shift])
+
+                Divider()
+
+                // The sheet tabs, ⌘1 to ⌘4 in the tab bar's order, as a
+                // browser's tabs.
+                ForEach(LedgerTab.allCases) { tab in
+                    Button(tab.label) {
+                        NotificationCenter.default.post(name: .selectTab, object: tab)
+                    }
+                    .keyboardShortcut(KeyEquivalent(Character(String(tab.shortcut))), modifiers: .command)
+                }
             }
 
             CommandGroup(after: .importExport) {
@@ -172,6 +183,8 @@ extension Notification.Name {
     static let exportCSV = Notification.Name("it.oghma.sparagne.exportCSV")
     /// ⌘⇧C: switches to the setup tab, envelopes and categories (§2.3).
     static let openSetup = Notification.Name("it.oghma.sparagne.openSetup")
+    /// ⌘1 to ⌘4: switches to a sheet tab; the object is the `LedgerTab`.
+    static let selectTab = Notification.Name("it.oghma.sparagne.selectTab")
     /// Vault menu and palette: the onboarding sheet again, for another vault.
     static let newVault = Notification.Name("it.oghma.sparagne.newVault")
     /// Vault menu and palette: rename the vault on screen.
