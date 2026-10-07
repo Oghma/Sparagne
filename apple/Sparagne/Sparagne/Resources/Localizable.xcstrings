@@ -81,6 +81,38 @@
         }
       }
     },
+    "%@ · due": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · due"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · dovuta"
+          }
+        }
+      }
+    },
+    "%@ · from %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · from %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · dal %@"
+          }
+        }
+      }
+    },
     "%@, %@ of %@": {
       "localizations": {
         "en": {
@@ -162,6 +194,46 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld modifiche non sono passate"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld days ago": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld day ago"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld days ago"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld giorno fa"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld giorni fa"
                 }
               }
             }
@@ -897,6 +969,22 @@
         }
       }
     },
+    "Any wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Any wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualsiasi wallet"
+          }
+        }
+      }
+    },
     "Archive": {
       "localizations": {
         "en": {
@@ -1149,6 +1237,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Secondo il segno"
+          }
+        }
+      }
+    },
+    "Cadence": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cadence"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cadenza"
           }
         }
       }
@@ -1849,6 +1953,22 @@
         }
       }
     },
+    "Day": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Day"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giorno"
+          }
+        }
+      }
+    },
     "Day %lld": {
       "localizations": {
         "en": {
@@ -1861,6 +1981,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Giorno %lld"
+          }
+        }
+      }
+    },
+    "Day of the month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Day of the month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giorno del mese"
           }
         }
       }
@@ -2345,6 +2481,38 @@
         }
       }
     },
+    "Enabled %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attiva %@"
+          }
+        }
+      }
+    },
+    "End": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fine"
+          }
+        }
+      }
+    },
     "End date": {
       "localizations": {
         "en": {
@@ -2713,6 +2881,38 @@
         }
       }
     },
+    "Expected expenses": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expected expenses"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uscite previste"
+          }
+        }
+      }
+    },
+    "Expected income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expected income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrate previste"
+          }
+        }
+      }
+    },
     "Expense": {
       "localizations": {
         "en": {
@@ -2853,6 +3053,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Primo wallet"
+          }
+        }
+      }
+    },
+    "Fixed expenses a month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed expenses a month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uscite fisse al mese"
+          }
+        }
+      }
+    },
+    "Fixed income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrate fisse"
           }
         }
       }
@@ -3197,6 +3429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entrate · %@"
+          }
+        }
+      }
+    },
+    "Interval": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interval"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intervallo"
           }
         }
       }
@@ -3921,6 +4169,22 @@
         }
       }
     },
+    "Never": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Never"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mai"
+          }
+        }
+      }
+    },
     "New": {
       "localizations": {
         "en": {
@@ -4145,6 +4409,38 @@
         }
       }
     },
+    "New recurring entry": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New recurring entry"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova ricorrenza"
+          }
+        }
+      }
+    },
+    "New recurring entry…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New recurring entry…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuova ricorrenza…"
+          }
+        }
+      }
+    },
     "New row": {
       "localizations": {
         "en": {
@@ -4209,6 +4505,38 @@
         }
       }
     },
+    "Next": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prossima"
+          }
+        }
+      }
+    },
+    "Next 30 days": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next 30 days"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prossimi 30 giorni"
+          }
+        }
+      }
+    },
     "Next Month": {
       "localizations": {
         "en": {
@@ -4221,6 +4549,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mese successivo"
+          }
+        }
+      }
+    },
+    "Next dates": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next dates"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prossime date"
           }
         }
       }
@@ -4285,6 +4629,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessuna colonna"
+          }
+        }
+      }
+    },
+    "No dates left: the end date has passed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No dates left: the end date has passed"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna data: la fine è già passata"
           }
         }
       }
@@ -4529,6 +4889,22 @@
         }
       }
     },
+    "Nothing in the next 30 days": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing in the next 30 days"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niente nei prossimi 30 giorni"
+          }
+        }
+      }
+    },
     "Nothing is due": {
       "localizations": {
         "en": {
@@ -4557,6 +4933,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessuna spesa questo mese"
+          }
+        }
+      }
+    },
+    "Nothing to confirm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to confirm"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niente da confermare"
           }
         }
       }
@@ -4621,6 +5013,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Offline"
+          }
+        }
+      }
+    },
+    "On a day…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On a day…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il giorno…"
           }
         }
       }
@@ -4977,6 +5385,38 @@
         }
       }
     },
+    "Record": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registra"
+          }
+        }
+      }
+    },
+    "Record all": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record all"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registra tutte"
+          }
+        }
+      }
+    },
     "Recurring": {
       "localizations": {
         "en": {
@@ -5229,6 +5669,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rinomina…"
+          }
+        }
+      }
+    },
+    "Repeat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repeat"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripeti"
           }
         }
       }
@@ -6113,6 +6569,22 @@
         }
       }
     },
+    "Start": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inizio"
+          }
+        }
+      }
+    },
     "Start date": {
       "localizations": {
         "en": {
@@ -6413,6 +6885,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Categoria di destinazione"
+          }
+        }
+      }
+    },
+    "Templates": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Templates"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelli"
           }
         }
       }
@@ -6781,6 +7269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Il vault vive solo su questo Mac. Collega un server per averlo su altri dispositivi o condividerlo."
+          }
+        }
+      }
+    },
+    "These settings do not make a schedule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These settings do not make a schedule"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Queste impostazioni non formano una cadenza"
           }
         }
       }
@@ -7521,6 +8025,22 @@
         }
       }
     },
+    "Week": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Week"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settimana"
+          }
+        }
+      }
+    },
     "Weekday": {
       "localizations": {
         "en": {
@@ -7569,6 +8089,38 @@
         }
       }
     },
+    "When": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quando"
+          }
+        }
+      }
+    },
+    "Where": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dove"
+          }
+        }
+      }
+    },
     "Which one did you mean?": {
       "localizations": {
         "en": {
@@ -7597,6 +8149,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome utente o password errati"
+          }
+        }
+      }
+    },
+    "Year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anno"
           }
         }
       }
@@ -7985,6 +8553,22 @@
         }
       }
     },
+    "click a row to edit it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "click a row to edit it"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "clic su una riga per modificarla"
+          }
+        }
+      }
+    },
     "current": {
       "localizations": {
         "en": {
@@ -7997,6 +8581,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "in corso"
+          }
+        }
+      }
+    },
+    "day": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "day"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "giorno"
+          }
+        }
+      }
+    },
+    "days": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "days"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "giorni"
           }
         }
       }
@@ -8033,6 +8649,22 @@
         }
       }
     },
+    "ended": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ended"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "conclusa"
+          }
+        }
+      }
+    },
     "envelope %@": {
       "localizations": {
         "en": {
@@ -8065,6 +8697,22 @@
         }
       }
     },
+    "every": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "every"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ogni"
+          }
+        }
+      }
+    },
     "expense": {
       "localizations": {
         "en": {
@@ -8093,6 +8741,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "uscita %@"
+          }
+        }
+      }
+    },
+    "from %@, envelope %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "from %@, envelope %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "da %@, busta %@"
+          }
+        }
+      }
+    },
+    "from any wallet, envelope %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "from any wallet, envelope %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "da qualsiasi wallet, busta %@"
           }
         }
       }
@@ -8145,6 +8825,22 @@
         }
       }
     },
+    "month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mese"
+          }
+        }
+      }
+    },
     "month=%lld": {
       "localizations": {
         "en": {
@@ -8173,6 +8869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "mese=%lld flow=%@ persona=%@"
+          }
+        }
+      }
+    },
+    "months": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "months"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mesi"
           }
         }
       }
@@ -8305,6 +9017,54 @@
         }
       }
     },
+    "on": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "on"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "di"
+          }
+        }
+      }
+    },
+    "on day": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "on day"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "il giorno"
+          }
+        }
+      }
+    },
+    "on the": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "on the"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "il"
+          }
+        }
+      }
+    },
     "opening balance": {
       "localizations": {
         "en": {
@@ -8333,6 +9093,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "persone"
+          }
+        }
+      }
+    },
+    "recurring.kind.income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrata"
           }
         }
       }
@@ -8513,6 +9289,38 @@
         }
       }
     },
+    "to confirm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "to confirm"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "da confermare"
+          }
+        }
+      }
+    },
+    "today": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "today"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oggi"
+          }
+        }
+      }
+    },
     "transfer": {
       "localizations": {
         "en": {
@@ -8669,6 +9477,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "wallet %@"
+          }
+        }
+      }
+    },
+    "week": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "week"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "settimana"
+          }
+        }
+      }
+    },
+    "weeks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "weeks"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "settimane"
+          }
+        }
+      }
+    },
+    "year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "anno"
+          }
+        }
+      }
+    },
+    "years": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "years"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "anni"
           }
         }
       }
