@@ -6,6 +6,11 @@ import SparagneCore
 /// drawn like the ledger.
 struct SetupView: View {
     let store: AppStore
+    /// `nil` before the database is open and in a demo database: the vault's
+    /// members and its sharing need an account.
+    let engine: SyncEngine?
+    /// Opens one of the window's sheets, e.g. sharing the vault.
+    let present: (MainWindow.SheetKind) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {

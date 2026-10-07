@@ -156,7 +156,7 @@ struct LedgerWindow: View {
             case .recurring:
                 RecurringTab(store: store, engine: engine) { sheet = $0 }
             case .setup:
-                SetupView(store: store)
+                SetupView(store: store, engine: engine) { sheet = $0 }
             }
         } else {
             VStack {
