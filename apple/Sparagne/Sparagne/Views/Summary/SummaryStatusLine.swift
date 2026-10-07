@@ -14,12 +14,11 @@ struct SummaryStatusLine: View {
         if let year = store.year {
             // The months up to the one on screen: the later ones are drawn
             // blank in the table, and are not counted here either.
-            let months = year.months.filter { !$0.isFuture }
-            let savings = months.reduce(0) { $0 + $1.savings }
-            items.append(StatusItem(label: String(localized: "Savings"), value: LedgerMoney.bare(savings)))
-            if let last = months.last {
-                items.append(StatusItem(label: String(localized: "Total"), value: LedgerMoney.bare(last.total)))
-            }
+            let label = String(year.year)
+            items.append(
+                StatusItem(label: String(localized: "Savings \(label)"), value: LedgerMoney.bare(year.yearSavings))
+            )
+            items.append(StatusItem(label: String(localized: "Total"), value: LedgerMoney.bare(year.closingTotal)))
         }
         if let savedAt = store.savedAt {
             items.append(StatusItem(label: String(localized: "saved at \(LedgerDate.clock(savedAt))")))

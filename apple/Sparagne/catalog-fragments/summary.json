@@ -1,0 +1,26 @@
+{
+  "Income · %@": {"en": "Income · %@", "it": "Entrate · %@"},
+  "Expenses · %@": {"en": "Expenses · %@", "it": "Uscite · %@"},
+  "Savings · %@": {"en": "Savings · %@", "it": "Risparmio · %@"},
+  "Savings rate": {"en": "Savings rate", "it": "Tasso di risparmio"},
+  "%@ in %@": {"en": "%@ in %@", "it": "%@ a %@"},
+  "%@ %@ vs %@": {"en": "%@ %@ vs %@", "it": "%@ %@ su %@"},
+  "%@ year to date": {"en": "%@ year to date", "it": "%@ da inizio anno"},
+  "Funds": {"en": "Funds", "it": "Fondi"},
+  "envelopes with a cap": {"en": "envelopes with a cap", "it": "buste con un tetto"},
+  "of %@ · %@": {"en": "of %@ · %@", "it": "di %@ · %@"},
+  "cap on balance": {"en": "cap on balance", "it": "tetto sul saldo"},
+  "cap on income": {"en": "cap on income", "it": "tetto sulle entrate"},
+  "Month by month": {"en": "Month by month", "it": "Mese per mese"},
+  "Total = savings + cash fund − fund expenses": {
+    "en": "Total = savings + cash fund − fund expenses",
+    "it": "Totale = risparmio + fondo cassa − uscite dei fondi"
+  },
+  "Start of year": {"en": "Start of year", "it": "Inizio anno"},
+  "current": {"en": "current", "it": "in corso"},
+  "Cash fund · total at month end": {"en": "Cash fund · total at month end", "it": "Fondo cassa · totale a fine mese"},
+  "%@ since the start of the year": {"en": "%@ since the start of the year", "it": "%@ da inizio anno"},
+  "start": {"en": "start", "it": "inizio"},
+  "up to %@": {"en": "up to %@", "it": "fino a %@"},
+  "Savings %@": {"en": "Savings %@", "it": "Risparmio %@"}
+}
