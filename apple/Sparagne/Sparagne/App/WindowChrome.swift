@@ -44,7 +44,12 @@ final class WindowChromeView: NSView {
     var onFullScreenChange: (Bool) -> Void = { _ in }
 
     private weak var observedWindow: NSWindow?
-    private var observers: [NSObjectProtocol] = []
+    /// Main-actor state like the rest, but `deinit` is not isolated and has
+    /// to reach the tokens: a view released together with its window never
+    /// hears `viewDidMoveToWindow` with no window, the call that detaches.
+    /// Written only from the main actor; `deinit` reads them last, once no
+    /// other reference to the view is left.
+    nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
     /// Between `willEnterFullScreen` and `willExitFullScreen`: AppKit owns
     /// the buttons then, and shows them in the bar that slides down with the
     /// menu bar.
@@ -55,8 +60,18 @@ final class WindowChromeView: NSView {
     private var buttonSpacing: CGFloat?
     /// The views whose frame changes are observed; AppKit may swap a button.
     private var observedViews: [ObjectIdentifier] = []
-    private var frameObservers: [NSObjectProtocol] = []
+    /// See `observers`.
+    nonisolated(unsafe) private var frameObservers: [NSObjectProtocol] = []
     private var checkScheduled = false
+
+    /// The notification center keeps a block observer until it is removed;
+    /// the blocks hold the view weakly, so a stale one would do nothing, but
+    /// it would stay registered for the life of the app.
+    deinit {
+        for token in observers + frameObservers {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
 
     // MARK: Events on the bar's empty areas
 
