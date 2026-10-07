@@ -360,8 +360,10 @@ extension CommandPaletteModel {
 
 // MARK: - The list under the field
 
-/// The rows under the ⌘K field while it is in command mode. Same ink as the
-/// grid: this is a list of choices, not a dialog.
+/// The rows of the ⌘K panel while its line starts with `>`
+/// (`QuickAddOverlay`): a list of choices inside the same panel, not a second
+/// dialog. The active row is tinted with the accent rather than filled with
+/// it, as the completion list's is; the panel's footer carries the keys.
 struct CommandPaletteList: View {
     let model: CommandPaletteModel
     /// Called after an entry ran, so the field can close itself.
@@ -369,14 +371,14 @@ struct CommandPaletteList: View {
 
     var body: some View {
         let results = model.results
-        VStack(alignment: .leading, spacing: 0) {
-            Hairline()
+        Group {
             if results.isEmpty {
                 Text(String(localized: "No matching command"))
                     .font(Face.row)
-                    .foregroundStyle(Ink.dim)
-                    .padding(.horizontal, 4)
-                    .frame(height: Metrics.rowHeight, alignment: .leading)
+                    .foregroundStyle(Ink.text3)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: Metrics.rowHeight)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -385,30 +387,24 @@ struct CommandPaletteList: View {
                         }
                     }
                 }
-                .frame(maxHeight: Metrics.rowHeight * 8)
+                .frame(maxHeight: Metrics.rowHeight * 10)
                 .scrollBounceBehavior(.basedOnSize)
             }
-            Hairline()
-            HStack(spacing: 16) {
-                hint("\u{2191}\u{2193}", String(localized: "select"))
-                hint("\u{21A9}", String(localized: "run"))
-                hint("esc", String(localized: "cancel"))
-            }
-            .frame(height: 22)
         }
+        .padding(6)
     }
 
     private func row(index: Int, action: PaletteAction) -> some View {
         let active = index == model.selection
         return Text(action.title)
             .font(Face.row)
-            .foregroundStyle(active ? Ink.bg : Ink.text)
+            .foregroundStyle(Ink.text)
             .lineLimit(1)
             .truncationMode(.tail)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: Metrics.rowHeight)
-            .background(active ? Ink.accent : Color.clear)
+            .background(active ? Ink.accent.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
             .contentShape(Rectangle())
             .onHover { inside in
                 if inside { model.select(index) }
@@ -417,12 +413,6 @@ struct CommandPaletteList: View {
                 model.select(index)
                 Task { if await model.run() { onRun() } }
             }
-    }
-
-    private func hint(_ key: String, _ label: String) -> some View {
-        HStack(spacing: 5) {
-            Text(key).font(Face.footnote).foregroundStyle(Ink.text)
-            Text(label).font(Face.footnote).foregroundStyle(Ink.dim)
-        }
+            .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
     }
 }

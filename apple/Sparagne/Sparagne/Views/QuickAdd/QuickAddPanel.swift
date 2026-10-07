@@ -1,12 +1,15 @@
 import SwiftUI
 import SparagneCore
 
-/// ⌘K: the one-line grammar of `DISTILLATO_V1.md` §3.1, over the grid, and
-/// the command palette of `docs/v2/UI.md` §6 when the line starts with `>`.
+/// ⌘K: the one-line grammar of `DISTILLATO_V1.md` §3.1, floating near the top
+/// of the window, and the command palette of `docs/v2/UI.md` §6 when the line
+/// starts with `>`.
 ///
 /// The grid covers the common case; this covers the fast case, where the
 /// whole row is one line of text and the fingers never leave the keyboard.
-/// One field, two grammars: a transaction, or a command.
+/// One field, two grammars: a transaction, or a command. Under the field the
+/// parsed line is laid out as chips (`QuickAddTokens`), one per field it will
+/// write, so a line read differently from what was meant shows before ↩.
 struct QuickAddOverlay: View {
     @Bindable var store: AppStore
     let engine: SyncEngine?
@@ -15,85 +18,35 @@ struct QuickAddOverlay: View {
     @FocusState private var focused: Bool
     @State private var palette = CommandPaletteModel()
     /// What the vault's history files the line's note under, when the line
-    /// names no category: shown beside the preview, added only by ⇥.
+    /// names no category: shown beside the chips, added only by ⇥.
     @State private var hint: NoteSuggestion?
+
+    static let width: CGFloat = 600
+    /// `#17171B`: a step above the cards, so the panel floats over the sheet.
+    private static let ground = Color(hex: 0x17171B)
 
     /// `>` in first position turns the field into the palette.
     private var isCommand: Bool { CommandPaletteModel.isCommand(store.quickAddText) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            TextField(
-                String(localized: "-12.50 pizza #food @cash >groceries"),
-                text: $store.quickAddText
-            )
-            .textFieldStyle(.plain)
-            .font(Face.ui(14))
-            .foregroundStyle(Ink.text)
-            .focused($focused)
-            // The arrows belong to the list while the field is a palette; the
-            // caret gets them back as soon as the `>` is gone.
-            .onKeyPress(.upArrow) {
-                guard isCommand else { return .ignored }
-                palette.move(by: -1)
-                return .handled
-            }
-            .onKeyPress(.downArrow) {
-                guard isCommand else { return .ignored }
-                palette.move(by: 1)
-                return .handled
-            }
-            // ⇥ takes the hint into the line, where the preview shows it;
-            // without one the key does what it always did.
-            .onKeyPress(.tab) {
-                guard !isCommand, let category = categoryHint,
-                      let accepted = QuickAddSummary.accepting(category, into: store.quickAddText)
-                else { return .ignored }
-                store.quickAddText = accepted
-                return .handled
-            }
-            .onSubmit {
-                if isCommand {
-                    // Nothing highlighted means nothing matched: stay open so
-                    // the query can be fixed.
-                    Task { if await palette.run() { close() } }
-                    return
-                }
-                Task {
-                    await store.submit(quickAdd: store.quickAddText)
-                    // A failed submit leaves the text in place and raises
-                    // `presentedError`; stay open so the user can fix the line
-                    // instead of closing over an empty grid.
-                    if store.presentedError == nil {
-                        isPresented = false
-                    }
-                }
-            }
-
+        VStack(alignment: .leading, spacing: 0) {
+            input
             if isCommand {
+                Hairline()
                 CommandPaletteList(model: palette, onRun: close)
-            } else {
-                HStack(spacing: 12) {
-                    Text(preview.text)
-                        .font(Face.footnote)
-                        .foregroundStyle(preview.isError ? Ink.negative : Ink.dim)
-                        .lineLimit(1)
-                    if let category = categoryHint {
-                        Spacer(minLength: 0)
-                        Text("\u{21E5} #\(category)")
-                            .font(Face.footnote)
-                            .foregroundStyle(Ink.text)
-                            .lineLimit(1)
-                            .accessibilityLabel(String(localized: "Suggested category \(category), tab to add it"))
-                    }
-                }
+            } else if !trimmed.isEmpty {
+                Hairline()
+                parsed
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
             }
+            footer
         }
-        .padding(14)
-        .frame(width: 520, alignment: .leading)
-        .background(Ink.panel)
-        .overlay(Rectangle().strokeBorder(Ink.accent, lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
+        .frame(width: Self.width, alignment: .leading)
+        .background(Self.ground)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(Ink.line2, lineWidth: 1))
+        .shadow(color: .black.opacity(0.65), radius: 30, y: 24)
         .onAppear {
             focused = true
             refreshActions()
@@ -118,6 +71,131 @@ struct QuickAddOverlay: View {
         }
     }
 
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 14) }
+
+    private var trimmed: String {
+        store.quickAddText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - The field
+
+    private var input: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Ink.accent)
+                .accessibilityHidden(true)
+            TextField(
+                "",
+                text: $store.quickAddText,
+                prompt: Text(String(localized: "-12.50 pizza #food @cash >groceries")).foregroundStyle(Ink.text3)
+            )
+            .textFieldStyle(.plain)
+            .font(Face.ui(16))
+            .foregroundStyle(Ink.text)
+            .focused($focused)
+            .accessibilityLabel(String(localized: "Quick Add"))
+            // The arrows belong to the list while the field is a palette; the
+            // caret gets them back as soon as the `>` is gone.
+            .onKeyPress(.upArrow) {
+                guard isCommand else { return .ignored }
+                palette.move(by: -1)
+                return .handled
+            }
+            .onKeyPress(.downArrow) {
+                guard isCommand else { return .ignored }
+                palette.move(by: 1)
+                return .handled
+            }
+            // ⇥ takes the hint into the line, where the chips show it; without
+            // one the key does what it always did.
+            .onKeyPress(.tab) {
+                guard !isCommand, let category = categoryHint,
+                      let accepted = QuickAddSummary.accepting(category, into: store.quickAddText)
+                else { return .ignored }
+                store.quickAddText = accepted
+                return .handled
+            }
+            .onSubmit(submit)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 52)
+    }
+
+    private func submit() {
+        if isCommand {
+            // Nothing highlighted means nothing matched: stay open so the
+            // query can be fixed.
+            Task { if await palette.run() { close() } }
+            return
+        }
+        Task {
+            await store.submit(quickAdd: store.quickAddText)
+            // A failed submit leaves the text in place and raises
+            // `presentedError`; stay open so the user can fix the line
+            // instead of closing over an empty grid.
+            if store.presentedError == nil {
+                isPresented = false
+            }
+        }
+    }
+
+    // MARK: - The parsed line
+
+    /// The chips, or the parser's complaint in red.
+    @ViewBuilder
+    private var parsed: some View {
+        switch store.preview(quickAdd: trimmed) {
+        case .success(let line):
+            let tokens = QuickAddTokens.make(line, currency: store.currency)
+            TokenFlow(spacing: 6) {
+                ForEach(tokens) { token in
+                    TokenChip(token: token)
+                }
+                if let category = categoryHint {
+                    HintChip(category: category)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        case .failure(let error):
+            Text(error.message)
+                .font(Face.ui(12))
+                .foregroundStyle(Ink.negative)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - The footer
+
+    /// The keys the panel takes, for the mode it is in.
+    private var footer: some View {
+        HStack(spacing: 16) {
+            if isCommand {
+                hint("\u{2191}\u{2193}", String(localized: "select"))
+                hint("\u{21A9}", String(localized: "run"))
+            } else {
+                hint("\u{21A9}", String(localized: "add"))
+                hint("\u{21E5}", String(localized: "suggested category"))
+                hint(">", String(localized: "commands"))
+            }
+            hint("esc", String(localized: "close"))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Ink.bg)
+        .overlay(alignment: .top) { Hairline() }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func hint(_ key: String, _ label: String) -> some View {
+        KeyHint(key: key, label: label, font: Face.ui(11.5))
+    }
+
+    // MARK: - Actions
+
     private func close() {
         store.quickAddText = ""
         isPresented = false
@@ -128,21 +206,9 @@ struct QuickAddOverlay: View {
         palette.query = CommandPaletteModel.query(in: store.quickAddText)
     }
 
-    private var preview: (text: String, isError: Bool) {
-        let trimmed = store.quickAddText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return (" ", false) }
-        switch store.preview(quickAdd: trimmed) {
-        case .success(let parsed):
-            return (QuickAddSummary.describe(parsed, currency: store.currency), false)
-        case .failure(let error):
-            return (error.message, true)
-        }
-    }
-
     /// The note of the line as typed, when the line parses and names no
     /// category.
     private var noteWithoutCategory: String? {
-        let trimmed = store.quickAddText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isCommand, case .success(let parsed) = store.preview(quickAdd: trimmed) else {
             return nil
         }
@@ -164,5 +230,98 @@ struct QuickAddOverlay: View {
         guard (try? await Task.sleep(for: .milliseconds(250))) != nil else { return }
         guard let category = await store.suggestedCategory(forNote: note), noteWithoutCategory == note else { return }
         hint = NoteSuggestion(note: note, category: category)
+    }
+}
+
+// MARK: - Chips
+
+/// One field of the parsed line (`.tok`): the small word naming it, then its
+/// value. A default the line did not say is drawn in `text3`.
+private struct TokenChip: View {
+    let token: QuickAddToken
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let label = token.label {
+                Text(label).foregroundStyle(Ink.text3)
+            }
+            Text(token.value).foregroundStyle(token.isDefault ? Ink.text3 : Ink.text)
+        }
+        .font(Face.ui(12))
+        .lineLimit(1)
+        .padding(.horizontal, 9)
+        .frame(height: 24)
+        .background(Ink.raised, in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+/// The category the history suggests for the note, offered with ⇥: in the
+/// accent, since it is the one thing on the panel waiting for a key.
+private struct HintChip: View {
+    let category: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            KeyCap(text: "\u{21E5}")
+            Text(category).foregroundStyle(Ink.accent)
+        }
+        .font(Face.ui(12))
+        .lineLimit(1)
+        .padding(.leading, 4)
+        .padding(.trailing, 9)
+        .frame(height: 24)
+        .background(Ink.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "Suggested category \(category), tab to add it"))
+    }
+}
+
+/// Lays its children out left to right and wraps onto a new line when the
+/// width runs out, as the chips of a long line need.
+private struct TokenFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(subviews, width: proposal.width ?? .infinity)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: proposal.width ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(subviews, width: bounds.width) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
+        var rows: [Row] = []
+        var current = Row()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
+            if needed > width, !current.indices.isEmpty {
+                rows.append(current)
+                current = Row()
+            }
+            current.width = current.indices.isEmpty ? size.width : current.width + spacing + size.width
+            current.height = max(current.height, size.height)
+            current.indices.append(index)
+        }
+        if !current.indices.isEmpty { rows.append(current) }
+        return rows
     }
 }
