@@ -225,6 +225,28 @@ func naiveDatesRoundTrip() throws {
     #expect(template.template.schedule.frequency == .monthly(day: 31))
 }
 
+@Test("A schedule previews its next dates without a database")
+func scheduleOccurrencesPreview() throws {
+    let schedule = Schedule(
+        frequency: .monthly(day: 31),
+        interval: 1,
+        startDate: "2027-01-01",
+        endDate: nil
+    )
+    #expect(
+        try scheduleOccurrences(schedule: schedule, from: "2027-01-15", limit: 3)
+            == ["2027-01-31", "2027-02-28", "2027-03-31"]
+    )
+    #expect(throws: DomainError.self) {
+        try scheduleOccurrences(
+            schedule: Schedule(
+                frequency: .monthly(day: 0), interval: 1, startDate: "2027-01-01", endDate: nil),
+            from: "2027-01-01",
+            limit: 3
+        )
+    }
+}
+
 @Test("An ambiguous wallet name comes back with its candidates")
 func ambiguousNameCarriesTheCandidates() throws {
     let fixture = try Fixture()
