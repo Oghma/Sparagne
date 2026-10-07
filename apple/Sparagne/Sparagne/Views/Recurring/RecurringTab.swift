@@ -21,6 +21,9 @@ struct RecurringTab: View {
     /// inspector shows the first template (`shown`), so the layout never
     /// jumps between a tab with an inspector and one without.
     @State private var picked: RecurringSelection?
+    /// The day everything on the tab counts from. Taken again when the
+    /// calendar day turns and whenever the due list changes, so a tab left
+    /// open past midnight does not keep counting from yesterday.
     @State private var today = CoreDate.day(Date())
 
     static let inspectorWidth: CGFloat = 340
@@ -42,13 +45,24 @@ struct RecurringTab: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task(id: store.currentVault?.id) {
-            today = CoreDate.day(Date())
+            refreshToday()
             await store.loadRecurringTemplates()
         }
-        // The agenda is worked out again whenever the templates or the due
-        // list change: a save, a period recorded, a sync.
-        .task(id: AgendaInputs(templates: store.recurringTemplates, pending: store.pendingRecurringItems)) {
-            await store.loadUpcomingRecurring()
+        // The agenda is worked out again whenever the templates, the due
+        // list or the day change: a save, a period recorded, a sync,
+        // midnight.
+        .task(id: AgendaInputs(templates: store.recurringTemplates, pending: store.pendingRecurringItems, today: today)) {
+            await store.loadUpcomingRecurring(today: today)
+        }
+        // The core works the due list out from its own clock: when it moves,
+        // the day may have too.
+        .onChange(of: store.pendingRecurringItems) { _, _ in refreshToday() }
+        // The notification promises no thread, and `today` is the main
+        // actor's.
+        .onReceive(
+            NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)
+        ) { _ in
+            refreshToday()
         }
         .onAppear(perform: takeCreateRequest)
         .onReceive(NotificationCenter.default.publisher(for: .createRecurringOnTab)) { _ in
@@ -56,6 +70,10 @@ struct RecurringTab: View {
         }
         // Another vault: the pick named a template of the vault that is gone.
         .onChange(of: store.currentVault?.id) { _, _ in picked = nil }
+    }
+
+    private func refreshToday() {
+        today = CoreDate.day(Date())
     }
 
     // MARK: - Selection
@@ -132,6 +150,7 @@ struct RecurringTab: View {
 private struct AgendaInputs: Equatable {
     let templates: [RecurringView]
     let pending: [PendingRecurring]
+    let today: NaiveDate
 }
 
 extension Notification.Name {
