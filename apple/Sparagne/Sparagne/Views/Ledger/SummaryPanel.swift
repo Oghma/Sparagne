@@ -241,9 +241,14 @@ struct PersonMatrix: View {
 
     /// Envelopes that moved this month, in the vault's order. Unallocated only
     /// shows when it actually carried something.
+    ///
+    /// Archived ones too, from the snapshot rather than `store.flows`: an
+    /// envelope archived after this month's expenses still carried them, and
+    /// the Savings line counts them, so without its row the lines above
+    /// would not add up to it.
     private var envelopes: [FlowView] {
         let touched = Set(summary.flowPerson.filter { $0.netExpense != 0 }.map(\.flowId))
-        return store.flows.filter { touched.contains($0.id) }
+        return (store.snapshot?.flows ?? []).filter { touched.contains($0.id) }
     }
 
     /// Plain figures, a dash for nothing; the savings line in bold, green or
