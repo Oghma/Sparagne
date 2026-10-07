@@ -13,6 +13,14 @@ struct LaunchOptionsTests {
         #expect(LaunchOptions.database(in: [:]) == nil)
     }
 
+    @Test("The option names the tab to open on; unknown or missing, the usual one")
+    func tab() {
+        #expect(LaunchOptions.tab(in: ["SparagneTab": "ledger"]) == .ledger)
+        #expect(LaunchOptions.tab(in: ["SparagneTab": " Recurring "]) == .recurring)
+        #expect(LaunchOptions.tab(in: ["SparagneTab": "year"]) == nil)
+        #expect(LaunchOptions.tab(in: [:]) == nil)
+    }
+
     @Test("A name lands next to the real database, a path is taken as it is")
     func url() throws {
         let real = try CoreActor.databaseURL()

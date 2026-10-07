@@ -35,12 +35,14 @@ struct ContentView: View {
                 // are signed with the name chosen for rows written offline.
                 let core = try CoreActor.onDisk(named: database, author: AccountStore.loggedOutAuthor())
                 let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
+                if let tab = LaunchOptions.tab { opened.tab = tab }
                 store = opened
                 await opened.bootstrap()
                 return
             }
             let core = try CoreActor.onDisk()
             let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
+            if let tab = LaunchOptions.tab { opened.tab = tab }
             // The engine adopts the account's username as the author and
             // starts the first sync right after bootstrap
             // (`docs/v2/SYNC.md` §5). It prepares before the bootstrap so the
