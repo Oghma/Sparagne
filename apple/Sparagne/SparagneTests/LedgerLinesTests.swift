@@ -124,6 +124,37 @@ struct LedgerLinesTests {
         )
     }
 
+    @Test("The grid's cache hands the lines back as they were, and works them out again when their input changes")
+    @MainActor
+    func cache() {
+        let cache = LedgerLines.Cache(timeZone: Self.zone)
+        var input = LedgerLines.Input(
+            rows: [Self.row(day: 2, note: "coop"), Self.row(day: 10, note: "bar")],
+            due: [Self.due("2026-10-25", note: "affitto")],
+            month: Self.october,
+            direction: .expenses,
+            search: "",
+            hasMoreRows: true
+        )
+        cache.update(input)
+        #expect(Self.names(cache.lines) == ["r:coop", "r:bar"])
+        #expect(cache.ordinals == ["row-coop": 0, "row-bar": 1])
+
+        cache.update(input)
+        #expect(Self.names(cache.lines) == ["r:coop", "r:bar"])
+
+        // The last page landed with one more row: the period shows after it.
+        input.rows.append(Self.row(day: 20, note: "cinema"))
+        input.hasMoreRows = false
+        cache.update(input)
+        #expect(Self.names(cache.lines) == ["r:coop", "r:bar", "r:cinema", "p:affitto"])
+        #expect(cache.ordinals["row-cinema"] == 2)
+
+        input.direction = .income
+        cache.update(input)
+        #expect(Self.names(cache.lines) == ["r:coop", "r:bar", "r:cinema"])
+    }
+
     @Test("Only the month on screen: a period of September or November stays off October's sheet")
     func monthBounds() {
         let due = [

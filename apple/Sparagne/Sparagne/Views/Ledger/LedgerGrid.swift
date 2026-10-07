@@ -30,6 +30,9 @@ struct LedgerGrid: View {
     /// The row under the pointer, so the eye can follow it across a grid that
     /// is much wider than a line of text.
     @State private var hovered: Uuid?
+    /// The lines as last worked out: the body runs again on every pointer
+    /// move and keystroke, and the lines change only with their input.
+    @State private var linesCache = LedgerLines.Cache()
     @FocusState private var focus: CellFocus?
     /// The grid as a whole, when no cell has the caret: what ⌘A, ⌫ and esc
     /// reach while rows are being picked rather than typed into.
@@ -137,16 +140,18 @@ struct LedgerGrid: View {
 
     // MARK: - The lines
 
-    /// The rows with the due periods among them (`AppStore.ledgerLines`), the
-    /// empty line, and ruled lines down to the bottom of the window: the
+    /// The rows with the due periods among them (`AppStore.ledgerLinesInput`),
+    /// the empty line, and ruled lines down to the bottom of the window: the
     /// sheet's pitch is fixed, so how much is left to rule is known without
     /// measuring anything.
     private func lines(viewportHeight: CGFloat) -> some View {
-        let rows = store.rows
-        let lines = store.ledgerLines
+        let input = store.ledgerLinesInput
+        linesCache.update(input)
+        let rows = input.rows
+        let lines = linesCache.lines
         // The # column numbers the stored rows only: a due period is not one
         // yet, and gets a symbol instead.
-        let ordinals = Dictionary(rows.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let ordinals = linesCache.ordinals
         let drawn = CGFloat(lines.count + (store.canWrite ? 1 : 0)) * Metrics.rowHeight
         return LazyVStack(spacing: 0) {
             ForEach(lines) { line in

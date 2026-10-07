@@ -85,6 +85,61 @@ enum LedgerLines {
     }
 }
 
+extension LedgerLines {
+    /// Everything the grid's lines are made of, and nothing else: what
+    /// `interleave` takes.
+    ///
+    /// The grid's body runs on every pointer move (the row under it is
+    /// tinted), every keystroke in a cell and every step of the completion
+    /// list, and none of those changes one of these. Comparing them is cheap
+    /// where `interleave` is not: it writes each row's day out as text.
+    struct Input: Equatable {
+        var rows: [TransactionRow]
+        var due: [DuePeriod]
+        var month: MonthKey
+        var direction: LedgerDirection
+        var search: String
+        var hasMoreRows: Bool
+    }
+
+    /// The grid's lines and the # column's numbers, worked out again only
+    /// when their `Input` changed, and otherwise handed back as they were.
+    ///
+    /// A reference, held in the grid's `@State`, so a pass of the body can
+    /// keep what it computed without that being a change SwiftUI redraws for.
+    @MainActor
+    final class Cache {
+        private var input: Input?
+        private let timeZone: TimeZone
+        private(set) var lines: [LedgerLine] = []
+        /// Each stored row's place among the rows, from 0: the # column
+        /// numbers the stored rows only, since a due period is not one yet.
+        private(set) var ordinals: [Uuid: Int] = [:]
+
+        init(timeZone: TimeZone = .current) {
+            self.timeZone = timeZone
+        }
+
+        func update(_ input: Input) {
+            guard input != self.input else { return }
+            self.input = input
+            lines = interleave(
+                rows: input.rows,
+                due: input.due,
+                month: input.month,
+                direction: input.direction,
+                search: input.search,
+                hasMoreRows: input.hasMoreRows,
+                timeZone: timeZone
+            )
+            ordinals = Dictionary(
+                input.rows.enumerated().map { ($1.id, $0) },
+                uniquingKeysWith: { first, _ in first }
+            )
+        }
+    }
+}
+
 extension LedgerDate {
     /// `"01"`: the DATA column's day, two digits so the column lines up.
     static func dayNumber(_ date: Date, calendar: Calendar = .current) -> String {

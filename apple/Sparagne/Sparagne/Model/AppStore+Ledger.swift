@@ -6,11 +6,13 @@ import SparagneCore
 /// a recurring template's ids stand for (`docs/v2/UI.md` §2.1). Computed only:
 /// nothing here is stored or written.
 extension AppStore {
-    /// The grid's lines: the rows on screen with the periods due this month
-    /// slotted in at their date (`LedgerLines`). While a next page is still
-    /// to come, the periods past the last row loaded wait for it.
-    var ledgerLines: [LedgerLine] {
-        LedgerLines.interleave(
+    /// What the grid's lines are made of: the rows on screen and the periods
+    /// due this month, to be slotted in at their date (`LedgerLines`). While a
+    /// next page is still to come, the periods past the last row loaded wait
+    /// for it. The grid keeps the lines until this changes
+    /// (`LedgerLines.Cache`).
+    var ledgerLinesInput: LedgerLines.Input {
+        LedgerLines.Input(
             rows: rows,
             due: duePeriods,
             month: month,
