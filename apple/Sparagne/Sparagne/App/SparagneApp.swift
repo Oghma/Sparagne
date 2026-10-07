@@ -187,7 +187,8 @@ extension Notification.Name {
     static let exportAllTransactions = Notification.Name("it.oghma.sparagne.exportAllTransactions")
     /// File menu: a copy of the whole database file.
     static let backupDatabase = Notification.Name("it.oghma.sparagne.backupDatabase")
-    /// Banner and palette: the recurring periods waiting for a decision.
+    /// The top bar's due pill: the Ricorrenze tab, where the periods waiting
+    /// for a decision are confirmed or skipped.
     static let reviewDueRecurring = Notification.Name("it.oghma.sparagne.reviewDueRecurring")
     /// Vault menu and palette: the sheet of a new recurring template, without
     /// going through the management sheet and its recurring panel.

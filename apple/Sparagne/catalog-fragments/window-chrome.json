@@ -3,12 +3,40 @@
     "en": {"one": "%lld to confirm", "other": "%lld to confirm"},
     "it": {"one": "%lld da confermare", "other": "%lld da confermare"}
   },
+  "Active": {
+    "en": "Active",
+    "it": "Attive"
+  },
+  "Count": {
+    "en": "Count",
+    "it": "Conteggio"
+  },
   "Demo database %@: it never syncs": {
     "en": "Demo database %@: it never syncs",
     "it": "Database demo %@: non si sincronizza mai"
   },
+  "In archive": {
+    "en": "In archive",
+    "it": "Archiviate"
+  },
+  "Manage Templates…": {
+    "en": "Manage Templates…",
+    "it": "Gestisci modelli…"
+  },
   "Search the month": {
     "en": "Search the month",
     "it": "Cerca nel mese"
+  },
+  "Sum": {
+    "en": "Sum",
+    "it": "Somma"
+  },
+  "To confirm": {
+    "en": "To confirm",
+    "it": "Da confermare"
+  },
+  "saved at %@": {
+    "en": "saved at %@",
+    "it": "salvato alle %@"
   }
 }

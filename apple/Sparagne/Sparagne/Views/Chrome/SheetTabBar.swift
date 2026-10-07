@@ -1,0 +1,75 @@
+import SwiftUI
+
+/// The sheet tabs along the bottom of the window, as in a spreadsheet
+/// (`docs/v2/UI.md` §2): Riepilogo · Mastro · Ricorrenze · Setup, plain words
+/// with the active one underlined in the accent, and on the right the status
+/// line of the sheet on screen. ⌘1 to ⌘4 select the same tabs from the View
+/// menu.
+struct SheetTabBar<Status: View>: View {
+    @Bindable var store: AppStore
+    /// The active tab's own figures (`StatusLine`).
+    @ViewBuilder let status: () -> Status
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ForEach(LedgerTab.allCases) { tab in
+                SheetTab(tab: tab, isActive: tab == store.tab, count: count(for: tab)) {
+                    store.tab = tab
+                }
+            }
+            Spacer(minLength: 14)
+            status()
+        }
+        .padding(.horizontal, 14)
+        .frame(height: Metrics.tabBar)
+        .frame(maxWidth: .infinity)
+        .background(Ink.bg)
+        .overlay(alignment: .top) { Hairline() }
+    }
+
+    /// What Ricorrenze carries beside its name: the periods to confirm, the
+    /// same count as the top bar's pill.
+    private func count(for tab: LedgerTab) -> Int {
+        tab == .recurring ? store.actionableDueCount : 0
+    }
+}
+
+/// One tab: its name, the accent count when there is one, and a 2-point
+/// accent underline when it is the sheet on screen.
+private struct SheetTab: View {
+    let tab: LedgerTab
+    let isActive: Bool
+    let count: Int
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: 5) {
+                Text(tab.label)
+                    .foregroundStyle(isActive ? Ink.text : Ink.text3)
+                if count > 0 {
+                    Text(count, format: .number)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Ink.accent)
+                }
+            }
+            .font(Face.ui(12, .medium))
+            .frame(height: Metrics.tabBar - 1)
+            .overlay(alignment: .bottom) {
+                if isActive {
+                    Rectangle().fill(Ink.accent).frame(height: 2)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(.default, select)
+    }
+
+    private var accessibilityLabel: String {
+        count > 0 ? "\(tab.label), \(CountText.toConfirm(count))" : tab.label
+    }
+}

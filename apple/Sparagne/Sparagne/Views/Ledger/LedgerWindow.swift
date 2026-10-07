@@ -2,9 +2,10 @@ import SwiftUI
 import SparagneCore
 import UniformTypeIdentifiers
 
-/// The window (`docs/v2/UI.md` §2): the top bar, one of the views, and a
-/// status bar. No sidebar and no inspector: the grid is editable in place,
-/// and everything that manages entities lives in the menus.
+/// The window (`docs/v2/UI.md` §2), top to bottom: the top bar, the sheet on
+/// screen, and the sheet tabs with the sheet's status line. No sidebar and
+/// no inspector: the grid is editable in place, and everything that manages
+/// entities lives in the menus.
 struct LedgerWindow: View {
     let store: AppStore
     let engine: SyncEngine?
@@ -43,8 +44,7 @@ struct LedgerWindow: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Ink.sheet)
-            Hairline()
-            LedgerStatusBar(store: store)
+            SheetTabBar(store: store) { statusLine }
         }
         .background(Ink.bg)
         .overlay(alignment: .top) {
@@ -150,6 +150,8 @@ struct LedgerWindow: View {
                 if let year = store.year {
                     ScrollView { SummaryView(year: year, store: store) }
                 }
+            case .recurring:
+                RecurringTab(store: store, engine: engine) { sheet = $0 }
             case .setup:
                 SetupView(store: store)
             }
@@ -162,6 +164,17 @@ struct LedgerWindow: View {
                 Spacer()
             }
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// The figures of the sheet on screen, at the right of the tab bar.
+    @ViewBuilder
+    private var statusLine: some View {
+        switch store.tab {
+        case .summary: SummaryStatusLine(store: store)
+        case .ledger: LedgerStatusLine(store: store)
+        case .recurring: RecurringStatusLine(store: store)
+        case .setup: SetupStatusLine(store: store)
         }
     }
 }

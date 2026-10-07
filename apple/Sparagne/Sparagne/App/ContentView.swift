@@ -57,8 +57,8 @@ struct ContentView: View {
     }
 }
 
-/// The single window: the ledger and its two summary views, plus the sheets,
-/// the alerts and the undo toast (`docs/v2/UI.md` §2).
+/// The single window: the four sheets behind the tab bar, plus the modal
+/// sheets, the alerts and the undo toast (`docs/v2/UI.md` §2).
 struct MainWindow: View {
     @Bindable var store: AppStore
     /// `nil` only before the database is open.
@@ -153,8 +153,9 @@ struct MainWindow: View {
             .onReceive(NotificationCenter.default.publisher(for: .importStatement)) { _ in
                 if store.currentVault != nil { sheet = .importStatement }
             }
+            // The due pill: the periods are decided on the Ricorrenze tab.
             .onReceive(NotificationCenter.default.publisher(for: .reviewDueRecurring)) { _ in
-                sheet = .dueRecurring
+                store.tab = .recurring
             }
             .onReceive(NotificationCenter.default.publisher(for: .newRecurring)) { _ in
                 if store.canWrite { sheet = .newRecurring }
