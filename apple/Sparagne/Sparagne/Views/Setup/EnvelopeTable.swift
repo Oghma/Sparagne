@@ -115,7 +115,7 @@ struct EnvelopeTable: View {
             }
             GridCell(width: EnvelopeColumn.action) { EmptyView() }
         }
-        .frame(height: 24)
+        .frame(height: Metrics.headerHeight)
     }
 
     // MARK: - An active envelope

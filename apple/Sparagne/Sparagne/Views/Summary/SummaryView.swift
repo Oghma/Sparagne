@@ -51,7 +51,7 @@ struct SummaryView: View {
     /// `2026 · fino a settembre`. A past year has no "up to": it is full.
     private var heading: some View {
         HStack(spacing: 6) {
-            SectionLabel(text: "\(year.year)", tint: Ink.accent)
+            SectionLabel(text: "\(year.year)", tint: Ink.text)
             if year.year == year.upTo.year {
                 SectionLabel(
                     text: "\u{00B7} \(String(localized: "up to")) \(LedgerDate.fullMonth(year.upTo.month))"
@@ -209,7 +209,7 @@ struct SummaryView: View {
 
     private func cell(_ value: Int64, width: CGFloat, tint: Color = Ink.text, weight: Font.Weight = .regular) -> some View {
         Text(LedgerMoney.bare(value))
-            .font(Face.mono(12, weight))
+            .font(Face.ui(12, weight))
             .foregroundStyle(value == 0 ? Ink.dim : tint)
             .frame(width: width, alignment: .trailing)
     }
@@ -223,7 +223,7 @@ struct SummaryView: View {
 
         return HStack(spacing: 0) {
             Text("\(year.year)")
-                .font(Face.mono(12, .semibold))
+                .font(Face.ui(12, .semibold))
                 .foregroundStyle(Ink.dim)
                 .frame(width: YearColumn.month, alignment: .leading)
             cell(income, width: YearColumn.income, tint: Ink.positive, weight: .semibold)
@@ -262,7 +262,7 @@ struct SummaryView: View {
                     ChartLegend(
                         entries: [
                             (String(localized: "Income"), Ink.positive),
-                            (String(localized: "Expenses"), Ink.negative),
+                            (String(localized: "Expenses"), Ink.chartExpense),
                             (String(localized: "Savings"), Ink.text),
                         ]
                     )
@@ -468,7 +468,7 @@ private struct CashFlowChart: View {
     var body: some View {
         Chart {
             series(months.map { ChartPoint($0.month.month, $0.income) }, key: "income", tint: Ink.positive)
-            series(months.map { ChartPoint($0.month.month, $0.cashExpense) }, key: "expenses", tint: Ink.negative)
+            series(months.map { ChartPoint($0.month.month, $0.cashExpense) }, key: "expenses", tint: Ink.chartExpense)
             series(months.map { ChartPoint($0.month.month, $0.savings) }, key: "savings", tint: Ink.text)
         }
         .chartXScale(domain: 1...12)
@@ -622,9 +622,8 @@ private struct ChartLegend: View {
             ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
                 HStack(spacing: 5) {
                     Rectangle().fill(entry.1).frame(width: 8, height: 2)
-                    Text(entry.0.uppercased())
+                    Text(entry.0)
                         .font(Face.footnote)
-                        .tracking(0.6)
                         .foregroundStyle(Ink.dim)
                 }
             }

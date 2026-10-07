@@ -95,7 +95,7 @@ struct WalletTable: View {
             }
             GridCell(width: WalletColumn.action) { EmptyView() }
         }
-        .frame(height: 24)
+        .frame(height: Metrics.headerHeight)
     }
 
     // MARK: - An active wallet

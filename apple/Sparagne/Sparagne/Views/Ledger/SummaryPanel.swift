@@ -39,7 +39,7 @@ struct PersonMatrix: View {
             VStack(alignment: .leading, spacing: 8) {
                 SectionLabel(
                     text: "\(String(localized: "Summary")) \(LedgerDate.fullMonth(summary.month.month))",
-                    tint: Ink.accent
+                    tint: Ink.text
                 )
                 .accessibilityAddTraits(.isHeader)
 
@@ -95,7 +95,7 @@ struct PersonMatrix: View {
     /// The total column carries the tint; the per-person ones stay neutral, so
     /// the eye lands on the sum rather than on the columns it is made of.
     private func row(_ label: String, values: [Int64], tint: Color = Ink.text, emphasis: Bool = false) -> some View {
-        let font = emphasis ? Face.mono(12, .semibold) : Face.row
+        let font = emphasis ? Face.ui(12, .semibold) : Face.row
         return HStack(spacing: 0) {
             Text(label)
                 .font(font)
@@ -338,7 +338,7 @@ struct BarStrip: View {
                         .frame(width: geometry.size.width, height: height, alignment: .topLeading)
                     }
                     Text(labels.indices.contains(index) ? labels[index] : "")
-                        .font(Face.mono(8))
+                        .font(Face.ui(8))
                         .foregroundStyle(index == highlighted ? Ink.text : Ink.dim)
                 }
             }

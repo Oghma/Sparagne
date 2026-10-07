@@ -119,7 +119,7 @@ struct CategoryTable: View {
             GridCell(width: CategoryColumn.badge) { Text("") }
             GridCell(width: CategoryColumn.action) { EmptyView() }
         }
-        .frame(height: 24)
+        .frame(height: Metrics.headerHeight)
     }
 
     private var archivedLabel: some View {

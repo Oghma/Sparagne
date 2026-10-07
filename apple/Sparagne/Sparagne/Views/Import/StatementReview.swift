@@ -46,7 +46,7 @@ struct StatementReview: View {
             ReviewCell(width: ReviewColumn.status) { SectionLabel(text: String(localized: "Status")) }
             ReviewCell(width: ReviewColumn.category) { SectionLabel(text: String(localized: "Category")) }
         }
-        .frame(height: 24)
+        .frame(height: Metrics.headerHeight)
     }
 }
 
@@ -61,7 +61,7 @@ private enum ReviewColumn {
     static let kind: CGFloat = 90
     static let status: CGFloat = 156
     static let category: CGFloat = 150
-    static let font = Face.mono(11)
+    static let font = Face.ui(11)
 }
 
 /// One previewed row. Rows that will not be imported are drawn in the dim

@@ -226,7 +226,7 @@ struct MainWindow: View {
         SegmentedStrip(
             options: LedgerTab.allCases,
             selection: $store.tab,
-            label: { $0.label.uppercased() }
+            label: { $0.label }
         )
         // `SegmentedStrip` (`Views/Ledger/LedgerHeader.swift`) draws its own
         // buttons and is owned by another package right now, so its own

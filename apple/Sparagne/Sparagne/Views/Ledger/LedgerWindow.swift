@@ -257,7 +257,7 @@ struct QuickAddOverlay: View {
                 text: $store.quickAddText
             )
             .textFieldStyle(.plain)
-            .font(Face.mono(14))
+            .font(Face.ui(14))
             .foregroundStyle(Ink.text)
             .focused($focused)
             // The arrows belong to the list while the field is a palette; the
@@ -305,7 +305,7 @@ struct QuickAddOverlay: View {
                 HStack(spacing: 12) {
                     Text(preview.text)
                         .font(Face.footnote)
-                        .foregroundStyle(preview.isError ? Ink.accent : Ink.dim)
+                        .foregroundStyle(preview.isError ? Ink.negative : Ink.dim)
                         .lineLimit(1)
                     if let category = categoryHint {
                         Spacer(minLength: 0)

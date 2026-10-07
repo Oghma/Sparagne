@@ -60,7 +60,7 @@ struct GridHeader: View {
             GridCell(width: GridColumn.person) { heading(String(localized: "Person")) }
             GridCell(width: GridColumn.amount, alignment: .trailing) { heading(RowField.amount.label) }
         }
-        .frame(height: 24)
+        .frame(height: Metrics.headerHeight)
         .background(Ink.bg)
     }
 

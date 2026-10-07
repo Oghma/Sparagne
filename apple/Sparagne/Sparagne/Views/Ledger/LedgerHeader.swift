@@ -28,7 +28,7 @@ struct LedgerHeader: View {
                 SegmentedStrip(
                     options: [nil] + store.authors.map(Optional.some),
                     selection: $store.person,
-                    label: { $0?.uppercased() ?? String(localized: "All").uppercased() }
+                    label: { $0 ?? String(localized: "All") }
                 )
             }
 
@@ -36,7 +36,7 @@ struct LedgerHeader: View {
                 SegmentedStrip(
                     options: LedgerDirection.allCases,
                     selection: $store.direction,
-                    label: { $0.label.uppercased() }
+                    label: { $0.label }
                 )
 
                 search
@@ -59,9 +59,8 @@ struct LedgerHeader: View {
         HStack(spacing: 8) {
             stepButton("chevron.left", months: -1)
             Text(store.month.title())
-                .font(Face.mono(13, .semibold))
+                .font(Face.ui(13, .semibold))
                 .foregroundStyle(Ink.text)
-                .tracking(0.5)
                 .frame(minWidth: 150, alignment: .leading)
                 // The page's title for VoiceOver: the month everything below
                 // is about.
@@ -127,7 +126,6 @@ struct SegmentedStrip<Option: Hashable>: View {
                 } label: {
                     Text(label(option))
                         .font(Face.label)
-                        .tracking(0.6)
                         .foregroundStyle(active ? Ink.bg : Ink.dim)
                         .padding(.horizontal, 10)
                         .frame(height: 22)
