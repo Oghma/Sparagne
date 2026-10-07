@@ -895,7 +895,12 @@ final class AppStore {
             return
         }
         await guarded {
-            recurringTemplates = try await core.listRecurring(vaultId: vault.id, includeArchived: true)
+            let templates = try await core.listRecurring(vaultId: vault.id, includeArchived: true)
+            // Another vault opened while the list was on its way: it belongs
+            // to the vault that is gone, and would sit under the new one's
+            // name until the next load.
+            guard currentVault?.id == vault.id else { return }
+            recurringTemplates = templates
         }
     }
 
