@@ -1,6 +1,70 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ %@ vs %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ vs %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ su %@"
+          }
+        }
+      }
+    },
+    "%@ in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ in %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a %@"
+          }
+        }
+      }
+    },
+    "%@ since the start of the year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ since the start of the year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ da inizio anno"
+          }
+        }
+      }
+    },
+    "%@ year to date": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ year to date"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ da inizio anno"
+          }
+        }
+      }
+    },
     "%@, %@ of %@": {
       "localizations": {
         "en": {
@@ -1149,6 +1213,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fondo cassa"
+          }
+        }
+      }
+    },
+    "Cash fund · total at month end": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cash fund · total at month end"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fondo cassa · totale a fine mese"
           }
         }
       }
@@ -2633,6 +2713,22 @@
         }
       }
     },
+    "Expenses · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expenses · %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uscite · %@"
+          }
+        }
+      }
+    },
     "Export All Transactions…": {
       "localizations": {
         "en": {
@@ -2757,6 +2853,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uscite fondi"
+          }
+        }
+      }
+    },
+    "Funds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funds"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fondi"
           }
         }
       }
@@ -3021,6 +3133,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limite sulle entrate"
+          }
+        }
+      }
+    },
+    "Income · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income · %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrate · %@"
           }
         }
       }
@@ -3549,6 +3677,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mese"
+          }
+        }
+      }
+    },
+    "Month by month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Month by month"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mese per mese"
           }
         }
       }
@@ -5105,6 +5249,54 @@
         }
       }
     },
+    "Savings %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Savings %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Risparmio %@"
+          }
+        }
+      }
+    },
+    "Savings rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Savings rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasso di risparmio"
+          }
+        }
+      }
+    },
+    "Savings · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Savings · %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Risparmio · %@"
+          }
+        }
+      }
+    },
     "Search the month": {
       "localizations": {
         "en": {
@@ -5677,6 +5869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Data di inizio"
+          }
+        }
+      }
+    },
+    "Start of year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start of year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inizio anno"
           }
         }
       }
@@ -6569,6 +6777,22 @@
         }
       }
     },
+    "Total = savings + cash fund − fund expenses": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total = savings + cash fund − fund expenses"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Totale = risparmio + fondo cassa − uscite dei fondi"
+          }
+        }
+      }
+    },
     "Total savings": {
       "localizations": {
         "en": {
@@ -7329,6 +7553,38 @@
         }
       }
     },
+    "cap on balance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cap on balance"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tetto sul saldo"
+          }
+        }
+      }
+    },
+    "cap on income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cap on income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tetto sulle entrate"
+          }
+        }
+      }
+    },
     "cap…": {
       "localizations": {
         "en": {
@@ -7377,6 +7633,22 @@
         }
       }
     },
+    "current": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "current"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in corso"
+          }
+        }
+      }
+    },
     "description…": {
       "localizations": {
         "en": {
@@ -7421,6 +7693,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "busta %@"
+          }
+        }
+      }
+    },
+    "envelopes with a cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "envelopes with a cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "buste con un tetto"
           }
         }
       }
@@ -7633,6 +7921,22 @@
         }
       }
     },
+    "of %@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "of %@ · %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "di %@ · %@"
+          }
+        }
+      }
+    },
     "of income": {
       "localizations": {
         "en": {
@@ -7793,6 +8097,22 @@
         }
       }
     },
+    "start": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "start"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "inizio"
+          }
+        }
+      }
+    },
     "status…": {
       "localizations": {
         "en": {
@@ -7853,6 +8173,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "fino a"
+          }
+        }
+      }
+    },
+    "up to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "up to %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fino a %@"
           }
         }
       }
