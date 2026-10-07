@@ -17,9 +17,10 @@ import SparagneCore
 /// ⌘-click and ⇧-click pick rows instead of opening one, and ⌘A picks them all
 /// while no cell is being edited: the selection the bulk actions work on
 /// (`SelectionBar`, `AppStore+Selection.swift`). The grid takes the keyboard
-/// then (`selectionKeys`), so ⌫ voids what is selected and esc lets it go,
+/// then (`selectionKeys`), so ⌫ deletes what is selected and esc lets it go,
 /// while a text field keeps its own ⌘A and ⌫ as long as it is being typed
-/// into.
+/// into. With nothing selected, ⌫ deletes the row under the pointer, the one
+/// showing its trash icon (`DeleteTarget`).
 struct LedgerGrid: View {
     @Bindable var store: AppStore
 
@@ -28,7 +29,8 @@ struct LedgerGrid: View {
     @State private var draft = RowDraft()
     @State private var newRow = RowDraft()
     /// The row under the pointer, so the eye can follow it across a grid that
-    /// is much wider than a line of text.
+    /// is much wider than a line of text. Its trash icon shows, and ⌫ with
+    /// nothing selected deletes it.
     @State private var hovered: Uuid?
     /// The lines as last worked out: the body runs again on every pointer
     /// move and keystroke, and the lines change only with their input.
@@ -109,7 +111,8 @@ struct LedgerGrid: View {
     // MARK: - The keys of a selection
 
     /// Where the keyboard goes while rows are picked rather than typed into:
-    /// ⌘A takes every row, ⌫ and ⌦ void the selection, esc lets it go.
+    /// ⌘A takes every row, ⌫ and ⌦ delete the selection, or with none the
+    /// row under the pointer (`deleteTarget`), esc lets the selection go.
     ///
     /// An invisible view behind the rows, not the scroll view itself: a
     /// focusable container would take the focus on every click inside it,
@@ -126,8 +129,14 @@ struct LedgerGrid: View {
             // Menu's Select All, which a focused text field would take first.
             .onCommand(#selector(NSResponder.selectAll(_:))) { selectAll() }
             .onKeyPress(keys: [.delete, .deleteForward]) { _ in
-                guard focus == nil, !store.selection.isEmpty else { return .ignored }
-                Task { await store.voidSelection() }
+                switch deleteTarget {
+                case .selection:
+                    Task { await store.voidSelection() }
+                case .row(let id):
+                    Task { await store.void(transactionId: id) }
+                case .none:
+                    return .ignored
+                }
                 return .handled
             }
             .onKeyPress(.escape) {
@@ -136,6 +145,18 @@ struct LedgerGrid: View {
                 return .handled
             }
             .accessibilityHidden(true)
+    }
+
+    /// What ⌫ deletes now. The hovered row is looked up among the rows on
+    /// screen: one just deleted is gone from them while the pointer has not
+    /// moved yet, and a second ⌫ must find nothing there.
+    private var deleteTarget: DeleteTarget {
+        DeleteTarget.resolve(
+            selection: store.selectedRows.map(\.id),
+            hovered: hovered.flatMap { id in store.rows.first { $0.id == id } },
+            editing: focus != nil || editing != nil,
+            canWrite: store.canWrite
+        )
     }
 
     // MARK: - The lines
@@ -254,7 +275,7 @@ struct LedgerGrid: View {
     /// account only reads, a row deleted already. The due periods and the
     /// empty line are not rows and never get one.
     private func trashAction(for row: TransactionRow, editing: Bool) -> (() -> Void)? {
-        guard hovered == row.id, !editing, store.canWrite, !row.voided else { return nil }
+        guard hovered == row.id, !editing, store.canWrite, DeleteTarget.isDeletable(row) else { return nil }
         return { delete(row) }
     }
 
@@ -300,6 +321,7 @@ struct LedgerGrid: View {
             focus: $focus,
             completion: completion,
             onCommit: commitNewRow,
+            onCancel: { gridFocused = true },
             showsWallet: store.showWalletColumn
         )
             .background(focus?.row == nil && focus != nil ? Ink.card : Color.clear)
@@ -489,7 +511,8 @@ struct LedgerGrid: View {
     }
 
     /// The trash icon: the row alone, through the context menu's own path,
-    /// so it is hidden at once and the toast can still put it back.
+    /// so it is hidden at once and the toast can still put it back. ⌫ over
+    /// the row takes the same path (`selectionKeys`).
     private func delete(_ row: TransactionRow) {
         Task { await store.void(transactionId: row.id) }
     }

@@ -149,6 +149,39 @@ struct SelectionTests {
         #expect(store.selection.isEmpty)
     }
 
+    @Test("⌫ over a row with nothing picked is one pending delete of that row alone; once it is hidden, ⌫ finds nothing there")
+    func deleteKeyOverARow() async throws {
+        let store = try await Self.ledger()
+        let pane = try #require(store.rows.first { $0.note == "pane" })
+        // What the grid asks, with the row under the pointer looked up among
+        // the rows on screen (`LedgerGrid.deleteTarget`).
+        func target(hovering id: Uuid) -> DeleteTarget {
+            DeleteTarget.resolve(
+                selection: store.selectedRows.map(\.id),
+                hovered: store.rows.first { $0.id == id },
+                editing: false,
+                canWrite: store.canWrite
+            )
+        }
+
+        // A row picked wins over the one pointed at.
+        let caffe = try Self.id("caffè", in: store)
+        store.toggleSelection(caffe)
+        #expect(target(hovering: pane.id) == .selection([caffe]))
+        store.clearSelection()
+
+        #expect(target(hovering: pane.id) == .row(pane.id))
+        await store.void(transactionId: pane.id)
+        #expect(store.pendingUndo?.ids == [pane.id])
+        #expect(store.rows.count == 3)
+        #expect(target(hovering: pane.id) == .none)
+
+        // The toast's Undo puts it back, and the pointer finds it again.
+        store.undo()
+        #expect(store.rows.count == 4)
+        #expect(target(hovering: pane.id) == .row(pane.id))
+    }
+
     @Test("A bulk void is one pending window, one toast, and one batch when it elapses")
     func bulkVoidIsOneBatch() async throws {
         let store = try await Self.ledger(undoWindow: .zero, sleeper: { _ in })

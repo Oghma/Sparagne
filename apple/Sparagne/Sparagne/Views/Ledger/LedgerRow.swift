@@ -608,6 +608,9 @@ struct NewRowView: View {
     /// The grid's one completion list, for the CATEGORY cell.
     let completion: CategoryCompletionModel
     let onCommit: () -> Void
+    /// esc threw the line away: the grid takes the keyboard back, so ⌘A and
+    /// ⌫ over a row have somewhere to land, as after esc on an open row.
+    var onCancel: () -> Void = {}
     /// With the column hidden the new row still lands on the sticky default
     /// wallet; showing it lets the wallet be picked per row (`UI.md` §3).
     var showsWallet = false
@@ -678,6 +681,7 @@ struct NewRowView: View {
         .onKeyPress(.escape) {
             draft = RowDraft.blank(in: store)
             focus = nil
+            onCancel()
             return .handled
         }
     }
