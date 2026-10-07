@@ -19,6 +19,10 @@
       "other": "Elimina %lld righe"
     }
   },
+  "Delete Transaction": {
+    "en": "Delete Transaction",
+    "it": "Elimina transazione"
+  },
   "Deleted": {
     "en": "Deleted",
     "it": "Eliminate"

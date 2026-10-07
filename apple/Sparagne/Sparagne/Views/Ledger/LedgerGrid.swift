@@ -189,7 +189,8 @@ struct LedgerGrid: View {
             completion: completion,
             onOpen: { field in open(row, at: field) },
             onCommit: { submit(row.id) },
-            onCancel: cancelEditing
+            onCancel: cancelEditing,
+            onDelete: trashAction(for: row, editing: isEditing)
         )
         .background(background(editing: isEditing, selected: isSelected, hovered: hovered == row.id))
         .onHover { inside in
@@ -244,6 +245,17 @@ struct LedgerGrid: View {
             Task { await store.void(transactionId: row.id) }
         }
         .disabled(store.isReadOnly || row.voided)
+    }
+
+    /// The trash icon's action, for the row under the pointer only, as the
+    /// SETUP tables show their archive icon: a sheet full of icons would be
+    /// noise. None on the row being edited, whose last cell is being typed
+    /// into, and none where the context menu's Delete is off: a vault this
+    /// account only reads, a row deleted already. The due periods and the
+    /// empty line are not rows and never get one.
+    private func trashAction(for row: TransactionRow, editing: Bool) -> (() -> Void)? {
+        guard hovered == row.id, !editing, store.canWrite, !row.voided else { return nil }
+        return { delete(row) }
     }
 
     /// What VoiceOver offers on a row: the context menu's actions, the click
@@ -474,6 +486,12 @@ struct LedgerGrid: View {
               newRow.note.trimmingCharacters(in: .whitespacesAndNewlines) == note
         else { return }
         newRow.suggestion = NoteSuggestion(note: note, category: category)
+    }
+
+    /// The trash icon: the row alone, through the context menu's own path,
+    /// so it is hidden at once and the toast can still put it back.
+    private func delete(_ row: TransactionRow) {
+        Task { await store.void(transactionId: row.id) }
     }
 
     /// ⌘D and the context menu: copy a row into the empty line, ready to be
