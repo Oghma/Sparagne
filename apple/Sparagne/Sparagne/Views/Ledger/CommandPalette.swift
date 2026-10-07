@@ -409,10 +409,17 @@ struct CommandPaletteList: View {
             .onHover { inside in
                 if inside { model.select(index) }
             }
-            .onTapGesture {
-                model.select(index)
-                Task { if await model.run() { onRun() } }
-            }
+            .onTapGesture { activate(index) }
             .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+            // A tap gesture is not an action VoiceOver can press: the row
+            // says it is a button, so it has to act like one.
+            .accessibilityAction { activate(index) }
+    }
+
+    /// A click on a row, or VoiceOver pressing it: the entry runs as ↩ would
+    /// run it with the row highlighted.
+    private func activate(_ index: Int) {
+        model.select(index)
+        Task { if await model.run() { onRun() } }
     }
 }

@@ -384,13 +384,20 @@ struct CategoryCompletionList: View {
         .onHover { inside in
             if inside { completion.highlight(index) }
         }
-        .onTapGesture {
-            completion.highlight(index)
-            completion.pick()
-        }
+        .onTapGesture { choose(index) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(candidate.alias.map { "\($0) \u{2192} \(candidate.name)" } ?? candidate.name)
         .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+        // A tap gesture is not an action VoiceOver can press: the row says it
+        // is a button, so it has to act like one.
+        .accessibilityAction { choose(index) }
+    }
+
+    /// A click on a row, or VoiceOver pressing it: that candidate goes into
+    /// the cell and the list closes (`CategoryCompletionModel.pick`).
+    private func choose(_ index: Int) {
+        completion.highlight(index)
+        completion.pick()
     }
 
     /// The keys the cell takes while the list is open.
