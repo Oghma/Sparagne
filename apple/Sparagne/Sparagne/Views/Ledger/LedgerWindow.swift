@@ -36,11 +36,6 @@ struct LedgerWindow: View {
     var body: some View {
         VStack(spacing: 0) {
             TopBar(store: store, engine: engine, searchFocused: $searchFocused) { sheet = $0 }
-            // The filters of the list; the other views are not a list.
-            if store.tab == .ledger {
-                LedgerHeader(store: store)
-                Hairline()
-            }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Ink.sheet)
@@ -59,8 +54,11 @@ struct LedgerWindow: View {
                             store.quickAddText = ""
                             showsQuickAdd = false
                         }
+                    // Near the top, over the sheet's first rows: where the
+                    // eye already is when ⌘K is pressed.
                     QuickAddOverlay(store: store, engine: engine, isPresented: $showsQuickAdd)
-                        .padding(.top, 60)
+                        .padding(.top, Metrics.topBar + 28)
+                        .padding(.horizontal, Metrics.gutter)
                 }
             }
         }
@@ -144,9 +142,13 @@ struct LedgerWindow: View {
         if let summary = store.summary {
             switch store.tab {
             case .ledger:
+                // The filters belong to the rows, so they sit over the grid
+                // only; the panel runs the full height beside both (`.body`).
                 HStack(spacing: 0) {
-                    LedgerGrid(store: store)
-                    Rectangle().fill(Ink.line).frame(width: 1)
+                    VStack(spacing: 0) {
+                        FilterBar(store: store)
+                        LedgerGrid(store: store)
+                    }
                     SummaryPanel(summary: summary, store: store)
                 }
             case .summary:
