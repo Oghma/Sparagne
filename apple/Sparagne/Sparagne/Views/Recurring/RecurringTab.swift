@@ -25,6 +25,9 @@ struct RecurringTab: View {
     /// calendar day turns and whenever the due list changes, so a tab left
     /// open past midnight does not keep counting from yesterday.
     @State private var today = CoreDate.day(Date())
+    /// The table's Prossima per template (`AppStore.nextRecurring`), worked
+    /// out with the agenda rather than by each row as it draws.
+    @State private var next: [Uuid: RecurringNext] = [:]
 
     static let inspectorWidth: CGFloat = 340
 
@@ -34,7 +37,7 @@ struct RecurringTab: View {
                 VStack(alignment: .leading, spacing: 10) {
                     DueRecurringCard(store: store, today: today)
                     RecurringAgendaCard(store: store)
-                    RecurringTemplateTable(store: store, today: today, selection: shown) { picked = $0 }
+                    RecurringTemplateTable(store: store, today: today, next: next, selection: shown) { picked = $0 }
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -48,11 +51,12 @@ struct RecurringTab: View {
             refreshToday()
             await store.loadRecurringTemplates()
         }
-        // The agenda is worked out again whenever the templates, the due
-        // list or the day change: a save, a period recorded, a sync,
-        // midnight.
+        // The agenda and the table's next dates are worked out again
+        // whenever the templates, the due list or the day change: a save, a
+        // period recorded, a sync, midnight.
         .task(id: AgendaInputs(templates: store.recurringTemplates, pending: store.pendingRecurringItems, today: today)) {
             await store.loadUpcomingRecurring(today: today)
+            next = store.nextRecurring(today: today)
         }
         // The core works the due list out from its own clock: when it moves,
         // the day may have too.

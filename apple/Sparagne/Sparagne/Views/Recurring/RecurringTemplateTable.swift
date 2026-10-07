@@ -32,6 +32,9 @@ private enum TemplateColumn {
 struct RecurringTemplateTable: View {
     let store: AppStore
     let today: NaiveDate
+    /// Prossima per template, from the tab (`AppStore.nextRecurring`): a row
+    /// only reads it, since a hover draws every row again.
+    let next: [Uuid: RecurringNext]
     /// What the inspector shows, as the tab resolved it.
     let selection: RecurringSelection?
     let select: (RecurringSelection) -> Void
@@ -110,7 +113,7 @@ struct RecurringTemplateTable: View {
             cell(minWidth: TemplateColumn.cadenceMinimum) {
                 Text(ScheduleFormatting.describe(template.schedule)).foregroundStyle(side)
             }
-            cell(width: TemplateColumn.next) { next(template, ink: ink) }
+            cell(width: TemplateColumn.next) { nextCell(template, ink: ink) }
             cell(width: TemplateColumn.wallet) {
                 Text(DueRecurringText.wallet(template, names: names)).foregroundStyle(side)
             }
@@ -149,15 +152,13 @@ struct RecurringTemplateTable: View {
     }
 
     /// Prossima: the oldest due period in red, or the next date; for an
-    /// archived template, the way back.
+    /// archived template, the way back. Empty for the moment between a new
+    /// template reaching the list and the tab working its date out.
     @ViewBuilder
-    private func next(_ template: RecurringView, ink: Color) -> some View {
-        switch RecurringNext.of(
-            template,
-            due: store.dueDates(of: template.id),
-            today: today,
-            occurrences: CoreSchedule.occurrences
-        ) {
+    private func nextCell(_ template: RecurringView, ink: Color) -> some View {
+        switch next[template.id] {
+        case nil:
+            EmptyView()
         case .due(let day):
             Text(String(localized: "\(RecurringDayText.short(day, today: today)) \u{00B7} due"))
                 .foregroundStyle(Ink.negative)

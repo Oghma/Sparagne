@@ -220,4 +220,40 @@ struct UpcomingRecurringStoreTests {
         #expect(!dates.contains(today))
         #expect(store.duePeriods.map(\.date) == [today])
     }
+
+    @Test("The table's next dates are worked out per template: the oldest due period, or the first one ahead")
+    func storeNextDates() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "sparagne.upcoming.\(UUID().uuidString)"))
+        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: defaults)
+        await store.bootstrap()
+        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
+        let today = CoreDate.day(Date())
+        let twoDaysAgo = try #require(NaiveDay.adding(-2, to: today))
+        let inAWeek = try #require(NaiveDay.adding(7, to: today))
+        let rent = try #require(await store.createRecurring(
+            kind: .expense,
+            amount: 500,
+            walletId: nil,
+            flowId: nil,
+            category: "Bills",
+            note: "Rent",
+            schedule: Schedule(frequency: .daily, interval: 1, startDate: twoDaysAgo, endDate: nil)
+        ))
+        let gym = try #require(await store.createRecurring(
+            kind: .expense,
+            amount: 300,
+            walletId: nil,
+            flowId: nil,
+            category: "Sport",
+            note: "Gym",
+            schedule: Schedule(frequency: .daily, interval: 7, startDate: inAWeek, endDate: nil)
+        ))
+        #expect(store.presentedError == nil)
+
+        let next = store.nextRecurring(today: today)
+
+        #expect(next.count == 2)
+        #expect(next[rent] == .due(twoDaysAgo))
+        #expect(next[gym] == .upcoming(inAWeek))
+    }
 }

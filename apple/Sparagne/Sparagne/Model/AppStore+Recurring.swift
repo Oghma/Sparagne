@@ -28,6 +28,29 @@ extension AppStore {
         ).tiles
     }
 
+    /// Prossima of every template, by id (`RecurringNext.of`), for the
+    /// templates table. The tab works it out in the same task as the agenda,
+    /// from the same inputs, and keeps it: each answer is a call into the
+    /// core, and the table draws every row again on each hover.
+    func nextRecurring(today: NaiveDate) -> [Uuid: RecurringNext] {
+        let due = Dictionary(
+            pendingRecurringItems.map { ($0.template.id, $0.due) },
+            uniquingKeysWith: +
+        )
+        let next = recurringTemplates.map { template in
+            (
+                template.id,
+                RecurringNext.of(
+                    template,
+                    due: due[template.id] ?? [],
+                    today: today,
+                    occurrences: CoreSchedule.occurrences
+                )
+            )
+        }
+        return Dictionary(next, uniquingKeysWith: { first, _ in first })
+    }
+
     /// The table's order: the templates that run or are paused, as the core
     /// lists them, then the archived ones at the bottom, still there to be
     /// restored.

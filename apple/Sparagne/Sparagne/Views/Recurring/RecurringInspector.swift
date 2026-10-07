@@ -23,6 +23,11 @@ struct RecurringInspector: View {
     @State private var draft: RecurringDraft
     /// A command in flight: Salva, Crea and the rest wait for it.
     @State private var working = false
+    /// The next four dates (`nextDates`), asked of the core when what they
+    /// depend on changes (`PreviewInputs`) rather than on every render: the
+    /// inspector draws again on every keystroke, in the amount and the note
+    /// too. `nil` until the first answer.
+    @State private var preview: Result<[RecurringNext.Preview], Error>?
 
     init(store: AppStore, template: RecurringView?, today: NaiveDate, finishedCreating: @escaping (Uuid?) -> Void) {
         self.store = store
@@ -66,6 +71,9 @@ struct RecurringInspector: View {
             } else {
                 draft.enabled = new.enabled
             }
+        }
+        .onChange(of: previewInputs, initial: true) { _, inputs in
+            preview = Self.previewDates(inputs)
         }
     }
 
@@ -301,6 +309,8 @@ struct RecurringInspector: View {
         VStack(alignment: .leading, spacing: 5) {
             groupLabel(String(localized: "Next dates"))
             switch preview {
+            case nil:
+                EmptyView()
             case .success(let dates):
                 VStack(spacing: 0) {
                     ForEach(dates, id: \.self) { line in
@@ -320,20 +330,29 @@ struct RecurringInspector: View {
         }
     }
 
-    /// The next four dates of the schedule on screen, saved or not. The due
-    /// periods lead while the schedule is the saved one; and today, for a
-    /// running template, counts as decided when it is not among them
-    /// (`RecurringNext.of`).
-    private var preview: Result<[RecurringNext.Preview], Error> {
+    /// What the preview is worked out from. Cheap to read on every render,
+    /// unlike the answer: the schedule on screen, saved or not; the due
+    /// periods, which lead while the schedule is the saved one; and whether
+    /// today, for a running template, counts as decided when it is not among
+    /// them (`RecurringNext.of`).
+    private var previewInputs: PreviewInputs {
         let schedule = draft.schedule
         let unchanged = template.map { $0.schedule == schedule } ?? false
-        let due = unchanged ? template.map { store.dueDates(of: $0.id) } ?? [] : []
-        let running = template.map { $0.enabled && !$0.archived } ?? false
-        let from = running ? (NaiveDay.adding(1, to: today) ?? today) : today
+        return PreviewInputs(
+            schedule: schedule,
+            due: unchanged ? template.map { store.dueDates(of: $0.id) } ?? [] : [],
+            today: today,
+            running: template.map { $0.enabled && !$0.archived } ?? false
+        )
+    }
+
+    /// The next four dates of `inputs`, asked of the core.
+    private static func previewDates(_ inputs: PreviewInputs) -> Result<[RecurringNext.Preview], Error> {
+        let from = inputs.running ? (NaiveDay.adding(1, to: inputs.today) ?? inputs.today) : inputs.today
         return Result {
             try RecurringNext.preview(
-                schedule: schedule,
-                due: due,
+                schedule: inputs.schedule,
+                due: inputs.due,
                 from: from,
                 count: 4,
                 occurrences: CoreSchedule.occurrences
@@ -504,6 +523,15 @@ struct RecurringInspector: View {
         }
         .frame(minHeight: 26)
     }
+}
+
+/// What the inspector's next dates are worked out from, as one value for
+/// `.onChange`.
+private struct PreviewInputs: Equatable {
+    let schedule: Schedule
+    let due: [NaiveDate]
+    let today: NaiveDate
+    let running: Bool
 }
 
 /// A horizontal line through the middle of its frame, for a dashed rule.
