@@ -89,6 +89,61 @@ enum CountText {
     static func voided(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
         String(localized: "\(count) transactions voided", bundle: bundle, locale: locale)
     }
+
+    /// `"5 days ago"` under a due period's date, `"today"` for one due today.
+    static func daysAgo(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
+        count <= 0
+            ? String(localized: "today", bundle: bundle, locale: locale)
+            : String(localized: "\(count) days ago", bundle: bundle, locale: locale)
+    }
+}
+
+/// Days as the Ricorrenze tab writes them (`docs/v2/UI.md` §2.5): `"gio 1
+/// ott"` in Italian, `"Thu, Oct 1"` in English, the order and the
+/// abbreviations the locale's own.
+///
+/// A `NaiveDate` is a calendar day with no time zone, so it is read and
+/// written in UTC on both sides: the local zone could put its midnight on
+/// the day before.
+enum RecurringDayText {
+    private static let utc = TimeZone(identifier: "UTC") ?? .gmt
+
+    private static func style(_ locale: Locale) -> Date.FormatStyle {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        return Date.FormatStyle(locale: locale, calendar: calendar, timeZone: utc)
+    }
+
+    private static func date(_ day: NaiveDate) -> Date? {
+        CoreDate.localDay(day, timeZone: utc)
+    }
+
+    /// `"gio 1 ott"`: a due period, a tile of the agenda.
+    static func weekday(_ day: NaiveDate, locale: Locale = .autoupdatingCurrent) -> String {
+        guard let date = date(day) else { return day }
+        return date.formatted(style(locale).weekday(.abbreviated).day().month(.abbreviated))
+    }
+
+    /// `"gio 1 ott 2026"`: the inspector's next dates, which run into the
+    /// years ahead.
+    static func weekdayWithYear(_ day: NaiveDate, locale: Locale = .autoupdatingCurrent) -> String {
+        guard let date = date(day) else { return day }
+        return date.formatted(style(locale).weekday(.abbreviated).day().month(.abbreviated).year())
+    }
+
+    /// `"1 ott"`, or `"15 mar 2027"` outside the year of `today`: the
+    /// templates table's Prossima.
+    static func short(_ day: NaiveDate, today: NaiveDate, locale: Locale = .autoupdatingCurrent) -> String {
+        guard let date = date(day) else { return day }
+        let base = style(locale).day().month(.abbreviated)
+        return day.prefix(4) == today.prefix(4) ? date.formatted(base) : date.formatted(base.year())
+    }
+
+    /// `"1 nov 2025"`: a start or end date.
+    static func full(_ day: NaiveDate, locale: Locale = .autoupdatingCurrent) -> String {
+        guard let date = date(day) else { return day }
+        return date.formatted(style(locale).day().month(.abbreviated).year())
+    }
 }
 
 /// What a schedule's interval counts.
