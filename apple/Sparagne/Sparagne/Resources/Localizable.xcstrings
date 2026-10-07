@@ -33,6 +33,22 @@
         }
       }
     },
+    "%@ of income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ delle entrate"
+          }
+        }
+      }
+    },
     "%@ of the cap": {
       "localizations": {
         "en": {
@@ -61,6 +77,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ da inizio anno"
+          }
+        }
+      }
+    },
+    "%@ vs %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ vs %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ su %@"
           }
         }
       }
@@ -1145,6 +1177,22 @@
         }
       }
     },
+    "Average": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Average"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media"
+          }
+        }
+      }
+    },
     "Back": {
       "localizations": {
         "en": {
@@ -1221,6 +1269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Categoria della banca"
+          }
+        }
+      }
+    },
+    "By person": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By person"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per persona"
           }
         }
       }
@@ -2209,6 +2273,22 @@
         }
       }
     },
+    "Direction": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direction"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direzione"
+          }
+        }
+      }
+    },
     "Disabled": {
       "localizations": {
         "en": {
@@ -2833,6 +2913,22 @@
         }
       }
     },
+    "Everyone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everyone"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tutti"
+          }
+        }
+      }
+    },
     "Everything is synced": {
       "localizations": {
         "en": {
@@ -3413,6 +3509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limite sulle entrate"
+          }
+        }
+      }
+    },
+    "Income entry": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrata"
           }
         }
       }
@@ -5353,6 +5465,22 @@
         }
       }
     },
+    "Quick Add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quick Add"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiunta rapida"
+          }
+        }
+      }
+    },
     "Quick Add…": {
       "localizations": {
         "en": {
@@ -5429,6 +5557,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ricorrenze"
+          }
+        }
+      }
+    },
+    "Recurring entry to confirm: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recurring entry to confirm: %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ricorrenza da confermare: %@"
+          }
+        }
+      }
+    },
+    "Refund": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refund"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimborso"
           }
         }
       }
@@ -5977,6 +6137,22 @@
         }
       }
     },
+    "Savings in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Savings in %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Risparmio di %@"
+          }
+        }
+      }
+    },
     "Savings rate": {
       "localizations": {
         "en": {
@@ -6009,6 +6185,22 @@
         }
       }
     },
+    "Savings · last 12 months": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Savings · last 12 months"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Risparmio · ultimi 12 mesi"
+          }
+        }
+      }
+    },
     "Search the month": {
       "localizations": {
         "en": {
@@ -6037,6 +6229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Seleziona"
+          }
+        }
+      }
+    },
+    "Selection:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selection:"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selezione:"
           }
         }
       }
@@ -7569,6 +7777,22 @@
         }
       }
     },
+    "Transfer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento"
+          }
+        }
+      }
+    },
     "Transfer between envelopes": {
       "localizations": {
         "en": {
@@ -7629,6 +7853,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trasferimento verso…"
+          }
+        }
+      }
+    },
+    "Transfers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfers"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimenti"
           }
         }
       }
@@ -7961,6 +8201,22 @@
         }
       }
     },
+    "Voided": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voided"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annullate"
+          }
+        }
+      }
+    },
     "Waiting to sync": {
       "localizations": {
         "en": {
@@ -7989,6 +8245,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wallet"
+          }
+        }
+      }
+    },
+    "Wallet column": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet column"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colonna wallet"
           }
         }
       }
@@ -8345,6 +8617,22 @@
         }
       }
     },
+    "add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "add"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aggiungi"
+          }
+        }
+      }
+    },
     "aliases take quick-add to the category: #pizza → Restaurants": {
       "localizations": {
         "en": {
@@ -8521,6 +8809,22 @@
         }
       }
     },
+    "category": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "category"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "categoria"
+          }
+        }
+      }
+    },
     "category…": {
       "localizations": {
         "en": {
@@ -8565,6 +8869,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "clic su una riga per modificarla"
+          }
+        }
+      }
+    },
+    "close": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "close"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chiudi"
+          }
+        }
+      }
+    },
+    "commands": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "commands"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "comandi"
           }
         }
       }
@@ -8661,6 +8997,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "conclusa"
+          }
+        }
+      }
+    },
+    "envelope": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "envelope"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "busta"
           }
         }
       }
@@ -8773,6 +9125,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "da qualsiasi wallet, busta %@"
+          }
+        }
+      }
+    },
+    "in progress": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in progress"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in corso"
           }
         }
       }
@@ -9097,6 +9465,22 @@
         }
       }
     },
+    "recent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "recent"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "recente"
+          }
+        }
+      }
+    },
     "recurring.kind.income": {
       "localizations": {
         "en": {
@@ -9209,6 +9593,22 @@
         }
       }
     },
+    "scroll": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "scroll"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "scorri"
+          }
+        }
+      }
+    },
     "search description…": {
       "localizations": {
         "en": {
@@ -9269,6 +9669,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "stato…"
+          }
+        }
+      }
+    },
+    "suggested category": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "suggested category"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "categoria suggerita"
           }
         }
       }
@@ -9465,6 +9881,22 @@
         }
       }
     },
+    "wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wallet"
+          }
+        }
+      }
+    },
     "wallet %@": {
       "localizations": {
         "en": {
@@ -9509,6 +9941,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "settimane"
+          }
+        }
+      }
+    },
+    "when": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "when"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "quando"
+          }
+        }
+      }
+    },
+    "who": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "who"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chi"
           }
         }
       }
