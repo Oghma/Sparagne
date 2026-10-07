@@ -1,14 +1,11 @@
 import SwiftUI
 import SparagneCore
 
-/// Column geometry of the wallet table. It sits above the envelope table in
-/// the setup tab's left column (`docs/v2/UI.md` §2.3) and has the same width,
-/// so SALDO lines up with the envelopes' SALDO. NOME takes what is left.
+/// Column geometry of the wallet table (`docs/v2/UI.md` §2.3), as the canvas
+/// has it: NOME takes what is left, SALDO 140 and the action column 36.
 private enum WalletColumn {
-    static let nameMinimum: CGFloat = 140
-    static let balance: CGFloat = 104
-    /// The archive/restore icon, empty until the pointer is over the row.
-    static let action: CGFloat = 28
+    static let nameMinimum: CGFloat = 100
+    static let balance: CGFloat = 140
 }
 
 /// The wallets of the vault as an editable table (`docs/v2/UI.md` §2.3). The
@@ -30,27 +27,18 @@ struct WalletTable: View {
     @FocusState private var focus: WalletCell?
 
     var body: some View {
-        Panel(padding: 0) {
-            VStack(spacing: 0) {
-                title
-                Hairline()
+        SetupCard(title: String(localized: "Wallets")) {
+            SetupTableBody {
                 header
-                Hairline()
-                // No scroll view: a vault has a handful of wallets, and the
-                // table takes only the height they need so the envelopes
-                // below keep the rest (`SetupView`).
                 ForEach(store.wallets, id: \.id) { wallet in
                     activeRow(wallet)
-                    Hairline()
                 }
                 // A viewer reads the wallets; nothing to add.
                 if store.canWrite { newLineRow }
                 archived
-                if store.canWrite {
-                    Hairline()
-                    footnote
-                }
+                totalRow
             }
+            if store.canWrite { footnote }
         }
         // A different vault means different wallets: whatever was half typed
         // belongs to the vault that is gone.
@@ -66,36 +54,41 @@ struct WalletTable: View {
 
     // MARK: - Chrome
 
-    private var title: some View {
-        HStack {
-            SectionLabel(text: String(localized: "Wallets"))
-            Spacer()
-        }
-        .padding(.horizontal, GridColumn.padding)
-        .frame(height: 24)
-    }
-
     /// Where an opening balance goes, which is what ties the wallets to the
     /// envelopes: Σ wallets = Σ envelopes (`docs/v2/DISTILLATO_V1.md` §1.1).
     private var footnote: some View {
         Text(String(localized: "The opening balance of a new wallet goes to Unallocated"))
-            .font(Face.footnote)
-            .foregroundStyle(Ink.dim)
-            .padding(.horizontal, GridColumn.padding)
-            .padding(.vertical, 8)
+            .font(Face.ui(11.5))
+            .foregroundStyle(Ink.text3)
+            .padding(.top, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {
-        HStack(spacing: 0) {
-            GridCell { SectionLabel(text: String(localized: "Name")) }
+        SetupHeaderRow {
+            SetupCell { Text(String(localized: "Name")) }
                 .frame(minWidth: WalletColumn.nameMinimum)
-            GridCell(width: WalletColumn.balance, alignment: .trailing) {
-                SectionLabel(text: String(localized: "Balance"))
+            SetupCell(width: WalletColumn.balance, alignment: .trailing) {
+                Text(String(localized: "Balance"))
             }
-            GridCell(width: WalletColumn.action) { EmptyView() }
+            SetupCell(width: SetupColumn.action) { EmptyView() }
         }
-        .frame(height: Metrics.headerHeight)
+    }
+
+    /// What all the wallets hold together, which is also what the envelopes
+    /// add up to.
+    private var totalRow: some View {
+        SetupRow(separator: false, topRule: true) {
+            SetupCell {
+                Text(String(localized: "Total")).font(Face.row.weight(.semibold)).foregroundStyle(Ink.text)
+            }
+            .frame(minWidth: WalletColumn.nameMinimum)
+            SetupCell(width: WalletColumn.balance, alignment: .trailing) {
+                let total = store.wallets.reduce(0) { $0 + $1.balance }
+                Text(LedgerMoney.amount(total)).font(Face.row.weight(.semibold)).foregroundStyle(Ink.text)
+            }
+            SetupCell(width: SetupColumn.action) { EmptyView() }
+        }
     }
 
     // MARK: - An active wallet
@@ -103,28 +96,22 @@ struct WalletTable: View {
     @ViewBuilder
     private func activeRow(_ wallet: WalletView) -> some View {
         let isEditing = editing == wallet.id
-        HStack(spacing: 0) {
+        SetupRow(highlighted: isEditing || hovered == wallet.id, editing: isEditing) {
             if isEditing {
-                GridCell {
+                SetupCell {
                     textField($draft.name, key: WalletCell(row: wallet.id, field: .name), placeholder: "")
                 }
                 .frame(minWidth: WalletColumn.nameMinimum)
                 balanceCell(wallet)
-                GridCell(width: WalletColumn.action) { EmptyView() }
+                SetupCell(width: SetupColumn.action) { EmptyView() }
             } else {
-                GridCell { Text(wallet.name).font(Face.row).foregroundStyle(Ink.text) }
+                SetupCell { Text(wallet.name).font(Face.row).foregroundStyle(Ink.text) }
                     .frame(minWidth: WalletColumn.nameMinimum)
                     .onTapGesture { open(wallet) }
                 balanceCell(wallet)
                     .onTapGesture { open(wallet) }
                 actionCell(wallet)
             }
-        }
-        .frame(height: Metrics.rowHeight)
-        .contentShape(Rectangle())
-        .background(isEditing || hovered == wallet.id ? Ink.raised : Color.clear)
-        .overlay(alignment: .leading) {
-            if isEditing { Rectangle().fill(Ink.accent).frame(width: 2) }
         }
         .onHover { inside in hover(wallet.id, inside) }
         .onKeyPress(.escape) {
@@ -145,17 +132,15 @@ struct WalletTable: View {
     /// `ArchiveWallet` the context menu sends. The core refuses a wallet that
     /// still holds money, and the refusal comes through the store's alert.
     private func actionCell(_ wallet: WalletView) -> some View {
-        GridCell(width: WalletColumn.action) {
+        SetupCell(width: SetupColumn.action) {
             if hovered == wallet.id, store.canWrite {
-                Button {
+                SetupIconButton(
+                    symbol: "archivebox",
+                    help: String(localized: "Archive"),
+                    label: String(localized: "Archive \(wallet.name)")
+                ) {
                     Task { await store.archiveWallet(wallet.id) }
-                } label: {
-                    Image(systemName: "archivebox")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Ink.dim)
                 }
-                .buttonStyle(.plain)
-                .help(String(localized: "Archive"))
             }
         }
     }
@@ -163,10 +148,10 @@ struct WalletTable: View {
     /// A wallet may go negative (a card), and then it reads like any other
     /// negative amount; a zero reads as background (`docs/v2/UI.md` §5).
     private func balanceCell(_ wallet: WalletView) -> some View {
-        GridCell(width: WalletColumn.balance, alignment: .trailing) {
+        SetupCell(width: WalletColumn.balance, alignment: .trailing) {
             Text(LedgerMoney.amount(wallet.balance))
                 .font(Face.row)
-                .foregroundStyle(wallet.balance == 0 ? Ink.dim : wallet.balance < 0 ? Ink.negative : Ink.text)
+                .foregroundStyle(wallet.balance == 0 ? Ink.text3 : wallet.balance < 0 ? Ink.negative : Ink.text)
         }
     }
 
@@ -174,49 +159,32 @@ struct WalletTable: View {
 
     @ViewBuilder
     private var archived: some View {
-        if !store.archivedWallets.isEmpty {
-            Hairline()
-            HStack(spacing: 0) {
-                GridCell { SectionLabel(text: String(localized: "Archived")) }
-                Spacer(minLength: 0)
-            }
-            .frame(height: 22)
-            ForEach(store.archivedWallets, id: \.id) { wallet in
-                Hairline()
-                HStack(spacing: 0) {
-                    GridCell {
-                        Text(wallet.name)
-                            .font(Face.row)
-                            .foregroundStyle(Ink.dim)
-                            .strikethrough()
-                    }
-                    .frame(minWidth: WalletColumn.nameMinimum)
-                    GridCell(width: WalletColumn.balance, alignment: .trailing) {
-                        Text(LedgerMoney.amount(wallet.balance)).font(Face.row).foregroundStyle(Ink.dim)
-                    }
-                    GridCell(width: WalletColumn.action) {
-                        if hovered == wallet.id, store.canWrite {
-                            Button {
-                                Task { await store.restoreWallet(wallet.id) }
-                            } label: {
-                                Image(systemName: "tray.and.arrow.up")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(Ink.dim)
-                            }
-                            .buttonStyle(.plain)
-                            .help(String(localized: "Restore"))
+        ForEach(store.archivedWallets, id: \.id) { wallet in
+            SetupRow(highlighted: hovered == wallet.id) {
+                SetupCell {
+                    Text(wallet.name).font(Face.row).foregroundStyle(Ink.text3).strikethrough()
+                }
+                .frame(minWidth: WalletColumn.nameMinimum)
+                SetupCell(width: WalletColumn.balance, alignment: .trailing) {
+                    Text(LedgerMoney.amount(wallet.balance)).font(Face.row).foregroundStyle(Ink.text3)
+                }
+                SetupCell(width: SetupColumn.action) {
+                    if hovered == wallet.id, store.canWrite {
+                        SetupIconButton(
+                            symbol: "tray.and.arrow.up",
+                            help: String(localized: "Restore"),
+                            label: String(localized: "Restore \(wallet.name)")
+                        ) {
+                            Task { await store.restoreWallet(wallet.id) }
                         }
                     }
                 }
-                .frame(height: Metrics.rowHeight)
-                .contentShape(Rectangle())
-                .background(hovered == wallet.id ? Ink.raised : Color.clear)
-                .onHover { inside in hover(wallet.id, inside) }
-                .contextMenu {
-                    if store.canWrite {
-                        Button(String(localized: "Restore")) {
-                            Task { await store.restoreWallet(wallet.id) }
-                        }
+            }
+            .onHover { inside in hover(wallet.id, inside) }
+            .contextMenu {
+                if store.canWrite {
+                    Button(String(localized: "Restore")) {
+                        Task { await store.restoreWallet(wallet.id) }
                     }
                 }
             }
@@ -228,29 +196,24 @@ struct WalletTable: View {
     /// Always under the active wallets: a name, an opening balance (negative
     /// for a card that starts in debt) and ↩.
     private var newLineRow: some View {
-        HStack(spacing: 0) {
-            GridCell {
+        SetupRow(highlighted: focus?.row == nil && focus != nil, editing: focus?.row == nil && focus != nil) {
+            SetupCell {
                 textField(
                     $newLine.name,
                     key: WalletCell(row: nil, field: .name),
-                    placeholder: String(localized: "name…")
+                    placeholder: String(localized: "New wallet…")
                 )
             }
             .frame(minWidth: WalletColumn.nameMinimum)
-            GridCell(width: WalletColumn.balance, alignment: .trailing) {
+            SetupCell(width: WalletColumn.balance, alignment: .trailing) {
                 textField(
                     $newLine.opening,
                     key: WalletCell(row: nil, field: .opening),
-                    placeholder: "0,00",
+                    placeholder: String(localized: "opening balance"),
                     alignment: .trailing
                 )
             }
-            GridCell(width: WalletColumn.action) { EmptyView() }
-        }
-        .frame(height: Metrics.rowHeight)
-        .background(focus?.row == nil && focus != nil ? Ink.raised : Color.clear)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(Ink.accent).frame(width: 2)
+            SetupCell(width: SetupColumn.action) { EmptyView() }
         }
         .onKeyPress(.escape) {
             newLine = WalletDraft()

@@ -2,16 +2,11 @@ import SwiftUI
 import SparagneCore
 
 /// Column geometry, fixed so the header, the rows and the empty line agree
-/// without a layout pass (`docs/v2/UI.md` §2.3 and §5). ALIASES takes what is
-/// left: the table shares the window with the envelopes one, so at the
-/// minimum width it still has room for a couple of names.
+/// without a layout pass (`docs/v2/UI.md` §2.3 and §5): the canvas's 140 for
+/// NOME, 80 for the usage and 36 for the action. ALIAS takes what is left.
 private enum CategoryColumn {
-    static let name: CGFloat = 160
-    /// Just wide enough for the SYSTEM badge, which only Opening and
-    /// Uncategorized carry.
-    static let badge: CGFloat = 72
-    /// The archive/restore icon, empty until the pointer is over the row.
-    static let action: CGFloat = 28
+    static let name: CGFloat = 140
+    static let usage: CGFloat = 80
 }
 
 /// The cells a category row is typed into.
@@ -53,31 +48,21 @@ struct CategoryTable: View {
     @FocusState private var focus: CategoryCellFocus?
 
     var body: some View {
-        Panel(padding: 0) {
-            VStack(spacing: 0) {
-                title
-                Hairline()
+        SetupCard(
+            title: String(localized: "Categories"),
+            hint: String(localized: "aliases take quick-add to the category: #pizza → Restaurants")
+        ) {
+            SetupTableBody {
                 header
-                Hairline()
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(active, id: \.id) { category in
-                            row(category)
-                            Hairline()
-                        }
-                        if !archived.isEmpty {
-                            archivedLabel
-                            Hairline()
-                            ForEach(archived, id: \.id) { category in
-                                row(category)
-                                Hairline()
-                            }
-                        }
-                        // A viewer reads the categories; nothing to add.
-                        if store.canWrite { newLine }
-                    }
+                ForEach(active, id: \.id) { category in
+                    row(category)
                 }
-                .scrollBounceBehavior(.basedOnSize)
+                // Archived ones keep their place at the bottom, dimmed.
+                ForEach(archived, id: \.id) { category in
+                    row(category)
+                }
+                // A viewer reads the categories; nothing to add.
+                if store.canWrite { newLine }
             }
         }
         // A vault switch reloads the lists under whatever was open.
@@ -103,32 +88,13 @@ struct CategoryTable: View {
 
     // MARK: - Chrome
 
-    private var title: some View {
-        HStack {
-            SectionLabel(text: String(localized: "Categories"))
-            Spacer()
-        }
-        .padding(.horizontal, GridColumn.padding)
-        .frame(height: 24)
-    }
-
     private var header: some View {
-        HStack(spacing: 0) {
-            GridCell(width: CategoryColumn.name) { SectionLabel(text: String(localized: "Name")) }
-            GridCell { SectionLabel(text: String(localized: "Aliases")) }
-            GridCell(width: CategoryColumn.badge) { Text("") }
-            GridCell(width: CategoryColumn.action) { EmptyView() }
+        SetupHeaderRow {
+            SetupCell(width: CategoryColumn.name) { Text(String(localized: "Name")) }
+            SetupCell { Text(String(localized: "Aliases")) }
+            SetupCell(width: CategoryColumn.usage, alignment: .trailing) { Text(String(localized: "Rows 90 d")) }
+            SetupCell(width: SetupColumn.action) { EmptyView() }
         }
-        .frame(height: Metrics.headerHeight)
-    }
-
-    private var archivedLabel: some View {
-        HStack {
-            SectionLabel(text: String(localized: "Archived"))
-            Spacer()
-        }
-        .padding(.horizontal, GridColumn.padding)
-        .frame(height: 22)
     }
 
     // MARK: - Rows
@@ -167,6 +133,7 @@ struct CategoryTable: View {
         CategoryRowView(
             category: category,
             aliases: aliases(of: category.id),
+            usage: store.categoryUsage[category.id] ?? 0,
             draft: isEditing ? $draft : nil,
             isHovered: hovered == category.id,
             isWritable: store.canWrite,
@@ -177,12 +144,6 @@ struct CategoryTable: View {
             onArchive: { Task { await store.archiveCategory(category.id) } },
             onRestore: { Task { await store.restoreCategory(category.id) } }
         )
-        .background(isEditing || hovered == category.id ? Ink.raised : Color.clear)
-        .overlay(alignment: .leading) {
-            if isEditing {
-                Rectangle().fill(Ink.accent).frame(width: 2)
-            }
-        }
         .onHover { inside in
             if inside {
                 hovered = category.id
@@ -192,30 +153,26 @@ struct CategoryTable: View {
         }
     }
 
-    /// The empty last line: a name, and under ALIASES the near names the core
+    /// The empty last line: a name, and under ALIAS the near names the core
     /// knows, which suggest and never block (`docs/v2/DISTILLATO_V1.md` §2.1).
     private var newLine: some View {
-        HStack(spacing: 0) {
-            GridCell(width: CategoryColumn.name) {
-                TextField(String(localized: "name…"), text: $newName)
+        let active = focus == CategoryCellFocus(row: nil, field: .name)
+        return SetupRow(highlighted: active, editing: active, separator: false) {
+            SetupCell(width: CategoryColumn.name) {
+                TextField(String(localized: "New category…"), text: $newName)
                     .textFieldStyle(.plain)
                     .font(Face.row)
                     .foregroundStyle(Ink.text)
                     .focused($focus, equals: CategoryCellFocus(row: nil, field: .name))
                     .onSubmit { Task { await commitNewLine() } }
             }
-            GridCell {
+            SetupCell {
                 Text(similarHint)
                     .font(Face.row)
-                    .foregroundStyle(Ink.dim)
+                    .foregroundStyle(Ink.text3)
             }
-            GridCell(width: CategoryColumn.badge) { Text("") }
-            GridCell(width: CategoryColumn.action) { EmptyView() }
-        }
-        .frame(height: Metrics.rowHeight)
-        .background(focus == CategoryCellFocus(row: nil, field: .name) ? Ink.raised : Color.clear)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(Ink.accent).frame(width: 2)
+            SetupCell(width: CategoryColumn.usage) { EmptyView() }
+            SetupCell(width: SetupColumn.action) { EmptyView() }
         }
         .onKeyPress(.escape) {
             newName = ""
@@ -224,11 +181,12 @@ struct CategoryTable: View {
         }
     }
 
-    /// The hint under the empty line, refreshed by a `task(id:)` on the
+    /// The hint beside the empty line, refreshed by a `task(id:)` on the
     /// typed name: the lookup is a core query, so it cannot be computed while
-    /// the row is being laid out.
+    /// the row is being laid out. With nothing close, it says what the
+    /// ALIAS column takes.
     private var similarHint: String {
-        guard !similar.isEmpty else { return "" }
+        guard !similar.isEmpty else { return String(localized: "aliases, comma-separated") }
         let names = similar.joined(separator: ", ")
         return String(localized: "Similar: \(names)")
     }
@@ -341,6 +299,8 @@ struct CategoryTable: View {
 private struct CategoryRowView: View {
     let category: CategoryView
     let aliases: [String]
+    /// Rows in the last 90 days.
+    let usage: Int
     /// Non-nil while this row is the one being edited.
     let draft: Binding<CategoryDraft>?
     let isHovered: Bool
@@ -354,27 +314,19 @@ private struct CategoryRowView: View {
     let onRestore: () -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
+        SetupRow(highlighted: draft != nil || isHovered, editing: draft != nil) {
             if let draft {
                 cell(draft.name, .name, width: CategoryColumn.name)
                 cell(draft.aliases, .aliases, width: nil)
             } else {
-                GridCell(width: CategoryColumn.name) { text(CategoryDraft.label(category)) }
+                SetupCell(width: CategoryColumn.name) { nameCell }
                     .onTapGesture { onOpen(.name) }
-                GridCell { aliasText }
+                SetupCell { aliasCell }
                     .onTapGesture { onOpen(.aliases) }
             }
-            GridCell(width: CategoryColumn.badge) {
-                if category.isSystem {
-                    SectionLabel(text: String(localized: "System"))
-                } else {
-                    Text("")
-                }
-            }
+            SetupCell(width: CategoryColumn.usage, alignment: .trailing) { usageText }
             actionCell
         }
-        .frame(height: Metrics.rowHeight)
-        .contentShape(Rectangle())
         .onKeyPress(.escape) {
             guard draft != nil else { return .ignored }
             onCancel()
@@ -382,54 +334,86 @@ private struct CategoryRowView: View {
         }
     }
 
-    /// The archive/restore icon, only for the row under the pointer: the same
+    /// The name, with the "system" tag on the two the core owns. An archived
+    /// category is dimmed, not struck through: the tag beside its alias
+    /// column already says why it is down here.
+    private var nameCell: some View {
+        HStack(spacing: 6) {
+            Text(CategoryDraft.label(category))
+                .font(Face.row)
+                .foregroundStyle(tint)
+                .lineLimit(1)
+            if category.isSystem { SetupTag(text: String(localized: "system")) }
+        }
+    }
+
+    private var tint: Color {
+        if category.archived { return Ink.text3 }
+        return category.isSystem ? Ink.text2 : Ink.text
+    }
+
+    /// The aliases as chips; for an archived row the "archived" tag and a
+    /// ghost "Restore" button instead, next to each other. They used to sit
+    /// in the 36 pt action column, which cut the word off.
+    @ViewBuilder
+    private var aliasCell: some View {
+        if category.archived {
+            HStack(spacing: 6) {
+                SetupTag(text: String(localized: "archived"))
+                if isWritable {
+                    Button(action: onRestore) {
+                        Text(String(localized: "Restore"))
+                            .font(Face.ui(11))
+                            .foregroundStyle(Ink.text2)
+                            .padding(.horizontal, 4)
+                            .frame(height: 18)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "Restore \(category.name)"))
+                }
+            }
+        } else {
+            HStack(spacing: 3) {
+                ForEach(aliases, id: \.self) { AliasChip(text: $0) }
+            }
+            .clipped()
+        }
+    }
+
+    /// Zero reads as background, a system category has no usage worth
+    /// counting (`Opening` and `Uncategorized` come from the core).
+    @ViewBuilder
+    private var usageText: some View {
+        if category.isSystem {
+            Text("—").font(Face.row).foregroundStyle(Ink.text3)
+        } else {
+            Text(usage.formatted(.number))
+                .font(Face.row)
+                .foregroundStyle(usage == 0 || category.archived ? Ink.text3 : Ink.text)
+        }
+    }
+
+    /// The archive icon, only for the row under the pointer: the same
     /// command the context menu already sends, one click closer. Hidden while
-    /// editing or for a system category, which the core refuses either way.
+    /// editing, for a system category (which the core refuses either way) and
+    /// for an archived one, whose Restore button is beside its tag.
     @ViewBuilder
     private var actionCell: some View {
-        GridCell(width: CategoryColumn.action) {
-            if draft == nil, isHovered, isWritable, !category.isSystem {
-                if category.archived {
-                    actionButton(symbol: "tray.and.arrow.up", tooltip: String(localized: "Restore"), action: onRestore)
-                } else {
-                    actionButton(symbol: "archivebox", tooltip: String(localized: "Archive"), action: onArchive)
-                }
+        SetupCell(width: SetupColumn.action) {
+            if draft == nil, isHovered, isWritable, !category.isSystem, !category.archived {
+                SetupIconButton(
+                    symbol: "archivebox",
+                    help: String(localized: "Archive"),
+                    label: String(localized: "Archive \(category.name)"),
+                    action: onArchive
+                )
             }
         }
     }
 
-    private func actionButton(symbol: String, tooltip: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Ink.dim)
-        }
-        .buttonStyle(.plain)
-        .help(tooltip)
-    }
-
-    /// Archived categories keep their place at the bottom of the list, struck
-    /// through and dim (`docs/v2/UI.md` §2.3).
-    private func text(_ value: String) -> some View {
-        Text(value)
-            .font(Face.row)
-            .foregroundStyle(category.archived ? Ink.dim : Ink.text)
-            .strikethrough(category.archived)
-    }
-
-    @ViewBuilder
-    private var aliasText: some View {
-        if aliases.isEmpty {
-            Text(TransactionRow.placeholder)
-                .font(Face.row)
-                .foregroundStyle(Ink.dim)
-        } else {
-            text(aliases.joined(separator: ", "))
-        }
-    }
-
     private func cell(_ value: Binding<String>, _ field: CategoryField, width: CGFloat?) -> some View {
-        GridCell(width: width) {
+        SetupCell(width: width) {
             TextField("", text: value)
                 .textFieldStyle(.plain)
                 .font(Face.row)

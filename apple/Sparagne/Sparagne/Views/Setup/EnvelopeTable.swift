@@ -1,22 +1,15 @@
 import SwiftUI
 import SparagneCore
 
-/// Column geometry of the envelope table, the ledger's `GridColumn` for the
-/// setup tab (`docs/v2/UI.md` §2.3): fixed widths so the header, the rows and
-/// the empty line agree without a layout pass. NOME takes what is left.
-///
-/// `GridCell` adds the grid's 10 pt of padding on each side of these, so the
-/// table asks for 604 pt at its narrowest: the two setup tables share 1146 pt
-/// at the window's minimum width (`ContentView`: 1176), and the widest cell of
-/// each column ("income cap", "150.000,00", "€150.000,00") fits with room.
+/// Column geometry of the envelope table, as the canvas has it
+/// (`docs/v2/UI.md` §2.3): fixed widths so the header, the rows and the empty
+/// line agree without a layout pass. NOME takes what is left.
 private enum EnvelopeColumn {
-    static let nameMinimum: CGFloat = 140
-    static let type: CGFloat = 92
-    static let cap: CGFloat = 92
-    static let negative: CGFloat = 48
-    static let balance: CGFloat = 104
-    /// The archive/restore icon, empty until the pointer is over the row.
-    static let action: CGFloat = 28
+    static let nameMinimum: CGFloat = 100
+    static let type: CGFloat = 116
+    static let cap: CGFloat = 96
+    static let negative: CGFloat = 56
+    static let balance: CGFloat = 140
 }
 
 /// The envelopes of the vault as an editable table (`docs/v2/UI.md` §2.3):
@@ -40,28 +33,15 @@ struct EnvelopeTable: View {
     @FocusState private var focus: EnvelopeCell?
 
     var body: some View {
-        Panel(padding: 0) {
-            VStack(spacing: 0) {
-                title
-                Hairline()
+        SetupCard(title: String(localized: "Envelopes"), hint: String(localized: "a cap makes it a fund in the summary")) {
+            SetupTableBody {
                 header
-                Hairline()
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(store.flows, id: \.id) { flow in
-                            activeRow(flow)
-                            Hairline()
-                        }
-                        // A viewer reads the envelopes; nothing to add.
-                        if store.canWrite { newLineRow }
-                        archived
-                    }
+                ForEach(store.flows, id: \.id) { flow in
+                    activeRow(flow)
                 }
-                .scrollBounceBehavior(.basedOnSize)
-                if store.canWrite {
-                    Hairline()
-                    footnote
-                }
+                // A viewer reads the envelopes; nothing to add.
+                if store.canWrite { newLineRow }
+                archived
             }
         }
         // A different vault means different envelopes: whatever was half
@@ -76,46 +56,20 @@ struct EnvelopeTable: View {
         .onChange(of: store.isReadOnly) { _, _ in cancel() }
     }
 
-    // MARK: - Chrome
-
-    /// Inside the panel's border, like `CategoryTable.title`: the two setup
-    /// tables share the same frame, not one boxed and one floating above it.
-    private var title: some View {
-        HStack {
-            SectionLabel(text: String(localized: "Envelopes"))
-            Spacer()
-        }
-        .padding(.horizontal, GridColumn.padding)
-        .frame(height: 24)
-    }
-
-    /// SALDO on the empty line is the opening allocation moved out of
-    /// Unallocated; this explains that, inside the same border as the rest
-    /// of the table so the two setup panels close at the same edge.
-    private var footnote: some View {
-        Text(String(localized: "The balance of a new envelope is moved from Unallocated"))
-            .font(Face.footnote)
-            .foregroundStyle(Ink.dim)
-            .padding(.horizontal, GridColumn.padding)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 0) {
-            GridCell { SectionLabel(text: String(localized: "Name")) }
+        SetupHeaderRow {
+            SetupCell { Text(String(localized: "Name")) }
                 .frame(minWidth: EnvelopeColumn.nameMinimum)
-            GridCell(width: EnvelopeColumn.type) { SectionLabel(text: String(localized: "Type")) }
-            GridCell(width: EnvelopeColumn.cap, alignment: .trailing) { SectionLabel(text: String(localized: "Cap")) }
-            GridCell(width: EnvelopeColumn.negative) { SectionLabel(text: String(localized: "Neg")) }
-            GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
-                SectionLabel(text: String(localized: "Balance"))
+            SetupCell(width: EnvelopeColumn.type) { Text(String(localized: "Cap type")) }
+            SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) { Text(String(localized: "Limit")) }
+            SetupCell(width: EnvelopeColumn.negative) { Text(String(localized: "Neg.")) }
+            SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
+                Text(String(localized: "Balance"))
             }
-            GridCell(width: EnvelopeColumn.action) { EmptyView() }
+            SetupCell(width: SetupColumn.action) { EmptyView() }
         }
-        .frame(height: Metrics.headerHeight)
     }
 
     // MARK: - An active envelope
@@ -123,18 +77,12 @@ struct EnvelopeTable: View {
     @ViewBuilder
     private func activeRow(_ flow: FlowView) -> some View {
         let isEditing = editing == flow.id
-        HStack(spacing: 0) {
+        SetupRow(highlighted: isEditing || hovered == flow.id, editing: isEditing) {
             if isEditing {
                 editingCells(flow)
             } else {
                 displayCells(flow)
             }
-        }
-        .frame(height: Metrics.rowHeight)
-        .contentShape(Rectangle())
-        .background(isEditing || hovered == flow.id ? Ink.raised : Color.clear)
-        .overlay(alignment: .leading) {
-            if isEditing { Rectangle().fill(Ink.accent).frame(width: 2) }
         }
         .onHover { inside in
             if inside {
@@ -160,33 +108,39 @@ struct EnvelopeTable: View {
     }
 
     /// A closed row: every cell is a click target that opens the row there.
+    /// The system envelope reads in `text2` and carries the "system" tag.
     @ViewBuilder
     private func displayCells(_ flow: FlowView) -> some View {
         let system = flow.isUnallocated
-        GridCell { rowText(store.flowName(flow)) }
-            .frame(minWidth: EnvelopeColumn.nameMinimum)
-            .onTapGesture { open(flow, at: .name) }
-        GridCell(width: EnvelopeColumn.type) {
+        SetupCell {
+            HStack(spacing: 6) {
+                rowText(store.flowName(flow), tint: system ? Ink.text2 : Ink.text)
+                if system { SetupTag(text: String(localized: "system")) }
+            }
+        }
+        .frame(minWidth: EnvelopeColumn.nameMinimum)
+        .onTapGesture { open(flow, at: .name) }
+        SetupCell(width: EnvelopeColumn.type) {
             if system {
                 dash
             } else {
-                rowText(EnvelopeCapKind(flow.mode).label)
+                rowText(EnvelopeCapKind(flow.mode).label, tint: Ink.text2)
             }
         }
         .onTapGesture { open(flow, at: .type) }
-        GridCell(width: EnvelopeColumn.cap, alignment: .trailing) {
+        SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
             if let cap = EnvelopeCapKind.cap(of: flow.mode), !system {
-                rowText(LedgerMoney.bare(cap))
+                rowText(LedgerMoney.bare(cap), tint: Ink.text2)
             } else {
                 dash
             }
         }
         .onTapGesture { open(flow, at: .cap) }
-        GridCell(width: EnvelopeColumn.negative) {
+        SetupCell(width: EnvelopeColumn.negative) {
             if system {
                 dash
             } else {
-                rowText(Self.label(negative: flow.allowNegative))
+                rowText(Self.label(negative: flow.allowNegative), tint: Ink.text2)
             }
         }
         .onTapGesture { open(flow, at: .negative) }
@@ -200,17 +154,15 @@ struct EnvelopeTable: View {
     /// Hidden while editing, so it never fights a row's own commit-on-blur.
     @ViewBuilder
     private func actionCell(_ flow: FlowView, system: Bool) -> some View {
-        GridCell(width: EnvelopeColumn.action) {
+        SetupCell(width: SetupColumn.action) {
             if !system, hovered == flow.id, store.canWrite {
-                Button {
+                SetupIconButton(
+                    symbol: "archivebox",
+                    help: String(localized: "Archive"),
+                    label: String(localized: "Archive \(flow.name)")
+                ) {
                     Task { await store.archiveEnvelope(flow.id) }
-                } label: {
-                    Image(systemName: "archivebox")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Ink.dim)
                 }
-                .buttonStyle(.plain)
-                .help(String(localized: "Archive"))
             }
         }
     }
@@ -219,12 +171,12 @@ struct EnvelopeTable: View {
     /// an amount and picking a type in either order must work.
     @ViewBuilder
     private func editingCells(_ flow: FlowView) -> some View {
-        GridCell {
+        SetupCell {
             textField($draft.name, key: EnvelopeCell(row: flow.id, field: .name), placeholder: "")
         }
         .frame(minWidth: EnvelopeColumn.nameMinimum)
         typeCell($draft)
-        GridCell(width: EnvelopeColumn.cap, alignment: .trailing) {
+        SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
             textField(
                 $draft.cap,
                 key: EnvelopeCell(row: flow.id, field: .cap),
@@ -234,15 +186,23 @@ struct EnvelopeTable: View {
         }
         negativeCell($draft)
         balanceCell(flow)
-        GridCell(width: EnvelopeColumn.action) { EmptyView() }
+        SetupCell(width: SetupColumn.action) { EmptyView() }
     }
 
+    /// The balance, and under it the 2 pt bar of a capped envelope: how much
+    /// of the cap it has used (`EnvelopeCapFill`).
     private func balanceCell(_ flow: FlowView) -> some View {
-        GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
-            Text(LedgerMoney.amount(flow.balance))
-                .font(Face.row)
-                .foregroundStyle(Self.tint(balance: flow.balance))
-                .strikethrough(flow.archived)
+        let fill = flow.isUnallocated
+            ? nil
+            : EnvelopeCapFill.fraction(mode: flow.mode, balance: flow.balance, incomeTotal: flow.incomeTotal)
+        return SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(LedgerMoney.amount(flow.balance))
+                    .font(Face.row)
+                    .foregroundStyle(Self.tint(balance: flow.balance))
+                    .strikethrough(flow.archived)
+                if let fill { CapBar(fraction: fill) }
+            }
         }
     }
 
@@ -250,66 +210,49 @@ struct EnvelopeTable: View {
 
     @ViewBuilder
     private var archived: some View {
-        if !store.archivedFlows.isEmpty {
-            Hairline()
-            HStack(spacing: 0) {
-                GridCell { SectionLabel(text: String(localized: "Archived")) }
-                Spacer(minLength: 0)
-            }
-            .frame(height: 22)
-            ForEach(store.archivedFlows, id: \.id) { flow in
-                Hairline()
-                HStack(spacing: 0) {
-                    GridCell {
-                        Text(flow.name)
-                            .font(Face.row)
-                            .foregroundStyle(Ink.dim)
-                            .strikethrough()
-                    }
-                    .frame(minWidth: EnvelopeColumn.nameMinimum)
-                    GridCell(width: EnvelopeColumn.type) {
-                        Text(EnvelopeCapKind(flow.mode).label).font(Face.row).foregroundStyle(Ink.dim)
-                    }
-                    GridCell(width: EnvelopeColumn.cap, alignment: .trailing) {
-                        Text(EnvelopeCapKind.cap(of: flow.mode).map(LedgerMoney.bare) ?? "—")
-                            .font(Face.row)
-                            .foregroundStyle(Ink.dim)
-                    }
-                    GridCell(width: EnvelopeColumn.negative) {
-                        Text(Self.label(negative: flow.allowNegative)).font(Face.row).foregroundStyle(Ink.dim)
-                    }
-                    GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
-                        Text(LedgerMoney.amount(flow.balance)).font(Face.row).foregroundStyle(Ink.dim)
-                    }
-                    GridCell(width: EnvelopeColumn.action) {
-                        if hovered == flow.id, store.canWrite {
-                            Button {
-                                Task { await store.restoreEnvelope(flow.id) }
-                            } label: {
-                                Image(systemName: "tray.and.arrow.up")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(Ink.dim)
-                            }
-                            .buttonStyle(.plain)
-                            .help(String(localized: "Restore"))
-                        }
-                    }
+        ForEach(store.archivedFlows, id: \.id) { flow in
+            SetupRow(highlighted: hovered == flow.id) {
+                SetupCell {
+                    Text(flow.name).font(Face.row).foregroundStyle(Ink.text3).strikethrough()
                 }
-                .frame(height: Metrics.rowHeight)
-                .contentShape(Rectangle())
-                .background(hovered == flow.id ? Ink.raised : Color.clear)
-                .onHover { inside in
-                    if inside {
-                        hovered = flow.id
-                    } else if hovered == flow.id {
-                        hovered = nil
-                    }
+                .frame(minWidth: EnvelopeColumn.nameMinimum)
+                SetupCell(width: EnvelopeColumn.type) {
+                    Text(EnvelopeCapKind(flow.mode).label).font(Face.row).foregroundStyle(Ink.text3)
                 }
-                .contextMenu {
-                    if store.canWrite {
-                        Button(String(localized: "Restore")) {
+                SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
+                    Text(EnvelopeCapKind.cap(of: flow.mode).map(LedgerMoney.bare) ?? "—")
+                        .font(Face.row)
+                        .foregroundStyle(Ink.text3)
+                }
+                SetupCell(width: EnvelopeColumn.negative) {
+                    Text(Self.label(negative: flow.allowNegative)).font(Face.row).foregroundStyle(Ink.text3)
+                }
+                SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
+                    Text(LedgerMoney.amount(flow.balance)).font(Face.row).foregroundStyle(Ink.text3)
+                }
+                SetupCell(width: SetupColumn.action) {
+                    if hovered == flow.id, store.canWrite {
+                        SetupIconButton(
+                            symbol: "tray.and.arrow.up",
+                            help: String(localized: "Restore"),
+                            label: String(localized: "Restore \(flow.name)")
+                        ) {
                             Task { await store.restoreEnvelope(flow.id) }
                         }
+                    }
+                }
+            }
+            .onHover { inside in
+                if inside {
+                    hovered = flow.id
+                } else if hovered == flow.id {
+                    hovered = nil
+                }
+            }
+            .contextMenu {
+                if store.canWrite {
+                    Button(String(localized: "Restore")) {
+                        Task { await store.restoreEnvelope(flow.id) }
                     }
                 }
             }
@@ -320,41 +263,37 @@ struct EnvelopeTable: View {
 
     /// Always under the active envelopes: fill it left to right and press ↩.
     /// SALDO is the opening allocation moved out of Unallocated
-    /// (`docs/v2/DISTILLATO_V1.md` §2.2).
+    /// (`docs/v2/DISTILLATO_V1.md` §2.2), which the placeholder says.
     private var newLineRow: some View {
-        HStack(spacing: 0) {
-            GridCell {
+        let active = focus?.row == nil && focus != nil
+        return SetupRow(highlighted: active, editing: active) {
+            SetupCell {
                 textField(
                     $newLine.name,
                     key: EnvelopeCell(row: nil, field: .name),
-                    placeholder: String(localized: "name…")
+                    placeholder: String(localized: "New envelope…")
                 )
             }
             .frame(minWidth: EnvelopeColumn.nameMinimum)
-            typeCell($newLine)
-            GridCell(width: EnvelopeColumn.cap, alignment: .trailing) {
+            typeCell($newLine, emptyLabel: String(localized: "No cap"))
+            SetupCell(width: EnvelopeColumn.cap, alignment: .trailing) {
                 textField(
                     $newLine.cap,
                     key: EnvelopeCell(row: nil, field: .cap),
-                    placeholder: String(localized: "cap…"),
+                    placeholder: "—",
                     alignment: .trailing
                 )
             }
             negativeCell($newLine)
-            GridCell(width: EnvelopeColumn.balance, alignment: .trailing) {
+            SetupCell(width: EnvelopeColumn.balance, alignment: .trailing) {
                 textField(
                     $newLine.allocation,
                     key: EnvelopeCell(row: nil, field: .allocation),
-                    placeholder: "0,00",
+                    placeholder: String(localized: "allocation"),
                     alignment: .trailing
                 )
             }
-            GridCell(width: EnvelopeColumn.action) { EmptyView() }
-        }
-        .frame(height: Metrics.rowHeight)
-        .background(focus?.row == nil && focus != nil ? Ink.raised : Color.clear)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(Ink.accent).frame(width: 2)
+            SetupCell(width: SetupColumn.action) { EmptyView() }
         }
         .onKeyPress(.escape) {
             newLine = EnvelopeDraft()
@@ -381,17 +320,18 @@ struct EnvelopeTable: View {
     }
 
     /// TIPO is a menu, not text: the three kinds are the whole vocabulary
-    /// (`docs/v2/UI.md` §2.3) and a typo has no meaning here.
-    private func typeCell(_ line: Binding<EnvelopeDraft>) -> some View {
-        GridCell(width: EnvelopeColumn.type) {
+    /// (`docs/v2/UI.md` §2.3) and a typo has no meaning here. On the empty
+    /// line an unchosen kind reads as "No cap" rather than "None".
+    private func typeCell(_ line: Binding<EnvelopeDraft>, emptyLabel: String? = nil) -> some View {
+        SetupCell(width: EnvelopeColumn.type) {
             Menu {
                 ForEach(EnvelopeCapKind.allCases) { kind in
                     Button(kind.label) { line.wrappedValue.kind = kind }
                 }
             } label: {
-                Text(line.wrappedValue.kind.label)
+                Text(line.wrappedValue.kind == .none ? (emptyLabel ?? EnvelopeCapKind.none.label) : line.wrappedValue.kind.label)
                     .font(Face.row)
-                    .foregroundStyle(Ink.text)
+                    .foregroundStyle(emptyLabel != nil && line.wrappedValue.kind == .none ? Ink.text3 : Ink.text)
             }
             .menuStyle(.borderlessButton)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -400,24 +340,24 @@ struct EnvelopeTable: View {
 
     /// NEG is one click, as the mockup writes it: no menu for two values.
     private func negativeCell(_ line: Binding<EnvelopeDraft>) -> some View {
-        GridCell(width: EnvelopeColumn.negative) {
+        SetupCell(width: EnvelopeColumn.negative) {
             Button {
                 line.wrappedValue.allowNegative.toggle()
             } label: {
                 Text(Self.label(negative: line.wrappedValue.allowNegative))
                     .font(Face.row)
-                    .foregroundStyle(Ink.text)
+                    .foregroundStyle(Ink.text2)
             }
             .buttonStyle(.plain)
         }
     }
 
-    private func rowText(_ value: String) -> some View {
-        Text(value).font(Face.row).foregroundStyle(Ink.text)
+    private func rowText(_ value: String, tint: Color = Ink.text) -> some View {
+        Text(value).font(Face.row).foregroundStyle(tint)
     }
 
     private var dash: some View {
-        Text("—").font(Face.row).foregroundStyle(Ink.dim)
+        Text("—").font(Face.row).foregroundStyle(Ink.text3)
     }
 
     private static func label(negative: Bool) -> String {
@@ -427,7 +367,7 @@ struct EnvelopeTable: View {
     /// A zero reads as background (`docs/v2/UI.md` §5 gives zeros to `dim`),
     /// an overdrawn envelope as a warning.
     private static func tint(balance: Int64) -> Color {
-        if balance == 0 { return Ink.dim }
+        if balance == 0 { return Ink.text3 }
         return balance < 0 ? Ink.negative : Ink.text
     }
 
@@ -591,9 +531,9 @@ enum EnvelopeCapKind: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .none: String(localized: "none")
-        case .net: String(localized: "net cap")
-        case .income: String(localized: "income cap")
+        case .none: String(localized: "None")
+        case .net: String(localized: "On balance")
+        case .income: String(localized: "On income")
         }
     }
 
