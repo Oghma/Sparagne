@@ -77,13 +77,13 @@ struct QuickAddOverlay: View {
         }
         .task(id: store.quickAddText) { await suggestCategory() }
         .onExitCommand(perform: close)
-        .onChange(of: store.savedAt) { _, _ in
-            // `resolveAmbiguous` resubmits from the error alert's candidate
-            // buttons, outside this field's own `onSubmit`, and clears the
-            // text on success. A save that lands while the line still holds
-            // text is someone else's (a pending void flushing) and must not
-            // take the line away.
-            if store.quickAddText.isEmpty { isPresented = false }
+        // `resolveAmbiguous` resubmits from the error alert's candidate
+        // buttons, outside this field's own `onSubmit`, and clears the line
+        // when it saves it. Only that closes the panel (`QuickAddSave`): a
+        // pending void flushing saves too, and must not close a panel that is
+        // still empty or take away a line being typed.
+        .onChange(of: QuickAddSave(savedAt: store.savedAt, line: store.quickAddText)) { old, new in
+            if new.savedLine(after: old) { isPresented = false }
         }
     }
 
@@ -255,6 +255,26 @@ struct QuickAddOverlay: View {
         guard (try? await Task.sleep(for: .milliseconds(250))) != nil else { return }
         guard let category = await store.suggestedCategory(forNote: note), noteWithoutCategory == note else { return }
         hint = NoteSuggestion(note: note, category: category)
+    }
+}
+
+// MARK: - Closing on a save
+
+/// The store's last save and the panel's line, watched together: the panel
+/// closes when a save took its line, and on no other save.
+///
+/// `AppStore.submit(quickAdd:)` stamps `savedAt` and empties the line in one
+/// stretch on the main actor, so both changes reach the view in the same
+/// update. Every other save, a pending void flushing say, leaves the line as
+/// it was, empty or not.
+struct QuickAddSave: Equatable {
+    let savedAt: Date?
+    let line: String
+
+    /// Whether this state, coming after `old`, is the panel's line saved: a
+    /// new save, and the line that was there gone with it.
+    func savedLine(after old: QuickAddSave) -> Bool {
+        savedAt != old.savedAt && line.isEmpty && !old.line.isEmpty
     }
 }
 
