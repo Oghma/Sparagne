@@ -451,9 +451,8 @@ struct RecurringInspector: View {
     /// envelope gone since) keeps the draft, so it can be fixed.
     private func create() {
         guard let creation = draft.creation(currency: currency) else { return }
-        let before = Set(store.recurringTemplates.map(\.id))
         run {
-            await store.createRecurring(
+            let created = await store.createRecurring(
                 kind: creation.kind,
                 amount: creation.amount,
                 walletId: creation.walletId,
@@ -462,9 +461,7 @@ struct RecurringInspector: View {
                 note: creation.note,
                 schedule: creation.schedule
             )
-            if let created = store.recurringTemplates.first(where: { !before.contains($0.id) }) {
-                finishedCreating(created.id)
-            }
+            if let created { finishedCreating(created) }
         }
     }
 

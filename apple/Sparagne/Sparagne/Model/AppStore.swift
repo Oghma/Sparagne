@@ -904,6 +904,11 @@ final class AppStore {
         }
     }
 
+    /// Returns the new template's id, from the core's receipt, or `nil` when
+    /// it was refused: the inspector selects what it created by that id, not
+    /// by what the list gained, which a sync landing at the same time could
+    /// also have added to.
+    @discardableResult
     func createRecurring(
         kind: TransactionKind,
         amount: Int64,
@@ -912,18 +917,28 @@ final class AppStore {
         category: String?,
         note: String?,
         schedule: Schedule
-    ) async {
-        await recurringCommand(
-            .createRecurring(
-                transactionKind: kind,
-                amount: amount,
-                walletId: walletId,
-                flowId: flowId,
-                category: category,
-                note: note,
-                schedule: schedule
+    ) async -> Uuid? {
+        guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
+        var created: Uuid?
+        // `recurringCommand`'s steps, keeping the receipt it drops.
+        await guarded {
+            let receipt = try await core.execute(
+                vaultId: vault.id,
+                .createRecurring(
+                    transactionKind: kind,
+                    amount: amount,
+                    walletId: walletId,
+                    flowId: flowId,
+                    category: category,
+                    note: note,
+                    schedule: schedule
+                )
             )
-        )
+            created = receipt.resultId
+            await loadRecurringTemplates()
+            await reload()
+        }
+        return created
     }
 
     func updateRecurring(_ recurringId: Uuid, patch: RecurringPatch) async {
