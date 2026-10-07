@@ -8665,6 +8665,20 @@ public func resolveDateSpec(spec: DateSpec, today: NaiveDate)throws  -> NaiveDat
 })
 }
 /**
+ * The next `limit` dates of a schedule on or after `from`, for previewing a
+ * saved or unsaved template (agenda, editor inspector). No database access.
+ */
+public func scheduleOccurrences(schedule: Schedule, from: NaiveDate, limit: UInt32)throws  -> [NaiveDate]  {
+    return try  FfiConverterSequenceTypeNaiveDate.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_func_schedule_occurrences(
+        FfiConverterTypeSchedule_lower(schedule),
+        FfiConverterTypeNaiveDate_lower(from),
+        FfiConverterUInt32.lower(limit),uniffiCallStatus
+    )
+})
+}
+/**
  * The built-in statement presets.
  */
 public func statementPresets() -> [StatementPreset]  {
@@ -8715,6 +8729,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_resolve_date_spec() != 56246) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_func_schedule_occurrences() != 5195) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_statement_presets() != 59997) {
