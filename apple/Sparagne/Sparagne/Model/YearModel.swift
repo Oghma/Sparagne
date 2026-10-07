@@ -17,7 +17,7 @@ struct YearRow: Hashable, Sendable {
     let fundExpense: Int64
 }
 
-/// A capped envelope as the RIEPILOGO's gauges show it (`docs/v2/UI.md`
+/// A capped envelope as the RIEPILOGO's fund cards show it (`docs/v2/UI.md`
 /// §2.2): how full it is against its cap.
 struct FundGauge: Identifiable, Hashable, Sendable {
     let id: Uuid
@@ -26,6 +26,23 @@ struct FundGauge: Identifiable, Hashable, Sendable {
     /// The balance for a net cap, the cumulative income for an income cap
     /// (`DISTILLATO_V1.md` §2.2).
     let filled: Int64
+    /// What the cap is measured on, named in the card's tag.
+    let kind: Kind
+
+    enum Kind: Hashable, Sendable {
+        /// The cap is on the balance: spending frees room.
+        case balance
+        /// The cap is on the cumulative income: spending does not.
+        case income
+    }
+
+    init(id: Uuid, name: String, cap: Int64, filled: Int64, kind: Kind = .balance) {
+        self.id = id
+        self.name = name
+        self.cap = cap
+        self.filled = filled
+        self.kind = kind
+    }
 
     /// 0...1.
     var fraction: Double {
@@ -59,6 +76,66 @@ struct YearMonth: Hashable, Sendable {
     var savings: Int64 { income - cashExpense }
 }
 
+/// One line of the RIEPILOGO's table. A `nil` figure is an empty cell: the
+/// opening row has only TOTALE, the sum has no FONDO CASSA, a future month
+/// has nothing at all.
+struct YearTableRow: Hashable, Sendable {
+    enum Kind: Hashable, Sendable {
+        /// "Inizio anno": the fund the year starts with.
+        case opening
+        case month(MonthKey)
+        /// The year's sums.
+        case sum
+    }
+
+    let kind: Kind
+    /// After the month on screen: dashes.
+    let isFuture: Bool
+    /// The month on screen, in the year on screen.
+    let isCurrent: Bool
+    /// TOTALE did not go down on the line before (January is compared with
+    /// the opening fund). Meaningless on a blank row.
+    let trendUp: Bool
+    let income: Int64?
+    let cashExpense: Int64?
+    let savings: Int64?
+    let carried: Int64?
+    let fundExpense: Int64?
+    let total: Int64?
+    /// In `YearSummary.people` order; empty on a blank row.
+    let totalByPerson: [Int64]
+}
+
+/// The four numbers of the month on screen (`docs/v2/UI.md` §2.2), with the
+/// month before and the year so far for their sub-lines. Plain figures, so
+/// the deltas the cards print are checked without a window.
+struct MonthKPIs: Hashable, Sendable {
+    let income: Int64
+    let expenses: Int64
+    let previousIncome: Int64
+    let previousExpenses: Int64
+    /// Income and savings of the year up to and including this month.
+    let yearIncome: Int64
+    let yearSavings: Int64
+
+    var savings: Int64 { income - expenses }
+    var previousSavings: Int64 { previousIncome - previousExpenses }
+
+    /// Savings against the month before, in money rather than percent: the
+    /// sign decides the arrow and its color.
+    var savingsDelta: Int64 { savings - previousSavings }
+
+    /// This month's savings over its income, `nil` with no income.
+    var rate: Double? {
+        income > 0 ? Double(savings) / Double(income) : nil
+    }
+
+    /// The year's rate, `nil` with no income yet.
+    var yearRate: Double? {
+        yearIncome > 0 ? Double(yearSavings) / Double(yearIncome) : nil
+    }
+}
+
 /// Everything the RIEPILOGO draws for one year, up to the month on screen.
 struct YearSummary: Sendable {
     let year: Int
@@ -74,6 +151,80 @@ struct YearSummary: Sendable {
     let funds: [FundGauge]
 
     var initial: Int64 { initialByPerson.reduce(0, +) }
+
+    /// The months up to the one on screen.
+    var elapsed: [YearMonth] { months.filter { !$0.isFuture } }
+
+    /// The year's flows so far: income, expenses and savings add up over a
+    /// year, unlike the running balances.
+    var yearIncome: Int64 { elapsed.reduce(0) { $0 + $1.income } }
+    var yearCashExpense: Int64 { elapsed.reduce(0) { $0 + $1.cashExpense } }
+    var yearFundExpense: Int64 { elapsed.reduce(0) { $0 + $1.fundExpense } }
+    var yearSavings: Int64 { yearIncome - yearCashExpense }
+
+    /// The wallets' balance at the end of the last month drawn: the opening
+    /// fund while no month has passed.
+    var closingTotal: Int64 { elapsed.last?.total ?? initial }
+
+    /// The same, per person.
+    var closingByPerson: [Int64] { elapsed.last?.totalByPerson ?? initialByPerson }
+
+    /// How much the cash fund grew since the start of the year.
+    var growth: Int64 { closingTotal - initial }
+
+    /// The savings rate of the year so far, `nil` with no income.
+    var yearRate: Double? {
+        guard yearIncome > 0 else { return nil }
+        return Double(yearSavings) / Double(yearIncome)
+    }
+
+    /// The table of `docs/v2/UI.md` §2.2, top to bottom: the opening cash
+    /// fund, the twelve months, the year's sum. Every decision the table
+    /// draws (which row is on screen, which is blank, which went down) is
+    /// made here so it can be tested.
+    var tableRows: [YearTableRow] {
+        var rows = [
+            YearTableRow(
+                kind: .opening, isFuture: false, isCurrent: false, trendUp: true,
+                income: nil, cashExpense: nil, savings: nil, carried: nil, fundExpense: nil,
+                total: initial, totalByPerson: initialByPerson
+            )
+        ]
+        var previous = initial
+        for month in months {
+            if month.isFuture {
+                rows.append(
+                    YearTableRow(
+                        kind: .month(month.month), isFuture: true, isCurrent: false, trendUp: false,
+                        income: nil, cashExpense: nil, savings: nil, carried: nil, fundExpense: nil,
+                        total: nil, totalByPerson: []
+                    )
+                )
+                continue
+            }
+            rows.append(
+                YearTableRow(
+                    kind: .month(month.month), isFuture: false, isCurrent: month.month == upTo,
+                    trendUp: month.total >= previous,
+                    income: month.income, cashExpense: month.cashExpense, savings: month.savings,
+                    carried: month.carried, fundExpense: month.fundExpense,
+                    total: month.total, totalByPerson: month.totalByPerson
+                )
+            )
+            previous = month.total
+        }
+        // FONDO CASSA is a running balance, so the sum has none; TOTALE is
+        // where the year ended up.
+        rows.append(
+            YearTableRow(
+                kind: .sum, isFuture: false, isCurrent: false, trendUp: closingTotal >= initial,
+                income: yearIncome, cashExpense: yearCashExpense, savings: yearSavings,
+                carried: nil, fundExpense: yearFundExpense,
+                total: closingTotal, totalByPerson: closingByPerson
+            )
+        )
+        return rows
+    }
 
     /// Pure arithmetic over the query's rows and the vault's envelopes, so it
     /// can be tested without a database (`docs/v2/UI.md` §2.2 for the
@@ -169,11 +320,13 @@ struct YearSummary: Sendable {
             case .unlimited:
                 return nil
             case .netCapped(let cap):
-                return FundGauge(id: flow.id, name: flow.name, cap: cap, filled: flow.balance)
+                return FundGauge(id: flow.id, name: flow.name, cap: cap, filled: flow.balance, kind: .balance)
             case .incomeCapped(let cap):
                 // Spending does not free room on an income cap, so what fills
-                // the ring is the cumulative income.
-                return FundGauge(id: flow.id, name: flow.name, cap: cap, filled: flow.incomeTotal ?? flow.balance)
+                // the bar is the cumulative income.
+                return FundGauge(
+                    id: flow.id, name: flow.name, cap: cap, filled: flow.incomeTotal ?? flow.balance, kind: .income
+                )
             }
         }
     }
