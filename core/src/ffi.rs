@@ -23,9 +23,10 @@ use crate::{
     AliasView, BucketPersonTotals, CategorySuggestion, CategoryTotals, CategoryView, Command,
     CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowPersonTotals, MergePreview,
     Money, Page, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
-    RecurringView, RejectedCommand, StatementDetection, StatementMapping, StatementOptions,
-    StatementPreset, StatementPreview, StatementReport, StatementRowOverride, SyncReport,
-    SyncState, TopExpense, TransactionFilter, TransactionView, VaultSnapshot, VaultView,
+    RecurringView, RejectedCommand, Schedule, StatementDetection, StatementMapping,
+    StatementOptions, StatementPreset, StatementPreview, StatementReport, StatementRowOverride,
+    SyncReport, SyncState, TopExpense, TransactionFilter, TransactionView, VaultSnapshot,
+    VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -555,6 +556,17 @@ pub fn encode_statement_mapping(mapping: StatementMapping) -> String {
 #[uniffi::export]
 pub fn decode_statement_mapping(json: String) -> Result<StatementMapping, DomainError> {
     statement::decode_mapping(&json)
+}
+
+/// The next `limit` dates of a schedule on or after `from`, for previewing a
+/// saved or unsaved template (agenda, editor inspector). No database access.
+#[uniffi::export]
+pub fn schedule_occurrences(
+    schedule: Schedule,
+    from: NaiveDate,
+    limit: u32,
+) -> Result<Vec<NaiveDate>, DomainError> {
+    schedule.occurrences_from(from, to_usize(limit))
 }
 
 /// Saturating `u32` -> `usize`; the core takes `usize` limits.
