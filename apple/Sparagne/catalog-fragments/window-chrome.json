@@ -1,4 +1,100 @@
 {
+  "%lld changes were refused": {
+    "en": {"one": "One change was refused", "other": "%lld changes were refused"},
+    "it": {"one": "Una modifica non è passata", "other": "%lld modifiche non sono passate"}
+  },
+  "%lld pending": {
+    "en": {"one": "%lld pending", "other": "%lld pending"},
+    "it": {"one": "%lld in attesa", "other": "%lld in attesa"}
+  },
+  "%lld refused": {
+    "en": {"one": "%lld refused", "other": "%lld refused"},
+    "it": {"one": "%lld rifiutata", "other": "%lld rifiutate"}
+  },
+  "Account & Server…": {
+    "en": "Account & Server…",
+    "it": "Account e server…"
+  },
+  "Changes wait on this Mac and go up when the server is back.": {
+    "en": "Changes wait on this Mac and go up when the server is back.",
+    "it": "Le modifiche aspettano su questo Mac e partono quando il server torna raggiungibile."
+  },
+  "Changes waiting to be sent": {
+    "en": "Changes waiting to be sent",
+    "it": "Modifiche in attesa di invio"
+  },
+  "Connect a Server…": {
+    "en": "Connect a Server…",
+    "it": "Collega un server…"
+  },
+  "Demo database": {
+    "en": "Demo database",
+    "it": "Database demo"
+  },
+  "Everything is synced": {
+    "en": "Everything is synced",
+    "it": "Tutto sincronizzato"
+  },
+  "Last sync": {
+    "en": "Last sync",
+    "it": "Ultima volta"
+  },
+  "Local only": {
+    "en": "Local only",
+    "it": "Solo locale"
+  },
+  "Log in again to resume syncing; your changes wait on this Mac.": {
+    "en": "Log in again to resume syncing; your changes wait on this Mac.",
+    "it": "Accedi di nuovo per riprendere la sincronizzazione; le modifiche aspettano su questo Mac."
+  },
+  "No server connected": {
+    "en": "No server connected",
+    "it": "Nessun server collegato"
+  },
+  "Offline": {
+    "en": "Offline",
+    "it": "Offline"
+  },
+  "Pending": {
+    "en": "Pending",
+    "it": "In attesa"
+  },
+  "Session expired": {
+    "en": "Session expired",
+    "it": "Sessione scaduta"
+  },
+  "Sync error": {
+    "en": "Sync error",
+    "it": "Errore di sync"
+  },
+  "Synced": {
+    "en": "Synced",
+    "it": "Sincronizzato"
+  },
+  "Syncing with the server…": {
+    "en": "Syncing with the server…",
+    "it": "Sincronizzo con il server…"
+  },
+  "Syncing…": {
+    "en": "Syncing…",
+    "it": "Sincronizzo…"
+  },
+  "The last sync failed": {
+    "en": "The last sync failed",
+    "it": "L'ultima sincronizzazione non è riuscita"
+  },
+  "The server can't be reached": {
+    "en": "The server can't be reached",
+    "it": "Il server non è raggiungibile"
+  },
+  "The vault lives on this Mac only. Connect a server to have it on other devices or to share it.": {
+    "en": "The vault lives on this Mac only. Connect a server to have it on other devices or to share it.",
+    "it": "Il vault vive solo su questo Mac. Collega un server per averlo su altri dispositivi o condividerlo."
+  },
+  "This database is for trying the app: it never syncs.": {
+    "en": "This database is for trying the app: it never syncs.",
+    "it": "Questo database serve a provare l'app: non si sincronizza mai."
+  },
   "%lld to confirm": {
     "en": {"one": "%lld to confirm", "other": "%lld to confirm"},
     "it": {"one": "%lld da confermare", "other": "%lld da confermare"}

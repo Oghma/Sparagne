@@ -41,9 +41,7 @@ struct TopBar: View {
             }
             DuePill(store: store)
             AddButton()
-            if let engine {
-                SyncStatusButton(engine: engine) { present(.rejected) }
-            }
+            SyncPill(engine: engine, present: present)
         }
         .padding(.leading, isFullScreen ? 14 : 78)
         .padding(.trailing, 12)
