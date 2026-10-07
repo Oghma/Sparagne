@@ -77,6 +77,16 @@ struct DuePeriod: Identifiable, Hashable, Sendable {
     var id: String { "\(template.id)/\(date)" }
 }
 
+/// One recurring period still ahead: a template and a day it will fall due,
+/// from `scheduleOccurrences`. What the Ricorrenze tab's agenda lists; never
+/// executed from there, since a period only becomes actionable once due.
+struct UpcomingPeriod: Identifiable, Hashable, Sendable {
+    let template: RecurringView
+    let date: NaiveDate
+
+    var id: String { "\(template.id)/\(date)" }
+}
+
 extension TransactionPatch {
     /// A patch that carries no field changes nothing, so it is never sent
     /// (`UpdateTransaction` refuses it, `docs/v2/ARCH.md` §4).
@@ -200,6 +210,17 @@ final class AppStore {
     /// Every template, active and archived; loaded on demand when the
     /// Recurring panel opens.
     private(set) var recurringTemplates: [RecurringView] = []
+    /// The periods of the next days, soonest first, for the Ricorrenze tab's
+    /// agenda. Written only by that tab's loader (`AppStore+Recurring.swift`),
+    /// hence not `private(set)`: an extension in another file has to set it.
+    var upcomingRecurring: [UpcomingPeriod] = []
+
+    // MARK: Setup
+
+    /// Rows per category id over the last 90 days, voided excluded: the
+    /// usage column of the SETUP categories. Written only by its loader
+    /// (`AppStore+Usage.swift`), so not `private(set)` for the same reason.
+    var categoryUsage: [Uuid: Int] = [:]
 
     // MARK: Filters and view state
 
@@ -420,6 +441,8 @@ final class AppStore {
         categoryAliases = []
         recentCategoryIds = []
         recurringTemplates = []
+        upcomingRecurring = []
+        categoryUsage = [:]
         selection.clear()
         // A void still counting down is not undone by leaving: it carries its
         // own vault, so it lands where its rows are, and the vault it left
