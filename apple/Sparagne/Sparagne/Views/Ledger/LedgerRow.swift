@@ -588,8 +588,10 @@ struct NewRowView: View {
             GridCell(width: GridColumn.amount, alignment: .trailing) {
                 let key = CellFocus(row: nil, field: .amount)
                 // A title, not a prompt: a prompt ignores the trailing
-                // alignment and would sit at the cell's left edge.
-                TextField("0,00", text: $draft.amount)
+                // alignment and would sit at the cell's left edge. A zero
+                // written as the column writes amounts, passed as a string so
+                // it is shown as is and not looked up in the catalog.
+                TextField(LedgerMoney.bare(0), text: $draft.amount)
                     .textFieldStyle(.plain)
                     .font(Face.row)
                     .multilineTextAlignment(.trailing)
