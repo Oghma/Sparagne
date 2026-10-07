@@ -34,12 +34,14 @@ struct SetupView: View {
         .background(Ink.sheet)
         .task(id: store.currentVault?.id) {
             await store.loadCategoryManagement()
-            await store.loadCategoryUsage()
         }
-        // A merge moves rows between categories, a rename or a new one
-        // changes the list: the usage is read again either way.
-        .onChange(of: store.windowCategories) {
-            Task { await store.loadCategoryUsage() }
+        // The one trigger of the usage column: it follows the list, so the
+        // first load, a vault switch (the list is cleared and then filled), a
+        // merge and a new category each read it once. The empty list a switch
+        // leaves in between has nothing to count, and a rename keeps the ids.
+        .task(id: store.windowCategories.map(\.id)) {
+            guard !store.windowCategories.isEmpty else { return }
+            await store.loadCategoryUsage()
         }
     }
 }
