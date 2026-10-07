@@ -109,14 +109,16 @@ struct MainWindow: View {
 
     var body: some View {
         LedgerWindow(store: store, engine: engine, sheet: $sheet)
+            // The scene hides the system title bar; the window's own top bar
+            // takes its place, from the window's top edge, with the traffic
+            // lights inside it (`TopBar`, `WindowChrome`).
+            .ignoresSafeArea(.container, edges: .top)
             .frame(minWidth: 1176, minHeight: 640)
             .preferredColorScheme(.dark)
+            // Not drawn, but the Window menu lists the window by it. Only the
+            // vault: AppKit lays the title bar out again on every new title,
+            // and puts the zoom button back where it was for a frame.
             .navigationTitle(title)
-            // The file's name when it is not the real database, so rows made
-            // up for a try are never mistaken for the ledger.
-            .navigationSubtitle(Text(verbatim: LaunchOptions.database ?? ""))
-            .toolbar { toolbar }
-            .toolbarBackground(Ink.bg, for: .windowToolbar)
             .overlay(alignment: .bottom) {
                 if let pending = store.pendingUndo {
                     UndoToast(pending: pending) { store.undo() }
@@ -199,48 +201,9 @@ struct MainWindow: View {
             }
     }
 
-    /// `Sparagne — libro mastro — 2026`, as in the mockups.
+    /// The vault's name, for the Window menu.
     private var title: String {
-        let vault = store.currentVault?.name ?? String(localized: "Sparagne")
-        return "\(vault) \u{2014} \(store.tab.label.lowercased()) \u{2014} \(store.month.year)"
-    }
-
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        if #available(macOS 26.0, *) {
-            // macOS 26 wraps every toolbar item in a glass capsule; the strip
-            // is square by design (`docs/v2/UI.md` §2) and sits badly in one.
-            ToolbarItem(placement: .principal) { switcher }
-                .sharedBackgroundVisibility(.hidden)
-        } else {
-            ToolbarItem(placement: .principal) { switcher }
-        }
-        if let engine {
-            ToolbarItem(placement: .primaryAction) {
-                SyncStatusButton(engine: engine) { sheet = .rejected }
-            }
-        }
-    }
-
-    private var switcher: some View {
-        SegmentedStrip(
-            options: LedgerTab.allCases,
-            selection: $store.tab,
-            label: { $0.label }
-        )
-        // `SegmentedStrip` (`Views/Ledger/LedgerHeader.swift`) draws its own
-        // buttons and is owned by another package right now, so its own
-        // accessibility can't be touched from here; this substitutes an
-        // equivalent tree — one real button per tab, the one on screen
-        // marked selected — for VoiceOver.
-        .accessibilityRepresentation {
-            HStack(spacing: 0) {
-                ForEach(LedgerTab.allCases) { tab in
-                    Button(tab.label) { store.tab = tab }
-                        .accessibilityAddTraits(tab == store.tab ? .isSelected : [])
-                }
-            }
-        }
+        store.currentVault?.name ?? String(localized: "Sparagne")
     }
 
     @ViewBuilder

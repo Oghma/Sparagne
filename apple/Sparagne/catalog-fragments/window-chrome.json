@@ -1,0 +1,14 @@
+{
+  "%lld to confirm": {
+    "en": {"one": "%lld to confirm", "other": "%lld to confirm"},
+    "it": {"one": "%lld da confermare", "other": "%lld da confermare"}
+  },
+  "Demo database %@: it never syncs": {
+    "en": "Demo database %@: it never syncs",
+    "it": "Database demo %@: non si sincronizza mai"
+  },
+  "Search the month": {
+    "en": "Search the month",
+    "it": "Cerca nel mese"
+  }
+}

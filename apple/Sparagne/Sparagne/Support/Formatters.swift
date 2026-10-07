@@ -75,9 +75,14 @@ enum CountText {
         String(localized: "\(count) rows", bundle: bundle, locale: locale)
     }
 
-    /// The ledger's recurring banner.
+    /// The Ricorrenze tab's sentence about what is due.
     static func recurringDue(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
         String(localized: "\(count) recurring entries are due", bundle: bundle, locale: locale)
+    }
+
+    /// `"3 to confirm"`: the top bar's due pill.
+    static func toConfirm(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
+        String(localized: "\(count) to confirm", bundle: bundle, locale: locale)
     }
 
     /// The undo toast, for one row or a selection.

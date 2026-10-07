@@ -1,30 +1,15 @@
 import SwiftUI
 import SparagneCore
 
-/// The line above the grid: month stepper, PERSONA, direction, search and the
-/// row count (`docs/v2/UI.md` §2.1).
+/// The line above the grid: PERSONA and direction (`docs/v2/UI.md` §2.1).
+/// The month and the search are in the top bar (`TopBar`), the row count in
+/// the tab bar's status line (`LedgerStatusLine`).
 struct LedgerHeader: View {
     @Bindable var store: AppStore
-    @FocusState.Binding var searchFocused: Bool
-    /// The summary is not a list, so it gets the month stepper alone: no
-    /// person, no direction, no search, no row count.
-    var compact = false
 
     var body: some View {
         HStack(spacing: 14) {
-            monthStepper
-
-            Text(String(localized: "month=\(store.month.month)"))
-                .font(Face.footnote)
-                .foregroundStyle(Ink.dim)
-                // The month's number again, in the mockup's shorthand: the
-                // title beside it already says it in words.
-                .accessibilityHidden(true)
-
-            // No person filter in the summary: there the people are columns,
-            // so filtering would blank all of them but one
-            // (`docs/v2/UI.md` §2.2).
-            if !compact, store.authors.count > 1 {
+            if store.authors.count > 1 {
                 SegmentedStrip(
                     options: [nil] + store.authors.map(Optional.some),
                     selection: $store.person,
@@ -32,80 +17,17 @@ struct LedgerHeader: View {
                 )
             }
 
-            if !compact {
-                SegmentedStrip(
-                    options: LedgerDirection.allCases,
-                    selection: $store.direction,
-                    label: { $0.label }
-                )
-
-                search
-            }
+            SegmentedStrip(
+                options: LedgerDirection.allCases,
+                selection: $store.direction,
+                label: { $0.label }
+            )
 
             Spacer(minLength: 8)
-
-            if !compact {
-                Text(CountText.rows(store.rows.count))
-                    .font(Face.footnote)
-                    .foregroundStyle(Ink.dim)
-            }
         }
         .padding(.horizontal, Metrics.gutter)
         .frame(height: 40)
         .background(Ink.bg)
-    }
-
-    private var monthStepper: some View {
-        HStack(spacing: 8) {
-            stepButton("chevron.left", months: -1)
-            Text(store.month.title())
-                .font(Face.ui(13, .semibold))
-                .foregroundStyle(Ink.text)
-                .frame(minWidth: 150, alignment: .leading)
-                // The page's title for VoiceOver: the month everything below
-                // is about.
-                .accessibilityAddTraits(.isHeader)
-            stepButton("chevron.right", months: 1)
-        }
-    }
-
-    private func stepButton(_ symbol: String, months: Int) -> some View {
-        Button {
-            store.month = store.month.adding(months: months)
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Ink.dim)
-                .frame(width: 18, height: 18)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        // The chevron alone reads as "go back" / "forward"; the menu items'
-        // names say what they step.
-        .accessibilityLabel(months < 0 ? String(localized: "Previous Month") : String(localized: "Next Month"))
-    }
-
-    private var search: some View {
-        HStack(spacing: 6) {
-            Text("/")
-                .font(Face.row)
-                .foregroundStyle(Ink.dim)
-            TextField(String(localized: "search description…"), text: $store.searchText)
-                .textFieldStyle(.plain)
-                .font(Face.row)
-                .foregroundStyle(Ink.text)
-                .focused($searchFocused)
-                // esc clears and drops focus; ⌘F (the menu) focuses it again.
-                .onExitCommand {
-                    store.searchText = ""
-                    searchFocused = false
-                }
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 24)
-        .frame(maxWidth: 320)
-        .background(Ink.panel)
-        .overlay(Rectangle().strokeBorder(Ink.line, lineWidth: 1))
     }
 }
 

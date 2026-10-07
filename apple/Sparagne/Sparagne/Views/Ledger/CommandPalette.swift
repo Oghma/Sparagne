@@ -213,40 +213,41 @@ extension CommandPaletteModel {
                 NotificationCenter.default.post(name: .newVault, object: nil)
             }
         )
-        if let vault = store.currentVault {
-            if engine?.mayRenameVault(vault.id) ?? true {
-                actions.append(
-                    PaletteAction(
-                        id: "vault.rename",
-                        title: String(localized: "Rename Vault\u{2026}"),
-                        keywords: ["vault", "rinomina", "name"]
-                    ) {
-                        NotificationCenter.default.post(name: .renameVault, object: nil)
-                    }
-                )
-            }
-            if engine?.mayLeaveVault(vault.id) ?? false {
-                actions.append(
-                    PaletteAction(
-                        id: "vault.leave",
-                        title: String(localized: "Leave Vault\u{2026}"),
-                        keywords: ["vault", "esci", "abbandona", "leave"]
-                    ) {
-                        NotificationCenter.default.post(name: .leaveVault, object: nil)
-                    }
-                )
-            }
-            if engine?.mayDeleteVault(vault.id) ?? true {
-                actions.append(
-                    PaletteAction(
-                        id: "vault.delete",
-                        title: String(localized: "Delete Vault\u{2026}"),
-                        keywords: ["vault", "elimina", "cancella", "remove"]
-                    ) {
-                        NotificationCenter.default.post(name: .deleteVault, object: nil)
-                    }
-                )
-            }
+        // The Vault menu's rules (`VaultPermissions`): no vault on screen,
+        // none of these.
+        let permissions = VaultPermissions(vault: store.currentVault, engine: engine)
+        if permissions.mayRename {
+            actions.append(
+                PaletteAction(
+                    id: "vault.rename",
+                    title: String(localized: "Rename Vault\u{2026}"),
+                    keywords: ["vault", "rinomina", "name"]
+                ) {
+                    NotificationCenter.default.post(name: .renameVault, object: nil)
+                }
+            )
+        }
+        if permissions.mayLeave {
+            actions.append(
+                PaletteAction(
+                    id: "vault.leave",
+                    title: String(localized: "Leave Vault\u{2026}"),
+                    keywords: ["vault", "esci", "abbandona", "leave"]
+                ) {
+                    NotificationCenter.default.post(name: .leaveVault, object: nil)
+                }
+            )
+        }
+        if permissions.mayDelete {
+            actions.append(
+                PaletteAction(
+                    id: "vault.delete",
+                    title: String(localized: "Delete Vault\u{2026}"),
+                    keywords: ["vault", "elimina", "cancella", "remove"]
+                ) {
+                    NotificationCenter.default.post(name: .deleteVault, object: nil)
+                }
+            )
         }
 
         actions.append(contentsOf: [

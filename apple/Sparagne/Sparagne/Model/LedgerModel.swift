@@ -46,9 +46,12 @@ struct MonthKey: Hashable, Sendable, Identifiable {
         return MonthKey(moved, calendar: calendar)
     }
 
-    /// `"AGOSTO 2026"`.
+    /// `"Agosto 2026"`: the top bar's month, in sentence case like every
+    /// other label of the window (`docs/v2/UI.md` §5), whatever case the
+    /// locale gives its month names.
     func title(locale: Locale = .autoupdatingCurrent) -> String {
-        "\(LedgerDate.fullMonth(month, locale: locale)) \(year)"
+        let name = LedgerDate.fullMonth(month, locale: locale).lowercased(with: locale)
+        return "\(name.prefix(1).uppercased(with: locale))\(name.dropFirst()) \(year)"
     }
 
     /// The twelve months of this month's year, January first.

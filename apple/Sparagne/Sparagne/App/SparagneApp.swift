@@ -27,6 +27,9 @@ struct SparagneApp: App {
                     appDelegate.store = store
                 }
         }
+        // No system title bar and no toolbar: the window draws its own top
+        // bar (`TopBar`), and `WindowChrome` moves the traffic lights into it.
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button(String(localized: "Quick Add\u{2026}")) {
@@ -106,18 +109,18 @@ struct SparagneApp: App {
                 Button(String(localized: "Rename Vault\u{2026}")) {
                     NotificationCenter.default.post(name: .renameVault, object: nil)
                 }
-                .disabled(!mayRenameCurrentVault)
+                .disabled(!permissions.mayRename)
                 // Greyed out for a shared vault I do not own: the core and
                 // the server would both refuse the command anyway.
                 Button(String(localized: "Delete Vault\u{2026}")) {
                     NotificationCenter.default.post(name: .deleteVault, object: nil)
                 }
-                .disabled(!mayDeleteCurrentVault)
+                .disabled(!permissions.mayDelete)
                 // A member's way out of a shared vault; the owner deletes it.
                 Button(String(localized: "Leave Vault\u{2026}")) {
                     NotificationCenter.default.post(name: .leaveVault, object: nil)
                 }
-                .disabled(!mayLeaveCurrentVault)
+                .disabled(!permissions.mayLeave)
 
                 Divider()
 
@@ -144,25 +147,10 @@ struct SparagneApp: App {
         }
     }
 
-    /// A vault on screen that is mine, or not on the server at all
-    /// (`SyncEngine.mayDeleteVault`).
-    private var mayDeleteCurrentVault: Bool {
-        guard let vault = store?.currentVault else { return false }
-        return engine?.mayDeleteVault(vault.id) ?? true
-    }
-
-    /// A vault on screen this account may write to
-    /// (`SyncEngine.mayRenameVault`).
-    private var mayRenameCurrentVault: Bool {
-        guard let vault = store?.currentVault else { return false }
-        return engine?.mayRenameVault(vault.id) ?? true
-    }
-
-    /// A shared vault on screen that someone else owns
-    /// (`SyncEngine.mayLeaveVault`).
-    private var mayLeaveCurrentVault: Bool {
-        guard let vault = store?.currentVault else { return false }
-        return engine?.mayLeaveVault(vault.id) ?? false
+    /// The same rules as the top bar's vault selector and the palette
+    /// (`VaultPermissions`).
+    private var permissions: VaultPermissions {
+        VaultPermissions(vault: store?.currentVault, engine: engine)
     }
 }
 
