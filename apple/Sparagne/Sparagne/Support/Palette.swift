@@ -14,9 +14,6 @@ enum Ink {
     static let sheet = Color(hex: 0x0E0E10)
     /// A card on the sheet.
     static let card = Color(hex: 0x131316)
-    /// Deprecated: the old name of `card`, kept so call sites compile until
-    /// they are moved over.
-    static let panel = card
     /// One step above `card`, for a hovered or focused row.
     static let raised = Color(hex: 0x1B1B20)
     /// The selected segment of a segmented control.
@@ -32,9 +29,6 @@ enum Ink {
     static let text2 = Color(hex: 0xA3A3AB)
     /// Column headings, placeholders and zero amounts.
     static let text3 = Color(hex: 0x80808A)
-    /// Alias of `text3`, the name call sites used before the scale had three
-    /// steps.
-    static let dim = text3
     /// Amber: interaction, selection, focus and active states only. Expenses
     /// and errors have their own colors, so amber never means "bad".
     static let accent = Color(hex: 0xFF9A2E)

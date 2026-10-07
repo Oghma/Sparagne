@@ -204,8 +204,9 @@ final class AppStore {
     // MARK: Recurring
 
     /// Periods still waiting for a decision, refreshed on every `reload()`
-    /// so the ledger window's banner (`RecurringBanner`, `LedgerWindow.swift`)
-    /// stays current without a separate poll.
+    /// so the top bar's due pill (`DuePill`, `Views/Chrome/TopBar.swift`), the
+    /// Ricorrenze tab and the Mastro's pending rows stay current without a
+    /// separate poll.
     private(set) var pendingRecurringItems: [PendingRecurring] = []
     /// Every template, active and archived; loaded on demand when the
     /// Recurring panel opens.

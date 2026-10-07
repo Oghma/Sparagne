@@ -70,16 +70,6 @@ extension Currency {
 /// `bundle` is the catalog to read the key from: the app's own, or one a
 /// test builds so the plural forms can be checked before the catalog has them.
 enum CountText {
-    /// `"37 rows"`, `"1 row"`.
-    static func rows(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
-        String(localized: "\(count) rows", bundle: bundle, locale: locale)
-    }
-
-    /// The Ricorrenze tab's sentence about what is due.
-    static func recurringDue(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
-        String(localized: "\(count) recurring entries are due", bundle: bundle, locale: locale)
-    }
-
     /// `"3 to confirm"`: the top bar's due pill.
     static func toConfirm(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
         String(localized: "\(count) to confirm", bundle: bundle, locale: locale)

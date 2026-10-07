@@ -81,7 +81,7 @@ struct StatementImportSheet: View {
             Spacer()
             Image(systemName: "doc.text")
                 .font(.system(size: 28, weight: .light))
-                .foregroundStyle(Ink.dim)
+                .foregroundStyle(Ink.text3)
             Text(String(localized: "Choose a CSV file exported by your bank or card. Nothing is imported before you have reviewed every row."))
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
@@ -102,7 +102,7 @@ struct StatementImportSheet: View {
                 .foregroundStyle(Ink.text)
             Text(String(localized: "Nothing can be imported into it."))
                 .font(Face.row)
-                .foregroundStyle(Ink.dim)
+                .foregroundStyle(Ink.text3)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -225,15 +225,15 @@ private struct StepStrip: View {
             Spacer().frame(width: 12)
             ForEach(Array(Self.steps.enumerated()), id: \.offset) { index, entry in
                 if index > 0 {
-                    Text(verbatim: "\u{203A}").font(Face.label).foregroundStyle(Ink.dim)
+                    Text(verbatim: "\u{203A}").font(Face.label).foregroundStyle(Ink.text3)
                 }
-                SectionLabel(text: entry.1, tint: entry.0 == step ? Ink.accent : Ink.dim)
+                SectionLabel(text: entry.1, tint: entry.0 == step ? Ink.accent : Ink.text3)
             }
             Spacer()
             if let fileName {
                 Text(fileName)
                     .font(Face.footnote)
-                    .foregroundStyle(Ink.dim)
+                    .foregroundStyle(Ink.text3)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -252,7 +252,7 @@ struct ProblemLine: View {
             Image(systemName: "exclamationmark.triangle")
             Text(problem.headline)
             if !problem.detail.isEmpty {
-                Text(problem.detail).foregroundStyle(Ink.dim)
+                Text(problem.detail).foregroundStyle(Ink.text3)
             }
         }
         .font(Face.footnote)
@@ -269,6 +269,6 @@ private struct HintLine: View {
     var body: some View {
         Text(text)
             .font(Face.footnote)
-            .foregroundStyle(Ink.dim)
+            .foregroundStyle(Ink.text3)
     }
 }

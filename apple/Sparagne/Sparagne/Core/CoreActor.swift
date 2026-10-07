@@ -479,7 +479,7 @@ actor CoreActor {
     }
 
     /// The outbox count over every vault and everything still held as
-    /// rejected: what the toolbar and the rejections sheet show.
+    /// rejected: what the top bar's sync pill and the rejections sheet show.
     ///
     /// Best effort, like the status line it feeds: a vault whose state cannot
     /// be read contributes nothing rather than blanking the whole count.

@@ -34,7 +34,7 @@ struct UndoToast: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Ink.panel)
+        .background(Ink.card)
         .overlay(Rectangle().strokeBorder(Ink.line, lineWidth: 1))
         .shadow(radius: 8, y: 2)
     }

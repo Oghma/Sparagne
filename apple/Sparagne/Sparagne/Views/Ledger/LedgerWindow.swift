@@ -165,7 +165,7 @@ struct LedgerWindow: View {
                 Spacer()
                 Text(String(localized: "No vault yet"))
                     .font(Face.row)
-                    .foregroundStyle(Ink.dim)
+                    .foregroundStyle(Ink.text3)
                 Spacer()
             }
             .frame(maxWidth: .infinity)
