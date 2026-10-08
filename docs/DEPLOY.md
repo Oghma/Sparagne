@@ -152,8 +152,8 @@ host che non deve scaricare nulla): dal checkout del repository,
 Ogni release allega anche il server come binario Linux statico (musl, con
 SQLite dentro), per amd64 e arm64, così gira su qualunque distribuzione:
 `sparagne-server-<versione>-x86_64-unknown-linux-musl.tar.gz` (o
-`aarch64-…`), con il binario, l'unit systemd e `.env.example`, più il suo
-`.sha256`.
+`aarch64-…`), con il binario, l'unit systemd, `.env.example` e `backup.sh`
+(§4), più il suo `.sha256`.
 
 ```sh
 V=2.0.0-beta.1; T=x86_64-unknown-linux-musl
