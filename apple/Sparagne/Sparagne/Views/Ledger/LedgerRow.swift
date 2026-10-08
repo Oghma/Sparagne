@@ -153,6 +153,7 @@ enum LedgerAccessibility {
         if let day = CoreDate.localDay(period.date) {
             parts.append(day.formatted(Date.FormatStyle(locale: locale).day().month(.wide)))
         }
+        parts.append(person(template.owner))
         return String(localized: "Recurring entry to confirm: \(parts.joined(separator: ", "))")
     }
 
@@ -599,9 +600,9 @@ struct PendingRowView: View {
             if showsWallet {
                 GridCell(width: GridColumn.wallet) { Text(store.walletName(template.walletId)) }
             }
-            // Whoever registers it is its author, as for any row written here.
+            // The template's owner: the row is theirs, whoever records it.
             GridCell(width: GridColumn.person) {
-                Text(store.currentAuthor).foregroundStyle(Ink.text3)
+                Text(template.owner).foregroundStyle(Ink.text3)
             }
             GridCell(width: GridColumn.amount, alignment: .trailing) {
                 Text(LedgerMoney.bare(template.amount))

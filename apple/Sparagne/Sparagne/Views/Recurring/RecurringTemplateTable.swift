@@ -21,6 +21,8 @@ private enum TemplateColumn {
     static let next: CGFloat = 100
     static let wallet: CGFloat = 84
     static let envelope: CGFloat = 92
+    /// A first name or a username, as the grid's PERSONA column.
+    static let owner: CGFloat = 76
     static let categoryMinimum: CGFloat = 90
     static let padding: CGFloat = 8
 }
@@ -70,6 +72,7 @@ struct RecurringTemplateTable: View {
             template.category ?? "",
             template.walletId.flatMap { names.wallet($0) } ?? "",
             template.flowId.flatMap { names.flow($0) } ?? "",
+            template.owner,
         ])
     }
 
@@ -84,6 +87,7 @@ struct RecurringTemplateTable: View {
             cell(width: TemplateColumn.next) { Text(String(localized: "Next")) }
             cell(width: TemplateColumn.wallet) { Text(String(localized: "Wallet")) }
             cell(width: TemplateColumn.envelope) { Text(String(localized: "Envelope")) }
+            cell(width: TemplateColumn.owner) { Text(RecurringInspector.ownerLabel) }
             cell(minWidth: TemplateColumn.categoryMinimum) { Text(String(localized: "Category")) }
         }
         .font(Face.ui(11, .medium))
@@ -130,6 +134,11 @@ struct RecurringTemplateTable: View {
             }
             cell(width: TemplateColumn.envelope) {
                 Text(DueRecurringText.envelope(template, names: names)).foregroundStyle(side)
+            }
+            cell(width: TemplateColumn.owner) {
+                Text(template.owner)
+                    .foregroundStyle(side)
+                    .accessibilityLabel("\(RecurringInspector.ownerLabel), \(template.owner)")
             }
             cell(minWidth: TemplateColumn.categoryMinimum) {
                 Text(template.category.flatMap { $0.isEmpty ? nil : $0 } ?? TransactionRow.placeholder)
@@ -210,6 +219,7 @@ struct RecurringTemplateTable: View {
             cell(width: TemplateColumn.next) { EmptyView() }
             cell(width: TemplateColumn.wallet) { EmptyView() }
             cell(width: TemplateColumn.envelope) { EmptyView() }
+            cell(width: TemplateColumn.owner) { Text(store.currentAuthor) }
             cell(minWidth: TemplateColumn.categoryMinimum) { EmptyView() }
         }
         .font(Face.ui(12))

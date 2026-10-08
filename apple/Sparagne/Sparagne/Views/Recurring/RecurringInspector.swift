@@ -46,7 +46,9 @@ struct RecurringInspector: View {
         self.duplicate = duplicate
         self.finishedCreating = finishedCreating
         _draft = State(
-            initialValue: template.map(RecurringDraft.init(template:)) ?? seed ?? RecurringDraft(today: today)
+            initialValue: template.map(RecurringDraft.init(template:))
+                ?? seed
+                ?? RecurringDraft(today: today, owner: store.currentAuthor)
         )
     }
 
@@ -225,7 +227,23 @@ struct RecurringInspector: View {
             FormRow(String(localized: "Note")) {
                 FormTextField(label: String(localized: "Note"), text: $draft.note)
             }
+            FormRow(Self.ownerLabel) {
+                FormPicker(label: Self.ownerLabel, selection: $draft.owner, options: owners, title: { $0 })
+            }
         }
+    }
+
+    /// "Titolare": whose the template is. Not the "Owner" of a vault
+    /// (Proprietario), hence a key of its own.
+    static var ownerLabel: String {
+        String(localized: "recurring.owner", defaultValue: "Owner")
+    }
+
+    /// Who the template may belong to: the people a row may be for, and the
+    /// owner it has now even when that is no longer one of them (a member
+    /// who left), so the picker never shows a choice it does not list.
+    private var owners: [String] {
+        AppStore.distinct(store.assignablePeople + [draft.owner, template?.owner ?? ""])
     }
 
     // MARK: - Quando
@@ -526,7 +544,8 @@ struct RecurringInspector: View {
                 flowId: creation.flowId,
                 category: creation.category,
                 note: creation.note,
-                schedule: creation.schedule
+                schedule: creation.schedule,
+                owner: creation.owner
             )
             if let created { finishedCreating(created) }
         }

@@ -967,7 +967,8 @@ final class AppStore {
         flowId: Uuid?,
         category: String?,
         note: String?,
-        schedule: Schedule
+        schedule: Schedule,
+        owner: String? = nil
     ) async -> Uuid? {
         guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
         var created: Uuid?
@@ -982,7 +983,10 @@ final class AppStore {
                     flowId: flowId,
                     category: category,
                     note: note,
-                    schedule: schedule
+                    schedule: schedule,
+                    // The author is the core's default owner: said by
+                    // leaving it out, like a row's person.
+                    owner: explicitPerson(owner)
                 )
             )
             created = receipt.resultId
@@ -1017,9 +1021,12 @@ final class AppStore {
 
     /// Materializes `periodDate` as a transaction; `occurredAt` is the due
     /// date at the current time of day, in the system offset (team-lead
-    /// task 4).
+    /// task 4). The row is for the template's owner, whoever presses
+    /// Registra: the mortgage stays Matteo's when Elisa records it.
     func executeRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
-        await recurringCommand(Self.execution(recurringId, periodDate: periodDate, now: Date()))
+        await recurringCommand(
+            execution(recurringId, owner: owner(ofTemplate: recurringId), periodDate: periodDate, now: Date())
+        )
     }
 
     func skipRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
@@ -1033,7 +1040,9 @@ final class AppStore {
     func executeAllDueRecurring() async {
         guard let vault = currentVault, !refusedAsReadOnly() else { return }
         let now = Date()
-        let commands = duePeriods.map { Self.execution($0.template.id, periodDate: $0.date, now: now) }
+        let commands = duePeriods.map {
+            execution($0.template.id, owner: $0.template.owner, periodDate: $0.date, now: now)
+        }
         guard !commands.isEmpty else { return }
         await guarded {
             try await core.executeBatch(vaultId: vault.id, commands)
@@ -1042,11 +1051,23 @@ final class AppStore {
         }
     }
 
-    private static func execution(_ recurringId: Uuid, periodDate: NaiveDate, now: Date) -> Command {
+    /// The owner of a template, from the due list `reload()` keeps fresh, or
+    /// from the templates the Ricorrenze tab loaded.
+    func owner(ofTemplate id: Uuid) -> String? {
+        pendingRecurringItems.first { $0.template.id == id }?.template.owner
+            ?? recurringTemplates.first { $0.id == id }?.owner
+    }
+
+    /// The command that records one period, for `owner`. The owner goes in
+    /// the command rather than being read when it is applied: a later change
+    /// of owner must not rewrite on replay what was recorded before it. The
+    /// author is left out, as on any row of theirs.
+    private func execution(_ recurringId: Uuid, owner: String?, periodDate: NaiveDate, now: Date) -> Command {
         .executeRecurring(
             recurringId: recurringId,
             periodDate: periodDate,
-            occurredAt: combine(day: periodDate, timeOf: now)
+            occurredAt: Self.combine(day: periodDate, timeOf: now),
+            person: explicitPerson(owner)
         )
     }
 
