@@ -7,10 +7,10 @@ import SwiftUI
 /// the bar's leading end, centred by `WindowChrome`, which also makes the
 /// bar's empty areas drag the window.
 struct TopBar: View {
-    let store: AppStore
+    @Bindable var store: AppStore
     let engine: SyncEngine?
-    /// Owned by the window, which focuses it on ⌘F after switching to the
-    /// Mastro tab.
+    /// Owned by the window, which focuses it on ⌘F: on the tab's own field,
+    /// or on the Mastro's after switching to it from the Riepilogo.
     @FocusState.Binding var searchFocused: Bool
     /// Requests one of `MainWindow`'s sheets.
     let present: (MainWindow.SheetKind) -> Void
@@ -36,8 +36,23 @@ struct TopBar: View {
                 MonthStepper(store: store)
             }
             Spacer(minLength: 12)
-            if store.tab == .ledger {
-                MonthSearchField(store: store, focused: $searchFocused)
+            switch store.tab {
+            case .ledger:
+                SearchField(text: $store.searchText, prompt: String(localized: "Search the month"), focused: $searchFocused)
+            case .recurring:
+                SearchField(
+                    text: $store.tabFilter,
+                    prompt: String(localized: "Search recurring entries"),
+                    focused: $searchFocused
+                )
+            case .setup:
+                SearchField(
+                    text: $store.tabFilter,
+                    prompt: String(localized: "Search wallets, envelopes and categories"),
+                    focused: $searchFocused
+                )
+            case .summary:
+                EmptyView()
             }
             // The pill leads to the Ricorrenze tab, where the periods are
             // decided: on that tab they are already on screen.
@@ -141,11 +156,14 @@ struct MonthStepper: View {
 
 // MARK: - Search
 
-/// The Mastro's search, in the bar so it stays put while the filters below
-/// change (`docs/v2/UI.md` §2.1). Bound to `store.searchText`; the window
-/// debounces the reload. esc clears it and gives the focus back.
-struct MonthSearchField: View {
-    @Bindable var store: AppStore
+/// The search of the tabs that have one, in the bar so it stays put while
+/// the filters below change (`docs/v2/UI.md` §2.1). On the Mastro it is
+/// bound to `store.searchText`, which the window debounces into a reload; on
+/// the Ricorrenze and the Setup, to `store.tabFilter`, which filters their
+/// tables as it is typed. esc clears it and gives the focus back.
+struct SearchField: View {
+    @Binding var text: String
+    let prompt: String
     @FocusState.Binding var focused: Bool
 
     var body: some View {
@@ -155,10 +173,10 @@ struct MonthSearchField: View {
                 .foregroundStyle(Ink.text3)
                 .accessibilityHidden(true)
             TextField(
-                text: $store.searchText,
-                prompt: Text(String(localized: "Search the month")).foregroundStyle(Ink.text3)
+                text: $text,
+                prompt: Text(prompt).foregroundStyle(Ink.text3)
             ) {
-                Text(String(localized: "Search the month"))
+                Text(prompt)
             }
             .textFieldStyle(.plain)
             .font(Face.ui(12))
@@ -166,7 +184,7 @@ struct MonthSearchField: View {
             .focused($focused)
             // esc clears and drops focus; ⌘F (the menu) focuses it again.
             .onExitCommand {
-                store.searchText = ""
+                text = ""
                 focused = false
             }
             // The menu item says the shortcut to VoiceOver already.

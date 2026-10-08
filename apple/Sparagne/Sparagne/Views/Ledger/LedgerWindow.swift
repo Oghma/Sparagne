@@ -66,10 +66,10 @@ struct LedgerWindow: View {
             showsQuickAdd = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
-            // The search field is in the top bar on the Mastro tab only, so
-            // the tab has to switch and lay out before the field can take
-            // focus.
-            store.tab = .ledger
+            // The Riepilogo has no field, so ⌘F goes to the Mastro's: the
+            // tab has to switch and lay out before the field can take focus.
+            // The other tabs have their own, already on screen.
+            if store.tab == .summary { store.tab = .ledger }
             Task { @MainActor in
                 await Task.yield()
                 searchFocused = true
