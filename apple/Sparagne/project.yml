@@ -14,6 +14,10 @@ settings:
     # stops marking every catalog entry stale (`scripts/catalog.py`).
     SWIFT_EMIT_LOC_STRINGS: YES
     SWIFT_APPROACHABLE_CONCURRENCY: YES
+    # Everything is on the main actor unless it says otherwise: the types
+    # that run elsewhere (the sync's network layer, what `CoreActor` and the
+    # `@concurrent` export build) are marked `nonisolated`.
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     SWIFT_UPCOMING_FEATURE_DISABLE_OUTWARD_ACTOR_ISOLATION: YES
     GENERATE_INFOPLIST_FILE: YES
     MARKETING_VERSION: "0.1.0"

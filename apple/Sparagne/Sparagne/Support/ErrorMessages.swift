@@ -11,7 +11,7 @@ import Foundation
 /// it exists here only as the catalog key behind `default`, so an
 /// unrecognized code still gets a real sentence instead of falling back to
 /// the raw code string.
-enum ErrorMessages {
+nonisolated enum ErrorMessages {
     static func summary(for code: String) -> String {
         switch code {
         case "insufficient_funds": String(localized: "Not enough money")

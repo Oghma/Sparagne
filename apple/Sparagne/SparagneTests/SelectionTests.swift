@@ -7,7 +7,7 @@ import Testing
 
 /// Counts `CoreActor`'s "a command was applied" hook: once per `execute`, once
 /// per whole `executeBatch`.
-private final class ExecutedCount: Sendable {
+private nonisolated final class ExecutedCount: Sendable {
     private let value = Mutex(0)
 
     var count: Int { value.withLock { $0 } }

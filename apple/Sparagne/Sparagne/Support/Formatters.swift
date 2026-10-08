@@ -52,7 +52,7 @@ enum DateFormatting {
     }
 }
 
-extension Currency {
+nonisolated extension Currency {
     /// ISO 4217 code, for `MoneyFormatter`. One currency per vault
     /// (docs/v2/ARCH.md §7); this switch grows with the enum.
     var code: String {

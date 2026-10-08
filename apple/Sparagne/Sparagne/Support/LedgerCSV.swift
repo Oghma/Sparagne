@@ -9,7 +9,7 @@ import SparagneCore
 ///
 /// RFC 4180: comma-separated, CRLF line endings, a field quoted when it
 /// carries a comma, a quote or a newline, with inner quotes doubled.
-enum LedgerCSV {
+nonisolated enum LedgerCSV {
     static let header = "date,kind,envelope,category,description,person,amount,voided"
     /// With the optional WALLET column on, the file carries it in the same
     /// place the grid does: after the description (`docs/v2/UI.md` §3).

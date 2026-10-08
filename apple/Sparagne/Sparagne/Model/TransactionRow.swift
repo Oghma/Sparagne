@@ -5,7 +5,7 @@ import SparagneCore
 ///
 /// The core returns legs, not names (`TransactionView.legs`), so the table
 /// joins them against the vault snapshot it already loaded.
-struct NameBook: Sendable {
+nonisolated struct NameBook: Sendable {
     private var wallets: [Uuid: String] = [:]
     private var flows: [Uuid: String] = [:]
 
@@ -27,7 +27,7 @@ struct NameBook: Sendable {
 
 /// One row of the transactions table: a `TransactionView` with its ids
 /// resolved to names and its amount signed for display.
-struct TransactionRow: Identifiable, Hashable, Sendable {
+nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
     static let placeholder = "—"
 
     let id: Uuid

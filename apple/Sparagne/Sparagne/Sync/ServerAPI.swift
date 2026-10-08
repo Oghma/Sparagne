@@ -7,7 +7,7 @@ import SparagneCore
 /// .md` §3), so `ErrorMessages` can localize it exactly like a domain error.
 /// A failure below HTTP — no route, timeout, a non-HTTP answer — is
 /// `status == 0` with the code `offline`.
-struct ServerError: Error, Equatable, Sendable {
+nonisolated struct ServerError: Error, Equatable, Sendable {
     let status: Int
     let code: String
     let message: String
@@ -57,7 +57,7 @@ struct ServerError: Error, Equatable, Sendable {
 }
 
 /// Who may do what with a vault (`vault_memberships.role`).
-enum MemberRole: String, Codable, Sendable, CaseIterable, Identifiable {
+nonisolated enum MemberRole: String, Codable, Sendable, CaseIterable, Identifiable {
     case owner
     case editor
     case viewer
@@ -77,7 +77,7 @@ enum MemberRole: String, Codable, Sendable, CaseIterable, Identifiable {
 }
 
 /// One row of `GET /vaults`: a vault as the server sees it, with my role.
-struct VaultSummary: Codable, Sendable, Equatable, Identifiable {
+nonisolated struct VaultSummary: Codable, Sendable, Equatable, Identifiable {
     let id: Uuid
     let name: String
     /// The currency code as the wire spells it (`"EUR"`); the app reads the
@@ -88,14 +88,14 @@ struct VaultSummary: Codable, Sendable, Equatable, Identifiable {
     let lastSeq: Int64
 }
 
-struct TokenResponse: Codable, Sendable, Equatable {
+nonisolated struct TokenResponse: Codable, Sendable, Equatable {
     let token: String
     /// Unix seconds.
     let expiresAt: Int64
     let username: String
 }
 
-struct MemberEntry: Codable, Sendable, Equatable, Identifiable {
+nonisolated struct MemberEntry: Codable, Sendable, Equatable, Identifiable {
     let username: String
     let role: MemberRole
 
@@ -121,7 +121,7 @@ private struct MeResponse: Codable, Sendable {
     let username: String
 }
 
-private struct ErrorBody: Codable, Sendable {
+private nonisolated struct ErrorBody: Codable, Sendable {
     struct Detail: Codable, Sendable {
         let code: String
         let message: String
@@ -135,7 +135,7 @@ private struct ErrorBody: Codable, Sendable {
 /// Only the small flat wire types are decoded here. Commands, envelopes and
 /// push or pull bodies stay opaque strings that travel between the core and
 /// the server untouched.
-struct ServerAPI: Sendable {
+nonisolated struct ServerAPI: Sendable {
     let transport: SyncTransport
 
     init(transport: SyncTransport) {

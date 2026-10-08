@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// the whole database and every transaction of the vault on screen. The work
 /// is here, free of any view, so the tests run it; `VaultExportHandlers`
 /// only asks where to save.
-enum VaultExporter {
+nonisolated enum VaultExporter {
     /// Transactions per call to the core while exporting: the ledger's own
     /// page size, so a vault of a few years takes a handful of calls.
     static let defaultPageSize: UInt32 = 1000

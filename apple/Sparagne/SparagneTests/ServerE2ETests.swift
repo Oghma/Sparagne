@@ -10,7 +10,7 @@ import Testing
 /// address down as `TEST_RUNNER_SPARAGNE_E2E_SERVER`; `xcodebuild` hands it to
 /// the test process with the prefix stripped, and the unprefixed name is read
 /// too so the suite also runs under a server started by hand.
-enum E2EServer {
+nonisolated enum E2EServer {
     static let variable = "SPARAGNE_E2E_SERVER"
 
     static var url: URL? {
