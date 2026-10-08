@@ -12,7 +12,8 @@
 ########################################
 # Builder
 ########################################
-FROM rust:1.92-bookworm AS builder
+# The same release as rust-toolchain.toml.
+FROM rust:1.99.0-trixie AS builder
 WORKDIR /build
 
 # Cache the dependency graph separately from the application code: copy only
@@ -39,7 +40,7 @@ RUN touch core/src/lib.rs server/src/main.rs \
 ########################################
 # Runtime
 ########################################
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl sqlite3 \

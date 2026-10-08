@@ -1,4 +1,6 @@
 [toolchain]
-channel = "stable"
+# The one place the Rust version is set: CI (`rustup toolchain install`) and
+# every local build read it, and `server/Dockerfile` names the same release.
+channel = "1.99.0"
 profile = "minimal"
 components = ["rustfmt", "clippy", "rust-analyzer"]
