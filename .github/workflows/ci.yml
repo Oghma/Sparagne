@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, v2]
+    branches: [master]
   pull_request:
 
 concurrency:
@@ -15,19 +15,24 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
+# Actions are pinned to a commit, with the release in a comment; Dependabot
+# (`.github/dependabot.yml`) moves both.
 jobs:
   core:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         # The version and the components come from rust-toolchain.toml.
         run: rustup toolchain install
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -38,20 +43,44 @@ jobs:
       - name: Test
         run: cargo test --workspace --all-targets
 
+  # Licenses, duplicate crates and where crates come from (`deny.toml`). The
+  # advisories are checked on their own schedule (`deps.yml`), so a new one
+  # does not fail a change that has nothing to do with it.
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: cargo deny
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check bans licenses sources
+
   apple:
     # macOS 27 is the app's minimum, so its tests need a macOS 27 host with
     # Xcode 27. GitHub keys macOS images by Xcode major now, not by OS.
     runs-on: xcode-27
+    # A test host that never connects hangs xcodebuild until the job's limit.
+    timeout-minutes: 60
+    env:
+      XCODEGEN_VERSION: 2.46.0
+      XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         # rust-toolchain.toml; aarch64-apple-darwin is the runner's own target.
         run: rustup toolchain install
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Build the Swift package artefacts
         run: bash apple/build-core.sh
@@ -63,7 +92,14 @@ jobs:
         run: swift test --package-path apple/SparagneCore
 
       - name: Install xcodegen
-        run: brew install xcodegen
+        # The release named above, checked against its checksum, rather than
+        # whatever Homebrew has that day.
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
 
       - name: Generate the Xcode project
         run: xcodegen generate

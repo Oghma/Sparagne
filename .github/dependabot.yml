@@ -13,3 +13,28 @@ updates:
       prefix: chore
       prefix-development: chore(dev)
       include: scope
+
+  # The workflows' actions, pinned to commits: Dependabot moves the commit and
+  # the release comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: master
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+
+  # The server image's Rust and Debian bases. The Rust one moves with
+  # rust-toolchain.toml, so its updates are a reminder to move both.
+  - package-ecosystem: docker
+    directory: /server
+    target-branch: master
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope

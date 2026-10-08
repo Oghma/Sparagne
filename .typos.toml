@@ -1,6 +1,7 @@
 [files]
-# Italian design documents.
-extend-exclude = ["docs/v2/**"]
+# Italian design documents, and the string catalog with its Italian
+# translations (its English keys are checked in the Swift that uses them).
+extend-exclude = ["docs/v2/**", "*.xcstrings"]
 
 [default]
 extend-ignore-re = [
@@ -10,3 +11,9 @@ extend-ignore-re = [
 
 [default.extend-words]
 sparagne = "sparagne"
+# Italian words in fixtures and tests: category and envelope names, the v1
+# import's data.
+alle = "alle"
+categorie = "categorie"
+comune = "comune"
+contanti = "contanti"

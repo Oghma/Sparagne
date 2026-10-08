@@ -1,9 +1,17 @@
 name: Deps
 
+# Security advisories against Cargo.lock: every Monday, and whenever a change
+# touches the lockfile or the policy. Kept apart from CI so an advisory
+# published today does not fail a change that has nothing to do with it; a
+# failed scheduled run is mailed to the repository's owner.
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 8 * * 1" # Mondays 08:00 UTC
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "deny.toml"
 
 concurrency:
   group: deps-${{ github.ref }}
@@ -11,16 +19,18 @@ concurrency:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
-  audit:
+  advisories:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: RustSec Audit
-        uses: rustsec/audit-check@v2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: cargo deny
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories
