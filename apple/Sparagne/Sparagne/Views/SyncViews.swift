@@ -193,6 +193,8 @@ struct ShareVaultSheet: View {
 }
 
 /// The Settings scene: which server, who I am, and where the sync stands.
+/// Drawn with the form kit at a sheet's density, so the window reads as one
+/// more panel of the app rather than the system's grouped form.
 struct AccountSettingsView: View {
     let engine: SyncEngine
 
@@ -203,105 +205,102 @@ struct AccountSettingsView: View {
 
     var body: some View {
         @Bindable var account = engine.account
-        Form {
-            Section(String(localized: "Server")) {
-                TextField(String(localized: "Server address"), text: $account.serverURLText)
-                    .disabled(engine.isLoggedIn)
-                    .textContentType(.URL)
+        VStack(alignment: .leading, spacing: 20) {
+            FormGroup(String(localized: "Server")) {
+                FormRow(String(localized: "Server address")) {
+                    FormTextField(label: String(localized: "Server address"), text: $account.serverURLText)
+                        .textContentType(.URL)
+                }
+                .disabled(engine.isLoggedIn)
             }
 
             if let name = account.username {
-                Section(String(localized: "Account")) {
-                    LabeledContent(String(localized: "Signed in as"), value: name)
+                FormGroup(String(localized: "Account")) {
+                    FormValueRow(String(localized: "Signed in as"), value: name)
                     if let expiry = account.expiresAt {
-                        Text(String(localized: "Signed in until \(expiry.formatted(date: .long, time: .shortened))"))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                        FormNote(String(localized: "Signed in until \(expiry.formatted(date: .long, time: .shortened))"))
                     }
                     if let failure = account.tokenSaveFailure {
                         // Not an error: this session works, the next launch
                         // will ask for the password again.
-                        VStack(alignment: .leading, spacing: 2) {
-                            Label(
-                                String(localized: "Your login could not be saved in the Keychain; you'll need to log in again next time."),
-                                systemImage: "exclamationmark.triangle"
-                            )
-                            .font(.callout)
-                            .foregroundStyle(Ink.warning)
-                            Text(failure)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .fixedSize(horizontal: false, vertical: true)
+                        FormNote(
+                            String(localized: "Your login could not be saved in the Keychain; you'll need to log in again next time."),
+                            tone: .warning,
+                            detail: failure
+                        )
                     }
-                    HStack {
-                        Button(String(localized: "Change Password…")) { changingPassword = true }
-                        Spacer()
-                        Button(String(localized: "Log Out")) {
-                            busy = true
-                            Task {
-                                await engine.logOut()
-                                busy = false
+                    FormRow("") {
+                        HStack(spacing: 8) {
+                            Button(String(localized: "Change Password…")) { changingPassword = true }
+                            Button(String(localized: "Log Out")) {
+                                busy = true
+                                Task {
+                                    await engine.logOut()
+                                    busy = false
+                                }
                             }
                         }
+                        .buttonStyle(.chrome(.bordered))
+                        .disabled(busy)
                     }
-                    .disabled(busy)
                 }
             } else {
-                Section(String(localized: "Person")) {
-                    TextField(
-                        String(localized: "Name in the ledger"),
-                        text: $account.localAuthor,
-                        prompt: Text(AccountStore.systemAuthor)
-                    )
+                FormGroup(String(localized: "Person")) {
+                    FormRow(String(localized: "Name in the ledger")) {
+                        FormTextField(
+                            label: String(localized: "Name in the ledger"),
+                            text: $account.localAuthor,
+                            prompt: AccountStore.systemAuthor
+                        )
+                    }
                     .onChange(of: account.localAuthor) { _, _ in
                         Task { await engine.adoptLocalAuthor() }
                     }
-                    Text(String(localized: "Signs the rows you add while logged out; an account's name takes over when you log in."))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    FormNote(String(localized: "Signs the rows you add while logged out; an account's name takes over when you log in."))
                 }
 
-                Section(String(localized: "Account")) {
-                    TextField(String(localized: "Username"), text: $username)
-                    if let hint = usernameHint { Self.hint(hint) }
-                    SecureField(String(localized: "Password"), text: $password)
-                    if let hint = passwordHint { Self.hint(hint) }
-                    HStack {
-                        Button(String(localized: "Log In")) { authenticate(registering: false) }
-                            .keyboardShortcut(.defaultAction)
-                            .disabled(!canLogIn)
-                        Button(String(localized: "Register")) { authenticate(registering: true) }
-                            .disabled(!canRegister)
-                        Spacer()
-                        if busy { ProgressView().controlSize(.small) }
+                FormGroup(String(localized: "Account")) {
+                    FormRow(String(localized: "Username")) {
+                        FormTextField(label: String(localized: "Username"), text: $username)
                     }
-                    .disabled(busy)
+                    if let hint = usernameHint { FormNote(hint) }
+                    FormRow(String(localized: "Password")) {
+                        FormTextField(label: String(localized: "Password"), text: $password, secure: true)
+                    }
+                    if let hint = passwordHint { FormNote(hint) }
+                    FormRow("") {
+                        HStack(spacing: 8) {
+                            Button(String(localized: "Log In")) { authenticate(registering: false) }
+                                .buttonStyle(.chrome(.primary))
+                                .keyboardShortcut(.defaultAction)
+                                .disabled(!canLogIn)
+                            Button(String(localized: "Register")) { authenticate(registering: true) }
+                                .buttonStyle(.chrome(.bordered))
+                                .disabled(!canRegister)
+                            if busy { ProgressView().controlSize(.small) }
+                        }
+                        .disabled(busy)
+                    }
                 }
             }
 
-            Section(String(localized: "Status")) {
-                LabeledContent(String(localized: "Sync"), value: statusText)
+            FormGroup(String(localized: "Status")) {
+                FormValueRow(String(localized: "Sync"), value: statusText)
                 if engine.pendingCount > 0 {
-                    LabeledContent(
+                    FormValueRow(
                         String(localized: "Waiting to sync"),
                         value: engine.pendingCount.formatted(.number)
                     )
                 }
                 if let message = engine.authMessage {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(message).font(.callout).foregroundStyle(.red)
-                        // The server's own English, as the detail.
-                        if let detail = engine.authDetail {
-                            Text(detail).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
+                    // The server's own English, as the detail.
+                    FormNote(message, tone: .negative, detail: engine.authDetail)
                 }
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 420)
+        .padding(20)
+        .frame(width: 460, alignment: .topLeading)
+        .environment(\.formMetrics, .sheet)
         .onAppear { username = account.lastUsername }
         .sheet(isPresented: $changingPassword) { ChangePasswordSheet(engine: engine) }
     }
@@ -329,13 +328,6 @@ struct AccountSettingsView: View {
         return String(localized: "New accounts need a password of at least 8 characters.")
     }
 
-    private static func hint(_ text: String) -> some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
     @MainActor
     private func authenticate(registering: Bool) {
         let name = normalizedUsername
@@ -357,4 +349,3 @@ struct AccountSettingsView: View {
         SyncPillState(engine: engine).settingsText
     }
 }
-

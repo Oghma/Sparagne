@@ -215,19 +215,29 @@ extension Notification.Name {
     static let newRecurring = Notification.Name("it.oghma.sparagne.newRecurring")
 }
 
+/// The Settings window: the account when the app has a sync engine, a line
+/// about where the data lives when it has none (a demo database). Painted on
+/// the window's sheet ground, title bar included, like the main window.
 private struct SettingsView: View {
     let engine: SyncEngine?
 
     var body: some View {
-        if let engine {
-            AccountSettingsView(engine: engine)
-        } else {
-            Form {
-                Text(String(localized: "Sparagne stores everything locally, in Application Support."))
-                    .foregroundStyle(.secondary)
+        Group {
+            if let engine {
+                AccountSettingsView(engine: engine)
+            } else {
+                FormGroup(String(localized: "Status")) {
+                    Text(String(localized: "Sparagne stores everything locally, in Application Support."))
+                        .font(Face.ui(13))
+                        .foregroundStyle(Ink.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(20)
+                .frame(width: 460, alignment: .topLeading)
+                .environment(\.formMetrics, .sheet)
             }
-            .padding()
-            .frame(width: 360, height: 140)
         }
+        .background(Ink.sheet)
+        .containerBackground(Ink.sheet, for: .window)
     }
 }
