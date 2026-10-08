@@ -501,8 +501,11 @@ final class SyncEngine {
             publishMembers()
             return
         }
+        // Asked again after the answer: a round may have dropped the vault
+        // (left, deleted, no longer shared) while the request was out, and
+        // its members must not come back with no vault to belong to.
         if let members = try? await session.api.members(token: session.token, vaultId: vaultId),
-           account.isLoggedIn
+           account.isLoggedIn, role(forVault: vaultId) != nil
         {
             account.adoptMembers(members.map(\.username), ofVault: vaultId)
         }

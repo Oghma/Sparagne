@@ -54,6 +54,15 @@ actor FakeServerTransport: SyncTransport {
         failingRemovals = value
     }
 
+    /// Runs once, when the next `GET /vaults/{id}/members` arrives and
+    /// before it is answered: what happens on the client while that request
+    /// is out.
+    private var whileMembersAreAsked: (@Sendable () async -> Void)?
+
+    func setWhileMembersAreAsked(_ hook: (@Sendable () async -> Void)?) {
+        whileMembersAreAsked = hook
+    }
+
     /// Every token of `username` stops working, as when it expires.
     func revokeTokens(of username: String) {
         sessions = sessions.filter { $0.value != username }
@@ -116,7 +125,13 @@ actor FakeServerTransport: SyncTransport {
                 return try pull(request, vaultId: vaultId, query: query)
             }
             if parts[2] == "members" {
-                if request.method == "GET" { return try members(request, vaultId: vaultId) }
+                if request.method == "GET" {
+                    if let hook = whileMembersAreAsked {
+                        whileMembersAreAsked = nil
+                        await hook()
+                    }
+                    return try members(request, vaultId: vaultId)
+                }
                 if request.method == "PUT" { return try setMember(request, vaultId: vaultId) }
             }
         }
@@ -555,6 +570,25 @@ struct SyncEngineTests {
         #expect(alice.store.vaultMembers == nil)
         #expect(alice.store.assignablePeople.first == AccountStore.systemAuthor)
         #expect(!alice.store.assignablePeople.contains("bob"))
+    }
+
+    @Test("The members of a vault that left this Mac while they were being asked for are not kept")
+    func membersOfADroppedVaultStayDropped() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        // The first round heard them.
+        #expect(alice.account.vaultMembers[vaultId] == ["alice"])
+
+        // The vault goes (a leave, a delete, a round that found it gone)
+        // while the request is out.
+        let account = alice.account
+        await server.setWhileMembersAreAsked { @MainActor in account.forget(vault: vaultId) }
+        await alice.engine.refreshMembers(ofVault: vaultId)
+
+        #expect(alice.account.vaultMembers[vaultId] == nil)
+        #expect(alice.store.vaultMembers?[vaultId] == nil)
+        #expect(AccountStore(defaults: alice.defaults, tokens: MemoryTokenStore()).vaultMembers[vaultId] == nil)
     }
 
     @Test("Writes made on both sides converge after two syncs each")
