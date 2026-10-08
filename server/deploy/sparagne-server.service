@@ -4,15 +4,16 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-# Bare-metal install: put the binary at the path below (build with
-# `cargo build --release -p sparagne_server` and copy
-# target/release/sparagne-server), create the dedicated user and data
-# directory once:
+# Install without Docker: the binary comes from a release archive, which
+# also carries this file and .env.example (docs/DEPLOY.md §3.3), or from
+# `cargo build --release -p sparagne_server`. From the unpacked archive,
+# once:
 #
 #   sudo useradd --system --home-dir /var/lib/sparagne --shell /usr/sbin/nologin sparagne
 #   sudo install -o sparagne -g sparagne -d /var/lib/sparagne
-#   sudo install -m 755 target/release/sparagne-server /usr/local/bin/sparagne-server
-#   sudo install -m 640 -o root -g sparagne server/deploy/.env.example /etc/sparagne.env
+#   sudo install -m 755 sparagne-server /usr/local/bin/sparagne-server
+#   sudo install -m 640 -o root -g sparagne .env.example /etc/sparagne.env
+#   sudo install -m 644 sparagne-server.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now sparagne-server
 #
