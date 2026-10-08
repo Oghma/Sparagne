@@ -141,10 +141,9 @@ struct RecurringInspector: View {
 
     private var whereGroup: some View {
         let names = NameBook(snapshot: store.snapshot)
-        return VStack(alignment: .leading, spacing: 5) {
-            groupLabel(String(localized: "Where"))
-            field(String(localized: "Wallet")) {
-                InspectorMenu(
+        return FormGroup(String(localized: "Where")) {
+            FormRow(String(localized: "Wallet")) {
+                FormMenu(
                     label: String(localized: "Wallet"),
                     value: draft.walletId.map { names.wallet($0) ?? TransactionRow.placeholder }
                         ?? String(localized: "Any wallet")
@@ -157,8 +156,8 @@ struct RecurringInspector: View {
                     }
                 }
             }
-            field(String(localized: "Envelope")) {
-                InspectorMenu(
+            FormRow(String(localized: "Envelope")) {
+                FormMenu(
                     label: String(localized: "Envelope"),
                     value: draft.flowId.map { names.flow($0) ?? TransactionRow.placeholder }
                         ?? NameBook.unallocatedLabel
@@ -171,11 +170,11 @@ struct RecurringInspector: View {
                     }
                 }
             }
-            field(String(localized: "Category")) {
-                InspectorTextField(label: String(localized: "Category"), text: $draft.category)
+            FormRow(String(localized: "Category")) {
+                FormTextField(label: String(localized: "Category"), text: $draft.category)
             }
-            field(String(localized: "Note")) {
-                InspectorTextField(label: String(localized: "Note"), text: $draft.note)
+            FormRow(String(localized: "Note")) {
+                FormTextField(label: String(localized: "Note"), text: $draft.note)
             }
         }
     }
@@ -183,8 +182,7 @@ struct RecurringInspector: View {
     // MARK: - Quando
 
     private var whenGroup: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            groupLabel(String(localized: "When"))
+        FormGroup(String(localized: "When")) {
             RecurringSegments(
                 options: RecurringDraft.Cadence.allCases,
                 selection: draft.cadence,
@@ -193,7 +191,7 @@ struct RecurringInspector: View {
                 name: String(localized: "Frequency")
             )
             .padding(.bottom, 2)
-            field(String(localized: "Repeat"), alignment: .firstTextBaseline) {
+            FormRow(String(localized: "Repeat"), alignment: .firstTextBaseline) {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
                         every
@@ -205,10 +203,10 @@ struct RecurringInspector: View {
                     }
                 }
             }
-            field(String(localized: "Start")) {
+            FormRow(String(localized: "Start")) {
                 DayField(label: String(localized: "Start"), day: $draft.startDate)
             }
-            field(String(localized: "End")) {
+            FormRow(String(localized: "End")) {
                 HStack(spacing: 8) {
                     RecurringSegments(
                         options: [false, true],
@@ -299,15 +297,14 @@ struct RecurringInspector: View {
     }
 
     private func compactMenu<Items: View>(label: String, value: String, @ViewBuilder items: () -> Items) -> some View {
-        InspectorMenu(label: label, value: value) { items() }
+        FormMenu(label: label, value: value) { items() }
             .fixedSize()
     }
 
     // MARK: - Prossime date
 
     private var nextDates: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            groupLabel(String(localized: "Next dates"))
+        FormGroup(String(localized: "Next dates")) {
             switch preview {
             case nil:
                 EmptyView()
@@ -392,7 +389,7 @@ struct RecurringInspector: View {
         HStack(spacing: 8) {
             if let template {
                 if store.canWrite {
-                    RecurringSwitch(label: String(localized: "Enabled"), isOn: draft.enabled && !template.archived) { on in
+                    FormSwitch(label: String(localized: "Enabled"), isOn: draft.enabled && !template.archived) { on in
                         run { await store.setRecurringEnabled(template.id, on) }
                     }
                     .disabled(template.archived || working)
@@ -490,38 +487,6 @@ struct RecurringInspector: View {
             await work()
             working = false
         }
-    }
-
-    // MARK: - Pieces
-
-    /// `DOVE`, `QUANDO`: small capitals in `text3`.
-    private func groupLabel(_ text: String) -> some View {
-        Text(text)
-            .font(Face.ui(10.5, .semibold))
-            .tracking(0.5)
-            .textCase(.uppercase)
-            .foregroundStyle(Ink.text3)
-            .padding(.bottom, 1)
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    /// A labelled row: the label in an 80-point column, the control after it.
-    /// Centered on a one-line control; on the first line of one that wraps.
-    private func field<Content: View>(
-        _ label: String,
-        alignment: VerticalAlignment = .center,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack(alignment: alignment, spacing: 8) {
-            Text(label)
-                .font(Face.ui(12))
-                .foregroundStyle(Ink.text2)
-                .frame(width: 80, alignment: .leading)
-                .accessibilityHidden(true)
-            content()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(minHeight: 26)
     }
 }
 
