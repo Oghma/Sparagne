@@ -1195,13 +1195,36 @@ final class AppStore {
     }
 
     /// What a command says for `person`: nothing for the author, or a blank,
-    /// the name otherwise. Shared by the rows the grid adds and the periods
-    /// a template records for its owner.
+    /// the name otherwise. Shared by the rows the grid adds, the quick-add
+    /// line's `!name` and the periods a template records for its owner.
+    ///
+    /// The author in any case is the author: logged out, the local name
+    /// "Matteo" and the username "matteo" of the synced rows are one person,
+    /// and the line resolves `!Matteo` to the username (`folded`).
     func explicitPerson(_ person: String?) -> String? {
         guard let trimmed = person?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmed.isEmpty, trimmed != currentAuthor
+              !trimmed.isEmpty, trimmed.lowercased() != currentAuthor.lowercased()
         else { return nil }
         return trimmed
+    }
+
+    /// `command` with its entry's person as `explicitPerson` says it. The
+    /// core hands back the name `!name` matched, the author's included; the
+    /// grid sends the author as no person, and so does the line.
+    private func withExplicitPerson(_ command: Command) -> Command {
+        switch command {
+        case .income(var entry):
+            entry.person = explicitPerson(entry.person)
+            return .income(entry)
+        case .expense(var entry):
+            entry.person = explicitPerson(entry.person)
+            return .expense(entry)
+        case .refund(var entry):
+            entry.person = explicitPerson(entry.person)
+            return .refund(entry)
+        default:
+            return command
+        }
     }
 
     /// Resolves what was typed in the FLOW cell to an envelope, with the same
@@ -1296,9 +1319,10 @@ final class AppStore {
                 return
             }
             // A row like one typed in the grid, and undone the same way.
-            let minted = await core.envelope(vaultId: vault.id, resolved.command)
+            let command = withExplicitPerson(resolved.command)
+            let minted = await core.envelope(vaultId: vault.id, command)
             let receipt = try await core.execute(envelope: minted)
-            recordAddedRow(resolved.command, id: receipt.resultId ?? minted.id, vaultId: vault.id)
+            recordAddedRow(command, id: receipt.resultId ?? minted.id, vaultId: vault.id)
             savedAt = Date()
             // The core reports what the names resolved to, so the sticky
             // defaults never depend on the shape of the command.

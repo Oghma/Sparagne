@@ -187,6 +187,41 @@ struct PeopleTests {
         #expect(!store.rows.contains { $0.note == "cena" })
     }
 
+    @Test("A !name for the author sends no person, whatever its case, as the PERSONA cell does")
+    func quickAddAuthorIsNoPerson() async throws {
+        let store = try await Self.onboarded()
+        let vault = try #require(store.currentVault)
+        store.setVaultMembers([vault.id: ["matteo", "elisa"]])
+
+        await store.submit(quickAdd: "-24 cena !mat")
+        await store.submit(quickAdd: "-5 pane !elisa")
+        #expect(store.presentedError == nil)
+        let commands = try await Self.outbox(store)
+        let dinner = try #require(commands.first { $0["note"] as? String == "cena" })
+        #expect(dinner["person"] == nil)
+        let bread = try #require(commands.first { $0["note"] as? String == "pane" })
+        #expect(bread["person"] as? String == "elisa")
+
+        // Logged out under the local name, the username its synced rows
+        // carry is the author too: the row is the author's, not a namesake's.
+        let local = try await Self.onboarded()
+        await local.setAuthor("Matteo")
+        await local.submit(quickAdd: "-24 cena !matteo")
+        #expect(local.presentedError == nil)
+        #expect(local.rows.first { $0.note == "cena" }?.person == "Matteo")
+        #expect(local.explicitPerson("MATTEO") == nil)
+    }
+
+    /// The commands waiting in the outbox of the vault on screen, as the
+    /// server will read them.
+    private static func outbox(_ store: AppStore) async throws -> [[String: Any]] {
+        let vault = try #require(store.currentVault)
+        let json = try await store.core.pushRequestJson(vaultId: vault.id, limit: 500)
+        let body = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let envelopes = try #require(body["commands"] as? [[String: Any]])
+        return envelopes.compactMap { $0["command"] as? [String: Any] }
+    }
+
     @Test("An ambiguous !name asks which person, and the choice is written behind the !")
     func quickAddAmbiguousPerson() async throws {
         let store = try await Self.onboarded()
