@@ -30,37 +30,40 @@ struct OnboardingSheet: View {
     }
 
     var body: some View {
-        SheetLayout(
-            title: isFirstRun ? String(localized: "Welcome to Sparagne") : String(localized: "New Vault"),
-            confirmTitle: String(localized: "Create"),
-            canConfirm: canCreate,
-            showsCancel: !isFirstRun,
-            confirm: {
+        FormSheet(
+            isFirstRun ? String(localized: "Welcome to Sparagne") : String(localized: "New Vault"),
+            // The three concepts, once, before the first one is named.
+            subtitle: isFirstRun
+                ? String(localized: "A vault holds your wallets, envelopes and transactions. A wallet is where the money sits; an envelope is what it is meant for.")
+                : nil
+        ) {
+            FormGroup {
+                FormRow(String(localized: "Vault name")) {
+                    FormTextField(label: String(localized: "Vault name"), text: $vaultName)
+                }
+                if let taken = VaultNaming.duplicate(of: vaultName, in: takenNames) {
+                    DuplicateNameWarning(name: taken)
+                }
+                FormRow(String(localized: "First wallet")) {
+                    FormTextField(label: String(localized: "First wallet"), text: $walletName)
+                }
+                FormRow(String(localized: "Opening balance")) {
+                    FormTextField(label: String(localized: "Opening balance"), text: $openingBalance, prompt: MoneyPrompt.zero)
+                }
+            }
+        } footer: {
+            if !isFirstRun {
+                FormCancelButton { dismiss() }
+            }
+            FormPrimaryButton(title: String(localized: "Create")) {
                 create(
                     vaultName.trimmingCharacters(in: .whitespaces),
                     walletName.trimmingCharacters(in: .whitespaces),
                     openingMinor ?? 0
                 )
                 dismiss()
-            },
-            cancel: { dismiss() }
-        ) {
-            if isFirstRun {
-                Text(String(localized: "A vault holds your wallets, envelopes and transactions. A wallet is where the money sits; an envelope is what it is meant for."))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
-            Form {
-                TextField(String(localized: "Vault name"), text: $vaultName)
-                if let taken = VaultNaming.duplicate(of: vaultName, in: takenNames) {
-                    DuplicateNameWarning(name: taken)
-                }
-                TextField(String(localized: "First wallet"), text: $walletName)
-                TextField(String(localized: "Opening balance"), text: $openingBalance)
-                    .monospacedDigit()
-            }
-            .formStyle(.grouped)
+            .disabled(!canCreate)
         }
     }
 }
@@ -81,23 +84,22 @@ struct NewWalletSheet: View {
     }
 
     var body: some View {
-        SheetLayout(
-            title: String(localized: "New Wallet"),
-            confirmTitle: String(localized: "Create"),
-            canConfirm: !name.trimmingCharacters(in: .whitespaces).isEmpty && openingMinor != nil,
-            showsCancel: true,
-            confirm: {
+        FormSheet(String(localized: "New Wallet")) {
+            FormGroup {
+                FormRow(String(localized: "Name")) {
+                    FormTextField(label: String(localized: "Name"), text: $name)
+                }
+                FormRow(String(localized: "Opening balance")) {
+                    FormTextField(label: String(localized: "Opening balance"), text: $openingBalance, prompt: MoneyPrompt.zero)
+                }
+            }
+        } footer: {
+            FormCancelButton { dismiss() }
+            FormPrimaryButton(title: String(localized: "Create")) {
                 create(name.trimmingCharacters(in: .whitespaces), openingMinor ?? 0)
                 dismiss()
-            },
-            cancel: { dismiss() }
-        ) {
-            Form {
-                TextField(String(localized: "Name"), text: $name)
-                TextField(String(localized: "Opening balance"), text: $openingBalance)
-                    .monospacedDigit()
             }
-            .formStyle(.grouped)
+            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || openingMinor == nil)
         }
     }
 }
@@ -153,12 +155,19 @@ struct NewEnvelopeSheet: View {
     }
 
     var body: some View {
-        SheetLayout(
-            title: String(localized: "New Envelope"),
-            confirmTitle: String(localized: "Create"),
-            canConfirm: canCreate,
-            showsCancel: true,
-            confirm: {
+        FormSheet(String(localized: "New Envelope")) {
+            FormGroup {
+                FormRow(String(localized: "Name")) {
+                    FormTextField(label: String(localized: "Name"), text: $name)
+                }
+                EnvelopeCapFields(capKind: $capKind, capAmount: $capAmount, allowNegative: $allowNegative)
+                FormRow(String(localized: "Opening allocation")) {
+                    FormTextField(label: String(localized: "Opening allocation"), text: $openingAllocation, prompt: MoneyPrompt.zero)
+                }
+            }
+        } footer: {
+            FormCancelButton { dismiss() }
+            FormPrimaryButton(title: String(localized: "Create")) {
                 create(
                     name.trimmingCharacters(in: .whitespaces),
                     mode ?? .unlimited,
@@ -166,25 +175,8 @@ struct NewEnvelopeSheet: View {
                     minorUnits(openingAllocation) ?? 0
                 )
                 dismiss()
-            },
-            cancel: { dismiss() }
-        ) {
-            Form {
-                TextField(String(localized: "Name"), text: $name)
-                Picker(String(localized: "Cap"), selection: $capKind) {
-                    ForEach(CapKind.allCases) { kind in
-                        Text(kind.label).tag(kind)
-                    }
-                }
-                if capKind != .unlimited {
-                    TextField(String(localized: "Cap amount"), text: $capAmount)
-                        .monospacedDigit()
-                }
-                Toggle(String(localized: "Allow negative balance"), isOn: $allowNegative)
-                TextField(String(localized: "Opening allocation"), text: $openingAllocation)
-                    .monospacedDigit()
             }
-            .formStyle(.grouped)
+            .disabled(!canCreate)
         }
     }
 }
@@ -216,22 +208,22 @@ struct RenameSheet: View {
     private var canSave: Bool { !trimmed.isEmpty && trimmed != name }
 
     var body: some View {
-        SheetLayout(
-            title: title,
-            confirmTitle: String(localized: "Save"),
-            canConfirm: canSave,
-            showsCancel: true,
-            confirm: {
+        FormSheet(title, subtitle: name, width: 420) {
+            FormGroup {
+                FormRow(String(localized: "Name")) {
+                    FormTextField(label: String(localized: "Name"), text: $text)
+                }
+                if trimmed != name, let taken = VaultNaming.duplicate(of: trimmed, in: takenNames) {
+                    DuplicateNameWarning(name: taken)
+                }
+            }
+        } footer: {
+            FormCancelButton { dismiss() }
+            FormPrimaryButton(title: String(localized: "Save")) {
                 save(trimmed)
                 dismiss()
-            },
-            cancel: { dismiss() }
-        ) {
-            TextField(String(localized: "Name"), text: $text)
-                .textFieldStyle(.roundedBorder)
-            if trimmed != name, let taken = VaultNaming.duplicate(of: trimmed, in: takenNames) {
-                DuplicateNameWarning(name: taken)
             }
+            .disabled(!canSave)
         }
     }
 }
@@ -249,23 +241,18 @@ struct DeleteVaultSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        SheetLayout(
-            title: String(localized: "Delete Vault"),
-            confirmTitle: String(localized: "Delete"),
-            confirmRole: .destructive,
-            canConfirm: true,
-            showsCancel: true,
-            confirm: {
+        FormSheet(String(localized: "Delete Vault")) {
+            ConfirmationText(
+                question: String(localized: "Delete \u{201C}\(vault.name)\u{201D}?"),
+                consequences: String(localized: "Its wallets, envelopes, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone.")
+            )
+        } footer: {
+            FormCancelButton { dismiss() }
+            // Destructive, so ↩ does not trigger it.
+            FormDestructiveButton(title: String(localized: "Delete")) {
                 delete()
                 dismiss()
-            },
-            cancel: { dismiss() }
-        ) {
-            Text(String(localized: "Delete \u{201C}\(vault.name)\u{201D}?"))
-            Text(String(localized: "Its wallets, envelopes, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
@@ -315,31 +302,43 @@ struct EditEnvelopeSheet: View {
     }
 
     var body: some View {
-        SheetLayout(
-            title: String(localized: "Edit Envelope"),
-            confirmTitle: String(localized: "Save"),
-            canConfirm: mode != nil,
-            showsCancel: true,
-            confirm: {
+        FormSheet(String(localized: "Edit Envelope"), subtitle: flow.name) {
+            FormGroup {
+                EnvelopeCapFields(capKind: $capKind, capAmount: $capAmount, allowNegative: $allowNegative)
+            }
+        } footer: {
+            FormCancelButton { dismiss() }
+            FormPrimaryButton(title: String(localized: "Save")) {
                 if let mode { save(mode, allowNegative) }
                 dismiss()
-            },
-            cancel: { dismiss() }
-        ) {
-            Form {
-                Picker(String(localized: "Cap"), selection: $capKind) {
-                    ForEach(NewEnvelopeSheet.CapKind.allCases) { kind in
-                        Text(kind.label).tag(kind)
-                    }
-                }
-                if capKind != .unlimited {
-                    TextField(String(localized: "Cap amount"), text: $capAmount)
-                        .monospacedDigit()
-                }
-                Toggle(String(localized: "Allow negative balance"), isOn: $allowNegative)
             }
-            .formStyle(.grouped)
+            .disabled(mode == nil)
         }
+    }
+}
+
+/// The cap, its amount once there is one, and allow-negative: what a new
+/// envelope and an edited one share.
+private struct EnvelopeCapFields: View {
+    @Binding var capKind: NewEnvelopeSheet.CapKind
+    @Binding var capAmount: String
+    @Binding var allowNegative: Bool
+
+    var body: some View {
+        FormRow(String(localized: "Cap")) {
+            FormPicker(
+                label: String(localized: "Cap"),
+                selection: $capKind,
+                options: NewEnvelopeSheet.CapKind.allCases,
+                title: \.label
+            )
+        }
+        if capKind != .unlimited {
+            FormRow(String(localized: "Cap amount")) {
+                FormTextField(label: String(localized: "Cap amount"), text: $capAmount, prompt: MoneyPrompt.zero)
+            }
+        }
+        FormToggleRow(String(localized: "Allow negative balance"), isOn: $allowNegative)
     }
 }
 
@@ -383,47 +382,38 @@ private struct DuplicateNameWarning: View {
     let name: String
 
     var body: some View {
-        Label(
+        FormNote(
             String(localized: "Another vault of the same owner is already called \u{201C}\(name)\u{201D}. The name is allowed, but the two will be hard to tell apart."),
-            systemImage: "exclamationmark.triangle"
+            tone: .warning
         )
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
-// MARK: - Shared chrome
+// MARK: - Shared pieces
 
-/// Title, content and a Cancel/Confirm footer: the plain macOS sheet shape.
-private struct SheetLayout<Content: View>: View {
-    let title: String
-    let confirmTitle: String
-    /// `.destructive` for the one sheet that deletes: the button is drawn as
-    /// such and ↩ no longer triggers it, so a stray return cannot.
-    var confirmRole: ButtonRole? = nil
-    let canConfirm: Bool
-    let showsCancel: Bool
-    let confirm: () -> Void
-    let cancel: () -> Void
-    @ViewBuilder let content: Content
+/// The body of a sheet that confirms something it cannot take back: the
+/// question in full-strength text, then what goes with it in `text2`.
+/// Leaving a vault says it the same way.
+struct ConfirmationText: View {
+    let question: String
+    let consequences: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.headline)
-            content
-            HStack {
-                Spacer()
-                if showsCancel {
-                    Button(String(localized: "Cancel"), role: .cancel, action: cancel)
-                        .keyboardShortcut(.cancelAction)
-                }
-                Button(confirmTitle, role: confirmRole, action: confirm)
-                    .keyboardShortcut(confirmRole == .destructive ? nil : .defaultAction)
-                    .disabled(!canConfirm)
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(question)
+                .font(Face.ui(13, .medium))
+                .foregroundStyle(Ink.text)
+            Text(consequences)
+                .font(Face.ui(12.5))
+                .foregroundStyle(Ink.text2)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(20)
-        .frame(width: 420)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
+}
+
+/// The grey `0,00` of an empty amount field, as the inspector's amount
+/// shows it: the format the field reads.
+enum MoneyPrompt {
+    static let zero = "0,00"
 }
