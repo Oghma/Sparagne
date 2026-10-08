@@ -288,7 +288,7 @@ struct AppStoreTests {
             Issue.record("expected the line to parse")
             return
         }
-        guard case .entry(let kind, let amount, let note, _, _, _, _) = parsed else {
+        guard case .entry(let kind, let amount, let note, _, _, _, _, _) = parsed else {
             Issue.record("expected an entry")
             return
         }
@@ -568,7 +568,7 @@ struct ErrorMessagesTests {
         // Sync: the server's codes and the transport's own two.
         "offline", "unauthorized", "forbidden", "author_mismatch",
         "registration_disabled", "invalid_request", "invalid_response",
-        "invalid_server_url", "server_error",
+        "invalid_server_url", "server_error", "not_a_member",
     ]
 
     @Test("Every documented error code maps to a non-empty localized summary")
@@ -577,6 +577,36 @@ struct ErrorMessagesTests {
             let summary = ErrorMessages.summary(for: code)
             #expect(!summary.isEmpty, "no summary for \(code)")
         }
+    }
+
+    @Test("A change refused for naming someone outside the vault says who, from the server's detail, in the app's language")
+    func notAMemberNamesThePerson() {
+        let command = RejectedCommand(
+            commandId: UUID().uuidString,
+            kind: "expense",
+            code: "not_a_member",
+            message: "Elisa is not a member of this vault",
+            detail: "Elisa"
+        )
+        let change = SyncEngine.RejectedChange(
+            entry: RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: command)
+        )
+        #expect(change.summary == String(localized: "\("Elisa") is not a member of this vault"))
+        // No detail (an older server, a row refused before it): the generic
+        // headline, whatever the sentence says.
+        let older = RejectedCommand(
+            commandId: UUID().uuidString,
+            kind: "expense",
+            code: "not_a_member",
+            message: "Elisa is not a member of this vault"
+        )
+        #expect(
+            SyncEngine.RejectedChange(entry: RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: older)).summary
+                == ErrorMessages.summary(for: "not_a_member")
+        )
+        #expect(ErrorMessages.summary(for: "not_a_member", detail: " ") == ErrorMessages.summary(for: "not_a_member"))
+        // Every other code keeps its own headline, whatever the detail.
+        #expect(ErrorMessages.summary(for: "forbidden", detail: "x") == ErrorMessages.summary(for: "forbidden"))
     }
 }
 

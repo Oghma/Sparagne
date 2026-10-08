@@ -10,18 +10,32 @@ enum RecurringSelection: Hashable {
 
 /// Column geometry of "Modelli", shared by the heading and the rows. The
 /// three text columns take what is left, down to their minimums, which fit
-/// the window's narrowest width beside the inspector.
+/// the window's narrowest width beside the inspector: 1176 less the
+/// inspector's 340 and the margins leaves about 800 points, and the widths
+/// below add up to 794. A wider column has to be paid for by another.
 private enum TemplateColumn {
     /// Wide enough for "Enabled", which is longer than the canvas's
     /// "Attiva".
     static let enabled: CGFloat = 60
-    static let descriptionMinimum: CGFloat = 120
-    static let amount: CGFloat = 96
-    static let cadenceMinimum: CGFloat = 150
-    static let next: CGFloat = 100
-    static let wallet: CGFloat = 84
-    static let envelope: CGFloat = 92
-    static let categoryMinimum: CGFloat = 90
+    /// A short title whole; a long one gives way to the cadence, which says
+    /// more than its last letters.
+    static let descriptionMinimum: CGFloat = 100
+    static let amount: CGFloat = 88
+    /// "Every month on day 12", the commonest cadence, whole from 146 and
+    /// so whole at the narrowest window, with room for a wider day and for
+    /// "Ogni mese il giorno 12". A yearly one or an interval still ends in
+    /// "…" there, until the window widens.
+    static let cadenceMinimum: CGFloat = 152
+    /// "1 ott · dovuta".
+    static let next: CGFloat = 96
+    /// "Contanti".
+    static let wallet: CGFloat = 72
+    /// "Non allocato".
+    static let envelope: CGFloat = 88
+    /// A first name or a username, as the grid's PERSONA column, and the
+    /// heading "Titolare".
+    static let owner: CGFloat = 64
+    static let categoryMinimum: CGFloat = 74
     static let padding: CGFloat = 8
 }
 
@@ -70,6 +84,7 @@ struct RecurringTemplateTable: View {
             template.category ?? "",
             template.walletId.flatMap { names.wallet($0) } ?? "",
             template.flowId.flatMap { names.flow($0) } ?? "",
+            template.owner,
         ])
     }
 
@@ -84,6 +99,7 @@ struct RecurringTemplateTable: View {
             cell(width: TemplateColumn.next) { Text(String(localized: "Next")) }
             cell(width: TemplateColumn.wallet) { Text(String(localized: "Wallet")) }
             cell(width: TemplateColumn.envelope) { Text(String(localized: "Envelope")) }
+            cell(width: TemplateColumn.owner) { Text(RecurringInspector.ownerLabel) }
             cell(minWidth: TemplateColumn.categoryMinimum) { Text(String(localized: "Category")) }
         }
         .font(Face.ui(11, .medium))
@@ -103,6 +119,7 @@ struct RecurringTemplateTable: View {
         // Archived reads as background; paused, one step back from running.
         let ink = template.archived ? Ink.text3 : template.enabled ? Ink.text : Ink.text2
         let side = template.archived ? Ink.text3 : Ink.text2
+        let ownerLeft = store.ownerHasLeft(template)
         return HStack(spacing: 0) {
             cell(width: TemplateColumn.enabled) {
                 RecurringSwitch(
@@ -114,7 +131,19 @@ struct RecurringTemplateTable: View {
                 .disabled(!store.canWrite || template.archived)
             }
             cell(minWidth: TemplateColumn.descriptionMinimum) {
-                Text(RecurringTitle.of(template)).foregroundStyle(ink)
+                if ownerLeft {
+                    // The note beside the title where both fit; at the
+                    // narrowest widths the owner's red name says it alone.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) {
+                            Text(RecurringTitle.of(template)).foregroundStyle(ink)
+                            RowTag(text: AppStore.noLongerAMember, tint: Ink.negative)
+                        }
+                        Text(RecurringTitle.of(template)).foregroundStyle(ink)
+                    }
+                } else {
+                    Text(RecurringTitle.of(template)).foregroundStyle(ink)
+                }
             }
             cell(width: TemplateColumn.amount, alignment: .trailing) {
                 Text(RecurringAmount.text(template))
@@ -130,6 +159,16 @@ struct RecurringTemplateTable: View {
             }
             cell(width: TemplateColumn.envelope) {
                 Text(DueRecurringText.envelope(template, names: names)).foregroundStyle(side)
+            }
+            cell(width: TemplateColumn.owner) {
+                // An owner who left the vault: its periods wait for another.
+                Text(template.owner)
+                    .foregroundStyle(ownerLeft && !template.archived ? Ink.negative : side)
+                    .help(ifAny: ownerLeft ? AppStore.noLongerAMember : nil)
+                    .accessibilityLabel(
+                        ([RecurringInspector.ownerLabel, template.owner] + (ownerLeft ? [AppStore.noLongerAMember] : []))
+                            .joined(separator: ", ")
+                    )
             }
             cell(minWidth: TemplateColumn.categoryMinimum) {
                 Text(template.category.flatMap { $0.isEmpty ? nil : $0 } ?? TransactionRow.placeholder)
@@ -193,7 +232,10 @@ struct RecurringTemplateTable: View {
     // MARK: - The last row
 
     /// "Nuova ricorrenza…": the inspector in create mode. The cells show what
-    /// a new template starts from.
+    /// a new template starts from, its owner among them. A cell with nothing
+    /// to show holds an empty text rather than no view: a frame around an
+    /// `EmptyView` drops out of the layout, and the cells after it would
+    /// slide under the wrong headings.
     private var newRow: some View {
         let key = RecurringSelection.new
         return HStack(spacing: 0) {
@@ -207,10 +249,11 @@ struct RecurringTemplateTable: View {
             }
             cell(width: TemplateColumn.amount, alignment: .trailing) { Text(LedgerMoney.bare(0)) }
             cell(minWidth: TemplateColumn.cadenceMinimum) { Text(ScheduleFormatting.every(1, .month)) }
-            cell(width: TemplateColumn.next) { EmptyView() }
-            cell(width: TemplateColumn.wallet) { EmptyView() }
-            cell(width: TemplateColumn.envelope) { EmptyView() }
-            cell(minWidth: TemplateColumn.categoryMinimum) { EmptyView() }
+            cell(width: TemplateColumn.next) { Text(verbatim: "") }
+            cell(width: TemplateColumn.wallet) { Text(verbatim: "") }
+            cell(width: TemplateColumn.envelope) { Text(verbatim: "") }
+            cell(width: TemplateColumn.owner) { Text(store.currentAuthor) }
+            cell(minWidth: TemplateColumn.categoryMinimum) { Text(verbatim: "") }
         }
         .font(Face.ui(12))
         .foregroundStyle(selection == key ? Ink.text2 : Ink.text3)

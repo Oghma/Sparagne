@@ -69,6 +69,19 @@ struct QuickAddTokensTests {
         #expect(Self.value(.when, in: Self.tokens(explicitToday, today: today)) == String(localized: "today"))
     }
 
+    @Test("The who chip is the line's !name, or the name it resolves to, last")
+    func personFromTheLine() {
+        let parsed = QuickAdd.entry(
+            kind: .expense, amount: 2_400, note: "cena", category: "Ristoranti", wallet: nil, flow: nil, date: nil,
+            person: "eli"
+        )
+        let typed = Self.tokens(parsed)
+        #expect(typed.last?.role == .who)
+        #expect(typed.last?.label == String(localized: "who"))
+        #expect(Self.value(.who, in: typed) == "eli")
+        #expect(Self.value(.who, in: Self.tokens(parsed, person: "elisa")) == "elisa")
+    }
+
     @Test("A person shows only when the line names one")
     func person() {
         let parsed = QuickAdd.entry(kind: .expense, amount: 300, note: nil, category: "Bar", wallet: nil, flow: nil, date: nil)

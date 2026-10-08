@@ -55,11 +55,17 @@ struct RecurringDraft: Equatable {
     var hasEndDate = false
     var endDate: NaiveDate
     var enabled = true
+    /// Whose template it is, the person every period it records is for: one
+    /// of `AppStore.assignablePeople`. Blank is the author, as the core
+    /// reads it.
+    var owner = ""
 
-    /// A new template: monthly, from today, on today's day. A template that
-    /// starts today has today as its first period, which is what "every
-    /// month from today" says.
-    init(today: NaiveDate) {
+    /// A new template: monthly, from today, on today's day, owned by
+    /// `owner`, the author who creates it unless the picker says otherwise.
+    /// A template that starts today has today as its first period, which is
+    /// what "every month from today" says.
+    init(today: NaiveDate, owner: String = "") {
+        self.owner = owner
         startDate = today
         endDate = today
         if let parts = NaiveDay.components(today) {
@@ -81,6 +87,7 @@ struct RecurringDraft: Equatable {
         category = template.category ?? ""
         note = template.note ?? ""
         enabled = template.enabled
+        owner = template.owner
 
         let schedule = template.schedule
         startDate = schedule.startDate
@@ -111,10 +118,10 @@ struct RecurringDraft: Equatable {
         }
     }
 
-    /// A new template written from `template`: the same fields, running, but
-    /// starting today. Starting where the original did would put every
-    /// period since then due at once, and an end date already behind today
-    /// would make the copy invalid, so it is dropped.
+    /// A new template written from `template`: the same fields, its owner
+    /// among them, running, but starting today. Starting where the original
+    /// did would put every period since then due at once, and an end date
+    /// already behind today would make the copy invalid, so it is dropped.
     init(duplicating template: RecurringView, today: NaiveDate) {
         self.init(template: template)
         enabled = true
@@ -159,6 +166,7 @@ struct RecurringDraft: Equatable {
 
     private var trimmedCategory: String { category.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var trimmedNote: String { note.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedOwner: String { owner.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     /// Whether Salva or Crea may go: an amount above zero, and a schedule the
     /// core would take (the same rules as `Schedule::validate` in
@@ -215,6 +223,9 @@ struct RecurringDraft: Equatable {
         if trimmedNote != (template.note ?? "") { patch.note = trimmedNote }
         if schedule != template.schedule { patch.schedule = schedule }
         if enabled != template.enabled { patch.enabled = enabled }
+        // Only a change: the patch's blank would mean "back to the author",
+        // and nobody picked that.
+        if !trimmedOwner.isEmpty, trimmedOwner != template.owner { patch.owner = trimmedOwner }
         return patch
     }
 
@@ -239,7 +250,8 @@ struct RecurringDraft: Equatable {
             flowId: flowId,
             category: trimmedCategory.isEmpty ? nil : trimmedCategory,
             note: trimmedNote.isEmpty ? nil : trimmedNote,
-            schedule: schedule
+            schedule: schedule,
+            owner: trimmedOwner.isEmpty ? nil : trimmedOwner
         )
     }
 
@@ -251,6 +263,9 @@ struct RecurringDraft: Equatable {
         let category: String?
         let note: String?
         let schedule: Schedule
+        /// `nil` = the author; `AppStore.createRecurring` also sends the
+        /// author as `nil`.
+        let owner: String?
     }
 
     /// The day fields are small; anything out of range is caught by

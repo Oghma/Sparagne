@@ -17,6 +17,7 @@ extension AppStore {
             due: duePeriods,
             month: month,
             direction: direction,
+            person: person,
             search: searchText,
             hasMoreRows: nextCursor != nil
         )

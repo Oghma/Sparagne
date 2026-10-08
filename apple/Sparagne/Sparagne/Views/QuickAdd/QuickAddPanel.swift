@@ -172,7 +172,7 @@ struct QuickAddOverlay: View {
     private var parsed: some View {
         switch store.preview(quickAdd: trimmed) {
         case .success(let line):
-            let tokens = QuickAddTokens.make(line, currency: store.currency)
+            let tokens = QuickAddTokens.make(line, currency: store.currency, person: resolvedPerson(line))
             TokenFlow(spacing: 6) {
                 ForEach(tokens) { token in
                     TokenChip(token: token)
@@ -229,6 +229,14 @@ struct QuickAddOverlay: View {
     private func refreshActions() {
         palette.actions = CommandPaletteModel.ledgerActions(store: store, engine: engine)
         palette.query = query
+    }
+
+    /// The line's `!name` as the row will say it: `!eli` is Elisa when she is
+    /// the only one it can mean. A name that resolves to nobody, or to more
+    /// than one, stays as typed; ↩ then says why.
+    private func resolvedPerson(_ line: QuickAdd) -> String? {
+        guard case .entry(_, _, _, _, _, _, _, let person?) = line else { return nil }
+        return (try? store.resolvePerson(named: person)) ?? person
     }
 
     /// The note of the line as typed, when the line parses and names no

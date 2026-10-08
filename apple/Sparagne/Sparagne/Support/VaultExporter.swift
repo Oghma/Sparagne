@@ -54,7 +54,7 @@ enum VaultExporter {
             walletId: nil,
             flowId: nil,
             text: nil,
-            author: nil,
+            person: nil,
             ascending: true
         )
         var all: [TransactionView] = []

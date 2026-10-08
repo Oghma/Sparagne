@@ -25,7 +25,8 @@ enum RecurringFixture {
         note: String? = "mutuo",
         schedule: Schedule = schedule(),
         enabled: Bool = true,
-        archived: Bool = false
+        archived: Bool = false,
+        owner: String = "matteo"
     ) -> RecurringView {
         RecurringView(
             id: id,
@@ -37,7 +38,8 @@ enum RecurringFixture {
             note: note,
             schedule: schedule,
             enabled: enabled,
-            archived: archived
+            archived: archived,
+            owner: owner
         )
     }
 

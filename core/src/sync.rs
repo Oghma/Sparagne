@@ -7,12 +7,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use rusqlite::{Connection, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    CommandEnvelope, CommandRecord, Core, Currency, DomainError, Result,
+    CommandEnvelope, CommandRecord, Core, Currency, DomainError, Receipt, Result,
     engine::{LogRow, apply_envelope, log_row, try_apply_envelope},
     query::log_records,
 };
@@ -31,8 +31,21 @@ pub struct PushRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum PushOutcome {
-    Applied { seq: i64, result_id: Option<Uuid> },
-    Rejected { code: String, message: String },
+    Applied {
+        seq: i64,
+        result_id: Option<Uuid>,
+    },
+    Rejected {
+        code: String,
+        message: String,
+        /// What the refusal is about, for a client to show without parsing
+        /// `message`, which is English prose: for `not_a_member`, the name
+        /// the server refused. Absent for the other codes, and from a server
+        /// older than the field; left out of the JSON when absent, so an
+        /// older client reads the body as before.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,6 +199,7 @@ impl Core {
                 Err(err) => PushOutcome::Rejected {
                     code: err.code().to_string(),
                     message: err.to_string(),
+                    detail: None,
                 },
             };
             results.push(PushResult {
@@ -197,6 +211,27 @@ impl Core {
             results,
             last_seq: self.last_seq(vault_id)?,
         })
+    }
+
+    /// The receipt [`Core::execute`] answers for a command already in the log,
+    /// `None` for one the log does not hold. A server that refuses commands
+    /// for reasons the log does not record (who is a member) asks first, so
+    /// that pushing the same command twice keeps answering the same seq.
+    pub fn receipt(&self, command_id: Uuid) -> Result<Option<Receipt>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT seq, result_id FROM commands WHERE id = ?1",
+                params![command_id],
+                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<Uuid>>(1)?)),
+            )
+            .optional()?;
+        Ok(row.map(|(seq, result_id)| Receipt {
+            command_id,
+            seq,
+            result_id,
+            deduplicated: true,
+        }))
     }
 
     /// The server side of a pull: applied commands with `seq > since`, at
@@ -255,6 +290,11 @@ pub struct RejectedCommand {
     pub kind: String,
     pub code: String,
     pub message: String,
+    /// The server's `detail` for the refusal: for `not_a_member`, the name
+    /// it refused. `None` when the server sent none, and for a refusal
+    /// made here (a rebase).
+    #[uniffi(default = None)]
+    pub detail: Option<String>,
 }
 
 /// Outcome of a push response or a pull integration.
@@ -362,7 +402,7 @@ impl Core {
     ) -> Result<SyncReport> {
         let tx = self.conn.transaction()?;
         let mut report = SyncReport::default();
-        let mut refused: Vec<(Uuid, String, String)> = Vec::new();
+        let mut refused: Vec<(Uuid, Reason)> = Vec::new();
         for result in &response.results {
             match &result.outcome {
                 PushOutcome::Applied { seq, .. } => {
@@ -376,9 +416,18 @@ impl Core {
                         report.confirmed += 1;
                     }
                 }
-                PushOutcome::Rejected { code, message } => {
+                PushOutcome::Rejected {
+                    code,
+                    message,
+                    detail,
+                } => {
                     if is_outbox(&tx, vault_id, result.command_id)? {
-                        refused.push((result.command_id, code.clone(), message.clone()));
+                        let reason = Reason {
+                            code: code.clone(),
+                            message: message.clone(),
+                            detail: detail.clone(),
+                        };
+                        refused.push((result.command_id, reason));
                     }
                 }
             }
@@ -388,7 +437,7 @@ impl Core {
             return self.stamp(vault_id, report, response.last_seq);
         }
 
-        let dropped: HashSet<Uuid> = refused.iter().map(|(id, _, _)| *id).collect();
+        let dropped: HashSet<Uuid> = refused.iter().map(|(id, _)| *id).collect();
         let ordered = planned(confirmed_records(&tx, vault_id)?);
         let outbox = outbox_records(&tx, vault_id)?;
         let retry: Vec<Planned> = outbox
@@ -401,21 +450,18 @@ impl Core {
             })
             .collect();
         let mut keep = rejected_rows(&tx, vault_id)?;
-        for (id, code, message) in refused {
+        for (id, reason) in refused {
             let Some(record) = outbox.iter().find(|record| record.envelope.id == id) else {
                 continue;
             };
             keep.push(RejectedRow {
                 envelope: record.envelope.clone(),
                 created_at: record.created_at,
-                reason: format!("{code}: {message}"),
+                reason: reason.stored(),
             });
-            report.rejected.push(RejectedCommand {
-                command_id: id,
-                kind: record.envelope.command.kind_name().to_string(),
-                code,
-                message,
-            });
+            report
+                .rejected
+                .push(reason.rejected(id, record.envelope.command.kind_name()));
         }
 
         report
@@ -541,6 +587,13 @@ impl Core {
     /// Rewrites the author of the outbox and rebuilds the projection, so that
     /// `created_by` and `owner_user_id` follow the account the app just logged
     /// into.
+    ///
+    /// A person or owner the outbox names by one of its old author names is
+    /// the same user, so it becomes the username too: left as it was, the
+    /// server would refuse it as somebody who is not a member. It becomes the
+    /// username rather than nothing, so a patch that only changes the person
+    /// keeps a field to carry. Other names stay as they are, and so do the
+    /// rejected rows, which never reach the server again.
     pub fn relabel_outbox(&mut self, vault_id: Uuid, author: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
         let outbox = outbox_records(&tx, vault_id)?;
@@ -548,10 +601,18 @@ impl Core {
             tx.commit()?;
             return Ok(());
         }
+        let old_names: HashSet<String> = outbox
+            .iter()
+            .map(|record| record.envelope.author.clone())
+            .filter(|name| name != author)
+            .collect();
         let ordered = planned(confirmed_records(&tx, vault_id)?);
         let retry: Vec<Planned> = planned(outbox)
             .into_iter()
             .map(|mut item| {
+                for old in &old_names {
+                    item.envelope.command.rename_person(old, author);
+                }
                 item.envelope.author = author.to_string();
                 item
             })
@@ -578,13 +639,9 @@ impl Core {
         let mut out = Vec::new();
         for row in rows {
             let (command_id, kind, rejection) = row?;
-            let (code, message) = split_reason(rejection.as_deref().unwrap_or_default());
-            out.push(RejectedCommand {
-                command_id,
-                kind,
-                code,
-                message,
-            });
+            out.push(
+                Reason::parse(rejection.as_deref().unwrap_or_default()).rejected(command_id, &kind),
+            );
         }
         Ok(out)
     }
@@ -634,8 +691,57 @@ struct Planned {
 struct RejectedRow {
     envelope: CommandEnvelope,
     created_at: i64,
-    /// `<code>: <message>`.
+    /// What [`Reason::stored`] wrote, kept as it is.
     reason: String,
+}
+
+/// Why a command was refused, as a rejected row keeps it in the log's
+/// `rejection` column and hands it back as a [`RejectedCommand`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct Reason {
+    code: String,
+    message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
+}
+
+impl Reason {
+    /// The text the column holds: `<code>: <message>`, as every rejected row
+    /// written before the detail existed, or a JSON object when there is a
+    /// detail, which a sentence could not carry apart from its words. No
+    /// code starts with `{`, so [`Self::parse`] tells the two apart.
+    fn stored(&self) -> String {
+        let plain = || format!("{}: {}", self.code, self.message);
+        if self.detail.is_none() {
+            return plain();
+        }
+        serde_json::to_string(self).unwrap_or_else(|_| plain())
+    }
+
+    /// Reads back what [`Self::stored`] wrote, either form.
+    fn parse(stored: &str) -> Self {
+        if stored.starts_with('{')
+            && let Ok(reason) = serde_json::from_str(stored)
+        {
+            return reason;
+        }
+        let (code, message) = split_reason(stored);
+        Self {
+            code,
+            message,
+            detail: None,
+        }
+    }
+
+    fn rejected(self, command_id: Uuid, kind: &str) -> RejectedCommand {
+        RejectedCommand {
+            command_id,
+            kind: kind.to_string(),
+            code: self.code,
+            message: self.message,
+            detail: self.detail,
+        }
+    }
 }
 
 /// Throws away a vault's projection and log and replays it.
@@ -680,17 +786,17 @@ fn rebuild(
     for item in retry {
         seq += 1;
         if let Some(err) = try_apply_envelope(tx, &item.envelope, seq, None, item.created_at)? {
-            fresh.push(RejectedCommand {
-                command_id: item.envelope.id,
-                kind: item.envelope.command.kind_name().to_string(),
+            let reason = Reason {
                 code: err.code().to_string(),
                 message: err.to_string(),
-            });
+                detail: None,
+            };
             kept.push(RejectedRow {
                 envelope: item.envelope.clone(),
                 created_at: item.created_at,
-                reason: format!("{}: {err}", err.code()),
+                reason: reason.stored(),
             });
+            fresh.push(reason.rejected(item.envelope.id, item.envelope.command.kind_name()));
         }
     }
 
@@ -821,6 +927,7 @@ impl Core {
                 outcome: PushOutcome::Rejected {
                     code: code.to_string(),
                     message: message.to_string(),
+                    detail: None,
                 },
             })
             .collect();
@@ -897,6 +1004,59 @@ mod tests {
         // A reason without the separator is all code, so nothing is lost.
         assert_eq!(split_reason("boom"), ("boom".to_string(), String::new()));
         assert_eq!(split_reason(""), (String::new(), String::new()));
+    }
+
+    #[test]
+    fn a_stored_reason_keeps_its_detail_and_reads_the_old_form() {
+        let refused = Reason {
+            code: "not_a_member".to_string(),
+            message: "elisa: is not a member of this vault".to_string(),
+            detail: Some("elisa".to_string()),
+        };
+        assert_eq!(Reason::parse(&refused.stored()), refused);
+
+        // Without a detail the column holds what it always held.
+        let plain = Reason {
+            detail: None,
+            ..refused.clone()
+        };
+        assert_eq!(
+            plain.stored(),
+            "not_a_member: elisa: is not a member of this vault"
+        );
+        assert_eq!(Reason::parse(&plain.stored()), plain);
+        assert_eq!(
+            Reason::parse("insufficient_funds: no room"),
+            Reason {
+                code: "insufficient_funds".to_string(),
+                message: "no room".to_string(),
+                detail: None,
+            }
+        );
+    }
+
+    #[test]
+    fn a_rejection_without_a_detail_reads_and_writes_as_before() {
+        let old = r#"{"command_id":"0192f0c8-0000-7000-8000-000000000001","status":"rejected","code":"insufficient_funds","message":"no room"}"#;
+        let result: PushResult = serde_json::from_str(old).unwrap();
+        assert_eq!(
+            result.outcome,
+            PushOutcome::Rejected {
+                code: "insufficient_funds".to_string(),
+                message: "no room".to_string(),
+                detail: None,
+            }
+        );
+        assert!(!serde_json::to_string(&result).unwrap().contains("detail"));
+
+        let named: PushResult = serde_json::from_str(
+            r#"{"command_id":"0192f0c8-0000-7000-8000-000000000001","status":"rejected","code":"not_a_member","message":"elisa is not a member of this vault","detail":"elisa"}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            named.outcome,
+            PushOutcome::Rejected { detail: Some(ref name), .. } if name == "elisa"
+        ));
     }
 
     #[test]

@@ -45,6 +45,9 @@ enum ErrorMessages {
         case "too_many_requests": String(localized: "Too many attempts. Try again later.")
         case "forbidden": String(localized: "You are not allowed to do that")
         case "author_mismatch": String(localized: "Those changes belong to another account")
+        // One command of a push, not the push: it put a row or a template on
+        // someone outside the vault. `summary(for:detail:)` names them.
+        case "not_a_member": String(localized: "Not a member of this vault")
         case "registration_disabled": String(localized: "This server is not accepting new accounts")
         case "invalid_request": String(localized: "The server refused the request")
         case "invalid_response": String(localized: "The server answered something unexpected")
@@ -53,6 +56,28 @@ enum ErrorMessages {
         default: String(localized: "Something went wrong")
         }
     }
+
+    /// The headline of a command the server refused, with what its `detail`
+    /// adds (`RejectedCommand.detail`): for `not_a_member`, who was named.
+    /// The message is English prose and never read: without a detail (a
+    /// server older than the field, a row refused before it) the code's own
+    /// headline stands.
+    static func summary(for code: String, detail: String?) -> String {
+        guard code == "not_a_member",
+              let name = detail?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty
+        else { return summary(for: code) }
+        return String(localized: "\(name) is not a member of this vault")
+    }
+
+    /// A person cell or a `!name` that matches nobody who may be named on a
+    /// row (`AppStore.assignablePeople`).
+    static func unknownPerson(_ name: String) -> String {
+        String(localized: "Unknown person: \(name)")
+    }
+
+    /// An `ambiguous_name` that came from a `!name`: the candidates the alert
+    /// offers are people, not categories or wallets.
+    static var ambiguousPerson: String { String(localized: "Which person did you mean?") }
 
     /// The status once the server stopped accepting the session's token.
     static var sessionExpired: String { String(localized: "Session expired — log in again") }

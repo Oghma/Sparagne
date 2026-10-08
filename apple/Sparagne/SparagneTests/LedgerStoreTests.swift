@@ -117,7 +117,7 @@ struct LedgerStoreTests {
         await store.setAuthor("matteo")
         await store.reload()
 
-        #expect(store.authors == ["elisa", "matteo"])
+        #expect(store.peopleInRows == ["elisa", "matteo"])
         #expect(store.rows.count == 3)
 
         store.person = "elisa"
@@ -398,7 +398,8 @@ struct LedgerStoreTests {
         #expect(label.contains(String(localized: "expense \(LedgerMoney.amount(95_000))")))
         #expect(label.contains("Casa, mutuo"))
         #expect(label.contains(String(localized: "envelope \(envelope.name)")))
-        #expect(label.hasSuffix(String(localized: "by \("matteo")")))
+        // matteo's own row: who it is for, and nobody else who recorded it.
+        #expect(label.hasSuffix(LedgerAccessibility.person("matteo")))
 
         try await store.core.execute(vaultId: try #require(store.currentVault).id, .voidTransaction(transactionId: row.id))
         store.showVoided = true

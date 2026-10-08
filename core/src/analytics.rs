@@ -26,7 +26,7 @@ use crate::{
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct FlowPersonTotals {
     pub flow_id: Uuid,
-    /// `transactions.created_by`: the member of the vault, the PERSONA column.
+    /// `transactions.person`: who the rows are for, the PERSONA column.
     pub person: String,
     pub income: i64,
     pub expense: i64,
@@ -59,6 +59,7 @@ pub struct TopExpense {
     pub note: Option<String>,
     pub category: String,
     pub category_is_system: bool,
+    /// `transactions.person`.
     pub person: String,
     pub amount: i64,
 }
@@ -69,7 +70,7 @@ pub struct TopExpense {
 pub struct BucketPersonTotals {
     /// Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
     pub bucket: u32,
-    /// `transactions.created_by`.
+    /// `transactions.person`.
     pub person: String,
     /// Income other than opening balances.
     pub income: i64,
@@ -141,7 +142,8 @@ fn check_bounds(bounds: &[DateTime<Utc>], query: &str) -> Result<()> {
 }
 
 /// `WHERE` shared by every aggregation: one vault, live rows, entries only,
-/// inside the range, optionally one person.
+/// inside the range, optionally one person: who the rows are for
+/// (`transactions.person`), not who recorded them.
 fn scope(
     vault_id: Uuid,
     from: DateTime<Utc>,
@@ -159,20 +161,20 @@ fn scope(
         Value::Integer(to.timestamp()),
     ];
     if let Some(person) = person {
-        sql.push_str(" AND t.created_by = ?");
+        sql.push_str(" AND t.person = ?");
         args.push(Value::Text(person.to_string()));
     }
     (sql, args)
 }
 
 impl Core {
-    /// Distinct authors of live transactions, ordered case-insensitively.
+    /// Distinct persons of live transactions, ordered case-insensitively.
     /// Feeds the `TUTTI / ELISA / MATTEO` segmented control.
-    pub fn authors(&self, vault_id: Uuid) -> Result<Vec<String>> {
+    pub fn people(&self, vault_id: Uuid) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
-            "SELECT DISTINCT created_by FROM transactions
+            "SELECT DISTINCT person FROM transactions
              WHERE vault_id = ?1 AND voided_at IS NULL
-             ORDER BY lower(created_by)",
+             ORDER BY lower(person)",
         )?;
         let rows = stmt
             .query_map([blob(vault_id)], |r| r.get::<_, String>(0))?
@@ -191,12 +193,12 @@ impl Core {
         check_range(from, to)?;
         let (where_sql, args) = scope(vault_id, from, to, None);
         let sql = format!(
-            "SELECT l.target_id, t.created_by, t.kind, SUM(ABS(l.amount))
+            "SELECT l.target_id, t.person, t.kind, SUM(ABS(l.amount))
              FROM transactions t
              JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
              {where_sql}
-             GROUP BY l.target_id, t.created_by, t.kind
-             ORDER BY lower(t.created_by)"
+             GROUP BY l.target_id, t.person, t.kind
+             ORDER BY lower(t.person)"
         );
 
         let mut stmt = self.conn.prepare(&sql)?;
@@ -373,7 +375,7 @@ impl Core {
         let edges: Vec<i64> = bounds.iter().map(|b| b.timestamp()).collect();
         let (where_sql, args) = scope(vault_id, bounds[0], bounds[bounds.len() - 1], None);
         let sql = format!(
-            "SELECT t.occurred_at, t.created_by, t.kind, c.is_system, c.name_norm,
+            "SELECT t.occurred_at, t.person, t.kind, c.is_system, c.name_norm,
                     f.cap IS NULL, ABS(l.amount)
              FROM transactions t
              JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
@@ -470,7 +472,7 @@ impl Core {
         let (where_sql, mut args) = scope(vault_id, from, to, person.as_deref());
         let sql = format!(
             "SELECT t.id, t.occurred_at, t.occurred_offset, t.note, c.name, c.is_system,
-                    t.created_by, t.amount
+                    t.person, t.amount
              FROM transactions t JOIN categories c ON c.id = t.category_id
              {where_sql} AND t.kind = 'expense'
              ORDER BY t.amount DESC, t.occurred_at DESC, t.id DESC

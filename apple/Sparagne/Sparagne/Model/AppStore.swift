@@ -4,7 +4,10 @@ import SparagneCore
 
 /// A domain error on its way to an alert. `code` is the stable snake_case
 /// code from `ErrorCodes.swift`, so tests and call sites can match on it.
-struct AppError: Identifiable, Equatable, Sendable {
+///
+/// Also thrown as it is, by a check the app makes before the core is asked
+/// (the PERSONA cell's name): it reaches the alert with its own headline.
+struct AppError: Identifiable, Equatable, Sendable, Error {
     let id = UUID()
     let code: String
     let message: String
@@ -15,25 +18,56 @@ struct AppError: Identifiable, Equatable, Sendable {
     /// `name`), so `AppStore.resolveAmbiguous` knows what to replace in
     /// `quickAddText`. `nil` outside that one case.
     let ambiguousFragment: String?
+    /// A headline more precise than the code's, when the error says what
+    /// it is about: a person nobody here goes by, or several that match.
+    private let headline: String?
 
     /// The localized headline for `code` (`ErrorMessages.swift`); the alert
     /// keeps `message`, the Rust `Display` text, as its secondary detail.
-    var summary: String { ErrorMessages.summary(for: code) }
+    var summary: String { headline ?? ErrorMessages.summary(for: code) }
 
-    init(code: String, message: String, candidates: [String] = [], ambiguousFragment: String? = nil) {
+    init(
+        code: String,
+        message: String,
+        candidates: [String] = [],
+        ambiguousFragment: String? = nil,
+        headline: String? = nil
+    ) {
         self.code = code
         self.message = message
         self.candidates = candidates
         self.ambiguousFragment = ambiguousFragment
+        self.headline = headline
     }
 
     init(_ error: DomainError) {
         self.init(code: error.code, message: error.message)
     }
 
-    init(_ error: QuickAddError) {
-        let fragment: String? = if case .AmbiguousName(let name, _) = error { name } else { nil }
-        self.init(code: error.code, message: error.message, candidates: error.candidates, ambiguousFragment: fragment)
+    /// `line` is the quick-add line the error is about. An ambiguous name
+    /// does not say which marker carried it; the line does, and a `!` makes
+    /// it a person.
+    init(_ error: QuickAddError, line: String? = nil) {
+        var fragment: String?
+        var headline: String?
+        switch error {
+        case .AmbiguousName(let name, _):
+            fragment = name
+            if let line, AppStore.marker(carrying: name, in: line)?.marker == "!" {
+                headline = ErrorMessages.ambiguousPerson
+            }
+        case .UnknownName(let kind, let name) where kind == "person":
+            headline = ErrorMessages.unknownPerson(name)
+        default:
+            break
+        }
+        self.init(
+            code: error.code,
+            message: error.message,
+            candidates: error.candidates,
+            ambiguousFragment: fragment,
+            headline: headline
+        )
     }
 }
 
@@ -168,6 +202,17 @@ final class AppStore {
     /// tables' add lines and every cell that opens for editing follow it.
     var canWrite: Bool { currentVault != nil && !isReadOnly }
 
+    /// The usernames of each vault's members, as the sync engine last heard
+    /// them from the server (`SyncEngine.publishMembers`). `nil` while
+    /// logged out and in a demo database, where no server checks a person;
+    /// logged in, a vault missing from it is one whose members are not
+    /// known yet.
+    private(set) var vaultMembers: [Uuid: [String]]?
+
+    func setVaultMembers(_ members: [Uuid: [String]]?) {
+        vaultMembers = members
+    }
+
     // MARK: Loaded data
 
     private(set) var snapshot: VaultSnapshot?
@@ -175,8 +220,12 @@ final class AppStore {
     private(set) var transactions: [TransactionView] = []
     private(set) var nextCursor: String?
     private(set) var allRows: [TransactionRow] = []
-    /// Distinct authors in the vault: the PERSONA segmented control.
-    private(set) var authors: [String] = []
+    /// The persons of the vault's live rows (`people()`): the PERSONA
+    /// segmented control, and the names the summaries break down by. Who
+    /// may be named on a new row is `assignablePeople`, a different list:
+    /// a member who never had a row is in that one only, a former member
+    /// with rows left behind in this one only.
+    private(set) var peopleInRows: [String] = []
     /// Everything the ledger's summary panel draws.
     private(set) var summary: LedgerSummary?
     /// Everything the RIEPILOGO draws: the year of `month`, up to `month`
@@ -472,7 +521,7 @@ final class AppStore {
             allRows = []
             nextCursor = nil
             loadedFilter = nil
-            authors = []
+            peopleInRows = []
             summary = nil
             year = nil
             pendingRecurringItems = []
@@ -492,7 +541,7 @@ final class AppStore {
             transactions = loaded.page.items
             nextCursor = loaded.page.nextCursor
             loadedFilter = request.filter
-            authors = loaded.authors
+            peopleInRows = loaded.people
             pendingRecurringItems = loaded.pendingRecurring
             summary = Self.summary(month: month, from: loaded)
             year = Self.year(month: month, from: loaded, flows: flows)
@@ -503,7 +552,7 @@ final class AppStore {
             // A person who has left the vault's history must not stay
             // selected, or the ledger shows an empty month with no way back.
             // Clearing it queues the reload that fetches the whole month.
-            if let person, !authors.contains(person) { self.person = nil }
+            if let person, !peopleInRows.contains(person) { self.person = nil }
         }
     }
 
@@ -616,7 +665,7 @@ final class AppStore {
             walletId: nil,
             flowId: nil,
             text: text.isEmpty ? nil : text,
-            author: person,
+            person: person,
             ascending: true
         )
     }
@@ -923,7 +972,8 @@ final class AppStore {
         flowId: Uuid?,
         category: String?,
         note: String?,
-        schedule: Schedule
+        schedule: Schedule,
+        owner: String? = nil
     ) async -> Uuid? {
         guard let vault = currentVault, !refusedAsReadOnly() else { return nil }
         var created: Uuid?
@@ -938,7 +988,10 @@ final class AppStore {
                     flowId: flowId,
                     category: category,
                     note: note,
-                    schedule: schedule
+                    schedule: schedule,
+                    // The author is the core's default owner: said by
+                    // leaving it out, like a row's person.
+                    owner: explicitPerson(owner)
                 )
             )
             created = receipt.resultId
@@ -973,9 +1026,23 @@ final class AppStore {
 
     /// Materializes `periodDate` as a transaction; `occurredAt` is the due
     /// date at the current time of day, in the system offset (team-lead
-    /// task 4).
+    /// task 4). The row is for the template's owner, whoever presses
+    /// Registra: the mortgage stays Matteo's when Elisa records it.
+    ///
+    /// An owner who left the vault is refused here, before the core: the
+    /// buttons are off for such a template (`ownerHasLeft`), and a period
+    /// recorded anyway would be refused by the server and fall due again.
     func executeRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
-        await recurringCommand(Self.execution(recurringId, periodDate: periodDate, now: Date()))
+        let owner = owner(ofTemplate: recurringId)
+        if let owner, Self.ownerHasLeft(owner, members: currentMembers, author: currentAuthor) {
+            presentedError = AppError(
+                code: "not_a_member",
+                message: Self.ownerLeftExplanation,
+                headline: String(localized: "\(owner) is not a member of this vault")
+            )
+            return
+        }
+        await recurringCommand(execution(recurringId, owner: owner, periodDate: periodDate, now: Date()))
     }
 
     func skipRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
@@ -986,23 +1053,55 @@ final class AppStore {
     /// written or, when one is refused (an envelope that would go below zero,
     /// a wallet archived since), none is, and the alert says which. Half a
     /// backlog applied would leave the user working out what is still due.
+    ///
+    /// The periods of a template whose owner left the vault stay out of the
+    /// batch and on the list (`ownerHasLeft`), and the alert counts them:
+    /// the server would refuse each, and refusing the lot over them would
+    /// hold back periods nothing is wrong with.
     func executeAllDueRecurring() async {
         guard let vault = currentVault, !refusedAsReadOnly() else { return }
         let now = Date()
-        let commands = duePeriods.map { Self.execution($0.template.id, periodDate: $0.date, now: now) }
-        guard !commands.isEmpty else { return }
-        await guarded {
-            try await core.executeBatch(vaultId: vault.id, commands)
-            savedAt = Date()
-            await reload()
+        let periods = duePeriods
+        let held = periods.filter { ownerHasLeft($0.template) }
+        let commands = periods.filter { !ownerHasLeft($0.template) }.map {
+            execution($0.template.id, owner: $0.template.owner, periodDate: $0.date, now: now)
         }
+        var refused = false
+        if !commands.isEmpty {
+            refused = true
+            await guarded {
+                try await core.executeBatch(vaultId: vault.id, commands)
+                refused = false
+                savedAt = Date()
+                await reload()
+            }
+        }
+        // A refused batch has its own alert, and recorded nothing either.
+        guard !held.isEmpty, !refused else { return }
+        presentedError = AppError(
+            code: "not_a_member",
+            message: Self.ownerLeftExplanation,
+            headline: Self.periodsNotRecorded(held.count)
+        )
     }
 
-    private static func execution(_ recurringId: Uuid, periodDate: NaiveDate, now: Date) -> Command {
+    /// The owner of a template, from the due list `reload()` keeps fresh, or
+    /// from the templates the Ricorrenze tab loaded.
+    func owner(ofTemplate id: Uuid) -> String? {
+        pendingRecurringItems.first { $0.template.id == id }?.template.owner
+            ?? recurringTemplates.first { $0.id == id }?.owner
+    }
+
+    /// The command that records one period, for `owner`. The owner goes in
+    /// the command rather than being read when it is applied: a later change
+    /// of owner must not rewrite on replay what was recorded before it. The
+    /// author is left out, as on any row of theirs.
+    private func execution(_ recurringId: Uuid, owner: String?, periodDate: NaiveDate, now: Date) -> Command {
         .executeRecurring(
             recurringId: recurringId,
             periodDate: periodDate,
-            occurredAt: combine(day: periodDate, timeOf: now)
+            occurredAt: Self.combine(day: periodDate, timeOf: now),
+            person: explicitPerson(owner)
         )
     }
 
@@ -1082,6 +1181,11 @@ final class AppStore {
     /// FLOW cell has to behave like the last row, not like a system envelope
     /// the user never picked. A `nil` kind is the direction on screen's; a
     /// duplicate passes its source's, so a refund copied stays a refund.
+    ///
+    /// `person` is who the row is for, already one of `assignablePeople`.
+    /// The author is sent as no person at all: the core reads that as the
+    /// author, and the command reads exactly as one from before rows could
+    /// be for someone else.
     func addRow(
         day: Date,
         flowId: Uuid?,
@@ -1089,7 +1193,8 @@ final class AppStore {
         note: String,
         amount: Int64,
         walletId: Uuid? = nil,
-        kind: TransactionKind? = nil
+        kind: TransactionKind? = nil,
+        person: String? = nil
     ) async {
         guard let vault = currentVault, amount > 0, !refusedAsReadOnly() else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1100,7 +1205,8 @@ final class AppStore {
             flowId: envelope,
             category: category?.trimmingCharacters(in: .whitespacesAndNewlines),
             note: trimmedNote.isEmpty ? nil : trimmedNote,
-            occurredAt: Self.combine(day: CoreDate.day(day), timeOf: Date())
+            occurredAt: Self.combine(day: CoreDate.day(day), timeOf: Date()),
+            person: explicitPerson(person)
         )
         let command: Command
         switch kind ?? direction.newRowKind {
@@ -1119,6 +1225,39 @@ final class AppStore {
             lastFlowId = envelope ?? lastFlowId
             savedAt = Date()
             await reload()
+        }
+    }
+
+    /// What a command says for `person`: nothing for the author, or a blank,
+    /// the name otherwise. Shared by the rows the grid adds, the quick-add
+    /// line's `!name` and the periods a template records for its owner.
+    ///
+    /// The author in any case is the author: logged out, the local name
+    /// "Matteo" and the username "matteo" of the synced rows are one person,
+    /// and the line resolves `!Matteo` to the username (`folded`).
+    func explicitPerson(_ person: String?) -> String? {
+        guard let trimmed = person?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty, trimmed.lowercased() != currentAuthor.lowercased()
+        else { return nil }
+        return trimmed
+    }
+
+    /// `command` with its entry's person as `explicitPerson` says it. The
+    /// core hands back the name `!name` matched, the author's included; the
+    /// grid sends the author as no person, and so does the line.
+    private func withExplicitPerson(_ command: Command) -> Command {
+        switch command {
+        case .income(var entry):
+            entry.person = explicitPerson(entry.person)
+            return .income(entry)
+        case .expense(var entry):
+            entry.person = explicitPerson(entry.person)
+            return .expense(entry)
+        case .refund(var entry):
+            entry.person = explicitPerson(entry.person)
+            return .refund(entry)
+        default:
+            return command
         }
     }
 
@@ -1197,16 +1336,27 @@ final class AppStore {
         guard !trimmed.isEmpty, !refusedAsReadOnly() else { return }
         await guarded {
             let parsed = try parseQuickAdd(input: trimmed, currency: currency)
-            let resolved = try await core.resolveQuickAdd(
-                vaultId: vault.id,
-                parsed: parsed,
-                now: Date(),
-                defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId)
-            )
+            let resolved: ResolvedQuickAdd
+            do {
+                // A `!name` picks among the people a row may be for, each
+                // once whatever the case of its spellings.
+                resolved = try await core.resolveQuickAdd(
+                    vaultId: vault.id,
+                    parsed: parsed,
+                    now: Date(),
+                    defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId),
+                    people: Self.folded(assignablePeople)
+                )
+            } catch let error as QuickAddError {
+                // The line knows which marker a name came from.
+                presentedError = AppError(error, line: trimmed)
+                return
+            }
             // A row like one typed in the grid, and undone the same way.
-            let minted = await core.envelope(vaultId: vault.id, resolved.command)
+            let command = withExplicitPerson(resolved.command)
+            let minted = await core.envelope(vaultId: vault.id, command)
             let receipt = try await core.execute(envelope: minted)
-            recordAddedRow(resolved.command, id: receipt.resultId ?? minted.id, vaultId: vault.id)
+            recordAddedRow(command, id: receipt.resultId ?? minted.id, vaultId: vault.id)
             savedAt = Date()
             // The core reports what the names resolved to, so the sticky
             // defaults never depend on the shape of the command.
@@ -1228,18 +1378,32 @@ final class AppStore {
         await submit(quickAdd: rewritten)
     }
 
-    /// Finds which marker (`#`, `@`, `>`) carried `fragment` and swaps in
-    /// `chosen`, preserving the marker. The grammar allows at most one of
-    /// each marker (`docs/v2/DISTILLATO_V1.md` §3.1), so the first match is
-    /// unambiguous.
-    private static func rewrite(_ text: String, fragment: String, with chosen: String) -> String {
-        for marker in ["#", "@", ">"] {
-            let needle = marker + fragment
-            if let range = text.range(of: needle, options: .caseInsensitive) {
-                return text.replacingCharacters(in: range, with: marker + chosen)
+    /// Swaps `chosen` in for `fragment` behind the marker that carried it,
+    /// preserving the marker.
+    nonisolated static func rewrite(_ text: String, fragment: String, with chosen: String) -> String {
+        guard let found = marker(carrying: fragment, in: text) else { return text }
+        return text.replacingCharacters(in: found.range, with: found.marker + chosen)
+    }
+
+    /// Which marker (`#`, `@`, `>`, `!`) carried `fragment` in `text`, and
+    /// where: the grammar allows at most one of each
+    /// (`docs/v2/DISTILLATO_V1.md` §3.1), so one match per marker is all
+    /// there is. A whole token wins over the start of a longer one: in
+    /// `#elisir !eli` the person is `!eli`, not the `#eli` of the category.
+    nonisolated static func marker(carrying fragment: String, in text: String) -> (marker: String, range: Range<String.Index>)? {
+        let markers = ["#", "@", ">", "!"]
+        var partial: (marker: String, range: Range<String.Index>)?
+        for marker in markers {
+            var start = text.startIndex
+            while let range = text.range(of: marker + fragment, options: .caseInsensitive, range: start..<text.endIndex) {
+                let opens = range.lowerBound == text.startIndex || text[text.index(before: range.lowerBound)].isWhitespace
+                let closes = range.upperBound == text.endIndex || text[range.upperBound].isWhitespace
+                if opens, closes { return (marker, range) }
+                if opens, partial == nil { partial = (marker, range) }
+                start = range.upperBound
             }
         }
-        return text
+        return partial
     }
 
     // MARK: - Void with deferred undo
@@ -1393,6 +1557,7 @@ final class AppStore {
 
     private func present(_ error: Error) {
         switch error {
+        case let error as AppError: presentedError = error
         case let error as DomainError: presentedError = AppError(error)
         case let error as QuickAddError: presentedError = AppError(error)
         default: presentedError = AppError(code: "unexpected", message: error.localizedDescription)

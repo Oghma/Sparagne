@@ -51,7 +51,7 @@ func quickAddRoundTrip() throws {
     let fixture = try Fixture()
 
     let parsed = try parseQuickAdd(input: "-12.50 pizza #food @cash", currency: .eur)
-    guard case .entry(let kind, let amount, let note, let category, let wallet, _, _) = parsed
+    guard case .entry(let kind, let amount, let note, let category, let wallet, _, _, _) = parsed
     else {
         Issue.record("expected an entry, got \(parsed)")
         return
@@ -66,7 +66,8 @@ func quickAddRoundTrip() throws {
         vaultId: fixture.vaultId,
         parsed: parsed,
         now: Fixture.now,
-        defaults: QuickAddDefaults()
+        defaults: QuickAddDefaults(),
+        people: []
     )
     guard case .expense(let entry) = resolved.command else {
         Issue.record("expected an expense, got \(resolved.command)")
@@ -260,7 +261,8 @@ func ambiguousNameCarriesTheCandidates() throws {
             vaultId: fixture.vaultId,
             parsed: parsed,
             now: Fixture.now,
-            defaults: QuickAddDefaults()
+            defaults: QuickAddDefaults(),
+            people: []
         )
         Issue.record("expected the name to be ambiguous")
     } catch let error as QuickAddError {
@@ -284,7 +286,8 @@ func periodTotalsWithoutBounds() throws {
         vaultId: fixture.vaultId,
         parsed: parsed,
         now: Fixture.now,
-        defaults: QuickAddDefaults()
+        defaults: QuickAddDefaults(),
+        people: []
     )
     _ = try fixture.execute(resolved.command)
 

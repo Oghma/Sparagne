@@ -80,9 +80,24 @@ periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
 - Ogni cella delle righe esistenti è editabile in posto; ↩ emette un
   `UpdateTransaction` con i soli campi cambiati, esc ripristina. Lasciare la
   riga (⇥ oltre IMPORTO, click altrove) salva come in un foglio di calcolo.
+- **La cella PERSONA** (2026-10-08) è una cella come le altre: mostra la persona
+  della riga, per chi è, e si modifica in posto. Il nome si risolve fra le
+  persone che una riga può avere (sotto) come si risolve una busta; un nome
+  che non corrisponde a nessuno è rifiutato sulla cella. La riga nuova parte
+  con l'autore corrente; se la persona coincide con l'autore l'app non manda
+  nessuna persona. Una modifica manda la sola persona, e un vuoto la rimette a
+  chi ha registrato la riga; annulla e ripeti la ripristinano. Una riga la cui
+  persona non è chi l'ha registrata lo dice nel suggerimento al passaggio del
+  puntatore e a VoiceOver ("Registrata da …"). Sui trasferimenti la cella
+  resta spenta (`dim`), e senza permesso di scrittura non si modifica.
+  **Chi si può scegliere** (`AppStore`): da loggati, solo gli username dei
+  **membri del vault** come li ha elencati il server, letti quando si apre il
+  vault e dopo ogni giro di sync, e ricordati per vault come i ruoli; da
+  sloggati, in un database demo o prima che il vault arrivi al server,
+  l'autore corrente, le persone delle righe e i titolari dei modelli.
 - **Barra dei filtri** (`Views/Ledger/FilterBar.swift`): sopra la griglia,
   due controlli segmentati, la direzione (Uscite / Entrate) e la persona
-  (Tutti e un segmento per autore, solo se gli autori sono più d'uno), poi tre
+  (Tutti e un segmento per persona, solo se le persone sono più d'una), poi tre
   chip per ciò che di solito è spento: Trasferimenti, Eliminate, Colonna wallet
   (tratteggiato da spento, pieno da acceso). I chip e le voci del menu (⌘⇧T,
   ⌘⇧V, ⌘⇧W) sono lo stesso valore. Mese e ricerca stanno nella barra in alto.
@@ -96,8 +111,9 @@ periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
   delle ricorrenze e il tag "da confermare"; **Salta** e **Registra** nella
   cella Descrizione (non in un vault in sola lettura). Non sono righe: non si
   aprono, non si scelgono e non entrano nella riga di stato. Seguono il filtro
-  direzione (un modello d'entrata sta sotto Entrate) e la ricerca; non hanno
-  autore, quindi la persona non li filtra. Nulla si scrive finché non si
+  direzione (un modello d'entrata sta sotto Entrate), la ricerca e, dal
+  2026-10-08, il filtro persona: la loro persona è il titolare del modello, che
+  la riga mostra nella colonna Persona. Nulla si scrive finché non si
   preme uno dei due bottoni (`Model/LedgerLines.swift`).
 - **Riga di stato**: la media, il conteggio e la somma delle righe a schermo,
   o di quelle scelte quando sono due o più, come la barra di stato di un
@@ -107,7 +123,7 @@ periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
   card, la più importante per prima. Il **risparmio del mese** in grande, con
   il tag "in corso" se il mese è quello corrente, la quota sulle entrate, la
   differenza col mese prima (▲ o ▼) e sotto entrate e uscite; **per persona**
-  (entrate, uscite per busta, risparmio, una colonna per autore); le **uscite
+  (entrate, uscite per busta, risparmio, una colonna per persona); le **uscite
   per categoria** (le sei maggiori, con quota e barra; la quota è su ciò che
   le categorie hanno speso, così un rimborso del mese scorso non porta la
   somma oltre il 100%); il **risparmio degli ultimi 12 mesi**.
@@ -165,9 +181,16 @@ periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
   (Senza categoria) è più chiaro. Chi ha scritto una riga che si legge in modo
   diverso da come voleva lo vede prima di ↩. Con `>` il riquadro elenca i
   comandi (§6). I chip li compone `Model/QuickAddTokens.swift`; il parsing
-  resta del core.
+  resta del core. Dal 2026-10-08 la riga può dire per chi è con **`!nome`**
+  (`!elisa`: un `!` seguito da una lettera o una cifra), risolto fra le
+  persone di cui sopra con gli stessi livelli di busta e wallet (esatto,
+  prefisso, contiene), e compare come chip "chi". Un `!` da solo resta nella
+  nota, un secondo `!` e un `!nome` in un trasferimento sono errori. Un nome
+  che non è di nessuno ha il suo messaggio; uno ambiguo chiede quale persona
+  e riscrive la scelta dietro il `!`. Il server rifiuta un nome che non è
+  membro del vault (`not_a_member`), e l'elenco dei rifiuti dice quale.
 - **VoiceOver**: ogni riga è una frase (data, importo col segno, categoria,
-  nota, busta, persona, eliminata) con le azioni Modifica, Duplica, Elimina e
+  nota, busta, persona, registrata da chi se diverso, eliminata) con le azioni Modifica, Duplica, Elimina e
   Seleziona e il tratto "selezionata"; celle, intestazioni, riga nuova, mese e
   segmenti dei filtri hanno un nome. Un periodo dovuto si legge come una
   frase, con le azioni Registra e Salta.
@@ -220,7 +243,7 @@ Definizioni (dell'utente, 2026-09-11), per il mese `m`:
 | TOTALE | RISPARMIO + FONDO CASSA − USCITE FONDI, cioè il saldo complessivo dei wallet a fine mese |
 | colonne persona | il TOTALE di ciascuna persona, stessa formula sulle sue sole righe |
 
-- Le persone non sono fisse: una colonna per ogni autore del vault, nell'ordine
+- Le persone non sono fisse: una colonna per ogni persona del vault, nell'ordine
   del core. Un vault con una persona ha una colonna sola e nessun totale
   ripetuto.
 - Il mese a schermo (lo stepper è lo stesso del mastro) decide l'anno e il
@@ -398,7 +421,7 @@ sinistra tre card in colonna e a destra l'inspector (340 pt):
   prima. Oggi sta in "Da confermare", e un giorno non si conta in tutte e due.
   Le date le calcola il core (`schedule_occurrences`, sotto).
 - **Modelli**: ogni modello in una riga da 26 pt (Attiva, Descrizione,
-  Importo, Cadenza, Prossima, Wallet, Busta, Categoria), le archiviate in
+  Importo, Cadenza, Prossima, Wallet, Busta, Categoria, Titolare), le archiviate in
   fondo in `dim` con **Ripristina**, una riga vuota per aggiungerne uno. Un
   click su una riga la apre nell'inspector; l'interruttore Attiva mette in
   pausa o riprende il modello sul posto. Le frasi di cadenza sono intere e al
@@ -406,7 +429,7 @@ sinistra tre card in colonna e a destra l'inspector (340 pt):
 
 L'**inspector** (`Views/Recurring/RecurringInspector.swift`) modifica un
 modello o ne scrive uno nuovo: importo e tipo (uscita o entrata), Dove
-(wallet, busta, categoria, nota), Quando (frequenza, ogni N, il giorno della
+(wallet, busta, categoria, nota, e il **Titolare**), Quando (frequenza, ogni N, il giorno della
 settimana, del mese o dell'anno, inizio, fine) e **Prossime date**, le
 prossime quattro, che seguono ogni tasto e che il core calcola anche per un
 modello non ancora salvato. **Salva** manda un `UpdateRecurring` con i soli
@@ -415,6 +438,16 @@ ripristina prima di modificarlo. L'inspector non offre ciò che
 `RecurringPatch` non sa dire: il tipo non cambia una volta creato il modello,
 e un modello con un wallet o una busta non torna a "qualsiasi wallet" né a
 Non allocato (quelle voci sono spente).
+
+**Il titolare** (2026-10-08). Il mutuo di Matteo resta di Matteo anche se è
+Elisa a premere Registra. Il selettore Titolare dell'inspector sceglie fra le
+persone che una riga può avere (§2.1), parte dall'autore su un modello nuovo
+e Duplica lo conserva; una modifica manda il titolare solo se è cambiato. La
+colonna Titolare della tabella lo mostra. **Registra** e **Registra tutte**
+mandano `ExecuteRecurring` con `person` = titolare, chiunque prema il
+bottone: la transazione è del titolare e `created_by` è di chi l'ha
+registrata. Le righe in attesa nel Mastro mostrano il titolare e seguono il
+filtro persona. Selettore spento senza permesso di scrittura.
 
 **Limite noto, non ancora affrontato** (2026-10-08). Un modello non si
 modifica del tutto: non si può togliergli il wallet o la busta una volta
@@ -459,8 +492,10 @@ dell'inspector.
   è più largo degli altri (880 × 640) perché la tabella ha otto colonne.
 - **File › Esporta tutte le transazioni…**: un CSV con ogni transazione del
   vault, tutte le date, eliminate e trasferimenti compresi, con tipo, wallet e
-  busta (da → a per i trasferimenti), categoria, nota, autore, eliminata (la
-  colonna `voided`).
+  busta (da → a per i trasferimenti), categoria, nota, persona, autore, eliminata (la
+  colonna `voided`). Dal 2026-10-08 la colonna persona è per chi è la riga e
+  l'autore è chi l'ha registrata: le due differiscono solo per una riga
+  registrata per conto di un altro.
   ⌘E resta l'export delle righe a schermo, ma legge tutte le pagine del mese.
 - **File › Backup del database…**: una copia coerente (`VACUUM INTO`) salvata
   dove si sceglie; l'avviso finale spiega come ripristinarla (README).
@@ -475,7 +510,7 @@ scrive in minuscolo, e `FLOW` si legge "Busta".)
 | `FLOW` (Cash, Casa, Varie, Investimenti, Emergenza) | busta (`flows`) |
 | `CATEGORIA` | categoria |
 | `DESCRIZIONE` | `note` |
-| `PERSONA` (Elisa, Matteo) | `transactions.created_by`, cioè l'autore del comando |
+| `PERSONA` (Elisa, Matteo) | `transactions.person`: per chi è la riga, di default l'autore (`created_by`, chi l'ha registrata, resta a parte) |
 | `IMPORTO` | `amount`, valore assoluto: il segno lo dà il filtro USCITE/ENTRATE |
 | `USCITE` / `ENTRATE` | `kinds = [expense, refund]` / `kinds = [income]` |
 | `Risparmio` (mastro) | `income − net_expense` |
@@ -495,14 +530,25 @@ nome come la cella FLOW — e la riga vuota lascia scegliere il wallet invece di
 prendere il default. I trasferimenti fanno eccezione: la cella mostra
 `da → a` in `dim` e non si modifica, perché le due gambe stanno in
 `from_id`/`to_id`, che la griglia non tocca. L'export CSV (⌘E) porta la
-colonna `wallet` solo quando è a schermo.
+colonna `wallet` solo quando è a schermo; la sua colonna persona è la persona
+della riga (dal 2026-10-08, prima era l'autore).
 
-Decisione sulla persona (2026-09-10): niente campo nuovo sulle transazioni.
-`created_by` è già l'utente del vault ed è il senso della colonna nei vault
-condivisi. Costo: non si registra una spesa "per conto di" un altro membro.
-Da loggati fuori il nome si sceglie nelle Impostazioni ("Nome nel mastro",
+Decisione sulla persona (2026-10-08, sostituisce quella del 2026-09-10): una
+transazione ha una persona distinta dall'autore. Il 2026-09-10 si era deciso
+di non aggiungere nessun campo, perché `created_by` era già l'utente del vault;
+costava non poter registrare una spesa "per conto di" un altro membro, e due
+bisogni lo hanno reso troppo: Matteo registra una spesa per Elisa, e il mutuo
+di Matteo resta suo anche se è Elisa a registrarlo. Sono lo stesso problema.
+La persona è `transactions.person` (schema v4), di default l'autore, quindi
+ogni riga esistente conserva il suo significato; `created_by` resta come
+"registrata da". Può essere persona **solo un membro del vault**: il server
+non accetta altro, e la persona vera di una riga deve esistere per chi la
+legge sugli altri Mac. Si sceglie nella cella PERSONA o con `!nome` nel ⌘K
+(§2.1), e un modello di ricorrenza ha il suo titolare (§2.5). Da loggati fuori
+il nome dell'autore si sceglie nelle Impostazioni ("Nome nel mastro",
 2026-09-11); senza scelta vale l'utente macOS, e dopo il login vale il nome
-dell'account.
+dell'account, e al login le persone che un comando in coda nominava con il
+vecchio nome diventano lo username.
 
 ## 4. Contratto delle query (core)
 
@@ -512,7 +558,7 @@ sistema, così il core non conosce fusi né calendari.
 
 | Query | Serve a |
 |---|---|
-| `authors(vault)` | il segmentato `TUTTI/ELISA/MATTEO` |
+| `people(vault)` | il segmentato `TUTTI/ELISA/MATTEO`: le persone distinte delle righe vive (prima `authors`) |
 | `flow_person_totals(vault, from, to)` | tabella persona × flow, "chi ha speso cosa" |
 | `category_totals(vault, from, to, person?)` | uscite per categoria |
 | `bucket_totals(vault, bounds[], person?)` | serie 12 mesi (13 estremi → 12 secchi) |
@@ -702,3 +748,13 @@ nel core il termine resta void (`VoidTransaction`, `voidSelection`). La riga
 sotto il puntatore ha un cestino in una corsia fissa dopo IMPORTO
 (`RowDeleteButton`, `RowActionTrack`) e ⌫ senza selezione la elimina
 (`DeleteTarget`, `SparagneTests/DeleteTargetTests.swift`), §2.1.
+
+**2026-10-08: persona e titolare.** La cella PERSONA diventa modificabile e
+legge `transactions.person`, il ⌘K ha `!nome` con il chip "chi", la barra dei
+filtri, il pannello e il riepilogo raggruppano per persona, le ricorrenze hanno
+il titolare (selettore nell'inspector, colonna nella tabella, Registra a suo
+nome, righe in attesa che seguono il filtro persona), e il CSV porta la
+persona e, nell'export completo, l'autore. Decisione e perché in §3, elenco di
+chi si può scegliere in §2.1. Il seed della demo ha alcune spese che Matteo
+registra per Elisa e un mutuo che resta di Matteo anche quando lo registra
+Elisa. Da rilasciare con il server per primo (`DEPLOY.md` §6.2).

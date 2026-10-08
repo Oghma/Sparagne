@@ -9,7 +9,10 @@
 use rusqlite::{OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
-use crate::{CommandEnvelope, DomainError, Result, TransactionKind, TransactionPatch};
+use crate::{
+    CommandEnvelope, DomainError, Result, TransactionKind, TransactionPatch,
+    command::explicit_person,
+};
 
 pub(super) fn update_transaction(
     tx: &Transaction<'_>,
@@ -55,16 +58,24 @@ pub(super) fn update_transaction(
         Some(when) => (when.timestamp(), when.offset().local_minus_utc()),
         None => (row.occurred_at, row.occurred_offset),
     };
+    // Transfers never get here with a person (see `transfer_legs`). A blank
+    // one gives the row back to whoever recorded it.
+    let person = match patch.person.as_deref() {
+        Some(text) => explicit_person(Some(text)).unwrap_or(&row.created_by),
+        None => &row.person,
+    };
     tx.execute(
         "UPDATE transactions
-         SET amount = ?1, occurred_at = ?2, occurred_offset = ?3, category_id = ?4, note = ?5
-         WHERE id = ?6",
+         SET amount = ?1, occurred_at = ?2, occurred_offset = ?3, category_id = ?4, note = ?5,
+             person = ?6
+         WHERE id = ?7",
         params![
             amount,
             occurred_at,
             occurred_offset,
             category_id,
             note,
+            person,
             transaction_id
         ],
     )?;
@@ -153,6 +164,13 @@ fn transfer_legs(
     if patch.category.is_some() || patch.wallet_id.is_some() || patch.flow_id.is_some() {
         return Err(DomainError::InvalidCommand(
             "category, wallet and flow are only valid on entries".to_string(),
+        ));
+    }
+    // A transfer moves money between two of the household's own pots: it is
+    // nobody's in particular, so it stays on whoever recorded it.
+    if patch.person.is_some() {
+        return Err(DomainError::InvalidCommand(
+            "person is only valid on entries".to_string(),
         ));
     }
     let (old_from, old_to) = endpoints(old_legs, kind)?;
@@ -281,12 +299,15 @@ struct Row {
     category_id: Uuid,
     note: Option<String>,
     voided: bool,
+    created_by: String,
+    person: String,
 }
 
 fn load_transaction(tx: &Transaction<'_>, vault_id: Uuid, id: Uuid) -> Result<Row> {
     let row = tx
         .query_row(
-            "SELECT kind, amount, occurred_at, occurred_offset, category_id, note, voided_at
+            "SELECT kind, amount, occurred_at, occurred_offset, category_id, note, voided_at,
+                    created_by, person
              FROM transactions WHERE id = ?1 AND vault_id = ?2",
             params![id, vault_id],
             |r| {
@@ -298,12 +319,24 @@ fn load_transaction(tx: &Transaction<'_>, vault_id: Uuid, id: Uuid) -> Result<Ro
                     r.get::<_, Uuid>(4)?,
                     r.get::<_, Option<String>>(5)?,
                     r.get::<_, Option<i64>>(6)?,
+                    r.get::<_, String>(7)?,
+                    r.get::<_, String>(8)?,
                 ))
             },
         )
         .optional()?
         .ok_or_else(|| DomainError::NotFound("transaction".to_string()))?;
-    let (kind, amount, occurred_at, occurred_offset, category_id, note, voided_at) = row;
+    let (
+        kind,
+        amount,
+        occurred_at,
+        occurred_offset,
+        category_id,
+        note,
+        voided_at,
+        created_by,
+        person,
+    ) = row;
     Ok(Row {
         kind: TransactionKind::parse(&kind)?,
         amount,
@@ -312,6 +345,8 @@ fn load_transaction(tx: &Transaction<'_>, vault_id: Uuid, id: Uuid) -> Result<Ro
         category_id,
         note,
         voided: voided_at.is_some(),
+        created_by,
+        person,
     })
 }
 

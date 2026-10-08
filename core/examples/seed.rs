@@ -15,6 +15,10 @@
 //! recurring templates: the mortgage has this month's payment still due, and
 //! the gym was cancelled half way.
 //!
+//! Who a row is for is not always who recorded it: matteo records a few of
+//! elisa's expenses for her, the gym is elisa's although matteo set it up,
+//! and the mortgage stays matteo's in the months elisa records it.
+//!
 //! It writes real commands through the real core, so the log and the
 //! projection are exactly what the app would have produced. `--replace` is
 //! required to overwrite an existing database, and it deletes it outright.
@@ -76,9 +80,11 @@ impl Rng {
     }
 }
 
-/// One entry to write: who, when, how much, where from and under what.
+/// One entry to write: who, when, how much, where from and under what, and
+/// for whom when that is not who writes it.
 struct Row<'a> {
     who: &'a str,
+    person: Option<&'a str>,
     day: NaiveDate,
     amount: i64,
     wallet: Uuid,
@@ -127,6 +133,7 @@ impl Seeder {
             category: row.category.map(str::to_string),
             note: Some(row.note.to_string()),
             occurred_at,
+            person: row.person.map(str::to_string),
         };
         let command = match kind {
             TransactionKind::Income => Command::Income(entry),
@@ -182,7 +189,8 @@ impl Seeder {
         );
     }
 
-    /// A monthly expense template from `start`.
+    /// A monthly expense template from `start`, `row.person`'s when it names
+    /// one, else its creator's.
     fn monthly(&mut self, who: &str, row: &Row<'_>, start: NaiveDate) -> Uuid {
         self.run(
             who,
@@ -201,12 +209,15 @@ impl Seeder {
                     start_date: start,
                     end_date: None,
                 },
+                owner: row.person.map(str::to_string),
             },
         )
     }
 
-    /// Confirms the period of `template` that falls on `day`, when it has come.
-    fn execute(&mut self, who: &str, template: Uuid, day: NaiveDate) {
+    /// Confirms the period of `template` that falls on `day`, when it has
+    /// come, for `owner`: the app always sends the template's owner, whoever
+    /// presses the button.
+    fn execute(&mut self, who: &str, template: Uuid, owner: &str, day: NaiveDate) {
         let occurred_at = at(day, 8);
         if occurred_at > self.now {
             return;
@@ -217,6 +228,7 @@ impl Seeder {
                 recurring_id: template,
                 period_date: day,
                 occurred_at,
+                person: Some(owner.to_string()),
             },
         );
     }
@@ -314,6 +326,7 @@ fn main() {
 
     let row = |who, day, amount, wallet, flow, category, note| Row {
         who,
+        person: None,
         day,
         amount,
         wallet,
@@ -348,17 +361,21 @@ fn main() {
         ),
         first_month,
     );
+    // matteo set elisa's gym up for her: the template is hers.
     let palestra = seed.monthly(
-        "elisa",
-        &row(
-            "elisa",
-            first_month.with_day(5).unwrap(),
-            4_500,
-            conto,
-            cash,
-            Some("Abbonamenti"),
-            "palestra",
-        ),
+        "matteo",
+        &Row {
+            person: Some("elisa"),
+            ..row(
+                "matteo",
+                first_month.with_day(5).unwrap(),
+                4_500,
+                conto,
+                cash,
+                Some("Abbonamenti"),
+                "palestra",
+            )
+        },
         first_month,
     );
 
@@ -443,13 +460,15 @@ fn main() {
         seed.transfer_flow(day(2), 15_000, cash, vacanze, "accantonamento");
         seed.transfer_wallet("matteo", day(7), 10_000, conto, contanti, "prelievo");
 
-        // The templates. This month's mortgage is left for the banner.
+        // The templates. This month's mortgage is left for the banner; elisa
+        // records it every third month, and it stays matteo's.
         if !current {
-            seed.execute("matteo", mutuo, day(1));
+            let who = if index % 3 == 2 { "elisa" } else { "matteo" };
+            seed.execute(who, mutuo, "matteo", day(1));
         }
-        seed.execute("matteo", streaming, day(12));
+        seed.execute("matteo", streaming, "matteo", day(12));
         if index < 6 {
-            seed.execute("elisa", palestra, day(5));
+            seed.execute("elisa", palestra, "elisa", day(5));
         }
 
         // Groceries every week, the market and the bakery in cash.
@@ -733,6 +752,37 @@ fn main() {
                     "rimborso assicurazione dentista",
                 ),
             );
+        }
+
+        // elisa's, recorded by matteo, who paid for them. Fixed amounts, so
+        // the rest of the year keeps its numbers.
+        if index % 3 == 1 {
+            seed.expense(&Row {
+                person: Some("elisa"),
+                ..row(
+                    "matteo",
+                    day(25),
+                    3_500,
+                    conto,
+                    cash,
+                    Some("Svago"),
+                    "parrucchiere",
+                )
+            });
+        }
+        if index % 4 == 2 {
+            seed.expense(&Row {
+                person: Some("elisa"),
+                ..row(
+                    "matteo",
+                    day(27),
+                    9_000,
+                    conto,
+                    cash,
+                    Some("medico"),
+                    "visita oculistica",
+                )
+            });
         }
 
         // Rows nobody filed, and a charge that came twice.

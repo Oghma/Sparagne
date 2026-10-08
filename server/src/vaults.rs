@@ -1,7 +1,7 @@
 //! Vault routes: listing, push (which also creates a vault) and pull
 //! (`docs/v2/SYNC.md` §3).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use axum::extract::State;
 use chrono::Utc;
@@ -68,6 +68,10 @@ pub async fn list(
 /// caller's `owner` membership appear together (`docs/v2/SYNC.md` §3). Any
 /// other first command for an unknown vault is a blind 404, exactly like a
 /// vault the caller is not a member of.
+///
+/// A command that puts a row or a template on somebody who is not a member
+/// of the vault is refused on its own as `not_a_member`, and the rest of the
+/// batch goes on (see [`stranger`]).
 pub async fn push(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -98,19 +102,39 @@ pub async fn push(
                 Some(_) => return Err(ApiError::forbidden()),
                 None => results.push(claim(state, vault_id, &user, &mut commands)?),
             }
+            // Once per push, and after `claim`, so a vault created by this
+            // very push already counts its owner.
+            let members: HashSet<String> = state
+                .db()
+                .members_of_vault(vault_id)?
+                .into_iter()
+                .map(|member| member.username)
+                .collect();
 
             let mut core = state.core();
             for envelope in commands {
                 let command_id = envelope.id;
-                let outcome = match core.execute(envelope) {
-                    Ok(receipt) => PushOutcome::Applied {
-                        seq: receipt.seq,
-                        result_id: receipt.result_id,
-                    },
-                    Err(DomainError::Storage(detail)) => return Err(ApiError::internal(detail)),
-                    Err(err) => PushOutcome::Rejected {
-                        code: err.code().to_string(),
-                        message: err.to_string(),
+                // A command the log already holds answers its seq again, even
+                // if the person it names has left the vault since.
+                let stray = match stranger(&envelope, &members) {
+                    Some(name) if core.receipt(command_id)?.is_none() => Some(name),
+                    _ => None,
+                };
+                let outcome = match stray {
+                    Some(name) => not_a_member(&name),
+                    None => match core.execute(envelope) {
+                        Ok(receipt) => PushOutcome::Applied {
+                            seq: receipt.seq,
+                            result_id: receipt.result_id,
+                        },
+                        Err(DomainError::Storage(detail)) => {
+                            return Err(ApiError::internal(detail));
+                        }
+                        Err(err) => PushOutcome::Rejected {
+                            code: err.code().to_string(),
+                            message: err.to_string(),
+                            detail: None,
+                        },
                     },
                 };
                 results.push(PushResult {
@@ -125,6 +149,34 @@ pub async fn push(
         })
         .await?;
     Ok(Json(response))
+}
+
+/// The first person or owner `envelope` names who may not stand on a row of
+/// the vault: anyone other than its author and the vault's members, whatever
+/// their role. Usernames are compared as they are, lowercase, so "Elisa" is
+/// nobody even when "elisa" is a member.
+///
+/// The check lives here and not in the core because membership is the
+/// server's to know: a refused command never enters the log, so replaying a
+/// log never depends on who was a member when it was written.
+fn stranger(envelope: &CommandEnvelope, members: &HashSet<String>) -> Option<String> {
+    envelope
+        .command
+        .named_people()
+        .into_iter()
+        .find(|name| *name != envelope.author && !members.contains(*name))
+        .map(str::to_string)
+}
+
+/// A command refused like any other: the rest of the batch goes on, and the
+/// app shows it among the rejected changes. The name goes in `detail` as
+/// well as in the sentence, so the app can say who without parsing English.
+fn not_a_member(name: &str) -> PushOutcome {
+    PushOutcome::Rejected {
+        code: "not_a_member".to_string(),
+        message: format!("{name} is not a member of this vault"),
+        detail: Some(name.to_string()),
+    }
 }
 
 /// Creates a vault the server does not hold yet from the first command of a

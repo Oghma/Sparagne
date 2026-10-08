@@ -9,7 +9,9 @@ import SparagneCore
 /// Registra tutte sends every period listed as one batch
 /// (`AppStore.executeAllDueRecurring`), so a backlog lands whole or not at
 /// all. A vault the account only reads shows its periods without the
-/// buttons: nothing there can be recorded or skipped.
+/// buttons: nothing there can be recorded or skipped. A period whose
+/// template's owner left the vault can be skipped only, and Registra tutte
+/// leaves it out and says so (`AppStore.ownerHasLeft`).
 struct DueRecurringCard: View {
     let store: AppStore
     let today: NaiveDate
@@ -83,15 +85,20 @@ struct DueRecurringCard: View {
                 .frame(width: 100, alignment: .trailing)
                 .accessibilityLabel("\(RecurringAmount.text(template)), \(DueRecurringText.kind(template.kind))")
             if store.canWrite {
+                let ownerLeft = store.ownerHasLeft(template)
                 HStack(spacing: 6) {
                     Button(String(localized: "Skip")) {
                         run { await store.skipRecurring(template.id, periodDate: period.date) }
                     }
                     .buttonStyle(.chrome(.ghost, small: true))
+                    // An owner who left the vault: skipping is all that can
+                    // be done until the template has another one.
                     Button(String(localized: "Record")) {
                         run { await store.executeRecurring(template.id, periodDate: period.date) }
                     }
                     .buttonStyle(AccentOutlineButtonStyle())
+                    .disabled(ownerLeft)
+                    .help(ifAny: ownerLeft ? AppStore.ownerLeftExplanation : nil)
                 }
                 .disabled(working)
             }

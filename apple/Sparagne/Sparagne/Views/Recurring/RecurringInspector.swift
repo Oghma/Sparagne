@@ -46,7 +46,9 @@ struct RecurringInspector: View {
         self.duplicate = duplicate
         self.finishedCreating = finishedCreating
         _draft = State(
-            initialValue: template.map(RecurringDraft.init(template:)) ?? seed ?? RecurringDraft(today: today)
+            initialValue: template.map(RecurringDraft.init(template:))
+                ?? seed
+                ?? RecurringDraft(today: today, owner: store.currentAuthor)
         )
     }
 
@@ -225,7 +227,39 @@ struct RecurringInspector: View {
             FormRow(String(localized: "Note")) {
                 FormTextField(label: String(localized: "Note"), text: $draft.note)
             }
+            FormRow(Self.ownerLabel) {
+                FormPicker(label: Self.ownerLabel, selection: $draft.owner, options: owners, title: ownerTitle)
+            }
+            // The saved owner left the vault and the draft still has them:
+            // why Registra is off, until another owner is picked and saved.
+            if let template, store.ownerHasLeft(template), draft.owner == template.owner {
+                Text(AppStore.ownerLeftExplanation)
+                    .font(Face.ui(11))
+                    .foregroundStyle(Ink.negative)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+
+    /// A name in the owner picker, with a note when it is someone who left
+    /// the vault: the members are what it offers, the former owner is there
+    /// only so the picker shows what the template has.
+    private func ownerTitle(_ name: String) -> String {
+        guard AppStore.ownerHasLeft(name, members: store.currentMembers, author: store.currentAuthor) else { return name }
+        return String(localized: "\(name) (no longer a member)")
+    }
+
+    /// "Titolare": whose the template is. Not the "Owner" of a vault
+    /// (Proprietario), hence a key of its own.
+    static var ownerLabel: String {
+        String(localized: "recurring.owner", defaultValue: "Owner")
+    }
+
+    /// Who the template may belong to: the people a row may be for, and the
+    /// owner it has now even when that is no longer one of them (a member
+    /// who left), so the picker never shows a choice it does not list.
+    private var owners: [String] {
+        AppStore.distinct(store.assignablePeople + [draft.owner, template?.owner ?? ""])
     }
 
     // MARK: - Quando
@@ -526,7 +560,8 @@ struct RecurringInspector: View {
                 flowId: creation.flowId,
                 category: creation.category,
                 note: creation.note,
-                schedule: creation.schedule
+                schedule: creation.schedule,
+                owner: creation.owner
             )
             if let created { finishedCreating(created) }
         }

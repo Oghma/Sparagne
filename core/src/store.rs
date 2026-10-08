@@ -17,10 +17,20 @@ CREATE UNIQUE INDEX ux_commands_vault_server_seq ON commands(vault_id, server_se
 /// name, so replaying a vault's log never trips over a name another vault
 /// took in the meantime (`docs/v2/SYNC.md` §3).
 const MIGRATION_V3: &str = "DROP INDEX IF EXISTS ux_vaults_owner_name;";
+/// A transaction gets a person apart from its author, and a recurring template
+/// an owner apart from its creator. Before version 4 no command named anybody
+/// else, so both start as the author: exactly what replaying the same log on
+/// version 4 gives, since a command without a person defaults to its author.
+const MIGRATION_V4: &str = "
+ALTER TABLE transactions ADD COLUMN person TEXT NOT NULL DEFAULT '';
+UPDATE transactions SET person = created_by;
+ALTER TABLE recurring_templates ADD COLUMN owner TEXT NOT NULL DEFAULT '';
+UPDATE recurring_templates SET owner = created_by;
+";
 /// Every step, keyed by the version it leads to: a database at version `v`
 /// runs, in order, each step whose key is above `v`.
-const MIGRATIONS: &[(i64, &str)] = &[(2, MIGRATION_V2), (3, MIGRATION_V3)];
-const SCHEMA_VERSION: i64 = 3;
+const MIGRATIONS: &[(i64, &str)] = &[(2, MIGRATION_V2), (3, MIGRATION_V3), (4, MIGRATION_V4)];
+const SCHEMA_VERSION: i64 = 4;
 
 /// Handle to one local database (one file per account, many vaults).
 pub struct Core {
@@ -126,17 +136,25 @@ mod tests {
             .command_id
     }
 
-    /// A file as `version` left it, holding alice's vault "Casa": the index on
-    /// the owner and the vault name is back, and before version 2 the server
-    /// seq column is gone too.
+    /// A file as `version` left it, holding alice's vault "Casa": the person
+    /// and owner columns are gone, before version 3 the index on the owner and
+    /// the vault name is back, and before version 2 the server seq column is
+    /// gone too.
     fn old_database(version: i64) -> (PathBuf, Uuid) {
         let path = temp_database();
         let casa = create_vault(&mut Core::open(&path).unwrap(), "Casa");
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch(
-            "CREATE UNIQUE INDEX ux_vaults_owner_name ON vaults(owner_user_id, lower(name));",
+            "ALTER TABLE transactions DROP COLUMN person;
+             ALTER TABLE recurring_templates DROP COLUMN owner;",
         )
         .unwrap();
+        if version < 3 {
+            conn.execute_batch(
+                "CREATE UNIQUE INDEX ux_vaults_owner_name ON vaults(owner_user_id, lower(name));",
+            )
+            .unwrap();
+        }
         if version < 2 {
             conn.execute_batch(
                 "DROP INDEX ux_commands_vault_server_seq;
@@ -157,6 +175,8 @@ mod tests {
         assert!(has_column(&core.conn, "commands", "server_seq"));
         assert!(has_index(&core.conn, "ux_commands_vault_server_seq"));
         assert!(!has_index(&core.conn, "ux_vaults_owner_name"));
+        assert!(has_column(&core.conn, "transactions", "person"));
+        assert!(has_column(&core.conn, "recurring_templates", "owner"));
 
         let vaults = core.vaults().unwrap();
         assert_eq!(vaults.len(), 1);
@@ -177,6 +197,8 @@ mod tests {
         assert_eq!(user_version(&core.conn), SCHEMA_VERSION);
         assert!(has_column(&core.conn, "commands", "server_seq"));
         assert!(!has_index(&core.conn, "ux_vaults_owner_name"));
+        assert!(has_column(&core.conn, "transactions", "person"));
+        assert!(has_column(&core.conn, "recurring_templates", "owner"));
     }
 
     #[test]
@@ -188,6 +210,8 @@ mod tests {
             conn.execute_batch(
                 "DROP INDEX ux_commands_vault_server_seq;
                  ALTER TABLE commands DROP COLUMN server_seq;
+                 ALTER TABLE transactions DROP COLUMN person;
+                 ALTER TABLE recurring_templates DROP COLUMN owner;
                  PRAGMA user_version = 1;",
             )
             .unwrap();
@@ -202,13 +226,18 @@ mod tests {
     }
 
     #[test]
-    fn a_version_1_database_migrates_to_3() {
+    fn a_version_1_database_migrates_to_the_current_version() {
         migrates_from(1);
     }
 
     #[test]
-    fn a_version_2_database_migrates_to_3() {
+    fn a_version_2_database_migrates_to_the_current_version() {
         migrates_from(2);
+    }
+
+    #[test]
+    fn a_version_3_database_migrates_to_the_current_version() {
+        migrates_from(3);
     }
 
     #[test]

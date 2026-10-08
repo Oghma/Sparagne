@@ -90,7 +90,7 @@ struct GridHeader: View {
             if showsWallet {
                 GridCell(width: GridColumn.wallet) { heading(RowField.wallet.label) }
             }
-            GridCell(width: GridColumn.person) { heading(String(localized: "Person")) }
+            GridCell(width: GridColumn.person) { heading(RowField.person.label) }
             GridCell(width: GridColumn.amount, alignment: .trailing) { heading(RowField.amount.label) }
             RowActionTrack()
         }
@@ -124,9 +124,22 @@ enum LedgerAccessibility {
         if showsWallet, row.walletDisplay != TransactionRow.placeholder {
             parts.append(String(localized: "wallet \(row.walletDisplay)"))
         }
-        parts.append(String(localized: "by \(row.person)"))
+        parts.append(person(row.person))
+        if row.isOnBehalf { parts.append(recordedBy(row.recordedBy)) }
         if row.voided { parts.append(String(localized: "deleted")) }
         return parts.joined(separator: ", ")
+    }
+
+    /// "Persona, Elisa": the column's name before the value, as the open
+    /// row's cells are read.
+    static func person(_ name: String) -> String {
+        String(localized: "Person, \(name)")
+    }
+
+    /// "registrata da Matteo": who typed a row that is for someone else, the
+    /// same words the PERSONA cell shows on hover.
+    static func recordedBy(_ name: String) -> String {
+        String(localized: "recorded by \(name)")
     }
 
     /// A due period as one sentence: what it is, how much, when; the two
@@ -140,6 +153,7 @@ enum LedgerAccessibility {
         if let day = CoreDate.localDay(period.date) {
             parts.append(day.formatted(Date.FormatStyle(locale: locale).day().month(.wide)))
         }
+        parts.append(person(template.owner))
         return String(localized: "Recurring entry to confirm: \(parts.joined(separator: ", "))")
     }
 
@@ -270,6 +284,13 @@ extension View {
             .padding(.horizontal, -5)
     }
 
+    /// A tooltip only where there is something to say: most cells of a
+    /// column have none, and should not raise an empty one.
+    @ViewBuilder
+    func help(ifAny text: String?) -> some View {
+        if let text { help(text) } else { self }
+    }
+
     /// The hairline under every line of the grid, inside its 24 points so the
     /// rows keep the pitch the empty lines below them are drawn at.
     func rowRule() -> some View {
@@ -326,9 +347,9 @@ struct LedgerRowView: View {
                     .font(Face.small)
                     .foregroundStyle(Ink.text3)
             }
-            // # and PERSONA hold no field of their own, but a click anywhere
-            // on a line should open it; DESCRIZIONE is the widest cell and the
-            // one most often retyped, so it takes the caret.
+            // # holds no field of its own, but a click anywhere on a line
+            // should open it; DESCRIZIONE is the widest cell and the one most
+            // often retyped, so it takes the caret.
             .onTapGesture { onOpen(.note) }
 
             if let draft {
@@ -396,8 +417,11 @@ struct LedgerRowView: View {
             GridCell(width: GridColumn.wallet) { text(row.walletDisplay, Ink.text2) }
                 .onTapGesture { onOpen(row.isTransfer ? .note : .wallet) }
         }
+        // Who typed a row recorded for someone else is on hover only: the
+        // column stays one short name wide.
         GridCell(width: GridColumn.person) { text(row.person, Ink.text2) }
-            .onTapGesture { onOpen(.note) }
+            .help(ifAny: row.isOnBehalf ? Self.recordedByHelp(row.recordedBy) : nil)
+            .onTapGesture { onOpen(row.isPersonEditable ? .person : .note) }
         GridCell(width: GridColumn.amount, alignment: .trailing) {
             text(amountText, amountTint)
         }
@@ -440,13 +464,15 @@ struct LedgerRowView: View {
 
     // MARK: Editing cells
 
-    private func textCell(_ field: RowField, width: CGFloat?) -> some View {
+    /// `hint` is what VoiceOver adds after the field's name and value.
+    private func textCell(_ field: RowField, width: CGFloat?, hint: String = "") -> some View {
         GridCell(width: width) {
             TextField("", text: binding(field))
                 .textFieldStyle(.plain)
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
                 .accessibilityLabel(field.label)
+                .accessibilityHint(hint)
                 .focused($focus, equals: key(field))
                 .onSubmit(onCommit)
                 .cellFocusRing(focus == key(field))
@@ -483,12 +509,29 @@ struct LedgerRowView: View {
         }
     }
 
+    /// A transfer is always its author's, so its cell stays read-only and
+    /// dim, as its wallets do (`walletCell`).
+    @ViewBuilder
     private var personCell: some View {
-        GridCell(width: GridColumn.person) {
-            Text(row.person)
-                .font(Face.row)
-                .foregroundStyle(Ink.text2)
+        if row.isPersonEditable {
+            textCell(
+                .person,
+                width: GridColumn.person,
+                hint: row.isOnBehalf ? LedgerAccessibility.recordedBy(row.recordedBy) : ""
+            )
+            .help(ifAny: row.isOnBehalf ? Self.recordedByHelp(row.recordedBy) : nil)
+        } else {
+            GridCell(width: GridColumn.person) {
+                Text(row.person)
+                    .font(Face.row)
+                    .foregroundStyle(Ink.text3)
+            }
         }
+    }
+
+    /// "Registrata da Matteo", the tooltip of a row recorded for someone else.
+    static func recordedByHelp(_ name: String) -> String {
+        String(localized: "Recorded by \(name)")
     }
 
     private func binding(_ field: RowField) -> Binding<String> {
@@ -498,6 +541,7 @@ struct LedgerRowView: View {
         case .category: return draft.category
         case .note: return draft.note
         case .wallet: return draft.wallet
+        case .person: return draft.person
         case .amount: return draft.amount
         case .date: return .constant("")
         }
@@ -547,8 +591,14 @@ struct PendingRowView: View {
                     if !store.isReadOnly {
                         Button(String(localized: "Skip")) { run { await store.skipRecurring(template.id, periodDate: period.date) } }
                             .buttonStyle(RowButtonStyle(tone: .ghost))
+                        // Off while the owner is someone who left the vault:
+                        // the server would refuse the row. The row's style
+                        // does not dim by itself, as the chrome's does.
                         Button(String(localized: "Record")) { run { await store.executeRecurring(template.id, periodDate: period.date) } }
                             .buttonStyle(RowButtonStyle(tone: .accent))
+                            .disabled(ownerLeft)
+                            .opacity(ownerLeft ? 0.4 : 1)
+                            .help(ifAny: ownerLeft ? AppStore.ownerLeftExplanation : nil)
                     }
                 }
                 .disabled(working)
@@ -556,9 +606,11 @@ struct PendingRowView: View {
             if showsWallet {
                 GridCell(width: GridColumn.wallet) { Text(store.walletName(template.walletId)) }
             }
-            // Whoever registers it is its author, as for any row written here.
+            // The template's owner: the row is theirs, whoever records it.
             GridCell(width: GridColumn.person) {
-                Text(store.currentAuthor).foregroundStyle(Ink.text3)
+                Text(template.owner)
+                    .foregroundStyle(ownerLeft ? Ink.negative : Ink.text3)
+                    .help(ifAny: ownerLeft ? AppStore.noLongerAMember : nil)
             }
             GridCell(width: GridColumn.amount, alignment: .trailing) {
                 Text(LedgerMoney.bare(template.amount))
@@ -575,11 +627,17 @@ struct PendingRowView: View {
         .accessibilityLabel(LedgerAccessibility.label(for: period))
         .accessibilityActions {
             if !store.isReadOnly, !working {
-                Button(String(localized: "Record")) { run { await store.executeRecurring(template.id, periodDate: period.date) } }
+                if !ownerLeft {
+                    Button(String(localized: "Record")) { run { await store.executeRecurring(template.id, periodDate: period.date) } }
+                }
                 Button(String(localized: "Skip")) { run { await store.skipRecurring(template.id, periodDate: period.date) } }
             }
         }
     }
+
+    /// The template's owner left the vault: the period can be skipped, not
+    /// recorded (`AppStore.ownerHasLeft`).
+    private var ownerLeft: Bool { store.ownerHasLeft(template) }
 
     /// Free text on the template, resolved when it is registered; none is
     /// Uncategorized, as a blank cell is.
@@ -649,11 +707,9 @@ struct NewRowView: View {
                     width: GridColumn.wallet
                 )
             }
-            GridCell(width: GridColumn.person) {
-                Text(store.currentAuthor)
-                    .font(Face.row)
-                    .foregroundStyle(Ink.text2)
-            }
+            // The author until another name is typed; emptied, it still
+            // means the author, and says so.
+            field($draft.person, .person, store.currentAuthor, width: GridColumn.person)
             GridCell(width: GridColumn.amount, alignment: .trailing) {
                 let key = CellFocus(row: nil, field: .amount)
                 // A title, not a prompt: a prompt ignores the trailing

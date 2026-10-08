@@ -326,7 +326,53 @@ struct RecurringDraftTests {
             flowId: nil,
             category: nil,
             note: "Stipendio",
-            schedule: RecurringFixture.schedule(.monthly(day: 27), from: "2026-10-07")
+            schedule: RecurringFixture.schedule(.monthly(day: 27), from: "2026-10-07"),
+            owner: nil
         ))
     }
+
+    // MARK: - The owner
+
+    @Test("A new template belongs to whoever the inspector starts it with, and says so when created")
+    func ownerOnCreation() {
+        var draft = RecurringDraft(today: "2026-10-07", owner: "matteo")
+        draft.amountText = "780"
+        #expect(draft.owner == "matteo")
+        #expect(draft.creation(currency: .eur)?.owner == "matteo")
+
+        draft.owner = "elisa"
+        #expect(draft.creation(currency: .eur)?.owner == "elisa")
+
+        // Blank is the core's own default, the author: nothing to send.
+        draft.owner = " "
+        #expect(draft.creation(currency: .eur)?.owner == nil)
+    }
+
+    @Test("An edit sends the owner only when it changed, and never a blank")
+    func ownerInThePatch() {
+        #expect(RecurringDraft(template: Self.rent).owner == "matteo")
+        #expect(patch { $0.owner = "elisa" } == RecurringPatch(owner: "elisa"))
+        #expect(patch { $0.owner = "matteo" }.isEmpty)
+        #expect(patch { $0.owner = "" }.isEmpty)
+        #expect(RecurringDraft(template: Self.rent).isDirty(against: Self.elisasRent, currency: .eur))
+    }
+
+    @Test("A duplicate keeps its template's owner, and creates the copy for them")
+    func duplicateKeepsTheOwner() {
+        let draft = RecurringDraft(duplicating: Self.elisasRent, today: "2026-10-08")
+        #expect(draft.owner == "elisa")
+        #expect(draft.creation(currency: .eur)?.owner == "elisa")
+    }
+
+    /// `rent`, owned by elisa.
+    private static let elisasRent = RecurringFixture.template(
+        "rent",
+        amount: 78_000,
+        walletId: wallet,
+        flowId: flow,
+        category: "Casa",
+        note: "mutuo",
+        schedule: RecurringFixture.schedule(.monthly(day: 1), from: "2025-11-01"),
+        owner: "elisa"
+    )
 }

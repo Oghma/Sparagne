@@ -122,7 +122,12 @@ struct MainWindow: View {
             .task {
                 if store.needsOnboarding { sheet = .vault }
             }
-            .task(id: store.currentVault?.id) { openLaunchSheet() }
+            .task(id: store.currentVault?.id) {
+                openLaunchSheet()
+                // Who the vault's rows may be for, as the server has it now:
+                // the cache from the last round stands in meanwhile.
+                await engine?.refreshMembers(ofVault: store.currentVault?.id)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .openManagement)) { _ in
                 sheet = .manage
             }
@@ -172,7 +177,7 @@ struct MainWindow: View {
                 Text(String(localized: "The server did not accept them, so they are not in your balances."))
             }
             .alert(
-                store.presentedError.map { ErrorMessages.summary(for: $0.code) } ?? String(localized: "Something went wrong"),
+                store.presentedError?.summary ?? String(localized: "Something went wrong"),
                 isPresented: Binding(
                     get: { store.presentedError != nil },
                     set: { if !$0 { store.presentedError = nil } }

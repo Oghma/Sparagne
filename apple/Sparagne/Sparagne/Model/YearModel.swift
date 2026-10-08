@@ -152,7 +152,8 @@ struct YearSummary: Sendable {
     let year: Int
     /// The month on screen: decides the year and which months are future.
     let upTo: MonthKey
-    /// One column per author of the vault, in the core's order.
+    /// One column per person the vault's rows are for (`transactions.person`):
+    /// a row recorded for Elisa counts in her column, not in the recorder's.
     let people: [String]
     /// FONDO CASSA INIZIALE per person: everything before January.
     let initialByPerson: [Int64]
@@ -315,7 +316,7 @@ struct YearSummary: Sendable {
         )
     }
 
-    /// One column per author, de-duplicated in the core's order and then
+    /// One column per person, de-duplicated in the core's order and then
     /// sorted case-insensitively, so two runs of the same vault always put
     /// the columns in the same place.
     private static func people(in rows: [YearRow]) -> [String] {

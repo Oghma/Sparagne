@@ -28,6 +28,7 @@ struct LedgerLinesTests {
             category: "Spesa",
             categoryIsSystem: false,
             note: note,
+            person: "matteo",
             createdBy: "matteo",
             voided: false,
             walletId: "wallet",
@@ -43,7 +44,8 @@ struct LedgerLinesTests {
         _ date: NaiveDate,
         kind: TransactionKind = .expense,
         note: String,
-        category: String? = "Casa"
+        category: String? = "Casa",
+        owner: String = "matteo"
     ) -> DuePeriod {
         let template = RecurringView(
             id: "tpl-\(note)",
@@ -55,7 +57,8 @@ struct LedgerLinesTests {
             note: note,
             schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: "2026-01-01", endDate: nil),
             enabled: true,
-            archived: false
+            archived: false,
+            owner: owner
         )
         return DuePeriod(template: template, date: date)
     }
@@ -75,6 +78,7 @@ struct LedgerLinesTests {
         _ rows: [TransactionRow],
         _ due: [DuePeriod],
         direction: LedgerDirection = .expenses,
+        person: String? = nil,
         search: String = "",
         hasMoreRows: Bool = false
     ) -> [String] {
@@ -84,6 +88,7 @@ struct LedgerLinesTests {
                 due: due,
                 month: october,
                 direction: direction,
+                person: person,
                 search: search,
                 hasMoreRows: hasMoreRows,
                 timeZone: zone
@@ -171,6 +176,18 @@ struct LedgerLinesTests {
         let due = [Self.due("2026-10-01", kind: .income, note: "stipendio"), Self.due("2026-10-01", note: "mutuo")]
         #expect(Self.interleave([], due, direction: .income) == ["p:stipendio"])
         #expect(Self.interleave([], due, direction: .expenses) == ["p:mutuo"])
+    }
+
+    @Test("Under the PERSONA filter a period shows for its template's owner only, the person it will be for")
+    func person() {
+        let due = [
+            Self.due("2026-10-01", note: "mutuo", owner: "matteo"),
+            Self.due("2026-10-02", note: "palestra", owner: "elisa"),
+        ]
+        #expect(Self.interleave([], due) == ["p:mutuo", "p:palestra"])
+        #expect(Self.interleave([], due, person: "elisa") == ["p:palestra"])
+        #expect(Self.interleave([], due, person: "matteo") == ["p:mutuo"])
+        #expect(Self.interleave([], due, person: "bob").isEmpty)
     }
 
     @Test("On a day that already has rows, the period comes after them, before the next day's")

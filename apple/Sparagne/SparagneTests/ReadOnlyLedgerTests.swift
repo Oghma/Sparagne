@@ -72,6 +72,22 @@ struct ReadOnlyLedgerTests {
         #expect(await calls.count == before)
     }
 
+    @Test("Who a row is for is not changed from a vault that is only read, nor a new row put on anyone")
+    func personEditsAreRefused() async throws {
+        let (store, calls) = try await Self.viewer()
+        let before = await calls.count
+        let pizza = try #require(store.rows.first { $0.note == "pizza" })
+
+        await store.update(transactionId: pizza.id, patch: TransactionPatch(person: "elisa"))
+        #expect(store.presentedError?.code == "forbidden")
+        store.presentedError = nil
+
+        await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 1_000, person: "elisa")
+        #expect(store.presentedError?.code == "forbidden")
+        #expect(await calls.count == before)
+        #expect(store.rows.first { $0.id == pizza.id }?.person == "tester")
+    }
+
     @Test("Another vault of the same account is writable again")
     func writableFollowsTheVaultOnScreen() async throws {
         let (store, _) = try await Self.viewer()

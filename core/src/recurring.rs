@@ -288,6 +288,9 @@ pub struct RecurringView {
     pub schedule: Schedule,
     pub enabled: bool,
     pub archived: bool,
+    /// Whose template it is: who created it, unless a command named someone
+    /// else. The app executes it with this person.
+    pub owner: String,
 }
 
 /// A template with the period dates still waiting for a decision.

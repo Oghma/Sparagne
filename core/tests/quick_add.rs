@@ -70,7 +70,7 @@ fn exact_beats_prefix_but_ambiguous_prefix_errors() {
     let parsed = quick_add::parse("15 pizza @bank", Currency::Eur).unwrap();
     let resolved =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap();
     match resolved.command {
         Command::Expense(entry) => assert_eq!(entry.wallet_id, Some(f.bank)),
@@ -81,7 +81,7 @@ fn exact_beats_prefix_but_ambiguous_prefix_errors() {
     let parsed = quick_add::parse("15 pizza @bancoposta", Currency::Eur).unwrap();
     let resolved =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap();
     match resolved.command {
         Command::Expense(entry) => assert_eq!(entry.wallet_id, Some(f.bancoposta)),
@@ -92,7 +92,7 @@ fn exact_beats_prefix_but_ambiguous_prefix_errors() {
     let parsed = quick_add::parse("15 pizza @ban", Currency::Eur).unwrap();
     let err =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap_err();
     match err {
         QuickAddError::AmbiguousName { name, candidates } => {
@@ -115,7 +115,7 @@ fn unknown_wallet_name_is_an_error() {
     let parsed = quick_add::parse("15 pizza @revolut", Currency::Eur).unwrap();
     let err =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap_err();
     assert_eq!(
         err,
@@ -137,7 +137,7 @@ fn defaults_apply_when_no_marker_present() {
     let parsed = quick_add::parse("15 pizza", Currency::Eur).unwrap();
     let resolved =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &defaults)
+            .resolve_quick_add(f.fx.vault, &parsed, now, &defaults, &[])
             .unwrap();
     // The resolution reports the ids it settled on, so the app can keep them
     // as the next defaults without taking the command apart.
@@ -161,7 +161,7 @@ fn wallet_exact_match_resolves_to_cash() {
     let parsed = quick_add::parse("15 pizza @cash", Currency::Eur).unwrap();
     let resolved =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap();
     assert_eq!(resolved.wallet_id, Some(f.cash));
     match resolved.command {
@@ -177,7 +177,7 @@ fn unallocated_flow_resolves_by_its_display_name() {
     let parsed = quick_add::parse("15 pizza >unallocated", Currency::Eur).unwrap();
     let resolved =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap();
     match resolved.command {
         Command::Expense(entry) => assert_eq!(entry.flow_id, Some(f.fx.unallocated)),
@@ -193,7 +193,7 @@ fn yesterday_shifts_occurred_at_by_one_day_keeping_time_and_offset() {
     let parsed = quick_add::parse("15 pizza ieri", Currency::Eur).unwrap();
     let resolved =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap();
     match resolved.command {
         Command::Expense(entry) => {
@@ -220,7 +220,7 @@ fn archived_wallets_are_not_matched() {
     let parsed = quick_add::parse("15 pizza @bank", Currency::Eur).unwrap();
     let err =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap_err();
     assert_eq!(
         err,
@@ -238,7 +238,7 @@ fn transfer_flow_execute_produces_expected_transaction() {
     let parsed = quick_add::parse("tf>25 >vacanze >spesa weekend", Currency::Eur).unwrap();
     let resolved =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap();
     match &resolved.command {
         Command::TransferFlow {
@@ -277,7 +277,7 @@ fn same_target_transfer_is_rejected() {
     let parsed = quick_add::parse("tw>10 @cash @cash", Currency::Eur).unwrap();
     let err =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap_err();
     assert_eq!(err, QuickAddError::same_target());
 }
@@ -289,10 +289,179 @@ fn resolve_quick_add_error_converts_to_domain_error() {
     let parsed = quick_add::parse("15 pizza @unknown", Currency::Eur).unwrap();
     let err =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap_err();
     let domain: DomainError = err.into();
     assert_eq!(domain.code(), "invalid_command");
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+/// Who the app lets a row be for in these tests.
+fn people() -> Vec<String> {
+    ["elisa", "matteo", "marta", "ann", "anna"]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+}
+
+fn resolve_person(f: &Fixture, line: &str, people: &[String]) -> Result<String, QuickAddError> {
+    let parsed = quick_add::parse(line, Currency::Eur).unwrap();
+    let resolved =
+        f.fx.core
+            .resolve_quick_add(f.fx.vault, &parsed, at(T0), &no_defaults(), people)?;
+    match resolved.command {
+        Command::Expense(entry) => Ok(entry.person.expect("a person on the entry")),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+#[test]
+fn a_person_resolves_through_the_same_tiers_as_a_wallet() {
+    let f = build_fixture();
+    let people = people();
+    // Exact, whatever the case, and the command carries the full name.
+    assert_eq!(
+        resolve_person(&f, "24 cena !ELISA", &people).unwrap(),
+        "elisa"
+    );
+    // A prefix of one name only.
+    assert_eq!(
+        resolve_person(&f, "24 cena !eli", &people).unwrap(),
+        "elisa"
+    );
+    // Inside one name only.
+    assert_eq!(
+        resolve_person(&f, "24 cena !tte", &people).unwrap(),
+        "matteo"
+    );
+    // "ann" is exact for ann even though it is a prefix of anna.
+    assert_eq!(resolve_person(&f, "24 cena !ann", &people).unwrap(), "ann");
+}
+
+#[test]
+fn an_unknown_or_ambiguous_person_is_an_error() {
+    let f = build_fixture();
+    let people = people();
+    assert_eq!(
+        resolve_person(&f, "24 cena !giorgio", &people).unwrap_err(),
+        QuickAddError::UnknownName {
+            kind: "person".to_string(),
+            name: "giorgio".to_string()
+        }
+    );
+    match resolve_person(&f, "24 cena !ma", &people).unwrap_err() {
+        QuickAddError::AmbiguousName {
+            name,
+            mut candidates,
+        } => {
+            assert_eq!(name, "ma");
+            candidates.sort();
+            assert_eq!(candidates, ["marta", "matteo"]);
+        }
+        other => panic!("unexpected {other:?}"),
+    }
+    // With nobody to choose from every name is unknown.
+    assert!(matches!(
+        resolve_person(&f, "24 cena !elisa", &[]).unwrap_err(),
+        QuickAddError::UnknownName { kind, .. } if kind == "person"
+    ));
+}
+
+#[test]
+fn repeated_or_blank_people_do_not_make_a_name_ambiguous() {
+    let f = build_fixture();
+    let people: Vec<String> = ["elisa", " ", "elisa", "matteo"]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(
+        resolve_person(&f, "24 cena !eli", &people).unwrap(),
+        "elisa"
+    );
+}
+
+#[test]
+fn one_person_under_two_spellings_is_never_ambiguous_with_itself() {
+    let f = build_fixture();
+    // The local name of a logged-out window and the username its synced
+    // rows carry, plus someone else sharing their first letters.
+    let people: Vec<String> = ["Matteo", "matteo", "marta"]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    // The name as typed wins, whichever spelling it is.
+    assert_eq!(
+        resolve_person(&f, "24 cena !matteo", &people).unwrap(),
+        "matteo"
+    );
+    assert_eq!(
+        resolve_person(&f, "24 cena !Matteo", &people).unwrap(),
+        "Matteo"
+    );
+    // Neither as typed: the lowercase spelling, the username.
+    assert_eq!(
+        resolve_person(&f, "24 cena !MATTEO", &people).unwrap(),
+        "matteo"
+    );
+    assert_eq!(
+        resolve_person(&f, "24 cena !matt", &people).unwrap(),
+        "matteo"
+    );
+    // Still ambiguous with someone else, offering the person once.
+    match resolve_person(&f, "24 cena !ma", &people).unwrap_err() {
+        QuickAddError::AmbiguousName { mut candidates, .. } => {
+            candidates.sort();
+            assert_eq!(candidates, ["marta", "matteo"]);
+        }
+        other => panic!("unexpected {other:?}"),
+    }
+    // With no lowercase spelling, the first one listed.
+    let shouted: Vec<String> = ["Elisa", "ELISA"].into_iter().map(str::to_string).collect();
+    assert_eq!(
+        resolve_person(&f, "24 cena !eli", &shouted).unwrap(),
+        "Elisa"
+    );
+}
+
+#[test]
+fn a_line_without_a_person_leaves_it_to_the_author() {
+    let mut f = build_fixture();
+    let parsed = quick_add::parse("24 cena @cash", Currency::Eur).unwrap();
+    let resolved =
+        f.fx.core
+            .resolve_quick_add(f.fx.vault, &parsed, at(T0), &no_defaults(), &people())
+            .unwrap();
+    match &resolved.command {
+        Command::Expense(entry) => assert_eq!(entry.person, None),
+        other => panic!("unexpected {other:?}"),
+    }
+    let id = try_run(&mut f.fx.core, f.fx.vault, resolved.command)
+        .unwrap()
+        .result_id
+        .unwrap();
+    let row = f.fx.core.transaction(f.fx.vault, id).unwrap();
+    assert_eq!(row.person, "alice");
+}
+
+#[test]
+fn a_resolved_person_is_who_the_row_is_for_and_the_author_recorded_it() {
+    let mut f = build_fixture();
+    let parsed = quick_add::parse("24 cena !eli @cash", Currency::Eur).unwrap();
+    let resolved =
+        f.fx.core
+            .resolve_quick_add(f.fx.vault, &parsed, at(T0), &no_defaults(), &people())
+            .unwrap();
+    let id = try_run(&mut f.fx.core, f.fx.vault, resolved.command)
+        .unwrap()
+        .result_id
+        .unwrap();
+    let row = f.fx.core.transaction(f.fx.vault, id).unwrap();
+    assert_eq!(row.person, "elisa");
+    assert_eq!(row.created_by, "alice");
+    assert_eq!(row.note.as_deref(), Some("cena"));
 }
 
 // ---------------------------------------------------------------------------
@@ -392,7 +561,7 @@ fn a_day_and_month_on_a_line_looks_back_across_the_new_year() {
     let parsed = quick_add::parse("15 cenone 31/12", Currency::Eur).unwrap();
     let resolved =
         f.fx.core
-            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults())
+            .resolve_quick_add(f.fx.vault, &parsed, now, &no_defaults(), &[])
             .unwrap();
     match resolved.command {
         Command::Expense(entry) => {

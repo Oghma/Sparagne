@@ -27,9 +27,10 @@ enum LedgerLines {
     ///
     /// A period belongs when its date is in `month` and its template's kind
     /// is in `direction`: an income template under ENTRATE, an expense one
-    /// under USCITE. A template has no author (`RecurringView`), so the
-    /// PERSONA filter cannot place it and it shows for everybody. A search
-    /// narrows the periods as it narrows the rows, by note and category.
+    /// under USCITE. It is for the template's owner, the person the row will
+    /// be for once recorded, so the PERSONA filter (`person`, `nil` for
+    /// everybody) keeps only the owner's. A search narrows the periods as it
+    /// narrows the rows, by note and category.
     ///
     /// Same day as stored rows: the period goes after them. It is not written
     /// yet, so it comes last among the day's entries, where the next row
@@ -44,6 +45,7 @@ enum LedgerLines {
         due: [DuePeriod],
         month: MonthKey,
         direction: LedgerDirection,
+        person: String? = nil,
         search: String = "",
         hasMoreRows: Bool = false,
         timeZone: TimeZone = .current
@@ -54,6 +56,7 @@ enum LedgerLines {
             .filter { period in
                 period.date.hasPrefix(prefix)
                     && direction.kinds.contains(period.template.kind)
+                    && (person.map { $0 == period.template.owner } ?? true)
                     && matches(period.template, needle)
             }
             // `NaiveDate` is `yyyy-MM-dd`, so the strings sort as the days do;
@@ -98,6 +101,7 @@ extension LedgerLines {
         var due: [DuePeriod]
         var month: MonthKey
         var direction: LedgerDirection
+        var person: String?
         var search: String
         var hasMoreRows: Bool
     }
@@ -128,6 +132,7 @@ extension LedgerLines {
                 due: input.due,
                 month: input.month,
                 direction: input.direction,
+                person: input.person,
                 search: input.search,
                 hasMoreRows: input.hasMoreRows,
                 timeZone: timeZone

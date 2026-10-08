@@ -22,6 +22,7 @@ struct DeleteTargetTests {
             category: "Spesa",
             categoryIsSystem: false,
             note: nil,
+            person: "matteo",
             createdBy: "matteo",
             voided: voided,
             walletId: isTransfer ? nil : UUID().uuidString,

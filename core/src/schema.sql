@@ -1,4 +1,4 @@
--- Sparagne v2 core schema, version 3 (`store.rs` migrates older files).
+-- Sparagne v2 core schema, version 4 (`store.rs` migrates older files).
 -- UUIDs are 16-byte BLOBs (v7 for entities, v5-derived for entities created
 -- inside a command). Timestamps are unix seconds (UTC); `occurred_offset` keeps
 -- the user's UTC offset in seconds.
@@ -65,10 +65,13 @@ CREATE TABLE transactions (
     amount          INTEGER NOT NULL,    -- absolute value; sign lives in legs
     category_id     BLOB NOT NULL REFERENCES categories(id),
     note            TEXT,
-    created_by      TEXT NOT NULL,
+    created_by      TEXT NOT NULL,       -- author of the command: who recorded it
     voided_at       INTEGER,
     voided_by       TEXT,
-    command_id      BLOB NOT NULL
+    command_id      BLOB NOT NULL,
+    -- Who the row is for: the person the command names, else its author. Last
+    -- and with a default because version 4 added it with ALTER TABLE.
+    person          TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX ix_transactions_vault_time ON transactions(vault_id, occurred_at DESC, id DESC);
 
@@ -93,7 +96,8 @@ CREATE TABLE commands (
     occurred_at INTEGER,                 -- for transaction commands
     created_at  INTEGER NOT NULL,
     status      TEXT NOT NULL,           -- applied|rejected
-    rejection   TEXT,                    -- '<code>: <message>' for rejected rows
+    rejection   TEXT,                    -- '<code>: <message>' for rejected rows, or a JSON
+                                         -- {code, message, detail} when the refusal named someone
     result_id   BLOB,                    -- id of the entity the command created
     server_seq  INTEGER                  -- seq the server gave it; NULL = outbox
 );
@@ -116,7 +120,10 @@ CREATE TABLE recurring_templates (
     enabled     INTEGER NOT NULL DEFAULT 1,
     archived_at INTEGER,
     created_by  TEXT NOT NULL,
-    created_at  INTEGER NOT NULL
+    created_at  INTEGER NOT NULL,
+    -- Whose template it is: the owner the commands name, else the creator.
+    -- Last and with a default because version 4 added it with ALTER TABLE.
+    owner       TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX ix_recurring_vault ON recurring_templates(vault_id);
 

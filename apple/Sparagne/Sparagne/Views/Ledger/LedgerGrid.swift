@@ -92,6 +92,11 @@ struct LedgerGrid: View {
             resetEditing()
             newRow = RowDraft.blank(in: store)
         }
+        // A login or a new local name changes who the author is: the empty
+        // line follows, unless its PERSONA cell was already set to someone.
+        .onChange(of: store.currentAuthor) { old, new in
+            if newRow.person == old { newRow.person = new }
+        }
         .onChange(of: focus) { _, new in
             commitIfLeft(new)
             // Typing into a cell is editing, not picking: one or the other.
@@ -484,7 +489,8 @@ struct LedgerGrid: View {
                     note: entry.note,
                     amount: entry.amount,
                     walletId: entry.walletId,
-                    kind: entry.kind
+                    kind: entry.kind,
+                    person: entry.person
                 )
             }
             newRow = RowDraft.blank(in: store)
@@ -541,8 +547,7 @@ struct CellFocus: Hashable {
     let field: RowField
 }
 
-/// The cells a row is typed into. PERSONA is not one: it is the author of the
-/// command, not a field (`docs/v2/UI.md` §3).
+/// The cells a row is typed into.
 ///
 /// Nothing here drives the traversal. ⇥ and ⇧⇥ are the system's, walking the
 /// focusable views in layout order, and the order of the cases is only the
@@ -558,6 +563,9 @@ enum RowField: Hashable, CaseIterable {
     case note
     /// Only in the hierarchy while the optional WALLET column is on.
     case wallet
+    /// Who the row is for: one of `AppStore.assignablePeople`. Not a field on
+    /// a transfer, which is always its author's.
+    case person
     case amount
 
     /// The column heading, which is what VoiceOver calls the cell: an open
@@ -569,6 +577,7 @@ enum RowField: Hashable, CaseIterable {
         case .category: String(localized: "Category")
         case .note: String(localized: "Description")
         case .wallet: String(localized: "Wallet")
+        case .person: String(localized: "Person")
         case .amount: String(localized: "Amount")
         }
     }
@@ -602,6 +611,10 @@ struct RowDraft {
     var category = ""
     var note = ""
     var wallet = ""
+    /// A name typed, resolved against `AppStore.assignablePeople` when the
+    /// row is saved. Blank leaves it to the default: the author on a new
+    /// row, whoever it is for already on a stored one.
+    var person = ""
     var amount = ""
     /// What the new line is written as. `nil` is the direction on screen's
     /// (`LedgerDirection.newRowKind`); a duplicate keeps its source's, so a
@@ -633,11 +646,13 @@ struct RowDraft {
         // name: nothing the cell could resolve, so it opens empty and the
         // commit leaves the legs alone.
         wallet = row.isTransfer || row.walletDisplay == TransactionRow.placeholder ? "" : row.walletDisplay
+        person = row.person
         amount = LedgerMoney.editable(row.absoluteAmount)
     }
 
     /// A new line: today if the month on screen is the current one, its first
-    /// day otherwise, and the sticky envelope already filled in.
+    /// day otherwise, the sticky envelope already filled in, and the author
+    /// as its person, which is who a row is for unless the cell says another.
     static func blank(in store: AppStore) -> RowDraft {
         var draft = RowDraft()
         let now = Date()
@@ -646,6 +661,7 @@ struct RowDraft {
             draft.flow = store.flowName(flow)
         }
         if store.showWalletColumn { draft.wallet = store.defaultWalletName ?? "" }
+        draft.person = store.currentAuthor
         return draft
     }
 
@@ -671,11 +687,13 @@ struct RowDraft {
         note: String,
         amount: Int64,
         walletId: Uuid?,
-        kind: TransactionKind?
+        kind: TransactionKind?,
+        person: String?
     )? {
         guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let resolvedFlow = try cell(.flow) { try store.resolveFlow(named: flow) }
         let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: wallet) }
+        let resolvedPerson = try cell(.person) { try store.resolvePerson(named: person) }
         let parsedAmount = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
         let trimmed = category.trimmingCharacters(in: .whitespacesAndNewlines)
         return (
@@ -686,7 +704,8 @@ struct RowDraft {
             note: note,
             amount: parsedAmount,
             walletId: resolvedWallet,
-            kind: kind
+            kind: kind,
+            person: resolvedPerson
         )
     }
 
@@ -716,6 +735,18 @@ struct RowDraft {
         if !trimmedWallet.isEmpty, trimmedWallet != row.walletDisplay {
             let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: trimmedWallet) }
             if let walletId = resolvedWallet, walletId != row.walletId { patch.walletId = walletId }
+        }
+
+        // Only when retyped, as the wallet: a row for someone who has left
+        // the vault still shows their name, which no longer resolves. Back
+        // to whoever recorded it is said with a blank, the patch's own word
+        // for it, rather than with a name.
+        let trimmedPerson = person.trimmingCharacters(in: .whitespacesAndNewlines)
+        if row.isPersonEditable, !trimmedPerson.isEmpty, trimmedPerson != row.person {
+            let resolvedPerson = try cell(.person) { try store.resolvePerson(named: trimmedPerson) }
+            if let name = resolvedPerson, name != row.person {
+                patch.person = name == row.recordedBy ? "" : name
+            }
         }
 
         if !Calendar.current.isDate(day, inSameDayAs: row.occurredAt) {

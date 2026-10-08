@@ -27,7 +27,8 @@ struct RecurringDueTests {
         _ store: AppStore,
         note: String,
         amount: Int64,
-        flowId: Uuid? = nil
+        flowId: Uuid? = nil,
+        owner: String? = nil
     ) async throws -> RecurringView {
         let start = try #require(Calendar.current.date(byAdding: .day, value: -2, to: Date()))
         await store.createRecurring(
@@ -37,7 +38,8 @@ struct RecurringDueTests {
             flowId: flowId,
             category: "Bills",
             note: note,
-            schedule: Schedule(frequency: .daily, interval: 1, startDate: CoreDate.day(start), endDate: nil)
+            schedule: Schedule(frequency: .daily, interval: 1, startDate: CoreDate.day(start), endDate: nil),
+            owner: owner
         )
         #expect(store.presentedError == nil)
         return try #require(store.recurringTemplates.first { $0.note == note })
@@ -78,6 +80,159 @@ struct RecurringDueTests {
         #expect(!Self.due(store, rent).contains(first))
         let spent: Int64 = 999
         #expect(try Self.cash(store) == 10_000 - spent)
+    }
+
+    // MARK: - The owner
+
+    @Test("A template is its creator's unless another owner was picked, and an edit moves it")
+    func ownerOnCreateAndEdit() async throws {
+        let store = try await Self.onboarded()
+        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 999)
+        let gym = try await Self.dailyExpense(store, note: "Gym", amount: 50, owner: "elisa")
+        #expect(rent.owner == "tester")
+        #expect(gym.owner == "elisa")
+
+        await store.updateRecurring(rent.id, patch: RecurringPatch(owner: "elisa"))
+        #expect(store.presentedError == nil)
+        #expect(store.recurringTemplates.first { $0.id == rent.id }?.owner == "elisa")
+    }
+
+    @Test("Registra records the period for the template's owner, by whoever pressed it")
+    func executeForTheOwner() async throws {
+        let store = try await Self.onboarded()
+        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 999, owner: "elisa")
+        let first = try #require(Self.due(store, rent).first)
+
+        await store.executeRecurring(rent.id, periodDate: first)
+
+        #expect(store.presentedError == nil)
+        let row = try #require(try await Self.everyRow(store).first { $0.note == "Rent" })
+        #expect(row.person == "elisa")
+        #expect(row.createdBy == "tester")
+    }
+
+    /// Every row of the vault, whatever month the periods fell in: two days
+    /// ago may be last month.
+    private static func everyRow(_ store: AppStore) async throws -> [TransactionView] {
+        try await VaultExporter.allTransactions(core: store.core, vaultId: try #require(store.currentVault).id)
+    }
+
+    @Test("Registra tutte records each period for its own template's owner")
+    func executeAllForEachOwner() async throws {
+        let store = try await Self.onboarded()
+        try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        try await Self.dailyExpense(store, note: "Gym", amount: 50)
+
+        await store.executeAllDueRecurring()
+
+        #expect(store.presentedError == nil)
+        let rows = try await Self.everyRow(store).filter { $0.note == "Rent" || $0.note == "Gym" }
+        #expect(rows.count == 6)
+        #expect(rows.allSatisfy { $0.createdBy == "tester" })
+        #expect(rows.filter { $0.note == "Rent" }.allSatisfy { $0.person == "elisa" })
+        #expect(rows.filter { $0.note == "Gym" }.allSatisfy { $0.person == "tester" })
+    }
+
+    @Test("Under the PERSONA filter the Mastro shows the due periods of that person's templates only")
+    func pendingRowsFollowThePersonFilter() async throws {
+        let store = try await Self.onboarded()
+        try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        try await Self.dailyExpense(store, note: "Gym", amount: 50)
+        // A row for elisa, so the filter has her to show.
+        await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 10, person: "elisa")
+
+        func pendingNotes() -> Set<String> {
+            let lines = LedgerLines.interleave(
+                rows: store.ledgerLinesInput.rows,
+                due: store.ledgerLinesInput.due,
+                month: store.month,
+                direction: store.direction,
+                person: store.ledgerLinesInput.person
+            )
+            return Set(lines.compactMap { line in
+                if case .pending(let period) = line { period.template.note } else { nil }
+            })
+        }
+        // The month of the periods: two days ago may be the month before.
+        #expect(!pendingNotes().isEmpty)
+
+        store.person = "elisa"
+        await store.settle()
+        #expect(store.person == "elisa")
+        #expect(pendingNotes() == ["Rent"])
+
+        store.person = "tester"
+        await store.settle()
+        #expect(pendingNotes() == ["Gym"])
+    }
+
+    // MARK: - An owner who left the vault
+
+    @Test("An owner has left when the members are known and are not them; never the author, never without a list")
+    func ownerHasLeftRule() {
+        #expect(AppStore.ownerHasLeft("elisa", members: ["tester", "bob"], author: "tester"))
+        #expect(!AppStore.ownerHasLeft("bob", members: ["tester", "bob"], author: "tester"))
+        // The author is left out of the command: the server never sees them.
+        #expect(!AppStore.ownerHasLeft("Tester", members: ["bob"], author: "tester"))
+        // No list: logged out, a demo database, or not heard yet.
+        #expect(!AppStore.ownerHasLeft("elisa", members: nil, author: "tester"))
+        #expect(!AppStore.ownerHasLeft("elisa", members: [], author: "tester"))
+        #expect(!AppStore.ownerHasLeft(" ", members: ["bob"], author: "tester"))
+    }
+
+    @Test("A template whose owner left can only skip its periods; Registra tutte records the others and counts what it left")
+    func ownerWhoLeft() async throws {
+        let store = try await Self.onboarded()
+        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        let gym = try await Self.dailyExpense(store, note: "Gym", amount: 50)
+        let vault = try #require(store.currentVault)
+        // Logged in, and elisa is not among the members any more.
+        store.setVaultMembers([vault.id: ["tester", "bob"]])
+        #expect(store.ownerHasLeft(rent))
+        #expect(!store.ownerHasLeft(gym))
+
+        // Registra, pressed anyway, never reaches the core.
+        let first = try #require(Self.due(store, rent).first)
+        await store.executeRecurring(rent.id, periodDate: first)
+        let refusal = try #require(store.presentedError)
+        #expect(refusal.code == "not_a_member")
+        #expect(refusal.summary.contains("elisa"))
+        #expect(Self.due(store, rent).count == 3)
+        store.presentedError = nil
+
+        // Registra tutte records gym's three, leaves rent's three and says so.
+        await store.executeAllDueRecurring()
+        let held = try #require(store.presentedError)
+        #expect(held.code == "not_a_member")
+        #expect(held.summary == AppStore.periodsNotRecorded(3))
+        #expect(Self.due(store, gym).isEmpty)
+        #expect(Self.due(store, rent).count == 3)
+        #expect(try Self.cash(store) == 10_000 - 3 * 50)
+        store.presentedError = nil
+
+        // Salta still works.
+        await store.skipRecurring(rent.id, periodDate: first)
+        #expect(store.presentedError == nil)
+        #expect(Self.due(store, rent).count == 2)
+
+        // Given to a member, the template records again.
+        await store.updateRecurring(rent.id, patch: RecurringPatch(owner: "bob"))
+        let given = try #require(store.recurringTemplates.first { $0.id == rent.id })
+        #expect(!store.ownerHasLeft(given))
+        await store.executeAllDueRecurring()
+        #expect(store.presentedError == nil)
+        #expect(Self.due(store, rent).isEmpty)
+    }
+
+    @Test("Logged out, an owner nobody checks records as before")
+    func ownerUncheckedWhileLoggedOut() async throws {
+        let store = try await Self.onboarded()
+        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        store.setVaultMembers(nil)
+        #expect(!store.ownerHasLeft(rent))
+        await store.executeAllDueRecurring()
+        #expect(store.presentedError == nil)
+        #expect(Self.due(store, rent).isEmpty)
     }
 
     @Test("Skipping a period takes it off the list and writes nothing")
