@@ -229,8 +229,9 @@ struct FormTextField: View {
         FormBox(focused: metrics.showsFocus && focused) {
             // An empty prompt rather than none: without one, the plain style
             // writes the label into the empty field, beside the label column
-            // that already says it.
-            let promptText = Text(verbatim: prompt ?? "")
+            // that already says it. Grey on its own: the box's text color
+            // would otherwise make it look typed.
+            let promptText = Text(verbatim: prompt ?? "").foregroundStyle(Ink.text3)
             Group {
                 if secure {
                     SecureField(label, text: $text, prompt: promptText)
