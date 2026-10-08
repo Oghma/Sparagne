@@ -5,59 +5,68 @@ import SparagneCore
 /// it. A new row can be ticked off (it goes to the core as `skip`) and its
 /// category typed; a category typed here may create one, the bank's never
 /// does (`core/src/statement/mod.rs`).
+///
+/// Ruled like the window's tables (`SetupHeaderRow`, `SetupRow`,
+/// `GridCell`), and pulled out by a cell's padding so the first column
+/// lines up with the sheet's title.
 struct StatementReview: View {
     @Bindable var model: StatementImportModel
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            Hairline()
             ScrollView {
                 LazyVStack(spacing: 0) {
                     let names = NameBook(snapshot: model.store.snapshot)
                     ForEach(model.preview?.rows ?? [], id: \.line) { row in
                         StatementReviewRow(model: model, row: row, names: names)
-                        Hairline()
                     }
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
         }
+        .padding(.horizontal, -Metrics.cellPad)
     }
 
     private var header: some View {
-        HStack(spacing: 0) {
-            ReviewCell(width: ReviewColumn.check) { Color.clear.frame(height: 1) }
-            ReviewCell(width: ReviewColumn.line, alignment: .trailing) { SectionLabel(text: "#") }
-            ReviewCell(width: ReviewColumn.date) { SectionLabel(text: String(localized: "Date")) }
-            ReviewCell { SectionLabel(text: String(localized: "Description")) }
-            ReviewCell(width: ReviewColumn.amount, alignment: .trailing) {
-                SectionLabel(text: String(localized: "Amount"))
+        SetupHeaderRow {
+            GridCell(width: ReviewColumn.check) { Color.clear.frame(height: 1) }
+            GridCell(width: ReviewColumn.line, alignment: .trailing) {
+                heading("#", spoken: String(localized: "Number"))
             }
-            ReviewCell(width: ReviewColumn.kind) { SectionLabel(text: String(localized: "Kind")) }
-            ReviewCell(width: ReviewColumn.status) { SectionLabel(text: String(localized: "Status")) }
-            ReviewCell(width: ReviewColumn.category) { SectionLabel(text: String(localized: "Category")) }
+            GridCell(width: ReviewColumn.date) { heading(String(localized: "Date")) }
+            GridCell { heading(String(localized: "Description")) }
+            GridCell(width: ReviewColumn.amount, alignment: .trailing) { heading(String(localized: "Amount")) }
+            GridCell(width: ReviewColumn.kind) { heading(String(localized: "Kind")) }
+            GridCell(width: ReviewColumn.status) { heading(String(localized: "Status")) }
+            GridCell(width: ReviewColumn.category) { heading(String(localized: "Category")) }
         }
-        .frame(height: Metrics.headerHeight)
+    }
+
+    /// A column heading, announced as one, and `#` as a word.
+    private func heading(_ text: String, spoken: String? = nil) -> some View {
+        Text(text)
+            .accessibilityLabel(spoken ?? text)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
-/// Column widths of the review; the description takes what is left. Kind
-/// and status fit the longest Italian word at the table's 11 pt
-/// ("trasferimento", "Saltata da una regola").
+/// Column widths of the review, as a cell's content gets them (`GridCell`
+/// pads each side); the description takes what is left, about 180 points
+/// of the sheet. Kind and status fit the longest words they show
+/// ("trasferimento", "Needs the other wallet" in the tag's 10 pt).
 private enum ReviewColumn {
-    static let check: CGFloat = 18
-    static let line: CGFloat = 30
-    static let date: CGFloat = 76
-    static let amount: CGFloat = 80
-    static let kind: CGFloat = 90
-    static let status: CGFloat = 156
-    static let category: CGFloat = 150
-    static let font = Face.ui(11)
+    static let check: CGFloat = 14
+    static let line: CGFloat = 28
+    static let date: CGFloat = 70
+    static let amount: CGFloat = 76
+    static let kind: CGFloat = 86
+    static let status: CGFloat = 140
+    static let category: CGFloat = 136
 }
 
 /// One previewed row. Rows that will not be imported are drawn in the dim
-/// ink, their status badge excepted.
+/// ink, their outcome tag excepted.
 private struct StatementReviewRow: View {
     @Bindable var model: StatementImportModel
     let row: StatementRow
@@ -69,26 +78,20 @@ private struct StatementReviewRow: View {
     private var live: Bool { isNew && included }
 
     var body: some View {
-        HStack(spacing: 0) {
-            ReviewCell(width: ReviewColumn.check) {
+        SetupRow {
+            GridCell(width: ReviewColumn.check) {
                 if isNew {
-                    Toggle(String(localized: "Import"), isOn: Binding(
-                        get: { included },
-                        set: { model.setIncluded($0, line: row.line) }
-                    ))
-                    .labelsHidden()
-                    .toggleStyle(.checkbox)
-                    .controlSize(.small)
+                    IncludeBox(isOn: included) { model.setIncluded($0, line: row.line) }
                 } else {
                     // An empty cell still holds its width.
                     Color.clear.frame(height: 1)
                 }
             }
-            ReviewCell(width: ReviewColumn.line, alignment: .trailing) {
+            GridCell(width: ReviewColumn.line, alignment: .trailing) {
                 Text(verbatim: String(row.line)).foregroundStyle(Ink.text3)
             }
-            ReviewCell(width: ReviewColumn.date) { Text(verbatim: date).foregroundStyle(ink) }
-            ReviewCell {
+            GridCell(width: ReviewColumn.date) { Text(verbatim: date).foregroundStyle(ink) }
+            GridCell {
                 HStack(spacing: 6) {
                     Text(verbatim: row.payee.isEmpty ? TransactionRow.placeholder : row.payee)
                         .foregroundStyle(ink)
@@ -98,21 +101,19 @@ private struct StatementReviewRow: View {
                 }
                 .help(row.payee)
             }
-            ReviewCell(width: ReviewColumn.amount, alignment: .trailing) {
+            GridCell(width: ReviewColumn.amount, alignment: .trailing) {
                 Text(verbatim: LedgerMoney.bare(signedAmount)).foregroundStyle(live ? amountTint : Ink.text3)
             }
-            ReviewCell(width: ReviewColumn.kind) {
+            GridCell(width: ReviewColumn.kind) {
                 Text(verbatim: StatementText.kind(row.kind)).foregroundStyle(ink)
             }
-            ReviewCell(width: ReviewColumn.status) {
-                Text(verbatim: statusText)
-                    .foregroundStyle(statusTint)
+            GridCell(width: ReviewColumn.status) {
+                OutcomeTag(text: statusText, tone: tone)
                     .help(StatementText.detail(row.status) ?? "")
             }
-            ReviewCell(width: ReviewColumn.category) { category }
+            GridCell(width: ReviewColumn.category) { category }
         }
-        .font(ReviewColumn.font)
-        .frame(height: Metrics.rowHeight)
+        .font(Face.row)
     }
 
     private var ink: Color { live ? Ink.text : Ink.text3 }
@@ -138,12 +139,11 @@ private struct StatementReviewRow: View {
         isNew && !included ? StatementText.skipped("skipped_by_you") : StatementText.status(row.status)
     }
 
-    private var statusTint: Color {
+    private var tone: OutcomeTag.Tone {
         switch row.status {
-        case .new: included ? Ink.positive : Ink.warning
-        case .alreadyImported: Ink.text3
-        case .skipped: Ink.warning
-        case .invalid: Ink.negative
+        case .new: included ? .new : .quiet
+        case .alreadyImported, .skipped: .quiet
+        case .invalid: .invalid
         }
     }
 
@@ -183,19 +183,56 @@ private struct StatementReviewRow: View {
     }
 }
 
-/// A cell of the review: fixed width or the rest, one line, tight padding.
-private struct ReviewCell<Content: View>: View {
-    var width: CGFloat?
-    var alignment: Alignment = .leading
-    @ViewBuilder var content: Content
+/// What the core will do with a row, as a small rounded tag: soft accent on
+/// a row that will be imported, `raised` and dim on one that will not
+/// (already in the vault, skipped by a rule, its status or the user), soft
+/// negative on one the core cannot read. The ledger's and setup's tags,
+/// so the three tables speak the same way.
+private struct OutcomeTag: View {
+    enum Tone { case new, quiet, invalid }
+
+    let text: String
+    let tone: Tone
 
     var body: some View {
-        content
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(width: width, alignment: alignment)
-            .frame(maxWidth: width == nil ? .infinity : nil, alignment: alignment)
-            .padding(.horizontal, Metrics.cellPad)
+        switch tone {
+        case .new: RowTag(text: text, tint: Ink.accent)
+        case .quiet: SetupTag(text: text)
+        case .invalid: RowTag(text: text, tint: Ink.negative)
+        }
+    }
+}
+
+/// The exclude box of a new row, drawn by hand like the form's switch: the
+/// accent with a dark tick while the row goes in, an outline once it is
+/// ticked off. VoiceOver gets the system checkbox it stands for, named
+/// "Import" as before.
+private struct IncludeBox: View {
+    let isOn: Bool
+    let set: (Bool) -> Void
+
+    var body: some View {
+        Button {
+            set(!isOn)
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(isOn ? Ink.accent : Ink.card)
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(isOn ? Ink.accent : Ink.line2, lineWidth: 1)
+                if isOn {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Color(hex: 0x140A00))
+                }
+            }
+            .frame(width: 13, height: 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityRepresentation {
+            Toggle(String(localized: "Import"), isOn: Binding(get: { isOn }, set: set))
+        }
     }
 }
 
@@ -205,62 +242,66 @@ struct StatementReportView: View {
     let report: StatementReport
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Panel {
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionLabel(text: String(localized: "Import finished"))
-                    HStack(alignment: .top, spacing: 32) {
+        VStack(alignment: .leading, spacing: 22) {
+            FormGroup(String(localized: "Import finished")) {
+                Panel {
+                    HStack(alignment: .top, spacing: 0) {
                         figure(String(localized: "Imported"), report.executed, Ink.positive)
                         figure(String(localized: "Already imported"), report.deduplicated, Ink.text)
                         figure(String(localized: "Skipped"), report.skipped, Ink.text)
                         figure(String(localized: "Rounded"), report.rounded, Ink.text)
                         figure(String(localized: "Refused"), UInt32(report.rejected.count), Ink.negative)
                     }
-                    if report.rounded > 0 {
-                        Text(String(localized: "Rounded rows had more decimals than the currency keeps."))
-                            .font(Face.footnote)
-                            .foregroundStyle(Ink.text3)
-                    }
+                }
+                if report.rounded > 0 {
+                    FormNote(String(localized: "Rounded rows had more decimals than the currency keeps."), indented: false)
                 }
             }
             if !report.rejected.isEmpty {
-                Panel(padding: 0) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        SectionLabel(text: String(localized: "Refused"))
-                            .padding(.horizontal, 14)
-                            .frame(height: 28)
-                        Hairline()
+                FormGroup(String(localized: "Refused")) {
+                    VStack(spacing: 0) {
                         ForEach(Array(report.rejected.enumerated()), id: \.offset) { _, rejection in
-                            HStack(spacing: 10) {
-                                Text(String(localized: "Line \(Int(rejection.line))"))
-                                    .foregroundStyle(Ink.text3)
-                                    .frame(width: 70, alignment: .leading)
-                                Text(ErrorMessages.summary(for: rejection.code))
-                                    .foregroundStyle(Ink.negative)
-                                Text(verbatim: rejection.message)
-                                    .foregroundStyle(Ink.text3)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .help(rejection.message)
+                            SetupRow {
+                                GridCell(width: Self.lineColumn) {
+                                    Text(String(localized: "Line \(Int(rejection.line))"))
+                                        .foregroundStyle(Ink.text3)
+                                }
+                                GridCell {
+                                    HStack(spacing: 10) {
+                                        Text(ErrorMessages.summary(for: rejection.code))
+                                            .foregroundStyle(Ink.negative)
+                                            .layoutPriority(1)
+                                        Text(verbatim: rejection.message)
+                                            .foregroundStyle(Ink.text3)
+                                            .help(rejection.message)
+                                    }
+                                }
                             }
-                            .font(Face.row)
-                            .padding(.horizontal, 14)
-                            .frame(height: Metrics.rowHeight)
-                            Hairline()
                         }
                     }
+                    .font(Face.row)
+                    .padding(.horizontal, -Metrics.cellPad)
                 }
             }
         }
-        .padding(Metrics.gutter)
+        .padding(.bottom, 4)
     }
 
+    /// "Riga 1234" with room to spare.
+    private static let lineColumn: CGFloat = 70
+
+    /// A figure of the report, as the summary's cards show one: the label
+    /// over the number, the number dimmed at zero.
     private func figure(_ label: String, _ value: UInt32, _ tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            SectionLabel(text: label)
+            Text(label)
+                .font(Face.label)
+                .foregroundStyle(Ink.text3)
             Text(verbatim: String(value))
-                .font(Face.headline)
+                .font(Face.display)
                 .foregroundStyle(value == 0 ? Ink.text3 : tint)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
