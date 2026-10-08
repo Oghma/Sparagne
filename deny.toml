@@ -1,0 +1,45 @@
+# cargo-deny's policy for the Rust workspace (https://embarkstudios.github.io/cargo-deny/).
+# CI checks bans, licenses and sources on every change (`ci.yml`); the
+# advisories run on their own schedule (`deps.yml`).
+
+[graph]
+# Only what is built: the server's Linux targets and the app's Apple silicon
+# slice, so Windows- and wasm-only crates do not count.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Permissive licenses, plus MPL-2.0 (file-level copyleft) for UniFFI. A crate
+# offered under several licenses passes when one of them is here.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Two versions of one crate are reported, not refused: they come and go with
+# the ecosystem's upgrades.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# crates.io only: no git dependencies, no other registry.
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,8 +1,9 @@
 # Sparagne v2 — Messa in produzione del server
 
 > 2026-09-12, aggiornato il 2026-09-23 (limiti ai tentativi, account da
-> riga di comando). Riferimenti: `SYNC.md` §2-3 (storage e API),
-> `server/Dockerfile`, `server/deploy/`.
+> riga di comando) e il 2026-10-08 (immagine pubblicata su GHCR, §3.2).
+> Riferimenti: `SYNC.md` §2-3 (storage e API), `server/Dockerfile`,
+> `server/deploy/`, `.github/workflows/release.yml`.
 
 ## 1. TLS obbligatorio
 
@@ -63,11 +64,12 @@ username resta).
 
 ## 3. Primo avvio
 
-1. `cd server/deploy && cp .env.example .env`, impostare `DOMAIN` e le altre
-   variabili.
+1. `cd server/deploy && cp .env.example .env`, impostare `DOMAIN`,
+   `SPARAGNE_VERSION` (la release da usare, §3.2) e le altre variabili.
 2. In `Caddyfile`, sostituire `sparagne.example.com` col dominio vero.
-3. `docker compose up -d` (builda l'immagine dal `Dockerfile` alla radice del
-   repo e avvia `sparagne` + `caddy`).
+3. `docker compose up -d` (scarica `ghcr.io/oghma/sparagne-server` alla
+   versione di `.env` e avvia `sparagne` + `caddy`). Sull'host bastano
+   `server/deploy/` e Docker: niente sorgenti né Rust.
 4. Verificare `curl https://il-tuo-dominio/health` → `{"status":"ok"}`.
 5. Creare gli account che servono: con `SPARAGNE_ALLOW_REGISTRATION=true`
    (default) dalla schermata di registrazione dell'app o da `POST
@@ -124,6 +126,27 @@ In caso di errore il comando scrive il motivo su stderr ed esce con 1 (2 per
 un comando scritto male). Dall'app un utente cambia la propria password con
 `POST /auth/password` (`SYNC.md` §3), che chiede quella attuale.
 
+### 3.2 L'immagine e da dove viene
+
+Ogni tag di versione (`v2.0.0`) pubblica l'immagine per linux/amd64 e
+linux/arm64 (`.github/workflows/release.yml`), con i tag `2.0.0`, `2.0` e
+`latest`; una pre-release (`v2.1.0-beta.1`) solo col proprio. `compose.yml`
+la prende per numero di versione, mai `latest`, così un aggiornamento è
+una scelta fatta dopo un backup (§6).
+
+Il workflow allega all'immagine un'attestazione di provenienza firmata da
+GitHub: dice che è stata costruita da quel workflow, su quel commit del
+repository. Prima di usarla (o di aggiornare):
+
+```sh
+gh attestation verify oci://ghcr.io/oghma/sparagne-server:2.0.0 --repo Oghma/Sparagne
+```
+
+Per costruirla invece dai sorgenti (una modifica non ancora rilasciata, un
+host che non deve scaricare nulla): dal checkout del repository,
+`docker compose -f compose.yml -f compose.build.yml up -d --build`
+(`server/deploy/compose.build.yml`).
+
 ### Bare metal (senza Docker)
 
 `server/deploy/sparagne-server.service` è un'unit systemd pronta all'uso: il
@@ -176,9 +199,14 @@ migrazione manuale serve per usarlo, a parte l'avvio normale (§6).
 
 ## 6. Aggiornamento
 
-1. `git pull` (o scaricare la nuova immagine se pubblicata), poi:
-   - Compose: `docker compose build sparagne && docker compose up -d
-     sparagne` (Caddy non serve ricostruirlo).
+1. Backup (§4), poi:
+   - Compose: in `.env` portare `SPARAGNE_VERSION` alla release nuova
+     (verificandola, §3.2), poi `docker compose pull sparagne && docker
+     compose up -d sparagne` (Caddy resta com'è). Da un'installazione che
+     costruiva l'immagine dai sorgenti, prima della 2.0.0: aggiornare anche
+     `compose.yml` e aggiungere `SPARAGNE_VERSION` a `.env` (`.env.example`).
+   - Compose dai sorgenti: `git pull`, poi `docker compose -f compose.yml -f
+     compose.build.yml up -d --build sparagne`.
    - Bare metal: ricompilare (`cargo build --release -p sparagne_server`),
      sostituire il binario, `systemctl restart sparagne-server`.
 2. Lo schema di `vaults.sqlite` **si aggiorna da solo all'avvio**: `Core::open`

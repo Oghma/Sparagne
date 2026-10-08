@@ -1,8 +1,11 @@
 # Run from server/deploy/:
 #
-#   cp .env.example .env   # edit DOMAIN and the rest
+#   cp .env.example .env   # edit DOMAIN, SPARAGNE_VERSION and the rest
 #   # edit Caddyfile: replace sparagne.example.com with the real domain
 #   docker compose up -d
+#
+# The server is the release image from GHCR. To build it from this checkout
+# instead: docker compose -f compose.yml -f compose.build.yml up -d --build
 #
 # Backups: `docker compose exec sparagne backup.sh` writes straight to
 # ./backups on the host (server/deploy/backup.sh ships inside the image).
@@ -16,10 +19,9 @@
 
 services:
   sparagne:
-    build:
-      context: ../..
-      dockerfile: server/Dockerfile
-    image: sparagne-server:latest
+    # A release named in .env rather than `latest`, so an upgrade is a choice
+    # made after a backup (docs/v2/DEPLOY.md §6).
+    image: ghcr.io/oghma/sparagne-server:${SPARAGNE_VERSION:?set SPARAGNE_VERSION in .env}
     restart: unless-stopped
     volumes:
       - sparagne-data:/data

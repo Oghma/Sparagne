@@ -12,3 +12,6 @@
 
 # macOS Finder metadata
 .DS_Store
+
+# The app built by scripts/build-app.sh
+/dist
