@@ -145,7 +145,7 @@ Multi-tenant lato server: account utente, vault di proprietà di un account, mem
 | 2026-09-23 | correzioni dell'audit dello stesso giorno e funzioni mancanti: nomi dei vault come etichette, account e limiti sul server, permessi e sola lettura nell'app, ricorrenze dovute, import di estratti conto, export completo e backup, selezione e operazioni in blocco, annulla/ripeti, completamento e suggerimento della categoria, icona e VoiceOver |
 | 2026-10-08 | persona sulle transazioni e titolare sulle ricorrenze: schema v4, default calcolato all'applicazione, `!nome` nel quick-add, `people()` al posto di `authors()`, `relabel_outbox` che riscrive persone e titolari, `not_a_member` sul server; da rilasciare prima il server (`DEPLOY.md` §6.2) |
 
-Rimandato: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`. Il core fuori dal main actor è stato fatto il 2026-09-12 (§2.2).
+Rimandato: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), firma con un team Apple (oggi ad-hoc). Il core fuori dal main actor è stato fatto il 2026-09-12 (§2.2).
 
 La griglia di dashboard di `DISTILLATO_V1.md` §3.4 è stata scartata il
 2026-09-10 a favore dei mockup: il riepilogo sta **accanto** alle righe, il
