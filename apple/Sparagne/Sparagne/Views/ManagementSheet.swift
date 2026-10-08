@@ -1,13 +1,13 @@
 import SwiftUI
 import SparagneCore
 
-/// Everything that manages the vault's entities, in one sheet (⌘⇧M).
+/// The vault on screen and its life cycle, in one sheet (⌘⇧M): switch to
+/// another vault, start a new one, rename, share, leave or delete this one,
+/// and remove the copies of vaults no longer shared.
 ///
-/// The ledger window has no sidebar (`docs/v2/UI.md` §2), so the vault picker,
-/// the wallet and envelope balances and their management actions moved here.
-/// Archived entities are behind a collapsed "Archived" group; capped envelopes
-/// show `balance / cap` with the 70%/90% tinted bar
-/// (docs/v2/DISTILLATO_V1.md §3.4).
+/// Wallets, envelopes and categories live on the Setup tab, the recurring
+/// templates on the Ricorrenze tab (`docs/v2/UI.md` §2.3, §2.5); the sheet
+/// links to both instead of keeping a second, smaller copy of either.
 struct ManagementSheet: View {
     let store: AppStore
     /// Says what the account may do to this vault on the server — share,
@@ -23,67 +23,13 @@ struct ManagementSheet: View {
     /// Why removing a vault no longer shared failed, shown under its row.
     @State private var removalFailure: String?
 
-    /// Writes are refused on a vault the account only reads, so what would
-    /// write is not offered.
-    private var writable: Bool { store.currentVault != nil && !store.isReadOnly }
-
     var body: some View {
-        VStack(spacing: 0) {
-            list
-            Divider()
-            HStack {
-                Spacer()
-                Button(String(localized: "Done")) { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-            }
-            .padding(12)
-        }
-        .frame(width: 420, height: 520)
-    }
-
-    private var list: some View {
-        List {
-            Section {
-                Menu {
-                    ForEach(store.vaults, id: \.id) { vault in
-                        Button(VaultNaming.label(for: vault, among: store.vaults)) {
-                            Task { await store.select(vault) }
-                        }
-                    }
-                    Divider()
-                    Button(String(localized: "New Vault…")) { present(.vault) }
-                    if let vault = store.currentVault {
-                        // Each entry only when it would go through: the core
-                        // and the server refuse the rest anyway.
-                        if engine?.mayRenameVault(vault.id) ?? true {
-                            Button(String(localized: "Rename…")) { present(.renameVault(vault)) }
-                        }
-                        if let engine, engine.isLoggedIn, engine.isOwner(ofVault: vault.id) {
-                            Button(String(localized: "Share…")) { present(.share(vault)) }
-                        }
-                        if engine?.mayLeaveVault(vault.id) ?? false {
-                            Divider()
-                            Button(String(localized: "Leave…")) { present(.leaveVault(vault)) }
-                        }
-                        if engine?.mayDeleteVault(vault.id) ?? true {
-                            Divider()
-                            Button(String(localized: "Delete…"), role: .destructive) {
-                                present(.deleteVault(vault))
-                            }
-                        }
-                    }
-                } label: {
-                    Label(
-                        store.currentVault.map { VaultNaming.label(for: $0, among: store.vaults) }
-                            ?? String(localized: "No vault"),
-                        systemImage: "chevron.up.chevron.down"
-                    )
-                }
-                .menuStyle(.borderlessButton)
+        FormSheet(String(localized: "Vault"), width: 460) {
+            VStack(alignment: .leading, spacing: 10) {
+                vaultPicker
+                actions
                 if store.isReadOnly, let vault = store.currentVault, !(engine?.hasLostAccess(to: vault.id) ?? false) {
-                    Text(String(localized: "You can read this vault but not change it."))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    FormNote(String(localized: "You can read this vault but not change it."), indented: false)
                 }
             }
 
@@ -91,211 +37,163 @@ struct ManagementSheet: View {
                 lostSection(engine)
             }
 
-            Section(String(localized: "Wallets")) {
-                ForEach(store.wallets, id: \.id) { wallet in
-                    WalletManagementRow(wallet: wallet)
-                        .contextMenu {
-                            if writable {
-                                Button(String(localized: "Rename…")) { present(.renameWallet(wallet)) }
-                                Button(String(localized: "Archive"), role: .destructive) {
-                                    Task { await store.archiveWallet(wallet.id) }
-                                }
-                            }
-                        }
-                }
-                if !store.archivedWallets.isEmpty {
-                    DisclosureGroup(String(localized: "Archived")) {
-                        ForEach(store.archivedWallets, id: \.id) { wallet in
-                            ArchivedRow(name: wallet.name, canRestore: writable) {
-                                Task { await store.restoreWallet(wallet.id) }
-                            }
-                        }
-                    }
-                }
-                Button(String(localized: "New Wallet…")) { present(.wallet) }
-                    .buttonStyle(.link)
-                    .disabled(!writable)
-            }
+            links
+        } footer: {
+            FormPrimaryButton(title: String(localized: "Done")) { dismiss() }
+        }
+    }
 
-            Section(String(localized: "Envelopes")) {
-                ForEach(store.flows, id: \.id) { flow in
-                    EnvelopeManagementRow(
-                        flow: flow,
-                        name: store.flowName(flow)
+    // MARK: - The vault on screen
+
+    private var vaultPicker: some View {
+        FormMenu(
+            label: String(localized: "Vault"),
+            value: store.currentVault.map { VaultNaming.label(for: $0, among: store.vaults) }
+                ?? String(localized: "No vault")
+        ) {
+            ForEach(store.vaults, id: \.id) { vault in
+                // A toggle, for the menu's checkmark on the vault on screen.
+                Toggle(
+                    VaultNaming.label(for: vault, among: store.vaults),
+                    isOn: Binding(
+                        get: { vault.id == store.currentVault?.id },
+                        set: { _ in Task { await store.select(vault) } }
                     )
-                    .contextMenu {
-                        // Unallocated is a system envelope: the core
-                        // refuses to update or archive it.
-                        if !flow.isUnallocated, writable {
-                            Button(String(localized: "Rename…")) { present(.renameEnvelope(flow)) }
-                            Button(String(localized: "Edit…")) { present(.editEnvelope(flow)) }
-                            Button(String(localized: "Archive"), role: .destructive) {
-                                Task { await store.archiveEnvelope(flow.id) }
-                            }
-                        }
-                    }
-                }
-                if !store.archivedFlows.isEmpty {
-                    DisclosureGroup(String(localized: "Archived")) {
-                        ForEach(store.archivedFlows, id: \.id) { flow in
-                            ArchivedRow(name: flow.name, canRestore: writable) {
-                                Task { await store.restoreEnvelope(flow.id) }
-                            }
-                        }
-                    }
-                }
-                Button(String(localized: "New Envelope…")) { present(.envelope) }
-                    .buttonStyle(.link)
-                    .disabled(!writable)
-            }
-
-            Section(String(localized: "Recurring")) {
-                // The templates live on the Ricorrenze tab now; the sheet
-                // gets out of its way.
-                Button(String(localized: "Manage Recurring…")) {
-                    store.tab = .recurring
-                    dismiss()
-                }
-                    .buttonStyle(.link)
-                    .disabled(store.currentVault == nil)
+                )
             }
         }
-        .listStyle(.inset)
-        // A row that crosses the archive/restore boundary moves between two
-        // separate `ForEach`s (the active `Section` and the archived
-        // `DisclosureGroup`); `List` on macOS is NSTableView-backed and does
-        // not reliably retire the outgoing cell across that boundary, so the
-        // restored row can keep rendering with the archived row's look until
-        // something forces the table to rebuild. Keying the whole `List` on
-        // the active/archived membership does that rebuild automatically,
-        // the same way leaving and reopening the sheet already does by hand.
-        .id(listIdentity)
     }
+
+    /// The life cycle, each action only when it would go through: the core
+    /// and the server refuse the rest anyway. The rules are the Vault menu's
+    /// and the top bar's (`VaultPermissions`), so the three never disagree.
+    private var actions: some View {
+        let permissions = VaultPermissions(vault: store.currentVault, engine: engine)
+        return HStack(spacing: 8) {
+            Button(String(localized: "New Vault…")) { present(.vault) }
+            if let vault = store.currentVault {
+                if permissions.mayRename {
+                    Button(String(localized: "Rename…")) { present(.renameVault(vault)) }
+                }
+                if permissions.mayShare {
+                    Button(String(localized: "Share…")) { present(.share(vault)) }
+                }
+                if permissions.mayLeave {
+                    Button(String(localized: "Leave…")) { present(.leaveVault(vault)) }
+                }
+                Spacer(minLength: 8)
+                if permissions.mayDelete {
+                    FormDestructiveButton(title: String(localized: "Delete…")) { present(.deleteVault(vault)) }
+                }
+            }
+        }
+        .buttonStyle(.chrome(.bordered))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Vaults no longer shared
 
     /// Vaults the server no longer shares with the account. Their copy stays
     /// here, read-only, until the user removes it: never dropped behind
     /// their back.
     private func lostSection(_ engine: SyncEngine) -> some View {
-        Section(String(localized: "No longer shared with you")) {
-            ForEach(engine.lostVaults, id: \.id) { vault in
-                HStack {
-                    Text(VaultNaming.label(for: vault, among: store.vaults))
-                    Spacer()
-                    Button(String(localized: "Remove from This Mac"), role: .destructive) {
-                        Task {
-                            do {
-                                try await engine.removeFromThisMac(vault.id)
-                                removalFailure = nil
-                            } catch let error as DomainError {
-                                removalFailure = "\(ErrorMessages.summary(for: error.code)): \(error.message)"
-                            } catch {
-                                removalFailure = error.localizedDescription
+        FormGroup(String(localized: "No longer shared with you")) {
+            Panel(padding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(Array(engine.lostVaults.enumerated()), id: \.element.id) { index, vault in
+                        if index > 0 { Hairline() }
+                        HStack(spacing: 8) {
+                            Text(VaultNaming.label(for: vault, among: store.vaults))
+                                .font(Face.ui(13))
+                                .foregroundStyle(Ink.text)
+                            Spacer(minLength: 8)
+                            FormDestructiveButton(title: String(localized: "Remove from This Mac"), small: true) {
+                                remove(vault, from: engine)
                             }
                         }
+                        .padding(.horizontal, Metrics.cardPad)
+                        .frame(minHeight: 34)
                     }
-                    .buttonStyle(.link)
                 }
             }
-            Text(String(localized: "The owner stopped sharing these vaults with you, or they were removed from the server. What was synced before stays here, read-only, until you remove it."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            FormNote(
+                String(localized: "The owner stopped sharing these vaults with you, or they were removed from the server. What was synced before stays here, read-only, until you remove it."),
+                indented: false
+            )
             if let removalFailure {
-                Text(removalFailure).font(.callout).foregroundStyle(.red)
+                FormNote(removalFailure, tone: .negative, indented: false)
             }
         }
     }
 
-    /// One tag per wallet and envelope, active or archived. Changes whenever
-    /// something crosses that boundary, which is exactly when `list` needs a
-    /// fresh `List` identity (see the comment above).
-    private var listIdentity: [String] {
-        store.wallets.map { "wallet:\($0.id)" }
-            + store.archivedWallets.map { "archived-wallet:\($0.id)" }
-            + store.flows.map { "flow:\($0.id)" }
-            + store.archivedFlows.map { "archived-flow:\($0.id)" }
+    private func remove(_ vault: VaultView, from engine: SyncEngine) {
+        Task {
+            do {
+                try await engine.removeFromThisMac(vault.id)
+                removalFailure = nil
+            } catch let error as DomainError {
+                removalFailure = "\(ErrorMessages.summary(for: error.code)): \(error.message)"
+            } catch {
+                removalFailure = error.localizedDescription
+            }
+        }
+    }
+
+    // MARK: - Elsewhere in the window
+
+    /// What this sheet used to list, where it lives now: each row closes the
+    /// sheet on its tab.
+    private var links: some View {
+        Panel(padding: 0) {
+            VStack(spacing: 0) {
+                TabLink(title: String(localized: "Wallets, envelopes and categories"), tab: .setup, go: go)
+                Hairline()
+                TabLink(title: LedgerTab.recurring.label, tab: .recurring, go: go)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        }
+        .disabled(store.currentVault == nil)
+    }
+
+    private func go(_ tab: LedgerTab) {
+        store.tab = tab
+        dismiss()
     }
 }
 
-/// One archived wallet or envelope, with its Restore action when the vault
-/// can be written.
-private struct ArchivedRow: View {
-    let name: String
-    let canRestore: Bool
-    let restore: () -> Void
+/// A row that takes the window to one of its tabs: the name, the tab's ⌘
+/// shortcut as a reminder, and a chevron.
+private struct TabLink: View {
+    let title: String
+    let tab: LedgerTab
+    let go: (LedgerTab) -> Void
+
+    @State private var hovered = false
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        HStack {
-            Text(name).foregroundStyle(.secondary)
-            Spacer()
-            if canRestore {
-                Button(String(localized: "Restore"), action: restore)
-                    .buttonStyle(.link)
+        Button {
+            go(tab)
+        } label: {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(Face.ui(13))
+                    .foregroundStyle(Ink.text)
+                Spacer(minLength: 8)
+                KeyCap(text: "\u{2318}\(tab.shortcut)")
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Ink.text3)
             }
+            .padding(.horizontal, Metrics.cardPad)
+            .frame(height: 34)
+            .background(hovered && isEnabled ? Ink.raised : Color.clear)
+            .contentShape(Rectangle())
         }
-    }
-}
-
-private struct WalletManagementRow: View {
-    let wallet: WalletView
-
-    var body: some View {
-        HStack {
-            Text(wallet.name)
-            Spacer()
-            Text(LedgerMoney.amount(wallet.balance))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct EnvelopeManagementRow: View {
-    let flow: FlowView
-    let name: String
-
-    /// The cap, when the mode has one.
-    private var cap: Int64? {
-        switch flow.mode {
-        case .unlimited: nil
-        case .netCapped(let cap), .incomeCapped(let cap): cap
-        }
-    }
-
-    /// What fills the bar: the balance for a net cap, the cumulative income
-    /// for an income cap (docs/v2/DISTILLATO_V1.md §2.2).
-    private var filled: Int64 {
-        switch flow.mode {
-        case .incomeCapped: flow.incomeTotal ?? flow.balance
-        case .unlimited, .netCapped: flow.balance
-        }
-    }
-
-    private var progress: Double? {
-        guard let cap, cap > 0 else { return nil }
-        return min(max(Double(filled) / Double(cap), 0), 1)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(name)
-                Spacer()
-                if let cap {
-                    Text("\(LedgerMoney.bare(flow.balance)) / \(LedgerMoney.amount(cap))")
-                    .font(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                } else {
-                    Text(LedgerMoney.amount(flow.balance))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let progress {
-                ProgressView(value: progress)
-                    .tint(Ink.progressTint(progress))
-            }
-        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.4)
+        .onHover { hovered = $0 }
+        // The name alone: the key cap and the chevron are for the eye.
+        .accessibilityLabel(title)
     }
 }
