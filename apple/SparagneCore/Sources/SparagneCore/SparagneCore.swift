@@ -4908,8 +4908,8 @@ public struct TransactionView: Equatable, Hashable, Codable {
     public var note: String?
     /**
      * Who the row is for, the PERSONA column: the person the command named,
-     * else its author. Transfers and opening balances are always the
-     * author's.
+     * else its author. A transfer is always its author's, and an opening
+     * balance starts as its author's.
      */
     public var person: String
     /**
@@ -4948,8 +4948,8 @@ public struct TransactionView: Equatable, Hashable, Codable {
          */categoryIsSystem: Bool, note: String?, 
         /**
          * Who the row is for, the PERSONA column: the person the command named,
-         * else its author. Transfers and opening balances are always the
-         * author's.
+         * else its author. A transfer is always its author's, and an opening
+         * balance starts as its author's.
          */person: String, 
         /**
          * Who recorded it: the author of the command that created the row, the
