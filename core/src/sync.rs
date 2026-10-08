@@ -541,6 +541,13 @@ impl Core {
     /// Rewrites the author of the outbox and rebuilds the projection, so that
     /// `created_by` and `owner_user_id` follow the account the app just logged
     /// into.
+    ///
+    /// A person or owner the outbox names by one of its old author names is
+    /// the same user, so it becomes the username too: left as it was, the
+    /// server would refuse it as somebody who is not a member. It becomes the
+    /// username rather than nothing, so a patch that only changes the person
+    /// keeps a field to carry. Other names stay as they are, and so do the
+    /// rejected rows, which never reach the server again.
     pub fn relabel_outbox(&mut self, vault_id: Uuid, author: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
         let outbox = outbox_records(&tx, vault_id)?;
@@ -548,10 +555,18 @@ impl Core {
             tx.commit()?;
             return Ok(());
         }
+        let old_names: HashSet<String> = outbox
+            .iter()
+            .map(|record| record.envelope.author.clone())
+            .filter(|name| name != author)
+            .collect();
         let ordered = planned(confirmed_records(&tx, vault_id)?);
         let retry: Vec<Planned> = planned(outbox)
             .into_iter()
             .map(|mut item| {
+                for old in &old_names {
+                    item.envelope.command.rename_person(old, author);
+                }
                 item.envelope.author = author.to_string();
                 item
             })

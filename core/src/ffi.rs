@@ -398,8 +398,9 @@ impl CoreHandle {
             .serve_pull_json(vault_id, since, limit as usize)
     }
 
-    /// Rewrites the author of the outbox after a login and rebuilds the
-    /// projection, so `created_by` and the vault owner follow the account.
+    /// Rewrites the author of the outbox after a login, and every person or
+    /// owner it names by an old author name, then rebuilds the projection: so
+    /// `created_by`, the persons and the vault owner follow the account.
     pub fn relabel_outbox(&self, vault_id: Uuid, author: String) -> Result<(), DomainError> {
         self.lock()?.relabel_outbox(vault_id, &author)
     }

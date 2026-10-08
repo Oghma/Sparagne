@@ -448,6 +448,88 @@ impl Command {
             | Self::SkipRecurring { .. } => None,
         }
     }
+
+    /// Every person or owner the command names, trimmed: the names a server
+    /// checks against the members of the vault. A blank one stands for the
+    /// author and is left out, so a command that only relies on the author
+    /// names nobody.
+    #[must_use]
+    pub fn named_people(&self) -> Vec<&str> {
+        let named = match self {
+            Self::Income(e) | Self::Expense(e) | Self::Refund(e) => &e.person,
+            Self::CreateRecurring { owner, .. } => owner,
+            Self::ExecuteRecurring { person, .. } => person,
+            Self::UpdateTransaction { patch, .. } => &patch.person,
+            Self::UpdateRecurring { patch, .. } => &patch.owner,
+            Self::CreateVault { .. }
+            | Self::RenameVault { .. }
+            | Self::DeleteVault
+            | Self::CreateWallet { .. }
+            | Self::RenameWallet { .. }
+            | Self::ArchiveWallet { .. }
+            | Self::RestoreWallet { .. }
+            | Self::CreateFlow { .. }
+            | Self::UpdateFlow { .. }
+            | Self::ArchiveFlow { .. }
+            | Self::RestoreFlow { .. }
+            | Self::CreateCategory { .. }
+            | Self::RenameCategory { .. }
+            | Self::ArchiveCategory { .. }
+            | Self::RestoreCategory { .. }
+            | Self::AddAlias { .. }
+            | Self::RemoveAlias { .. }
+            | Self::MergeCategory { .. }
+            | Self::TransferWallet { .. }
+            | Self::TransferFlow { .. }
+            | Self::VoidTransaction { .. }
+            | Self::ArchiveRecurring { .. }
+            | Self::RestoreRecurring { .. }
+            | Self::SkipRecurring { .. } => return Vec::new(),
+        };
+        explicit_person(named.as_deref()).into_iter().collect()
+    }
+
+    /// Renames the person or owner the command names as `from` (compared
+    /// trimmed) to `to`, and reports whether it did. A blank one stands for
+    /// the author and is left alone: it follows the author by itself.
+    pub fn rename_person(&mut self, from: &str, to: &str) -> bool {
+        let slot = match self {
+            Self::Income(e) | Self::Expense(e) | Self::Refund(e) => &mut e.person,
+            Self::CreateRecurring { owner, .. } => owner,
+            Self::ExecuteRecurring { person, .. } => person,
+            Self::UpdateTransaction { patch, .. } => &mut patch.person,
+            Self::UpdateRecurring { patch, .. } => &mut patch.owner,
+            Self::CreateVault { .. }
+            | Self::RenameVault { .. }
+            | Self::DeleteVault
+            | Self::CreateWallet { .. }
+            | Self::RenameWallet { .. }
+            | Self::ArchiveWallet { .. }
+            | Self::RestoreWallet { .. }
+            | Self::CreateFlow { .. }
+            | Self::UpdateFlow { .. }
+            | Self::ArchiveFlow { .. }
+            | Self::RestoreFlow { .. }
+            | Self::CreateCategory { .. }
+            | Self::RenameCategory { .. }
+            | Self::ArchiveCategory { .. }
+            | Self::RestoreCategory { .. }
+            | Self::AddAlias { .. }
+            | Self::RemoveAlias { .. }
+            | Self::MergeCategory { .. }
+            | Self::TransferWallet { .. }
+            | Self::TransferFlow { .. }
+            | Self::VoidTransaction { .. }
+            | Self::ArchiveRecurring { .. }
+            | Self::RestoreRecurring { .. }
+            | Self::SkipRecurring { .. } => return false,
+        };
+        if explicit_person(slot.as_deref()) != Some(from) {
+            return false;
+        }
+        *slot = Some(to.to_string());
+        true
+    }
 }
 
 /// The person a command names, trimmed, or `None` when it names nobody (left
