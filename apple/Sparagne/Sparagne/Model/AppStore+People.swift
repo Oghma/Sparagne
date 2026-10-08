@@ -49,7 +49,13 @@ extension AppStore {
                 )
             }
         }
-        throw DomainError.NotFound(message: ErrorMessages.unknownPerson(trimmed))
+        // The headline the quick-add line gives the same name, and who may
+        // be named instead.
+        throw AppError(
+            code: "not_found",
+            message: String(localized: "A row may be for \(ListFormatter.localizedString(byJoining: assignablePeople))"),
+            headline: ErrorMessages.unknownPerson(trimmed)
+        )
     }
 
     /// `names` in their first order, blanks and repeats dropped.

@@ -102,9 +102,12 @@ struct PeopleTests {
         do {
             _ = try store.resolvePerson(named: "paolo")
             Issue.record("an unknown person resolved")
-        } catch let error as DomainError {
+        } catch let error as AppError {
             #expect(error.code == "not_found")
-            #expect(error.message == ErrorMessages.unknownPerson("paolo"))
+            // The headline the quick-add line gives `!paolo`, and who may be
+            // named instead.
+            #expect(error.summary == ErrorMessages.unknownPerson("paolo"))
+            #expect(error.message.contains("elisa"))
         }
     }
 

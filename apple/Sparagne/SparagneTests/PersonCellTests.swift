@@ -139,7 +139,12 @@ struct PersonCellTests {
             Issue.record("an unknown person was accepted")
         } catch let failure as RowDraftError {
             #expect(failure.field == .person)
-            #expect((failure.underlying as? DomainError)?.code == "not_found")
+            #expect((failure.underlying as? AppError)?.code == "not_found")
+            // The alert the grid raises has the quick-add line's headline,
+            // not a bare "Not found".
+            store.report(failure.underlying)
+            #expect(store.presentedError?.summary == ErrorMessages.unknownPerson("paolo"))
+            store.presentedError = nil
         }
 
         do {

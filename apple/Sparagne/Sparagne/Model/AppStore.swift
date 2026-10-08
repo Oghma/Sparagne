@@ -4,7 +4,10 @@ import SparagneCore
 
 /// A domain error on its way to an alert. `code` is the stable snake_case
 /// code from `ErrorCodes.swift`, so tests and call sites can match on it.
-struct AppError: Identifiable, Equatable, Sendable {
+///
+/// Also thrown as it is, by a check the app makes before the core is asked
+/// (the PERSONA cell's name): it reaches the alert with its own headline.
+struct AppError: Identifiable, Equatable, Sendable, Error {
     let id = UUID()
     let code: String
     let message: String
@@ -1523,6 +1526,7 @@ final class AppStore {
 
     private func present(_ error: Error) {
         switch error {
+        case let error as AppError: presentedError = error
         case let error as DomainError: presentedError = AppError(error)
         case let error as QuickAddError: presentedError = AppError(error)
         default: presentedError = AppError(code: "unexpected", message: error.localizedDescription)
