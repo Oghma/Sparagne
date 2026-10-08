@@ -17,7 +17,7 @@ Wants=network-online.target
 #   sudo systemctl enable --now sparagne-server
 #
 # /etc/sparagne.env holds SPARAGNE_ALLOW_REGISTRATION, SPARAGNE_TOKEN_TTL_DAYS,
-# the login limits, SPARAGNE_TRUST_PROXY and RUST_LOG (docs/v2/DEPLOY.md);
+# the login limits, SPARAGNE_TRUST_PROXY and RUST_LOG (docs/DEPLOY.md);
 # SPARAGNE_BIND and SPARAGNE_DATA_DIR are set below since they describe this
 # machine, not the deployment's policy.
 #

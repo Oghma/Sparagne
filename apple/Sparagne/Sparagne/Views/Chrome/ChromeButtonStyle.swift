@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The square-cornered buttons of the window's chrome (`docs/v2/UI.md` §5):
+/// The square-cornered buttons of the window's chrome:
 /// bordered for an ordinary action, ghost for a quiet one beside it, primary
 /// for the one the context is about, warning for a caution. Pills
 /// (`PillButtonStyle`) are for states; these are for actions.

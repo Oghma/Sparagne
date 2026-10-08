@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The AppKit side of the window's own top bar (`docs/v2/UI.md` §2), for a
+/// The AppKit side of the window's own top bar, for a
 /// window whose scene has `.windowStyle(.hiddenTitleBar)`: it finds the
 /// hosting `NSWindow`, keeps the traffic lights vertically centred in the
 /// bar, and makes the bar's empty areas behave like a title bar (drag,

@@ -3,7 +3,7 @@ import SparagneCore
 
 /// Row selection and the bulk actions over it: ⌘-click, ⇧-click and ⌘A pick
 /// rows of the ledger, the selection bar voids them or files them under one
-/// category (`docs/v2/DISTILLATO_V1.md` §7, "bulk edit").
+/// category.
 ///
 /// The gestures only say which rows; the grid decides which gesture a click
 /// was (`LedgerGrid.open`), so everything here runs without a window.

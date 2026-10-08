@@ -39,7 +39,7 @@ private enum TemplateColumn {
     static let padding: CGFloat = 8
 }
 
-/// "Modelli" (`docs/v2/UI.md` §2.5): every template as a 26-point row,
+/// "Modelli": every template as a 26-point row,
 /// archived ones at the bottom, dimmed, with Ripristina. A click selects a
 /// row and the inspector edits it; the switch pauses or resumes it in place;
 /// the last row starts a new one.

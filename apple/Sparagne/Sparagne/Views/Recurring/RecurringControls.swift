@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-// The small controls of the Ricorrenze tab (`docs/v2/UI.md` §2.5), drawn by
+// The small controls of the Ricorrenze tab, drawn by
 // hand like the rest of the window: the system segmented picker and date
 // picker are light-on-dark strangers on this ground. The switch is
 // `FormSwitch`, in `FormKit`.

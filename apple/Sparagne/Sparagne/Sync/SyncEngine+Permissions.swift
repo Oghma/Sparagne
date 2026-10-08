@@ -13,7 +13,7 @@ extension SyncEngine {
         !readOnlyVaultIds.contains(vaultId)
     }
 
-    /// Only the owner deletes a vault (`docs/v2/SYNC.md` §3). Logged in with
+    /// Only the owner deletes a vault. Logged in with
     /// the vault listed, the role says it; otherwise the core decides from
     /// the vault's owner and the author it signs with, and so does this.
     func mayDeleteVault(_ vaultId: Uuid) -> Bool {
@@ -33,7 +33,7 @@ extension SyncEngine {
 
 /// What the vault on screen allows, for the three places that offer the
 /// vault's life cycle: the Vault menu, the top bar's vault selector and the
-/// command palette (`docs/v2/UI.md` §2.4). One set of rules, so the three
+/// command palette. One set of rules, so the three
 /// never disagree about an entry.
 ///
 /// Without an engine (a demo database) nothing is on a server: the core

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The Riepilogo's status line (`docs/v2/UI.md` §2.2): the year so far, in
+/// The Riepilogo's status line: the year so far, in
 /// the RIEPILOGO's own figures, and when the last change was saved.
 struct SummaryStatusLine: View {
     let store: AppStore

@@ -54,7 +54,7 @@
 //! # What is dropped
 //!
 //! - `flow_references` and `flow_memberships` are not imported at all
-//!   (`docs/v2/ARCH.md` §6: cross-vault flow sharing is not a v2 concept).
+//!   (cross-vault flow sharing is not a v2 concept).
 //!   The report counts the rows it skipped.
 //! - `legs.attributed_user_id`: v2 attributes a whole transaction to its
 //!   author, never a single leg.

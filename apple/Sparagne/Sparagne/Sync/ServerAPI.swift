@@ -3,8 +3,8 @@ import SparagneCore
 
 /// A request the server refused, or a network failure.
 ///
-/// `code` is the server's stable snake_case code (`ErrorBody`, `docs/v2/SYNC
-/// .md` §3), so `ErrorMessages` can localize it exactly like a domain error.
+/// `code` is the server's stable snake_case code (`ErrorBody`), so
+/// `ErrorMessages` can localize it exactly like a domain error.
 /// A failure below HTTP — no route, timeout, a non-HTTP answer — is
 /// `status == 0` with the code `offline`.
 nonisolated struct ServerError: Error, Equatable, Sendable {
@@ -12,7 +12,7 @@ nonisolated struct ServerError: Error, Equatable, Sendable {
     let code: String
     let message: String
     /// Seconds the server asked to wait, from the `Retry-After` of a `429`
-    /// (login and register limits, `docs/v2/SYNC.md` §3).
+    /// (login and register limits).
     let retryAfter: Int?
 
     init(status: Int, code: String, message: String, retryAfter: Int? = nil) {
@@ -130,7 +130,7 @@ private nonisolated struct ErrorBody: Codable, Sendable {
     let error: Detail
 }
 
-/// The HTTP API of `docs/v2/SYNC.md` §3, typed.
+/// The server's HTTP API, typed.
 ///
 /// Only the small flat wire types are decoded here. Commands, envelopes and
 /// push or pull bodies stay opaque strings that travel between the core and
@@ -199,8 +199,7 @@ nonisolated struct ServerAPI: Sendable {
 
     /// `body` comes from `pushRequestJson`; the answer goes back to
     /// `applyPushResponseJson`. A vault the server has never seen is created
-    /// by this same call, when the body starts with its `CreateVault`
-    /// (`docs/v2/SYNC.md` §3).
+    /// by this same call, when the body starts with its `CreateVault`.
     func push(token: String, vaultId: Uuid, body: String) async throws -> String {
         let data = try await call(
             SyncRequest(
@@ -244,7 +243,7 @@ nonisolated struct ServerAPI: Sendable {
     }
 
     /// The owner removing a member, or a member removing themself: leaving
-    /// the vault (`docs/v2/SYNC.md` §3).
+    /// the vault.
     func removeMember(token: String, vaultId: Uuid, username: String) async throws {
         _ = try await call(
             SyncRequest(
@@ -291,8 +290,7 @@ nonisolated struct ServerAPI: Sendable {
         return seconds
     }
 
-    /// What a body without an `ErrorBody` means, by status
-    /// (`docs/v2/SYNC.md` §3).
+    /// What a body without an `ErrorBody` means, by status.
     private static func fallbackCode(for status: Int) -> String {
         switch status {
         case 400: "invalid_request"

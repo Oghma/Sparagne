@@ -1,7 +1,7 @@
 import Foundation
 
 /// What the window's chrome reads off the store: the top bar's due pill and
-/// the Ricorrenze tab's count (`docs/v2/UI.md` §2.5).
+/// the Ricorrenze tab's count.
 extension AppStore {
     /// Every period waiting for a decision, over all the templates: a
     /// template three months behind counts three times, since each period is

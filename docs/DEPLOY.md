@@ -2,8 +2,8 @@
 
 > 2026-09-12, aggiornato il 2026-09-23 (limiti ai tentativi, account da
 > riga di comando) e il 2026-10-08 (immagine pubblicata su GHCR, §3.2).
-> Riferimenti: `SYNC.md` §2-3 (storage e API), `server/Dockerfile`,
-> `server/deploy/`, `.github/workflows/release.yml`.
+> Riferimenti: `server/Dockerfile`, `server/deploy/`,
+> `.github/workflows/release.yml`.
 
 ## 1. TLS obbligatorio
 
@@ -124,7 +124,7 @@ printf '%s\n' "$PW" | sudo -u sparagne env SPARAGNE_DATA_DIR=/var/lib/sparagne \
 
 In caso di errore il comando scrive il motivo su stderr ed esce con 1 (2 per
 un comando scritto male). Dall'app un utente cambia la propria password con
-`POST /auth/password` (`SYNC.md` §3), che chiede quella attuale.
+`POST /auth/password`, che chiede quella attuale.
 
 ### 3.2 L'immagine e da dove viene
 
@@ -248,7 +248,7 @@ transazione ha una **persona** distinta dal suo autore (`transactions.person`)
 e un modello di ricorrenza ha un **titolare** (`recurring_templates.owner`).
 Le righe esistenti si riempiono da sole con il loro autore. Il server inoltre
 rifiuta, comando per comando, un comando che nomina come persona o titolare
-qualcuno che non è membro del vault (`not_a_member`, `SYNC.md`). L'ordine
+qualcuno che non è membro del vault (`not_a_member`). L'ordine
 conta, ed è **l'inverso di §6.1**:
 
 1. **Backup del server** (§4): `docker compose exec sparagne backup.sh`, o

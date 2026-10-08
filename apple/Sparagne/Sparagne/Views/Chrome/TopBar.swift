@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The window's own top bar, in place of the system title bar and toolbar
-/// (`docs/v2/UI.md` §2): the vault, the month, then on the trailing side the
+/// The window's own top bar, in place of the system title bar and toolbar:
+/// the vault, the month, then on the trailing side the
 /// search, what is due, what the tab adds and the sync state. The scene hides
 /// the title bar (`.windowStyle(.hiddenTitleBar)`); the traffic lights sit at
 /// the bar's leading end, centred by `WindowChrome`, which also makes the
@@ -101,7 +101,7 @@ struct TopBar: View {
 // MARK: - The month
 
 /// ‹ month › in one bordered group, and Today when the month on screen is
-/// another (`docs/v2/UI.md` §2.1). ⌥← and ⌥→ step it too, from the Ledger
+/// another. ⌥← and ⌥→ step it too, from the Ledger
 /// menu.
 struct MonthStepper: View {
     let store: AppStore
@@ -157,7 +157,7 @@ struct MonthStepper: View {
 // MARK: - Search
 
 /// The search of the tabs that have one, in the bar so it stays put while
-/// the filters below change (`docs/v2/UI.md` §2.1). On the Mastro it is
+/// the filters below change. On the Mastro it is
 /// bound to `store.searchText`, which the window debounces into a reload; on
 /// the Ricorrenze and the Setup, to `store.tabFilter`, which filters their
 /// tables as it is typed. esc clears it and gives the focus back.
@@ -204,8 +204,8 @@ struct SearchField: View {
 
 // MARK: - Due and add
 
-/// "3 da confermare": the recurring periods waiting for a decision
-/// (`docs/v2/UI.md` §2.5), the same count the Ricorrenze tab shows. Nothing
+/// "3 da confermare": the recurring periods waiting for a decision,
+/// the same count the Ricorrenze tab shows. Nothing
 /// when none is due, or when the account only reads the vault and could not
 /// confirm one anyway. Opens the Ricorrenze tab, where they are decided.
 struct DuePill: View {

@@ -244,7 +244,7 @@ impl CoreHandle {
         self.lock()?.period_totals(vault_id, from, to)
     }
 
-    // -- analytics (docs/v2/UI.md §4) ------------------------------------
+    // -- analytics -------------------------------------------------------
 
     /// Distinct persons of live transactions: the PERSONA segmented control.
     pub fn people(&self, vault_id: Uuid) -> Result<Vec<String>, DomainError> {

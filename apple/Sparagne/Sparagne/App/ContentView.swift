@@ -44,8 +44,8 @@ struct ContentView: View {
             let opened = AppStore(core: core, defaultCategories: DefaultCategories.forAppLanguage())
             if let tab = LaunchOptions.tab { opened.tab = tab }
             // The engine adopts the account's username as the author and
-            // starts the first sync right after bootstrap
-            // (`docs/v2/SYNC.md` §5). It prepares before the bootstrap so the
+            // starts the first sync right after bootstrap.
+            // It prepares before the bootstrap so the
             // first command is already signed with the account's name.
             let sync = SyncEngine(core: core, store: opened, account: AccountStore())
             store = opened
@@ -60,7 +60,7 @@ struct ContentView: View {
 }
 
 /// The single window: the four sheets behind the tab bar, plus the modal
-/// sheets, the alerts and the undo toast (`docs/v2/UI.md` §2).
+/// sheets, the alerts and the undo toast.
 struct MainWindow: View {
     @Bindable var store: AppStore
     /// `nil` only before the database is open.

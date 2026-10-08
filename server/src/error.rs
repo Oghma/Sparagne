@@ -1,4 +1,4 @@
-//! Request-level errors and their HTTP mapping (`docs/v2/SYNC.md` §3).
+//! Request-level errors and their HTTP mapping.
 
 use axum::{
     Json,

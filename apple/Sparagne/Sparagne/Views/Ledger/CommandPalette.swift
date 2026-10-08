@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// One entry of the ⌘K command palette (`docs/v2/UI.md` §6).
+/// One entry of the ⌘K command palette.
 ///
 /// `run` is whatever the menu item of the same name already does: the palette
 /// is a second way to reach the app's actions, never a second implementation

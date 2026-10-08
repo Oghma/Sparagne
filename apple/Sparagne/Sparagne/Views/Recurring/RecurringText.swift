@@ -1,7 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The words of a template on the Ricorrenze tab (`docs/v2/UI.md` §2.5):
+/// The words of a template on the Ricorrenze tab:
 /// where its money goes, and what kind it is.
 enum DueRecurringText {
     /// What VoiceOver says after an amount, since the color that tells an

@@ -2,12 +2,12 @@ import Foundation
 import SparagneCore
 
 /// Formats `Int64` minor units (e.g. cents) as currency. Amounts are never
-/// floats anywhere in the app (docs/v2/DISTILLATO_V1.md §1.4); this is the
+/// floats anywhere in the app; this is the
 /// only place minor units get converted to displayable text, always through
 /// `Decimal`.
 ///
 /// Note: this assumes 2 minor-unit decimal places (true for EUR, the only
-/// currency v2.0 supports per docs/v2/ARCH.md §7). A future multi-currency
+/// currency v2.0 supports). A future multi-currency
 /// core would need to expose the exponent per currency instead of assuming it.
 enum MoneyFormatter {
     private static let minorUnitsPerMajor: Int64 = 100
@@ -31,7 +31,7 @@ enum MoneyFormatter {
 
 /// Formats dates the way the transactions table wants them: "Today"/
 /// "Yesterday" for the last two days, a locale-formatted date otherwise
-/// (docs/v2/DISTILLATO_V1.md §3.4 "Today / Yesterday / date").
+/// ("Today / Yesterday / date").
 enum DateFormatting {
     /// `"Today"`, `"Yesterday"`, or a locale-formatted date (e.g. `"Sep 9, 2026"`).
     static func relativeDay(_ date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .autoupdatingCurrent) -> String {
@@ -53,8 +53,8 @@ enum DateFormatting {
 }
 
 nonisolated extension Currency {
-    /// ISO 4217 code, for `MoneyFormatter`. One currency per vault
-    /// (docs/v2/ARCH.md §7); this switch grows with the enum.
+    /// ISO 4217 code, for `MoneyFormatter`. One currency per vault;
+    /// this switch grows with the enum.
     var code: String {
         switch self {
         case .eur: "EUR"
@@ -88,7 +88,7 @@ enum CountText {
     }
 }
 
-/// Days as the Ricorrenze tab writes them (`docs/v2/UI.md` §2.5): `"gio 1
+/// Days as the Ricorrenze tab writes them: `"gio 1
 /// ott"` in Italian, `"Thu, Oct 1"` in English, the order and the
 /// abbreviations the locale's own.
 ///
@@ -144,8 +144,8 @@ enum ScheduleUnit {
     case year
 }
 
-/// Describes a recurring template's `Schedule` (`docs/v2/ARCH.md` §4:
-/// `frequency` + `interval`, day/weekday/month clamped to the calendar by
+/// Describes a recurring template's `Schedule` (`frequency` + `interval`,
+/// day/weekday/month clamped to the calendar by
 /// the core) for the Recurring panel's list and edit form.
 ///
 /// Every description is one whole sentence in the catalog. An interval of

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A small capsule button (`docs/v2/UI.md` §5): neutral for ordinary actions,
+/// A small capsule button: neutral for ordinary actions,
 /// accent for the one that matters, warning for a caution. Pressing dims it
 /// rather than changing its color, so every tone reacts the same way.
 struct PillButtonStyle: ButtonStyle {

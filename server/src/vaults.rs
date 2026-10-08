@@ -1,5 +1,4 @@
-//! Vault routes: listing, push (which also creates a vault) and pull
-//! (`docs/v2/SYNC.md` §3).
+//! Vault routes: listing, push (which also creates a vault) and pull.
 
 use std::collections::{HashMap, HashSet};
 
@@ -65,7 +64,7 @@ pub async fn list(
 ///
 /// A vault the server has never heard of is created by this very push, when
 /// its first command is the `CreateVault` that mints it: the vault and the
-/// caller's `owner` membership appear together (`docs/v2/SYNC.md` §3). Any
+/// caller's `owner` membership appear together. Any
 /// other first command for an unknown vault is a blind 404, exactly like a
 /// vault the caller is not a member of.
 ///

@@ -14,7 +14,7 @@ gh attestation verify oci://ghcr.io/oghma/sparagne-server:{{VERSION}} --repo Ogh
 **Upgrade the server before the apps**: back it up, set
 `SPARAGNE_VERSION={{VERSION}}` in `server/deploy/.env`, then
 `docker compose pull sparagne && docker compose up -d sparagne`
-(`docs/v2/DEPLOY.md` §6).
+(`docs/DEPLOY.md` §6).
 
 ## App (macOS 27, Apple silicon)
 

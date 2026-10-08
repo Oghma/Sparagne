@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The fixed dark palette of `docs/v2/UI.md` §5.
+/// The window's fixed dark palette.
 ///
 /// These are constants, not system colors: the window forces `.dark` and
 /// paints its own ground, because the ledger is a designed surface (a dark
@@ -35,7 +35,7 @@ enum Ink {
     static let positive = Color(hex: 0x3ECF8E)
     /// Errors and negative balances. Deliberately not the accent.
     static let negative = Color(hex: 0xFF6B6B)
-    /// Amber-yellow: a refused sync change (`docs/v2/UI.md` §5's table). Used
+    /// Amber-yellow: a refused sync change. Used
     /// wherever the ledger needs a caution color instead of system orange.
     static let warning = Color(hex: 0xE8A33D)
 
@@ -104,7 +104,7 @@ enum Metrics {
 
 // MARK: - Shared chrome
 
-/// A section heading: sentence case, `text3` (`docs/v2/UI.md` §5).
+/// A section heading: sentence case, `text3`.
 struct SectionLabel: View {
     let text: String
     var tint: Color = Ink.text3

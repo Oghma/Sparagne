@@ -35,7 +35,7 @@ nonisolated enum ErrorMessages {
         case "ambiguous_name": String(localized: "Which one did you mean?")
         case "unknown_name": String(localized: "Unknown name")
         case "same_target": String(localized: "Source and destination are the same")
-        // Server-side codes (`docs/v2/SYNC.md` §3) plus the two the transport
+        // Server-side codes plus the two the transport
         // itself raises, `offline` and `invalid_server_url`.
         case "offline": String(localized: "The server is unreachable")
         // A 401 on a request that carried a token: the token expired or was

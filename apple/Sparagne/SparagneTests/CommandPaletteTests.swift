@@ -4,7 +4,7 @@ import Testing
 
 @testable import Sparagne
 
-/// The ⌘K field's second grammar (`docs/v2/UI.md` §6): a line that starts
+/// The ⌘K field's second grammar: a line that starts
 /// with `>` is a command palette. `CommandPaletteModel` holds the actions,
 /// the filter and the selection, and none of it needs a window.
 struct CommandPaletteTests {

@@ -1,14 +1,14 @@
 import SwiftUI
 import SparagneCore
 
-/// Column geometry of the wallet table (`docs/v2/UI.md` §2.3), as the canvas
+/// Column geometry of the wallet table, as the canvas
 /// has it: NOME takes what is left, SALDO 140 and the action column 36.
 private enum WalletColumn {
     static let nameMinimum: CGFloat = 100
     static let balance: CGFloat = 140
 }
 
-/// The wallets of the vault as an editable table (`docs/v2/UI.md` §2.3). The
+/// The wallets of the vault as an editable table. The
 /// wallets say where the money is and the envelopes below say what it is for.
 /// NOME edits in place (`RenameWallet`). SALDO comes from the transactions, so
 /// it is only typed on the empty line, where it is the opening balance.
@@ -60,7 +60,7 @@ struct WalletTable: View {
     // MARK: - Chrome
 
     /// Where an opening balance goes, which is what ties the wallets to the
-    /// envelopes: Σ wallets = Σ envelopes (`docs/v2/DISTILLATO_V1.md` §1.1).
+    /// envelopes: Σ wallets = Σ envelopes.
     private var footnote: some View {
         Text(String(localized: "The opening balance of a new wallet goes to Unallocated"))
             .font(Face.ui(11.5))
@@ -151,7 +151,7 @@ struct WalletTable: View {
     }
 
     /// A wallet may go negative (a card), and then it reads like any other
-    /// negative amount; a zero reads as background (`docs/v2/UI.md` §5).
+    /// negative amount; a zero reads as background.
     private func balanceCell(_ wallet: WalletView) -> some View {
         SetupCell(width: WalletColumn.balance, alignment: .trailing) {
             Text(LedgerMoney.amount(wallet.balance))

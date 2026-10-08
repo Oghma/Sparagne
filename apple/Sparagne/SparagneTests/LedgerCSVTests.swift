@@ -5,7 +5,7 @@ import Testing
 @testable import Sparagne
 
 /// `LedgerCSV`'s rendering, a pure function over `[TransactionRow]`
-/// (`docs/v2/UI.md` §6, ⌘E). Rows are built straight from `TransactionView`
+/// (⌘E). Rows are built straight from `TransactionView`
 /// through `TransactionRow.init(view:names:)`, with an empty `NameBook` since
 /// none of these cases depend on a name resolving.
 struct LedgerCSVTests {
@@ -103,7 +103,7 @@ struct LedgerCSVTests {
         #expect(LedgerCSV.fileName(vault: "Casa Nostra", month: month, direction: .income) == "casa-nostra-2026-08-income.csv")
     }
 
-    // MARK: - The optional WALLET column (`docs/v2/UI.md` §3)
+    // MARK: - The optional WALLET column
 
     /// The same fixture, with a wallet the `NameBook` can resolve to a name.
     private static func namedWalletRow(wallet: String) -> TransactionRow {

@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// "Prossimi 30 giorni" (`docs/v2/UI.md` §2.5): one tile per period ahead,
+/// "Prossimi 30 giorni": one tile per period ahead,
 /// from tomorrow, with what the window adds up to on each side. Read only:
 /// a period can be recorded once it is due, never before.
 struct RecurringAgendaCard: View {
@@ -35,7 +35,7 @@ struct RecurringAgendaCard: View {
     private func totals(_ agenda: RecurringAgenda) -> some View {
         HStack(spacing: 4) {
             Text(String(localized: "Expected expenses")).foregroundStyle(Ink.text3)
-            // A zero reads as background (`docs/v2/UI.md` §5).
+            // A zero reads as background.
             Text(LedgerMoney.bare(agenda.expenses))
                 .foregroundStyle(agenda.expenses == 0 ? Ink.text3 : Ink.text)
             Text(String(localized: "Expected income"))

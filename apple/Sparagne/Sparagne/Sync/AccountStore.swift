@@ -103,8 +103,8 @@ final class MemoryTokenStore: TokenStore, @unchecked Sendable {
 ///
 /// The URL, the username and the token's expiry are preferences; the token is
 /// a secret and lives only in the Keychain, never in a file or in the
-/// defaults. The username is also the `author` of every command
-/// (`docs/v2/SYNC.md` §1), which is why `SyncEngine` relabels the outbox as
+/// defaults. The username is also the `author` of every command,
+/// which is why `SyncEngine` relabels the outbox as
 /// soon as a login succeeds.
 ///
 /// It also remembers what the server said about the account's vaults — the
@@ -130,7 +130,7 @@ final class AccountStore {
 
     /// The name chosen in Settings for the rows written while logged out. A
     /// household ledger names people, not logins, so the macOS account name
-    /// is only the fallback (`docs/v2/UI.md` §3, PERSONA).
+    /// is only the fallback (the PERSONA column).
     var localAuthor: String {
         didSet { defaults.set(localAuthor, forKey: Self.localAuthorKey) }
     }

@@ -4,8 +4,8 @@ import Testing
 
 @testable import Sparagne
 
-/// The usage column and the envelope bars of the setup tab
-/// (`docs/v2/UI.md` §2.3): both are plain functions, tested without a view.
+/// The usage column and the envelope bars of the setup tab:
+/// both are plain functions, tested without a view.
 struct CategoryUsageTests {
     private static func totals(_ id: String, count: UInt32) -> CategoryTotals {
         CategoryTotals(

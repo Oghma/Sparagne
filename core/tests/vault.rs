@@ -1,5 +1,5 @@
-//! The vault's own life cycle: `RenameVault` and `DeleteVault`
-//! (`docs/v2/ARCH.md` §4). Creation is covered in `core.rs`.
+//! The vault's own life cycle: `RenameVault` and `DeleteVault`.
+//! Creation is covered in `core.rs`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 

@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The vault on screen, at the start of the top bar (`docs/v2/UI.md` §2.4):
+/// The vault on screen, at the start of the top bar:
 /// its initial in a small mark, its name, and a menu with the other vaults
 /// and the vault's life cycle.
 ///

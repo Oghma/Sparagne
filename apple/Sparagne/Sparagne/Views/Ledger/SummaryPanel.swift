@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The column to the right of the grid (`.side`, `docs/v2/UI.md` §2.1): the
+/// The column to the right of the grid (`.side`): the
 /// month's numbers, always next to the rows that produce them. Four cards,
 /// most important first: what was saved, who moved what, where the spending
 /// went, and how this month sits in the last twelve.
@@ -80,8 +80,7 @@ enum PanelMoney {
 
 /// The month's savings (`income − net expense`), large: the one figure the
 /// ledger exists to produce. Under it, the share of income it is and how it
-/// moved since the month before, then income and expenses side by side
-/// (`DISTILLATO_V1.md` §3.5).
+/// moved since the month before, then income and expenses side by side.
 struct SavingsHero: View {
     let summary: LedgerSummary
 
@@ -270,7 +269,7 @@ struct PersonMatrix: View {
                     .frame(width: columnWidth, alignment: .trailing)
                     // The figure has a row label and a column heading; the
                     // person's name has to travel with the amount for
-                    // VoiceOver to make sense of it (`docs/v2/UI.md` §2.1).
+                    // VoiceOver to make sense of it.
                     .accessibilityLabel(
                         AccessibilityText.figure(
                             label,

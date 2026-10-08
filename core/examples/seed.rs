@@ -25,7 +25,7 @@
 //!
 //! The rows are signed by two people, matteo and elisa, which a server would
 //! refuse from one account: open the file with the app's `-SparagneDatabase`
-//! launch option, which never syncs (`docs/v2/UI.md`).
+//! launch option, which never syncs.
 
 // A fixture may panic on anything: there is no caller to report to.
 #![allow(clippy::unwrap_used, clippy::expect_used)]

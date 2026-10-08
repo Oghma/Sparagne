@@ -1,9 +1,8 @@
 import SwiftUI
 import SparagneCore
 
-/// ⌘K: the one-line grammar of `DISTILLATO_V1.md` §3.1, floating near the top
-/// of the window, and the command palette of `docs/v2/UI.md` §6 when the line
-/// starts with `>`.
+/// ⌘K: the one-line quick-add grammar, floating near the top of the window,
+/// and the command palette when the line starts with `>`.
 ///
 /// The grid covers the common case; this covers the fast case, where the
 /// whole row is one line of text and the fingers never leave the keyboard.

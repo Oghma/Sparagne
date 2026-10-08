@@ -1,8 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// What the server refused, kept by the core until it is dismissed
-/// (`docs/v2/SYNC.md` §4.5).
+/// What the server refused, kept by the core until it is dismissed.
 struct RejectedChangesSheet: View {
     let engine: SyncEngine
     @Environment(\.dismiss) private var dismiss
@@ -78,7 +77,7 @@ private struct RejectedRow: View {
 }
 
 /// Who else can see and write a vault. Owner only: the button that opens it
-/// is hidden otherwise (`docs/v2/SYNC.md` §3, members endpoints).
+/// is hidden otherwise.
 struct ShareVaultSheet: View {
     let engine: SyncEngine
     let vault: VaultView

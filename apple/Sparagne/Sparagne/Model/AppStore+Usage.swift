@@ -1,7 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The usage column of the SETUP categories (`docs/v2/UI.md` §2.3): how many
+/// The usage column of the SETUP categories: how many
 /// rows each category has had in the last 90 days, so an unused one is easy
 /// to spot before archiving it.
 enum CategoryUsage {

@@ -4,7 +4,7 @@ import Testing
 
 @testable import Sparagne
 
-/// The draft behind the setup tab's envelope table (`docs/v2/UI.md` §2.3):
+/// The draft behind the setup tab's envelope table:
 /// what an edited row sends back, what the empty line creates, and which cell
 /// a refused amount points at. The draft is a plain struct, so none of this
 /// needs a view.

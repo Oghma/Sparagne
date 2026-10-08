@@ -1,4 +1,4 @@
-//! Tests for the ledger aggregations (`docs/v2/UI.md` §4): people, the
+//! Tests for the ledger aggregations: people, the
 //! envelope x person matrix, the category breakdown, the twelve-month buckets,
 //! the top expenses and the year breakdown behind the RIEPILOGO.
 

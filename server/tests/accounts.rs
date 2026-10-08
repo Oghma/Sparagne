@@ -1,6 +1,6 @@
 //! Accounts on the server: case-insensitive usernames, login failures and
 //! their limits, changing the password, leaving a vault, and the `user`
-//! commands of the admin CLI (`docs/v2/SYNC.md` §3, `docs/v2/DEPLOY.md`).
+//! commands of the admin CLI (`docs/DEPLOY.md`).
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 

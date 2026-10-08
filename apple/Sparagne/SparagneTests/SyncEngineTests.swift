@@ -6,8 +6,8 @@ import Testing
 
 /// A server made of a second core plus a Swift auth and membership table.
 ///
-/// It implements exactly the routes `SyncEngine` calls, with the rules of
-/// `docs/v2/SYNC.md` §3: a non-member gets 404, a viewer 403, an envelope
+/// It implements exactly the routes `SyncEngine` calls, with the server's
+/// rules: a non-member gets 404, a viewer 403, an envelope
 /// signed by someone else 403 `author_mismatch`. The command log itself is
 /// the core's own `serve_push` and `serve_pull`, so the tests exercise the
 /// real protocol rather than a mock of it.
@@ -222,8 +222,7 @@ actor FakeServerTransport: SyncTransport {
 
     /// `POST /vaults/{id}/push`. A vault the server has never seen is created
     /// by this very request when its first command is the `CreateVault` that
-    /// minted it, together with the caller's `owner` membership
-    /// (`docs/v2/SYNC.md` §3).
+    /// minted it, together with the caller's `owner` membership.
     private func push(_ request: SyncRequest, vaultId: Uuid) throws -> SyncResponse {
         guard let user = caller(request) else { return Self.failure(401, "unauthorized") }
         guard let body = request.body,

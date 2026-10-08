@@ -2,7 +2,7 @@ import SwiftUI
 import SparagneCore
 
 /// Column geometry, shared by the header, the rows and the empty line so the
-/// three agree without a layout pass (`docs/v2/UI.md` §5).
+/// three agree without a layout pass.
 ///
 /// The widths are what a cell's content gets: the canvas's tracks
 /// (`# 34 · Data 60 · Busta 84 · Categoria 124 · Descrizione · Wallet 84 ·
@@ -15,7 +15,7 @@ enum GridColumn {
     static let date: CGFloat = 60 - 2 * padding
     static let flow: CGFloat = 84 - 2 * padding
     static let category: CGFloat = 124 - 2 * padding
-    /// The optional WALLET column (`docs/v2/UI.md` §3), between DESCRIZIONE
+    /// The optional WALLET column, between DESCRIZIONE
     /// and PERSONA when the View menu turns it on.
     static let wallet: CGFloat = 84 - 2 * padding
     static let person: CGFloat = 84 - 2 * padding
@@ -67,7 +67,7 @@ struct GridCell<Content: View>: View {
             // The whole column is the click target. SwiftUI does not hit-test
             // the transparent part of a frame, so without this a short "Casa"
             // or the "—" of an empty note would leave most of its cell dead
-            // and the row would refuse to open (`docs/v2/UI.md` §2.1).
+            // and the row would refuse to open.
             .contentShape(Rectangle())
     }
 }
@@ -550,11 +550,10 @@ struct LedgerRowView: View {
 
 // MARK: - A due recurring period
 
-/// A recurring period that fell due this month, at its date among the rows
-/// (`docs/v2/UI.md` §2.5): hatched, in `text2`, with "Salta" and "Registra"
+/// A recurring period that fell due this month, at its date among the rows:
+/// hatched, in `text2`, with "Salta" and "Registra"
 /// in the DESCRIZIONE cell. Nothing is written until one of the two is
-/// pressed; a template never writes a transaction by itself
-/// (`DISTILLATO_V1.md` §2.3).
+/// pressed; a template never writes a transaction by itself.
 ///
 /// Not a row: it has no number, cannot be opened, picked or summed, and the
 /// status line's figures leave it out (`SheetStats`).
@@ -670,7 +669,7 @@ struct NewRowView: View {
     /// ⌫ over a row have somewhere to land, as after esc on an open row.
     var onCancel: () -> Void = {}
     /// With the column hidden the new row still lands on the sticky default
-    /// wallet; showing it lets the wallet be picked per row (`UI.md` §3).
+    /// wallet; showing it lets the wallet be picked per row.
     var showsWallet = false
 
     var body: some View {

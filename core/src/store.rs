@@ -15,7 +15,7 @@ CREATE UNIQUE INDEX ux_commands_vault_server_seq ON commands(vault_id, server_se
 ";
 /// Vault names become labels: an owner may keep two vaults with the same
 /// name, so replaying a vault's log never trips over a name another vault
-/// took in the meantime (`docs/v2/SYNC.md` §3).
+/// took in the meantime.
 const MIGRATION_V3: &str = "DROP INDEX IF EXISTS ux_vaults_owner_name;";
 /// A transaction gets a person apart from its author, and a recurring template
 /// an owner apart from its creator. Before version 4 no command named anybody

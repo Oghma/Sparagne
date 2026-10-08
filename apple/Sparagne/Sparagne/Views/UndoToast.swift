@@ -2,8 +2,7 @@ import SwiftUI
 
 /// The 5-second undo window after a void, which the window calls a delete:
 /// the row is already gone, a bar counts down, and Undo ("Ripristina")
-/// puts it back without ever touching the core (docs/v2/DISTILLATO_V1.md
-/// §2.4).
+/// puts it back without ever touching the core.
 ///
 /// ⌘Z does the same through Edit ▸ Undo, where the store registers the void
 /// (`LedgerHistory.recordPendingVoid`). The button has no shortcut of its own:
@@ -11,7 +10,7 @@ import SwiftUI
 ///
 /// Drawn with the ledger's own chrome (`Panel`'s rounded, hairline-bordered
 /// card) rather than the system material, so it reads as part of the finance
-/// terminal instead of a generic macOS alert (`docs/v2/UI.md` §5).
+/// terminal instead of a generic macOS alert.
 struct UndoToast: View {
     let pending: PendingUndo
     let undo: () -> Void

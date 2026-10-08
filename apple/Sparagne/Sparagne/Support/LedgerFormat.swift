@@ -1,6 +1,6 @@
 import Foundation
 
-/// Money as the ledger writes it (`docs/v2/UI.md` §5): the symbol in front,
+/// Money as the ledger writes it: the symbol in front,
 /// `.` between thousands and `,` before the cents.
 ///
 /// Unlike `MoneyFormatter`, which follows the user's locale, this one is fixed:
@@ -46,8 +46,8 @@ enum LedgerMoney {
     }
 
     /// A month-over-month delta as the cards show it: `"+4,2%"`, or `nil` when
-    /// the previous period was zero (`DISTILLATO_V1.md` §3.5 divides by
-    /// `|previous|`, which is undefined there).
+    /// the previous period was zero (the delta divides by `|previous|`,
+    /// which is undefined there).
     static func delta(current: Int64, previous: Int64) -> String? {
         guard previous != 0 else { return nil }
         let ratio = (Decimal(current - previous) / Decimal(abs(previous)) * 100) as NSDecimalNumber

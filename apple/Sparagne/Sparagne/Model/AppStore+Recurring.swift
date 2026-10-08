@@ -2,7 +2,7 @@ import Foundation
 import SparagneCore
 
 /// What the Ricorrenze tab reads off the store and the one list it loads
-/// itself, the agenda of the next 30 days (`docs/v2/UI.md` §2.5).
+/// itself, the agenda of the next 30 days.
 extension AppStore {
     /// How far ahead "Prossimi 30 giorni" looks.
     static let agendaDays = 30

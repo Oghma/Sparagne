@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The Mastro's status line (`docs/v2/UI.md` §2.1), as a spreadsheet's status
+/// The Mastro's status line, as a spreadsheet's status
 /// bar reads the cells under the cursor: the average, the count and the sum of
 /// the rows on screen, or of the selection when two or more rows are picked,
 /// then when the last change was saved. The month's own totals are the side

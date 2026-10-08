@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The frame the three SETUP tables share (`docs/v2/UI.md` §2.3): a card
+/// The frame the three SETUP tables share: a card
 /// with a title row, a header, rows of 24 pt with a hairline under each, and
 /// the pieces the rows are made of. Before this each table drew its own
 /// copy of the same stack, and they drifted.
@@ -191,8 +191,8 @@ struct SetupIconButton: View {
     }
 }
 
-/// How full a capped envelope is, as the 2 pt bar under its balance
-/// (`docs/v2/UI.md` §2.3). The RIEPILOGO's gauges answer the same question,
+/// How full a capped envelope is, as the 2 pt bar under its balance.
+/// The RIEPILOGO's gauges answer the same question,
 /// so this asks `FundGauge` rather than redoing its arithmetic: the balance
 /// against a net cap, the cumulative income against an income cap.
 enum EnvelopeCapFill {

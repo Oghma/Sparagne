@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The RIEPILOGO view (`docs/v2/UI.md` §2.2): the year up to the month on
+/// The RIEPILOGO view: the year up to the month on
 /// screen, the way the household's spreadsheet reads it.
 ///
 /// Everything here is drawing: the arithmetic is `YearSummary` and

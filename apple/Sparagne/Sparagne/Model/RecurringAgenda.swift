@@ -60,7 +60,7 @@ enum NaiveDay {
     }
 }
 
-/// The Ricorrenze tab's "Prossimi 30 giorni" (`docs/v2/UI.md` §2.5): every
+/// The Ricorrenze tab's "Prossimi 30 giorni": every
 /// period of the templates that run, from tomorrow to `days` days from today,
 /// with what they add up to on each side.
 ///

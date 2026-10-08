@@ -2,7 +2,7 @@ import Testing
 
 @testable import Sparagne
 
-/// The sheet tabs at the bottom of the window (`docs/v2/UI.md` §2): their
+/// The sheet tabs at the bottom of the window: their
 /// order is the tab bar's and the View menu's ⌘1 to ⌘4, so it is checked
 /// without a window.
 struct LedgerTabTests {
