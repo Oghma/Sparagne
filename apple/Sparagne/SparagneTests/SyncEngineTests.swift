@@ -517,6 +517,46 @@ struct SyncEngineTests {
         #expect(members.first { $0.username == "bob" }?.role == .editor)
     }
 
+    @Test("Logged in, a row may be for the vault's members and nobody else; the list outlives the session, not the login")
+    func membersAreWhoARowMayBeFor() async throws {
+        let server = FakeServerTransport(core: try CoreHandle.openInMemory())
+        let alice = try await Self.alice(server)
+        let vaultId = try #require(alice.vaultId)
+        let bob = try await Peer(server: server)
+        await bob.engine.register(username: "bob", password: "supersecret")
+
+        // The first round asked the server: alice alone.
+        #expect(alice.store.assignablePeople == ["alice"])
+
+        // Sharing names bob at once, before any round.
+        try await alice.engine.setMember(vaultId: vaultId, username: "bob", role: .editor)
+        #expect(alice.store.assignablePeople == ["alice", "bob"])
+        // bob's own window hears it on his first round, with the vault.
+        await bob.engine.syncNow()
+        #expect(bob.store.currentVault?.id == vaultId)
+        await bob.engine.refreshMembers(ofVault: vaultId)
+        #expect(bob.store.assignablePeople == ["alice", "bob"])
+
+        // A row of the vault's history from someone who is not a member any
+        // more stays in the PERSONA filter, but is not offered.
+        await alice.store.setAuthor("carol")
+        await alice.store.submit(quickAdd: "-1.00 vecchio @Cash >Food")
+        await alice.store.setAuthor("alice")
+        #expect(alice.store.peopleInRows.contains("carol"))
+        #expect(!alice.store.assignablePeople.contains("carol"))
+
+        // Remembered for the next launch, offline included.
+        let relaunched = AccountStore(defaults: alice.defaults, tokens: MemoryTokenStore())
+        #expect(relaunched.vaultMembers[vaultId] == ["alice", "bob"])
+
+        // Logged out, the server's list says nothing about the local name
+        // the rows are signed with now: the names the vault knows stand in.
+        await alice.engine.logOut()
+        #expect(alice.store.vaultMembers.isEmpty)
+        #expect(alice.store.assignablePeople.first == AccountStore.systemAuthor)
+        #expect(!alice.store.assignablePeople.contains("bob"))
+    }
+
     @Test("Writes made on both sides converge after two syncs each")
     func interleavedWritesConverge() async throws {
         let server = FakeServerTransport(core: try CoreHandle.openInMemory())

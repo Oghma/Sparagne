@@ -117,7 +117,7 @@ struct LedgerStoreTests {
         await store.setAuthor("matteo")
         await store.reload()
 
-        #expect(store.authors == ["elisa", "matteo"])
+        #expect(store.peopleInRows == ["elisa", "matteo"])
         #expect(store.rows.count == 3)
 
         store.person = "elisa"

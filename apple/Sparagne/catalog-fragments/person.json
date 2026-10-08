@@ -1,0 +1,10 @@
+{
+  "More than one person matches “%@”": {
+    "en": "More than one person matches “%@”",
+    "it": "Più di una persona corrisponde a “%@”"
+  },
+  "Unknown person: %@": {
+    "en": "Unknown person: %@",
+    "it": "Persona sconosciuta: %@"
+  }
+}

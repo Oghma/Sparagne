@@ -114,13 +114,14 @@ final class SyncEngine {
         self.makeTransport = makeTransport
     }
 
-    /// Adopts the account's author and the read-only vaults remembered from
-    /// the last session, subscribes to applied commands and reads the local
-    /// sync state. `init` cannot await the core actor, so this runs once
-    /// before the first command, ahead of `start()`.
+    /// Adopts the account's author, the read-only vaults and the members
+    /// remembered from the last session, subscribes to applied commands and
+    /// reads the local sync state. `init` cannot await the core actor, so
+    /// this runs once before the first command, ahead of `start()`.
     func prepare() async {
         await store.setAuthor(account.author)
         await publishAccess()
+        publishMembers()
         await core.setOnExecuted { [weak self] in
             Task { @MainActor in await self?.scheduleSync() }
         }
@@ -293,6 +294,9 @@ final class SyncEngine {
             }
         }
         await publishAccess()
+        // Who may be named on a row changes with the sharing, which only the
+        // server knows: asked again every round, for the vault on screen.
+        await refreshMembers(ofVault: store.currentVault?.id)
         return round
     }
 
@@ -443,6 +447,7 @@ final class SyncEngine {
             // revoked it: the session is over, the name stays for the form.
             account.signOut(expired: true)
             await store.setAuthor(account.author)
+            publishMembers()
             serverVaults = []
         }
         if round.outcome.changed { await store.refreshAfterSync() }
@@ -475,10 +480,39 @@ final class SyncEngine {
         await core.setReadOnlyVaults(ids)
     }
 
+    /// Hands the store the members of each vault, the names its person
+    /// cells and owner pickers offer. Only while logged in: the server
+    /// checks a person against its usernames, and a logged-out window signs
+    /// its rows with a local name that is none of them.
+    private func publishMembers() {
+        store.setVaultMembers(account.isLoggedIn ? account.vaultMembers : [:])
+    }
+
+    /// Asks the server who belongs to `vaultId`, remembers it and hands it
+    /// to the store. The window calls it when a vault opens, a round when it
+    /// ends. Only for a vault the server listed: one created here and not
+    /// pushed yet has no members there, just its author.
+    ///
+    /// Silent on failure: the list is a convenience, and the one heard last
+    /// stands in until the next round.
+    func refreshMembers(ofVault vaultId: Uuid?) async {
+        guard let vaultId, role(forVault: vaultId) != nil, let session = try? authorized() else {
+            publishMembers()
+            return
+        }
+        if let members = try? await session.api.members(token: session.token, vaultId: vaultId),
+           account.isLoggedIn
+        {
+            account.adoptMembers(members.map(\.username), ofVault: vaultId)
+        }
+        publishMembers()
+    }
+
     /// A vault left this device: nothing more to remember about it.
     private func drop(_ vaultId: Uuid) {
         account.forget(vault: vaultId)
         serverVaults.removeAll { $0.id == vaultId }
+        publishMembers()
     }
 
     // MARK: - Rejections
@@ -549,6 +583,7 @@ final class SyncEngine {
         stop()
         account.signOut()
         await store.setAuthor(account.author)
+        publishMembers()
         serverVaults = []
         status = .idle
         lastSyncAt = nil
@@ -626,6 +661,8 @@ final class SyncEngine {
         return try await session.api.members(token: session.token, vaultId: vaultId)
     }
 
+    /// The new member can be named on a row from now on, not from the next
+    /// round.
     func setMember(vaultId: Uuid, username: String, role: MemberRole) async throws {
         let session = try authorized()
         try await session.api.setMember(
@@ -634,11 +671,13 @@ final class SyncEngine {
             username: AccountRules.normalize(username: username),
             role: role
         )
+        await refreshMembers(ofVault: vaultId)
     }
 
     func removeMember(vaultId: Uuid, username: String) async throws {
         let session = try authorized()
         try await session.api.removeMember(token: session.token, vaultId: vaultId, username: username)
+        await refreshMembers(ofVault: vaultId)
     }
 
     // MARK: - Plumbing

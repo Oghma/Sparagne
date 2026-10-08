@@ -108,9 +108,10 @@ final class MemoryTokenStore: TokenStore, @unchecked Sendable {
 /// soon as a login succeeds.
 ///
 /// It also remembers what the server said about the account's vaults — the
-/// roles of the last `GET /vaults` and the vaults it lost access to — so a
-/// viewer's vault is read-only from the first frame after a relaunch, even
-/// offline.
+/// roles of the last `GET /vaults`, the vaults it lost access to and who is
+/// a member of each — so a viewer's vault is read-only from the first frame
+/// after a relaunch, even offline, and a row can be put on another member
+/// before the first sync of the session.
 @Observable
 @MainActor
 final class AccountStore {
@@ -119,6 +120,7 @@ final class AccountStore {
     static let expiresAtKey = "syncTokenExpiresAt"
     static let vaultRolesKey = "syncVaultRoles"
     static let lostVaultsKey = "syncLostVaults"
+    static let vaultMembersKey = "syncVaultMembers"
     static let defaultServerURL = "http://127.0.0.1:3000"
 
     static let localAuthorKey = "localAuthor"
@@ -163,6 +165,10 @@ final class AccountStore {
     /// Vaults the account had, with server history, that the server no
     /// longer lists and no longer lets it pull: no longer shared with it.
     private(set) var lostVaultIds: Set<Uuid>
+    /// The usernames of each vault's members, every role, from the last
+    /// `GET /vaults/{id}/members`: the only names the server takes as the
+    /// person of a row or the owner of a template (`not_a_member`).
+    private(set) var vaultMembers: [Uuid: [String]]
 
     init(
         defaults: UserDefaults = .standard,
@@ -178,6 +184,7 @@ final class AccountStore {
         let expiry = (defaults.object(forKey: Self.expiresAtKey) as? Double).map(Date.init(timeIntervalSince1970:))
         vaultRoles = Self.decodeRoles(defaults.dictionary(forKey: Self.vaultRolesKey))
         lostVaultIds = Set(defaults.stringArray(forKey: Self.lostVaultsKey) ?? [])
+        vaultMembers = Self.decodeMembers(defaults.dictionary(forKey: Self.vaultMembersKey))
 
         if let stored, let expiry, expiry <= now {
             // A token past its expiry would only earn a 401: the session is
@@ -229,6 +236,8 @@ final class AccountStore {
             // Another account: what the server said about the previous one's
             // vaults says nothing about this one's.
             adoptRoles([:])
+            vaultMembers = [:]
+            persistVaults()
         }
         self.username = username
         self.token = token
@@ -266,8 +275,17 @@ final class AccountStore {
         persistVaults()
     }
 
+    /// The members of a `GET /vaults/{id}/members`, by username.
+    func adoptMembers(_ usernames: [String], ofVault vaultId: Uuid) {
+        vaultMembers[vaultId] = usernames
+        persistVaults()
+    }
+
+    /// Nobody here may put a row on anyone in a vault that is no longer
+    /// shared: it is read-only.
     func markLost(_ vaultId: Uuid) {
         vaultRoles[vaultId] = nil
+        vaultMembers[vaultId] = nil
         lostVaultIds.insert(vaultId)
         persistVaults()
     }
@@ -276,6 +294,7 @@ final class AccountStore {
     /// remember about it.
     func forget(vault vaultId: Uuid) {
         vaultRoles[vaultId] = nil
+        vaultMembers[vaultId] = nil
         lostVaultIds.remove(vaultId)
         persistVaults()
     }
@@ -283,9 +302,14 @@ final class AccountStore {
     private func persistVaults() {
         defaults.set(vaultRoles.mapValues(\.rawValue), forKey: Self.vaultRolesKey)
         defaults.set(lostVaultIds.sorted(), forKey: Self.lostVaultsKey)
+        defaults.set(vaultMembers, forKey: Self.vaultMembersKey)
     }
 
     private static func decodeRoles(_ stored: [String: Any]?) -> [Uuid: MemberRole] {
         (stored ?? [:]).compactMapValues { ($0 as? String).flatMap(MemberRole.init(rawValue:)) }
+    }
+
+    private static func decodeMembers(_ stored: [String: Any]?) -> [Uuid: [String]] {
+        (stored ?? [:]).compactMapValues { $0 as? [String] }
     }
 }

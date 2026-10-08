@@ -168,6 +168,15 @@ final class AppStore {
     /// tables' add lines and every cell that opens for editing follow it.
     var canWrite: Bool { currentVault != nil && !isReadOnly }
 
+    /// The usernames of each vault's members, as the sync engine last heard
+    /// them from the server; empty while logged out (`SyncEngine
+    /// .publishMembers`).
+    private(set) var vaultMembers: [Uuid: [String]] = [:]
+
+    func setVaultMembers(_ members: [Uuid: [String]]) {
+        vaultMembers = members
+    }
+
     // MARK: Loaded data
 
     private(set) var snapshot: VaultSnapshot?
@@ -175,8 +184,12 @@ final class AppStore {
     private(set) var transactions: [TransactionView] = []
     private(set) var nextCursor: String?
     private(set) var allRows: [TransactionRow] = []
-    /// Distinct authors in the vault: the PERSONA segmented control.
-    private(set) var authors: [String] = []
+    /// The persons of the vault's live rows (`people()`): the PERSONA
+    /// segmented control, and the names the summaries break down by. Who
+    /// may be named on a new row is `assignablePeople`, a different list:
+    /// a member who never had a row is in that one only, a former member
+    /// with rows left behind in this one only.
+    private(set) var peopleInRows: [String] = []
     /// Everything the ledger's summary panel draws.
     private(set) var summary: LedgerSummary?
     /// Everything the RIEPILOGO draws: the year of `month`, up to `month`
@@ -472,7 +485,7 @@ final class AppStore {
             allRows = []
             nextCursor = nil
             loadedFilter = nil
-            authors = []
+            peopleInRows = []
             summary = nil
             year = nil
             pendingRecurringItems = []
@@ -492,7 +505,7 @@ final class AppStore {
             transactions = loaded.page.items
             nextCursor = loaded.page.nextCursor
             loadedFilter = request.filter
-            authors = loaded.authors
+            peopleInRows = loaded.people
             pendingRecurringItems = loaded.pendingRecurring
             summary = Self.summary(month: month, from: loaded)
             year = Self.year(month: month, from: loaded, flows: flows)
@@ -503,7 +516,7 @@ final class AppStore {
             // A person who has left the vault's history must not stay
             // selected, or the ledger shows an empty month with no way back.
             // Clearing it queues the reload that fetches the whole month.
-            if let person, !authors.contains(person) { self.person = nil }
+            if let person, !peopleInRows.contains(person) { self.person = nil }
         }
     }
 
@@ -1202,7 +1215,7 @@ final class AppStore {
                 parsed: parsed,
                 now: Date(),
                 defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId),
-                people: authors
+                people: assignablePeople
             )
             // A row like one typed in the grid, and undone the same way.
             let minted = await core.envelope(vaultId: vault.id, resolved.command)

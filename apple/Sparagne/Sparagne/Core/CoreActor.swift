@@ -373,7 +373,7 @@ actor CoreActor {
                     limit: request.limit,
                     cursor: nil
                 ),
-                authors: try handle.people(vaultId: vaultId),
+                people: try handle.people(vaultId: vaultId),
                 pendingRecurring: try handle.pendingRecurring(vaultId: vaultId, today: request.today),
                 flowPerson: try handle.flowPersonTotals(
                     vaultId: vaultId,
@@ -552,7 +552,8 @@ struct VaultLoad: Sendable {
     let snapshot: VaultSnapshot
     let categories: [CategoryView]
     let page: Page
-    let authors: [String]
+    /// The persons of the live rows (`people()`), the PERSONA filter's segments.
+    let people: [String]
     let pendingRecurring: [PendingRecurring]
     let flowPerson: [FlowPersonTotals]
     let categoryTotals: [CategoryTotals]

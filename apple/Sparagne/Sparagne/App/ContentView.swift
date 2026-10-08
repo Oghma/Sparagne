@@ -122,7 +122,12 @@ struct MainWindow: View {
             .task {
                 if store.needsOnboarding { sheet = .vault }
             }
-            .task(id: store.currentVault?.id) { openLaunchSheet() }
+            .task(id: store.currentVault?.id) {
+                openLaunchSheet()
+                // Who the vault's rows may be for, as the server has it now:
+                // the cache from the last round stands in meanwhile.
+                await engine?.refreshMembers(ofVault: store.currentVault?.id)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .openManagement)) { _ in
                 sheet = .manage
             }

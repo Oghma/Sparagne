@@ -54,6 +54,12 @@ enum ErrorMessages {
         }
     }
 
+    /// A person cell or a `!name` that matches nobody who may be named on a
+    /// row (`AppStore.assignablePeople`).
+    static func unknownPerson(_ name: String) -> String {
+        String(localized: "Unknown person: \(name)")
+    }
+
     /// The status once the server stopped accepting the session's token.
     static var sessionExpired: String { String(localized: "Session expired — log in again") }
 
