@@ -147,13 +147,48 @@ host che non deve scaricare nulla): dal checkout del repository,
 `docker compose -f compose.yml -f compose.build.yml up -d --build`
 (`server/deploy/compose.build.yml`).
 
-### Bare metal (senza Docker)
+### 3.3 Senza Docker: il binario della release (LXC, VM, bare metal)
 
-`server/deploy/sparagne-server.service` è un'unit systemd pronta all'uso: il
-commento in testa al file elenca i comandi (utente dedicato, percorso del
-binario, `EnvironmentFile`). In questo caso il reverse proxy (Caddy, nginx,
-…) è un servizio a parte sulla stessa macchina o su un'altra; per
-`SPARAGNE_TRUST_PROXY` vedi §2.1.
+Ogni release allega anche il server come binario Linux statico (musl, con
+SQLite dentro), per amd64 e arm64, così gira su qualunque distribuzione:
+`sparagne-server-<versione>-x86_64-unknown-linux-musl.tar.gz` (o
+`aarch64-…`), con il binario, l'unit systemd e `.env.example`, più il suo
+`.sha256`.
+
+```sh
+V=2.0.0-beta.1; T=x86_64-unknown-linux-musl
+base=https://github.com/Oghma/Sparagne/releases/download/v$V
+curl -fLO "$base/sparagne-server-$V-$T.tar.gz"
+curl -fLO "$base/sparagne-server-$V-$T.tar.gz.sha256"
+sha256sum -c "sparagne-server-$V-$T.tar.gz.sha256"
+tar xzf "sparagne-server-$V-$T.tar.gz"
+```
+
+Anche l'archivio ha la sua attestazione di provenienza: da una macchina con
+`gh`, `gh attestation verify sparagne-server-$V-$T.tar.gz --repo
+Oghma/Sparagne`.
+
+Poi `sparagne-server.service`, nell'archivio: il commento in testa elenca i
+comandi (utente dedicato, cartella dei dati, `/etc/sparagne.env`, avvio). Il
+server ascolta su `127.0.0.1:3000`; il reverse proxy con TLS (§1) è un
+servizio a parte, sulla stessa macchina o su un'altra, e per
+`SPARAGNE_TRUST_PROXY` vale §2.1.
+
+**Solo in rete locale, senza dominio.** Caddy sulla stessa macchina dà un
+certificato anche a un indirizzo IP, firmato dalla propria CA interna:
+
+```
+https://192.168.178.81 {
+	reverse_proxy 127.0.0.1:3000
+}
+```
+
+La radice di quella CA (col pacchetto Debian:
+`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`) va resa
+fidata su ogni Mac che sincronizza: `sudo security add-trusted-cert -d -r
+trustRoot -k /Library/Keychains/System.keychain root.crt`. Nell'app l'URL è
+allora `https://192.168.178.81`. Il resto della pagina vale uguale; quando
+arriverà un dominio, basta cambiare la prima riga del Caddyfile.
 
 ## 4. Backup
 
@@ -207,8 +242,9 @@ migrazione manuale serve per usarlo, a parte l'avvio normale (§6).
      `compose.yml` e aggiungere `SPARAGNE_VERSION` a `.env` (`.env.example`).
    - Compose dai sorgenti: `git pull`, poi `docker compose -f compose.yml -f
      compose.build.yml up -d --build sparagne`.
-   - Bare metal: ricompilare (`cargo build --release -p sparagne_server`),
-     sostituire il binario, `systemctl restart sparagne-server`.
+   - Senza Docker: scaricare e verificare l'archivio della release nuova
+     (§3.3), `install -m 755 sparagne-server /usr/local/bin/sparagne-server`,
+     `systemctl restart sparagne-server`.
 2. Lo schema di `vaults.sqlite` **si aggiorna da solo all'avvio**: `Core::open`
    (`core/src/store.rs`) legge `PRAGMA user_version`, applica la migrazione
    mancante se la versione sul disco è più vecchia della versione del codice
