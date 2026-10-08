@@ -1,7 +1,7 @@
 [files]
-# The Italian deploy guide, and the string catalog with its Italian
-# translations (its English keys are checked in the Swift that uses them).
-extend-exclude = ["docs/**", "*.xcstrings"]
+# The string catalog with its Italian translations (its English keys are
+# checked in the Swift that uses them).
+extend-exclude = ["*.xcstrings"]
 
 [default]
 extend-ignore-re = [

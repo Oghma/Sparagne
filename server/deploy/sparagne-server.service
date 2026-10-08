@@ -22,9 +22,10 @@ Wants=network-online.target
 # SPARAGNE_BIND and SPARAGNE_DATA_DIR are set below since they describe this
 # machine, not the deployment's policy.
 #
-# Accounts, as the service user so SQLite's side files keep their owner:
+# Accounts, as the service user so SQLite's side files keep their owner
+# (`runuser` is there even where `sudo` is not):
 #
-#   printf '%s\n' "$PW" | sudo -u sparagne env SPARAGNE_DATA_DIR=/var/lib/sparagne \
+#   printf '%s\n' "$PW" | runuser -u sparagne -- env SPARAGNE_DATA_DIR=/var/lib/sparagne \
 #       /usr/local/bin/sparagne-server user add alice
 User=sparagne
 Group=sparagne
