@@ -222,7 +222,7 @@ fn applied(result: &PushResult) -> i64 {
 
 fn rejection(result: &PushResult) -> (String, String) {
     match &result.outcome {
-        PushOutcome::Rejected { code, message } => (code.clone(), message.clone()),
+        PushOutcome::Rejected { code, message, .. } => (code.clone(), message.clone()),
         PushOutcome::Applied { .. } => panic!("expected rejected, got {:?}", result.outcome),
     }
 }
@@ -722,7 +722,8 @@ async fn household(api: &Api) -> (String, Uuid) {
     (alice, vault)
 }
 
-/// The `not_a_member` refusal of a command that names `name`.
+/// The `not_a_member` refusal of a command that names `name`, with the name
+/// in `detail` too.
 fn assert_not_a_member(result: &PushResult, name: &str) {
     assert_eq!(
         rejection(result),
@@ -731,6 +732,31 @@ fn assert_not_a_member(result: &PushResult, name: &str) {
             format!("{name} is not a member of this vault")
         )
     );
+    match &result.outcome {
+        PushOutcome::Rejected { detail, .. } => assert_eq!(detail.as_deref(), Some(name)),
+        PushOutcome::Applied { .. } => unreachable!("checked above"),
+    }
+}
+
+#[tokio::test]
+async fn a_not_a_member_refusal_names_the_person_in_a_field_of_its_own() {
+    let api = Api::new();
+    let (alice, vault) = household(&api).await;
+
+    let batch = vec![
+        envelope(vault, "alice", expense_for(1_000, "mallory")),
+        envelope(vault, "alice", expense(2_000, None)),
+    ];
+    let res = api.push(&alice, vault, batch).await;
+    let results = &res.body["results"];
+    assert_eq!(results[0]["status"], "rejected");
+    assert_eq!(results[0]["code"], "not_a_member");
+    // The app reads the name here, not out of the English sentence.
+    assert_eq!(results[0]["detail"], "mallory");
+    // Nothing else carries the key, not even as a null, so a client from
+    // before it reads the body as it always did.
+    assert_eq!(results[1]["status"], "applied");
+    assert!(results[1].get("detail").is_none());
 }
 
 #[tokio::test]

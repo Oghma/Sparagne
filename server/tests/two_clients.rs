@@ -346,6 +346,11 @@ async fn a_person_travels_with_the_row() {
     assert_eq!(rejected[0].command_id, stray);
     assert_eq!(rejected[0].code, "not_a_member");
     assert_eq!(rejected[0].message, "mallory is not a member of this vault");
+    assert_eq!(rejected[0].detail.as_deref(), Some("mallory"));
+    // Kept with the rejected row, for the app to read back.
+    let kept = alice.core.rejected_commands(vault).unwrap();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].detail.as_deref(), Some("mallory"));
     bob.sync(&api, vault).await;
 
     let (expected, templates) = {

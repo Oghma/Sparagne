@@ -133,6 +133,7 @@ pub async fn push(
                         Err(err) => PushOutcome::Rejected {
                             code: err.code().to_string(),
                             message: err.to_string(),
+                            detail: None,
                         },
                     },
                 };
@@ -168,11 +169,13 @@ fn stranger(envelope: &CommandEnvelope, members: &HashSet<String>) -> Option<Str
 }
 
 /// A command refused like any other: the rest of the batch goes on, and the
-/// app shows it among the rejected changes.
+/// app shows it among the rejected changes. The name goes in `detail` as
+/// well as in the sentence, so the app can say who without parsing English.
 fn not_a_member(name: &str) -> PushOutcome {
     PushOutcome::Rejected {
         code: "not_a_member".to_string(),
         message: format!("{name} is not a member of this vault"),
+        detail: Some(name.to_string()),
     }
 }
 

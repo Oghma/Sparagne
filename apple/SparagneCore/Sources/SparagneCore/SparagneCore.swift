@@ -3259,14 +3259,26 @@ public struct RejectedCommand: Equatable, Hashable, Codable {
     public var kind: String
     public var code: String
     public var message: String
+    /**
+     * The server's `detail` for the refusal: for `not_a_member`, the name
+     * it refused. `None` when the server sent none, and for a refusal
+     * made here (a rebase).
+     */
+    public var detail: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(commandId: Uuid, kind: String, code: String, message: String) {
+    public init(commandId: Uuid, kind: String, code: String, message: String, 
+        /**
+         * The server's `detail` for the refusal: for `not_a_member`, the name
+         * it refused. `None` when the server sent none, and for a refusal
+         * made here (a rebase).
+         */detail: String? = nil) {
         self.commandId = commandId
         self.kind = kind
         self.code = code
         self.message = message
+        self.detail = detail
     }
 
     
@@ -3288,7 +3300,8 @@ public struct FfiConverterTypeRejectedCommand: FfiConverterRustBuffer {
                 commandId: FfiConverterTypeUuid.read(from: &buf), 
                 kind: FfiConverterString.read(from: &buf), 
                 code: FfiConverterString.read(from: &buf), 
-                message: FfiConverterString.read(from: &buf)
+                message: FfiConverterString.read(from: &buf), 
+                detail: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -3297,6 +3310,7 @@ public struct FfiConverterTypeRejectedCommand: FfiConverterRustBuffer {
         FfiConverterString.write(value.kind, into: &buf)
         FfiConverterString.write(value.code, into: &buf)
         FfiConverterString.write(value.message, into: &buf)
+        FfiConverterOptionString.write(value.detail, into: &buf)
     }
 }
 

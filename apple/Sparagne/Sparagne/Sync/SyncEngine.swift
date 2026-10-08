@@ -40,7 +40,7 @@ final class SyncEngine {
         var id: Uuid { command.commandId }
         /// The localized headline for the server's code, naming the person
         /// when the row was put on someone outside the vault.
-        var summary: String { ErrorMessages.summary(for: command.code, message: command.message) }
+        var summary: String { ErrorMessages.summary(for: command.code, detail: command.detail) }
         /// What the refused command did, in words (`CommandKindNames`).
         var kindName: String { CommandKindNames.name(for: command.kind) }
     }

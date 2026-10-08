@@ -61,6 +61,7 @@ impl FakeServer {
                     Err(err) => PushOutcome::Rejected {
                         code: err.code().to_string(),
                         message: err.to_string(),
+                        detail: None,
                     },
                 };
                 PushResult {
