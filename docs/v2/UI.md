@@ -416,6 +416,17 @@ ripristina prima di modificarlo. L'inspector non offre ciò che
 e un modello con un wallet o una busta non torna a "qualsiasi wallet" né a
 Non allocato (quelle voci sono spente).
 
+**Limite noto, non ancora affrontato** (2026-10-08). Un modello non si
+modifica del tutto: non si può togliergli il wallet o la busta una volta
+scelti, né trasformare un'uscita in un'entrata (o viceversa). Esempi: un
+abbonamento creato sul Conto che dovrebbe valere per "qualsiasi wallet"; un
+"Rimborso spese lavoro" creato per sbaglio come uscita. La causa sta nel core:
+`RecurringPatch` dice "imposta questo campo" ma non "svuotalo", e non ha un
+campo per il tipo; cambiarlo tocca il formato dei comandi sincronizzati
+(`ARCH.md` §4, `SYNC.md`). Oggi la via è archiviare il modello e crearne uno
+nuovo, anche con **Duplica** dal menu "…" dell'inspector; la storia dei
+periodi già registrati resta sul modello archiviato.
+
 **Nuova ricorrenza…** (menu Vault e palette; dal 2026-09-29, prima erano tre
 passaggi) passa alla scheda e apre l'inspector su un modello nuovo; spenta per
 un vault in sola lettura.
