@@ -32,7 +32,6 @@ struct PaletteAction: Identifiable {
 ///
 /// Deliberately free of SwiftUI, so the filtering and the selection can be
 /// tested without a window (`SparagneTests/CommandPaletteTests.swift`).
-@MainActor
 @Observable
 final class CommandPaletteModel {
     /// Rebuilt every time the palette opens: the vault list and the state of

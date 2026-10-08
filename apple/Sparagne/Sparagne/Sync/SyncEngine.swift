@@ -17,7 +17,6 @@ import SparagneCore
 /// actions the sheets run (leaving a vault, changing the password) throw, so
 /// the sheet can show why.
 @Observable
-@MainActor
 final class SyncEngine {
     /// Where the last round stands; the top bar's pill words it
     /// (`SyncPillState`).

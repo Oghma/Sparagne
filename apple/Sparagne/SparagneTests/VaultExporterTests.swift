@@ -7,7 +7,6 @@ import Testing
 /// Back Up Database and Export All Transactions (`Support/VaultExporter.swift`)
 /// over an in-memory core: the backup is opened again as a database, the
 /// export is read back line by line.
-@MainActor
 struct VaultExporterTests {
     /// A store through onboarding: vault `Casa`, wallet `Cash` with 10,000.00.
     private static func onboarded() async throws -> AppStore {

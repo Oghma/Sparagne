@@ -48,7 +48,6 @@ private actor Gate {
 /// These are the properties the move is for: the window is never blocked while
 /// the core works, and two things asking at once are answered one at a time
 /// rather than racing.
-@MainActor
 struct CoreActorTests {
     private static func makeStore(probe: (@Sendable () async -> Void)? = nil) throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.actor.\(UUID().uuidString)"))

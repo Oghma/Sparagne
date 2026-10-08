@@ -26,7 +26,6 @@ private struct CannedTransport: SyncTransport {
 
 /// The account side of the app: where the session lives, when it ends, and
 /// what the forms check before the server does.
-@MainActor
 struct AccountTests {
     private static func defaults() throws -> UserDefaults {
         try #require(UserDefaults(suiteName: "sparagne.account.\(UUID().uuidString)"))

@@ -159,7 +159,6 @@ struct ShareVaultSheet: View {
         .frame(minHeight: 32)
     }
 
-    @MainActor
     private func load() async {
         do {
             members = try await engine.members(ofVault: vault.id)
@@ -171,7 +170,6 @@ struct ShareVaultSheet: View {
 
     /// Runs a member change, then reloads the list from the server so the
     /// sheet never guesses what the server did.
-    @MainActor
     private func act(_ work: @MainActor @escaping () async throws -> Void) {
         busy = true
         Task {
@@ -328,7 +326,6 @@ struct AccountSettingsView: View {
         return String(localized: "New accounts need a password of at least 8 characters.")
     }
 
-    @MainActor
     private func authenticate(registering: Bool) {
         let name = normalizedUsername
         let secret = password

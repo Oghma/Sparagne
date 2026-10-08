@@ -14,7 +14,6 @@ private actor CoreCalls {
 /// A vault this account only reads (a viewer's): the window offers nothing
 /// that would write, and what gets through anyway is refused before it
 /// reaches the core.
-@MainActor
 struct ReadOnlyLedgerTests {
     /// Vault `Main` with wallet `Cash`, marked read-only once it is set up,
     /// and the counter of every core call made from then on.

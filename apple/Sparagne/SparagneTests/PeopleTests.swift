@@ -8,7 +8,6 @@ import Testing
 /// when the sync engine has them, the names the vault knows otherwise, and
 /// how a typed name resolves to one of them. The logged-in half, with a
 /// server behind it, is in `SyncEngineTests`.
-@MainActor
 struct PeopleTests {
     /// Vault `Casa` with wallet `Conto`, written by matteo while logged out.
     private static func onboarded() async throws -> AppStore {

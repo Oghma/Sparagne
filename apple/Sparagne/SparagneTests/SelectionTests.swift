@@ -17,7 +17,6 @@ private nonisolated final class ExecutedCount: Sendable {
 
 /// The ledger's row selection and the bulk actions over it: the gestures on
 /// `RowSelection`, then the store that keeps it and acts on it.
-@MainActor
 struct SelectionTests {
     // MARK: - The gestures
 

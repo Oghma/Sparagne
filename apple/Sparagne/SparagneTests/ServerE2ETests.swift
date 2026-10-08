@@ -33,7 +33,6 @@ nonisolated enum E2EServer {
 ///
 /// This is `SyncEngineTests.Peer` pointed at a live server instead of a fake
 /// one: same construction, same API, nothing stubbed below `ServerAPI`.
-@MainActor
 private struct E2EPeer {
     let core: CoreActor
     let store: AppStore
@@ -115,7 +114,6 @@ private struct E2EPeer {
     .serialized,
     .enabled(if: E2EServer.url != nil, "SPARAGNE_E2E_SERVER is not set: run scripts/e2e.sh")
 )
-@MainActor
 struct ServerE2ETests {
     /// A directory of throwaway SQLite files, one subdirectory per peer. The
     /// app's own database in the container is never opened.

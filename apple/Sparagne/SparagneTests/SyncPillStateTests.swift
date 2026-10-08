@@ -4,7 +4,6 @@ import Testing
 
 /// The top bar's sync pill (`Model/SyncPillState.swift`): which state wins,
 /// what it says and what its popover offers, from the engine's fields alone.
-@MainActor
 struct SyncPillStateTests {
     /// A logged-in, idle, empty engine unless a test says otherwise.
     private static func state(

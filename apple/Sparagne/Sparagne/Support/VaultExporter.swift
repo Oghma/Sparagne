@@ -125,7 +125,6 @@ struct VaultExportHandlers: ViewModifier {
             }
     }
 
-    @MainActor
     private func backUp() async {
         let type = UTType(filenameExtension: "sqlite") ?? .data
         guard let destination = await Self.chooseDestination(name: VaultExporter.backupFileName(), type: type) else {
@@ -139,7 +138,6 @@ struct VaultExportHandlers: ViewModifier {
         }
     }
 
-    @MainActor
     private func exportAll() async {
         guard let vault = store.currentVault else { return }
         let name = LedgerCSV.allFileName(vault: vault.name)
@@ -154,7 +152,6 @@ struct VaultExportHandlers: ViewModifier {
 
     /// A save panel, as a sheet on the key window when there is one. The
     /// panel asks before replacing a file; `nil` when cancelled.
-    @MainActor
     private static func chooseDestination(name: String, type: UTType) async -> URL? {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name

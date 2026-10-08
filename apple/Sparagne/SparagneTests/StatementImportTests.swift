@@ -8,7 +8,6 @@ import Testing
 /// synthetic card export, the core previews and imports it, and every
 /// assertion is about what the vault holds afterwards. No real statement is
 /// used anywhere.
-@MainActor
 struct StatementImportTests {
     // MARK: - Fixtures
 

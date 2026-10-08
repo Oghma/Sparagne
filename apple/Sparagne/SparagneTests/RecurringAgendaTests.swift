@@ -192,7 +192,6 @@ struct RecurringAgendaTests {
 }
 
 /// `AppStore.loadUpcomingRecurring` on a real vault.
-@MainActor
 struct UpcomingRecurringStoreTests {
     @Test("The store's agenda is the running templates' next thirty days")
     func storeAgenda() async throws {

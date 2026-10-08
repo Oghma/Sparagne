@@ -51,7 +51,6 @@ enum SyncPillState: Equatable, Sendable {
     }
 
     /// The engine's state, or `.demo` without one.
-    @MainActor
     init(engine: SyncEngine?) {
         guard let engine else {
             self = .demo

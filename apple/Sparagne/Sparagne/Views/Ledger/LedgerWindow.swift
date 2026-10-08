@@ -70,7 +70,7 @@ struct LedgerWindow: View {
             // tab has to switch and lay out before the field can take focus.
             // The other tabs have their own, already on screen.
             if store.tab == .summary { store.tab = .ledger }
-            Task { @MainActor in
+            Task {
                 await Task.yield()
                 searchFocused = true
             }

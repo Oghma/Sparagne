@@ -10,7 +10,6 @@ import SparagneCore
 /// off) and turns it into the core's `StatementMapping`, `StatementOptions`
 /// and `StatementRowOverride`s. Nothing is written before `runImport()`.
 @Observable
-@MainActor
 final class StatementImportModel {
     /// The pages of the sheet, in order.
     enum Step: Equatable {

@@ -37,11 +37,9 @@ struct RowPatch: Equatable, Sendable {
 /// reaches the core cannot be taken back (there is no un-void), and it also
 /// makes every step about its rows impossible, so `forget(rows:)` takes those
 /// off both stacks rather than leave an Undo that can only fail.
-@MainActor
 final class LedgerHistory {
     /// What a step is registered under. The manager does not retain it, so the
     /// handler does, for as long as the step is on a stack.
-    @MainActor
     final class Target {
         /// Mutable because redoing an added row adds it under a new id.
         var rows: Set<Uuid>
@@ -156,7 +154,7 @@ final class LedgerHistory {
     private func enqueue(_ work: @escaping @MainActor @Sendable () async -> Void) {
         queued += 1
         let previous = tail
-        tail = Task { @MainActor in
+        tail = Task {
             await previous?.value
             await work()
         }

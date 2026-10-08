@@ -151,7 +151,6 @@ extension RecurringPatch {
 /// point that touches the core is therefore `async`: views call them from a
 /// `Task`, tests await them.
 @Observable
-@MainActor
 final class AppStore {
     /// A month of a personal ledger fits in one page in practice. A month that
     /// does not goes on page by page as the grid scrolls to its end
@@ -441,7 +440,7 @@ final class AppStore {
     private func scheduleReload() {
         queuedGeneration += 1
         let previous = queuedLoad
-        queuedLoad = Task { @MainActor [weak self] in
+        queuedLoad = Task { [weak self] in
             await previous?.value
             await self?.reload()
         }
@@ -644,7 +643,7 @@ final class AppStore {
         }
         guard let vault = currentVault, let cursor = nextCursor, let filter = loadedFilter else { return }
         let generation = loadGeneration
-        let load = Task { @MainActor [weak self] in
+        let load = Task { [weak self] in
             guard let self else { return }
             await guarded {
                 let page = try await core.transactions(

@@ -46,7 +46,6 @@ struct VaultPermissions: Equatable {
     /// Owner only, and only with an account the server can share through.
     var mayShare = false
 
-    @MainActor
     init(vault: VaultView?, engine: SyncEngine?) {
         guard let vault else { return }
         mayRename = engine?.mayRenameVault(vault.id) ?? true

@@ -92,7 +92,7 @@ struct TopBar: View {
             Ink.bg
             WindowChrome(barHeight: Metrics.topBar, buttonsLeading: 14) { full in
                 // Not during the view update that may have called this.
-                Task { @MainActor in isFullScreen = full }
+                Task { isFullScreen = full }
             }
         }
     }

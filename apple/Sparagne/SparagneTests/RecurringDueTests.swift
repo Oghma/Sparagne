@@ -8,7 +8,6 @@ import Testing
 /// a template is waiting on, and what Registra, Salta and Registra tutte
 /// leave behind. Every assertion reads the core's own answer after the
 /// command, not the card.
-@MainActor
 struct RecurringDueTests {
     /// Vault `Main`, wallet `Cash` holding 100.00.
     private static func onboarded() async throws -> AppStore {

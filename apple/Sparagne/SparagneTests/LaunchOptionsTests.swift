@@ -44,7 +44,6 @@ struct LaunchOptionsTests {
 }
 
 /// Who signs the rows of a launch on another database.
-@MainActor
 struct LoggedOutAuthorTests {
     @Test("The name chosen in Settings, else the macOS account, whatever the account")
     func author() throws {

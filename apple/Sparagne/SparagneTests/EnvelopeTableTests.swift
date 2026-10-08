@@ -8,7 +8,6 @@ import Testing
 /// what an edited row sends back, what the empty line creates, and which cell
 /// a refused amount points at. The draft is a plain struct, so none of this
 /// needs a view.
-@MainActor
 struct EnvelopeTableTests {
     private static func makeStore() throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.envelopes.\(UUID().uuidString)"))

@@ -7,7 +7,6 @@ import Testing
 /// The ⌘K field's second grammar (`docs/v2/UI.md` §6): a line that starts
 /// with `>` is a command palette. `CommandPaletteModel` holds the actions,
 /// the filter and the selection, and none of it needs a window.
-@MainActor
 struct CommandPaletteTests {
     /// A box a test action can write to, so "it ran" is an observable fact.
     private final class Box {

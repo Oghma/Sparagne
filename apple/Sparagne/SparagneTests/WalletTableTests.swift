@@ -7,7 +7,6 @@ import Testing
 /// The draft behind the setup tab's wallet table (`docs/v2/UI.md` §2.3): what
 /// a renamed row sends back and what the empty line creates. The draft is a
 /// plain struct, so none of this needs a view.
-@MainActor
 struct WalletTableTests {
     private static func makeStore() throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.wallets.\(UUID().uuidString)"))

@@ -6,7 +6,6 @@ import Testing
 
 /// The list under a CATEGORY cell: the ranking on its own, then the model the
 /// cell drives, over a store with real categories.
-@MainActor
 struct CategoryCompletionTests {
     private static func category(_ name: String, system: Bool = false, archived: Bool = false) -> CategoryView {
         CategoryView(id: "id-\(name)", name: name, isSystem: system, archived: archived)
