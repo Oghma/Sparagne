@@ -21,6 +21,14 @@ struct LaunchOptionsTests {
         #expect(LaunchOptions.tab(in: [:]) == nil)
     }
 
+    @Test("The option names a sheet in any case; blank or missing, none")
+    func sheet() {
+        #expect(LaunchOptions.sheet(in: ["SparagneSheet": "Manage"]) == "manage")
+        #expect(LaunchOptions.sheet(in: ["SparagneSheet": " importStatement "]) == "importstatement")
+        #expect(LaunchOptions.sheet(in: ["SparagneSheet": " "]) == nil)
+        #expect(LaunchOptions.sheet(in: [:]) == nil)
+    }
+
     @Test("A name lands next to the real database, a path is taken as it is")
     func url() throws {
         let real = try CoreActor.databaseURL()

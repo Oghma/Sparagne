@@ -66,6 +66,9 @@ struct MainWindow: View {
     /// `nil` only before the database is open.
     let engine: SyncEngine?
     @State private var sheet: SheetKind?
+    /// `-SparagneSheet` opens its sheet once, not again on every vault switch.
+    @State private var openedLaunchSheet = false
+    @Environment(\.openSettings) private var openSettings
 
     /// The sheets the window can present. Associated values seed the sheet
     /// with the entity being renamed or edited.
@@ -129,6 +132,7 @@ struct MainWindow: View {
             .task {
                 if store.needsOnboarding { sheet = .vault }
             }
+            .task(id: store.currentVault?.id) { openLaunchSheet() }
             .onReceive(NotificationCenter.default.publisher(for: .openManagement)) { _ in
                 sheet = .manage
             }
@@ -203,6 +207,27 @@ struct MainWindow: View {
     /// The vault's name, for the Window menu.
     private var title: String {
         store.currentVault?.name ?? String(localized: "Sparagne")
+    }
+
+    /// The sheet `-SparagneSheet` names (`LaunchOptions.sheet`), once the
+    /// vault it is about is open.
+    private func openLaunchSheet() {
+        guard !openedLaunchSheet, let name = LaunchOptions.sheet, let vault = store.currentVault else { return }
+        openedLaunchSheet = true
+        switch name {
+        case "settings": openSettings()
+        case "vault": sheet = .vault
+        case "renamevault": sheet = .renameVault(vault)
+        case "deletevault": sheet = .deleteVault(vault)
+        case "leavevault": sheet = .leaveVault(vault)
+        case "share": sheet = .share(vault)
+        case "wallet": sheet = .wallet
+        case "envelope": sheet = .envelope
+        case "manage": sheet = .manage
+        case "importstatement": sheet = .importStatement
+        case "rejected": sheet = .rejected
+        default: break
+        }
     }
 
     @ViewBuilder
