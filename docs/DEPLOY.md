@@ -1,159 +1,159 @@
-# Sparagne v2 — Messa in produzione del server
+# Sparagne v2 — Running the server
 
-> 2026-09-12, aggiornato il 2026-09-23 (limiti ai tentativi, account da
-> riga di comando) e il 2026-10-08 (immagine pubblicata su GHCR, §3.2).
-> Riferimenti: `server/Dockerfile`, `server/deploy/`,
+> 2026-09-12, updated 2026-09-23 (login limits, accounts from the command
+> line) and 2026-10-08 (image on GHCR, §3.2; release binary, §3.3).
+> See also: `server/Dockerfile`, `server/deploy/`,
 > `.github/workflows/release.yml`.
 
-## 1. TLS obbligatorio
+## 1. TLS is required
 
-L'app macOS usa App Transport Security, che rifiuta `http://` verso
-qualunque host che non sia `localhost`. Il server quindi **sta sempre dietro
-un reverse proxy con certificato**: `server/deploy/compose.yml` include
-Caddy, che ottiene e rinnova il certificato Let's Encrypt da solo (bastano
-una porta 80/443 raggiungibile e un DNS che punta al dominio). L'URL che si
-digita nelle impostazioni dell'app è `https://il-tuo-dominio`, mai un IP o
-`http://`.
+The macOS app uses App Transport Security, which refuses `http://` to any
+host other than `localhost`. The server therefore **always sits behind a
+reverse proxy with a certificate**: `server/deploy/compose.yml` includes
+Caddy, which obtains and renews a Let's Encrypt certificate on its own (all
+it needs is a reachable port 80/443 and a DNS record pointing at the
+domain). The URL typed in the app's settings is `https://your-domain`, never
+`http://`; on a local network without a domain, `https://<address>` with a
+certificate from Caddy's internal CA (§3.3).
 
-## 2. Variabili d'ambiente
+## 2. Environment variables
 
-| Variabile | Default (nel container) | Significato |
+| Variable | Default (in the container) | Meaning |
 |---|---|---|
-| `SPARAGNE_BIND` | `0.0.0.0:3000` | indirizzo:porta di ascolto. Nell'immagine Docker è già `0.0.0.0:3000` (Caddy fa da front); su bare metal si preferisce `127.0.0.1:3000` col proxy sulla stessa macchina. |
-| `SPARAGNE_DATA_DIR` | `/data` | cartella con `vaults.sqlite` e `server.sqlite`. |
-| `SPARAGNE_ALLOW_REGISTRATION` | `true` | se `false`, `POST /auth/register` risponde `403 registration_disabled`. |
-| `SPARAGNE_TOKEN_TTL_DAYS` | `30` | validità di un token di login. |
-| `SPARAGNE_TRUST_PROXY` | `false` (`true` in `compose.yml`) | se `true`, l'indirizzo del client è l'ultima voce di `X-Forwarded-For` invece del peer TCP (§2.1). |
-| `SPARAGNE_LOGIN_MAX_FAILURES` | `5` | login falliti per uno username dentro la finestra, dopo i quali lo username è bloccato per un'altra finestra; `0` toglie il limite. |
-| `SPARAGNE_LOGIN_WINDOW_SECS` | `900` | la finestra dei due limiti sul login, in secondi. |
-| `SPARAGNE_IP_MAX_FAILURES` | `30` | login falliti da un indirizzo dentro la finestra; `0` toglie il limite. |
-| `RUST_LOG` | (vuoto, nessun filtro esplicito) | sintassi `tracing-subscriber` env-filter, es. `info` o `sparagne_server=debug,info`. |
+| `SPARAGNE_BIND` | `0.0.0.0:3000` | address:port to listen on. The Docker image already sets `0.0.0.0:3000` (Caddy is in front); without Docker, prefer `127.0.0.1:3000` with the proxy on the same machine. |
+| `SPARAGNE_DATA_DIR` | `/data` | directory holding `vaults.sqlite` and `server.sqlite`. |
+| `SPARAGNE_ALLOW_REGISTRATION` | `true` | when `false`, `POST /auth/register` answers `403 registration_disabled`. |
+| `SPARAGNE_TOKEN_TTL_DAYS` | `30` | how long a login token stays valid. |
+| `SPARAGNE_TRUST_PROXY` | `false` (`true` in `compose.yml`) | when `true`, the client's address is the last entry of `X-Forwarded-For` instead of the TCP peer (§2.1). |
+| `SPARAGNE_LOGIN_MAX_FAILURES` | `5` | failed logins for one username within the window, after which the username is locked for another window; `0` removes the limit. |
+| `SPARAGNE_LOGIN_WINDOW_SECS` | `900` | the window of the two login limits, in seconds. |
+| `SPARAGNE_IP_MAX_FAILURES` | `30` | failed logins from one address within the window; `0` removes the limit. |
+| `RUST_LOG` | (empty, no explicit filter) | `tracing-subscriber` env-filter syntax, e.g. `info` or `sparagne_server=debug,info`. |
 
-Il TLS lo fa il reverse proxy; i limiti ai tentativi li fa il server stesso
-(§2.1), il proxy non ne ha.
+TLS is the reverse proxy's job; the login limits are the server's own
+(§2.1), the proxy has none.
 
-### 2.1 Limiti ai tentativi
+### 2.1 Login limits
 
-Il server frena chi prova a indovinare una password, in memoria (un riavvio
-li azzera) e prima di calcolare qualsiasi hash:
+The server slows down anyone guessing a password, in memory (a restart
+resets the counts) and before computing any hash:
 
-- **Per username**: 5 login falliti in 15 minuti bloccano lo username per 15
-  minuti. Mentre è bloccato, anche la password giusta riceve `429
-  too_many_requests` con l'header `Retry-After` (secondi). Un login riuscito
-  azzera il conteggio. Uno username che non esiste si blocca allo stesso
-  modo, così il blocco non rivela quali account ci sono; anche la password
-  attuale sbagliata in `POST /auth/password` conta come un login fallito.
-- **Per indirizzo**: 30 login falliti in 15 minuti dallo stesso indirizzo
-  (per IPv6, dalla stessa /64) → `429`, qualunque sia lo username.
-- **Registrazione**: al massimo 10 tentativi l'ora per indirizzo, validi o no.
+- **Per username**: 5 failed logins in 15 minutes lock the username for 15
+  minutes. While it is locked, even the right password gets `429
+  too_many_requests` with a `Retry-After` header (seconds). A successful
+  login resets the count. A username that does not exist locks the same
+  way, so the lock does not reveal which accounts exist; a wrong current
+  password in `POST /auth/password` also counts as a failed login.
+- **Per address**: 30 failed logins in 15 minutes from the same address
+  (for IPv6, the same /64) → `429`, whatever the username.
+- **Registration**: at most 10 attempts an hour per address, valid or not.
 
-**Quale indirizzo.** Senza proxy è il peer della connessione TCP. Dietro un
-proxy il peer è sempre il proxy, e tutti i client finirebbero nello stesso
-conteggio: con `SPARAGNE_TRUST_PROXY=true` il server usa invece l'**ultima**
-voce di `X-Forwarded-For`, quella che il proxy aggiunge per conto suo e che
-il client non può falsificare (le voci più a sinistra le può scrivere
-chiunque). `compose.yml` lo accende perché la porta 3000 non è pubblicata e
-solo Caddy raggiunge il container; Caddy imposta `X-Forwarded-For` da solo.
-Su bare metal va acceso solo se il server ascolta su `127.0.0.1` (o su una
-porta che il firewall apre al solo proxy) e il proxy aggiunge l'indirizzo
-del client: Caddy lo fa di default, nginx con `proxy_set_header
-X-Forwarded-For $proxy_add_x_forwarded_for;`. **Mai** con la porta del
-server raggiungibile direttamente: chiunque sceglierebbe il proprio
-indirizzo e il limite per indirizzo non varrebbe più nulla (quello per
-username resta).
+**Which address.** Without a proxy it is the TCP peer. Behind a proxy the
+peer is always the proxy, and every client would share one count: with
+`SPARAGNE_TRUST_PROXY=true` the server uses the **last** entry of
+`X-Forwarded-For` instead, the one the proxy appends itself and the client
+cannot forge (anyone can write the entries further left). `compose.yml`
+turns it on because port 3000 is not published and only Caddy reaches the
+container; Caddy sets `X-Forwarded-For` by itself. Without Docker, turn it
+on only when the server listens on `127.0.0.1` (or on a port the firewall
+opens to the proxy alone) and the proxy appends the client's address: Caddy
+does by default, nginx with `proxy_set_header X-Forwarded-For
+$proxy_add_x_forwarded_for;`. **Never** with the server's port reachable
+directly: anyone could pick their own address and the per-address limit
+would be worthless (the per-username one stays).
 
-## 3. Primo avvio
+## 3. First start
 
-1. `cd server/deploy && cp .env.example .env`, impostare `DOMAIN`,
-   `SPARAGNE_VERSION` (la release da usare, §3.2) e le altre variabili.
-2. In `Caddyfile`, sostituire `sparagne.example.com` col dominio vero.
-3. `docker compose up -d` (scarica `ghcr.io/oghma/sparagne-server` alla
-   versione di `.env` e avvia `sparagne` + `caddy`). Sull'host bastano
-   `server/deploy/` e Docker: niente sorgenti né Rust.
-4. Verificare `curl https://il-tuo-dominio/health` → `{"status":"ok"}`.
-5. Creare gli account che servono: con `SPARAGNE_ALLOW_REGISTRATION=true`
-   (default) dalla schermata di registrazione dell'app o da `POST
-   /auth/register`; in ogni caso con la CLI (§3.1).
-6. Chiudere la registrazione: in `.env` impostare
-   `SPARAGNE_ALLOW_REGISTRATION=false`, poi `docker compose up -d` di nuovo
-   (ricrea solo il container `sparagne` con la nuova variabile). Da qui in
-   poi i nuovi account si creano solo con la CLI (§3.1). **Condividere un
-   vault non crea account**: `PUT /vaults/{id}/members` con uno username che
-   non esiste risponde `404 not_found`, quindi l'account va creato prima.
+1. `cd server/deploy && cp .env.example .env`, then set `DOMAIN`,
+   `SPARAGNE_VERSION` (the release to run, §3.2) and the other variables.
+2. In `Caddyfile`, replace `sparagne.example.com` with the real domain.
+3. `docker compose up -d` (pulls `ghcr.io/oghma/sparagne-server` at the
+   version in `.env` and starts `sparagne` + `caddy`). The host only needs
+   `server/deploy/` and Docker: no sources, no Rust.
+4. Check `curl https://your-domain/health` → `{"status":"ok"}`.
+5. Create the accounts you need: with `SPARAGNE_ALLOW_REGISTRATION=true`
+   (the default) from the app's sign-up screen or `POST /auth/register`; in
+   any case with the CLI (§3.1).
+6. Close registration: set `SPARAGNE_ALLOW_REGISTRATION=false` in `.env`,
+   then `docker compose up -d` again (it recreates only the `sparagne`
+   container with the new variable). From then on, new accounts are created
+   with the CLI only (§3.1). **Sharing a vault does not create accounts**:
+   `PUT /vaults/{id}/members` with a username that does not exist answers
+   `404 not_found`, so the account has to exist first.
 
-### 3.1 Account da riga di comando
+### 3.1 Accounts from the command line
 
-Lo stesso binario gestisce gli account: `sparagne-server` (o
-`sparagne-server serve`) avvia il server, `sparagne-server user …` lavora
-sugli account e esce. Apre solo `server.sqlite` nella cartella dei dati
-(`--data-dir`, altrimenti `SPARAGNE_DATA_DIR`, altrimenti `./data`) e rifiuta
-una cartella che non lo contiene invece di crearne uno vuoto. Si usa col
-server acceso: SQLite in WAL con un busy timeout regge i due processi, e un
-token revocato smette di funzionare alla richiesta successiva. Ignora
-`SPARAGNE_ALLOW_REGISTRATION`: è proprio il modo di creare account a
-registrazione chiusa.
+The same binary manages the accounts: `sparagne-server` (or
+`sparagne-server serve`) runs the server, `sparagne-server user …` works on
+the accounts and exits. It opens only `server.sqlite` in the data directory
+(`--data-dir`, else `SPARAGNE_DATA_DIR`, else `./data`) and refuses a
+directory that does not hold one instead of creating an empty one. It is
+meant for a running server: SQLite in WAL mode with a busy timeout copes
+with the two processes, and a revoked token stops working on its next
+request. It ignores `SPARAGNE_ALLOW_REGISTRATION`: it is precisely the way
+to create accounts with registration closed.
 
-| Comando | Effetto |
+| Command | Effect |
 |---|---|
-| `user add <nome>` | crea l'account; password dalla prima riga di stdin |
-| `user passwd <nome>` | nuova password dalla prima riga di stdin, e revoca tutti i token dell'account (va rifatto il login ovunque) |
-| `user list` | un account per riga: username, tab, data di creazione (UTC) |
-| `user revoke <nome>` | revoca tutti i token dell'account, la password resta |
+| `user add <name>` | creates the account; password from the first line of stdin |
+| `user passwd <name>` | new password from the first line of stdin, and revokes every token of the account (it has to log in again everywhere) |
+| `user list` | one account per line: username, tab, creation date (UTC) |
+| `user revoke <name>` | revokes every token of the account, the password stays |
 
-Username e password seguono le regole della registrazione (username 3-32
-caratteri `[a-z0-9_.-]`, portato in minuscolo; password di almeno 8
-caratteri). La password non è mai un argomento, così non finisce nella
-history della shell né in `ps`. Con Docker Compose, da `server/deploy/`
-(`-T` serve a passare stdin a `exec`):
+Usernames and passwords follow the registration rules (username 3-32
+characters of `[a-z0-9_.-]`, lowercased; password at least 8 characters).
+The password is never an argument, so it ends up neither in the shell's
+history nor in `ps`. With Docker Compose, from `server/deploy/` (`-T` lets
+`exec` pass stdin through):
 
 ```sh
-read -rs PW    # digitata senza eco
+read -rs PW    # typed without echo
 printf '%s\n' "$PW" | docker compose exec -T sparagne sparagne-server user add alice
 printf '%s\n' "$PW" | docker compose exec -T sparagne sparagne-server user passwd alice
 docker compose exec sparagne sparagne-server user list
 docker compose exec sparagne sparagne-server user revoke alice
 ```
 
-Su bare metal, come utente del servizio (così i file `-wal`/`-shm` di SQLite
-restano suoi):
+Without Docker, as the service's user (so SQLite's `-wal`/`-shm` files stay
+its own); `runuser` needs root and is there even where `sudo` is not:
 
 ```sh
-printf '%s\n' "$PW" | sudo -u sparagne env SPARAGNE_DATA_DIR=/var/lib/sparagne \
+printf '%s\n' "$PW" | runuser -u sparagne -- env SPARAGNE_DATA_DIR=/var/lib/sparagne \
     /usr/local/bin/sparagne-server user add alice
 ```
 
-In caso di errore il comando scrive il motivo su stderr ed esce con 1 (2 per
-un comando scritto male). Dall'app un utente cambia la propria password con
-`POST /auth/password`, che chiede quella attuale.
+On an error the command prints the reason on stderr and exits with 1 (2
+for a malformed command). From the app, a user changes their own password
+with `POST /auth/password`, which asks for the current one.
 
-### 3.2 L'immagine e da dove viene
+### 3.2 The image and where it comes from
 
-Ogni tag di versione (`v2.0.0`) pubblica l'immagine per linux/amd64 e
-linux/arm64 (`.github/workflows/release.yml`), con i tag `2.0.0`, `2.0` e
-`latest`; una pre-release (`v2.1.0-beta.1`) solo col proprio. `compose.yml`
-la prende per numero di versione, mai `latest`, così un aggiornamento è
-una scelta fatta dopo un backup (§6).
+Every version tag (`v2.0.0`) publishes the image for linux/amd64 and
+linux/arm64 (`.github/workflows/release.yml`), tagged `2.0.0`, `2.0` and
+`latest`; a pre-release (`v2.1.0-beta.1`) only under its own tag.
+`compose.yml` takes it by version number, never `latest`, so an upgrade is
+a choice made after a backup (§6).
 
-Il workflow allega all'immagine un'attestazione di provenienza firmata da
-GitHub: dice che è stata costruita da quel workflow, su quel commit del
-repository. Prima di usarla (o di aggiornare):
+The workflow attaches to the image a provenance attestation signed by
+GitHub: it says the image was built by that workflow, from that commit of
+the repository. Before using it (or upgrading):
 
 ```sh
 gh attestation verify oci://ghcr.io/oghma/sparagne-server:2.0.0 --repo Oghma/Sparagne
 ```
 
-Per costruirla invece dai sorgenti (una modifica non ancora rilasciata, un
-host che non deve scaricare nulla): dal checkout del repository,
+To build it from the sources instead (a change not released yet, a host
+that must not download anything): from a checkout of the repository,
 `docker compose -f compose.yml -f compose.build.yml up -d --build`
 (`server/deploy/compose.build.yml`).
 
-### 3.3 Senza Docker: il binario della release (LXC, VM, bare metal)
+### 3.3 Without Docker: the release binary (LXC, VM, bare metal)
 
-Ogni release allega anche il server come binario Linux statico (musl, con
-SQLite dentro), per amd64 e arm64, così gira su qualunque distribuzione:
-`sparagne-server-<versione>-x86_64-unknown-linux-musl.tar.gz` (o
-`aarch64-…`), con il binario, l'unit systemd, `.env.example` e `backup.sh`
-(§4), più il suo `.sha256`.
+Every release also carries the server as a static Linux binary (musl, with
+SQLite built in), for amd64 and arm64, so it runs on any distribution:
+`sparagne-server-<version>-x86_64-unknown-linux-musl.tar.gz` (or
+`aarch64-…`), holding the binary, the systemd unit, `.env.example` and
+`backup.sh` (§4), plus its `.sha256`.
 
 ```sh
 V=2.0.0-beta.1; T=x86_64-unknown-linux-musl
@@ -164,18 +164,19 @@ sha256sum -c "sparagne-server-$V-$T.tar.gz.sha256"
 tar xzf "sparagne-server-$V-$T.tar.gz"
 ```
 
-Anche l'archivio ha la sua attestazione di provenienza: da una macchina con
+The archive has its own provenance attestation too: on a machine with
 `gh`, `gh attestation verify sparagne-server-$V-$T.tar.gz --repo
 Oghma/Sparagne`.
 
-Poi `sparagne-server.service`, nell'archivio: il commento in testa elenca i
-comandi (utente dedicato, cartella dei dati, `/etc/sparagne.env`, avvio). Il
-server ascolta su `127.0.0.1:3000`; il reverse proxy con TLS (§1) è un
-servizio a parte, sulla stessa macchina o su un'altra, e per
-`SPARAGNE_TRUST_PROXY` vale §2.1.
+Then `sparagne-server.service`, in the archive: the comment at its top
+lists the commands (dedicated user, data directory, `/etc/sparagne.env`,
+start), to run as root (without `sudo` where you already are root, as in a
+container). The server listens on `127.0.0.1:3000`; the reverse proxy with
+TLS (§1) is a separate service, on the same machine or another one, and
+§2.1 applies to `SPARAGNE_TRUST_PROXY`.
 
-**Solo in rete locale, senza dominio.** Caddy sulla stessa macchina dà un
-certificato anche a un indirizzo IP, firmato dalla propria CA interna:
+**Local network only, no domain.** Caddy on the same machine also issues a
+certificate for an IP address, signed by its own internal CA:
 
 ```
 https://192.168.178.81 {
@@ -183,135 +184,131 @@ https://192.168.178.81 {
 }
 ```
 
-La radice di quella CA (col pacchetto Debian:
-`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`) va resa
-fidata su ogni Mac che sincronizza: `sudo security add-trusted-cert -d -r
-trustRoot -k /Library/Keychains/System.keychain root.crt`. Nell'app l'URL è
-allora `https://192.168.178.81`. Il resto della pagina vale uguale; quando
-arriverà un dominio, basta cambiare la prima riga del Caddyfile.
+The root of that CA (with the Debian package:
+`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`) has to
+be trusted on every Mac that syncs: `sudo security add-trusted-cert -d -r
+trustRoot -k /Library/Keychains/System.keychain root.crt`. The app's URL is
+then `https://192.168.178.81`. The rest of this page applies unchanged;
+once there is a domain, only the Caddyfile's first line changes.
 
 ## 4. Backup
 
-`server/deploy/backup.sh` fa un backup online (nessun downtime) di
-`vaults.sqlite` e `server.sqlite` con `sqlite3 <db> ".backup '<dest>'"`,
-verifica l'integrità del dump con `PRAGMA integrity_check`, e applica una
-retention in giorni.
+`backup.sh` (`server/deploy/`, and in the release archive) takes an online
+backup (no downtime) of `vaults.sqlite` and `server.sqlite` with `sqlite3
+<db> ".backup '<dest>'"`, checks the dump's integrity with `PRAGMA
+integrity_check`, and applies a retention in days.
 
-- **Docker Compose**: lo script e `sqlite3` sono già dentro l'immagine
-  (`server/Dockerfile`); `compose.yml` monta `./backups` sull'host su
-  `/backups` nel container. Da `server/deploy/`:
+- **Docker Compose**: the script and `sqlite3` are already in the image
+  (`server/Dockerfile`); `compose.yml` mounts `./backups` on the host at
+  `/backups` in the container. From `server/deploy/`:
 
   ```sh
   docker compose exec sparagne backup.sh
   ```
 
-  Il dump compare direttamente in `server/deploy/backups/<timestamp>/`
-  sull'host. Per la retention: `docker compose exec sparagne env
+  The dump appears directly in `server/deploy/backups/<timestamp>/` on the
+  host. For the retention: `docker compose exec sparagne env
   RETENTION_DAYS=30 backup.sh`.
 
-- **Bare metal**:
+- **Without Docker** (it needs the `sqlite3` command):
 
   ```sh
   DATA_DIR=/var/lib/sparagne BACKUP_DIR=/var/backups/sparagne \
-      server/deploy/backup.sh
+      backup.sh
   ```
 
-Schedularlo con cron o un timer systemd, secondo la piattaforma.
+Schedule it with cron or a systemd timer, whichever the platform has.
 
-## 5. Ripristino
+## 5. Restore
 
-1. Fermare il server (`docker compose stop sparagne`, oppure `systemctl stop
-   sparagne-server` su bare metal): i due file SQLite non vanno toccati
-   mentre il processo scrive.
-2. Copiare `vaults.sqlite` e `server.sqlite` dal backup scelto sopra i file
-   in `SPARAGNE_DATA_DIR`, sovrascrivendoli (togliere anche eventuali
-   `-wal`/`-shm` residui dei vecchi file, così SQLite riparte da uno stato
-   pulito).
-3. Riavviare il server.
+1. Stop the server (`docker compose stop sparagne`, or `systemctl stop
+   sparagne-server` without Docker): the two SQLite files must not be
+   touched while the process writes.
+2. Copy `vaults.sqlite` and `server.sqlite` from the chosen backup over the
+   files in `SPARAGNE_DATA_DIR` (also remove any `-wal`/`-shm` left over
+   from the old files, so SQLite starts from a clean state).
+3. Start the server again.
 
-Un dump di `.backup` è un file SQLite completo e coerente: nessun replay o
-migrazione manuale serve per usarlo, a parte l'avvio normale (§6).
+A `.backup` dump is a complete, consistent SQLite file: it needs no replay
+or manual migration, only the normal start (§6).
 
-## 6. Aggiornamento
+## 6. Upgrading
 
-1. Backup (§4), poi:
-   - Compose: in `.env` portare `SPARAGNE_VERSION` alla release nuova
-     (verificandola, §3.2), poi `docker compose pull sparagne && docker
-     compose up -d sparagne` (Caddy resta com'è). Da un'installazione che
-     costruiva l'immagine dai sorgenti, prima della 2.0.0: aggiornare anche
-     `compose.yml` e aggiungere `SPARAGNE_VERSION` a `.env` (`.env.example`).
-   - Compose dai sorgenti: `git pull`, poi `docker compose -f compose.yml -f
-     compose.build.yml up -d --build sparagne`.
-   - Senza Docker: scaricare e verificare l'archivio della release nuova
-     (§3.3), `install -m 755 sparagne-server /usr/local/bin/sparagne-server`,
+1. Back up (§4), then:
+   - Compose: in `.env` set `SPARAGNE_VERSION` to the new release (after
+     verifying it, §3.2), then `docker compose pull sparagne && docker
+     compose up -d sparagne` (Caddy stays as it is). From an install that
+     built the image from the sources, before 2.0.0: also update
+     `compose.yml` and add `SPARAGNE_VERSION` to `.env` (`.env.example`).
+   - Compose from the sources: `git pull`, then `docker compose -f
+     compose.yml -f compose.build.yml up -d --build sparagne`.
+   - Without Docker: download and verify the new release's archive (§3.3),
+     `install -m 755 sparagne-server /usr/local/bin/sparagne-server`,
      `systemctl restart sparagne-server`.
-2. Lo schema di `vaults.sqlite` **si aggiorna da solo all'avvio**: `Core::open`
-   (`core/src/store.rs`) legge `PRAGMA user_version`, applica la migrazione
-   mancante se la versione sul disco è più vecchia della versione del codice
-   e aggiorna `user_version` di conseguenza, nella stessa apertura di
-   connessione. Non c'è un comando di migrazione separato da lanciare: basta
-   avviare il binario nuovo sui file esistenti. Se `user_version` sul disco
-   fosse più recente della versione che il binario conosce (upgrade poi
-   downgrade), l'apertura fallisce con un errore esplicito invece di
-   corrompere i dati: in quel caso ripristinare un binario aggiornato o un
-   backup precedente.
-3. Fare comunque un backup (§4) prima di un aggiornamento importante.
+2. The schema of `vaults.sqlite` **upgrades itself at start**: `Core::open`
+   (`core/src/store.rs`) reads `PRAGMA user_version`, applies the missing
+   migration when the version on disk is older than the code's, and updates
+   `user_version` accordingly, in the same opening of the connection. There
+   is no separate migration command to run: starting the new binary on the
+   existing files is enough. If the `user_version` on disk were newer than
+   the one the binary knows (an upgrade, then a downgrade), opening fails
+   with an explicit error instead of corrupting the data: in that case put
+   back an up-to-date binary or restore an earlier backup.
+3. Back up (§4) before any major upgrade regardless.
 
-### 6.1 Passaggio allo schema v3
+### 6.1 Moving to schema v3
 
-La versione del 2026-09-23 porta lo schema del core alla versione 3 (i nomi
-dei vault diventano etichette e possono ripetersi) e aggiunge all'API il
-cambio password, l'uscita da un vault e i `429` dei limiti (§2.1). L'ordine
-conta:
+The 2026-09-23 version takes the core's schema to version 3 (vault names
+become labels and may repeat) and adds password changes, leaving a vault
+and the login limits' `429` to the API (§2.1). The order matters:
 
-1. **Backup del server** (§4): `docker compose exec sparagne backup.sh`, o
-   `backup.sh` su bare metal.
-2. **Prima tutte le app, poi il server.** Aggiornare l'app su ogni Mac che
-   sincronizza, e solo dopo il server (§6). Al contrario, un'app vecchia che
-   riceve col pull due vault con lo stesso nome (il server nuovo li accetta)
-   diverge dal server.
-3. **Il ritorno indietro è un ripristino.** Un database v3 non si apre con un
-   binario o un'app della versione precedente (l'apertura fallisce, §6 punto
-   2): tornare indietro vuol dire rimettere il binario vecchio **e**
-   ripristinare (§5) il backup del punto 1, perdendo quel che è arrivato al
-   server nel frattempo. Lo stesso vale per il database locale di un'app già
-   aggiornata.
+1. **Back up the server** (§4): `docker compose exec sparagne backup.sh`,
+   or `backup.sh` without Docker.
+2. **Every app first, then the server.** Upgrade the app on every Mac that
+   syncs, and only then the server (§6). The other way round, an old app
+   that pulls two vaults with the same name (the new server accepts them)
+   diverges from the server.
+3. **Going back is a restore.** A v3 database does not open with a binary
+   or an app of the previous version (opening fails, §6 point 2): going
+   back means putting the old binary back **and** restoring (§5) the backup
+   of point 1, losing what reached the server in the meantime. The same
+   holds for the local database of an app already upgraded.
 
-### 6.2 Passaggio allo schema v4 (persona e titolare)
+### 6.2 Moving to schema v4 (person and owner)
 
-La versione del 2026-10-08 porta lo schema del core alla versione 4: una
-transazione ha una **persona** distinta dal suo autore (`transactions.person`)
-e un modello di ricorrenza ha un **titolare** (`recurring_templates.owner`).
-Le righe esistenti si riempiono da sole con il loro autore. Il server inoltre
-rifiuta, comando per comando, un comando che nomina come persona o titolare
-qualcuno che non è membro del vault (`not_a_member`). L'ordine
-conta, ed è **l'inverso di §6.1**:
+The 2026-10-08 version takes the core's schema to version 4: a transaction
+has a **person** distinct from its author (`transactions.person`) and a
+recurring template has an **owner** (`recurring_templates.owner`). Existing
+rows fill themselves in with their author. The server also refuses, command
+by command, a command naming as person or owner someone who is not a member
+of the vault (`not_a_member`). The order matters, and it is **the reverse
+of §6.1**:
 
-1. **Backup del server** (§4): `docker compose exec sparagne backup.sh`, o
-   `backup.sh` su bare metal.
-2. **Prima il server, poi le app.** Un server vecchio, quando risponde a un
-   pull, riserializza i comandi e **scarta in silenzio** i campi nuovi: la
-   persona e il titolare spariscono dal log che gli altri Mac scaricano. Rifiuta
-   inoltre una modifica che cambia solo la persona (per lui è una patch vuota).
-3. **Poi ogni app, subito.** Un'app vecchia non conosce i campi nuovi: non
-   li mostra e, scaricandoli, li perde. Aggiornare tutti i Mac che
-   sincronizzano appena il server è su.
-4. **Nessuno registra "per conto di" finché ogni Mac non è aggiornato.**
-   Finché ne resta uno vecchio, una persona diversa dall'autore o un titolare
-   scelto lì non arriva a quel Mac, e lì la riga risulta dell'autore.
-5. **Il ritorno indietro è un ripristino.** Un database v4 non si apre con un
-   binario o un'app della versione precedente (§6 punto 2): tornare indietro
-   vuol dire rimettere il binario vecchio **e** ripristinare (§5) il backup
-   del punto 1, perdendo quel che è arrivato al server nel frattempo. Lo
-   stesso vale per il database locale di un'app già aggiornata.
+1. **Back up the server** (§4): `docker compose exec sparagne backup.sh`,
+   or `backup.sh` without Docker.
+2. **The server first, then the apps.** An old server, answering a pull,
+   re-serializes the commands and **silently drops** the new fields: the
+   person and the owner vanish from the log the other Macs download. It also
+   refuses an edit that changes only the person (to it, an empty patch).
+3. **Then every app, right away.** An old app does not know the new fields:
+   it does not show them and, downloading them, loses them. Upgrade every
+   Mac that syncs as soon as the server is up.
+4. **Nobody records "on behalf of" until every Mac is upgraded.** While an
+   old one remains, a person other than the author, or an owner chosen
+   there, does not reach that Mac, and there the row shows as the author's.
+5. **Going back is a restore.** A v4 database does not open with a binary
+   or an app of the previous version (§6 point 2): going back means putting
+   the old binary back **and** restoring (§5) the backup of point 1, losing
+   what reached the server in the meantime. The same holds for the local
+   database of an app already upgraded.
 
-## 7. Log e healthcheck
+## 7. Logs and health check
 
-- Log strutturati su stdout via `tracing`, controllati da `RUST_LOG`
-  (`docker compose logs -f sparagne`, oppure `journalctl -u
-  sparagne-server -f` su bare metal).
-- `GET /health` risponde `{"status":"ok"}` senza autenticazione: è anche
-  l'`HEALTHCHECK` dell'immagine Docker (`docker ps` mostra `healthy`).
-- All'avvio la riga `listening` riporta la configurazione effettiva, limiti
-  e `trust_proxy` compresi: è il posto dove controllare che il proxy sia
-  considerato come ci si aspetta.
+- Structured logs on stdout through `tracing`, controlled by `RUST_LOG`
+  (`docker compose logs -f sparagne`, or `journalctl -u sparagne-server -f`
+  without Docker).
+- `GET /health` answers `{"status":"ok"}` without authentication: it is
+  also the Docker image's `HEALTHCHECK` (`docker ps` shows `healthy`).
+- At start, the `listening` line reports the effective configuration,
+  limits and `trust_proxy` included: that is where to check that the proxy
+  is seen the way it should be.
