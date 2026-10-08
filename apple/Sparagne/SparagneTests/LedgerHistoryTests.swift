@@ -7,7 +7,6 @@ import Testing
 /// Edit ▸ Undo and Redo over the ledger's writes (`LedgerHistory`), driven the
 /// way the menu drives them: `undo()` and `redo()` on an `UndoManager`, then
 /// the store once the queued writes have landed.
-@MainActor
 struct LedgerHistoryTests {
     /// Vault `Casa` with a wallet, and an undo manager attached after the
     /// setup, so the stack starts empty.

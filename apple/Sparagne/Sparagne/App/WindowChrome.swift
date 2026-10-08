@@ -107,8 +107,8 @@ final class WindowChromeView: NSView {
             return
         default:
             // "Maximize", which AppKit registers as the default when the
-            // user never chose. "Fill" (macOS 15 and later) has no public
-            // API, so it zooms as well.
+            // user never chose. "Fill" has no public API, so it zooms as
+            // well.
             window.performZoom(nil)
         }
     }
@@ -220,7 +220,7 @@ final class WindowChromeView: NSView {
         else { return }
         observeTitleBarViews(buttons + [titlebar, container])
         placing = true
-        moveButtons(buttons, in: titlebar, container: container, frameView: frameView)
+        moveButtons(buttons, frameView: frameView)
         placing = false
         if deferredCheck, !checkScheduled {
             checkScheduled = true
@@ -241,7 +241,7 @@ final class WindowChromeView: NSView {
     /// container moves. Nor does making the container and its title bar view
     /// as tall as the bar, after Electron's `trafficLightPosition`: AppKit
     /// sets the title bar view back to its own height on every layout.
-    private func moveButtons(_ buttons: [NSButton], in titlebar: NSView, container: NSView, frameView: NSView) {
+    private func moveButtons(_ buttons: [NSButton], frameView: NSView) {
         if buttonSpacing == nil {
             buttonSpacing = buttons[1].frame.minX - buttons[0].frame.minX
         }

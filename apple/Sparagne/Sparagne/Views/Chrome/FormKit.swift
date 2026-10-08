@@ -331,37 +331,6 @@ struct FormSwitch: View {
     }
 }
 
-/// A yes-or-no setting: the switch in the control column with its sentence
-/// after it, like a checkbox. The sentence is too long for the label column
-/// and reads better beside what it turns on.
-struct FormToggleRow: View {
-    let label: String
-    @Binding var isOn: Bool
-
-    @Environment(\.formMetrics) private var metrics
-
-    init(_ label: String, isOn: Binding<Bool>) {
-        self.label = label
-        _isOn = isOn
-    }
-
-    var body: some View {
-        FormRow("") {
-            HStack(spacing: 8) {
-                FormSwitch(label: label, isOn: isOn) { isOn = $0 }
-                // The switch already says it to VoiceOver; the sentence is a
-                // bigger target for the pointer.
-                Text(label)
-                    .font(Face.ui(metrics.fontSize))
-                    .foregroundStyle(Ink.text)
-                    .contentShape(Rectangle())
-                    .onTapGesture { isOn.toggle() }
-                    .accessibilityHidden(true)
-            }
-        }
-    }
-}
-
 // MARK: - Sheets
 
 /// A sheet of the window: its title at 15 semibold with an optional line in

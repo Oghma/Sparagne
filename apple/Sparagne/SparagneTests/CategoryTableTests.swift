@@ -7,7 +7,6 @@ import Testing
 /// The rules of the CATEGORIE table (`docs/v2/UI.md` §2.3): what a typed row
 /// sends to the core, and which rows can be typed at all. The diff lives in
 /// `CategoryDraft`, so none of this needs a view.
-@MainActor
 struct CategoryTableTests {
     private static func makeStore() throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.categories.\(UUID().uuidString)"))

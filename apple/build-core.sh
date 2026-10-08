@@ -9,9 +9,9 @@
 
 set -euo pipefail
 
-# Rust targets to build. Add "x86_64-apple-darwin" here for Intel Macs; the
-# slices are merged with lipo into the single macOS slice of the XCFramework.
-TARGETS=(aarch64-apple-darwin)
+# The one Rust target: macOS 27, the app's minimum, runs only on Apple
+# silicon, so the XCFramework has a single arm64 slice.
+TARGET=aarch64-apple-darwin
 
 CRATE=sparagne_core
 LIB_FILE="lib${CRATE}.a"
@@ -26,35 +26,21 @@ swift_out="${package_dir}/Sources/${MODULE}/${MODULE}.swift"
 
 cd "${root_dir}"
 
-installed_targets="$(rustup target list --installed)"
-for target in "${TARGETS[@]}"; do
-    if ! grep -qx "${target}" <<<"${installed_targets}"; then
-        echo "error: Rust target '${target}' is not installed." >&2
-        echo "       Run: rustup target add ${target}" >&2
-        exit 1
-    fi
-done
+if ! rustup target list --installed | grep -qx "${TARGET}"; then
+    echo "error: Rust target '${TARGET}' is not installed." >&2
+    echo "       Run: rustup target add ${TARGET}" >&2
+    exit 1
+fi
 
 work_dir="$(mktemp -d)"
 trap 'rm -rf "${work_dir}"' EXIT
 
-echo "==> Building ${CRATE} (release) for: ${TARGETS[*]}"
+echo "==> Building ${CRATE} (release) for: ${TARGET}"
 # Must match `platforms:` in Package.swift, or the linker warns that the
 # archive was built for a newer macOS than the one being linked against.
 export MACOSX_DEPLOYMENT_TARGET=27.0
-slices=()
-for target in "${TARGETS[@]}"; do
-    cargo build --release --target "${target}" --package "${CRATE}"
-    slices+=("${root_dir}/target/${target}/release/${LIB_FILE}")
-done
-
-if [[ ${#slices[@]} -eq 1 ]]; then
-    library="${slices[0]}"
-else
-    echo "==> Merging ${#slices[@]} slices with lipo"
-    library="${work_dir}/${LIB_FILE}"
-    lipo -create "${slices[@]}" -output "${library}"
-fi
+cargo build --release --target "${TARGET}" --package "${CRATE}"
+library="${root_dir}/target/${TARGET}/release/${LIB_FILE}"
 
 echo "==> Generating Swift bindings"
 generated="${work_dir}/generated"

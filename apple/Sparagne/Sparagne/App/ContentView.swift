@@ -3,7 +3,7 @@ import SparagneCore
 
 /// Opens the database, then hands the window over to `MainWindow`. Owns the
 /// store through a binding so `SparagneApp` can share the same instance
-/// with the Categories `Window` scene.
+/// with its menu commands, the Settings scene and the app delegate.
 struct ContentView: View {
     @Binding var store: AppStore?
     @Binding var engine: SyncEngine?
@@ -148,15 +148,6 @@ struct MainWindow: View {
             .onReceive(NotificationCenter.default.publisher(for: .importStatement)) { _ in
                 if store.currentVault != nil { sheet = .importStatement }
             }
-            // The due pill: the periods are decided on the Ricorrenze tab.
-            .onReceive(NotificationCenter.default.publisher(for: .reviewDueRecurring)) { _ in
-                store.tab = .recurring
-            }
-            // The Vault menu and the palette: the Ricorrenze tab, its
-            // inspector on a new template.
-            .onReceive(NotificationCenter.default.publisher(for: .newRecurring)) { _ in
-                RecurringTab.requestCreate(store: store)
-            }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
             .modifier(VaultExportHandlers(store: store))
@@ -168,31 +159,23 @@ struct MainWindow: View {
                     set: { engine?.showsRejectedAlert = $0 }
                 )
             ) {
-                Button(String(localized: "Review")) {
-                    engine?.showsRejectedAlert = false
-                    sheet = .rejected
-                }
-                Button(String(localized: "Later"), role: .cancel) { engine?.showsRejectedAlert = false }
+                Button(String(localized: "Review")) { sheet = .rejected }
+                Button(String(localized: "Later"), role: .cancel) {}
             } message: {
                 Text(String(localized: "The server did not accept them, so they are not in your balances."))
             }
-            .alert(
-                store.presentedError?.summary ?? String(localized: "Something went wrong"),
-                isPresented: Binding(
-                    get: { store.presentedError != nil },
-                    set: { if !$0 { store.presentedError = nil } }
-                ),
-                presenting: store.presentedError
-            ) { error in
+            // Titled by the error's `summary` (`AppError` is a
+            // `LocalizedError`); closing it sets `presentedError` to `nil`.
+            .alert(error: $store.presentedError) { error in
                 // ambiguous_name: one button per candidate name, rewriting the
                 // marker in quickAddText and resubmitting.
                 if error.candidates.isEmpty {
-                    Button(String(localized: "OK"), role: .cancel) { store.presentedError = nil }
+                    Button(String(localized: "OK"), role: .cancel) {}
                 } else {
                     ForEach(error.candidates, id: \.self) { candidate in
-                        Button(candidate) { Task { await store.resolveAmbiguous(choosing: candidate) } }
+                        Button(candidate) { Task { await store.resolveAmbiguous(error, choosing: candidate) } }
                     }
-                    Button(String(localized: "Cancel"), role: .cancel) { store.presentedError = nil }
+                    Button(String(localized: "Cancel"), role: .cancel) {}
                 }
             } message: { error in
                 Text(error.message)

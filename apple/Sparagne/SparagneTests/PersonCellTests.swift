@@ -7,7 +7,6 @@ import Testing
 /// The PERSONA cell of the grid (`RowDraft.person`): who a row is for, typed
 /// on the empty line or into an open row, sent only when it changed, undone
 /// like any other cell.
-@MainActor
 struct PersonCellTests {
     /// Vault `Casa` with wallet `Conto`, written by matteo, whose members are
     /// matteo, elisa and bob; an undo manager attached once it is set up.

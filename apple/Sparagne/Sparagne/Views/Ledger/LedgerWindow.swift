@@ -70,20 +70,10 @@ struct LedgerWindow: View {
             // tab has to switch and lay out before the field can take focus.
             // The other tabs have their own, already on screen.
             if store.tab == .summary { store.tab = .ledger }
-            Task { @MainActor in
+            Task {
                 await Task.yield()
                 searchFocused = true
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openSetup)) { _ in
-            store.tab = .setup
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .selectTab)) { note in
-            if let tab = note.object as? LedgerTab { store.tab = tab }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .stepMonth)) { note in
-            let months = note.object as? Int ?? 1
-            store.month = store.month.adding(months: months)
         }
         .onReceive(NotificationCenter.default.publisher(for: .exportCSV)) { _ in
             Task {
@@ -156,7 +146,7 @@ struct LedgerWindow: View {
                     ScrollView { SummaryView(year: year, store: store) }
                 }
             case .recurring:
-                RecurringTab(store: store, engine: engine) { sheet = $0 }
+                RecurringTab(store: store)
             case .setup:
                 SetupView(store: store, engine: engine) { sheet = $0 }
             }

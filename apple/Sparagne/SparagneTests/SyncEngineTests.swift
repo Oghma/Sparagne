@@ -366,7 +366,6 @@ actor FakeServerTransport: SyncTransport {
 
 /// One app: its own in-memory core, store, account and engine, all pointed at
 /// the same fake server.
-@MainActor
 private struct Peer {
     let core: CoreActor
     let store: AppStore
@@ -413,7 +412,6 @@ private struct Peer {
     }
 }
 
-@MainActor
 struct SyncEngineTests {
     /// A vault with a `Cash` wallet holding 100.00 and a `Food` envelope
     /// holding 50.00, all still in the outbox.

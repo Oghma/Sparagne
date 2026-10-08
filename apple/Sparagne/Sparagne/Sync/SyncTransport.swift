@@ -6,7 +6,7 @@ import Foundation
 /// (`/vaults/<id>/pull?since=0&limit=500`). The body is opaque `Data`: the
 /// engine hands over JSON the core wrote and never inspects a command
 /// (`docs/v2/SYNC.md` §1).
-struct SyncRequest: Sendable, Equatable {
+nonisolated struct SyncRequest: Sendable, Equatable {
     var method: String
     var path: String
     var bearer: String?
@@ -22,7 +22,7 @@ struct SyncRequest: Sendable, Equatable {
 
 /// The status line, the headers and the bytes; the API layer decides what
 /// they mean.
-struct SyncResponse: Sendable, Equatable {
+nonisolated struct SyncResponse: Sendable, Equatable {
     var status: Int
     var body: Data
     /// Header names are case-insensitive in HTTP, so they are kept
@@ -46,7 +46,7 @@ struct SyncResponse: Sendable, Equatable {
 
 /// What `ServerAPI` talks to. The tests replace it with a fake server backed
 /// by a second core, so the whole engine runs without a network.
-protocol SyncTransport: Sendable {
+nonisolated protocol SyncTransport: Sendable {
     func send(_ request: SyncRequest) async throws -> SyncResponse
 }
 
@@ -55,7 +55,7 @@ protocol SyncTransport: Sendable {
 /// Any transport-level failure (no route to host, timeout, a response that is
 /// not HTTP) becomes `ServerError.offline`, which the engine shows as the
 /// offline status rather than an error.
-struct URLSessionTransport: SyncTransport {
+nonisolated struct URLSessionTransport: SyncTransport {
     let baseURL: URL
     var timeout: TimeInterval = 20
 

@@ -32,7 +32,6 @@ struct PaletteAction: Identifiable {
 ///
 /// Deliberately free of SwiftUI, so the filtering and the selection can be
 /// tested without a window (`SparagneTests/CommandPaletteTests.swift`).
-@MainActor
 @Observable
 final class CommandPaletteModel {
     /// Rebuilt every time the palette opens: the vault list and the state of
@@ -154,25 +153,21 @@ extension CommandPaletteModel {
                 title: String(localized: "Previous Month"),
                 keywords: ["month", "mese", "prev"]
             ) {
-                NotificationCenter.default.post(name: .stepMonth, object: -1)
+                store.stepMonth(by: -1)
             },
             PaletteAction(
                 id: "month.next",
                 title: String(localized: "Next Month"),
                 keywords: ["month", "mese"]
             ) {
-                NotificationCenter.default.post(name: .stepMonth, object: 1)
+                store.stepMonth(by: 1)
             },
             PaletteAction(
                 id: "month.today",
                 title: String(localized: "Current Month"),
                 keywords: ["today", "oggi", "month", "mese"]
             ) {
-                // Through the same notification the arrows use, so the window
-                // stays the one place that moves the month.
-                let now = MonthKey(Date())
-                let delta = (now.year - store.month.year) * 12 + (now.month - store.month.month)
-                NotificationCenter.default.post(name: .stepMonth, object: delta)
+                store.showCurrentMonth()
             },
         ]
 
@@ -258,7 +253,7 @@ extension CommandPaletteModel {
                 title: String(localized: "Wallets, Envelopes & Categories\u{2026}"),
                 keywords: ["setup", "wallet", "flow", "buste", "categorie"]
             ) {
-                NotificationCenter.default.post(name: .openSetup, object: nil)
+                store.tab = .setup
             },
             PaletteAction(
                 id: "open.management",
@@ -276,7 +271,7 @@ extension CommandPaletteModel {
                     title: String(localized: "New Recurring\u{2026}"),
                     keywords: ["recurring", "ricorrenza", "ricorrente", "abbonamento", "subscription"]
                 ) {
-                    NotificationCenter.default.post(name: .newRecurring, object: nil)
+                    store.requestNewRecurring()
                 }
             )
         }

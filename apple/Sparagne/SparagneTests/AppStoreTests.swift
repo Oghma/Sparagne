@@ -7,7 +7,6 @@ import Testing
 
 /// `AppStore` driven end to end over an in-memory core: every assertion is
 /// about what the projection says after a real command was applied.
-@MainActor
 struct AppStoreTests {
     /// A store on a fresh in-memory database, with its own defaults so the
     /// "last vault" key never leaks between tests.
@@ -296,10 +295,9 @@ struct AppStoreTests {
         #expect(amount == 1250)
         #expect(note == "pizza")
 
-        let summary = QuickAddSummary.describe(parsed, currency: .eur)
-        #expect(summary.contains("12.50 EUR"))
-        #expect(summary.contains("#food"))
-        #expect(summary.contains("@cash"))
+        let tokens = QuickAddTokens.make(parsed, currency: .eur)
+        #expect(tokens.contains { $0.role == .category && $0.value == "food" })
+        #expect(tokens.contains { $0.role == .wallet && $0.value == "cash" })
 
         guard case .failure(let error) = store.preview(quickAdd: "pizza") else {
             Issue.record("expected a parse failure")
@@ -500,7 +498,6 @@ struct AppStoreTests {
     }
 }
 
-@MainActor
 struct MonthKeyTests {
     private static let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
@@ -611,7 +608,6 @@ struct ErrorMessagesTests {
 }
 
 /// Date conversions on the FFI boundary.
-@MainActor
 struct CoreDateTests {
     @Test func offsetStringRoundTrips() throws {
         let date = Date(timeIntervalSince1970: 1_772_000_000)

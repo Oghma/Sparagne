@@ -7,7 +7,6 @@ import Testing
 /// The categories a new vault starts with (`DefaultCategories`): which list a
 /// language gets, that the core takes each list as it is, and that the store
 /// writes it together with the vault.
-@MainActor
 struct DefaultCategoriesTests {
     private static func store(_ categories: [DefaultCategory]) throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.defaults.\(UUID().uuidString)"))

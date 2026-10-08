@@ -130,7 +130,6 @@ struct LedgerLinesTests {
     }
 
     @Test("The grid's cache hands the lines back as they were, and works them out again when their input changes")
-    @MainActor
     func cache() {
         let cache = LedgerLines.Cache(timeZone: Self.zone)
         var input = LedgerLines.Input(

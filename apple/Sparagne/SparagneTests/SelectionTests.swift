@@ -7,7 +7,7 @@ import Testing
 
 /// Counts `CoreActor`'s "a command was applied" hook: once per `execute`, once
 /// per whole `executeBatch`.
-private final class ExecutedCount: Sendable {
+private nonisolated final class ExecutedCount: Sendable {
     private let value = Mutex(0)
 
     var count: Int { value.withLock { $0 } }
@@ -17,7 +17,6 @@ private final class ExecutedCount: Sendable {
 
 /// The ledger's row selection and the bulk actions over it: the gestures on
 /// `RowSelection`, then the store that keeps it and acts on it.
-@MainActor
 struct SelectionTests {
     // MARK: - The gestures
 

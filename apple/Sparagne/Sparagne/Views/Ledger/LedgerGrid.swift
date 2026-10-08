@@ -604,7 +604,6 @@ struct RowDraftError: Error {
 ///
 /// Main-actor bound because resolving a name or parsing an amount reads the
 /// store, which owns the core.
-@MainActor
 struct RowDraft {
     var day = Date()
     var flow = ""

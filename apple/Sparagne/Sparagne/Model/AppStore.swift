@@ -7,7 +7,11 @@ import SparagneCore
 ///
 /// Also thrown as it is, by a check the app makes before the core is asked
 /// (the PERSONA cell's name): it reaches the alert with its own headline.
-struct AppError: Identifiable, Equatable, Sendable, Error {
+///
+/// A `LocalizedError` whose description is `summary`: the window's
+/// `.alert(error:)` takes it as the title, and a sheet that shows a caught
+/// error's `localizedDescription` gets the headline too.
+struct AppError: Identifiable, Equatable, Sendable, LocalizedError {
     let id = UUID()
     let code: String
     let message: String
@@ -25,6 +29,8 @@ struct AppError: Identifiable, Equatable, Sendable, Error {
     /// The localized headline for `code` (`ErrorMessages.swift`); the alert
     /// keeps `message`, the Rust `Display` text, as its secondary detail.
     var summary: String { headline ?? ErrorMessages.summary(for: code) }
+
+    var errorDescription: String? { summary }
 
     init(
         code: String,
@@ -145,7 +151,6 @@ extension RecurringPatch {
 /// point that touches the core is therefore `async`: views call them from a
 /// `Task`, tests await them.
 @Observable
-@MainActor
 final class AppStore {
     /// A month of a personal ledger fits in one page in practice. A month that
     /// does not goes on page by page as the grid scrolls to its end
@@ -281,12 +286,35 @@ final class AppStore {
     /// A `didSet` cannot await, so it queues the reload; `settle()` is how a
     /// caller waits for the queue to drain.
     var month = MonthKey(Date()) { didSet { if month != oldValue { filtersChanged() } } }
+
+    /// ⌥⌘← and ⌥⌘→, and the palette: `months` back (negative) or forward.
+    func stepMonth(by months: Int) {
+        month = month.adding(months: months)
+    }
+
+    /// The palette's Current Month: the month `today` falls in.
+    func showCurrentMonth(today: Date = Date()) {
+        month = MonthKey(today)
+    }
+
+    /// Nuova ricorrenza…: the Ricorrenze tab, its inspector on a new
+    /// template (`newRecurringRequested`). Nothing for a vault only read.
+    func requestNewRecurring() {
+        guard canWrite else { return }
+        newRecurringRequested = true
+        tab = .recurring
+    }
     var direction: LedgerDirection = .expenses { didSet { if direction != oldValue { filtersChanged() } } }
     /// The PERSONA filter: `nil` is everybody.
     var person: String? { didSet { if person != oldValue { filtersChanged() } } }
     /// Which of the two views is on screen; no reload, the data is the same.
     /// The window opens on the RIEPILOGO (`docs/v2/UI.md` §2).
     var tab: LedgerTab = .summary { didSet { if tab != oldValue { tabFilter = "" } } }
+    /// Nuova ricorrenza… was asked for (Vault menu, palette, the tab's add
+    /// button): the Ricorrenze tab opens its inspector on a new template,
+    /// when it appears or at once if it is on screen, and sets this back
+    /// (`RecurringTab`).
+    var newRecurringRequested = false
     /// What the top bar's search field holds on the Ricorrenze and the Setup
     /// tabs, which filter their tables locally. Apart from `searchText` so
     /// that typing there never reloads the ledger; cleared with the tab and
@@ -412,7 +440,7 @@ final class AppStore {
     private func scheduleReload() {
         queuedGeneration += 1
         let previous = queuedLoad
-        queuedLoad = Task { @MainActor [weak self] in
+        queuedLoad = Task { [weak self] in
             await previous?.value
             await self?.reload()
         }
@@ -615,7 +643,7 @@ final class AppStore {
         }
         guard let vault = currentVault, let cursor = nextCursor, let filter = loadedFilter else { return }
         let generation = loadGeneration
-        let load = Task { @MainActor [weak self] in
+        let load = Task { [weak self] in
             guard let self else { return }
             await guarded {
                 let page = try await core.transactions(
@@ -1369,10 +1397,14 @@ final class AppStore {
 
     /// Called from the error alert's candidate buttons after an
     /// `ambiguous_name` quick-add error: rewrites the marker that carried
-    /// the ambiguous fragment with the chosen name and resubmits (task 1).
-    func resolveAmbiguous(choosing candidate: String) async {
-        guard let error = presentedError, let fragment = error.ambiguousFragment else { return }
-        presentedError = nil
+    /// the ambiguous fragment with the chosen name and resubmits.
+    ///
+    /// Takes the error the alert showed rather than reading `presentedError`:
+    /// the alert sets that to `nil` as it closes, before the button's task
+    /// gets to run.
+    func resolveAmbiguous(_ error: AppError, choosing candidate: String) async {
+        guard let fragment = error.ambiguousFragment else { return }
+        if presentedError == error { presentedError = nil }
         let rewritten = Self.rewrite(quickAddText, fragment: fragment, with: candidate)
         quickAddText = rewritten
         await submit(quickAdd: rewritten)

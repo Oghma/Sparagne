@@ -113,7 +113,6 @@ final class MemoryTokenStore: TokenStore, @unchecked Sendable {
 /// after a relaunch, even offline, and a row can be put on another member
 /// before the first sync of the session.
 @Observable
-@MainActor
 final class AccountStore {
     static let serverURLKey = "syncServerURL"
     static let usernameKey = "syncUsername"

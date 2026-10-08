@@ -591,15 +591,13 @@ sembra cliccabile per il solo colore.
 | `accent` | `#FF9A2E` | ambra: solo interazione |
 | `positive` | `#3ECF8E` | entrate, risparmio |
 | `negative` | `#FF6B6B` | importi e saldi negativi, errori |
-| `warning` | `#E8A33D` | modifica rifiutata dal sync, fascia di mezzo di una barra |
-| `muted`, `mutedPositive` | `#4A2A12`, `#1D5340` | metà scura di una barra a due toni |
+| `warning` | `#E8A33D` | modifica rifiutata dal sync, avvisi |
 | `chartIncome` | `#5A8CF0` | serie entrate |
 | `chartExpense` | `#D6742A` | serie uscite, barre delle categorie |
 | `chartSavings` | `#25A26C` | serie risparmio |
 
 I colori delle serie sono scelti perché si distinguano anche a chi non vede
-bene i colori, su `#111113`. Una barra di avanzamento passa da `positive` a
-`warning` a `negative` oltre il 70% e il 90%.
+bene i colori, su `#111113`.
 
 Tipografia: SF Pro con cifre tabulari ovunque (`Face.ui`), così le colonne di
 numeri stanno in colonna senza trucchi; il monospazio resta solo per i tasti
@@ -650,9 +648,11 @@ colonna wallet; fino al 2026-10-07 "annullate"); dal 2026-09-23 anche Esci dal v
 Importa estratto conto…, Esporta tutte le transazioni… e Backup del
 database…, e Rinomina vault… solo a chi può scrivere; dal 2026-09-29 Nuova
 ricorrenza…, solo a chi può scrivere. Quelle che hanno già una voce di
-menu ne mandano la notifica, così le due strade condividono una sola
-implementazione; il modello (`Views/Ledger/CommandPalette.swift`) è puro e
-testato senza finestra.
+menu condividono con lei una sola implementazione: un metodo dello store
+quando cambiano solo lo store (scheda, mese, Nuova ricorrenza…), la notifica
+del menu quando toccano uno stato della finestra (un fuoco, uno sheet, un
+pannello di salvataggio); il modello (`Views/Ledger/CommandPalette.swift`) è
+puro e testato senza finestra.
 
 ## 7. Cronologia
 

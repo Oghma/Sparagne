@@ -8,7 +8,6 @@ import Testing
 /// when the sync engine has them, the names the vault knows otherwise, and
 /// how a typed name resolves to one of them. The logged-in half, with a
 /// server behind it, is in `SyncEngineTests`.
-@MainActor
 struct PeopleTests {
     /// Vault `Casa` with wallet `Conto`, written by matteo while logged out.
     private static func onboarded() async throws -> AppStore {
@@ -186,7 +185,7 @@ struct PeopleTests {
             Issue.record("expected the line to parse")
             return
         }
-        #expect(QuickAddSummary.describe(parsed, currency: .eur).contains("!eli"))
+        #expect(QuickAddTokens.make(parsed, currency: .eur).contains { $0.role == .who && $0.value == "eli" })
 
         await store.submit(quickAdd: "-24 cena !eli")
         #expect(store.presentedError == nil)
@@ -258,11 +257,30 @@ struct PeopleTests {
         #expect(error.code == "ambiguous_name")
         #expect(error.candidates.sorted() == ["elena", "elisa"])
         #expect(error.summary == ErrorMessages.ambiguousPerson)
+        // The alert's title (`.alert(error:)`).
+        #expect(error.localizedDescription == ErrorMessages.ambiguousPerson)
 
-        await store.resolveAmbiguous(choosing: "elisa")
+        await store.resolveAmbiguous(error, choosing: "elisa")
         #expect(store.presentedError == nil)
         #expect(store.rows.first { $0.note == "cena" }?.person == "elisa")
         #expect(store.categories.contains { $0.name == "elettricità" })
+    }
+
+    @Test("A name picked in the alert is written although the alert has already cleared the error")
+    func quickAddAmbiguousPersonAfterTheAlertCloses() async throws {
+        let store = try await Self.onboarded()
+        let vault = try #require(store.currentVault)
+        store.setVaultMembers([vault.id: ["matteo", "elisa", "elena"]])
+
+        store.quickAddText = "-24 cena !el"
+        await store.submit(quickAdd: store.quickAddText)
+        let error = try #require(store.presentedError)
+        // What the alert does as it closes, before the button's task runs.
+        store.presentedError = nil
+
+        await store.resolveAmbiguous(error, choosing: "elisa")
+        #expect(store.presentedError == nil)
+        #expect(store.rows.first { $0.note == "cena" }?.person == "elisa")
     }
 
     @Test("Rewriting a choice keeps each marker and finds the whole token")

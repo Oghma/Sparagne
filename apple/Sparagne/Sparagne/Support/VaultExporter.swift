@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// the whole database and every transaction of the vault on screen. The work
 /// is here, free of any view, so the tests run it; `VaultExportHandlers`
 /// only asks where to save.
-enum VaultExporter {
+nonisolated enum VaultExporter {
     /// Transactions per call to the core while exporting: the ledger's own
     /// page size, so a vault of a few years takes a handful of calls.
     static let defaultPageSize: UInt32 = 1000
@@ -115,14 +115,7 @@ struct VaultExportHandlers: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .exportAllTransactions)) { _ in
                 Task { await exportAll() }
             }
-            .alert(
-                String(localized: "Backup saved"),
-                isPresented: Binding(
-                    get: { savedBackup != nil },
-                    set: { if !$0 { savedBackup = nil } }
-                ),
-                presenting: savedBackup
-            ) { url in
+            .alert(String(localized: "Backup saved"), item: $savedBackup) { url in
                 Button(String(localized: "Show in Finder")) {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
@@ -132,7 +125,6 @@ struct VaultExportHandlers: ViewModifier {
             }
     }
 
-    @MainActor
     private func backUp() async {
         let type = UTType(filenameExtension: "sqlite") ?? .data
         guard let destination = await Self.chooseDestination(name: VaultExporter.backupFileName(), type: type) else {
@@ -146,7 +138,6 @@ struct VaultExportHandlers: ViewModifier {
         }
     }
 
-    @MainActor
     private func exportAll() async {
         guard let vault = store.currentVault else { return }
         let name = LedgerCSV.allFileName(vault: vault.name)
@@ -161,7 +152,6 @@ struct VaultExportHandlers: ViewModifier {
 
     /// A save panel, as a sheet on the key window when there is one. The
     /// panel asks before replacing a file; `nil` when cancelled.
-    @MainActor
     private static func chooseDestination(name: String, type: UTType) async -> URL? {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name

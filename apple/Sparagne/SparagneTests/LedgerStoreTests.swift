@@ -7,7 +7,6 @@ import Testing
 /// The ledger's own state on `AppStore`: the month window, the direction and
 /// person filters, the aggregates behind the summary panel, and the writes the
 /// grid makes (`docs/v2/UI.md`).
-@MainActor
 struct LedgerStoreTests {
     private static func makeStore(author: String = "matteo") throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.ledger.\(UUID().uuidString)"))
@@ -50,6 +49,37 @@ struct LedgerStoreTests {
         store.month = store.month.adding(months: 1)
         await store.settle()
         #expect(store.rows.count == 2)
+    }
+
+    @Test("The menu and the palette step the month either way, and come back to the month of today")
+    func monthSteps() async throws {
+        let (store, _) = try await Self.household()
+        let current = store.month
+
+        store.stepMonth(by: -1)
+        #expect(store.month == current.adding(months: -1))
+        store.stepMonth(by: 13)
+        #expect(store.month == current.adding(months: 12))
+
+        let march = try #require(Calendar.current.date(from: DateComponents(year: 2025, month: 3, day: 15)))
+        store.showCurrentMonth(today: march)
+        #expect(store.month == MonthKey(year: 2025, month: 3))
+
+        store.showCurrentMonth()
+        await store.settle()
+        #expect(store.month == current)
+        #expect(store.rows.count == 2)
+    }
+
+    @Test("Nuova ricorrenza… opens the Ricorrenze tab with a request the tab takes")
+    func newRecurringRequest() async throws {
+        let (store, _) = try await Self.household()
+        #expect(store.tab == .summary)
+        #expect(!store.newRecurringRequested)
+
+        store.requestNewRecurring()
+        #expect(store.tab == .recurring)
+        #expect(store.newRecurringRequested)
     }
 
     @Test("Rows come back oldest first, the reading order of a ledger")

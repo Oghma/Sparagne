@@ -111,7 +111,6 @@ extension LedgerLines {
     ///
     /// A reference, held in the grid's `@State`, so a pass of the body can
     /// keep what it computed without that being a change SwiftUI redraws for.
-    @MainActor
     final class Cache {
         private var input: Input?
         private let timeZone: TimeZone

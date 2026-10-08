@@ -90,7 +90,6 @@ enum CategoryCompletion {
 /// time; the grid draws the list over everything else (`LedgerGrid`), so it is
 /// never clipped by the rows under it. Free of views, so the ranking and the
 /// arrows can be tested without a window.
-@MainActor
 @Observable
 final class CategoryCompletionModel {
     private(set) var candidates: [CategoryCandidate] = []
@@ -214,7 +213,7 @@ struct CategoryCell: View {
                 // ⇥ picks and moves on to DESCRIZIONE, as it would have. After
                 // the pick has reached the field, or leaving it would write
                 // back what was typed.
-                Task { @MainActor in focus = CellFocus(row: key.row, field: .note) }
+                Task { focus = CellFocus(row: key.row, field: .note) }
             }
             // The recent categories and the aliases, once the cell has the
             // caret. A click on the CATEGORY cell of a closed row focuses it

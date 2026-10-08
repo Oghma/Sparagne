@@ -79,7 +79,7 @@ struct TopBar: View {
         if store.canWrite {
             switch store.tab {
             case .summary, .ledger: AddButton()
-            case .recurring: NewRecurringButton()
+            case .recurring: NewRecurringButton(store: store)
             case .setup: EmptyView()
             }
         }
@@ -92,7 +92,7 @@ struct TopBar: View {
             Ink.bg
             WindowChrome(barHeight: Metrics.topBar, buttonsLeading: 14) { full in
                 // Not during the view update that may have called this.
-                Task { @MainActor in isFullScreen = full }
+                Task { isFullScreen = full }
             }
         }
     }
@@ -207,8 +207,7 @@ struct SearchField: View {
 /// "3 da confermare": the recurring periods waiting for a decision
 /// (`docs/v2/UI.md` §2.5), the same count the Ricorrenze tab shows. Nothing
 /// when none is due, or when the account only reads the vault and could not
-/// confirm one anyway. Opens the periods through `.reviewDueRecurring`, so
-/// the window decides in one place where they are decided.
+/// confirm one anyway. Opens the Ricorrenze tab, where they are decided.
 struct DuePill: View {
     let store: AppStore
 
@@ -216,7 +215,7 @@ struct DuePill: View {
         let count = store.actionableDueCount
         if count > 0 {
             Button {
-                NotificationCenter.default.post(name: .reviewDueRecurring, object: nil)
+                store.tab = .recurring
             } label: {
                 HStack(spacing: 6) {
                     StatusDot(color: Ink.accent)
@@ -248,13 +247,16 @@ struct AddButton: View {
     }
 }
 
-/// The Ricorrenze tab's add button: the inspector on a new template, through
-/// `.newRecurring` as the Vault menu and the palette do. No key cap: the menu
-/// item has no shortcut, and ⌘K adds a row, not a template.
+/// The Ricorrenze tab's add button: the inspector on a new template, as the
+/// Vault menu and the palette ask for it (`AppStore.requestNewRecurring`).
+/// No key cap: the menu item has no shortcut, and ⌘K adds a row, not a
+/// template.
 struct NewRecurringButton: View {
+    let store: AppStore
+
     var body: some View {
         Button {
-            NotificationCenter.default.post(name: .newRecurring, object: nil)
+            store.requestNewRecurring()
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")

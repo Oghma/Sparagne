@@ -3,7 +3,7 @@ import Foundation
 /// The server's rules for an account (`docs/v2/SYNC.md` §3, register), checked
 /// in the form before anything is sent, so a refusal reads as a hint under
 /// the field instead of the server's English after a round trip.
-enum AccountRules {
+nonisolated enum AccountRules {
     static let usernameLength = 3...32
     static let minimumPasswordLength = 8
 

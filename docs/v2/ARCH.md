@@ -34,6 +34,7 @@ L'app lavora su un SQLite locale attraverso un core Rust in-process; ogni scritt
 - SwiftUI, `@Observable` store che incapsula il core. Dal 2026-09-10 la tabella è una griglia SwiftUI scritta a mano (`Views/Ledger/`), non `Table`: l'editing in cella e il look dei mockup lo richiedono. NSTableView è stata valutata e scartata (`UI.md`).
 - L'app non ha stato di dominio proprio: ogni vista è una query sul core, ogni azione è un comando.
 - Dal 2026-09-12 il core sta su un attore dedicato (`Core/CoreActor.swift`), l'unico posto che tocca `CoreHandle`. `AppStore` resta `@MainActor @Observable` ma ogni punto di ingresso che tocca il core è `async`: attende l'attore e scrive lo stato pubblicato sul main actor al ritorno. `SyncEngine` usa lo stesso attore, così il core non è mai chiamato da due domini di isolamento. Il caricamento del mese è una sola visita (`CoreActor.load`), non una dozzina di salti, e una `reload` più vecchia non sovrascrive un mese più recente. I filtri (`month`, `direction`, `person`, i due interruttori) restano proprietà legabili dalle view: il `didSet` non può attendere, quindi accoda il caricamento e `AppStore.settle()` aspetta che la coda si svuoti.
+- Dal 2026-10-08 l'isolamento di default dell'app è il main actor (`SWIFT_DEFAULT_ACTOR_ISOLATION`): quello che gira altrove lo dichiara con `nonisolated`, ed è un elenco corto: il livello di rete del sync (`Sync/SyncTransport.swift`, `Sync/ServerAPI.swift`, `AccountRules`) e i valori che `CoreActor` e l'export `@concurrent` costruiscono (`CoreDate`, `NameBook`, `TransactionRow`, `LedgerCSV`, `VaultExporter`, `ErrorMessages`).
 - Timezone di sistema; i comandi portano `occurred_at` come RFC3339 con offset.
 
 ### 2.3 `sync`
@@ -145,7 +146,7 @@ Multi-tenant lato server: account utente, vault di proprietà di un account, mem
 | 2026-09-23 | correzioni dell'audit dello stesso giorno e funzioni mancanti: nomi dei vault come etichette, account e limiti sul server, permessi e sola lettura nell'app, ricorrenze dovute, import di estratti conto, export completo e backup, selezione e operazioni in blocco, annulla/ripeti, completamento e suggerimento della categoria, icona e VoiceOver |
 | 2026-10-08 | persona sulle transazioni e titolare sulle ricorrenze: schema v4, default calcolato all'applicazione, `!nome` nel quick-add, `people()` al posto di `authors()`, `relabel_outbox` che riscrive persone e titolari, `not_a_member` sul server; da rilasciare prima il server (`DEPLOY.md` §6.2) |
 
-Rimandato: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), firma con un team Apple (oggi ad-hoc), target `x86_64-apple-darwin`. Il core fuori dal main actor è stato fatto il 2026-09-12 (§2.2).
+Rimandato: snapshot periodici della proiezione (§3), comandi `rejected` nel log (oggi un comando rifiutato non viene scritto), firma con un team Apple (oggi ad-hoc). Il core fuori dal main actor è stato fatto il 2026-09-12 (§2.2).
 
 La griglia di dashboard di `DISTILLATO_V1.md` §3.4 è stata scartata il
 2026-09-10 a favore dei mockup: il riepilogo sta **accanto** alle righe, il

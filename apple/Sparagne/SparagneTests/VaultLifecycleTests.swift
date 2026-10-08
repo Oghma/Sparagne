@@ -7,7 +7,6 @@ import Testing
 /// Renaming and deleting a vault from the store: what the window shows
 /// afterwards, and what the core is left with. The sync side of the same
 /// commands is in `SyncEngineTests`.
-@MainActor
 struct VaultLifecycleTests {
     private static func store() throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.vault.\(UUID().uuidString)"))
