@@ -2,15 +2,58 @@
 
 Sparagne (in Italian "risparmiare") is a Furlan word that means "savings".
 
-Version 2 is a rewrite in progress on branch `v2`: a local-first personal
-finance app for macOS. A Rust core keeps the domain rules and a SQLite file
-where every change is a command appended to a per-vault log; the state tables
-are a projection of that log. The macOS app (SwiftUI) talks to the core
-in-process through UniFFI and never touches SQL. A small sync server, built on
-the same core, comes later.
+Version 2 is a local-first personal finance app for macOS. A Rust core keeps
+the domain rules and a SQLite file where every change is a command appended
+to a per-vault log; the state tables are a projection of that log. The macOS
+app (SwiftUI) talks to the core in-process through UniFFI and never touches
+SQL. A small sync server, built on the same core, shares vaults between
+accounts and Macs.
 
 Version 1 (Rust engine, HTTP server, Telegram bot, terminal UI) lives at tag
 `v0.93.0`.
+
+## Install
+
+Server and app share one version: a release tag `vX.Y.Z` names both. Upgrade
+the server before the apps (`docs/v2/DEPLOY.md` §6).
+
+### Server
+
+The release image, for linux/amd64 and linux/arm64, is
+`ghcr.io/oghma/sparagne-server:<version>`. On the host:
+
+```sh
+cd server/deploy && cp .env.example .env   # set DOMAIN and SPARAGNE_VERSION
+docker compose up -d
+```
+
+`gh attestation verify oci://ghcr.io/oghma/sparagne-server:<version> --repo
+Oghma/Sparagne` checks that an image was built by this repository's release
+workflow. `docs/v2/DEPLOY.md` has the full setup (TLS via Caddy, login
+limits, backups, upgrades, building the image from the sources).
+
+Accounts can also be managed from the command line, which is the way to add
+them once registration is closed: `sparagne-server user add <name>` and
+`user passwd <name>` read the password from the first line of stdin
+(`passwd` also logs the account out everywhere), `user list` prints every
+account, `user revoke <name>` revokes its tokens. They work on the data
+directory of a running server, e.g.
+`printf '%s\n' "$PW" | docker compose exec -T sparagne sparagne-server user add alice`.
+
+### App
+
+The app is built from the sources on the Mac that runs it (Apple silicon,
+macOS 27). There is no download: without an Apple Developer ID, macOS would
+stop a downloaded copy, while one built here needs no exception. It takes
+Xcode 27, Rust through rustup (the version comes from `rust-toolchain.toml`)
+and xcodegen (`brew install xcodegen`). From a release tag:
+
+```sh
+bash scripts/build-app.sh --install   # or without --install: dist/Sparagne.app
+```
+
+The build is signed ad hoc with the app sandbox, like a run from Xcode, so
+both use the same database (below).
 
 ## Layout
 
@@ -66,22 +109,5 @@ The import is idempotent, so running it again changes nothing. It prints a
 report with the counts per entity, the v1 fields that have no v2 counterpart
 and the commands the core refused. The imported commands sit in the outbox and
 reach the server at the first sync.
-
-### Server
-
-```sh
-cd server/deploy && cp .env.example .env && docker compose up -d
-```
-
-See `docs/v2/DEPLOY.md` for the full setup (TLS via Caddy, login limits,
-backups, upgrades).
-
-Accounts can also be managed from the command line, which is the way to add
-them once registration is closed: `sparagne-server user add <name>` and
-`user passwd <name>` read the password from the first line of stdin
-(`passwd` also logs the account out everywhere), `user list` prints every
-account, `user revoke <name>` revokes its tokens. They work on the data
-directory of a running server, e.g.
-`printf '%s\n' "$PW" | docker compose exec -T sparagne sparagne-server user add alice`.
 
 The design is in `docs/v2/ARCH.md`.
