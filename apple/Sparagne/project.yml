@@ -2,14 +2,17 @@ name: Sparagne
 options:
   bundleIdPrefix: it.oghma
   deploymentTarget:
-    macOS: "15.0"
+    macOS: "27.0"
   createIntermediateGroups: true
 
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    MACOSX_DEPLOYMENT_TARGET: "27.0"
     SWIFT_STRICT_CONCURRENCY: complete
+    # Lets Xcode find the `String(localized:)` keys, so a build in the IDE
+    # stops marking every catalog entry stale (`scripts/catalog.py`).
+    SWIFT_EMIT_LOC_STRINGS: YES
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     SWIFT_UPCOMING_FEATURE_DISABLE_OUTWARD_ACTOR_ISOLATION: YES
     GENERATE_INFOPLIST_FILE: YES
@@ -29,7 +32,7 @@ targets:
   Sparagne:
     type: application
     platform: macOS
-    deploymentTarget: "15.0"
+    deploymentTarget: "27.0"
     # The string catalog and the asset catalog go through `sources` like the
     # code: XcodeGen files them under Resources by their type, and has no
     # `resources` key of its own.
@@ -52,7 +55,7 @@ targets:
   SparagneTests:
     type: bundle.unit-test
     platform: macOS
-    deploymentTarget: "15.0"
+    deploymentTarget: "27.0"
     sources:
       - path: SparagneTests
     settings:
