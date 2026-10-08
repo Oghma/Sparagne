@@ -7,7 +7,8 @@ import SparagneCore
 /// An inverse is made of what the core stores, never of what the grid shows:
 /// the stored category name, or `""` for Uncategorized (its localized label
 /// typed back would create a category of that name), `""` for no note, the
-/// original `occurred_at` with its own offset.
+/// original `occurred_at` with its own offset, `""` for a row that was its
+/// recorder's own.
 extension AppStore {
     /// The window's undo manager, handed over by `LedgerWindow`.
     func attach(undoManager: UndoManager?) {
@@ -66,7 +67,15 @@ extension AppStore {
         if patch.flowId != nil { inverse.flowId = view.flowId }
         if patch.fromId != nil { inverse.fromId = view.fromId }
         if patch.toId != nil { inverse.toId = view.toId }
+        if patch.person != nil { inverse.person = storedPerson(view) }
         return inverse
+    }
+
+    /// What `UpdateTransaction` needs to give a row back to whoever it was
+    /// for: blank when that was the one who recorded it, which is what the
+    /// patch calls "back to `created_by`", and the name otherwise.
+    static func storedPerson(_ view: TransactionView) -> String {
+        view.person == view.createdBy ? "" : view.person
     }
 
     /// What `UpdateTransaction` needs to file a row back where it was: the

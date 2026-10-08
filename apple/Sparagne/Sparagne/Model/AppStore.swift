@@ -1095,6 +1095,11 @@ final class AppStore {
     /// FLOW cell has to behave like the last row, not like a system envelope
     /// the user never picked. A `nil` kind is the direction on screen's; a
     /// duplicate passes its source's, so a refund copied stays a refund.
+    ///
+    /// `person` is who the row is for, already one of `assignablePeople`.
+    /// The author is sent as no person at all: the core reads that as the
+    /// author, and the command reads exactly as one from before rows could
+    /// be for someone else.
     func addRow(
         day: Date,
         flowId: Uuid?,
@@ -1102,7 +1107,8 @@ final class AppStore {
         note: String,
         amount: Int64,
         walletId: Uuid? = nil,
-        kind: TransactionKind? = nil
+        kind: TransactionKind? = nil,
+        person: String? = nil
     ) async {
         guard let vault = currentVault, amount > 0, !refusedAsReadOnly() else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1113,7 +1119,8 @@ final class AppStore {
             flowId: envelope,
             category: category?.trimmingCharacters(in: .whitespacesAndNewlines),
             note: trimmedNote.isEmpty ? nil : trimmedNote,
-            occurredAt: Self.combine(day: CoreDate.day(day), timeOf: Date())
+            occurredAt: Self.combine(day: CoreDate.day(day), timeOf: Date()),
+            person: explicitPerson(person)
         )
         let command: Command
         switch kind ?? direction.newRowKind {
@@ -1133,6 +1140,16 @@ final class AppStore {
             savedAt = Date()
             await reload()
         }
+    }
+
+    /// What a command says for `person`: nothing for the author, or a blank,
+    /// the name otherwise. Shared by the rows the grid adds and the periods
+    /// a template records for its owner.
+    func explicitPerson(_ person: String?) -> String? {
+        guard let trimmed = person?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty, trimmed != currentAuthor
+        else { return nil }
+        return trimmed
     }
 
     /// Resolves what was typed in the FLOW cell to an envelope, with the same

@@ -39,9 +39,12 @@ struct TransactionRow: Identifiable, Hashable, Sendable {
     /// Localized for the two system categories, verbatim otherwise.
     let category: String
     let note: String
-    /// `created_by`: the member of the vault who entered the row, the PERSONA
-    /// column of the ledger (`docs/v2/UI.md` §3).
+    /// Who the row is for, the PERSONA column of the ledger (`docs/v2/UI.md`
+    /// §3): the author, unless the row was recorded on someone else's behalf.
     let person: String
+    /// `created_by`: the member of the vault who entered the row. Shown only
+    /// where it differs from `person`, as "recorded by".
+    let recordedBy: String
     let voided: Bool
 
     /// Entries: the wallet leg. Transfers between wallets: the source.
@@ -54,6 +57,14 @@ struct TransactionRow: Identifiable, Hashable, Sendable {
 
     var isTransfer: Bool { kind == .transferWallet || kind == .transferFlow }
 
+    /// Recorded by one member for another: the PERSONA cell then says who
+    /// typed it, on hover and to VoiceOver.
+    var isOnBehalf: Bool { person != recordedBy }
+
+    /// Whether the PERSONA cell opens for typing. A transfer always stays its
+    /// author's (`TransactionPatch.person` is for entries only).
+    var isPersonEditable: Bool { !isTransfer }
+
     init(view: TransactionView, names: NameBook) {
         id = view.id
         kind = view.kind
@@ -62,7 +73,8 @@ struct TransactionRow: Identifiable, Hashable, Sendable {
         categoryId = view.categoryId
         category = Self.categoryLabel(view)
         note = view.note ?? ""
-        person = view.createdBy
+        person = view.person
+        recordedBy = view.createdBy
         voided = view.voided
 
         // The core already sorted the legs out by kind (`core/src/query.rs`).

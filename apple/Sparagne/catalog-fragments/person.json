@@ -3,8 +3,20 @@
     "en": "More than one person matches “%@”",
     "it": "Più di una persona corrisponde a “%@”"
   },
+  "Person, %@": {
+    "en": "Person, %@",
+    "it": "Persona, %@"
+  },
+  "Recorded by %@": {
+    "en": "Recorded by %@",
+    "it": "Registrata da %@"
+  },
   "Unknown person: %@": {
     "en": "Unknown person: %@",
     "it": "Persona sconosciuta: %@"
+  },
+  "recorded by %@": {
+    "en": "recorded by %@",
+    "it": "registrata da %@"
   }
 }
