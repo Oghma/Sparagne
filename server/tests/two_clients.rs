@@ -12,9 +12,13 @@
 mod common;
 
 use axum::http::StatusCode;
-use common::{Api, Client, T0, all_txns, basics, expense_cmd, flow_cmd, projection};
+use chrono::NaiveDate;
+use common::{Api, Client, T0, all_txns, at, basics, entry, expense_cmd, flow_cmd, projection};
 use serde_json::json;
-use sparagne_core::{Core, FlowMode, SyncReport, sync::PushResponse};
+use sparagne_core::{
+    Command, Core, Entry, FlowMode, Frequency, Schedule, SyncReport, TransactionKind,
+    TransactionPatch, sync::PushResponse,
+};
 use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
@@ -282,4 +286,111 @@ async fn idempotent_push() {
             ..SyncReport::default()
         }
     );
+}
+
+// ---------------------------------------------------------------------------
+// 5. Person
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_person_travels_with_the_row() {
+    let api = Api::new();
+    let (mut alice, mut bob, vault, wallet) = basics(&api).await;
+    let for_whom = |name: &str, amount: i64, secs: i64| {
+        Command::Expense(Entry {
+            person: Some(name.to_string()),
+            ..entry(amount, Some(wallet), None, Some("cena"), secs)
+        })
+    };
+
+    // alice records a dinner for bob, and a mortgage bob owns whose first
+    // period she pays for him.
+    let dinner = alice.exec(vault, for_whom("bob", 2_400, T0 + 60));
+    let mutuo = alice.exec(
+        vault,
+        Command::CreateRecurring {
+            transaction_kind: TransactionKind::Expense,
+            amount: 1_000,
+            wallet_id: Some(wallet),
+            flow_id: None,
+            category: Some("Casa".to_string()),
+            note: Some("mutuo".to_string()),
+            schedule: Schedule {
+                frequency: Frequency::Monthly { day: 1 },
+                interval: 1,
+                start_date: NaiveDate::from_ymd_opt(2023, 11, 1).unwrap(),
+                end_date: None,
+            },
+            owner: Some("bob".to_string()),
+        },
+    );
+    let paid = alice.exec(
+        vault,
+        Command::ExecuteRecurring {
+            recurring_id: mutuo,
+            period_date: NaiveDate::from_ymd_opt(2023, 11, 1).unwrap(),
+            occurred_at: at(T0 + 120),
+            person: Some("bob".to_string()),
+        },
+    );
+    // A name that is no member of the vault comes back refused, on its own.
+    let stray = alice.exec(vault, for_whom("mallory", 500, T0 + 180));
+
+    let rejected: Vec<_> = alice
+        .sync(&api, vault)
+        .await
+        .into_iter()
+        .flat_map(|report| report.rejected)
+        .collect();
+    assert_eq!(rejected.len(), 1);
+    assert_eq!(rejected[0].command_id, stray);
+    assert_eq!(rejected[0].code, "not_a_member");
+    assert_eq!(rejected[0].message, "mallory is not a member of this vault");
+    bob.sync(&api, vault).await;
+
+    let (expected, templates) = {
+        let core = api.state.core();
+        (
+            projection(&core, vault),
+            core.list_recurring(vault, true).unwrap(),
+        )
+    };
+    for client in [&alice, &bob] {
+        assert_eq!(projection(&client.core, vault), expected);
+        assert_eq!(client.core.list_recurring(vault, true).unwrap(), templates);
+    }
+    assert_eq!(templates[0].owner, "bob");
+    for id in [dinner, paid] {
+        let row = bob.core.transaction(vault, id).unwrap();
+        assert_eq!(
+            (row.person.as_str(), row.created_by.as_str()),
+            ("bob", "alice")
+        );
+    }
+    assert_eq!(bob.core.people(vault).unwrap(), ["alice", "bob"]);
+
+    // bob gives the dinner back with a blank person: it returns to whoever
+    // recorded it, on both sides.
+    bob.exec(
+        vault,
+        Command::UpdateTransaction {
+            transaction_id: dinner,
+            patch: TransactionPatch {
+                person: Some(String::new()),
+                ..TransactionPatch::default()
+            },
+        },
+    );
+    bob.sync(&api, vault).await;
+    alice.sync(&api, vault).await;
+    assert_eq!(
+        alice.core.transaction(vault, dinner).unwrap().person,
+        "alice"
+    );
+    let expected = {
+        let core = api.state.core();
+        projection(&core, vault)
+    };
+    assert_eq!(projection(&alice.core, vault), expected);
+    assert_eq!(projection(&bob.core, vault), expected);
 }

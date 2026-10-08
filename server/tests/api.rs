@@ -686,6 +686,182 @@ async fn a_stranger_gets_a_blind_404() {
 }
 
 // ---------------------------------------------------------------------------
+// Persons and owners
+// ---------------------------------------------------------------------------
+
+/// An expense on the only wallet for `person`.
+fn expense_for(amount: i64, person: &str) -> Command {
+    Command::Expense(Entry {
+        person: Some(person.to_string()),
+        ..entry(amount, None)
+    })
+}
+
+/// alice's vault "Main" with a wallet, elisa as an editor and carol as a
+/// viewer; mallory has an account but no membership. Returns alice's token
+/// and the vault.
+async fn household(api: &Api) -> (String, Uuid) {
+    let alice = api.register("alice").await;
+    for name in ["elisa", "carol", "mallory"] {
+        api.register(name).await;
+    }
+    let vault = api.create_vault(&alice, "alice", "Main").await;
+    for (username, role) in [("elisa", "editor"), ("carol", "viewer")] {
+        let res = api
+            .put(
+                &format!("/vaults/{vault}/members"),
+                &alice,
+                json!({ "username": username, "role": role }),
+            )
+            .await;
+        assert_eq!(res.status, StatusCode::NO_CONTENT, "{:?}", res.body);
+    }
+    let setup = vec![envelope(vault, "alice", wallet("Cash", 100_000))];
+    let response: PushResponse = api.push(&alice, vault, setup).await.json();
+    applied(&response.results[0]);
+    (alice, vault)
+}
+
+/// The `not_a_member` refusal of a command that names `name`.
+fn assert_not_a_member(result: &PushResult, name: &str) {
+    assert_eq!(
+        rejection(result),
+        (
+            "not_a_member".to_string(),
+            format!("{name} is not a member of this vault")
+        )
+    );
+}
+
+#[tokio::test]
+async fn a_person_outside_the_vault_is_refused_and_the_batch_goes_on() {
+    let api = Api::new();
+    let (alice, vault) = household(&api).await;
+
+    let batch = vec![
+        envelope(vault, "alice", expense_for(1_000, "mallory")),
+        envelope(vault, "alice", expense(2_000, None)),
+        envelope(vault, "alice", expense_for(3_000, "giorgio")),
+        envelope(vault, "alice", expense_for(4_000, "alice")),
+    ];
+    let ids: Vec<Uuid> = batch.iter().map(|e| e.id).collect();
+    let response: PushResponse = api.push(&alice, vault, batch).await.json();
+    // An account that is not a member and a name nobody has are refused
+    // alike, and neither takes a seq.
+    assert_not_a_member(&response.results[0], "mallory");
+    assert_eq!(applied(&response.results[1]), 3);
+    assert_not_a_member(&response.results[2], "giorgio");
+    assert_eq!(applied(&response.results[3]), 4);
+    assert_eq!(response.last_seq, 4);
+
+    // The refused commands never entered the log.
+    let pull: PullResponse = api
+        .get(&format!("/vaults/{vault}/pull"), &alice)
+        .await
+        .json();
+    let logged: Vec<Uuid> = pull.commands.iter().map(|r| r.envelope.id).collect();
+    assert!(!logged.contains(&ids[0]));
+    assert!(!logged.contains(&ids[2]));
+    assert!(logged.contains(&ids[1]) && logged.contains(&ids[3]));
+}
+
+#[tokio::test]
+async fn any_member_may_be_the_person_but_only_by_the_exact_username() {
+    let api = Api::new();
+    let (alice, vault) = household(&api).await;
+
+    let batch = vec![
+        // An editor and a viewer: the role says who may write, not who a
+        // row may be for.
+        envelope(vault, "alice", expense_for(1_000, "elisa")),
+        envelope(vault, "alice", expense_for(1_000, "carol")),
+        // Usernames are lowercase: "Elisa" is nobody.
+        envelope(vault, "alice", expense_for(1_000, "Elisa")),
+        // Spaces around a name do not count, here as in the core.
+        envelope(vault, "alice", expense_for(1_000, " elisa ")),
+        // A blank person is the author, and names nobody.
+        envelope(vault, "alice", expense_for(1_000, "  ")),
+    ];
+    let response: PushResponse = api.push(&alice, vault, batch).await.json();
+    applied(&response.results[0]);
+    applied(&response.results[1]);
+    assert_not_a_member(&response.results[2], "Elisa");
+    applied(&response.results[3]);
+    applied(&response.results[4]);
+}
+
+#[tokio::test]
+async fn owners_patches_and_executions_name_members_too() {
+    let api = Api::new();
+    let (alice, vault) = household(&api).await;
+
+    let template = |owner: &str| Command::CreateRecurring {
+        transaction_kind: sparagne_core::TransactionKind::Expense,
+        amount: 78_000,
+        wallet_id: None,
+        flow_id: None,
+        category: Some("Casa".to_string()),
+        note: Some("mutuo".to_string()),
+        schedule: sparagne_core::Schedule {
+            frequency: sparagne_core::Frequency::Monthly { day: 1 },
+            interval: 1,
+            start_date: chrono::NaiveDate::from_ymd_opt(2023, 11, 1).expect("date"),
+            end_date: None,
+        },
+        owner: Some(owner.to_string()),
+    };
+    let refused_template = envelope(vault, "alice", template("mallory"));
+    let mutuo = envelope(vault, "alice", template("elisa"));
+    let mutuo_id = mutuo.id;
+    let response: PushResponse = api
+        .push(&alice, vault, vec![refused_template, mutuo])
+        .await
+        .json();
+    assert_not_a_member(&response.results[0], "mallory");
+    applied(&response.results[1]);
+
+    let owner = |owner: &str| Command::UpdateRecurring {
+        recurring_id: mutuo_id,
+        patch: sparagne_core::RecurringPatch {
+            owner: Some(owner.to_string()),
+            ..Default::default()
+        },
+    };
+    let execute = |person: &str, day: u32| Command::ExecuteRecurring {
+        recurring_id: mutuo_id,
+        period_date: chrono::NaiveDate::from_ymd_opt(2023, day, 1).expect("date"),
+        occurred_at: at(T0),
+        person: Some(person.to_string()),
+    };
+    let expense = envelope(vault, "alice", expense(1_000, None));
+    let expense_id = expense.id;
+    let person = |person: &str| Command::UpdateTransaction {
+        transaction_id: expense_id,
+        patch: sparagne_core::TransactionPatch {
+            person: Some(person.to_string()),
+            ..Default::default()
+        },
+    };
+    let batch = vec![
+        envelope(vault, "alice", owner("mallory")),
+        envelope(vault, "alice", owner("")),
+        envelope(vault, "alice", execute("mallory", 11)),
+        envelope(vault, "alice", execute("elisa", 11)),
+        expense,
+        envelope(vault, "alice", person("mallory")),
+        envelope(vault, "alice", person("carol")),
+    ];
+    let response: PushResponse = api.push(&alice, vault, batch).await.json();
+    assert_not_a_member(&response.results[0], "mallory");
+    applied(&response.results[1]);
+    assert_not_a_member(&response.results[2], "mallory");
+    applied(&response.results[3]);
+    applied(&response.results[4]);
+    assert_not_a_member(&response.results[5], "mallory");
+    applied(&response.results[6]);
+}
+
+// ---------------------------------------------------------------------------
 // Pull
 // ---------------------------------------------------------------------------
 
