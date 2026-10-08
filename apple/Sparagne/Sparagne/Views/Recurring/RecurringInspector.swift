@@ -193,7 +193,7 @@ struct RecurringInspector: View {
             .padding(.bottom, 2)
             FormRow(String(localized: "Repeat"), alignment: .firstTextBaseline) {
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         every
                         on
                     }
@@ -232,9 +232,11 @@ struct RecurringInspector: View {
         }
     }
 
-    /// "ogni [1] mese,"
+    /// "ogni [1] mese,". The spacing is tight on purpose: in English, with
+    /// "month," and "on day", the row only just fits the inspector's 340 pt on
+    /// one line, and it wraps (`ViewThatFits`) at any looser gap.
     private var every: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             Text(String(localized: "every"))
             MiniNumberField(label: String(localized: "Interval"), value: $draft.interval)
             Text(unitWord + (draft.cadence == .daily ? "" : ","))
@@ -261,7 +263,7 @@ struct RecurringInspector: View {
     /// day and a month.
     @ViewBuilder
     private var on: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             switch draft.cadence {
             case .daily:
                 EmptyView()
