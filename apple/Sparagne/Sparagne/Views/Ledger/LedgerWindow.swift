@@ -156,7 +156,7 @@ struct LedgerWindow: View {
                     ScrollView { SummaryView(year: year, store: store) }
                 }
             case .recurring:
-                RecurringTab(store: store, engine: engine) { sheet = $0 }
+                RecurringTab(store: store)
             case .setup:
                 SetupView(store: store, engine: engine) { sheet = $0 }
             }

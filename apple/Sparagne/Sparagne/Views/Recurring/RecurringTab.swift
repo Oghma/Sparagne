@@ -12,10 +12,6 @@ import SparagneCore
 /// mode (`requestCreate`).
 struct RecurringTab: View {
     let store: AppStore
-    /// Taken for the same call as the other tabs (`LedgerWindow.content`);
-    /// nothing here needs the engine or a sheet.
-    let engine: SyncEngine?
-    let present: (MainWindow.SheetKind) -> Void
 
     /// The user's pick in the table. `nil` until there is one, and then the
     /// inspector shows the first template (`shown`), so the layout never

@@ -2,12 +2,9 @@ import SwiftUI
 import SparagneCore
 
 // The small controls of the Ricorrenze tab (`docs/v2/UI.md` §2.5), drawn by
-// hand like the rest of the window: the system switch, segmented picker and
-// date picker are light-on-dark strangers on this ground.
-
-/// The switch moved to `FormKit` as `FormSwitch`; the template table still
-/// calls it by the tab's name.
-typealias RecurringSwitch = FormSwitch
+// hand like the rest of the window: the system segmented picker and date
+// picker are light-on-dark strangers on this ground. The switch is
+// `FormSwitch`, in `FormKit`.
 
 /// The canvas's `.seg`: segments on the darkest ground, the chosen one
 /// raised on `hi`. Not `SegmentedStrip`, whose chosen segment is amber: here

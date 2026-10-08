@@ -35,29 +35,14 @@ enum Ink {
     static let positive = Color(hex: 0x3ECF8E)
     /// Errors and negative balances. Deliberately not the accent.
     static let negative = Color(hex: 0xFF6B6B)
-    /// The darker half of a two-tone bar (the second person, last year): a
-    /// dark step of `chartExpense`.
-    static let muted = Color(hex: 0x4A2A12)
-    static let mutedPositive = Color(hex: 0x1D5340)
-    /// Amber-yellow: a refused sync change, the mid band of a budget bar
-    /// (`docs/v2/UI.md` §5's table). Used wherever the ledger needs a caution
-    /// color instead of system orange.
+    /// Amber-yellow: a refused sync change (`docs/v2/UI.md` §5's table). Used
+    /// wherever the ledger needs a caution color instead of system orange.
     static let warning = Color(hex: 0xE8A33D)
 
     /// Chart series, validated for color-blind separation on `#111113`.
     static let chartIncome = Color(hex: 0x5A8CF0)
     static let chartExpense = Color(hex: 0xD6742A)
     static let chartSavings = Color(hex: 0x25A26C)
-
-    /// Traffic light for a budget bar at a given fill fraction
-    /// (`DISTILLATO_V1.md` §3.4: thresholds at 70% and 90%).
-    static func progressTint(_ fraction: Double) -> Color {
-        switch fraction {
-        case ..<0.7: positive
-        case ..<0.9: warning
-        default: negative
-        }
-    }
 }
 
 extension Color {

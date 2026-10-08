@@ -3,7 +3,7 @@ import SparagneCore
 
 /// Opens the database, then hands the window over to `MainWindow`. Owns the
 /// store through a binding so `SparagneApp` can share the same instance
-/// with the Categories `Window` scene.
+/// with its menu commands, the Settings scene and the app delegate.
 struct ContentView: View {
     @Binding var store: AppStore?
     @Binding var engine: SyncEngine?

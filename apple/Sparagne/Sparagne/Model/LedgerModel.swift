@@ -54,11 +54,6 @@ struct MonthKey: Hashable, Sendable, Identifiable {
         return "\(name.prefix(1).uppercased(with: locale))\(name.dropFirst()) \(year)"
     }
 
-    /// The twelve months of this month's year, January first.
-    func yearMonths() -> [MonthKey] {
-        (1...12).map { MonthKey(year: year, month: $0) }
-    }
-
     /// The 13 boundaries `bucket_totals` needs for the twelve bars of a year.
     static func yearBounds(_ year: Int, calendar: Calendar = .current) -> [UtcDateTime] {
         let starts = (1...12).map { MonthKey(year: year, month: $0).start(calendar) }

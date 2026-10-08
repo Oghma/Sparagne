@@ -122,7 +122,7 @@ struct RecurringTemplateTable: View {
         let ownerLeft = store.ownerHasLeft(template)
         return HStack(spacing: 0) {
             cell(width: TemplateColumn.enabled) {
-                RecurringSwitch(
+                FormSwitch(
                     label: String(localized: "Enabled \(RecurringTitle.of(template))"),
                     isOn: template.enabled && !template.archived
                 ) { on in

@@ -1,8 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The modal sheets of the CATEGORIE table (`docs/v2/UI.md` §2.3). Moved here
-/// from the old Categories window, which the SETUP view replaces.
+/// The modal sheets of the CATEGORIE table (`docs/v2/UI.md` §2.3).
 
 /// The subject of the merge sheet. `.sheet(item:)` needs an `Identifiable`
 /// and the core's `CategoryView` is not one.
