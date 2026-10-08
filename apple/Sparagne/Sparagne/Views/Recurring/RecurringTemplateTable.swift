@@ -12,24 +12,30 @@ enum RecurringSelection: Hashable {
 /// three text columns take what is left, down to their minimums, which fit
 /// the window's narrowest width beside the inspector: 1176 less the
 /// inspector's 340 and the margins leaves about 800 points, and the widths
-/// below add up to 798. A wider column has to be paid for by another.
+/// below add up to 794. A wider column has to be paid for by another.
 private enum TemplateColumn {
     /// Wide enough for "Enabled", which is longer than the canvas's
     /// "Attiva".
     static let enabled: CGFloat = 60
-    static let descriptionMinimum: CGFloat = 110
+    /// A short title whole; a long one gives way to the cadence, which says
+    /// more than its last letters.
+    static let descriptionMinimum: CGFloat = 100
     static let amount: CGFloat = 88
-    /// "Every month on day 12" whole from 146; narrower, it ends in "…"
-    /// until the window widens.
-    static let cadenceMinimum: CGFloat = 130
+    /// "Every month on day 12", the commonest cadence, whole from 146 and
+    /// so whole at the narrowest window, with room for a wider day and for
+    /// "Ogni mese il giorno 12". A yearly one or an interval still ends in
+    /// "…" there, until the window widens.
+    static let cadenceMinimum: CGFloat = 152
     /// "1 ott · dovuta".
     static let next: CGFloat = 96
-    static let wallet: CGFloat = 76
+    /// "Contanti".
+    static let wallet: CGFloat = 72
     /// "Non allocato".
     static let envelope: CGFloat = 88
-    /// A first name or a username, as the grid's PERSONA column.
-    static let owner: CGFloat = 70
-    static let categoryMinimum: CGFloat = 80
+    /// A first name or a username, as the grid's PERSONA column, and the
+    /// heading "Titolare".
+    static let owner: CGFloat = 64
+    static let categoryMinimum: CGFloat = 74
     static let padding: CGFloat = 8
 }
 
