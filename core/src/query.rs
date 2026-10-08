@@ -84,8 +84,8 @@ pub struct TransactionView {
     pub category_is_system: bool,
     pub note: Option<String>,
     /// Who the row is for, the PERSONA column: the person the command named,
-    /// else its author. Transfers and opening balances are always the
-    /// author's.
+    /// else its author. A transfer is always its author's, and an opening
+    /// balance starts as its author's.
     pub person: String,
     /// Who recorded it: the author of the command that created the row, the
     /// account username once the vault is shared. Equal to `person` unless
