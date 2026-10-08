@@ -10,14 +10,6 @@ struct StatementReview: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                StatementCountsStrip(counts: model.counts)
-                Spacer()
-                if model.isPreviewing { ProgressView().controlSize(.small) }
-            }
-            .padding(.horizontal, Metrics.gutter)
-            .frame(height: 34)
-            Hairline()
             header
             Hairline()
             ScrollView {
@@ -203,32 +195,7 @@ private struct ReviewCell<Content: View>: View {
             .truncationMode(.tail)
             .frame(width: width, alignment: alignment)
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: alignment)
-            .padding(.horizontal, ImportMetrics.cellPadding)
-    }
-}
-
-/// `NEW 4  ALREADY IMPORTED 0  SKIPPED 4  INVALID 0  ROUNDED 0`: the
-/// preview's counts, as the import will make them.
-struct StatementCountsStrip: View {
-    let counts: StatementImportModel.Counts
-
-    var body: some View {
-        HStack(spacing: 14) {
-            item(String(localized: "To import"), counts.new, Ink.positive)
-            item(String(localized: "Already imported"), counts.alreadyImported, Ink.text)
-            item(String(localized: "Skipped"), counts.skipped, Ink.warning)
-            item(String(localized: "Invalid"), counts.invalid, Ink.negative)
-            item(String(localized: "Rounded"), counts.rounded, Ink.text)
-        }
-    }
-
-    private func item(_ label: String, _ value: Int, _ tint: Color) -> some View {
-        HStack(spacing: 5) {
-            SectionLabel(text: label)
-            Text(verbatim: String(value))
-                .font(Face.row)
-                .foregroundStyle(value == 0 ? Ink.text3 : tint)
-        }
+            .padding(.horizontal, Metrics.cellPad)
     }
 }
 

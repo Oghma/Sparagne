@@ -112,6 +112,20 @@ final class StatementImportModel {
         walletId = store.wallets.count == 1 ? store.wallets.first?.id : nil
     }
 
+    /// The pages the sheet's step strip may jump to from here: back to any
+    /// page already passed, ahead only as far as the footer's own button
+    /// would go (a review needs a preview the core accepted). Nothing moves
+    /// while the import runs or once it has: the report is the last page.
+    func isReachable(_ target: Step) -> Bool {
+        guard !isImporting, report == nil else { return target == step }
+        switch target {
+        case .file: return true
+        case .mapping: return detection != nil
+        case .review: return preview != nil && previewProblem == nil
+        case .report: return false
+        }
+    }
+
     // MARK: - Reading the file
 
     /// Reads the file the user picked. The URL comes from `.fileImporter`, so
