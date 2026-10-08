@@ -600,11 +600,6 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func applyPushResponseJson(vaultId: Uuid, json: String) throws  -> SyncReport
     
     /**
-     * Distinct authors of live transactions: the PERSONA segmented control.
-     */
-    func authors(vaultId: Uuid) throws  -> [String]
-    
-    /**
      * Writes a consistent copy of the database to `path`, which must not
      * exist yet.
      */
@@ -691,6 +686,11 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func pendingRecurring(vaultId: Uuid, today: NaiveDate) throws  -> [PendingRecurring]
     
     /**
+     * Distinct persons of live transactions: the PERSONA segmented control.
+     */
+    func people(vaultId: Uuid) throws  -> [String]
+    
+    /**
      * Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
      * is all time.
      */
@@ -732,17 +732,18 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func rejectedCommands(vaultId: Uuid) throws  -> [RejectedCommand]
     
     /**
-     * Rewrites the author of the outbox after a login and rebuilds the
-     * projection, so `created_by` and the vault owner follow the account.
+     * Rewrites the author of the outbox after a login, and every person or
+     * owner it names by an old author name, then rebuilds the projection: so
+     * `created_by`, the persons and the vault owner follow the account.
      */
     func relabelOutbox(vaultId: Uuid, author: String) throws 
     
     /**
-     * Resolves the wallet and flow names of a parsed quick-add line against
-     * the vault and returns the command to execute plus the ids the names
-     * resolved to.
+     * Resolves the wallet, flow and person names of a parsed quick-add line
+     * against the vault and `people` (who the app lets a row be for), and
+     * returns the command to execute plus the ids the names resolved to.
      */
-    func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, defaults: QuickAddDefaults) throws  -> ResolvedQuickAdd
+    func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, defaults: QuickAddDefaults, people: [String]) throws  -> ResolvedQuickAdd
     
     /**
      * Server side of a pull.
@@ -907,19 +908,6 @@ open func applyPushResponseJson(vaultId: Uuid, json: String)throws  -> SyncRepor
             self.uniffiCloneHandle(),
         FfiConverterTypeUuid_lower(vaultId),
         FfiConverterString.lower(json),uniffiCallStatus
-    )
-})
-}
-    
-    /**
-     * Distinct authors of live transactions: the PERSONA segmented control.
-     */
-open func authors(vaultId: Uuid)throws  -> [String]  {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
-        uniffiCallStatus in
-    uniffi_sparagne_core_fn_method_corehandle_authors(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
     )
 })
 }
@@ -1165,6 +1153,19 @@ open func pendingRecurring(vaultId: Uuid, today: NaiveDate)throws  -> [PendingRe
 }
     
     /**
+     * Distinct persons of live transactions: the PERSONA segmented control.
+     */
+open func people(vaultId: Uuid)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_people(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * Sums by kind over `[from, to)`. Either bound may be `nil`; both `nil`
      * is all time.
      */
@@ -1283,8 +1284,9 @@ open func rejectedCommands(vaultId: Uuid)throws  -> [RejectedCommand]  {
 }
     
     /**
-     * Rewrites the author of the outbox after a login and rebuilds the
-     * projection, so `created_by` and the vault owner follow the account.
+     * Rewrites the author of the outbox after a login, and every person or
+     * owner it names by an old author name, then rebuilds the projection: so
+     * `created_by`, the persons and the vault owner follow the account.
      */
 open func relabelOutbox(vaultId: Uuid, author: String)throws   {try rustCallWithError(FfiConverterTypeDomainError_lift) {
         uniffiCallStatus in
@@ -1297,11 +1299,11 @@ open func relabelOutbox(vaultId: Uuid, author: String)throws   {try rustCallWith
 }
     
     /**
-     * Resolves the wallet and flow names of a parsed quick-add line against
-     * the vault and returns the command to execute plus the ids the names
-     * resolved to.
+     * Resolves the wallet, flow and person names of a parsed quick-add line
+     * against the vault and `people` (who the app lets a row be for), and
+     * returns the command to execute plus the ids the names resolved to.
      */
-open func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, defaults: QuickAddDefaults)throws  -> ResolvedQuickAdd  {
+open func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, defaults: QuickAddDefaults, people: [String])throws  -> ResolvedQuickAdd  {
     return try  FfiConverterTypeResolvedQuickAdd_lift(try rustCallWithError(FfiConverterTypeQuickAddError_lift) {
         uniffiCallStatus in
     uniffi_sparagne_core_fn_method_corehandle_resolve_quick_add(
@@ -1309,7 +1311,8 @@ open func resolveQuickAdd(vaultId: Uuid, parsed: QuickAdd, now: OffsetDateTime, 
         FfiConverterTypeUuid_lower(vaultId),
         FfiConverterTypeQuickAdd_lower(parsed),
         FfiConverterTypeOffsetDateTime_lower(now),
-        FfiConverterTypeQuickAddDefaults_lower(defaults),uniffiCallStatus
+        FfiConverterTypeQuickAddDefaults_lower(defaults),
+        FfiConverterSequenceString.lower(people),uniffiCallStatus
     )
 })
 }
@@ -1591,7 +1594,7 @@ public struct BucketPersonTotals: Equatable, Hashable, Codable {
      */
     public var bucket: UInt32
     /**
-     * `transactions.created_by`.
+     * `transactions.person`.
      */
     public var person: String
     /**
@@ -1619,7 +1622,7 @@ public struct BucketPersonTotals: Equatable, Hashable, Codable {
          * Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
          */bucket: UInt32, 
         /**
-         * `transactions.created_by`.
+         * `transactions.person`.
          */person: String, 
         /**
          * Income other than opening balances.
@@ -2105,6 +2108,15 @@ public struct Entry: Equatable, Hashable, Codable {
     public var category: String?
     public var note: String?
     public var occurredAt: OffsetDateTime
+    /**
+     * Who the row is for, when that is not the author: a member of the vault
+     * recording on someone else's behalf. `None` or blank = the author.
+     *
+     * Resolved when the command is applied, never stored as the author's
+     * name, and left out of the JSON when `None`: a log written before the
+     * field existed replays exactly as it did, every row on its author.
+     */
+    public var person: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2120,13 +2132,22 @@ public struct Entry: Equatable, Hashable, Codable {
          */flowId: Uuid?, 
         /**
          * Free text resolved by key, then alias; blank = Uncategorized.
-         */category: String?, note: String?, occurredAt: OffsetDateTime) {
+         */category: String?, note: String?, occurredAt: OffsetDateTime, 
+        /**
+         * Who the row is for, when that is not the author: a member of the vault
+         * recording on someone else's behalf. `None` or blank = the author.
+         *
+         * Resolved when the command is applied, never stored as the author's
+         * name, and left out of the JSON when `None`: a log written before the
+         * field existed replays exactly as it did, every row on its author.
+         */person: String? = nil) {
         self.amount = amount
         self.walletId = walletId
         self.flowId = flowId
         self.category = category
         self.note = note
         self.occurredAt = occurredAt
+        self.person = person
     }
 
     
@@ -2150,7 +2171,8 @@ public struct FfiConverterTypeEntry: FfiConverterRustBuffer {
                 flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 category: FfiConverterOptionString.read(from: &buf), 
                 note: FfiConverterOptionString.read(from: &buf), 
-                occurredAt: FfiConverterTypeOffsetDateTime.read(from: &buf)
+                occurredAt: FfiConverterTypeOffsetDateTime.read(from: &buf), 
+                person: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -2161,6 +2183,7 @@ public struct FfiConverterTypeEntry: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.category, into: &buf)
         FfiConverterOptionString.write(value.note, into: &buf)
         FfiConverterTypeOffsetDateTime.write(value.occurredAt, into: &buf)
+        FfiConverterOptionString.write(value.person, into: &buf)
     }
 }
 
@@ -2189,7 +2212,7 @@ public func FfiConverterTypeEntry_lower(_ value: Entry) -> RustBuffer {
 public struct FlowPersonTotals: Equatable, Hashable, Codable {
     public var flowId: Uuid
     /**
-     * `transactions.created_by`: the member of the vault, the PERSONA column.
+     * `transactions.person`: who the rows are for, the PERSONA column.
      */
     public var person: String
     public var income: Int64
@@ -2204,7 +2227,7 @@ public struct FlowPersonTotals: Equatable, Hashable, Codable {
     // declare one manually.
     public init(flowId: Uuid, 
         /**
-         * `transactions.created_by`: the member of the vault, the PERSONA column.
+         * `transactions.person`: who the rows are for, the PERSONA column.
          */person: String, income: Int64, expense: Int64, refund: Int64, 
         /**
          * `max(expense - refund, 0)`.
@@ -2942,6 +2965,10 @@ public struct RecurringPatch: Equatable, Hashable, Codable {
      * Disabled templates are never pending.
      */
     public var enabled: Bool?
+    /**
+     * Blank = the author of the template. Left out of the JSON when `None`.
+     */
+    public var owner: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2957,7 +2984,10 @@ public struct RecurringPatch: Equatable, Hashable, Codable {
          */note: String? = nil, schedule: Schedule? = nil, 
         /**
          * Disabled templates are never pending.
-         */enabled: Bool? = nil) {
+         */enabled: Bool? = nil, 
+        /**
+         * Blank = the author of the template. Left out of the JSON when `None`.
+         */owner: String? = nil) {
         self.amount = amount
         self.walletId = walletId
         self.flowId = flowId
@@ -2965,6 +2995,7 @@ public struct RecurringPatch: Equatable, Hashable, Codable {
         self.note = note
         self.schedule = schedule
         self.enabled = enabled
+        self.owner = owner
     }
 
     
@@ -2989,7 +3020,8 @@ public struct FfiConverterTypeRecurringPatch: FfiConverterRustBuffer {
                 category: FfiConverterOptionString.read(from: &buf), 
                 note: FfiConverterOptionString.read(from: &buf), 
                 schedule: FfiConverterOptionTypeSchedule.read(from: &buf), 
-                enabled: FfiConverterOptionBool.read(from: &buf)
+                enabled: FfiConverterOptionBool.read(from: &buf), 
+                owner: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -3001,6 +3033,7 @@ public struct FfiConverterTypeRecurringPatch: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.note, into: &buf)
         FfiConverterOptionTypeSchedule.write(value.schedule, into: &buf)
         FfiConverterOptionBool.write(value.enabled, into: &buf)
+        FfiConverterOptionString.write(value.owner, into: &buf)
     }
 }
 
@@ -3116,6 +3149,11 @@ public struct RecurringView: Equatable, Hashable, Codable {
     public var schedule: Schedule
     public var enabled: Bool
     public var archived: Bool
+    /**
+     * Whose template it is: who created it, unless a command named someone
+     * else. The app executes it with this person.
+     */
+    public var owner: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -3134,7 +3172,11 @@ public struct RecurringView: Equatable, Hashable, Codable {
          */flowId: Uuid?, 
         /**
          * Free text, resolved at execution time.
-         */category: String?, note: String?, schedule: Schedule, enabled: Bool, archived: Bool) {
+         */category: String?, note: String?, schedule: Schedule, enabled: Bool, archived: Bool, 
+        /**
+         * Whose template it is: who created it, unless a command named someone
+         * else. The app executes it with this person.
+         */owner: String) {
         self.id = id
         self.kind = kind
         self.amount = amount
@@ -3145,6 +3187,7 @@ public struct RecurringView: Equatable, Hashable, Codable {
         self.schedule = schedule
         self.enabled = enabled
         self.archived = archived
+        self.owner = owner
     }
 
     
@@ -3172,7 +3215,8 @@ public struct FfiConverterTypeRecurringView: FfiConverterRustBuffer {
                 note: FfiConverterOptionString.read(from: &buf), 
                 schedule: FfiConverterTypeSchedule.read(from: &buf), 
                 enabled: FfiConverterBool.read(from: &buf), 
-                archived: FfiConverterBool.read(from: &buf)
+                archived: FfiConverterBool.read(from: &buf), 
+                owner: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -3187,6 +3231,7 @@ public struct FfiConverterTypeRecurringView: FfiConverterRustBuffer {
         FfiConverterTypeSchedule.write(value.schedule, into: &buf)
         FfiConverterBool.write(value.enabled, into: &buf)
         FfiConverterBool.write(value.archived, into: &buf)
+        FfiConverterString.write(value.owner, into: &buf)
     }
 }
 
@@ -4476,12 +4521,18 @@ public struct TopExpense: Equatable, Hashable, Codable {
     public var note: String?
     public var category: String
     public var categoryIsSystem: Bool
+    /**
+     * `transactions.person`.
+     */
     public var person: String
     public var amount: Int64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(transactionId: Uuid, occurredAt: OffsetDateTime, note: String?, category: String, categoryIsSystem: Bool, person: String, amount: Int64) {
+    public init(transactionId: Uuid, occurredAt: OffsetDateTime, note: String?, category: String, categoryIsSystem: Bool, 
+        /**
+         * `transactions.person`.
+         */person: String, amount: Int64) {
         self.transactionId = transactionId
         self.occurredAt = occurredAt
         self.note = note
@@ -4577,10 +4628,10 @@ public struct TransactionFilter: Equatable, Hashable, Codable {
      */
     public var text: String?
     /**
-     * Exact `created_by`: the PERSONA filter of the ledger
+     * Exact `person`: the PERSONA filter of the ledger
      * (`docs/v2/UI.md` §3). `None` = everybody.
      */
-    public var author: String?
+    public var person: String?
     /**
      * Oldest first, the reading order of the ledger. Cursors keep working:
      * they simply walk forward instead of backward.
@@ -4610,9 +4661,9 @@ public struct TransactionFilter: Equatable, Hashable, Codable {
          * Case-insensitive substring on note or category name.
          */text: String? = nil, 
         /**
-         * Exact `created_by`: the PERSONA filter of the ledger
+         * Exact `person`: the PERSONA filter of the ledger
          * (`docs/v2/UI.md` §3). `None` = everybody.
-         */author: String? = nil, 
+         */person: String? = nil, 
         /**
          * Oldest first, the reading order of the ledger. Cursors keep working:
          * they simply walk forward instead of backward.
@@ -4625,7 +4676,7 @@ public struct TransactionFilter: Equatable, Hashable, Codable {
         self.walletId = walletId
         self.flowId = flowId
         self.text = text
-        self.author = author
+        self.person = person
         self.ascending = ascending
     }
 
@@ -4653,7 +4704,7 @@ public struct FfiConverterTypeTransactionFilter: FfiConverterRustBuffer {
                 walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 text: FfiConverterOptionString.read(from: &buf), 
-                author: FfiConverterOptionString.read(from: &buf), 
+                person: FfiConverterOptionString.read(from: &buf), 
                 ascending: FfiConverterBool.read(from: &buf)
         )
     }
@@ -4667,7 +4718,7 @@ public struct FfiConverterTypeTransactionFilter: FfiConverterRustBuffer {
         FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
         FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
         FfiConverterOptionString.write(value.text, into: &buf)
-        FfiConverterOptionString.write(value.author, into: &buf)
+        FfiConverterOptionString.write(value.person, into: &buf)
         FfiConverterBool.write(value.ascending, into: &buf)
     }
 }
@@ -4692,10 +4743,11 @@ public func FfiConverterTypeTransactionFilter_lower(_ value: TransactionFilter) 
  * The fields [`Command::UpdateTransaction`] can change.
  *
  * Every field is optional and `None` means "leave as is"; a blank string
- * clears the note or puts the category back to Uncategorized. Which fields
- * apply depends on the kind of the transaction being patched: `wallet_id`,
- * `flow_id` and `category` belong to entries, `from_id` and `to_id` to
- * transfers, and mixing the two is refused.
+ * clears the note, puts the category back to Uncategorized or gives the row
+ * back to whoever recorded it. Which fields apply depends on the kind of the
+ * transaction being patched: `wallet_id`, `flow_id`, `category` and `person`
+ * belong to entries, `from_id` and `to_id` to transfers, and mixing the two
+ * is refused.
  */
 public struct TransactionPatch: Equatable, Hashable, Codable {
     /**
@@ -4727,6 +4779,12 @@ public struct TransactionPatch: Equatable, Hashable, Codable {
      * Transfers only.
      */
     public var toId: Uuid?
+    /**
+     * Entries only; blank = the author of the transaction (`created_by`).
+     * Left out of the JSON when `None`, so a patch without it serializes as
+     * it always did.
+     */
+    public var person: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -4751,7 +4809,12 @@ public struct TransactionPatch: Equatable, Hashable, Codable {
          */fromId: Uuid? = nil, 
         /**
          * Transfers only.
-         */toId: Uuid? = nil) {
+         */toId: Uuid? = nil, 
+        /**
+         * Entries only; blank = the author of the transaction (`created_by`).
+         * Left out of the JSON when `None`, so a patch without it serializes as
+         * it always did.
+         */person: String? = nil) {
         self.amount = amount
         self.occurredAt = occurredAt
         self.category = category
@@ -4760,6 +4823,7 @@ public struct TransactionPatch: Equatable, Hashable, Codable {
         self.flowId = flowId
         self.fromId = fromId
         self.toId = toId
+        self.person = person
     }
 
     
@@ -4785,7 +4849,8 @@ public struct FfiConverterTypeTransactionPatch: FfiConverterRustBuffer {
                 walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 fromId: FfiConverterOptionTypeUuid.read(from: &buf), 
-                toId: FfiConverterOptionTypeUuid.read(from: &buf)
+                toId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                person: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -4798,6 +4863,7 @@ public struct FfiConverterTypeTransactionPatch: FfiConverterRustBuffer {
         FfiConverterOptionTypeUuid.write(value.flowId, into: &buf)
         FfiConverterOptionTypeUuid.write(value.fromId, into: &buf)
         FfiConverterOptionTypeUuid.write(value.toId, into: &buf)
+        FfiConverterOptionString.write(value.person, into: &buf)
     }
 }
 
@@ -4841,8 +4907,15 @@ public struct TransactionView: Equatable, Hashable, Codable {
     public var categoryIsSystem: Bool
     public var note: String?
     /**
-     * Author of the command that created the row; the account username once
-     * the vault is shared.
+     * Who the row is for, the PERSONA column: the person the command named,
+     * else its author. Transfers and opening balances are always the
+     * author's.
+     */
+    public var person: String
+    /**
+     * Who recorded it: the author of the command that created the row, the
+     * account username once the vault is shared. Equal to `person` unless
+     * someone recorded the row on another member's behalf.
      */
     public var createdBy: String
     public var voided: Bool
@@ -4874,8 +4947,14 @@ public struct TransactionView: Equatable, Hashable, Codable {
          * `true` for `Opening` and `Uncategorized`: the app localizes the name.
          */categoryIsSystem: Bool, note: String?, 
         /**
-         * Author of the command that created the row; the account username once
-         * the vault is shared.
+         * Who the row is for, the PERSONA column: the person the command named,
+         * else its author. Transfers and opening balances are always the
+         * author's.
+         */person: String, 
+        /**
+         * Who recorded it: the author of the command that created the row, the
+         * account username once the vault is shared. Equal to `person` unless
+         * someone recorded the row on another member's behalf.
          */createdBy: String, voided: Bool, 
         /**
          * Entries only: the wallet the money moved on.
@@ -4897,6 +4976,7 @@ public struct TransactionView: Equatable, Hashable, Codable {
         self.category = category
         self.categoryIsSystem = categoryIsSystem
         self.note = note
+        self.person = person
         self.createdBy = createdBy
         self.voided = voided
         self.walletId = walletId
@@ -4930,6 +5010,7 @@ public struct FfiConverterTypeTransactionView: FfiConverterRustBuffer {
                 category: FfiConverterString.read(from: &buf), 
                 categoryIsSystem: FfiConverterBool.read(from: &buf), 
                 note: FfiConverterOptionString.read(from: &buf), 
+                person: FfiConverterString.read(from: &buf), 
                 createdBy: FfiConverterString.read(from: &buf), 
                 voided: FfiConverterBool.read(from: &buf), 
                 walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
@@ -4949,6 +5030,7 @@ public struct FfiConverterTypeTransactionView: FfiConverterRustBuffer {
         FfiConverterString.write(value.category, into: &buf)
         FfiConverterBool.write(value.categoryIsSystem, into: &buf)
         FfiConverterOptionString.write(value.note, into: &buf)
+        FfiConverterString.write(value.person, into: &buf)
         FfiConverterString.write(value.createdBy, into: &buf)
         FfiConverterBool.write(value.voided, into: &buf)
         FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
@@ -5407,7 +5489,12 @@ public enum Command: Equatable, Hashable, Codable {
          */flowId: Uuid?, 
         /**
          * Free text, resolved at execution time; blank = Uncategorized.
-         */category: String?, note: String?, schedule: Schedule
+         */category: String?, note: String?, schedule: Schedule, 
+        /**
+         * Whose template it is, the person an execution is meant for; `None`
+         * or blank = the author. Left out of the JSON when `None`, like
+         * [`Entry::person`].
+         */owner: String? = nil
     )
     /**
      * Partial update; the patch must carry at least one field. Past runs are
@@ -5424,7 +5511,13 @@ public enum Command: Equatable, Hashable, Codable {
      * whose id is the command id. `period_date` must be a due date of the
      * schedule that has not been executed or skipped yet.
      */
-    case executeRecurring(recurringId: Uuid, periodDate: NaiveDate, occurredAt: OffsetDateTime
+    case executeRecurring(recurringId: Uuid, periodDate: NaiveDate, occurredAt: OffsetDateTime, 
+        /**
+         * The person of the transaction; the app sends the template's owner.
+         * `None` or blank = the author, whoever owns the template: reading
+         * the owner when the command is applied would let a later change of
+         * owner rewrite past executions on replay.
+         */person: String? = nil
     )
     /**
      * Marks a due period as handled without a transaction.
@@ -5526,7 +5619,7 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         case 25: return .voidTransaction(transactionId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 26: return .createRecurring(transactionKind: try FfiConverterTypeTransactionKind.read(from: &buf), amount: try FfiConverterInt64.read(from: &buf), walletId: try FfiConverterOptionTypeUuid.read(from: &buf), flowId: try FfiConverterOptionTypeUuid.read(from: &buf), category: try FfiConverterOptionString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), schedule: try FfiConverterTypeSchedule.read(from: &buf)
+        case 26: return .createRecurring(transactionKind: try FfiConverterTypeTransactionKind.read(from: &buf), amount: try FfiConverterInt64.read(from: &buf), walletId: try FfiConverterOptionTypeUuid.read(from: &buf), flowId: try FfiConverterOptionTypeUuid.read(from: &buf), category: try FfiConverterOptionString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), schedule: try FfiConverterTypeSchedule.read(from: &buf), owner: try FfiConverterOptionString.read(from: &buf)
         )
         
         case 27: return .updateRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), patch: try FfiConverterTypeRecurringPatch.read(from: &buf)
@@ -5538,7 +5631,7 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         case 29: return .restoreRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf)
         )
         
-        case 30: return .executeRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf)
+        case 30: return .executeRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf), person: try FfiConverterOptionString.read(from: &buf)
         )
         
         case 31: return .skipRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
@@ -5700,7 +5793,7 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             FfiConverterTypeUuid.write(transactionId, into: &buf)
             
         
-        case let .createRecurring(transactionKind,amount,walletId,flowId,category,note,schedule):
+        case let .createRecurring(transactionKind,amount,walletId,flowId,category,note,schedule,owner):
             writeInt(&buf, Int32(26))
             FfiConverterTypeTransactionKind.write(transactionKind, into: &buf)
             FfiConverterInt64.write(amount, into: &buf)
@@ -5709,6 +5802,7 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             FfiConverterOptionString.write(category, into: &buf)
             FfiConverterOptionString.write(note, into: &buf)
             FfiConverterTypeSchedule.write(schedule, into: &buf)
+            FfiConverterOptionString.write(owner, into: &buf)
             
         
         case let .updateRecurring(recurringId,patch):
@@ -5727,11 +5821,12 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             
         
-        case let .executeRecurring(recurringId,periodDate,occurredAt):
+        case let .executeRecurring(recurringId,periodDate,occurredAt,person):
             writeInt(&buf, Int32(30))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
             FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
             FfiConverterTypeOffsetDateTime.write(occurredAt, into: &buf)
+            FfiConverterOptionString.write(person, into: &buf)
             
         
         case let .skipRecurring(recurringId,periodDate):
@@ -6461,7 +6556,10 @@ public enum QuickAdd: Equatable, Hashable, Codable {
     case entry(kind: TransactionKind, 
         /**
          * Absolute, `> 0`.
-         */amount: Int64, note: String?, category: String?, wallet: String?, flow: String?, date: DateSpec?
+         */amount: Int64, note: String?, category: String?, wallet: String?, flow: String?, date: DateSpec?, 
+        /**
+         * The `!name` marker: who the row is for, before resolution.
+         */person: String? = nil
     )
     case transferWallet(amount: Int64, from: String, to: String, note: String?, date: DateSpec?
     )
@@ -6488,7 +6586,7 @@ public struct FfiConverterTypeQuickAdd: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .entry(kind: try FfiConverterTypeTransactionKind.read(from: &buf), amount: try FfiConverterInt64.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), category: try FfiConverterOptionString.read(from: &buf), wallet: try FfiConverterOptionString.read(from: &buf), flow: try FfiConverterOptionString.read(from: &buf), date: try FfiConverterOptionTypeDateSpec.read(from: &buf)
+        case 1: return .entry(kind: try FfiConverterTypeTransactionKind.read(from: &buf), amount: try FfiConverterInt64.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), category: try FfiConverterOptionString.read(from: &buf), wallet: try FfiConverterOptionString.read(from: &buf), flow: try FfiConverterOptionString.read(from: &buf), date: try FfiConverterOptionTypeDateSpec.read(from: &buf), person: try FfiConverterOptionString.read(from: &buf)
         )
         
         case 2: return .transferWallet(amount: try FfiConverterInt64.read(from: &buf), from: try FfiConverterString.read(from: &buf), to: try FfiConverterString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf), date: try FfiConverterOptionTypeDateSpec.read(from: &buf)
@@ -6505,7 +6603,7 @@ public struct FfiConverterTypeQuickAdd: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .entry(kind,amount,note,category,wallet,flow,date):
+        case let .entry(kind,amount,note,category,wallet,flow,date,person):
             writeInt(&buf, Int32(1))
             FfiConverterTypeTransactionKind.write(kind, into: &buf)
             FfiConverterInt64.write(amount, into: &buf)
@@ -6514,6 +6612,7 @@ public struct FfiConverterTypeQuickAdd: FfiConverterRustBuffer {
             FfiConverterOptionString.write(wallet, into: &buf)
             FfiConverterOptionString.write(flow, into: &buf)
             FfiConverterOptionTypeDateSpec.write(date, into: &buf)
+            FfiConverterOptionString.write(person, into: &buf)
             
         
         case let .transferWallet(amount,from,to,note,date):
@@ -8747,9 +8846,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_apply_push_response_json() != 58020) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_authors() != 39372) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_sparagne_core_checksum_method_corehandle_backup_to() != 36213) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8801,6 +8897,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_pending_recurring() != 33812) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_method_corehandle_people() != 47772) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_method_corehandle_period_totals() != 68) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8825,10 +8924,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_rejected_commands() != 26105) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_relabel_outbox() != 61026) {
+    if (uniffi_sparagne_core_checksum_method_corehandle_relabel_outbox() != 55910) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sparagne_core_checksum_method_corehandle_resolve_quick_add() != 42675) {
+    if (uniffi_sparagne_core_checksum_method_corehandle_resolve_quick_add() != 38373) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_serve_pull_json() != 45657) {
