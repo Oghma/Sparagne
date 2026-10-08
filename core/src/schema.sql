@@ -96,7 +96,8 @@ CREATE TABLE commands (
     occurred_at INTEGER,                 -- for transaction commands
     created_at  INTEGER NOT NULL,
     status      TEXT NOT NULL,           -- applied|rejected
-    rejection   TEXT,                    -- '<code>: <message>' for rejected rows
+    rejection   TEXT,                    -- '<code>: <message>' for rejected rows, or a JSON
+                                         -- {code, message, detail} when the refusal named someone
     result_id   BLOB,                    -- id of the entity the command created
     server_seq  INTEGER                  -- seq the server gave it; NULL = outbox
 );
