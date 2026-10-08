@@ -10,20 +10,26 @@ enum RecurringSelection: Hashable {
 
 /// Column geometry of "Modelli", shared by the heading and the rows. The
 /// three text columns take what is left, down to their minimums, which fit
-/// the window's narrowest width beside the inspector.
+/// the window's narrowest width beside the inspector: 1176 less the
+/// inspector's 340 and the margins leaves about 800 points, and the widths
+/// below add up to 798. A wider column has to be paid for by another.
 private enum TemplateColumn {
     /// Wide enough for "Enabled", which is longer than the canvas's
     /// "Attiva".
     static let enabled: CGFloat = 60
-    static let descriptionMinimum: CGFloat = 120
-    static let amount: CGFloat = 96
-    static let cadenceMinimum: CGFloat = 150
-    static let next: CGFloat = 100
-    static let wallet: CGFloat = 84
-    static let envelope: CGFloat = 92
+    static let descriptionMinimum: CGFloat = 110
+    static let amount: CGFloat = 88
+    /// "Every month on day 12" whole from 146; narrower, it ends in "…"
+    /// until the window widens.
+    static let cadenceMinimum: CGFloat = 130
+    /// "1 ott · dovuta".
+    static let next: CGFloat = 96
+    static let wallet: CGFloat = 76
+    /// "Non allocato".
+    static let envelope: CGFloat = 88
     /// A first name or a username, as the grid's PERSONA column.
-    static let owner: CGFloat = 76
-    static let categoryMinimum: CGFloat = 90
+    static let owner: CGFloat = 70
+    static let categoryMinimum: CGFloat = 80
     static let padding: CGFloat = 8
 }
 
@@ -202,7 +208,10 @@ struct RecurringTemplateTable: View {
     // MARK: - The last row
 
     /// "Nuova ricorrenza…": the inspector in create mode. The cells show what
-    /// a new template starts from.
+    /// a new template starts from, its owner among them. A cell with nothing
+    /// to show holds an empty text rather than no view: a frame around an
+    /// `EmptyView` drops out of the layout, and the cells after it would
+    /// slide under the wrong headings.
     private var newRow: some View {
         let key = RecurringSelection.new
         return HStack(spacing: 0) {
@@ -216,11 +225,11 @@ struct RecurringTemplateTable: View {
             }
             cell(width: TemplateColumn.amount, alignment: .trailing) { Text(LedgerMoney.bare(0)) }
             cell(minWidth: TemplateColumn.cadenceMinimum) { Text(ScheduleFormatting.every(1, .month)) }
-            cell(width: TemplateColumn.next) { EmptyView() }
-            cell(width: TemplateColumn.wallet) { EmptyView() }
-            cell(width: TemplateColumn.envelope) { EmptyView() }
+            cell(width: TemplateColumn.next) { Text(verbatim: "") }
+            cell(width: TemplateColumn.wallet) { Text(verbatim: "") }
+            cell(width: TemplateColumn.envelope) { Text(verbatim: "") }
             cell(width: TemplateColumn.owner) { Text(store.currentAuthor) }
-            cell(minWidth: TemplateColumn.categoryMinimum) { EmptyView() }
+            cell(minWidth: TemplateColumn.categoryMinimum) { Text(verbatim: "") }
         }
         .font(Face.ui(12))
         .foregroundStyle(selection == key ? Ink.text2 : Ink.text3)
