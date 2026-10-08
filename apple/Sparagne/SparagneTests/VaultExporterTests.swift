@@ -109,7 +109,7 @@ struct VaultExporterTests {
         #expect(csv.hasPrefix(LedgerCSV.allHeader + "\r\n"))
         let lines = Self.lines(csv)
         #expect(lines.count == all.count)
-        #expect(lines.allSatisfy { $0.count == 9 })
+        #expect(lines.allSatisfy { $0.count == 10 })
 
         let first = try #require(lines.first { $0[6] == "row 0" })
         #expect(first[1] == "expense")
@@ -117,8 +117,11 @@ struct VaultExporterTests {
         #expect(first[3] == "Cash")
         #expect(first[4] == NameBook.unallocatedLabel)
         #expect(first[5] == "Food")
+        // The person and who recorded it: the same, nobody recorded it for
+        // anyone else.
         #expect(first[7] == "tester")
-        #expect(first[8] == "false")
+        #expect(first[8] == "tester")
+        #expect(first[9] == "false")
 
         let wallets = try #require(lines.first { $0[6] == "to bank" })
         #expect(wallets[1] == "transfer_wallet")
@@ -134,7 +137,7 @@ struct VaultExporterTests {
         let voided = try #require(lines.first { $0[6] == "pizza" })
         #expect(voided[2] == "-12.50")
         #expect(voided[4] == "Holidays")
-        #expect(voided[8] == "true")
+        #expect(voided[9] == "true")
     }
 
     @Test("The backup is named after today")

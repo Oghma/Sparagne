@@ -4,7 +4,8 @@ import SparagneCore
 /// The ledger's CSV export (`docs/v2/UI.md` §6, ⌘E): a pure rendering over
 /// the rows already on screen, so the window only has to hand it what
 /// `AppStore.rows` already filtered (month, direction, person, search, and
-/// voided/transfers only when the View menu is showing them).
+/// voided/transfers only when the View menu is showing them). Its `person`
+/// is the PERSONA column: who each row is for.
 ///
 /// RFC 4180: comma-separated, CRLF line endings, a field quoted when it
 /// carries a comma, a quote or a newline, with inner quotes doubled.
@@ -43,9 +44,10 @@ enum LedgerCSV {
     /// The full export (`Support/VaultExporter.swift`): every transaction of
     /// the vault, whatever the window shows. Wallet and envelope both have a
     /// column, so a transfer writes `from → to` in the one it moves and the
-    /// placeholder in the other; the note and the author keep the core's
-    /// names.
-    static let allHeader = "date,kind,amount,wallet,envelope,category,note,author,voided"
+    /// placeholder in the other; the note keeps the core's name. `person` is
+    /// who the row is for and `author` who recorded it, the same name unless
+    /// one member recorded it for another.
+    static let allHeader = "date,kind,amount,wallet,envelope,category,note,person,author,voided"
 
     /// The full file text, header included, with the conventions of
     /// `render(_:wallet:)`: CRLF, RFC 4180 quoting, amounts signed by kind.
@@ -79,6 +81,7 @@ enum LedgerCSV {
             row.category,
             row.note,
             row.person,
+            row.recordedBy,
             row.voided ? "true" : "false",
         ]
         .map(quoted)

@@ -15,6 +15,7 @@ struct LedgerCSVTests {
         category: String = "Groceries",
         note: String = "",
         person: String = "Matteo",
+        recordedBy: String? = nil,
         voided: Bool = false,
         occurredAt: Date = Date()
     ) -> TransactionRow {
@@ -29,7 +30,7 @@ struct LedgerCSVTests {
             categoryIsSystem: false,
             note: note.isEmpty ? nil : note,
             person: person,
-            createdBy: person,
+            createdBy: recordedBy ?? person,
             voided: voided,
             walletId: isTransfer ? nil : UUID().uuidString,
             flowId: isTransfer ? nil : UUID().uuidString,
@@ -151,16 +152,28 @@ struct LedgerCSVTests {
 
         let spend = Self.namedWalletRow(wallet: "Conto")
         let fields = LedgerCSV.renderAll([spend]).components(separatedBy: "\r\n")[1].components(separatedBy: ",")
-        #expect(fields.count == 9)
+        #expect(fields.count == 10)
         #expect(fields[1] == "expense")
         #expect(fields[2] == "-10.00")
         #expect(fields[3] == "Conto")
         #expect(fields[4] == TransactionRow.placeholder)
         #expect(fields[7] == "Matteo")
-        #expect(fields[8] == "false")
+        #expect(fields[8] == "Matteo")
+        #expect(fields[9] == "false")
 
         let quoted = LedgerCSV.renderAll([Self.row(note: "bread, milk")])
         #expect(quoted.contains(",\"bread, milk\","))
+    }
+
+    @Test("A row recorded for someone else: the ledger's person is who it is for, the full export says who recorded it too")
+    func personAndAuthor() {
+        let dinner = Self.row(note: "cena", person: "Elisa", recordedBy: "Matteo")
+        #expect(Self.dataLine(dinner)[5] == "Elisa")
+
+        #expect(LedgerCSV.allHeader.contains(",note,person,author,voided"))
+        let fields = LedgerCSV.renderAll([dinner]).components(separatedBy: "\r\n")[1].components(separatedBy: ",")
+        #expect(fields[7] == "Elisa")
+        #expect(fields[8] == "Matteo")
     }
 
     @Test("The full export is named after the vault and today, without the characters a file name cannot hold")
