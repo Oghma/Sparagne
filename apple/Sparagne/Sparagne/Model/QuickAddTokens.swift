@@ -22,8 +22,7 @@ struct QuickAddToken: Identifiable, Hashable, Sendable {
 }
 
 /// The parsed line as chips: `Uscita · 12,50 € · categoria Ristoranti · busta
-/// Cash · quando oggi`. The old one-line preview (`QuickAddSummary`) packed the
-/// same fields behind sigils; the chips name them, so a line that parsed into
+/// Cash · quando oggi`. The chips name each field, so a line that parsed into
 /// something unexpected is spotted before ↩.
 ///
 /// Parsing belongs to the core (`parseQuickAdd`); this only lays out what came

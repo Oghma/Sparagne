@@ -186,7 +186,7 @@ struct PeopleTests {
             Issue.record("expected the line to parse")
             return
         }
-        #expect(QuickAddSummary.describe(parsed, currency: .eur).contains("!eli"))
+        #expect(QuickAddTokens.make(parsed, currency: .eur).contains { $0.role == .who && $0.value == "eli" })
 
         await store.submit(quickAdd: "-24 cena !eli")
         #expect(store.presentedError == nil)

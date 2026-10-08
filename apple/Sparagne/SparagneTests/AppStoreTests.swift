@@ -296,10 +296,9 @@ struct AppStoreTests {
         #expect(amount == 1250)
         #expect(note == "pizza")
 
-        let summary = QuickAddSummary.describe(parsed, currency: .eur)
-        #expect(summary.contains("12.50 EUR"))
-        #expect(summary.contains("#food"))
-        #expect(summary.contains("@cash"))
+        let tokens = QuickAddTokens.make(parsed, currency: .eur)
+        #expect(tokens.contains { $0.role == .category && $0.value == "food" })
+        #expect(tokens.contains { $0.role == .wallet && $0.value == "cash" })
 
         guard case .failure(let error) = store.preview(quickAdd: "pizza") else {
             Issue.record("expected a parse failure")
