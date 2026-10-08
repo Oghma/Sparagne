@@ -7,7 +7,11 @@ import SparagneCore
 ///
 /// Also thrown as it is, by a check the app makes before the core is asked
 /// (the PERSONA cell's name): it reaches the alert with its own headline.
-struct AppError: Identifiable, Equatable, Sendable, Error {
+///
+/// A `LocalizedError` whose description is `summary`: the window's
+/// `.alert(error:)` takes it as the title, and a sheet that shows a caught
+/// error's `localizedDescription` gets the headline too.
+struct AppError: Identifiable, Equatable, Sendable, LocalizedError {
     let id = UUID()
     let code: String
     let message: String
@@ -25,6 +29,8 @@ struct AppError: Identifiable, Equatable, Sendable, Error {
     /// The localized headline for `code` (`ErrorMessages.swift`); the alert
     /// keeps `message`, the Rust `Display` text, as its secondary detail.
     var summary: String { headline ?? ErrorMessages.summary(for: code) }
+
+    var errorDescription: String? { summary }
 
     init(
         code: String,
@@ -1369,10 +1375,14 @@ final class AppStore {
 
     /// Called from the error alert's candidate buttons after an
     /// `ambiguous_name` quick-add error: rewrites the marker that carried
-    /// the ambiguous fragment with the chosen name and resubmits (task 1).
-    func resolveAmbiguous(choosing candidate: String) async {
-        guard let error = presentedError, let fragment = error.ambiguousFragment else { return }
-        presentedError = nil
+    /// the ambiguous fragment with the chosen name and resubmits.
+    ///
+    /// Takes the error the alert showed rather than reading `presentedError`:
+    /// the alert sets that to `nil` as it closes, before the button's task
+    /// gets to run.
+    func resolveAmbiguous(_ error: AppError, choosing candidate: String) async {
+        guard let fragment = error.ambiguousFragment else { return }
+        if presentedError == error { presentedError = nil }
         let rewritten = Self.rewrite(quickAddText, fragment: fragment, with: candidate)
         quickAddText = rewritten
         await submit(quickAdd: rewritten)
