@@ -7,12 +7,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use rusqlite::{Connection, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    CommandEnvelope, CommandRecord, Core, Currency, DomainError, Result,
+    CommandEnvelope, CommandRecord, Core, Currency, DomainError, Receipt, Result,
     engine::{LogRow, apply_envelope, log_row, try_apply_envelope},
     query::log_records,
 };
@@ -197,6 +197,27 @@ impl Core {
             results,
             last_seq: self.last_seq(vault_id)?,
         })
+    }
+
+    /// The receipt [`Core::execute`] answers for a command already in the log,
+    /// `None` for one the log does not hold. A server that refuses commands
+    /// for reasons the log does not record (who is a member) asks first, so
+    /// that pushing the same command twice keeps answering the same seq.
+    pub fn receipt(&self, command_id: Uuid) -> Result<Option<Receipt>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT seq, result_id FROM commands WHERE id = ?1",
+                params![command_id],
+                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<Uuid>>(1)?)),
+            )
+            .optional()?;
+        Ok(row.map(|(seq, result_id)| Receipt {
+            command_id,
+            seq,
+            result_id,
+            deduplicated: true,
+        }))
     }
 
     /// The server side of a pull: applied commands with `seq > since`, at

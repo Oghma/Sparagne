@@ -114,7 +114,13 @@ pub async fn push(
             let mut core = state.core();
             for envelope in commands {
                 let command_id = envelope.id;
-                let outcome = match stranger(&envelope, &members) {
+                // A command the log already holds answers its seq again, even
+                // if the person it names has left the vault since.
+                let stray = match stranger(&envelope, &members) {
+                    Some(name) if core.receipt(command_id)?.is_none() => Some(name),
+                    _ => None,
+                };
+                let outcome = match stray {
                     Some(name) => not_a_member(&name),
                     None => match core.execute(envelope) {
                         Ok(receipt) => PushOutcome::Applied {

@@ -791,6 +791,28 @@ async fn any_member_may_be_the_person_but_only_by_the_exact_username() {
 }
 
 #[tokio::test]
+async fn a_replayed_push_keeps_its_seq_after_the_person_left() {
+    let api = Api::new();
+    let (alice, vault) = household(&api).await;
+    let batch = vec![envelope(vault, "alice", expense_for(1_000, "elisa"))];
+    let first: PushResponse = api.push(&alice, vault, batch.clone()).await.json();
+    applied(&first.results[0]);
+
+    // elisa leaves before the client hears back, and the client retries.
+    let res = api
+        .delete(&format!("/vaults/{vault}/members/elisa"), &alice)
+        .await;
+    assert_eq!(res.status, StatusCode::NO_CONTENT, "{:?}", res.body);
+    let again: PushResponse = api.push(&alice, vault, batch).await.json();
+    assert_eq!(again, first, "the command is in the log: same answer");
+
+    // A new command naming her is refused now.
+    let late = vec![envelope(vault, "alice", expense_for(1_000, "elisa"))];
+    let response: PushResponse = api.push(&alice, vault, late).await.json();
+    assert_not_a_member(&response.results[0], "elisa");
+}
+
+#[tokio::test]
 async fn owners_patches_and_executions_name_members_too() {
     let api = Api::new();
     let (alice, vault) = household(&api).await;
