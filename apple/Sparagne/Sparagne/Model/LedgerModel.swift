@@ -172,6 +172,51 @@ struct RowSelection: Equatable, Sendable {
     }
 }
 
+/// What ⌫ and ⌦ delete while no cell has the caret (`LedgerGrid.selectionKeys`).
+/// "Delete" is the window's word: the core voids the row (`VoidTransaction`),
+/// since its log is append-only and synced, and the row stays in the history.
+///
+/// The rows picked come first, as they always have; with none picked, the row
+/// under the pointer, the one whose trash icon is showing. A value with no
+/// SwiftUI in it, so the choice is tested without a window
+/// (`SparagneTests/DeleteTargetTests.swift`).
+enum DeleteTarget: Equatable, Sendable {
+    /// The selection, in the order on screen. The store passes over what a
+    /// bulk action skips, deleted rows and transfers (`AppStore.bulkTargets`).
+    case selection([Uuid])
+    /// The row under the pointer, alone, as its context menu deletes it.
+    case row(Uuid)
+    /// Nothing: the keys go on to the system, which beeps.
+    case none
+
+    /// - Parameters:
+    ///   - selection: the picked rows, in the order on screen.
+    ///   - hovered: the row under the pointer, if it is still on screen.
+    ///   - editing: a row is open or a cell has the caret, so the keys belong
+    ///     to the text being typed.
+    ///   - canWrite: the vault on screen is not one this account only reads.
+    static func resolve(
+        selection: [Uuid],
+        hovered: TransactionRow?,
+        editing: Bool,
+        canWrite: Bool
+    ) -> DeleteTarget {
+        guard canWrite, !editing else { return .none }
+        if !selection.isEmpty { return .selection(selection) }
+        guard let hovered, isDeletable(hovered) else { return .none }
+        return .row(hovered.id)
+    }
+
+    /// Whether `row` can be deleted on its own: what the context menu's
+    /// Delete, the trash icon and ⌫ over the row all ask. A row deleted
+    /// already cannot be deleted again. A transfer can, as its context menu
+    /// has always allowed: only the bulk actions pass over transfers, which
+    /// share their targets with Set Category (`AppStore.bulkTargets`).
+    static func isDeletable(_ row: TransactionRow) -> Bool {
+        !row.voided
+    }
+}
+
 /// The sheets of the tab bar at the bottom of the window (`docs/v2/UI.md`
 /// §2), in the bar's order, which is also ⌘1 to ⌘4; the window opens on the
 /// first.

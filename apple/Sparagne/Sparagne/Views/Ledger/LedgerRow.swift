@@ -6,7 +6,8 @@ import SparagneCore
 ///
 /// The widths are what a cell's content gets: the canvas's tracks
 /// (`# 34 · Data 60 · Busta 84 · Categoria 124 · Descrizione · Wallet 84 ·
-/// Persona 84 · Importo 96`) less the padding `GridCell` adds on both sides.
+/// Persona 84 · Importo 96`) less the padding `GridCell` adds on both sides,
+/// then a 28-point track after IMPORTO for the trash icon.
 enum GridColumn {
     /// A cell's horizontal padding, on each side (`Metrics.cellPad`).
     static let padding: CGFloat = Metrics.cellPad
@@ -19,6 +20,34 @@ enum GridColumn {
     static let wallet: CGFloat = 84 - 2 * padding
     static let person: CGFloat = 84 - 2 * padding
     static let amount: CGFloat = 96 - 2 * padding
+    /// The track after IMPORTO for the trash icon of the row under the
+    /// pointer (`RowActionTrack`): the whole track, with no cell padding
+    /// around it, just wide enough for the 20-point button.
+    static let action: CGFloat = 28
+}
+
+/// The narrow track at the end of every line of the grid, where the row
+/// under the pointer shows its trash icon (`RowDeleteButton`). The header,
+/// the due periods and the empty line reserve it too, empty, so the icon
+/// coming and going moves no column.
+///
+/// The width hangs on a clear fill with the content over it: a frame around
+/// nothing at all, an empty line's track or a row with no icon showing, is
+/// dropped from the layout and would take its 28 points with it.
+struct RowActionTrack<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        Color.clear
+            .frame(width: GridColumn.action)
+            .overlay { content }
+    }
+}
+
+extension RowActionTrack where Content == EmptyView {
+    init() {
+        content = EmptyView()
+    }
 }
 
 /// One cell: fixed width, one line, the grid's padding. Shared with the
@@ -63,6 +92,7 @@ struct GridHeader: View {
             }
             GridCell(width: GridColumn.person) { heading(String(localized: "Person")) }
             GridCell(width: GridColumn.amount, alignment: .trailing) { heading(RowField.amount.label) }
+            RowActionTrack()
         }
         .frame(height: Metrics.headerHeight)
         .background(Ink.sheet)
@@ -95,7 +125,7 @@ enum LedgerAccessibility {
             parts.append(String(localized: "wallet \(row.walletDisplay)"))
         }
         parts.append(String(localized: "by \(row.person)"))
-        if row.voided { parts.append(String(localized: "voided")) }
+        if row.voided { parts.append(String(localized: "deleted")) }
         return parts.joined(separator: ", ")
     }
 
@@ -196,6 +226,34 @@ struct RowButtonStyle: ButtonStyle {
     }
 }
 
+/// The trash icon at the end of the row under the pointer, the way the
+/// SETUP tables show their archive icon (`SetupIconButton`): one click
+/// deletes the row with the undo toast, as its context menu does. Quiet in
+/// `text3` until the pointer is on the icon itself, then red, the color of
+/// what cannot be taken back once the toast is gone.
+///
+/// VoiceOver never reaches it inside a closed row, which it reads as one
+/// sentence: the row's own Delete action is the way there.
+struct RowDeleteButton: View {
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "trash")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(hovering ? Ink.negative : Ink.text3)
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(String(localized: "Delete Transaction"))
+        .accessibilityLabel(String(localized: "Delete Transaction"))
+    }
+}
+
 extension View {
     /// The focused cell (`.fbox`): a 20-point box on the raised ground with
     /// a 1.5-point accent ring inside, reaching 5 points into the cell's
@@ -254,6 +312,10 @@ struct LedgerRowView: View {
     let onOpen: (RowField) -> Void
     let onCommit: () -> Void
     let onCancel: () -> Void
+    /// Deletes the row from its trash icon. Non-nil only while the icon
+    /// shows: the row is under the pointer and may be deleted alone
+    /// (`LedgerGrid.trashAction`).
+    var onDelete: (() -> Void)?
 
     private var editing: Bool { draft != nil }
 
@@ -289,6 +351,9 @@ struct LedgerRowView: View {
                 amountCell
             } else {
                 display
+            }
+            RowActionTrack {
+                if let onDelete { RowDeleteButton(action: onDelete) }
             }
         }
         .frame(height: Metrics.rowHeight)
@@ -498,6 +563,7 @@ struct PendingRowView: View {
             GridCell(width: GridColumn.amount, alignment: .trailing) {
                 Text(LedgerMoney.bare(template.amount))
             }
+            RowActionTrack()
         }
         .font(Face.row)
         .foregroundStyle(Ink.text2)
@@ -542,6 +608,9 @@ struct NewRowView: View {
     /// The grid's one completion list, for the CATEGORY cell.
     let completion: CategoryCompletionModel
     let onCommit: () -> Void
+    /// esc threw the line away: the grid takes the keyboard back, so ⌘A and
+    /// ⌫ over a row have somewhere to land, as after esc on an open row.
+    var onCancel: () -> Void = {}
     /// With the column hidden the new row still lands on the sticky default
     /// wallet; showing it lets the wallet be picked per row (`UI.md` §3).
     var showsWallet = false
@@ -603,6 +672,7 @@ struct NewRowView: View {
                     .onSubmit(onCommit)
                     .cellFocusRing(focus == key)
             }
+            RowActionTrack()
         }
         .frame(height: Metrics.rowHeight)
         // One group VoiceOver can name, with the cells inside it.
@@ -611,6 +681,7 @@ struct NewRowView: View {
         .onKeyPress(.escape) {
             draft = RowDraft.blank(in: store)
             focus = nil
+            onCancel()
             return .handled
         }
     }

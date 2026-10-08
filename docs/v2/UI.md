@@ -63,7 +63,7 @@ periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
 
 ```
 (●●●) [C] Casa ▾ DEMO │ ‹ Ottobre 2026 › Oggi   Cerca nel mese ⌘F  ● 1 da confermare  + Aggiungi ⌘K  ● Sincronizzato
-[Uscite|Entrate] [Tutti|Elisa|Matteo] │ (Trasferimenti) (Annullate) (Colonna wallet)
+[Uscite|Entrate] [Tutti|Elisa|Matteo] │ (Trasferimenti) (Eliminate) (Colonna wallet)
  #   Data    Busta   Categoria   Descrizione                 Persona      Importo ┃ ┌ Risparmio di ottobre ┐
  02  01 gio  Cash    Casa        mutuo                       Matteo        950,00 ┃ │ 1.250,00 €           │
  03  02 ven  Cash    Computer    Claude                      Matteo         74,33 ┃ │ 66% delle entrate    │
@@ -83,13 +83,14 @@ periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
 - **Barra dei filtri** (`Views/Ledger/FilterBar.swift`): sopra la griglia,
   due controlli segmentati, la direzione (Uscite / Entrate) e la persona
   (Tutti e un segmento per autore, solo se gli autori sono più d'uno), poi tre
-  chip per ciò che di solito è spento: Trasferimenti, Annullate, Colonna wallet
+  chip per ciò che di solito è spento: Trasferimenti, Eliminate, Colonna wallet
   (tratteggiato da spento, pieno da acceso). I chip e le voci del menu (⌘⇧T,
   ⌘⇧V, ⌘⇧W) sono lo stesso valore. Mese e ricerca stanno nella barra in alto.
 - **La griglia è un foglio a righe**: intestazioni da 26 pt e righe da 24 pt
   con filetti, colonne `#`, Data (giorno e giorno della settimana), Busta,
-  Categoria, Descrizione, Wallet se acceso, Persona, Importo; etichette in
-  minuscolo, cifre tabulari.
+  Categoria, Descrizione, Wallet se acceso, Persona, Importo, e dopo Importo
+  una corsia stretta (28 pt) per il cestino, tenuta su ogni riga anche vuota
+  così le colonne non si spostano; etichette in minuscolo, cifre tabulari.
 - **Ricorrenze dovute nella griglia**: i periodi dovuti del mese a schermo
   stanno fra le righe, alla loro data, come righe tratteggiate con l'icona
   delle ricorrenze e il tag "da confermare"; **Salta** e **Registra** nella
@@ -100,8 +101,8 @@ periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
   preme uno dei due bottoni (`Model/LedgerLines.swift`).
 - **Riga di stato**: la media, il conteggio e la somma delle righe a schermo,
   o di quelle scelte quando sono due o più, come la barra di stato di un
-  foglio di calcolo (`Model/SheetStats.swift`). Annullate e trasferimenti non
-  contano, un rimborso toglie. I totali del mese sono il pannello destro.
+  foglio di calcolo (`Model/SheetStats.swift`). Righe eliminate e
+  trasferimenti non contano, un rimborso toglie. I totali del mese sono il pannello destro.
 - **Pannello destro** (300 pt, `Views/Ledger/SummaryPanel.swift`): quattro
   card, la più importante per prima. Il **risparmio del mese** in grande, con
   il tag "in corso" se il mese è quello corrente, la quota sulle entrate, la
@@ -112,23 +113,38 @@ periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
   somma oltre il 100%); il **risparmio degli ultimi 12 mesi**.
 - I trasferimenti non stanno né in USCITE né in ENTRATE: spostano soldi senza
   guadagnarli o spenderli. Il menu Mastro li aggiunge alla lista corrente
-  (⌘⇧T), come fa con le annullate (⌘⇧V).
+  (⌘⇧T), come fa con le eliminate (⌘⇧V).
 - **Selezione** (2026-09-23): ⌘-click aggiunge o toglie una riga,
   ⇧-click prende l'intervallo, ⌘A tutte le righe visibili quando nessuna cella
   è in modifica; le righe scelte hanno la tinta dell'accento e un click semplice
   apre ancora la riga in modifica. Con due o più righe compare la barra della
-  selezione: **Annulla N righe** (un solo toast, un solo `execute_batch` alla
+  selezione: **Elimina N righe** (un solo toast, un solo `execute_batch` alla
   scadenza) e **Imposta categoria…** (un solo `execute_batch` di
-  `UpdateTransaction`); ⌫/⌦ annullano la selezione, esc la toglie. Righe
-  annullate e trasferimenti si possono scegliere ma le azioni li saltano. La
+  `UpdateTransaction`); ⌫/⌦ eliminano la selezione, esc la toglie. Righe
+  eliminate e trasferimenti si possono scegliere ma le azioni li saltano. La
   selezione si svuota cambiando mese, vault o filtro.
+- **Eliminare una riga** (dal 2026-10-07): la riga sotto il puntatore mostra
+  in fondo un cestino in `text3`, rosso sotto il puntatore; un click la
+  elimina. Con nessuna riga scelta e nessuna cella in modifica, ⌫ o ⌦
+  eliminano la riga sotto il puntatore (`DeleteTarget` in
+  `Model/LedgerModel.swift`); con righe scelte eliminano quelle; dentro una
+  cella scrivono come sempre. Tutte le strade (cestino, ⌫, menu contestuale
+  Elimina, azione VoiceOver) passano dallo stesso toast: per 5 secondi
+  **Ripristina** la rimette. Il cestino non compare in sola lettura, sulla
+  riga in modifica, sulla riga vuota, sui periodi dovuti né su una riga già
+  eliminata; un trasferimento da solo si elimina, come dal menu. Nel registro
+  del core niente sparisce: eliminare emette un `VoidTransaction`, la riga
+  resta nella cronologia, barrata quando il chip Eliminate è acceso, e fuori
+  da ogni totale. "Elimina" ha preso il posto di "Annulla", che era anche
+  Annulla dei dialoghi e del menu Modifica.
 - **Annulla e ripeti** (⌘Z, ⇧⌘Z, menu Modifica, sull'`UndoManager` della
   finestra, `Model/LedgerHistory.swift`): una modifica di cella (si riscrivono
   i valori grezzi di prima: `""` per "senza categoria" e per la nota vuota),
-  una riga aggiunta (dalla griglia o dal quick-add: annullarla la annulla
+  una riga aggiunta (dalla griglia o dal quick-add: annullarla la elimina
   subito, ripeterla la riaggiunge con un id nuovo), una categoria impostata in
-  blocco (un passo solo) e l'annullo in attesa sul toast (⌘Z lo ferma). Un
-  annullo già scritto non si disfa, perché non esiste un comando inverso:
+  blocco (un passo solo) e l'eliminazione in attesa sul toast (⌘Z la ferma).
+  Un'eliminazione già scritta non si disfa, perché non esiste un comando
+  inverso:
   quando il toast scade il suo passo, e quelli sulle stesse righe, lasciano la
   pila. Cambiare vault svuota la pila. Dentro una cella ⌘Z disfa ancora la
   digitazione.
@@ -151,7 +167,7 @@ periodi da confermare, lo stesso della pillola. A destra di ogni scheda sta la
   comandi (§6). I chip li compone `Model/QuickAddTokens.swift`; il parsing
   resta del core.
 - **VoiceOver**: ogni riga è una frase (data, importo col segno, categoria,
-  nota, busta, persona, annullata) con le azioni Modifica, Duplica, Annulla e
+  nota, busta, persona, eliminata) con le azioni Modifica, Duplica, Elimina e
   Seleziona e il tratto "selezionata"; celle, intestazioni, riga nuova, mese e
   segmenti dei filtri hanno un nome. Un periodo dovuto si legge come una
   frase, con le azioni Registra e Salta.
@@ -321,7 +337,7 @@ condiviso di cui non si è owner (`SyncEngine.mayDeleteVault`); se arriva lo
 stesso, il core risponde `forbidden` e l'alert dice "Non puoi farlo". Dopo la
 cancellazione la finestra passa a un altro vault (quello ricordato, altrimenti
 il primo) o torna all'onboarding se era l'ultimo; una riga in attesa sul toast
-di annullamento muore col vault senza mandare nulla. Ai membri la
+di eliminazione muore col vault senza mandare nulla. Ai membri la
 cancellazione arriva col sync (`SYNC.md` §4 punto 6).
 
 **Dal 2026-09-23.** Una quarta azione, **Esci dal vault…**, per un membro
@@ -335,13 +351,14 @@ omonimi stanno nello stesso elenco compare l'owner fra parentesi. Il foglio di
 cancellazione dice che il vault sparisce da ogni dispositivo di ogni membro man
 mano che sincronizzano e che il server ne tiene la storia per la sync. Un vault
 in **sola lettura** (ruolo `viewer`) non offre la riga vuota, le celle non si
-modificano, Duplica e Annulla sono spenti, il quick-add risponde con un
+modificano, Duplica ed Elimina sono spenti, il cestino non compare, il
+quick-add risponde con un
 messaggio, SETUP non si edita, e `CoreActor` rifiuta comunque ogni scrittura.
 Un vault che non è più condiviso con me resta leggibile e la gestione lo
 elenca fra i "Non più condivisi con te" con **Rimuovi da questo Mac**. La riga
-in attesa sul toast di annullamento porta il suo vault: se un pull cancella
-quel vault il toast sparisce senza avvisi, e chiudere l'app scrive l'annullo
-prima di uscire.
+in attesa sul toast di eliminazione porta il suo vault: se un pull cancella
+quel vault il toast sparisce senza avvisi, e chiudere l'app scrive
+l'eliminazione prima di uscire.
 
 **Dal 2026-09-28.** Un vault nuovo nasce con 16 categorie, 14 di uscita e 2
 di entrata, ognuna di una parola sola così che il quick-add la raggiunga con
@@ -430,8 +447,9 @@ dell'inspector.
   Reimportare lo stesso file non aggiunge nulla (id stabili per riga). Il foglio
   è più largo degli altri (880 × 640) perché la tabella ha otto colonne.
 - **File › Esporta tutte le transazioni…**: un CSV con ogni transazione del
-  vault, tutte le date, annullate e trasferimenti compresi, con tipo, wallet e
-  busta (da → a per i trasferimenti), categoria, nota, autore, annullata.
+  vault, tutte le date, eliminate e trasferimenti compresi, con tipo, wallet e
+  busta (da → a per i trasferimenti), categoria, nota, autore, eliminata (la
+  colonna `voided`).
   ⌘E resta l'export delle righe a schermo, ma legge tutte le pagine del mese.
 - **File › Backup del database…**: una copia coerente (`VACUUM INTO`) salvata
   dove si sceglie; l'avviso finale spiega come ripristinarla (README).
@@ -543,8 +561,8 @@ delle schede da 27.
 | `↩` | salva la riga |
 | `esc` | chiude l'elenco delle categorie, poi annulla la modifica; senza modifica toglie la selezione |
 | `⌘`-click / `⇧`-click / `⌘A` | sceglie righe: una, un intervallo, tutte (§2.1) |
-| `⌫` / `⌦` | annulla le righe scelte (col toast) |
-| `⌘Z` / `⇧⌘Z` | annulla / ripeti: modifica di cella, riga aggiunta, categoria in blocco, annullo in attesa |
+| `⌫` / `⌦` | elimina le righe scelte (col toast); senza righe scelte e senza cella in modifica, la riga sotto il puntatore (dal 2026-10-07) |
+| `⌘Z` / `⇧⌘Z` | annulla / ripeti: modifica di cella, riga aggiunta, categoria in blocco, eliminazione in attesa |
 | `↑` `↓` `↩` `⇥` | nell'elenco delle categorie: scorre e sceglie; nel quick-add `⇥` scrive la categoria suggerita |
 | `⌘D` | duplica l'ultima riga (non un trasferimento; il tipo resta, un rimborso duplicato è un rimborso) |
 | `⌥←` `⌥→` | mese precedente / successivo |
@@ -557,7 +575,7 @@ delle schede da 27.
 | menu Vault | Nuovo vault…, Rinomina vault…, Elimina vault…, Esci dal vault… (§2.4), senza scorciatoia: rari, e due distruttivi; dal 2026-09-29 anche Nuova ricorrenza… (§2.5) |
 | `⌘1` `⌘2` `⌘3` `⌘4` | schede Riepilogo, Mastro, Ricorrenze, Setup (menu Vista) |
 | `⌘⇧C` | scheda Setup: wallet, buste e categorie (menu Vault, "Wallet, buste e categorie…") |
-| `⌘⇧V` / `⌘⇧T` | mostra annullate / trasferimenti |
+| `⌘⇧V` / `⌘⇧T` | mostra eliminate / trasferimenti |
 | `⌘⇧W` | mostra / nasconde la colonna WALLET (menu Vista) |
 
 **Palette comandi** (2026-09-12): il campo ⌘K resta il quick-add finché il
@@ -570,8 +588,8 @@ rientro in fondo, ↩ esegue e chiude, esc chiude. Nessuna finestra nuova:
 "Vai a" ciascuna delle quattro schede (Riepilogo, Mastro, Ricorrenze, Setup), un "Vault: nome" per ogni altro vault, Nuovo vault…,
 Rinomina vault… ed Elimina vault… (§2.4; le ultime due solo con un vault a
 schermo, Elimina solo se lo si può cancellare), "Wallet, buste e categorie…", gestione, esporta CSV,
-sincronizza ora, e i tre interruttori di vista (annullate, trasferimenti,
-colonna wallet); dal 2026-09-23 anche Esci dal vault… (solo a un membro),
+sincronizza ora, e i tre interruttori di vista (eliminate, trasferimenti,
+colonna wallet; fino al 2026-10-07 "annullate"); dal 2026-09-23 anche Esci dal vault… (solo a un membro),
 Importa estratto conto…, Esporta tutte le transazioni… e Backup del
 database…, e Rinomina vault… solo a chi può scrivere; dal 2026-09-29 Nuova
 ricorrenza…, solo a chi può scrivere. Quelle che hanno già una voce di
@@ -665,3 +683,11 @@ core `schedule_occurrences` (`core/src/recurring.rs`, `core/src/ffi.rs`).
 Setup: `Views/Setup/VaultCard.swift`, tabelle ridisegnate, barre di riempimento
 delle buste e colonna "Righe 90 gg" (`Model/AppStore+Usage.swift`). Avvio:
 `-SparagneTab` (`App/LaunchOptions.swift`).
+
+**Dal 2026-10-07.** Nella UI "annulla" diventa "elimina", in inglese (Void →
+Delete) e in italiano (Annulla → Elimina, Annullate → Eliminate), perché
+"Annulla" era anche il Cancel dei dialoghi e l'Undo di sistema; nel codice e
+nel core il termine resta void (`VoidTransaction`, `voidSelection`). La riga
+sotto il puntatore ha un cestino in una corsia fissa dopo IMPORTO
+(`RowDeleteButton`, `RowActionTrack`) e ⌫ senza selezione la elimina
+(`DeleteTarget`, `SparagneTests/DeleteTargetTests.swift`), §2.1.

@@ -114,7 +114,7 @@ struct SparagneApp: App {
 
                 Divider()
 
-                Toggle(String(localized: "Show Voided"), isOn: $showVoided)
+                Toggle(String(localized: "Show Deleted"), isOn: $showVoided)
                     .keyboardShortcut("v", modifiers: [.command, .shift])
                 Toggle(String(localized: "Show Transfers"), isOn: $showTransfers)
                     .keyboardShortcut("t", modifiers: [.command, .shift])

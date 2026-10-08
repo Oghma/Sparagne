@@ -388,7 +388,7 @@ struct LedgerStoreTests {
 
     // MARK: - VoiceOver
 
-    @Test("VoiceOver reads a row as one sentence: the amount with its kind, the category, the note, the envelope, who, and voided")
+    @Test("VoiceOver reads a row as one sentence: the amount with its kind, the category, the note, the envelope, who, and deleted")
     func rowReadsAsOneSentence() async throws {
         let (store, envelope) = try await Self.household()
         let row = try #require(store.rows.first { $0.note == "mutuo" })
@@ -404,7 +404,7 @@ struct LedgerStoreTests {
         store.showVoided = true
         await store.settle()
         let voided = try #require(store.rows.first { $0.id == row.id })
-        #expect(LedgerAccessibility.label(for: voided).hasSuffix(String(localized: "voided")))
+        #expect(LedgerAccessibility.label(for: voided).hasSuffix(String(localized: "deleted")))
     }
 
     // MARK: - The optional WALLET column (`docs/v2/UI.md` §3)

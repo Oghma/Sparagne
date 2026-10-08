@@ -104,7 +104,7 @@ private enum TestCatalog {
     static func english() throws -> Bundle {
         try bundle(language: "en", plurals: [
             "%lld to confirm": ("%lld to confirm", "%lld to confirm"),
-            "%lld transactions voided": ("Transaction voided", "%lld transactions voided"),
+            "%lld transactions deleted": ("Transaction deleted", "%lld transactions deleted"),
             "Every %lld days": ("Every day", "Every %lld days"),
             "Every %lld weeks": ("Every week", "Every %lld weeks"),
             "Every %lld months": ("Every month", "Every %lld months"),
@@ -117,7 +117,7 @@ private enum TestCatalog {
             language: "it",
             plurals: [
                 "%lld to confirm": ("%lld da confermare", "%lld da confermare"),
-                "%lld transactions voided": ("Transazione annullata", "%lld transazioni annullate"),
+                "%lld transactions deleted": ("Transazione eliminata", "%lld transazioni eliminate"),
                 "Every %lld weeks": ("Ogni settimana", "Ogni %lld settimane"),
             ],
             strings: [
@@ -136,8 +136,8 @@ struct CountTextTests {
         let catalog = try TestCatalog.english()
         #expect(CountText.toConfirm(1, bundle: catalog, locale: Self.english) == "1 to confirm")
         #expect(CountText.toConfirm(3, bundle: catalog, locale: Self.english) == "3 to confirm")
-        #expect(CountText.voided(1, bundle: catalog, locale: Self.english) == "Transaction voided")
-        #expect(CountText.voided(3, bundle: catalog, locale: Self.english) == "3 transactions voided")
+        #expect(CountText.voided(1, bundle: catalog, locale: Self.english) == "Transaction deleted")
+        #expect(CountText.voided(3, bundle: catalog, locale: Self.english) == "3 transactions deleted")
     }
 
     @Test("The same counts in Italian")
@@ -145,8 +145,8 @@ struct CountTextTests {
         let catalog = try TestCatalog.italian()
         #expect(CountText.toConfirm(1, bundle: catalog, locale: Self.italian) == "1 da confermare")
         #expect(CountText.toConfirm(3, bundle: catalog, locale: Self.italian) == "3 da confermare")
-        #expect(CountText.voided(1, bundle: catalog, locale: Self.italian) == "Transazione annullata")
-        #expect(CountText.voided(3, bundle: catalog, locale: Self.italian) == "3 transazioni annullate")
+        #expect(CountText.voided(1, bundle: catalog, locale: Self.italian) == "Transazione eliminata")
+        #expect(CountText.voided(3, bundle: catalog, locale: Self.italian) == "3 transazioni eliminate")
     }
 }
 

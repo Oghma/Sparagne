@@ -328,9 +328,9 @@ extension CommandPaletteModel {
             PaletteAction(
                 id: "toggle.voided",
                 title: store.showVoided
-                    ? String(localized: "Hide Voided")
-                    : String(localized: "Show Voided"),
-                keywords: ["voided", "annullate"]
+                    ? String(localized: "Hide Deleted")
+                    : String(localized: "Show Deleted"),
+                keywords: ["deleted", "eliminate"]
             ) {
                 store.showVoided.toggle()
             },

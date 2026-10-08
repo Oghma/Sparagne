@@ -154,7 +154,7 @@ struct LedgerHistoryTests {
 
         await store.void(transactionId: row.id)
         #expect(store.pendingUndo != nil)
-        #expect(manager.undoActionName == String(localized: "Void Transactions"))
+        #expect(manager.undoActionName == String(localized: "Delete Transactions"))
 
         manager.undo()
         await store.settle()

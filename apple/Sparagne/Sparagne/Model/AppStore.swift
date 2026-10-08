@@ -1250,7 +1250,7 @@ final class AppStore {
         await flushPendingUndo()
         pendingUndo = PendingUndo(ids: ids, vaultId: vault.id, startedAt: Date(), duration: undoWindow)
         // ⌘Z while the toast is up is the toast's own Undo.
-        history.recordPendingVoid(name: String(localized: "Void Transactions")) { [weak self] in self?.undo() }
+        history.recordPendingVoid(name: String(localized: "Delete Transactions")) { [weak self] in self?.undo() }
         let window = undoWindow
         let sleep = sleeper
         undoTask = Task { [weak self] in

@@ -20,7 +20,7 @@ struct SelectionBar: View {
                 .font(Face.ui(11.5, .medium))
                 .foregroundStyle(Ink.accent)
                 .padding(.trailing, 4)
-            Button(String(localized: "Void \(targets) Rows")) {
+            Button(String(localized: "Delete \(targets) Rows")) {
                 Task { await store.voidSelection() }
             }
             .buttonStyle(RowButtonStyle())
@@ -32,7 +32,7 @@ struct SelectionBar: View {
                     BulkCategoryPopover(store: store, isPresented: $showsCategory)
                 }
             Spacer()
-            KeyHint(key: "\u{232B}", label: String(localized: "void"))
+            KeyHint(key: "\u{232B}", label: String(localized: "delete"))
             KeyHint(key: "esc", label: String(localized: "clear"))
         }
         .padding(.horizontal, 12)
