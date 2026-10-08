@@ -384,6 +384,49 @@ fn repeated_or_blank_people_do_not_make_a_name_ambiguous() {
 }
 
 #[test]
+fn one_person_under_two_spellings_is_never_ambiguous_with_itself() {
+    let f = build_fixture();
+    // The local name of a logged-out window and the username its synced
+    // rows carry, plus someone else sharing their first letters.
+    let people: Vec<String> = ["Matteo", "matteo", "marta"]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    // The name as typed wins, whichever spelling it is.
+    assert_eq!(
+        resolve_person(&f, "24 cena !matteo", &people).unwrap(),
+        "matteo"
+    );
+    assert_eq!(
+        resolve_person(&f, "24 cena !Matteo", &people).unwrap(),
+        "Matteo"
+    );
+    // Neither as typed: the lowercase spelling, the username.
+    assert_eq!(
+        resolve_person(&f, "24 cena !MATTEO", &people).unwrap(),
+        "matteo"
+    );
+    assert_eq!(
+        resolve_person(&f, "24 cena !matt", &people).unwrap(),
+        "matteo"
+    );
+    // Still ambiguous with someone else, offering the person once.
+    match resolve_person(&f, "24 cena !ma", &people).unwrap_err() {
+        QuickAddError::AmbiguousName { mut candidates, .. } => {
+            candidates.sort();
+            assert_eq!(candidates, ["marta", "matteo"]);
+        }
+        other => panic!("unexpected {other:?}"),
+    }
+    // With no lowercase spelling, the first one listed.
+    let shouted: Vec<String> = ["Elisa", "ELISA"].into_iter().map(str::to_string).collect();
+    assert_eq!(
+        resolve_person(&f, "24 cena !eli", &shouted).unwrap(),
+        "Elisa"
+    );
+}
+
+#[test]
 fn a_line_without_a_person_leaves_it_to_the_author() {
     let mut f = build_fixture();
     let parsed = quick_add::parse("24 cena @cash", Currency::Eur).unwrap();

@@ -1281,13 +1281,14 @@ final class AppStore {
             let parsed = try parseQuickAdd(input: trimmed, currency: currency)
             let resolved: ResolvedQuickAdd
             do {
-                // A `!name` picks among the people a row may be for.
+                // A `!name` picks among the people a row may be for, each
+                // once whatever the case of its spellings.
                 resolved = try await core.resolveQuickAdd(
                     vaultId: vault.id,
                     parsed: parsed,
                     now: Date(),
                     defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId),
-                    people: assignablePeople
+                    people: Self.folded(assignablePeople)
                 )
             } catch let error as QuickAddError {
                 // The line knows which marker a name came from.

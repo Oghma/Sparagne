@@ -31,14 +31,13 @@ extension AppStore {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let needle = trimmed.lowercased()
         guard !needle.isEmpty else { return nil }
-        let people = assignablePeople
         // The name as written wins over one that differs only in case: a
         // logged-out vault can know both "Elisa" and the username "elisa".
-        if let exact = people.first(where: { $0 == trimmed })
-            ?? people.first(where: { $0.lowercased() == needle })
-        {
-            return exact
-        }
+        // Past that the two are one person, as the core's `!name` counts
+        // them, or no prefix of theirs would ever be unique.
+        if let exact = assignablePeople.first(where: { $0 == trimmed }) { return exact }
+        let people = Self.folded(assignablePeople)
+        if let same = people.first(where: { $0.lowercased() == needle }) { return same }
         for matches in [
             people.filter { $0.lowercased().hasPrefix(needle) },
             people.filter { $0.lowercased().contains(needle) },
@@ -59,5 +58,25 @@ extension AppStore {
         return names.filter { name in
             !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && seen.insert(name).inserted
         }
+    }
+
+    /// `names` with the spellings that differ only in case counted once, at
+    /// the place of the first: the lowercase one when there is one, since
+    /// usernames are lowercase and that is the name the server knows. What
+    /// the quick-add line resolves its `!name` among, so the local "Matteo"
+    /// and the synced "matteo" never tie.
+    static func folded(_ names: [String]) -> [String] {
+        var spellings: [String] = []
+        var slots: [String: Int] = [:]
+        for name in distinct(names) {
+            let key = name.lowercased()
+            if let slot = slots[key] {
+                if name == key { spellings[slot] = name }
+            } else {
+                slots[key] = spellings.count
+                spellings.append(name)
+            }
+        }
+        return spellings
     }
 }

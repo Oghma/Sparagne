@@ -108,6 +108,50 @@ struct PeopleTests {
         }
     }
 
+    @Test("One person under two spellings never ties with itself, in the PERSONA cell or behind a !")
+    func twoSpellingsOfOnePerson() async throws {
+        let store = try await Self.onboarded()
+        // elisa's rows from before she had a username, and from after.
+        await store.setAuthor("Elisa")
+        await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 1_000)
+        await store.setAuthor("elisa")
+        await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "conad", amount: 1_000)
+        await store.setAuthor("matteo")
+        #expect(store.presentedError == nil)
+        #expect(store.assignablePeople.contains("Elisa") && store.assignablePeople.contains("elisa"))
+        #expect(AppStore.folded(store.assignablePeople) == ["matteo", "elisa"])
+
+        // The cell: the name as written, then one person per spelling.
+        #expect(try store.resolvePerson(named: "Elisa") == "Elisa")
+        #expect(try store.resolvePerson(named: "ELISA") == "elisa")
+        #expect(try store.resolvePerson(named: "eli") == "elisa")
+
+        // The line: a prefix and a shout both find the username.
+        await store.submit(quickAdd: "-24 cena !eli")
+        await store.submit(quickAdd: "-3 caffè !ELISA")
+        #expect(store.presentedError == nil)
+        #expect(store.rows.first { $0.note == "cena" }?.person == "elisa")
+        #expect(store.rows.first { $0.note == "caffè" }?.person == "elisa")
+    }
+
+    @Test("Logged out under the local name Matteo, with rows by the username matteo, !matteo is not ambiguous")
+    func localNameBesideItsUsername() async throws {
+        let store = try await Self.onboarded()
+        await store.setAuthor("Matteo")
+        #expect(store.assignablePeople.contains("Matteo") && store.assignablePeople.contains("matteo"))
+
+        await store.submit(quickAdd: "-24 cena !matteo")
+        #expect(store.presentedError == nil)
+        #expect(store.rows.contains { $0.note == "cena" })
+    }
+
+    @Test("Spellings that differ only in case are folded into the lowercase one, at the first one's place")
+    func folding() {
+        #expect(AppStore.folded(["Matteo", "elisa", "matteo", "ELISA", " ", "Elisa"]) == ["matteo", "elisa"])
+        // With no lowercase spelling, the first one stays.
+        #expect(AppStore.folded(["Elisa", "ELISA", "bob"]) == ["Elisa", "bob"])
+    }
+
     // MARK: - Quick add
 
     @Test("A quick-add !name puts the row on that member, recorded by the author")

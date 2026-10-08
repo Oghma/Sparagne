@@ -759,11 +759,29 @@ fn resolve_occurred_at(
 /// The person `query` names among `people`, as [`resolve_name`] matches a
 /// wallet. Blank names and repeats in the list are ignored, so a caller that
 /// merges several sources does not make a name ambiguous with itself.
+///
+/// A logged-out vault can know one person under two spellings, the local
+/// name "Matteo" and the username "matteo" its synced rows carry. Matching
+/// ignores case, so the two would tie on every query and no choice could
+/// break the tie. The name exactly as typed wins first. Otherwise the
+/// spellings that differ only in case count as one, the lowercase one when
+/// there is one, since usernames are lowercase and that is the name the
+/// server knows.
 fn resolve_person(people: &[String], query: &str) -> Result<String, QuickAddError> {
+    let names = people.iter().map(|p| p.trim()).filter(|p| !p.is_empty());
+    if let Some(exact) = names.clone().find(|name| *name == query) {
+        return Ok(exact.to_string());
+    }
     let mut candidates: Vec<(&str, &str)> = Vec::new();
-    for name in people.iter().map(|p| p.trim()).filter(|p| !p.is_empty()) {
-        if !candidates.iter().any(|(known, _)| *known == name) {
-            candidates.push((name, name));
+    for name in names {
+        let folded = name.to_lowercase();
+        match candidates
+            .iter_mut()
+            .find(|(known, _)| known.to_lowercase() == folded)
+        {
+            Some(slot) if name == folded => *slot = (name, name),
+            Some(_) => {}
+            None => candidates.push((name, name)),
         }
     }
     resolve_name(&candidates, query, "person").map(str::to_string)
