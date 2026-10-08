@@ -48,7 +48,7 @@ struct TopBar: View {
             case .setup:
                 SearchField(
                     text: $store.tabFilter,
-                    prompt: String(localized: "Search wallets, envelopes and categories"),
+                    prompt: String(localized: "Search Setup"),
                     focused: $searchFocused
                 )
             case .summary:

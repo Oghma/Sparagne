@@ -330,7 +330,8 @@ final class AppStore {
     /// Active envelopes, Unallocated first (the core already orders them).
     var flows: [FlowView] { snapshot?.flows.filter { !$0.archived } ?? [] }
 
-    /// For the management sheet's collapsed "Archived" group.
+    /// The archived rows at the bottom of the SETUP tables, where they can be
+    /// restored.
     var archivedWallets: [WalletView] { snapshot?.wallets.filter { $0.archived } ?? [] }
 
     /// Unallocated is never archived, so it never needs to appear here.
