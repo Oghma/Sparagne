@@ -622,6 +622,7 @@ impl Core {
                     category: category.clone(),
                     note: note.clone(),
                     occurred_at: resolve_occurred_at(date, now)?,
+                    person: None,
                 };
                 let command = match kind {
                     TransactionKind::Income => Command::Income(entry),

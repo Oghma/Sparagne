@@ -199,6 +199,7 @@ fn entry(amount: i64, flow: Option<Uuid>) -> Entry {
         category: None,
         note: None,
         occurred_at: at(T0),
+        person: None,
     }
 }
 

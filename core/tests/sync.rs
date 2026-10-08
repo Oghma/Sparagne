@@ -450,6 +450,7 @@ fn two_clients_converge_on_the_server_projection() {
                 start_date: at(T0).date_naive(),
                 end_date: None,
             },
+            owner: None,
         },
     );
     exec(
@@ -711,6 +712,7 @@ fn a_confirmed_command_that_cannot_be_replayed_is_a_divergence() {
             category: Some("truffa".to_string()),
             note: None,
             occurred_at: at(T0 + 60),
+            person: None,
         }),
     );
     let response = PullResponse {

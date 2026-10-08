@@ -83,8 +83,13 @@ pub struct TransactionView {
     /// `true` for `Opening` and `Uncategorized`: the app localizes the name.
     pub category_is_system: bool,
     pub note: Option<String>,
-    /// Author of the command that created the row; the account username once
-    /// the vault is shared.
+    /// Who the row is for, the PERSONA column: the person the command named,
+    /// else its author. Transfers and opening balances are always the
+    /// author's.
+    pub person: String,
+    /// Who recorded it: the author of the command that created the row, the
+    /// account username once the vault is shared. Equal to `person` unless
+    /// someone recorded the row on another member's behalf.
     pub created_by: String,
     pub voided: bool,
     /// Entries only: the wallet the money moved on.
@@ -167,10 +172,10 @@ pub struct TransactionFilter {
     /// Case-insensitive substring on note or category name.
     #[uniffi(default = None)]
     pub text: Option<String>,
-    /// Exact `created_by`: the PERSONA filter of the ledger
+    /// Exact `person`: the PERSONA filter of the ledger
     /// (`docs/v2/UI.md` §3). `None` = everybody.
     #[uniffi(default = None)]
-    pub author: Option<String>,
+    pub person: Option<String>,
     /// Oldest first, the reading order of the ledger. Cursors keep working:
     /// they simply walk forward instead of backward.
     #[uniffi(default = false)]
@@ -326,7 +331,7 @@ impl Core {
         }
 
         let mut sql = String::from(
-            "SELECT t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at, t.created_by
+            "SELECT t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at, t.created_by, t.person
              FROM transactions t JOIN categories c ON c.id = t.category_id
              WHERE t.vault_id = ?",
         );
@@ -378,9 +383,9 @@ impl Core {
                 args.push(Value::Text(pattern));
             }
         }
-        if let Some(author) = filter.author.as_deref() {
-            sql.push_str(" AND t.created_by = ?");
-            args.push(Value::Text(author.to_string()));
+        if let Some(person) = filter.person.as_deref() {
+            sql.push_str(" AND t.person = ?");
+            args.push(Value::Text(person.to_string()));
         }
         if let Some(cursor) = cursor {
             let (at, id) = parse_cursor(cursor)?;
@@ -417,6 +422,7 @@ impl Core {
                         category: r.get(6)?,
                         category_is_system: r.get(7)?,
                         note: r.get(8)?,
+                        person: r.get(11)?,
                         created_by: r.get(10)?,
                         voided: voided_at.is_some(),
                         wallet_id: None,

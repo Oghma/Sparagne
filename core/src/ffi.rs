@@ -246,9 +246,9 @@ impl CoreHandle {
 
     // -- analytics (docs/v2/UI.md §4) ------------------------------------
 
-    /// Distinct authors of live transactions: the PERSONA segmented control.
-    pub fn authors(&self, vault_id: Uuid) -> Result<Vec<String>, DomainError> {
-        self.lock()?.authors(vault_id)
+    /// Distinct persons of live transactions: the PERSONA segmented control.
+    pub fn people(&self, vault_id: Uuid) -> Result<Vec<String>, DomainError> {
+        self.lock()?.people(vault_id)
     }
 
     /// Envelope x person matrix over `[from, to)`.

@@ -45,6 +45,7 @@ fn recurring_cmd(
         category: category.map(str::to_string),
         note: None,
         schedule,
+        owner: None,
     }
 }
 
@@ -399,6 +400,7 @@ fn pending_respects_end_date_disabled_and_archived() {
                     recurring_id: id,
                     period_date: date(2026, 1, 1),
                     occurred_at: at(T0),
+                    person: None,
                 },
             ),
             Err(DomainError::InvalidCommand(_))
@@ -427,6 +429,7 @@ fn execute_posts_the_transaction_and_records_the_run() {
             recurring_id: id,
             period_date: date(2026, 1, 1),
             occurred_at: at(T0 + 100),
+            person: None,
         },
     )
     .result_id
@@ -472,6 +475,7 @@ fn a_period_can_be_handled_only_once_and_only_when_due() {
         recurring_id: id,
         period_date: period,
         occurred_at: at(T0 + 100),
+        person: None,
     };
 
     // Not an occurrence of the schedule.
@@ -570,6 +574,7 @@ fn a_refused_execution_leaves_no_run_and_no_transaction() {
                 recurring_id: id,
                 period_date: date(2026, 1, 1),
                 occurred_at: at(T0 + 100),
+                person: None,
             },
         )
         .unwrap_err(),
@@ -601,6 +606,7 @@ fn wallet_none_resolves_to_the_only_active_wallet() {
             recurring_id: id,
             period_date: date(2026, 1, 1),
             occurred_at: at(T0 + 100),
+            person: None,
         },
     )
     .result_id
@@ -626,6 +632,7 @@ fn wallet_none_resolves_to_the_only_active_wallet() {
                 recurring_id: id,
                 period_date: date(2026, 2, 1),
                 occurred_at: at(T0 + 200),
+                person: None,
             },
         ),
         Err(DomainError::InvalidCommand(_))
@@ -664,6 +671,7 @@ fn replay_rebuilds_templates_runs_and_transactions() {
             recurring_id: id,
             period_date: date(2026, 1, 1),
             occurred_at: at(T0 + 100),
+            person: None,
         },
     );
     run(
@@ -695,6 +703,7 @@ fn replay_rebuilds_templates_runs_and_transactions() {
             recurring_id: id,
             period_date: date(2026, 3, 3),
             occurred_at: at(T0 + 300),
+            person: None,
         },
     );
     let archived = run(&mut fx.core, fx.vault, rent_cmd()).result_id.unwrap();

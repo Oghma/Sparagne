@@ -42,6 +42,7 @@ fn rent_cmd() -> Command {
             start_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
             end_date: None,
         },
+        owner: None,
     }
 }
 
@@ -148,7 +149,7 @@ fn delete_vault_drops_the_projection_and_keeps_the_log() {
             .is_empty()
     );
     assert!(fx.core.list_recurring(fx.vault, true).unwrap().is_empty());
-    assert!(fx.core.authors(fx.vault).unwrap().is_empty());
+    assert!(fx.core.people(fx.vault).unwrap().is_empty());
 
     // The log is intact, the deletion is its last entry, and all of it is
     // still waiting for the server.

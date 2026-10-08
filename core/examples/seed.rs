@@ -127,6 +127,7 @@ impl Seeder {
             category: row.category.map(str::to_string),
             note: Some(row.note.to_string()),
             occurred_at,
+            person: None,
         };
         let command = match kind {
             TransactionKind::Income => Command::Income(entry),
@@ -201,6 +202,7 @@ impl Seeder {
                     start_date: start,
                     end_date: None,
                 },
+                owner: None,
             },
         )
     }
@@ -217,6 +219,7 @@ impl Seeder {
                 recurring_id: template,
                 period_date: day,
                 occurred_at,
+                person: None,
             },
         );
     }

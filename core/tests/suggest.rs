@@ -28,6 +28,7 @@ fn file_as(
         category: category.map(str::to_string),
         note: Some(note.to_string()),
         occurred_at: at(secs),
+        person: None,
     });
     run(&mut fx.core, fx.vault, command).result_id.unwrap()
 }

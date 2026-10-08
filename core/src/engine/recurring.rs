@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::{
     CommandEnvelope, Core, DomainError, RecurringPatch, Result, TransactionKind,
+    command::explicit_person,
     normalize_category_key,
     recurring::{PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule},
 };
@@ -26,6 +27,8 @@ pub(super) struct RecurringSpec<'a> {
     pub category: Option<&'a str>,
     pub note: Option<&'a str>,
     pub schedule: Schedule,
+    /// Already resolved: the owner the command names, else its author.
+    pub owner: &'a str,
 }
 
 // ---------------------------------------------------------------------------
@@ -49,8 +52,8 @@ pub(super) fn create_recurring(
     let note = super::normalize_note(spec.note);
     tx.execute(
         "INSERT INTO recurring_templates
-            (id, vault_id, kind, amount, wallet_id, flow_id, category, note, schedule, enabled, archived_at, created_by, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, NULL, ?10, ?11)",
+            (id, vault_id, kind, amount, wallet_id, flow_id, category, note, schedule, enabled, archived_at, created_by, created_at, owner)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, NULL, ?10, ?11, ?12)",
         params![
             env.id,
             env.vault_id,
@@ -63,6 +66,7 @@ pub(super) fn create_recurring(
             encode_schedule(&spec.schedule)?,
             env.author,
             now,
+            spec.owner,
         ],
     )?;
     Ok(env.id)
@@ -119,12 +123,20 @@ pub(super) fn update_recurring(
         None => current.note,
     };
     let enabled = patch.enabled.unwrap_or(current.enabled);
+    // A blank owner gives the template back to whoever created it.
+    let owner = match patch.owner.as_deref() {
+        Some(text) => match explicit_person(Some(text)) {
+            Some(name) => name.to_string(),
+            None => template_creator(tx, recurring_id)?,
+        },
+        None => current.owner,
+    };
 
     tx.execute(
         "UPDATE recurring_templates
          SET amount = ?1, wallet_id = ?2, flow_id = ?3, category = ?4, note = ?5,
-             schedule = ?6, enabled = ?7
-         WHERE id = ?8",
+             schedule = ?6, enabled = ?7, owner = ?8
+         WHERE id = ?9",
         params![
             amount,
             wallet_id,
@@ -133,6 +145,7 @@ pub(super) fn update_recurring(
             note,
             encode_schedule(&schedule)?,
             enabled,
+            owner,
             recurring_id,
         ],
     )?;
@@ -172,13 +185,16 @@ pub(super) fn restore_recurring(
     Ok(())
 }
 
-/// Returns the id of the created transaction (the command id).
+/// Returns the id of the created transaction (the command id). `person` is
+/// already resolved: the one the command names, else its author, never the
+/// template's owner (see `Command::ExecuteRecurring`).
 pub(super) fn execute_recurring(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
     recurring_id: Uuid,
     period_date: NaiveDate,
     occurred_at: DateTime<FixedOffset>,
+    person: &str,
     now: i64,
 ) -> Result<Uuid> {
     let template = due_template(tx, env.vault_id, recurring_id, period_date)?;
@@ -206,6 +222,7 @@ pub(super) fn execute_recurring(
         category_id,
         template.note,
         occurred_at,
+        person,
     )?;
     insert_run(
         tx,
@@ -337,7 +354,7 @@ impl Core {
 // ---------------------------------------------------------------------------
 
 const TEMPLATE_COLUMNS: &str =
-    "id, kind, amount, wallet_id, flow_id, category, note, schedule, enabled, archived_at";
+    "id, kind, amount, wallet_id, flow_id, category, note, schedule, enabled, archived_at, owner";
 
 /// Raw `TEMPLATE_COLUMNS` row; turned into a [`RecurringView`] by [`to_view`].
 type TemplateRow = (
@@ -351,6 +368,7 @@ type TemplateRow = (
     String,
     bool,
     Option<i64>,
+    String,
 );
 
 fn template_row(r: &Row<'_>) -> rusqlite::Result<TemplateRow> {
@@ -365,12 +383,24 @@ fn template_row(r: &Row<'_>) -> rusqlite::Result<TemplateRow> {
         r.get(7)?,
         r.get(8)?,
         r.get(9)?,
+        r.get(10)?,
     ))
 }
 
 fn to_view(row: TemplateRow) -> Result<RecurringView> {
-    let (id, kind, amount, wallet_id, flow_id, category, note, schedule, enabled, archived_at) =
-        row;
+    let (
+        id,
+        kind,
+        amount,
+        wallet_id,
+        flow_id,
+        category,
+        note,
+        schedule,
+        enabled,
+        archived_at,
+        owner,
+    ) = row;
     Ok(RecurringView {
         id,
         kind: TransactionKind::parse(&kind)?,
@@ -382,7 +412,18 @@ fn to_view(row: TemplateRow) -> Result<RecurringView> {
         schedule: serde_json::from_str(&schedule)?,
         enabled,
         archived: archived_at.is_some(),
+        owner,
     })
+}
+
+/// The author of the template's `CreateRecurring`, the owner a blank one
+/// falls back to.
+fn template_creator(tx: &Transaction<'_>, recurring_id: Uuid) -> Result<String> {
+    Ok(tx.query_row(
+        "SELECT created_by FROM recurring_templates WHERE id = ?1",
+        params![recurring_id],
+        |r| r.get(0),
+    )?)
 }
 
 fn load_template(conn: &Connection, vault_id: Uuid, recurring_id: Uuid) -> Result<RecurringView> {

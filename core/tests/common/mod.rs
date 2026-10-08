@@ -89,6 +89,7 @@ pub fn entry(
         category: category.map(str::to_string),
         note: None,
         occurred_at: at(secs),
+        person: None,
     }
 }
 

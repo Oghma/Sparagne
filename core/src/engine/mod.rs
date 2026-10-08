@@ -16,6 +16,7 @@ use crate::{
     Command, CommandEnvelope, Core, DomainError, Entry, Flow, FlowMode, Receipt, Result,
     TransactionKind,
     category::{OPENING_KEY, UNCATEGORIZED_KEY, normalize_category_key, validate_category_name},
+    command::explicit_person,
     flow::UNALLOCATED_NAME,
 };
 
@@ -272,6 +273,7 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             category,
             note,
             schedule,
+            owner,
         } => recurring::create_recurring(
             tx,
             env,
@@ -283,6 +285,7 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
                 category: category.as_deref(),
                 note: note.as_deref(),
                 schedule: *schedule,
+                owner: person_or_author(owner.as_deref(), env),
             },
             now,
         )
@@ -301,8 +304,17 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             recurring_id,
             period_date,
             occurred_at,
-        } => recurring::execute_recurring(tx, env, *recurring_id, *period_date, *occurred_at, now)
-            .map(Some),
+            person,
+        } => recurring::execute_recurring(
+            tx,
+            env,
+            *recurring_id,
+            *period_date,
+            *occurred_at,
+            person_or_author(person.as_deref(), env),
+            now,
+        )
+        .map(Some),
         Command::SkipRecurring {
             recurring_id,
             period_date,
@@ -420,6 +432,7 @@ fn create_wallet(
             system_category_id(tx, env.vault_id, OPENING_KEY)?,
             Some(format!("opening balance for wallet '{name}'")),
             occurred_at,
+            &env.author,
         )?;
     }
     Ok(env.id)
@@ -532,6 +545,7 @@ fn entry(
         category_id,
         normalize_note(e.note.as_deref()),
         e.occurred_at,
+        person_or_author(e.person.as_deref(), env),
     )?;
     Ok(env.id)
 }
@@ -549,6 +563,7 @@ fn post_entry(
     category_id: Uuid,
     note: Option<String>,
     occurred_at: DateTime<FixedOffset>,
+    person: &str,
 ) -> Result<()> {
     let mut flow = load_flow(tx, env.vault_id, flow_id)?;
     flow.apply_leg_change(0, signed)?;
@@ -563,6 +578,7 @@ fn post_entry(
         category_id,
         note,
         occurred_at,
+        person,
     )?;
     insert_leg(tx, tx_id, 0, "wallet", wallet_id, signed)?;
     insert_leg(tx, tx_id, 1, "flow", flow_id, signed)?;
@@ -602,6 +618,7 @@ fn transfer_wallet(
         category,
         normalize_note(note),
         occurred_at,
+        &env.author,
     )?;
     insert_leg(tx, env.id, 0, "wallet", from, -amount)?;
     insert_leg(tx, env.id, 1, "wallet", to, amount)?;
@@ -647,6 +664,7 @@ fn post_transfer_flow(
         category_id,
         note,
         occurred_at,
+        &env.author,
     )?;
     insert_leg(tx, tx_id, 0, "flow", from, -amount)?;
     insert_leg(tx, tx_id, 1, "flow", to, amount)?;
@@ -728,6 +746,13 @@ fn normalize_note(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
+}
+
+/// The person a command names, trimmed, or its author when it names nobody.
+/// Worked out here, when the command is applied, so that a log written before
+/// commands could name a person replays with every row on its author.
+fn person_or_author<'a>(named: Option<&'a str>, env: &'a CommandEnvelope) -> &'a str {
+    explicit_person(named).unwrap_or(&env.author)
 }
 
 fn require_vault(tx: &Transaction<'_>, vault_id: Uuid) -> Result<()> {
@@ -938,6 +963,8 @@ fn adjust_wallet(tx: &Transaction<'_>, wallet_id: Uuid, delta: i64) -> Result<()
     }
 }
 
+/// `created_by` is always the author of the command; `person` is whoever the
+/// row is for, which only an entry or an execution may set apart from it.
 #[allow(clippy::too_many_arguments)]
 fn insert_transaction(
     tx: &Transaction<'_>,
@@ -948,11 +975,12 @@ fn insert_transaction(
     category_id: Uuid,
     note: Option<String>,
     occurred_at: DateTime<FixedOffset>,
+    person: &str,
 ) -> Result<()> {
     tx.execute(
         "INSERT INTO transactions
-            (id, vault_id, kind, occurred_at, occurred_offset, amount, category_id, note, created_by, command_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            (id, vault_id, kind, occurred_at, occurred_offset, amount, category_id, note, created_by, command_id, person)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
             id,
             env.vault_id,
@@ -964,6 +992,7 @@ fn insert_transaction(
             note,
             env.author,
             env.id,
+            person,
         ],
     )?;
     Ok(())

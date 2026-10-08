@@ -60,6 +60,15 @@ pub struct Entry {
     pub category: Option<String>,
     pub note: Option<String>,
     pub occurred_at: DateTime<FixedOffset>,
+    /// Who the row is for, when that is not the author: a member of the vault
+    /// recording on someone else's behalf. `None` or blank = the author.
+    ///
+    /// Resolved when the command is applied, never stored as the author's
+    /// name, and left out of the JSON when `None`: a log written before the
+    /// field existed replays exactly as it did, every row on its author.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[uniffi(default = None)]
+    pub person: Option<String>,
 }
 
 /// One unit of change. Serialized as JSON in the log with a `kind` tag.
@@ -222,6 +231,12 @@ pub enum Command {
         category: Option<String>,
         note: Option<String>,
         schedule: Schedule,
+        /// Whose template it is, the person an execution is meant for; `None`
+        /// or blank = the author. Left out of the JSON when `None`, like
+        /// [`Entry::person`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[uniffi(default = None)]
+        owner: Option<String>,
     },
     /// Partial update; the patch must carry at least one field. Past runs are
     /// not touched.
@@ -242,6 +257,13 @@ pub enum Command {
         recurring_id: Uuid,
         period_date: NaiveDate,
         occurred_at: DateTime<FixedOffset>,
+        /// The person of the transaction; the app sends the template's owner.
+        /// `None` or blank = the author, whoever owns the template: reading
+        /// the owner when the command is applied would let a later change of
+        /// owner rewrite past executions on replay.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[uniffi(default = None)]
+        person: Option<String>,
     },
     /// Marks a due period as handled without a transaction.
     SkipRecurring {
@@ -253,10 +275,11 @@ pub enum Command {
 /// The fields [`Command::UpdateTransaction`] can change.
 ///
 /// Every field is optional and `None` means "leave as is"; a blank string
-/// clears the note or puts the category back to Uncategorized. Which fields
-/// apply depends on the kind of the transaction being patched: `wallet_id`,
-/// `flow_id` and `category` belong to entries, `from_id` and `to_id` to
-/// transfers, and mixing the two is refused.
+/// clears the note, puts the category back to Uncategorized or gives the row
+/// back to whoever recorded it. Which fields apply depends on the kind of the
+/// transaction being patched: `wallet_id`, `flow_id`, `category` and `person`
+/// belong to entries, `from_id` and `to_id` to transfers, and mixing the two
+/// is refused.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, uniffi::Record)]
 #[serde(default)]
 pub struct TransactionPatch {
@@ -283,6 +306,12 @@ pub struct TransactionPatch {
     /// Transfers only.
     #[uniffi(default = None)]
     pub to_id: Option<Uuid>,
+    /// Entries only; blank = the author of the transaction (`created_by`).
+    /// Left out of the JSON when `None`, so a patch without it serializes as
+    /// it always did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[uniffi(default = None)]
+    pub person: Option<String>,
 }
 
 impl TransactionPatch {
@@ -297,6 +326,7 @@ impl TransactionPatch {
             && self.flow_id.is_none()
             && self.from_id.is_none()
             && self.to_id.is_none()
+            && self.person.is_none()
     }
 }
 
@@ -323,6 +353,10 @@ pub struct RecurringPatch {
     /// Disabled templates are never pending.
     #[uniffi(default = None)]
     pub enabled: Option<bool>,
+    /// Blank = the author of the template. Left out of the JSON when `None`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[uniffi(default = None)]
+    pub owner: Option<String>,
 }
 
 impl RecurringPatch {
@@ -336,6 +370,7 @@ impl RecurringPatch {
             && self.note.is_none()
             && self.schedule.is_none()
             && self.enabled.is_none()
+            && self.owner.is_none()
     }
 }
 
@@ -413,6 +448,12 @@ impl Command {
             | Self::SkipRecurring { .. } => None,
         }
     }
+}
+
+/// The person a command names, trimmed, or `None` when it names nobody (left
+/// out or blank): the engine then falls back to its own default.
+pub(crate) fn explicit_person(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|name| !name.is_empty())
 }
 
 /// A command addressed to a vault by an author.

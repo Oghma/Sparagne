@@ -63,7 +63,8 @@
 //! - `transactions.refunded_transaction_id`: v2 refunds are not linked to the
 //!   expense they undo.
 //! - `transactions.created_by` and `voided_by`: every imported command is
-//!   authored by `options.author`.
+//!   authored by `options.author`, and names no person, so every imported row
+//!   is the importer's.
 //! - `transactions.voided_at`: `Command::VoidTransaction` carries no
 //!   timestamp, so a voided row gets the import time as `voided_at`.
 //! - `recurring_templates.created_by` and `created_at`, and the v1 `interval`
@@ -835,6 +836,8 @@ impl Importer<'_> {
                     Some(CategoryUse::Name(name)) => Some(name.clone()),
                     _ => None,
                 };
+                // v1 authors are not v2 users: the row is the importer's,
+                // like its author.
                 let entry = Entry {
                     amount: tx.amount_minor,
                     wallet_id: Some(resolve(wallet.target_id)?),
@@ -842,6 +845,7 @@ impl Importer<'_> {
                     category,
                     note,
                     occurred_at,
+                    person: None,
                 };
                 Ok(match kind {
                     TransactionKind::Income => Command::Income(entry),
@@ -940,6 +944,7 @@ impl Importer<'_> {
                     category,
                     note: template.note.clone(),
                     schedule,
+                    owner: None,
                 },
             )?;
             if !created {

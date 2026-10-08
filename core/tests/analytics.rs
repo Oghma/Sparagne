@@ -1,4 +1,4 @@
-//! Tests for the ledger aggregations (`docs/v2/UI.md` §4): authors, the
+//! Tests for the ledger aggregations (`docs/v2/UI.md` §4): people, the
 //! envelope x person matrix, the category breakdown, the twelve-month buckets,
 //! the top expenses and the year breakdown behind the RIEPILOGO.
 
@@ -87,19 +87,19 @@ fn shared_month() -> Shared {
     Shared { fx, cash, varie }
 }
 
-// -- authors ---------------------------------------------------------------
+// -- people ----------------------------------------------------------------
 
 #[test]
-fn authors_are_distinct_and_sorted_and_skip_voided_rows() {
+fn people_are_distinct_and_sorted_and_skip_voided_rows() {
     let mut s = shared_month();
-    assert_eq!(s.fx.core.authors(s.fx.vault).unwrap(), ["elisa", "matteo"]);
+    assert_eq!(s.fx.core.people(s.fx.vault).unwrap(), ["elisa", "matteo"]);
 
     // Voiding elisa's only row drops her from the list.
     let elisa_row = list(
         &s.fx.core,
         s.fx.vault,
         &TransactionFilter {
-            author: Some("elisa".to_string()),
+            person: Some("elisa".to_string()),
             ..Default::default()
         },
     );
@@ -111,7 +111,7 @@ fn authors_are_distinct_and_sorted_and_skip_voided_rows() {
             transaction_id: elisa_row[0].id,
         },
     );
-    assert_eq!(s.fx.core.authors(s.fx.vault).unwrap(), ["matteo"]);
+    assert_eq!(s.fx.core.people(s.fx.vault).unwrap(), ["matteo"]);
 }
 
 // -- flow x person ---------------------------------------------------------
@@ -508,13 +508,13 @@ fn year_breakdown_rejects_bad_boundaries() {
 // -- filter additions ------------------------------------------------------
 
 #[test]
-fn the_filter_selects_one_author_and_can_read_oldest_first() {
+fn the_filter_selects_one_person_and_can_read_oldest_first() {
     let s = shared_month();
     let matteo = list(
         &s.fx.core,
         s.fx.vault,
         &TransactionFilter {
-            author: Some("matteo".to_string()),
+            person: Some("matteo".to_string()),
             ascending: true,
             ..Default::default()
         },

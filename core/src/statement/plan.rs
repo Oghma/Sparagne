@@ -487,6 +487,8 @@ impl<'a> Context<'a> {
             category: row.matched_category.clone(),
             note: note.clone(),
             occurred_at,
+            // A statement is the importer's own account.
+            person: None,
         };
         // A sign that contradicts the action (a refund written as money out)
         // keeps the action: the rule names what the row is, the amount is
