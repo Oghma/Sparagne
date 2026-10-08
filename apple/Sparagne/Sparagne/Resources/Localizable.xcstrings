@@ -17,6 +17,22 @@
         }
       }
     },
+    "%@ (no longer a member)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (no longer a member)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (non più membro)"
+          }
+        }
+      }
+    },
     "%@ in %@": {
       "localizations": {
         "en": {
@@ -313,6 +329,46 @@
         }
       }
     },
+    "%lld periods not recorded": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld period not recorded"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld periods not recorded"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld periodo non registrato"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld periodi non registrati"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld refused": {
       "localizations": {
         "en": {
@@ -505,6 +561,22 @@
         }
       }
     },
+    "A row may be for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A row may be for %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una riga può essere per %@"
+          }
+        }
+      }
+    },
     "A storage error occurred": {
       "localizations": {
         "en": {
@@ -533,6 +605,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uno schema strftime, per esempio:"
+          }
+        }
+      }
+    },
+    "A template whose owner is no longer a member of this vault records nothing until it has another owner. Its periods can still be skipped.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A template whose owner is no longer a member of this vault records nothing until it has another owner. Its periods can still be skipped."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un modello il cui titolare non è più membro di questo vault non registra nulla finché non ne ha un altro. I suoi periodi si possono comunque saltare."
           }
         }
       }
@@ -8533,6 +8621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "no"
+          }
+        }
+      }
+    },
+    "no longer a member": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no longer a member"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "non è più membro"
           }
         }
       }
