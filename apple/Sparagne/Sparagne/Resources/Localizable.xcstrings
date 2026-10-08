@@ -33,6 +33,22 @@
         }
       }
     },
+    "%@ is not a member of this vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is not a member of this vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ non è un membro di questo vault"
+          }
+        }
+      }
+    },
     "%@ of income": {
       "localizations": {
         "en": {
@@ -3857,6 +3873,22 @@
         }
       }
     },
+    "More than one person matches “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More than one person matches “%@”"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Più di una persona corrisponde a “%@”"
+          }
+        }
+      }
+    },
     "More than one wallet matches “%@”": {
       "localizations": {
         "en": {
@@ -4465,6 +4497,22 @@
         }
       }
     },
+    "Not a member of this vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not a member of this vault"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non è un membro di questo vault"
+          }
+        }
+      }
+    },
     "Not enough money": {
       "localizations": {
         "en": {
@@ -4881,6 +4929,22 @@
         }
       }
     },
+    "Person, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Person, %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persona, %@"
+          }
+        }
+      }
+    },
     "Preset: %@": {
       "localizations": {
         "en": {
@@ -4989,6 +5053,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Registra tutte"
+          }
+        }
+      }
+    },
+    "Recorded by %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded by %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrata da %@"
           }
         }
       }
@@ -7369,6 +7449,22 @@
         }
       }
     },
+    "Unknown person: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown person: %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persona sconosciuta: %@"
+          }
+        }
+      }
+    },
     "Unreadable amount": {
       "localizations": {
         "en": {
@@ -7673,6 +7769,22 @@
         }
       }
     },
+    "Which person did you mean?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which person did you mean?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quale persona intendevi?"
+          }
+        }
+      }
+    },
     "Wrong username or password": {
       "localizations": {
         "en": {
@@ -7941,22 +8053,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "archiviata"
-          }
-        }
-      }
-    },
-    "by %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "by %@"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "di %@"
           }
         }
       }
@@ -8537,6 +8633,22 @@
         }
       }
     },
+    "recorded by %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "recorded by %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "registrata da %@"
+          }
+        }
+      }
+    },
     "recurring.kind.income": {
       "localizations": {
         "en": {
@@ -8549,6 +8661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entrata"
+          }
+        }
+      }
+    },
+    "recurring.owner": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Owner"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titolare"
           }
         }
       }
