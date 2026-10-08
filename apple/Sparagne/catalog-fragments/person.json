@@ -1,7 +1,15 @@
 {
+  "%@ is not a member of this vault": {
+    "en": "%@ is not a member of this vault",
+    "it": "%@ non è un membro di questo vault"
+  },
   "More than one person matches “%@”": {
     "en": "More than one person matches “%@”",
     "it": "Più di una persona corrisponde a “%@”"
+  },
+  "Not a member of this vault": {
+    "en": "Not a member of this vault",
+    "it": "Non è un membro di questo vault"
   },
   "Person, %@": {
     "en": "Person, %@",

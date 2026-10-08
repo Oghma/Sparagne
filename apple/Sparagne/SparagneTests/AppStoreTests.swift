@@ -568,7 +568,7 @@ struct ErrorMessagesTests {
         // Sync: the server's codes and the transport's own two.
         "offline", "unauthorized", "forbidden", "author_mismatch",
         "registration_disabled", "invalid_request", "invalid_response",
-        "invalid_server_url", "server_error",
+        "invalid_server_url", "server_error", "not_a_member",
     ]
 
     @Test("Every documented error code maps to a non-empty localized summary")
@@ -577,6 +577,27 @@ struct ErrorMessagesTests {
             let summary = ErrorMessages.summary(for: code)
             #expect(!summary.isEmpty, "no summary for \(code)")
         }
+    }
+
+    @Test("A change refused for naming someone outside the vault says who, in the app's language")
+    func notAMemberNamesThePerson() {
+        let command = RejectedCommand(
+            commandId: UUID().uuidString,
+            kind: "expense",
+            code: "not_a_member",
+            message: "Elisa is not a member of this vault"
+        )
+        let change = SyncEngine.RejectedChange(
+            entry: RejectedEntry(vaultId: UUID().uuidString, vaultName: "Casa", command: command)
+        )
+        #expect(change.summary == String(localized: "\("Elisa") is not a member of this vault"))
+        // Worded otherwise, the message adds nothing the headline can use.
+        #expect(
+            ErrorMessages.summary(for: "not_a_member", message: "refused")
+                == ErrorMessages.summary(for: "not_a_member")
+        )
+        // Every other code keeps its own headline, whatever the message.
+        #expect(ErrorMessages.summary(for: "forbidden", message: "x") == ErrorMessages.summary(for: "forbidden"))
     }
 }
 

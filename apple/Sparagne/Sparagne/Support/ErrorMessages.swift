@@ -45,6 +45,9 @@ enum ErrorMessages {
         case "too_many_requests": String(localized: "Too many attempts. Try again later.")
         case "forbidden": String(localized: "You are not allowed to do that")
         case "author_mismatch": String(localized: "Those changes belong to another account")
+        // One command of a push, not the push: it put a row or a template on
+        // someone outside the vault. `summary(for:message:)` names them.
+        case "not_a_member": String(localized: "Not a member of this vault")
         case "registration_disabled": String(localized: "This server is not accepting new accounts")
         case "invalid_request": String(localized: "The server refused the request")
         case "invalid_response": String(localized: "The server answered something unexpected")
@@ -52,6 +55,22 @@ enum ErrorMessages {
         case "server_error": String(localized: "The server had a problem")
         default: String(localized: "Something went wrong")
         }
+    }
+
+    /// The headline of a command the server refused, with what its message
+    /// adds: for `not_a_member`, who was named.
+    static func summary(for code: String, message: String) -> String {
+        guard code == "not_a_member", let name = nonMember(in: message) else { return summary(for: code) }
+        return String(localized: "\(name) is not a member of this vault")
+    }
+
+    /// The name at the start of the server's `"<name> is not a member of
+    /// this vault"` (`server/src/vaults.rs`); `nil` for any other wording.
+    private static func nonMember(in message: String) -> String? {
+        let suffix = " is not a member of this vault"
+        guard message.hasSuffix(suffix) else { return nil }
+        let name = String(message.dropLast(suffix.count))
+        return name.isEmpty ? nil : name
     }
 
     /// A person cell or a `!name` that matches nobody who may be named on a
