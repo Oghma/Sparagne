@@ -468,18 +468,19 @@ impl CoreHandle {
             .import_statement(vault_id, &author, &text, &mapping, &options, &overrides)
     }
 
-    /// Resolves the wallet and flow names of a parsed quick-add line against
-    /// the vault and returns the command to execute plus the ids the names
-    /// resolved to.
+    /// Resolves the wallet, flow and person names of a parsed quick-add line
+    /// against the vault and `people` (who the app lets a row be for), and
+    /// returns the command to execute plus the ids the names resolved to.
     pub fn resolve_quick_add(
         &self,
         vault_id: Uuid,
         parsed: QuickAdd,
         now: OffsetDateTime,
         defaults: QuickAddDefaults,
+        people: Vec<String>,
     ) -> Result<ResolvedQuickAdd, QuickAddError> {
         self.lock()?
-            .resolve_quick_add(vault_id, &parsed, now, &defaults)
+            .resolve_quick_add(vault_id, &parsed, now, &defaults, &people)
     }
 }
 

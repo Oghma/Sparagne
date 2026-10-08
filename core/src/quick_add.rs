@@ -1,18 +1,23 @@
 //! Quick-add: the one-line grammar for entering a transaction.
 //!
 //! Two stages: [`parse`] turns a line of text into a [`QuickAdd`] with no
-//! database access, then [`Core::resolve_quick_add`] resolves the wallet and
-//! flow names it carries against a vault's active entities and produces a
-//! [`ResolvedQuickAdd`]: the [`Command`] ready for [`crate::Core::execute`]
-//! and the ids its names resolved to.
+//! database access, then [`Core::resolve_quick_add`] resolves the wallet,
+//! flow and person names it carries against a vault's active entities and the
+//! people the app offers, and produces a [`ResolvedQuickAdd`]: the
+//! [`Command`] ready for [`crate::Core::execute`] and the ids its names
+//! resolved to.
 //!
 //! Grammar (see `docs/v2/DISTILLATO_V1.md` §3.1):
 //!
 //! ```text
-//! [+|-|r] importo  [nota…]  [#categoria]  [@wallet]  [>busta]  [data]
+//! [+|-|r] importo  [nota…]  [#categoria]  [@wallet]  [>busta]  [!persona]  [data]
 //! tw> importo @da @a [nota] [data]        transfer between wallets
 //! tf> importo >da >a [nota] [data]        transfer between flows
 //! ```
+//!
+//! `!persona` names who the row is for when that is not the author; a `!`
+//! not followed by a letter or a digit (`!`, `!!!`) is note text, so an
+//! exclamation in a note still reads as one.
 
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, NaiveDateTime, TimeZone};
 use thiserror::Error;
@@ -237,6 +242,9 @@ pub enum QuickAdd {
         wallet: Option<String>,
         flow: Option<String>,
         date: Option<DateSpec>,
+        /// The `!name` marker: who the row is for, before resolution.
+        #[uniffi(default = None)]
+        person: Option<String>,
     },
     TransferWallet {
         amount: i64,
@@ -296,6 +304,7 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAdd, QuickAddError>
     let mut category: Option<String> = None;
     let mut wallet: Option<String> = None;
     let mut flow: Option<String> = None;
+    let mut person: Option<String> = None;
     let mut date: Option<DateSpec> = None;
     let mut note_tokens: Vec<&str> = Vec::new();
 
@@ -324,6 +333,11 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAdd, QuickAddError>
             } else {
                 flow = Some(rest.to_string());
             }
+        } else if let Some(name) = person_marker(token) {
+            if person.is_some() {
+                return Err(QuickAddError::duplicate_marker(PERSON_MARKER));
+            }
+            person = Some(name.to_string());
         } else if let Some(result) = try_parse_date_token(token) {
             if date.is_some() {
                 return Err(QuickAddError::duplicate_date());
@@ -342,7 +356,21 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAdd, QuickAddError>
         wallet,
         flow,
         date,
+        person,
     })
+}
+
+/// Marks the person a row is for: `!elisa`.
+const PERSON_MARKER: char = '!';
+
+/// The name of a `!name` token. Only a `!` followed by a letter or a digit
+/// counts: a lone `!`, or `!!!`, is an exclamation and stays in the note.
+fn person_marker(token: &str) -> Option<&str> {
+    let name = token.strip_prefix(PERSON_MARKER)?;
+    name.chars()
+        .next()
+        .is_some_and(char::is_alphanumeric)
+        .then_some(name)
 }
 
 #[derive(Clone, Copy)]
@@ -393,6 +421,9 @@ fn parse_transfer(
             } else {
                 return Err(QuickAddError::marker_not_allowed(forbidden));
             }
+        } else if person_marker(token).is_some() {
+            // A transfer is always its author's: it names nobody.
+            return Err(QuickAddError::marker_not_allowed(PERSON_MARKER));
         } else if let Some(result) = try_parse_date_token(token) {
             if date.is_some() {
                 return Err(QuickAddError::duplicate_date());
@@ -574,14 +605,20 @@ pub struct ResolvedQuickAdd {
 
 impl Core {
     /// Resolves a parsed quick-add line against `vault_id`'s active wallets
-    /// and flows and builds the [`Command`] to execute, together with the ids
-    /// the line resolved to.
+    /// and flows and against `people`, and builds the [`Command`] to execute,
+    /// together with the ids the line resolved to.
+    ///
+    /// `people` are the names the app lets a row be for (the vault's members
+    /// once it syncs); the core has no list of its own, since membership
+    /// lives on the server. A `!name` resolves among them the way a wallet
+    /// does, and the command carries the full name it matched.
     pub fn resolve_quick_add(
         &self,
         vault_id: Uuid,
         parsed: &QuickAdd,
         now: DateTime<FixedOffset>,
         defaults: &QuickAddDefaults,
+        people: &[String],
     ) -> Result<ResolvedQuickAdd, QuickAddError> {
         let snapshot = self.snapshot(vault_id)?;
         let wallets: Vec<(Uuid, &str)> = snapshot
@@ -606,7 +643,12 @@ impl Core {
                 wallet,
                 flow,
                 date,
+                person,
             } => {
+                let person = match person {
+                    Some(name) => Some(resolve_person(people, name)?),
+                    None => None,
+                };
                 let wallet_id = match wallet {
                     Some(name) => Some(resolve_name(&wallets, name, "wallet")?),
                     None => defaults.wallet_id,
@@ -622,7 +664,7 @@ impl Core {
                     category: category.clone(),
                     note: note.clone(),
                     occurred_at: resolve_occurred_at(date, now)?,
-                    person: None,
+                    person,
                 };
                 let command = match kind {
                     TransactionKind::Income => Command::Income(entry),
@@ -714,17 +756,31 @@ fn resolve_occurred_at(
         .ok_or_else(|| QuickAddError::invalid_date("ambiguous local time"))
 }
 
+/// The person `query` names among `people`, as [`resolve_name`] matches a
+/// wallet. Blank names and repeats in the list are ignored, so a caller that
+/// merges several sources does not make a name ambiguous with itself.
+fn resolve_person(people: &[String], query: &str) -> Result<String, QuickAddError> {
+    let mut candidates: Vec<(&str, &str)> = Vec::new();
+    for name in people.iter().map(|p| p.trim()).filter(|p| !p.is_empty()) {
+        if !candidates.iter().any(|(known, _)| *known == name) {
+            candidates.push((name, name));
+        }
+    }
+    resolve_name(&candidates, query, "person").map(str::to_string)
+}
+
 /// Matches `query` case-insensitively against `candidates`, priority exact >
-/// prefix > contains within the best non-empty tier.
-fn resolve_name(
-    candidates: &[(Uuid, &str)],
+/// prefix > contains within the best non-empty tier. `T` is what a match
+/// yields: an id for wallets and flows, the name itself for people.
+fn resolve_name<T: Copy>(
+    candidates: &[(T, &str)],
     query: &str,
     kind: &'static str,
-) -> Result<Uuid, QuickAddError> {
+) -> Result<T, QuickAddError> {
     let query_lower = query.to_lowercase();
-    let mut exact: Vec<(Uuid, &str)> = Vec::new();
-    let mut prefix: Vec<(Uuid, &str)> = Vec::new();
-    let mut contains: Vec<(Uuid, &str)> = Vec::new();
+    let mut exact: Vec<(T, &str)> = Vec::new();
+    let mut prefix: Vec<(T, &str)> = Vec::new();
+    let mut contains: Vec<(T, &str)> = Vec::new();
 
     for &(id, name) in candidates {
         let name_lower = name.to_lowercase();
@@ -948,6 +1004,55 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_bang_before_a_name_is_the_person() {
+        match parse_ok("-24 cena !elisa #ristoranti") {
+            QuickAdd::Entry {
+                person,
+                note,
+                category,
+                ..
+            } => {
+                assert_eq!(person.as_deref(), Some("elisa"));
+                assert_eq!(note.as_deref(), Some("cena"));
+                assert_eq!(category.as_deref(), Some("ristoranti"));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        // A digit counts as well as a letter, and so does a letter with an
+        // accent.
+        for (line, name) in [("5 !2b", "2b"), ("5 !élise", "élise")] {
+            match parse_ok(line) {
+                QuickAdd::Entry { person, .. } => assert_eq!(person.as_deref(), Some(name)),
+                other => panic!("unexpected {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn a_bang_without_a_name_stays_in_the_note() {
+        match parse_ok("5 che caldo ! !!! !? wow!") {
+            QuickAdd::Entry { person, note, .. } => {
+                assert_eq!(person, None);
+                assert_eq!(note.as_deref(), Some("che caldo ! !!! !? wow!"));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn duplicate_person_marker_is_an_error() {
+        assert_eq!(
+            parse_err("24 cena !elisa !matteo"),
+            QuickAddError::duplicate_marker('!')
+        );
+        // An exclamation after the person is still just note text.
+        assert!(matches!(
+            parse_ok("24 cena !elisa !!!"),
+            QuickAdd::Entry { person: Some(_), note: Some(note), .. } if note == "cena !!!"
+        ));
+    }
+
     // -- transfers ----------------------------------------------------------
 
     #[test]
@@ -1034,6 +1139,24 @@ mod tests {
             parse_err("tf>50 >food >savings @cash"),
             QuickAddError::marker_not_allowed('@')
         );
+    }
+
+    #[test]
+    fn transfers_reject_the_person_marker_but_keep_an_exclamation() {
+        assert_eq!(
+            parse_err("tw>50 @bank @cash !elisa"),
+            QuickAddError::marker_not_allowed('!')
+        );
+        assert_eq!(
+            parse_err("tf>50 >food >savings !elisa"),
+            QuickAddError::marker_not_allowed('!')
+        );
+        match parse_ok("tw>50 @bank @cash finalmente !") {
+            QuickAdd::TransferWallet { note, .. } => {
+                assert_eq!(note.as_deref(), Some("finalmente !"));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
     }
 
     // -- date tokens ----------------------------------------------------------
