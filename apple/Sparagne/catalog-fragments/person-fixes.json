@@ -1,6 +1,28 @@
 {
+  "%@ (no longer a member)": {
+    "en": "%@ (no longer a member)",
+    "it": "%@ (non più membro)"
+  },
+  "%lld periods not recorded": {
+    "en": {
+      "one": "%lld period not recorded",
+      "other": "%lld periods not recorded"
+    },
+    "it": {
+      "one": "%lld periodo non registrato",
+      "other": "%lld periodi non registrati"
+    }
+  },
   "A row may be for %@": {
     "en": "A row may be for %@",
     "it": "Una riga può essere per %@"
+  },
+  "A template whose owner is no longer a member of this vault records nothing until it has another owner. Its periods can still be skipped.": {
+    "en": "A template whose owner is no longer a member of this vault records nothing until it has another owner. Its periods can still be skipped.",
+    "it": "Un modello il cui titolare non è più membro di questo vault non registra nulla finché non ne ha un altro. I suoi periodi si possono comunque saltare."
+  },
+  "no longer a member": {
+    "en": "no longer a member",
+    "it": "non è più membro"
   }
 }

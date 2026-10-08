@@ -113,6 +113,7 @@ struct RecurringTemplateTable: View {
         // Archived reads as background; paused, one step back from running.
         let ink = template.archived ? Ink.text3 : template.enabled ? Ink.text : Ink.text2
         let side = template.archived ? Ink.text3 : Ink.text2
+        let ownerLeft = store.ownerHasLeft(template)
         return HStack(spacing: 0) {
             cell(width: TemplateColumn.enabled) {
                 RecurringSwitch(
@@ -124,7 +125,19 @@ struct RecurringTemplateTable: View {
                 .disabled(!store.canWrite || template.archived)
             }
             cell(minWidth: TemplateColumn.descriptionMinimum) {
-                Text(RecurringTitle.of(template)).foregroundStyle(ink)
+                if ownerLeft {
+                    // The note beside the title where both fit; at the
+                    // narrowest widths the owner's red name says it alone.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) {
+                            Text(RecurringTitle.of(template)).foregroundStyle(ink)
+                            RowTag(text: AppStore.noLongerAMember, tint: Ink.negative)
+                        }
+                        Text(RecurringTitle.of(template)).foregroundStyle(ink)
+                    }
+                } else {
+                    Text(RecurringTitle.of(template)).foregroundStyle(ink)
+                }
             }
             cell(width: TemplateColumn.amount, alignment: .trailing) {
                 Text(RecurringAmount.text(template))
@@ -142,9 +155,14 @@ struct RecurringTemplateTable: View {
                 Text(DueRecurringText.envelope(template, names: names)).foregroundStyle(side)
             }
             cell(width: TemplateColumn.owner) {
+                // An owner who left the vault: its periods wait for another.
                 Text(template.owner)
-                    .foregroundStyle(side)
-                    .accessibilityLabel("\(RecurringInspector.ownerLabel), \(template.owner)")
+                    .foregroundStyle(ownerLeft && !template.archived ? Ink.negative : side)
+                    .help(ifAny: ownerLeft ? AppStore.noLongerAMember : nil)
+                    .accessibilityLabel(
+                        ([RecurringInspector.ownerLabel, template.owner] + (ownerLeft ? [AppStore.noLongerAMember] : []))
+                            .joined(separator: ", ")
+                    )
             }
             cell(minWidth: TemplateColumn.categoryMinimum) {
                 Text(template.category.flatMap { $0.isEmpty ? nil : $0 } ?? TransactionRow.placeholder)

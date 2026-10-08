@@ -591,8 +591,14 @@ struct PendingRowView: View {
                     if !store.isReadOnly {
                         Button(String(localized: "Skip")) { run { await store.skipRecurring(template.id, periodDate: period.date) } }
                             .buttonStyle(RowButtonStyle(tone: .ghost))
+                        // Off while the owner is someone who left the vault:
+                        // the server would refuse the row. The row's style
+                        // does not dim by itself, as the chrome's does.
                         Button(String(localized: "Record")) { run { await store.executeRecurring(template.id, periodDate: period.date) } }
                             .buttonStyle(RowButtonStyle(tone: .accent))
+                            .disabled(ownerLeft)
+                            .opacity(ownerLeft ? 0.4 : 1)
+                            .help(ifAny: ownerLeft ? AppStore.ownerLeftExplanation : nil)
                     }
                 }
                 .disabled(working)
@@ -602,7 +608,9 @@ struct PendingRowView: View {
             }
             // The template's owner: the row is theirs, whoever records it.
             GridCell(width: GridColumn.person) {
-                Text(template.owner).foregroundStyle(Ink.text3)
+                Text(template.owner)
+                    .foregroundStyle(ownerLeft ? Ink.negative : Ink.text3)
+                    .help(ifAny: ownerLeft ? AppStore.noLongerAMember : nil)
             }
             GridCell(width: GridColumn.amount, alignment: .trailing) {
                 Text(LedgerMoney.bare(template.amount))
@@ -619,11 +627,17 @@ struct PendingRowView: View {
         .accessibilityLabel(LedgerAccessibility.label(for: period))
         .accessibilityActions {
             if !store.isReadOnly, !working {
-                Button(String(localized: "Record")) { run { await store.executeRecurring(template.id, periodDate: period.date) } }
+                if !ownerLeft {
+                    Button(String(localized: "Record")) { run { await store.executeRecurring(template.id, periodDate: period.date) } }
+                }
                 Button(String(localized: "Skip")) { run { await store.skipRecurring(template.id, periodDate: period.date) } }
             }
         }
     }
+
+    /// The template's owner left the vault: the period can be skipped, not
+    /// recorded (`AppStore.ownerHasLeft`).
+    private var ownerLeft: Bool { store.ownerHasLeft(template) }
 
     /// Free text on the template, resolved when it is registered; none is
     /// Uncategorized, as a blank cell is.

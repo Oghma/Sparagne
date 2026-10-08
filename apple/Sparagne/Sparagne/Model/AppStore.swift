@@ -1028,10 +1028,21 @@ final class AppStore {
     /// date at the current time of day, in the system offset (team-lead
     /// task 4). The row is for the template's owner, whoever presses
     /// Registra: the mortgage stays Matteo's when Elisa records it.
+    ///
+    /// An owner who left the vault is refused here, before the core: the
+    /// buttons are off for such a template (`ownerHasLeft`), and a period
+    /// recorded anyway would be refused by the server and fall due again.
     func executeRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
-        await recurringCommand(
-            execution(recurringId, owner: owner(ofTemplate: recurringId), periodDate: periodDate, now: Date())
-        )
+        let owner = owner(ofTemplate: recurringId)
+        if let owner, Self.ownerHasLeft(owner, members: currentMembers, author: currentAuthor) {
+            presentedError = AppError(
+                code: "not_a_member",
+                message: Self.ownerLeftExplanation,
+                headline: String(localized: "\(owner) is not a member of this vault")
+            )
+            return
+        }
+        await recurringCommand(execution(recurringId, owner: owner, periodDate: periodDate, now: Date()))
     }
 
     func skipRecurring(_ recurringId: Uuid, periodDate: NaiveDate) async {
@@ -1042,18 +1053,36 @@ final class AppStore {
     /// written or, when one is refused (an envelope that would go below zero,
     /// a wallet archived since), none is, and the alert says which. Half a
     /// backlog applied would leave the user working out what is still due.
+    ///
+    /// The periods of a template whose owner left the vault stay out of the
+    /// batch and on the list (`ownerHasLeft`), and the alert counts them:
+    /// the server would refuse each, and refusing the lot over them would
+    /// hold back periods nothing is wrong with.
     func executeAllDueRecurring() async {
         guard let vault = currentVault, !refusedAsReadOnly() else { return }
         let now = Date()
-        let commands = duePeriods.map {
+        let periods = duePeriods
+        let held = periods.filter { ownerHasLeft($0.template) }
+        let commands = periods.filter { !ownerHasLeft($0.template) }.map {
             execution($0.template.id, owner: $0.template.owner, periodDate: $0.date, now: now)
         }
-        guard !commands.isEmpty else { return }
-        await guarded {
-            try await core.executeBatch(vaultId: vault.id, commands)
-            savedAt = Date()
-            await reload()
+        var refused = false
+        if !commands.isEmpty {
+            refused = true
+            await guarded {
+                try await core.executeBatch(vaultId: vault.id, commands)
+                refused = false
+                savedAt = Date()
+                await reload()
+            }
         }
+        // A refused batch has its own alert, and recorded nothing either.
+        guard !held.isEmpty, !refused else { return }
+        presentedError = AppError(
+            code: "not_a_member",
+            message: Self.ownerLeftExplanation,
+            headline: Self.periodsNotRecorded(held.count)
+        )
     }
 
     /// The owner of a template, from the due list `reload()` keeps fresh, or

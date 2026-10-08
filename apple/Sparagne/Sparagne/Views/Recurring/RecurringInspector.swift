@@ -228,9 +228,25 @@ struct RecurringInspector: View {
                 FormTextField(label: String(localized: "Note"), text: $draft.note)
             }
             FormRow(Self.ownerLabel) {
-                FormPicker(label: Self.ownerLabel, selection: $draft.owner, options: owners, title: { $0 })
+                FormPicker(label: Self.ownerLabel, selection: $draft.owner, options: owners, title: ownerTitle)
+            }
+            // The saved owner left the vault and the draft still has them:
+            // why Registra is off, until another owner is picked and saved.
+            if let template, store.ownerHasLeft(template), draft.owner == template.owner {
+                Text(AppStore.ownerLeftExplanation)
+                    .font(Face.ui(11))
+                    .foregroundStyle(Ink.negative)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// A name in the owner picker, with a note when it is someone who left
+    /// the vault: the members are what it offers, the former owner is there
+    /// only so the picker shows what the template has.
+    private func ownerTitle(_ name: String) -> String {
+        guard AppStore.ownerHasLeft(name, members: store.currentMembers, author: store.currentAuthor) else { return name }
+        return String(localized: "\(name) (no longer a member)")
     }
 
     /// "Titolare": whose the template is. Not the "Owner" of a vault

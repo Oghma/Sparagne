@@ -166,6 +166,75 @@ struct RecurringDueTests {
         #expect(pendingNotes() == ["Gym"])
     }
 
+    // MARK: - An owner who left the vault
+
+    @Test("An owner has left when the members are known and are not them; never the author, never without a list")
+    func ownerHasLeftRule() {
+        #expect(AppStore.ownerHasLeft("elisa", members: ["tester", "bob"], author: "tester"))
+        #expect(!AppStore.ownerHasLeft("bob", members: ["tester", "bob"], author: "tester"))
+        // The author is left out of the command: the server never sees them.
+        #expect(!AppStore.ownerHasLeft("Tester", members: ["bob"], author: "tester"))
+        // No list: logged out, a demo database, or not heard yet.
+        #expect(!AppStore.ownerHasLeft("elisa", members: nil, author: "tester"))
+        #expect(!AppStore.ownerHasLeft("elisa", members: [], author: "tester"))
+        #expect(!AppStore.ownerHasLeft(" ", members: ["bob"], author: "tester"))
+    }
+
+    @Test("A template whose owner left can only skip its periods; Registra tutte records the others and counts what it left")
+    func ownerWhoLeft() async throws {
+        let store = try await Self.onboarded()
+        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        let gym = try await Self.dailyExpense(store, note: "Gym", amount: 50)
+        let vault = try #require(store.currentVault)
+        // Logged in, and elisa is not among the members any more.
+        store.setVaultMembers([vault.id: ["tester", "bob"]])
+        #expect(store.ownerHasLeft(rent))
+        #expect(!store.ownerHasLeft(gym))
+
+        // Registra, pressed anyway, never reaches the core.
+        let first = try #require(Self.due(store, rent).first)
+        await store.executeRecurring(rent.id, periodDate: first)
+        let refusal = try #require(store.presentedError)
+        #expect(refusal.code == "not_a_member")
+        #expect(refusal.summary.contains("elisa"))
+        #expect(Self.due(store, rent).count == 3)
+        store.presentedError = nil
+
+        // Registra tutte records gym's three, leaves rent's three and says so.
+        await store.executeAllDueRecurring()
+        let held = try #require(store.presentedError)
+        #expect(held.code == "not_a_member")
+        #expect(held.summary == AppStore.periodsNotRecorded(3))
+        #expect(Self.due(store, gym).isEmpty)
+        #expect(Self.due(store, rent).count == 3)
+        #expect(try Self.cash(store) == 10_000 - 3 * 50)
+        store.presentedError = nil
+
+        // Salta still works.
+        await store.skipRecurring(rent.id, periodDate: first)
+        #expect(store.presentedError == nil)
+        #expect(Self.due(store, rent).count == 2)
+
+        // Given to a member, the template records again.
+        await store.updateRecurring(rent.id, patch: RecurringPatch(owner: "bob"))
+        let given = try #require(store.recurringTemplates.first { $0.id == rent.id })
+        #expect(!store.ownerHasLeft(given))
+        await store.executeAllDueRecurring()
+        #expect(store.presentedError == nil)
+        #expect(Self.due(store, rent).isEmpty)
+    }
+
+    @Test("Logged out, an owner nobody checks records as before")
+    func ownerUncheckedWhileLoggedOut() async throws {
+        let store = try await Self.onboarded()
+        let rent = try await Self.dailyExpense(store, note: "Rent", amount: 100, owner: "elisa")
+        store.setVaultMembers(nil)
+        #expect(!store.ownerHasLeft(rent))
+        await store.executeAllDueRecurring()
+        #expect(store.presentedError == nil)
+        #expect(Self.due(store, rent).isEmpty)
+    }
+
     @Test("Skipping a period takes it off the list and writes nothing")
     func skipOnePeriod() async throws {
         let store = try await Self.onboarded()

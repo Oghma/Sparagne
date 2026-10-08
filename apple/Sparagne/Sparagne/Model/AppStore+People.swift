@@ -64,6 +64,45 @@ extension AppStore {
         )
     }
 
+    /// The members of the vault on screen, when the server's list of them is
+    /// known: `nil` logged out, in a demo database, or before it is heard.
+    var currentMembers: [String]? {
+        currentVault.flatMap { vaultMembers?[$0.id] }.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Whether `template`'s owner has left the vault on screen. Its periods
+    /// can be skipped but not recorded: the server would refuse the row
+    /// (`not_a_member`) and the period would fall due again, every time,
+    /// until the template is given another owner.
+    func ownerHasLeft(_ template: RecurringView) -> Bool {
+        Self.ownerHasLeft(template.owner, members: currentMembers, author: currentAuthor)
+    }
+
+    /// The rule behind `ownerHasLeft`, apart from the store: the members are
+    /// known, and `owner` is none of them. The author always passes, since a
+    /// command leaves them out (`explicitPerson`), and so does a blank. With
+    /// no list (logged out, a demo database, a list not heard yet) nothing
+    /// is held back: no server will check, or the next round will tell.
+    nonisolated static func ownerHasLeft(_ owner: String, members: [String]?, author: String) -> Bool {
+        let name = owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let members, !members.isEmpty, !name.isEmpty else { return false }
+        return name.lowercased() != author.lowercased() && !members.contains(name)
+    }
+
+    /// The note a template whose owner left carries in the Ricorrenze tab.
+    static var noLongerAMember: String { String(localized: "no longer a member") }
+
+    /// Why a period of such a template is not recorded: what the Record
+    /// buttons say on hover, and the alert when one is pressed anyway.
+    static var ownerLeftExplanation: String {
+        String(localized: "A template whose owner is no longer a member of this vault records nothing until it has another owner. Its periods can still be skipped.")
+    }
+
+    /// The headline when Registra tutte leaves out `count` such periods.
+    static func periodsNotRecorded(_ count: Int) -> String {
+        String(localized: "\(count) periods not recorded")
+    }
+
     /// `names` in their first order, blanks and repeats dropped.
     static func distinct(_ names: [String]) -> [String] {
         var seen = Set<String>()
