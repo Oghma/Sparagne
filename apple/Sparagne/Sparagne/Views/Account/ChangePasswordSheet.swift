@@ -35,65 +35,47 @@ struct ChangePasswordSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "Change Password")).font(.headline)
+        FormSheet(
+            String(localized: "Change Password"),
+            subtitle: done ? nil : String(localized: "Your other devices will be signed out.")
+        ) {
             if done {
                 Text(String(localized: "Your password was changed. Your other devices were signed out and need to log in again with the new password."))
-                    .font(.callout)
+                    .font(Face.ui(13))
+                    .foregroundStyle(Ink.text)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Spacer()
-                    Button(String(localized: "Done")) { dismiss() }
-                        .keyboardShortcut(.defaultAction)
-                }
             } else {
                 form
             }
-        }
-        .padding(20)
-        .frame(width: 420)
-    }
-
-    @ViewBuilder
-    private var form: some View {
-        Form {
-            SecureField(String(localized: "Current password"), text: $current)
-            SecureField(String(localized: "New password"), text: $newPassword)
-            if let newProblem { Self.hint(newProblem) }
-            SecureField(String(localized: "Confirm new password"), text: $confirmation)
-            if let confirmationProblem { Self.hint(confirmationProblem) }
-        }
-        .formStyle(.grouped)
-
-        Text(String(localized: "Your other devices will be signed out."))
-            .font(.callout)
-            .foregroundStyle(.secondary)
-
-        if let failure {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(failure).font(.callout).foregroundStyle(.red)
-                if let failureDetail {
-                    Text(failureDetail).font(.caption).foregroundStyle(.secondary)
-                }
+        } footer: {
+            if done {
+                FormPrimaryButton(title: String(localized: "Done")) { dismiss() }
+            } else {
+                if busy { ProgressView().controlSize(.small) }
+                FormCancelButton { dismiss() }
+                FormPrimaryButton(title: String(localized: "Change Password")) { submit() }
+                    .disabled(!canSubmit)
             }
-            .fixedSize(horizontal: false, vertical: true)
-        }
-
-        HStack {
-            if busy { ProgressView().controlSize(.small) }
-            Spacer()
-            Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
-                .keyboardShortcut(.cancelAction)
-            Button(String(localized: "Change Password")) { submit() }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!canSubmit)
         }
     }
 
-    private static func hint(_ text: String) -> some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
+    private var form: some View {
+        FormGroup {
+            FormRow(String(localized: "Current password")) {
+                FormTextField(label: String(localized: "Current password"), text: $current, secure: true)
+            }
+            FormRow(String(localized: "New password")) {
+                FormTextField(label: String(localized: "New password"), text: $newPassword, secure: true)
+            }
+            if let newProblem { FormNote(newProblem) }
+            FormRow(String(localized: "Confirm new password")) {
+                FormTextField(label: String(localized: "Confirm new password"), text: $confirmation, secure: true)
+            }
+            if let confirmationProblem { FormNote(confirmationProblem) }
+            if let failure {
+                FormNote(failure, tone: .negative, detail: failureDetail)
+            }
+        }
     }
 
     private func submit() {

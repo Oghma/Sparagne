@@ -9,7 +9,7 @@ import SwiftUI
 /// (`LedgerHistory.recordPendingVoid`). The button has no shortcut of its own:
 /// one would take ⌘Z away from a cell being typed into while the toast is up.
 ///
-/// Drawn with the ledger's own chrome (`Panel`'s square, hairline-bordered
+/// Drawn with the ledger's own chrome (`Panel`'s rounded, hairline-bordered
 /// card) rather than the system material, so it reads as part of the finance
 /// terminal instead of a generic macOS alert (`docs/v2/UI.md` §5).
 struct UndoToast: View {
@@ -35,8 +35,8 @@ struct UndoToast: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Ink.card)
-        .overlay(Rectangle().strokeBorder(Ink.line, lineWidth: 1))
+        .background(Ink.card, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.cardRadius).strokeBorder(Ink.line, lineWidth: 1))
         .shadow(radius: 8, y: 2)
     }
 }

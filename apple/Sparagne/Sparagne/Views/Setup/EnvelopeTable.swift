@@ -36,7 +36,7 @@ struct EnvelopeTable: View {
         SetupCard(title: String(localized: "Envelopes"), hint: String(localized: "a cap makes it a fund in the summary")) {
             SetupTableBody {
                 header
-                ForEach(store.flows, id: \.id) { flow in
+                ForEach(store.flows.filter { matchesFilter($0.name) }, id: \.id) { flow in
                     activeRow(flow)
                 }
                 // A viewer reads the envelopes; nothing to add.
@@ -54,6 +54,11 @@ struct EnvelopeTable: View {
         .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
         // Turned read-only under an open row: it could not be saved.
         .onChange(of: store.isReadOnly) { _, _ in cancel() }
+    }
+
+    /// The top bar's search; the empty line stays.
+    private func matchesFilter(_ name: String) -> Bool {
+        TableFilter.matches(store.tabFilter, [name])
     }
 
     // MARK: - Header
@@ -210,7 +215,7 @@ struct EnvelopeTable: View {
 
     @ViewBuilder
     private var archived: some View {
-        ForEach(store.archivedFlows, id: \.id) { flow in
+        ForEach(store.archivedFlows.filter { matchesFilter($0.name) }, id: \.id) { flow in
             SetupRow(highlighted: hovered == flow.id) {
                 SetupCell {
                     Text(flow.name).font(Face.row).foregroundStyle(Ink.text3).strikethrough()

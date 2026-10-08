@@ -53,13 +53,24 @@ struct RecurringTemplateTable: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
                 header
-                ForEach(store.recurringTemplatesInTableOrder, id: \.id) { template in
+                // The top bar's search narrows the templates only; the due card
+                // and the agenda above are what is waiting, whatever is typed.
+                ForEach(store.recurringTemplatesInTableOrder.filter { matchesFilter($0, names: names) }, id: \.id) { template in
                     row(template, names: names)
                 }
                 // A viewer reads the templates; nothing to add.
                 if store.canWrite { newRow }
             }
         }
+    }
+
+    private func matchesFilter(_ template: RecurringView, names: NameBook) -> Bool {
+        TableFilter.matches(store.tabFilter, [
+            template.note ?? "",
+            template.category ?? "",
+            template.walletId.flatMap { names.wallet($0) } ?? "",
+            template.flowId.flatMap { names.flow($0) } ?? "",
+        ])
     }
 
     // MARK: - Heading

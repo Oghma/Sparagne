@@ -30,7 +30,7 @@ struct WalletTable: View {
         SetupCard(title: String(localized: "Wallets")) {
             SetupTableBody {
                 header
-                ForEach(store.wallets, id: \.id) { wallet in
+                ForEach(store.wallets.filter { matchesFilter($0.name) }, id: \.id) { wallet in
                     activeRow(wallet)
                 }
                 // A viewer reads the wallets; nothing to add.
@@ -50,6 +50,11 @@ struct WalletTable: View {
         .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
         // Turned read-only under an open row: it could not be saved.
         .onChange(of: store.isReadOnly) { _, _ in cancel() }
+    }
+
+    /// The top bar's search; the empty line and the total stay.
+    private func matchesFilter(_ name: String) -> Bool {
+        TableFilter.matches(store.tabFilter, [name])
     }
 
     // MARK: - Chrome
@@ -159,7 +164,7 @@ struct WalletTable: View {
 
     @ViewBuilder
     private var archived: some View {
-        ForEach(store.archivedWallets, id: \.id) { wallet in
+        ForEach(store.archivedWallets.filter { matchesFilter($0.name) }, id: \.id) { wallet in
             SetupRow(highlighted: hovered == wallet.id) {
                 SetupCell {
                     Text(wallet.name).font(Face.row).foregroundStyle(Ink.text3).strikethrough()

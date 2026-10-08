@@ -729,22 +729,6 @@
         }
       }
     },
-    "Allow negative balance": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow negative balance"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Consenti saldo negativo"
-          }
-        }
-      }
-    },
     "Already exists": {
       "localizations": {
         "en": {
@@ -985,22 +969,6 @@
         }
       }
     },
-    "Archived": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Archived"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Archiviati"
-          }
-        }
-      }
-    },
     "As expense": {
       "localizations": {
         "en": {
@@ -1205,38 +1173,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annulla"
-          }
-        }
-      }
-    },
-    "Cap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cap"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Limite"
-          }
-        }
-      }
-    },
-    "Cap amount": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cap amount"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Importo del limite"
           }
         }
       }
@@ -2361,22 +2297,6 @@
         }
       }
     },
-    "Edit Envelope": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edit Envelope"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modifica busta"
-          }
-        }
-      }
-    },
     "Edit Row": {
       "localizations": {
         "en": {
@@ -2453,22 +2373,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collaboratore"
-          }
-        }
-      }
-    },
-    "Edit…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edit…"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modifica…"
           }
         }
       }
@@ -3361,22 +3265,6 @@
         }
       }
     },
-    "Income cap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Income cap"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Limite sulle entrate"
-          }
-        }
-      }
-    },
     "Income entry": {
       "localizations": {
         "en": {
@@ -3793,22 +3681,6 @@
         }
       }
     },
-    "Manage Recurring…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manage Recurring…"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gestisci ricorrenze…"
-          }
-        }
-      }
-    },
     "Manage…": {
       "localizations": {
         "en": {
@@ -3953,6 +3825,22 @@
         }
       }
     },
+    "More actions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More actions"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altre azioni"
+          }
+        }
+      }
+    },
     "More than one envelope matches “%@”": {
       "localizations": {
         "en": {
@@ -4049,22 +3937,6 @@
         }
       }
     },
-    "Net cap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Net cap"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Limite sul saldo"
-          }
-        }
-      }
-    },
     "Never": {
       "localizations": {
         "en": {
@@ -4093,38 +3965,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nuova"
-          }
-        }
-      }
-    },
-    "New Envelope": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Envelope"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nuova busta"
-          }
-        }
-      }
-    },
-    "New Envelope…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Envelope…"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nuova busta…"
           }
         }
       }
@@ -4173,38 +4013,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nuovo vault…"
-          }
-        }
-      }
-    },
-    "New Wallet": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Wallet"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nuovo wallet"
-          }
-        }
-      }
-    },
-    "New Wallet…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Wallet…"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nuovo wallet…"
           }
         }
       }
@@ -4929,22 +4737,6 @@
         }
       }
     },
-    "Opening allocation": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Opening allocation"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dotazione iniziale"
-          }
-        }
-      }
-    },
     "Opening balance": {
       "localizations": {
         "en": {
@@ -5361,22 +5153,6 @@
         }
       }
     },
-    "Rename Envelope": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rename Envelope"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rinomina busta"
-          }
-        }
-      }
-    },
     "Rename Vault": {
       "localizations": {
         "en": {
@@ -5405,22 +5181,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rinomina vault…"
-          }
-        }
-      }
-    },
-    "Rename Wallet": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rename Wallet"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rinomina wallet"
           }
         }
       }
@@ -5853,6 +5613,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Risparmio · ultimi 12 mesi"
+          }
+        }
+      }
+    },
+    "Search Setup": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search Setup"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca nel Setup"
+          }
+        }
+      }
+    },
+    "Search recurring entries": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search recurring entries"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerca ricorrenze"
           }
         }
       }
@@ -7577,22 +7369,6 @@
         }
       }
     },
-    "Unlimited": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unlimited"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Illimitata"
-          }
-        }
-      }
-    },
     "Unreadable amount": {
       "localizations": {
         "en": {
@@ -7781,6 +7557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wallet, buste e categorie…"
+          }
+        }
+      }
+    },
+    "Wallets, envelopes and categories": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallets, envelopes and categories"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet, buste e categorie"
           }
         }
       }

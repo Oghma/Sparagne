@@ -111,6 +111,24 @@ struct RecurringDraft: Equatable {
         }
     }
 
+    /// A new template written from `template`: the same fields, running, but
+    /// starting today. Starting where the original did would put every
+    /// period since then due at once, and an end date already behind today
+    /// would make the copy invalid, so it is dropped.
+    init(duplicating template: RecurringView, today: NaiveDate) {
+        self.init(template: template)
+        enabled = true
+        startDate = today
+        if let parts = NaiveDay.components(today) {
+            weekday = cadence == .weekly ? weekday : parts.isoWeekday
+            monthDay = cadence == .monthly ? monthDay : parts.day
+            yearMonth = cadence == .yearly ? yearMonth : parts.month
+            yearDay = cadence == .yearly ? yearDay : parts.day
+        }
+        if hasEndDate, endDate < today { hasEndDate = false }
+        endDate = hasEndDate ? endDate : today
+    }
+
     // MARK: - What the fields say
 
     var frequency: Frequency {

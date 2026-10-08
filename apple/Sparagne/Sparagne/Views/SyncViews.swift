@@ -8,60 +8,72 @@ struct RejectedChangesSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "Refused changes")).font(.headline)
-            Text(String(localized: "The server did not accept these changes, so they are not in your balances."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
+        FormSheet(
+            String(localized: "Refused changes"),
+            subtitle: String(localized: "The server did not accept these changes, so they are not in your balances."),
+            width: 480
+        ) {
             if engine.rejected.isEmpty {
-                ContentUnavailableView(
-                    String(localized: "Nothing was refused"),
-                    systemImage: "checkmark.circle"
-                )
-                .frame(height: 140)
-            } else {
-                List(engine.rejected) { change in
-                    RejectedRow(change: change) { Task { await engine.dismiss(change) } }
+                Panel {
+                    VStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Ink.text3)
+                            .accessibilityHidden(true)
+                        Text(String(localized: "Nothing was refused"))
+                            .font(Face.ui(12.5))
+                            .foregroundStyle(Ink.text2)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 116)
                 }
-                .frame(height: 220)
+            } else {
+                Panel(padding: 0) {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(Array(engine.rejected.enumerated()), id: \.element.id) { index, change in
+                                if index > 0 { Hairline() }
+                                RejectedRow(change: change) { Task { await engine.dismiss(change) } }
+                            }
+                        }
+                    }
+                    .frame(height: 220)
+                }
             }
-
-            HStack {
-                Button(String(localized: "Dismiss All")) { Task { await engine.dismissAllRejected() } }
-                    .disabled(engine.rejected.isEmpty)
-                Spacer()
-                Button(String(localized: "Close"), role: .cancel) { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-            }
+        } footer: {
+            Button(String(localized: "Dismiss All")) { Task { await engine.dismissAllRejected() } }
+                .buttonStyle(.chrome(.bordered))
+                .disabled(engine.rejected.isEmpty)
+            FormPrimaryButton(title: String(localized: "Close"), role: .cancel) { dismiss() }
         }
-        .padding(20)
-        .frame(width: 460)
     }
 }
 
+/// One refused change: what it was, the server's reason, and where.
 private struct RejectedRow: View {
     let change: SyncEngine.RejectedChange
     let dismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(change.summary).font(.body)
+                Text(change.summary)
+                    .font(Face.ui(13))
+                    .foregroundStyle(Ink.text)
                 Text(change.command.message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Face.ui(11.5))
+                    .foregroundStyle(Ink.text2)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("\(change.vaultName) · \(change.kindName)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(Face.ui(11))
+                    .foregroundStyle(Ink.text3)
             }
-            Spacer()
+            Spacer(minLength: 8)
             Button(String(localized: "Dismiss"), action: dismiss)
-                .buttonStyle(.link)
+                .buttonStyle(.chrome(.ghost, small: true))
         }
-        .padding(.vertical, 2)
+        .padding(.horizontal, Metrics.cardPad)
+        .padding(.vertical, 8)
     }
 }
 
@@ -83,36 +95,32 @@ struct ShareVaultSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "Share Vault")).font(.headline)
-            Text(vault.name).foregroundStyle(.secondary)
-
-            List(members) { member in
-                HStack {
-                    Text(member.username)
-                    Spacer()
-                    Text(member.role.label).foregroundStyle(.secondary)
-                    if member.role != .owner {
-                        Button(String(localized: "Remove"), role: .destructive) {
-                            act { try await engine.removeMember(vaultId: vault.id, username: member.username) }
+        FormSheet(String(localized: "Share Vault"), subtitle: vault.name, width: 460) {
+            FormGroup(String(localized: "Members")) {
+                Panel(padding: 0) {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
+                                if index > 0 { Hairline() }
+                                memberRow(member)
+                            }
                         }
-                        .buttonStyle(.link)
                     }
+                    .frame(height: 160)
                 }
             }
-            .frame(height: 160)
 
-            HStack {
-                TextField(String(localized: "Username"), text: $newUsername)
-                Picker(String(localized: "Role"), selection: $newRole) {
-                    Text(MemberRole.editor.label).tag(MemberRole.editor)
-                    Text(MemberRole.viewer.label).tag(MemberRole.viewer)
-                }
-                .labelsHidden()
-                // `labelsHidden()` only hides the visible title next to the
-                // field; VoiceOver still needs to be told what the picker is.
-                .accessibilityLabel(String(localized: "Role"))
-                .frame(width: 110)
+            HStack(spacing: 8) {
+                // No label column here: the field says what it is in its
+                // empty state.
+                FormTextField(label: String(localized: "Username"), text: $newUsername, prompt: String(localized: "Username"))
+                FormPicker(
+                    label: String(localized: "Role"),
+                    selection: $newRole,
+                    options: [MemberRole.editor, .viewer],
+                    title: \.label
+                )
+                .frame(width: 120)
                 Button(String(localized: "Add")) {
                     let username = trimmedUsername
                     act {
@@ -120,23 +128,35 @@ struct ShareVaultSheet: View {
                         newUsername = ""
                     }
                 }
+                .buttonStyle(.chrome(.bordered))
                 .disabled(trimmedUsername.isEmpty || busy)
             }
 
             if let message {
-                Text(message).font(.callout).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+                FormNote(message, tone: .negative, indented: false)
             }
+        } footer: {
+            FormPrimaryButton(title: String(localized: "Done"), role: .cancel) { dismiss() }
+        }
+        .task { await load() }
+    }
 
-            HStack {
-                Spacer()
-                Button(String(localized: "Done"), role: .cancel) { dismiss() }
-                    .keyboardShortcut(.defaultAction)
+    private func memberRow(_ member: MemberEntry) -> some View {
+        HStack(spacing: 8) {
+            Text(member.username)
+                .foregroundStyle(Ink.text)
+            Spacer(minLength: 8)
+            Text(member.role.label)
+                .foregroundStyle(Ink.text2)
+            if member.role != .owner {
+                FormDestructiveButton(title: String(localized: "Remove"), small: true) {
+                    act { try await engine.removeMember(vaultId: vault.id, username: member.username) }
+                }
             }
         }
-        .padding(20)
-        .frame(width: 440)
-        .task { await load() }
+        .font(Face.ui(13))
+        .padding(.horizontal, Metrics.cardPad)
+        .frame(minHeight: 32)
     }
 
     @MainActor
@@ -173,6 +193,8 @@ struct ShareVaultSheet: View {
 }
 
 /// The Settings scene: which server, who I am, and where the sync stands.
+/// Drawn with the form kit at a sheet's density, so the window reads as one
+/// more panel of the app rather than the system's grouped form.
 struct AccountSettingsView: View {
     let engine: SyncEngine
 
@@ -183,105 +205,102 @@ struct AccountSettingsView: View {
 
     var body: some View {
         @Bindable var account = engine.account
-        Form {
-            Section(String(localized: "Server")) {
-                TextField(String(localized: "Server address"), text: $account.serverURLText)
-                    .disabled(engine.isLoggedIn)
-                    .textContentType(.URL)
+        VStack(alignment: .leading, spacing: 20) {
+            FormGroup(String(localized: "Server")) {
+                FormRow(String(localized: "Server address")) {
+                    FormTextField(label: String(localized: "Server address"), text: $account.serverURLText)
+                        .textContentType(.URL)
+                }
+                .disabled(engine.isLoggedIn)
             }
 
             if let name = account.username {
-                Section(String(localized: "Account")) {
-                    LabeledContent(String(localized: "Signed in as"), value: name)
+                FormGroup(String(localized: "Account")) {
+                    FormValueRow(String(localized: "Signed in as"), value: name)
                     if let expiry = account.expiresAt {
-                        Text(String(localized: "Signed in until \(expiry.formatted(date: .long, time: .shortened))"))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                        FormNote(String(localized: "Signed in until \(expiry.formatted(date: .long, time: .shortened))"))
                     }
                     if let failure = account.tokenSaveFailure {
                         // Not an error: this session works, the next launch
                         // will ask for the password again.
-                        VStack(alignment: .leading, spacing: 2) {
-                            Label(
-                                String(localized: "Your login could not be saved in the Keychain; you'll need to log in again next time."),
-                                systemImage: "exclamationmark.triangle"
-                            )
-                            .font(.callout)
-                            .foregroundStyle(Ink.warning)
-                            Text(failure)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .fixedSize(horizontal: false, vertical: true)
+                        FormNote(
+                            String(localized: "Your login could not be saved in the Keychain; you'll need to log in again next time."),
+                            tone: .warning,
+                            detail: failure
+                        )
                     }
-                    HStack {
-                        Button(String(localized: "Change Password…")) { changingPassword = true }
-                        Spacer()
-                        Button(String(localized: "Log Out")) {
-                            busy = true
-                            Task {
-                                await engine.logOut()
-                                busy = false
+                    FormRow("") {
+                        HStack(spacing: 8) {
+                            Button(String(localized: "Change Password…")) { changingPassword = true }
+                            Button(String(localized: "Log Out")) {
+                                busy = true
+                                Task {
+                                    await engine.logOut()
+                                    busy = false
+                                }
                             }
                         }
+                        .buttonStyle(.chrome(.bordered))
+                        .disabled(busy)
                     }
-                    .disabled(busy)
                 }
             } else {
-                Section(String(localized: "Person")) {
-                    TextField(
-                        String(localized: "Name in the ledger"),
-                        text: $account.localAuthor,
-                        prompt: Text(AccountStore.systemAuthor)
-                    )
+                FormGroup(String(localized: "Person")) {
+                    FormRow(String(localized: "Name in the ledger")) {
+                        FormTextField(
+                            label: String(localized: "Name in the ledger"),
+                            text: $account.localAuthor,
+                            prompt: AccountStore.systemAuthor
+                        )
+                    }
                     .onChange(of: account.localAuthor) { _, _ in
                         Task { await engine.adoptLocalAuthor() }
                     }
-                    Text(String(localized: "Signs the rows you add while logged out; an account's name takes over when you log in."))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    FormNote(String(localized: "Signs the rows you add while logged out; an account's name takes over when you log in."))
                 }
 
-                Section(String(localized: "Account")) {
-                    TextField(String(localized: "Username"), text: $username)
-                    if let hint = usernameHint { Self.hint(hint) }
-                    SecureField(String(localized: "Password"), text: $password)
-                    if let hint = passwordHint { Self.hint(hint) }
-                    HStack {
-                        Button(String(localized: "Log In")) { authenticate(registering: false) }
-                            .keyboardShortcut(.defaultAction)
-                            .disabled(!canLogIn)
-                        Button(String(localized: "Register")) { authenticate(registering: true) }
-                            .disabled(!canRegister)
-                        Spacer()
-                        if busy { ProgressView().controlSize(.small) }
+                FormGroup(String(localized: "Account")) {
+                    FormRow(String(localized: "Username")) {
+                        FormTextField(label: String(localized: "Username"), text: $username)
                     }
-                    .disabled(busy)
+                    if let hint = usernameHint { FormNote(hint) }
+                    FormRow(String(localized: "Password")) {
+                        FormTextField(label: String(localized: "Password"), text: $password, secure: true)
+                    }
+                    if let hint = passwordHint { FormNote(hint) }
+                    FormRow("") {
+                        HStack(spacing: 8) {
+                            Button(String(localized: "Log In")) { authenticate(registering: false) }
+                                .buttonStyle(.chrome(.primary))
+                                .keyboardShortcut(.defaultAction)
+                                .disabled(!canLogIn)
+                            Button(String(localized: "Register")) { authenticate(registering: true) }
+                                .buttonStyle(.chrome(.bordered))
+                                .disabled(!canRegister)
+                            if busy { ProgressView().controlSize(.small) }
+                        }
+                        .disabled(busy)
+                    }
                 }
             }
 
-            Section(String(localized: "Status")) {
-                LabeledContent(String(localized: "Sync"), value: statusText)
+            FormGroup(String(localized: "Status")) {
+                FormValueRow(String(localized: "Sync"), value: statusText)
                 if engine.pendingCount > 0 {
-                    LabeledContent(
+                    FormValueRow(
                         String(localized: "Waiting to sync"),
                         value: engine.pendingCount.formatted(.number)
                     )
                 }
                 if let message = engine.authMessage {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(message).font(.callout).foregroundStyle(.red)
-                        // The server's own English, as the detail.
-                        if let detail = engine.authDetail {
-                            Text(detail).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
+                    // The server's own English, as the detail.
+                    FormNote(message, tone: .negative, detail: engine.authDetail)
                 }
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 420)
+        .padding(20)
+        .frame(width: 460, alignment: .topLeading)
+        .environment(\.formMetrics, .sheet)
         .onAppear { username = account.lastUsername }
         .sheet(isPresented: $changingPassword) { ChangePasswordSheet(engine: engine) }
     }
@@ -309,13 +328,6 @@ struct AccountSettingsView: View {
         return String(localized: "New accounts need a password of at least 8 characters.")
     }
 
-    private static func hint(_ text: String) -> some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
     @MainActor
     private func authenticate(registering: Bool) {
         let name = normalizedUsername
@@ -337,4 +349,3 @@ struct AccountSettingsView: View {
         SyncPillState(engine: engine).settingsText
     }
 }
-

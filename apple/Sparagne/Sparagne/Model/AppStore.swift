@@ -237,7 +237,12 @@ final class AppStore {
     var person: String? { didSet { if person != oldValue { filtersChanged() } } }
     /// Which of the two views is on screen; no reload, the data is the same.
     /// The window opens on the RIEPILOGO (`docs/v2/UI.md` §2).
-    var tab: LedgerTab = .summary
+    var tab: LedgerTab = .summary { didSet { if tab != oldValue { tabFilter = "" } } }
+    /// What the top bar's search field holds on the Ricorrenze and the Setup
+    /// tabs, which filter their tables locally. Apart from `searchText` so
+    /// that typing there never reloads the ledger; cleared with the tab and
+    /// the vault, since it named rows of the table that is gone.
+    var tabFilter = ""
     var showVoided = false { didSet { if showVoided != oldValue { filtersChanged() } } }
     /// Transfers are in neither direction, so the View menu opts into them.
     var showTransfers = false { didSet { if showTransfers != oldValue { filtersChanged() } } }
@@ -325,7 +330,8 @@ final class AppStore {
     /// Active envelopes, Unallocated first (the core already orders them).
     var flows: [FlowView] { snapshot?.flows.filter { !$0.archived } ?? [] }
 
-    /// For the management sheet's collapsed "Archived" group.
+    /// The archived rows at the bottom of the SETUP tables, where they can be
+    /// restored.
     var archivedWallets: [WalletView] { snapshot?.wallets.filter { $0.archived } ?? [] }
 
     /// Unallocated is never archived, so it never needs to appear here.
@@ -445,6 +451,7 @@ final class AppStore {
         upcomingRecurring = []
         categoryUsage = [:]
         selection.clear()
+        tabFilter = ""
         // A void still counting down is not undone by leaving: it carries its
         // own vault, so it lands where its rows are, and the vault it left
         // is not reloaded for nothing.

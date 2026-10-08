@@ -296,6 +296,46 @@ struct StatementImportTests {
         #expect(after.count == imported.count)
     }
 
+    // MARK: - The steps
+
+    @Test("The step strip goes back to any page passed, ahead only as far as the footer's button, and nowhere after the import")
+    func reachableSteps() async throws {
+        let (store, card, _) = try await Self.vault()
+        let model = StatementImportModel(store: store, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        #expect(model.isReachable(.file))
+        #expect(!model.isReachable(.mapping))
+        #expect(!model.isReachable(.review))
+
+        await model.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        #expect(model.isReachable(.file))
+        #expect(model.isReachable(.mapping))
+        // Two wallets and none chosen yet: nothing to review.
+        #expect(!model.isReachable(.review))
+
+        model.walletId = card
+        await model.refreshPreview()
+        #expect(model.isReachable(.review))
+        #expect(!model.isReachable(.report))
+
+        // A date column the file does not have: the core refuses the
+        // preview, and the review closes again.
+        let dateColumn = model.mapping.dateColumn
+        model.mapping.dateColumn = "nowhere"
+        await model.refreshPreview()
+        #expect(model.previewProblem != nil)
+        #expect(!model.isReachable(.review))
+        model.mapping.dateColumn = dateColumn
+        await model.refreshPreview()
+
+        model.step = .review
+        await model.runImport()
+        #expect(model.step == .report)
+        #expect(!model.isReachable(.file))
+        #expect(!model.isReachable(.mapping))
+        #expect(!model.isReachable(.review))
+        #expect(model.isReachable(.report))
+    }
+
     // MARK: - Words
 
     @Test("Every status code the core sends has its own translation")

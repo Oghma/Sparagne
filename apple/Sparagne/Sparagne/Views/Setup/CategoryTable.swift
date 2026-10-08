@@ -99,8 +99,13 @@ struct CategoryTable: View {
 
     // MARK: - Rows
 
-    private var active: [CategoryView] { store.windowCategories.filter { !$0.archived } }
-    private var archived: [CategoryView] { store.windowCategories.filter { $0.archived } }
+    private var active: [CategoryView] { store.windowCategories.filter { !$0.archived && matchesFilter($0) } }
+    private var archived: [CategoryView] { store.windowCategories.filter { $0.archived && matchesFilter($0) } }
+
+    /// The top bar's search, on the name and the aliases; the empty line stays.
+    private func matchesFilter(_ category: CategoryView) -> Bool {
+        TableFilter.matches(store.tabFilter, [category.name] + aliases(of: category.id))
+    }
 
     /// System categories are read-only: the core refuses to rename, archive or
     /// merge them, so they carry no menu at all rather than an empty one. So

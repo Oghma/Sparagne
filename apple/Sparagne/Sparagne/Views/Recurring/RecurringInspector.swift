@@ -19,6 +19,9 @@ struct RecurringInspector: View {
     /// A new template was created and should be selected, or the user gave
     /// up on one (`nil`).
     let finishedCreating: (Uuid?) -> Void
+    /// "Duplicate": the tab opens create mode with the draft this inspector
+    /// made from the template.
+    var duplicate: (RecurringDraft) -> Void = { _ in }
 
     @State private var draft: RecurringDraft
     /// A command in flight: Salva, Crea and the rest wait for it.
@@ -29,12 +32,22 @@ struct RecurringInspector: View {
     /// too. `nil` until the first answer.
     @State private var preview: Result<[RecurringNext.Preview], Error>?
 
-    init(store: AppStore, template: RecurringView?, today: NaiveDate, finishedCreating: @escaping (Uuid?) -> Void) {
+    init(
+        store: AppStore,
+        template: RecurringView?,
+        seed: RecurringDraft? = nil,
+        today: NaiveDate,
+        duplicate: @escaping (RecurringDraft) -> Void = { _ in },
+        finishedCreating: @escaping (Uuid?) -> Void
+    ) {
         self.store = store
         self.template = template
         self.today = today
+        self.duplicate = duplicate
         self.finishedCreating = finishedCreating
-        _draft = State(initialValue: template.map(RecurringDraft.init(template:)) ?? RecurringDraft(today: today))
+        _draft = State(
+            initialValue: template.map(RecurringDraft.init(template:)) ?? seed ?? RecurringDraft(today: today)
+        )
     }
 
     private var currency: Currency { store.currency }
@@ -82,16 +95,52 @@ struct RecurringInspector: View {
     private var title: some View {
         let cadence = ScheduleFormatting.describe(draft.schedule)
         return VStack(alignment: .leading, spacing: 2) {
-            Text(template.map(RecurringTitle.of) ?? String(localized: "New recurring entry"))
-                .font(Face.ui(16, .semibold))
-                .foregroundStyle(Ink.text)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 8) {
+                Text(template.map(RecurringTitle.of) ?? String(localized: "New recurring entry"))
+                    .font(Face.ui(16, .semibold))
+                    .foregroundStyle(Ink.text)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+                if let template, store.canWrite { moreMenu(template) }
+            }
             Text(String(localized: "\(cadence) \u{00B7} from \(RecurringDayText.full(draft.startDate))"))
             .font(Face.ui(12))
             .foregroundStyle(Ink.text2)
             .lineLimit(2)
         }
+    }
+
+    /// The "…" beside the title: duplicating, and the footer's archive or
+    /// restore. Not for a vault that is only read, and not in create mode,
+    /// where there is nothing to copy yet. Outside the `.disabled` of the
+    /// fields, so an archived template can still be restored from it.
+    private func moreMenu(_ template: RecurringView) -> some View {
+        Menu {
+            Button(String(localized: "Duplicate")) {
+                duplicate(RecurringDraft(duplicating: template, today: today))
+            }
+            if template.archived {
+                Button(String(localized: "Restore")) {
+                    run { await store.restoreRecurring(template.id) }
+                }
+            } else {
+                Button(String(localized: "Archive"), role: .destructive) {
+                    run { await store.archiveRecurring(template.id) }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Ink.text2)
+                .frame(width: 26, height: 22)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(working)
+        .accessibilityLabel(String(localized: "More actions"))
     }
 
     // MARK: - Amount and kind
@@ -141,10 +190,9 @@ struct RecurringInspector: View {
 
     private var whereGroup: some View {
         let names = NameBook(snapshot: store.snapshot)
-        return VStack(alignment: .leading, spacing: 5) {
-            groupLabel(String(localized: "Where"))
-            field(String(localized: "Wallet")) {
-                InspectorMenu(
+        return FormGroup(String(localized: "Where")) {
+            FormRow(String(localized: "Wallet")) {
+                FormMenu(
                     label: String(localized: "Wallet"),
                     value: draft.walletId.map { names.wallet($0) ?? TransactionRow.placeholder }
                         ?? String(localized: "Any wallet")
@@ -157,8 +205,8 @@ struct RecurringInspector: View {
                     }
                 }
             }
-            field(String(localized: "Envelope")) {
-                InspectorMenu(
+            FormRow(String(localized: "Envelope")) {
+                FormMenu(
                     label: String(localized: "Envelope"),
                     value: draft.flowId.map { names.flow($0) ?? TransactionRow.placeholder }
                         ?? NameBook.unallocatedLabel
@@ -171,11 +219,11 @@ struct RecurringInspector: View {
                     }
                 }
             }
-            field(String(localized: "Category")) {
-                InspectorTextField(label: String(localized: "Category"), text: $draft.category)
+            FormRow(String(localized: "Category")) {
+                FormTextField(label: String(localized: "Category"), text: $draft.category)
             }
-            field(String(localized: "Note")) {
-                InspectorTextField(label: String(localized: "Note"), text: $draft.note)
+            FormRow(String(localized: "Note")) {
+                FormTextField(label: String(localized: "Note"), text: $draft.note)
             }
         }
     }
@@ -183,8 +231,7 @@ struct RecurringInspector: View {
     // MARK: - Quando
 
     private var whenGroup: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            groupLabel(String(localized: "When"))
+        FormGroup(String(localized: "When")) {
             RecurringSegments(
                 options: RecurringDraft.Cadence.allCases,
                 selection: draft.cadence,
@@ -193,9 +240,9 @@ struct RecurringInspector: View {
                 name: String(localized: "Frequency")
             )
             .padding(.bottom, 2)
-            field(String(localized: "Repeat"), alignment: .firstTextBaseline) {
+            FormRow(String(localized: "Repeat"), alignment: .firstTextBaseline) {
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         every
                         on
                     }
@@ -205,10 +252,10 @@ struct RecurringInspector: View {
                     }
                 }
             }
-            field(String(localized: "Start")) {
+            FormRow(String(localized: "Start")) {
                 DayField(label: String(localized: "Start"), day: $draft.startDate)
             }
-            field(String(localized: "End")) {
+            FormRow(String(localized: "End")) {
                 HStack(spacing: 8) {
                     RecurringSegments(
                         options: [false, true],
@@ -234,9 +281,11 @@ struct RecurringInspector: View {
         }
     }
 
-    /// "ogni [1] mese,"
+    /// "ogni [1] mese,". The spacing is tight on purpose: in English, with
+    /// "month," and "on day", the row only just fits the inspector's 340 pt on
+    /// one line, and it wraps (`ViewThatFits`) at any looser gap.
     private var every: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             Text(String(localized: "every"))
             MiniNumberField(label: String(localized: "Interval"), value: $draft.interval)
             Text(unitWord + (draft.cadence == .daily ? "" : ","))
@@ -263,7 +312,7 @@ struct RecurringInspector: View {
     /// day and a month.
     @ViewBuilder
     private var on: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             switch draft.cadence {
             case .daily:
                 EmptyView()
@@ -299,15 +348,14 @@ struct RecurringInspector: View {
     }
 
     private func compactMenu<Items: View>(label: String, value: String, @ViewBuilder items: () -> Items) -> some View {
-        InspectorMenu(label: label, value: value) { items() }
+        FormMenu(label: label, value: value) { items() }
             .fixedSize()
     }
 
     // MARK: - Prossime date
 
     private var nextDates: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            groupLabel(String(localized: "Next dates"))
+        FormGroup(String(localized: "Next dates")) {
             switch preview {
             case nil:
                 EmptyView()
@@ -392,7 +440,7 @@ struct RecurringInspector: View {
         HStack(spacing: 8) {
             if let template {
                 if store.canWrite {
-                    RecurringSwitch(label: String(localized: "Enabled"), isOn: draft.enabled && !template.archived) { on in
+                    FormSwitch(label: String(localized: "Enabled"), isOn: draft.enabled && !template.archived) { on in
                         run { await store.setRecurringEnabled(template.id, on) }
                     }
                     .disabled(template.archived || working)
@@ -490,38 +538,6 @@ struct RecurringInspector: View {
             await work()
             working = false
         }
-    }
-
-    // MARK: - Pieces
-
-    /// `DOVE`, `QUANDO`: small capitals in `text3`.
-    private func groupLabel(_ text: String) -> some View {
-        Text(text)
-            .font(Face.ui(10.5, .semibold))
-            .tracking(0.5)
-            .textCase(.uppercase)
-            .foregroundStyle(Ink.text3)
-            .padding(.bottom, 1)
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    /// A labelled row: the label in an 80-point column, the control after it.
-    /// Centered on a one-line control; on the first line of one that wraps.
-    private func field<Content: View>(
-        _ label: String,
-        alignment: VerticalAlignment = .center,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack(alignment: alignment, spacing: 8) {
-            Text(label)
-                .font(Face.ui(12))
-                .foregroundStyle(Ink.text2)
-                .frame(width: 80, alignment: .leading)
-                .accessibilityHidden(true)
-            content()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(minHeight: 26)
     }
 }
 

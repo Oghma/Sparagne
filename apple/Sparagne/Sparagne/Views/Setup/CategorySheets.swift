@@ -15,8 +15,8 @@ struct MergeSubject: Identifiable {
 /// disabling Merge when the preview is not `ok`
 /// (`Core::preview_merge`, `docs/v2/ARCH.md` §4).
 ///
-/// System styling on purpose: a modal sheet is a dialog, not part of the
-/// spreadsheet surface the table draws.
+/// Drawn with the form kit like the window's other sheets, so a dialog over
+/// the table reads as part of the same surface.
 struct MergeCategorySheet: View {
     let store: AppStore
     let source: CategoryView
@@ -27,45 +27,44 @@ struct MergeCategorySheet: View {
     @State private var preview: MergePreview?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "Merge \u{201C}\(source.name)\u{201D} into"))
-                .font(.headline)
-            Picker(String(localized: "Target category"), selection: $targetId) {
-                Text(String(localized: "Choose…")).tag(Optional<Uuid>.none)
-                ForEach(targets, id: \.id) { target in
-                    Text(target.name).tag(Optional(target.id))
+        FormSheet(String(localized: "Merge \u{201C}\(source.name)\u{201D} into"), width: 420) {
+            FormGroup {
+                FormRow(String(localized: "Target category")) {
+                    FormPicker(
+                        label: String(localized: "Target category"),
+                        selection: $targetId,
+                        options: [nil] + targets.map { Optional($0.id) },
+                        title: targetName
+                    )
                 }
-            }
-            .task(id: targetId) {
-                guard let targetId else {
-                    preview = nil
-                    return
+                .task(id: targetId) {
+                    guard let targetId else {
+                        preview = nil
+                        return
+                    }
+                    preview = await store.previewCategoryMerge(sourceId: source.id, targetId: targetId)
                 }
-                preview = await store.previewCategoryMerge(sourceId: source.id, targetId: targetId)
-            }
-            if let preview, !preview.conflicts.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                if let preview, !preview.conflicts.isEmpty {
                     ForEach(Array(preview.conflicts.enumerated()), id: \.offset) { _, conflict in
-                        Label(conflictText(conflict), systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(Ink.warning)
-                            .font(.caption)
+                        FormNote(conflictText(conflict), tone: .warning)
                     }
                 }
             }
-            HStack {
-                Spacer()
-                Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
-                Button(String(localized: "Merge")) {
-                    guard let targetId else { return }
-                    Task { await store.mergeCategory(sourceId: source.id, targetId: targetId) }
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(targetId == nil || preview?.ok == false)
+        } footer: {
+            FormCancelButton { dismiss() }
+            FormPrimaryButton(title: String(localized: "Merge")) {
+                guard let targetId else { return }
+                Task { await store.mergeCategory(sourceId: source.id, targetId: targetId) }
+                dismiss()
             }
+            .disabled(targetId == nil || preview?.ok == false)
         }
-        .padding(20)
-        .frame(width: 380)
+    }
+
+    /// "Choose…" until a target is picked.
+    private func targetName(_ id: Uuid?) -> String {
+        guard let id else { return String(localized: "Choose…") }
+        return targets.first { $0.id == id }?.name ?? String(localized: "Choose…")
     }
 
     private func conflictText(_ conflict: MergeConflict) -> String {

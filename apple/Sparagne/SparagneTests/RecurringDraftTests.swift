@@ -67,6 +67,33 @@ struct RecurringDraftTests {
         }
     }
 
+    @Test("A duplicate keeps the fields, runs, and starts today")
+    func duplicate() {
+        let draft = RecurringDraft(duplicating: Self.rent, today: "2026-10-08")
+        #expect(draft.amountText == "780,00")
+        #expect(draft.walletId == Self.wallet)
+        #expect(draft.flowId == Self.flow)
+        #expect(draft.category == "Casa")
+        #expect(draft.note == "mutuo")
+        #expect(draft.schedule == RecurringFixture.schedule(.monthly(day: 1), from: "2026-10-08"))
+        #expect(draft.isValid(currency: .eur))
+    }
+
+    @Test("A duplicate of a paused template with an end date behind today has none")
+    func duplicateDropsAPastEnd() {
+        let old = RecurringFixture.template(
+            schedule: RecurringFixture.schedule(.weekly(weekday: 3), from: "2025-01-01", until: "2025-06-01"),
+            enabled: false
+        )
+        let draft = RecurringDraft(duplicating: old, today: "2026-10-08")
+        #expect(draft.enabled)
+        #expect(draft.schedule == RecurringFixture.schedule(.weekly(weekday: 3), from: "2026-10-08"))
+        let ahead = RecurringFixture.template(
+            schedule: RecurringFixture.schedule(.daily, from: "2025-01-01", until: "2027-01-01")
+        )
+        #expect(RecurringDraft(duplicating: ahead, today: "2026-10-08").schedule.endDate == "2027-01-01")
+    }
+
     @Test("Spaces around the category and the note change nothing")
     func whitespaceIsNotAChange() {
         #expect(patch { $0.category = " Casa "; $0.note = "mutuo " }.isEmpty)

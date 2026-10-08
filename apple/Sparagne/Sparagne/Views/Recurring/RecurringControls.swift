@@ -5,39 +5,9 @@ import SparagneCore
 // hand like the rest of the window: the system switch, segmented picker and
 // date picker are light-on-dark strangers on this ground.
 
-/// The canvas's 24 × 14 switch: amber with a dark knob when on, a grey
-/// track when off. VoiceOver reads it as a toggle, with its state.
-struct RecurringSwitch: View {
-    let label: String
-    let isOn: Bool
-    let set: (Bool) -> Void
-
-    @Environment(\.isEnabled) private var isEnabled
-
-    var body: some View {
-        Button {
-            set(!isOn)
-        } label: {
-            ZStack(alignment: isOn ? .trailing : .leading) {
-                Capsule().fill(isOn ? Ink.accent : Ink.line2)
-                Circle()
-                    .fill(isOn ? Color(hex: 0x140A00) : Ink.text3)
-                    .frame(width: 10, height: 10)
-                    .padding(2)
-            }
-            .frame(width: 24, height: 14)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .opacity(isEnabled ? 1 : 0.5)
-        .help(label)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(.isToggle)
-        .accessibilityValue(isOn ? String(localized: "Enabled") : String(localized: "Disabled"))
-        .accessibilityAction { set(!isOn) }
-    }
-}
+/// The switch moved to `FormKit` as `FormSwitch`; the template table still
+/// calls it by the tab's name.
+typealias RecurringSwitch = FormSwitch
 
 /// The canvas's `.seg`: segments on the darkest ground, the chosen one
 /// raised on `hi`. Not `SegmentedStrip`, whose chosen segment is amber: here
@@ -88,37 +58,6 @@ struct RecurringSegments<Option: Hashable>: View {
     }
 }
 
-/// The inspector's input box (`.inp`): 24 high, a `line2` border on the
-/// card ground.
-struct InspectorBox<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        HStack(spacing: 8) { content }
-            .font(Face.ui(12))
-            .foregroundStyle(Ink.text)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24, alignment: .leading)
-            .background(Ink.card, in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Ink.line2, lineWidth: 1))
-    }
-}
-
-/// A one-line text field inside an `InspectorBox`.
-struct InspectorTextField: View {
-    let label: String
-    @Binding var text: String
-
-    var body: some View {
-        InspectorBox {
-            TextField(label, text: $text, prompt: Text(verbatim: ""))
-                .textFieldStyle(.plain)
-                .labelsHidden()
-                .accessibilityLabel(label)
-        }
-    }
-}
-
 /// The 44 × 22 number box of "ogni [n] mesi, il giorno [n]". It keeps its own
 /// text while it is typed in, so emptying it to type another number does not
 /// snap back to a zero; the number goes out as soon as it reads as one.
@@ -164,7 +103,7 @@ struct DayField: View {
         Button {
             picking = true
         } label: {
-            InspectorBox {
+            FormBox {
                 Text(RecurringDayText.full(day))
                 Spacer(minLength: 4)
                 Image(systemName: "calendar")
@@ -192,34 +131,6 @@ struct DayField: View {
             .labelsHidden()
             .padding(10)
         }
-    }
-}
-
-/// A menu drawn as an `InspectorBox`, the chevron at its end.
-struct InspectorMenu<Items: View>: View {
-    let label: String
-    let value: String
-    @ViewBuilder var items: Items
-
-    var body: some View {
-        Menu {
-            items
-        } label: {
-            InspectorBox {
-                Text(value).lineLimit(1)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Ink.text3)
-            }
-            .contentShape(Rectangle())
-        }
-        // As in `VaultSelector`: the plain style keeps the label as drawn.
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .accessibilityLabel(label)
-        .accessibilityValue(value)
     }
 }
 

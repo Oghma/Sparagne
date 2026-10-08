@@ -66,6 +66,9 @@ struct MainWindow: View {
     /// `nil` only before the database is open.
     let engine: SyncEngine?
     @State private var sheet: SheetKind?
+    /// `-SparagneSheet` opens its sheet once, not again on every vault switch.
+    @State private var openedLaunchSheet = false
+    @Environment(\.openSettings) private var openSettings
 
     /// The sheets the window can present. Associated values seed the sheet
     /// with the entity being renamed or edited.
@@ -73,11 +76,6 @@ struct MainWindow: View {
         case vault
         case renameVault(VaultView)
         case deleteVault(VaultView)
-        case wallet
-        case envelope
-        case renameWallet(WalletView)
-        case renameEnvelope(FlowView)
-        case editEnvelope(FlowView)
         case share(VaultView)
         case leaveVault(VaultView)
         case rejected
@@ -89,11 +87,6 @@ struct MainWindow: View {
             case .vault: "vault"
             case .renameVault(let vault): "renameVault-\(vault.id)"
             case .deleteVault(let vault): "deleteVault-\(vault.id)"
-            case .wallet: "wallet"
-            case .envelope: "envelope"
-            case .renameWallet(let wallet): "renameWallet-\(wallet.id)"
-            case .renameEnvelope(let flow): "renameEnvelope-\(flow.id)"
-            case .editEnvelope(let flow): "editEnvelope-\(flow.id)"
             case .share(let vault): "share-\(vault.id)"
             case .leaveVault(let vault): "leaveVault-\(vault.id)"
             case .rejected: "rejected"
@@ -129,6 +122,7 @@ struct MainWindow: View {
             .task {
                 if store.needsOnboarding { sheet = .vault }
             }
+            .task(id: store.currentVault?.id) { openLaunchSheet() }
             .onReceive(NotificationCenter.default.publisher(for: .openManagement)) { _ in
                 sheet = .manage
             }
@@ -205,6 +199,25 @@ struct MainWindow: View {
         store.currentVault?.name ?? String(localized: "Sparagne")
     }
 
+    /// The sheet `-SparagneSheet` names (`LaunchOptions.sheet`), once the
+    /// vault it is about is open.
+    private func openLaunchSheet() {
+        guard !openedLaunchSheet, let name = LaunchOptions.sheet, let vault = store.currentVault else { return }
+        openedLaunchSheet = true
+        switch name {
+        case "settings": openSettings()
+        case "vault": sheet = .vault
+        case "renamevault": sheet = .renameVault(vault)
+        case "deletevault": sheet = .deleteVault(vault)
+        case "leavevault": sheet = .leaveVault(vault)
+        case "share": sheet = .share(vault)
+        case "manage": sheet = .manage
+        case "importstatement": sheet = .importStatement
+        case "rejected": sheet = .rejected
+        default: break
+        }
+    }
+
     @ViewBuilder
     private func sheetBody(_ kind: SheetKind) -> some View {
         switch kind {
@@ -227,33 +240,6 @@ struct MainWindow: View {
         case .deleteVault(let vault):
             DeleteVaultSheet(vault: vault) {
                 Task { await store.deleteVault(vault.id) }
-            }
-        case .wallet:
-            NewWalletSheet(currency: store.currency) { name, opening in
-                Task { await store.createWallet(name: name, openingBalance: opening) }
-            }
-        case .envelope:
-            NewEnvelopeSheet(currency: store.currency) { name, mode, allowNegative, allocation in
-                Task {
-                    await store.createEnvelope(
-                        name: name,
-                        mode: mode,
-                        allowNegative: allowNegative,
-                        openingAllocation: allocation
-                    )
-                }
-            }
-        case .renameWallet(let wallet):
-            RenameSheet(title: String(localized: "Rename Wallet"), name: wallet.name) { name in
-                Task { await store.renameWallet(wallet.id, name: name) }
-            }
-        case .renameEnvelope(let flow):
-            RenameSheet(title: String(localized: "Rename Envelope"), name: flow.name) { name in
-                Task { await store.updateEnvelope(flow.id, name: name) }
-            }
-        case .editEnvelope(let flow):
-            EditEnvelopeSheet(flow: flow, currency: store.currency) { mode, allowNegative in
-                Task { await store.updateEnvelope(flow.id, mode: mode, allowNegative: allowNegative) }
             }
         case .share(let vault):
             if let engine {
