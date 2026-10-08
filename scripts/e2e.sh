@@ -2,7 +2,7 @@
 #
 # End-to-end test of the app against the real sync server: builds and starts
 # `sparagne-server` on a free port with a throwaway data directory, then runs
-# `SparagneTests/ServerE2ETests` against it over HTTP (`docs/v2/SYNC.md` §6).
+# `SparagneTests/ServerE2ETests` against it over HTTP.
 #
 # Runnable from any working directory. Without this script the suite skips,
 # because it only runs when SPARAGNE_E2E_SERVER is set.
@@ -112,7 +112,7 @@ set +e
     -scheme Sparagne \
     -destination 'platform=macOS' \
     -only-testing:SparagneTests/ServerE2ETests \
-    "${derived_data_args[@]}" \
+    ${derived_data_args[@]+"${derived_data_args[@]}"} \
     test \
     CODE_SIGNING_ALLOWED=NO \
     ${bundle_args[@]+"${bundle_args[@]}"} \
