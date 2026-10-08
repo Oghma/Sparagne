@@ -115,14 +115,7 @@ struct VaultExportHandlers: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .exportAllTransactions)) { _ in
                 Task { await exportAll() }
             }
-            .alert(
-                String(localized: "Backup saved"),
-                isPresented: Binding(
-                    get: { savedBackup != nil },
-                    set: { if !$0 { savedBackup = nil } }
-                ),
-                presenting: savedBackup
-            ) { url in
+            .alert(String(localized: "Backup saved"), item: $savedBackup) { url in
                 Button(String(localized: "Show in Finder")) {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
