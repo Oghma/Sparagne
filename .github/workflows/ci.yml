@@ -42,7 +42,9 @@ jobs:
         run: cargo test --workspace --all-targets
 
   apple:
-    runs-on: macos-15
+    # macOS 27 is the app's minimum, so its tests need a macOS 27 host with
+    # Xcode 27. GitHub keys macOS images by Xcode major now, not by OS.
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v4
