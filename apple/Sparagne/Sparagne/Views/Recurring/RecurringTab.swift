@@ -28,6 +28,9 @@ struct RecurringTab: View {
     /// The table's Prossima per template (`AppStore.nextRecurring`), worked
     /// out with the agenda rather than by each row as it draws.
     @State private var next: [Uuid: RecurringNext] = [:]
+    /// What "Duplicate" in the inspector's menu hands to create mode: the
+    /// new template's first draft. `nil` for a blank one.
+    @State private var seed: RecurringDraft?
 
     static let inspectorWidth: CGFloat = 340
 
@@ -37,7 +40,10 @@ struct RecurringTab: View {
                 VStack(alignment: .leading, spacing: 10) {
                     DueRecurringCard(store: store, today: today)
                     RecurringAgendaCard(store: store)
-                    RecurringTemplateTable(store: store, today: today, next: next, selection: shown) { picked = $0 }
+                    RecurringTemplateTable(store: store, today: today, next: next, selection: shown) {
+                        seed = nil
+                        picked = $0
+                    }
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -103,11 +109,20 @@ struct RecurringTab: View {
         switch shown {
         case .template(let id):
             if let template = store.recurringTemplates.first(where: { $0.id == id }) {
-                RecurringInspector(store: store, template: template, today: today) { _ in }
-                    .id(RecurringSelection.template(id))
+                RecurringInspector(
+                    store: store,
+                    template: template,
+                    today: today,
+                    duplicate: { draft in
+                        seed = draft
+                        picked = .new
+                    }
+                ) { _ in }
+                .id(RecurringSelection.template(id))
             }
         case .new:
-            RecurringInspector(store: store, template: nil, today: today) { created in
+            RecurringInspector(store: store, template: nil, seed: seed, today: today) { created in
+                seed = nil
                 picked = created.map(RecurringSelection.template)
             }
             .id(RecurringSelection.new)
@@ -146,7 +161,10 @@ struct RecurringTab: View {
     private func takeCreateRequest() {
         guard Self.createRequested else { return }
         Self.createRequested = false
-        if store.canWrite { picked = .new }
+        if store.canWrite {
+            seed = nil
+            picked = .new
+        }
     }
 }
 

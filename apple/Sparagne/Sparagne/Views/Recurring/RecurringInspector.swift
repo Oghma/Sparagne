@@ -19,6 +19,9 @@ struct RecurringInspector: View {
     /// A new template was created and should be selected, or the user gave
     /// up on one (`nil`).
     let finishedCreating: (Uuid?) -> Void
+    /// "Duplicate": the tab opens create mode with the draft this inspector
+    /// made from the template.
+    var duplicate: (RecurringDraft) -> Void = { _ in }
 
     @State private var draft: RecurringDraft
     /// A command in flight: Salva, Crea and the rest wait for it.
@@ -29,12 +32,22 @@ struct RecurringInspector: View {
     /// too. `nil` until the first answer.
     @State private var preview: Result<[RecurringNext.Preview], Error>?
 
-    init(store: AppStore, template: RecurringView?, today: NaiveDate, finishedCreating: @escaping (Uuid?) -> Void) {
+    init(
+        store: AppStore,
+        template: RecurringView?,
+        seed: RecurringDraft? = nil,
+        today: NaiveDate,
+        duplicate: @escaping (RecurringDraft) -> Void = { _ in },
+        finishedCreating: @escaping (Uuid?) -> Void
+    ) {
         self.store = store
         self.template = template
         self.today = today
+        self.duplicate = duplicate
         self.finishedCreating = finishedCreating
-        _draft = State(initialValue: template.map(RecurringDraft.init(template:)) ?? RecurringDraft(today: today))
+        _draft = State(
+            initialValue: template.map(RecurringDraft.init(template:)) ?? seed ?? RecurringDraft(today: today)
+        )
     }
 
     private var currency: Currency { store.currency }
@@ -82,16 +95,52 @@ struct RecurringInspector: View {
     private var title: some View {
         let cadence = ScheduleFormatting.describe(draft.schedule)
         return VStack(alignment: .leading, spacing: 2) {
-            Text(template.map(RecurringTitle.of) ?? String(localized: "New recurring entry"))
-                .font(Face.ui(16, .semibold))
-                .foregroundStyle(Ink.text)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 8) {
+                Text(template.map(RecurringTitle.of) ?? String(localized: "New recurring entry"))
+                    .font(Face.ui(16, .semibold))
+                    .foregroundStyle(Ink.text)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+                if let template, store.canWrite { moreMenu(template) }
+            }
             Text(String(localized: "\(cadence) \u{00B7} from \(RecurringDayText.full(draft.startDate))"))
             .font(Face.ui(12))
             .foregroundStyle(Ink.text2)
             .lineLimit(2)
         }
+    }
+
+    /// The "…" beside the title: duplicating, and the footer's archive or
+    /// restore. Not for a vault that is only read, and not in create mode,
+    /// where there is nothing to copy yet. Outside the `.disabled` of the
+    /// fields, so an archived template can still be restored from it.
+    private func moreMenu(_ template: RecurringView) -> some View {
+        Menu {
+            Button(String(localized: "Duplicate")) {
+                duplicate(RecurringDraft(duplicating: template, today: today))
+            }
+            if template.archived {
+                Button(String(localized: "Restore")) {
+                    run { await store.restoreRecurring(template.id) }
+                }
+            } else {
+                Button(String(localized: "Archive"), role: .destructive) {
+                    run { await store.archiveRecurring(template.id) }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Ink.text2)
+                .frame(width: 26, height: 22)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(working)
+        .accessibilityLabel(String(localized: "More actions"))
     }
 
     // MARK: - Amount and kind
