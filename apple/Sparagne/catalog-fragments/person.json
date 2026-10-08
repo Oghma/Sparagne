@@ -15,6 +15,10 @@
     "en": "Unknown person: %@",
     "it": "Persona sconosciuta: %@"
   },
+  "Which person did you mean?": {
+    "en": "Which person did you mean?",
+    "it": "Quale persona intendevi?"
+  },
   "recorded by %@": {
     "en": "recorded by %@",
     "it": "registrata da %@"

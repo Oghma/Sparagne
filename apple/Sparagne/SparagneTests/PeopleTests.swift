@@ -108,6 +108,72 @@ struct PeopleTests {
         }
     }
 
+    // MARK: - Quick add
+
+    @Test("A quick-add !name puts the row on that member, recorded by the author")
+    func quickAddPerson() async throws {
+        let store = try await Self.onboarded()
+        let vault = try #require(store.currentVault)
+        store.setVaultMembers([vault.id: ["matteo", "elisa"]])
+
+        guard case .success(let parsed) = store.preview(quickAdd: "-24 cena !eli") else {
+            Issue.record("expected the line to parse")
+            return
+        }
+        #expect(QuickAddSummary.describe(parsed, currency: .eur).contains("!eli"))
+
+        await store.submit(quickAdd: "-24 cena !eli")
+        #expect(store.presentedError == nil)
+        let row = try #require(store.rows.first { $0.note == "cena" })
+        #expect(row.person == "elisa")
+        #expect(row.recordedBy == "matteo")
+        #expect(store.transactions.first { $0.id == row.id }?.createdBy == "matteo")
+    }
+
+    @Test("A !name nobody here goes by is refused with its own headline, and nothing is written")
+    func quickAddUnknownPerson() async throws {
+        let store = try await Self.onboarded()
+        let vault = try #require(store.currentVault)
+        store.setVaultMembers([vault.id: ["matteo", "elisa"]])
+
+        await store.submit(quickAdd: "-24 cena !paolo")
+        let error = try #require(store.presentedError)
+        #expect(error.code == "unknown_name")
+        #expect(error.summary == ErrorMessages.unknownPerson("paolo"))
+        #expect(!store.rows.contains { $0.note == "cena" })
+    }
+
+    @Test("An ambiguous !name asks which person, and the choice is written behind the !")
+    func quickAddAmbiguousPerson() async throws {
+        let store = try await Self.onboarded()
+        let vault = try #require(store.currentVault)
+        store.setVaultMembers([vault.id: ["matteo", "elisa", "elena"]])
+
+        // `#elettricità` starts with the fragment too: only the whole token
+        // behind the `!` is the person.
+        store.quickAddText = "-24 cena #elettricità !el"
+        await store.submit(quickAdd: store.quickAddText)
+        let error = try #require(store.presentedError)
+        #expect(error.code == "ambiguous_name")
+        #expect(error.candidates.sorted() == ["elena", "elisa"])
+        #expect(error.summary == ErrorMessages.ambiguousPerson)
+
+        await store.resolveAmbiguous(choosing: "elisa")
+        #expect(store.presentedError == nil)
+        #expect(store.rows.first { $0.note == "cena" }?.person == "elisa")
+        #expect(store.categories.contains { $0.name == "elettricità" })
+    }
+
+    @Test("Rewriting a choice keeps each marker and finds the whole token")
+    func rewrite() {
+        #expect(AppStore.rewrite("-5 pizza !el", fragment: "el", with: "elisa") == "-5 pizza !elisa")
+        #expect(AppStore.rewrite("-5 pizza #elisir !el", fragment: "el", with: "elisa") == "-5 pizza #elisir !elisa")
+        #expect(AppStore.rewrite("-5 hotel @ban", fragment: "ban", with: "Bank") == "-5 hotel @Bank")
+        #expect(AppStore.rewrite("-5 hotel", fragment: "ban", with: "Bank") == "-5 hotel")
+        #expect(AppStore.marker(carrying: "el", in: "-5 #ele !el")?.marker == "!")
+        #expect(AppStore.marker(carrying: "food", in: "-5 #food")?.marker == "#")
+    }
+
     @Test("Blanks and repeats are dropped, the first order kept")
     func distinct() {
         #expect(AppStore.distinct(["b", "a", "b", " ", "", "c", "a"]) == ["b", "a", "c"])

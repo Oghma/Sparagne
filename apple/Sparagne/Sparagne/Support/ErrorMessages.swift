@@ -60,6 +60,10 @@ enum ErrorMessages {
         String(localized: "Unknown person: \(name)")
     }
 
+    /// An `ambiguous_name` that came from a `!name`: the candidates the alert
+    /// offers are people, not categories or wallets.
+    static var ambiguousPerson: String { String(localized: "Which person did you mean?") }
+
     /// The status once the server stopped accepting the session's token.
     static var sessionExpired: String { String(localized: "Session expired — log in again") }
 

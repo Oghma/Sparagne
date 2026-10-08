@@ -15,25 +15,56 @@ struct AppError: Identifiable, Equatable, Sendable {
     /// `name`), so `AppStore.resolveAmbiguous` knows what to replace in
     /// `quickAddText`. `nil` outside that one case.
     let ambiguousFragment: String?
+    /// A headline more precise than the code's, when the error says what
+    /// it is about: a person nobody here goes by, or several that match.
+    private let headline: String?
 
     /// The localized headline for `code` (`ErrorMessages.swift`); the alert
     /// keeps `message`, the Rust `Display` text, as its secondary detail.
-    var summary: String { ErrorMessages.summary(for: code) }
+    var summary: String { headline ?? ErrorMessages.summary(for: code) }
 
-    init(code: String, message: String, candidates: [String] = [], ambiguousFragment: String? = nil) {
+    init(
+        code: String,
+        message: String,
+        candidates: [String] = [],
+        ambiguousFragment: String? = nil,
+        headline: String? = nil
+    ) {
         self.code = code
         self.message = message
         self.candidates = candidates
         self.ambiguousFragment = ambiguousFragment
+        self.headline = headline
     }
 
     init(_ error: DomainError) {
         self.init(code: error.code, message: error.message)
     }
 
-    init(_ error: QuickAddError) {
-        let fragment: String? = if case .AmbiguousName(let name, _) = error { name } else { nil }
-        self.init(code: error.code, message: error.message, candidates: error.candidates, ambiguousFragment: fragment)
+    /// `line` is the quick-add line the error is about. An ambiguous name
+    /// does not say which marker carried it; the line does, and a `!` makes
+    /// it a person.
+    init(_ error: QuickAddError, line: String? = nil) {
+        var fragment: String?
+        var headline: String?
+        switch error {
+        case .AmbiguousName(let name, _):
+            fragment = name
+            if let line, AppStore.marker(carrying: name, in: line)?.marker == "!" {
+                headline = ErrorMessages.ambiguousPerson
+            }
+        case .UnknownName(let kind, let name) where kind == "person":
+            headline = ErrorMessages.unknownPerson(name)
+        default:
+            break
+        }
+        self.init(
+            code: error.code,
+            message: error.message,
+            candidates: error.candidates,
+            ambiguousFragment: fragment,
+            headline: headline
+        )
     }
 }
 
@@ -1227,13 +1258,21 @@ final class AppStore {
         guard !trimmed.isEmpty, !refusedAsReadOnly() else { return }
         await guarded {
             let parsed = try parseQuickAdd(input: trimmed, currency: currency)
-            let resolved = try await core.resolveQuickAdd(
-                vaultId: vault.id,
-                parsed: parsed,
-                now: Date(),
-                defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId),
-                people: assignablePeople
-            )
+            let resolved: ResolvedQuickAdd
+            do {
+                // A `!name` picks among the people a row may be for.
+                resolved = try await core.resolveQuickAdd(
+                    vaultId: vault.id,
+                    parsed: parsed,
+                    now: Date(),
+                    defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId),
+                    people: assignablePeople
+                )
+            } catch let error as QuickAddError {
+                // The line knows which marker a name came from.
+                presentedError = AppError(error, line: trimmed)
+                return
+            }
             // A row like one typed in the grid, and undone the same way.
             let minted = await core.envelope(vaultId: vault.id, resolved.command)
             let receipt = try await core.execute(envelope: minted)
@@ -1259,18 +1298,32 @@ final class AppStore {
         await submit(quickAdd: rewritten)
     }
 
-    /// Finds which marker (`#`, `@`, `>`) carried `fragment` and swaps in
-    /// `chosen`, preserving the marker. The grammar allows at most one of
-    /// each marker (`docs/v2/DISTILLATO_V1.md` §3.1), so the first match is
-    /// unambiguous.
-    private static func rewrite(_ text: String, fragment: String, with chosen: String) -> String {
-        for marker in ["#", "@", ">"] {
-            let needle = marker + fragment
-            if let range = text.range(of: needle, options: .caseInsensitive) {
-                return text.replacingCharacters(in: range, with: marker + chosen)
+    /// Swaps `chosen` in for `fragment` behind the marker that carried it,
+    /// preserving the marker.
+    nonisolated static func rewrite(_ text: String, fragment: String, with chosen: String) -> String {
+        guard let found = marker(carrying: fragment, in: text) else { return text }
+        return text.replacingCharacters(in: found.range, with: found.marker + chosen)
+    }
+
+    /// Which marker (`#`, `@`, `>`, `!`) carried `fragment` in `text`, and
+    /// where: the grammar allows at most one of each
+    /// (`docs/v2/DISTILLATO_V1.md` §3.1), so one match per marker is all
+    /// there is. A whole token wins over the start of a longer one: in
+    /// `#elisir !eli` the person is `!eli`, not the `#eli` of the category.
+    nonisolated static func marker(carrying fragment: String, in text: String) -> (marker: String, range: Range<String.Index>)? {
+        let markers = ["#", "@", ">", "!"]
+        var partial: (marker: String, range: Range<String.Index>)?
+        for marker in markers {
+            var start = text.startIndex
+            while let range = text.range(of: marker + fragment, options: .caseInsensitive, range: start..<text.endIndex) {
+                let opens = range.lowerBound == text.startIndex || text[text.index(before: range.lowerBound)].isWhitespace
+                let closes = range.upperBound == text.endIndex || text[range.upperBound].isWhitespace
+                if opens, closes { return (marker, range) }
+                if opens, partial == nil { partial = (marker, range) }
+                start = range.upperBound
             }
         }
-        return text
+        return partial
     }
 
     // MARK: - Void with deferred undo

@@ -30,9 +30,10 @@ struct QuickAddToken: Identifiable, Hashable, Sendable {
 /// back. Pure, so it is tested without a window
 /// (`SparagneTests/QuickAddTokensTests.swift`).
 enum QuickAddTokens {
-    /// `person` is who the line names, when the grammar carries one; the
-    /// quick-add grammar has no person marker today, so the panel passes
-    /// `nil` and the row goes to the author like any other.
+    /// The "who" chip shows the `!name` of the line, and nothing when there
+    /// is none: the row is then the author's, like any other. `person`, when
+    /// given, is that name as it resolves (`eli` → Elisa), which is what the
+    /// row will say.
     static func make(
         _ parsed: QuickAdd,
         currency: Currency,
@@ -42,8 +43,10 @@ enum QuickAddTokens {
     ) -> [QuickAddToken] {
         var tokens: [QuickAddToken]
         let when: DateSpec?
+        var who = person
         switch parsed {
-        case .entry(let kind, let amount, _, let category, let wallet, let flow, let date, _):
+        case .entry(let kind, let amount, _, let category, let wallet, let flow, let date, let named):
+            who = nonEmpty(person) ?? named
             tokens = [
                 QuickAddToken(role: .kind, label: nil, value: kindName(kind)),
                 QuickAddToken(role: .amount, label: nil, value: money(amount, currency)),
@@ -88,8 +91,8 @@ enum QuickAddTokens {
         tokens.append(
             QuickAddToken(role: .when, label: String(localized: "when"), value: day(when, today: today, timeZone: timeZone))
         )
-        if let person = nonEmpty(person) {
-            tokens.append(QuickAddToken(role: .who, label: String(localized: "who"), value: person))
+        if let who = nonEmpty(who) {
+            tokens.append(QuickAddToken(role: .who, label: String(localized: "who"), value: who))
         }
         return tokens
     }

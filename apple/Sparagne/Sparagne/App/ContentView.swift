@@ -177,7 +177,7 @@ struct MainWindow: View {
                 Text(String(localized: "The server did not accept them, so they are not in your balances."))
             }
             .alert(
-                store.presentedError.map { ErrorMessages.summary(for: $0.code) } ?? String(localized: "Something went wrong"),
+                store.presentedError?.summary ?? String(localized: "Something went wrong"),
                 isPresented: Binding(
                     get: { store.presentedError != nil },
                     set: { if !$0 { store.presentedError = nil } }
