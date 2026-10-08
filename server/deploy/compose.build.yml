@@ -1,0 +1,13 @@
+# Builds the server image from this checkout instead of pulling the release
+# from GHCR, for a change not released yet or a host that will not pull:
+#
+#   docker compose -f compose.yml -f compose.build.yml up -d --build
+#
+# SPARAGNE_VERSION is still read by compose.yml; any value will do here.
+
+services:
+  sparagne:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    image: sparagne-server:local
