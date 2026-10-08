@@ -209,7 +209,9 @@ private struct OutcomeTag: View {
 /// "Import" as before.
 private struct IncludeBox: View {
     let isOn: Bool
-    let set: (Bool) -> Void
+    /// On the main actor, as everything here, and said in the type so the
+    /// `Binding` VoiceOver's checkbox writes through can take it.
+    let set: @MainActor (Bool) -> Void
 
     var body: some View {
         Button {
