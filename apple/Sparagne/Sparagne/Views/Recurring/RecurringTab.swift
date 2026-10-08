@@ -8,8 +8,8 @@ import SparagneCore
 ///
 /// It replaces the old modal sheets: the due periods are recorded from the
 /// first card, and the templates are created and edited in the inspector.
-/// Nuova ricorrenza… in the Vault menu and the palette opens it in create
-/// mode (`requestCreate`).
+/// Nuova ricorrenza… in the Vault menu, the palette and the top bar opens it
+/// in create mode (`AppStore.requestNewRecurring`).
 struct RecurringTab: View {
     let store: AppStore
 
@@ -63,16 +63,18 @@ struct RecurringTab: View {
         // The core works the due list out from its own clock: when it moves,
         // the day may have too.
         .onChange(of: store.pendingRecurringItems) { _, _ in refreshToday() }
-        // The notification promises no thread, and `today` is the main
-        // actor's.
-        .onReceive(
-            NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)
-        ) { _ in
-            refreshToday()
+        // Midnight: the calendar's own message, awaited on the main actor
+        // that `today` belongs to.
+        .task {
+            for await _ in NotificationCenter.default.messages(of: Calendar.self, for: .calendarDayChanged) {
+                refreshToday()
+            }
         }
+        // Nuova ricorrenza…: asked for before the tab was on screen, or while
+        // it is.
         .onAppear(perform: takeCreateRequest)
-        .onReceive(NotificationCenter.default.publisher(for: .createRecurringOnTab)) { _ in
-            takeCreateRequest()
+        .onChange(of: store.newRecurringRequested) { _, requested in
+            if requested { takeCreateRequest() }
         }
         // Another vault: the pick named a template of the vault that is gone.
         .onChange(of: store.currentVault?.id) { _, _ in picked = nil }
@@ -134,29 +136,10 @@ struct RecurringTab: View {
 
     // MARK: - Nuova ricorrenza…
 
-    /// Set by `requestCreate`, read once by whichever comes first: the tab
-    /// appearing, or the notification that follows the request.
-    @MainActor private static var createRequested = false
-
-    /// The Vault menu's and the palette's Nuova ricorrenza…: switches to
-    /// this tab and opens the inspector on a new template.
-    ///
-    /// The tab may not be on screen yet, so the request is left where the
-    /// tab finds it when it appears, and also announced once the switch has
-    /// had a turn to lay the tab out, for a tab that was already there.
-    @MainActor static func requestCreate(store: AppStore) {
-        guard store.canWrite else { return }
-        createRequested = true
-        store.tab = .recurring
-        Task { @MainActor in
-            await Task.yield()
-            NotificationCenter.default.post(name: .createRecurringOnTab, object: nil)
-        }
-    }
-
+    /// Takes `AppStore.newRecurringRequested` once, wherever it came from.
     private func takeCreateRequest() {
-        guard Self.createRequested else { return }
-        Self.createRequested = false
+        guard store.newRecurringRequested else { return }
+        store.newRecurringRequested = false
         if store.canWrite {
             seed = nil
             picked = .new
@@ -169,10 +152,4 @@ private struct AgendaInputs: Equatable {
     let templates: [RecurringView]
     let pending: [PendingRecurring]
     let today: NaiveDate
-}
-
-extension Notification.Name {
-    /// Posted by `RecurringTab.requestCreate` once the tab is on screen: the
-    /// inspector opens on a new template.
-    static let createRecurringOnTab = Notification.Name("it.oghma.sparagne.createRecurringOnTab")
 }

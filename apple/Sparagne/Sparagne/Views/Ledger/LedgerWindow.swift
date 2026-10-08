@@ -75,16 +75,6 @@ struct LedgerWindow: View {
                 searchFocused = true
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openSetup)) { _ in
-            store.tab = .setup
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .selectTab)) { note in
-            if let tab = note.object as? LedgerTab { store.tab = tab }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .stepMonth)) { note in
-            let months = note.object as? Int ?? 1
-            store.month = store.month.adding(months: months)
-        }
         .onReceive(NotificationCenter.default.publisher(for: .exportCSV)) { _ in
             Task {
                 // Every row of the month, not only the pages scrolled to so

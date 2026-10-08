@@ -287,12 +287,35 @@ final class AppStore {
     /// A `didSet` cannot await, so it queues the reload; `settle()` is how a
     /// caller waits for the queue to drain.
     var month = MonthKey(Date()) { didSet { if month != oldValue { filtersChanged() } } }
+
+    /// ⌥⌘← and ⌥⌘→, and the palette: `months` back (negative) or forward.
+    func stepMonth(by months: Int) {
+        month = month.adding(months: months)
+    }
+
+    /// The palette's Current Month: the month `today` falls in.
+    func showCurrentMonth(today: Date = Date()) {
+        month = MonthKey(today)
+    }
+
+    /// Nuova ricorrenza…: the Ricorrenze tab, its inspector on a new
+    /// template (`newRecurringRequested`). Nothing for a vault only read.
+    func requestNewRecurring() {
+        guard canWrite else { return }
+        newRecurringRequested = true
+        tab = .recurring
+    }
     var direction: LedgerDirection = .expenses { didSet { if direction != oldValue { filtersChanged() } } }
     /// The PERSONA filter: `nil` is everybody.
     var person: String? { didSet { if person != oldValue { filtersChanged() } } }
     /// Which of the two views is on screen; no reload, the data is the same.
     /// The window opens on the RIEPILOGO (`docs/v2/UI.md` §2).
     var tab: LedgerTab = .summary { didSet { if tab != oldValue { tabFilter = "" } } }
+    /// Nuova ricorrenza… was asked for (Vault menu, palette, the tab's add
+    /// button): the Ricorrenze tab opens its inspector on a new template,
+    /// when it appears or at once if it is on screen, and sets this back
+    /// (`RecurringTab`).
+    var newRecurringRequested = false
     /// What the top bar's search field holds on the Ricorrenze and the Setup
     /// tabs, which filter their tables locally. Apart from `searchText` so
     /// that typing there never reloads the ledger; cleared with the tab and

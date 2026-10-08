@@ -648,9 +648,11 @@ colonna wallet; fino al 2026-10-07 "annullate"); dal 2026-09-23 anche Esci dal v
 Importa estratto conto…, Esporta tutte le transazioni… e Backup del
 database…, e Rinomina vault… solo a chi può scrivere; dal 2026-09-29 Nuova
 ricorrenza…, solo a chi può scrivere. Quelle che hanno già una voce di
-menu ne mandano la notifica, così le due strade condividono una sola
-implementazione; il modello (`Views/Ledger/CommandPalette.swift`) è puro e
-testato senza finestra.
+menu condividono con lei una sola implementazione: un metodo dello store
+quando cambiano solo lo store (scheda, mese, Nuova ricorrenza…), la notifica
+del menu quando toccano uno stato della finestra (un fuoco, uno sheet, un
+pannello di salvataggio); il modello (`Views/Ledger/CommandPalette.swift`) è
+puro e testato senza finestra.
 
 ## 7. Cronologia
 

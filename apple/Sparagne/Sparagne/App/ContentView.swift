@@ -148,15 +148,6 @@ struct MainWindow: View {
             .onReceive(NotificationCenter.default.publisher(for: .importStatement)) { _ in
                 if store.currentVault != nil { sheet = .importStatement }
             }
-            // The due pill: the periods are decided on the Ricorrenze tab.
-            .onReceive(NotificationCenter.default.publisher(for: .reviewDueRecurring)) { _ in
-                store.tab = .recurring
-            }
-            // The Vault menu and the palette: the Ricorrenze tab, its
-            // inspector on a new template.
-            .onReceive(NotificationCenter.default.publisher(for: .newRecurring)) { _ in
-                RecurringTab.requestCreate(store: store)
-            }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
             .modifier(VaultExportHandlers(store: store))

@@ -62,9 +62,7 @@ struct SparagneApp: App {
                 // The sheet tabs, ⌘1 to ⌘4 in the tab bar's order, as a
                 // browser's tabs.
                 ForEach(LedgerTab.allCases) { tab in
-                    Button(tab.label) {
-                        NotificationCenter.default.post(name: .selectTab, object: tab)
-                    }
+                    Button(tab.label) { store?.tab = tab }
                     .keyboardShortcut(KeyEquivalent(Character(String(tab.shortcut))), modifiers: .command)
                 }
             }
@@ -95,14 +93,10 @@ struct SparagneApp: App {
             }
 
             CommandMenu(String(localized: "Ledger")) {
-                Button(String(localized: "Previous Month")) {
-                    NotificationCenter.default.post(name: .stepMonth, object: -1)
-                }
+                Button(String(localized: "Previous Month")) { store?.stepMonth(by: -1) }
                 .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
 
-                Button(String(localized: "Next Month")) {
-                    NotificationCenter.default.post(name: .stepMonth, object: 1)
-                }
+                Button(String(localized: "Next Month")) { store?.stepMonth(by: 1) }
                 .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
 
                 Divider()
@@ -147,14 +141,10 @@ struct SparagneApp: App {
                 }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
 
-                Button(String(localized: "Wallets, Envelopes & Categories\u{2026}")) {
-                    NotificationCenter.default.post(name: .openSetup, object: nil)
-                }
+                Button(String(localized: "Wallets, Envelopes & Categories\u{2026}")) { store?.tab = .setup }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
 
-                Button(String(localized: "New Recurring\u{2026}")) {
-                    NotificationCenter.default.post(name: .newRecurring, object: nil)
-                }
+                Button(String(localized: "New Recurring\u{2026}")) { store?.requestNewRecurring() }
                 .disabled(store?.canWrite != true)
             }
         }
@@ -172,9 +162,11 @@ struct SparagneApp: App {
     }
 }
 
-/// Menu commands reach the window through notifications rather than shared
-/// state: the menu bar is a scene, the ledger is a view, and the only thing
-/// they need to agree on is the name of the action.
+/// Menu commands that act on state of the window's own views (a focus, a
+/// sheet, a file panel) reach them through notifications: the menu bar is a
+/// scene, the ledger is a view, and the only thing they need to agree on is
+/// the name of the action. A command that only changes the store (the tab,
+/// the month, Nuova ricorrenza…) calls it directly.
 extension Notification.Name {
     /// ⌘K: opens the quick-add line over the grid.
     static let focusQuickAdd = Notification.Name("it.oghma.sparagne.focusQuickAdd")
@@ -182,16 +174,10 @@ extension Notification.Name {
     static let focusSearch = Notification.Name("it.oghma.sparagne.focusSearch")
     /// ⌘D: copies the last row of the month into the empty line.
     static let duplicateLastRow = Notification.Name("it.oghma.sparagne.duplicateLastRow")
-    /// ⌥←/⌥→: steps the month; the object is the number of months, signed.
-    static let stepMonth = Notification.Name("it.oghma.sparagne.stepMonth")
     /// ⌘⇧M: opens the management sheet.
     static let openManagement = Notification.Name("it.oghma.sparagne.openManagement")
     /// ⌘E: exports the rows on screen as CSV (`docs/v2/UI.md` §6).
     static let exportCSV = Notification.Name("it.oghma.sparagne.exportCSV")
-    /// ⌘⇧C: switches to the setup tab, envelopes and categories (§2.3).
-    static let openSetup = Notification.Name("it.oghma.sparagne.openSetup")
-    /// ⌘1 to ⌘4: switches to a sheet tab; the object is the `LedgerTab`.
-    static let selectTab = Notification.Name("it.oghma.sparagne.selectTab")
     /// Vault menu and palette: the onboarding sheet again, for another vault.
     static let newVault = Notification.Name("it.oghma.sparagne.newVault")
     /// Vault menu and palette: rename the vault on screen.
@@ -207,12 +193,6 @@ extension Notification.Name {
     static let exportAllTransactions = Notification.Name("it.oghma.sparagne.exportAllTransactions")
     /// File menu: a copy of the whole database file.
     static let backupDatabase = Notification.Name("it.oghma.sparagne.backupDatabase")
-    /// The top bar's due pill: the Ricorrenze tab, where the periods waiting
-    /// for a decision are confirmed or skipped.
-    static let reviewDueRecurring = Notification.Name("it.oghma.sparagne.reviewDueRecurring")
-    /// Vault menu and palette: the sheet of a new recurring template, without
-    /// going through the management sheet and its recurring panel.
-    static let newRecurring = Notification.Name("it.oghma.sparagne.newRecurring")
 }
 
 /// The Settings window: the account when the app has a sync engine, a line

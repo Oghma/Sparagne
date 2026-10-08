@@ -49,6 +49,14 @@ struct ReadOnlyLedgerTests {
         #expect(!store.rows.contains { $0.note == "hotel" })
     }
 
+    @Test("Nuova ricorrenza… asks for nothing in a vault that is only read")
+    func noNewRecurring() async throws {
+        let (store, _) = try await Self.viewer()
+        store.requestNewRecurring()
+        #expect(!store.newRecurringRequested)
+        #expect(store.tab == .summary)
+    }
+
     @Test("The grid offers no empty line and the writes behind it are refused")
     func theGridOffersNoNewRow() async throws {
         let (store, calls) = try await Self.viewer()
