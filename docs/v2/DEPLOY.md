@@ -213,6 +213,34 @@ conta:
    server nel frattempo. Lo stesso vale per il database locale di un'app già
    aggiornata.
 
+### 6.2 Passaggio allo schema v4 (persona e titolare)
+
+La versione del 2026-10-08 porta lo schema del core alla versione 4: una
+transazione ha una **persona** distinta dal suo autore (`transactions.person`)
+e un modello di ricorrenza ha un **titolare** (`recurring_templates.owner`).
+Le righe esistenti si riempiono da sole con il loro autore. Il server inoltre
+rifiuta, comando per comando, un comando che nomina come persona o titolare
+qualcuno che non è membro del vault (`not_a_member`, `SYNC.md`). L'ordine
+conta, ed è **l'inverso di §6.1**:
+
+1. **Backup del server** (§4): `docker compose exec sparagne backup.sh`, o
+   `backup.sh` su bare metal.
+2. **Prima il server, poi le app.** Un server vecchio, quando risponde a un
+   pull, riserializza i comandi e **scarta in silenzio** i campi nuovi: la
+   persona e il titolare spariscono dal log che gli altri Mac scaricano. Rifiuta
+   inoltre una modifica che cambia solo la persona (per lui è una patch vuota).
+3. **Poi ogni app, subito.** Un'app vecchia non conosce i campi nuovi: non
+   li mostra e, scaricandoli, li perde. Aggiornare tutti i Mac che
+   sincronizzano appena il server è su.
+4. **Nessuno registra "per conto di" finché ogni Mac non è aggiornato.**
+   Finché ne resta uno vecchio, una persona diversa dall'autore o un titolare
+   scelto lì non arriva a quel Mac, e lì la riga risulta dell'autore.
+5. **Il ritorno indietro è un ripristino.** Un database v4 non si apre con un
+   binario o un'app della versione precedente (§6 punto 2): tornare indietro
+   vuol dire rimettere il binario vecchio **e** ripristinare (§5) il backup
+   del punto 1, perdendo quel che è arrivato al server nel frattempo. Lo
+   stesso vale per il database locale di un'app già aggiornata.
+
 ## 7. Log e healthcheck
 
 - Log strutturati su stdout via `tracing`, controllati da `RUST_LOG`
