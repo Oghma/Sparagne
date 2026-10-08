@@ -39,8 +39,8 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
     /// Localized for the two system categories, verbatim otherwise.
     let category: String
     let note: String
-    /// Who the row is for, the PERSONA column of the ledger (`docs/v2/UI.md`
-    /// §3): the author, unless the row was recorded on someone else's behalf.
+    /// Who the row is for, the PERSONA column of the ledger: the author, unless
+    /// the row was recorded on someone else's behalf.
     let person: String
     /// `created_by`: the member of the vault who entered the row. Shown only
     /// where it differs from `person`, as "recorded by".

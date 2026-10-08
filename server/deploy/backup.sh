@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Online backup of the two server databases (docs/v2/DEPLOY.md).
+# Online backup of the two server databases (docs/DEPLOY.md).
 #
 # Uses `sqlite3 <db> ".backup '<dest>'"`, which is safe to run against a live
 # database (SQLite's own backup API, consistent even mid-write) and needs no

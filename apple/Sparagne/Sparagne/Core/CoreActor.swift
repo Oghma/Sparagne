@@ -5,15 +5,15 @@ import SparagneCore
 /// isolation domain that ever touches it.
 ///
 /// Everything the UI does is either a query on `CoreHandle` or a command
-/// wrapped in an envelope minted by the core (`docs/v2/ARCH.md` §2.2). Ids are
+/// wrapped in an envelope minted by the core. Ids are
 /// never invented in Swift: `newEnvelope` and `createVaultEnvelope` produce
 /// them, and the created entity's id comes back on the `Receipt`.
 ///
 /// `CoreHandle`'s calls are synchronous and hold a mutex (`core/src/ffi.rs`),
 /// so a long scan would freeze the window if it ran on the main actor. It runs
 /// here instead: `AppStore` and `SyncEngine` await this actor, which serializes
-/// the two of them onto one executor and leaves the main actor free to draw
-/// (`docs/v2/ARCH.md` §8). Every value crossing back is `Sendable` — the
+/// the two of them onto one executor and leaves the main actor free to draw.
+/// Every value crossing back is `Sendable` — the
 /// generated record and enum types already are.
 ///
 /// Two FFI functions deliberately stay off it: `parseQuickAdd` and
@@ -25,8 +25,7 @@ actor CoreActor {
     private let handle: CoreHandle
 
     /// Author recorded on every command in the log. It follows the account:
-    /// logging in changes it and relabels whatever the outbox still holds
-    /// (`docs/v2/SYNC.md` §1).
+    /// logging in changes it and relabels whatever the outbox still holds.
     private var author: String
 
     /// The author the actor was built with. The store shows a name before it
@@ -236,7 +235,7 @@ actor CoreActor {
 
     /// The vaults a `DeleteVault` removed whose log is still here. Their
     /// outbox has to reach the server like any other, the deletion first of
-    /// all (`docs/v2/SYNC.md` §4.6).
+    /// all.
     func deletedVaults() async throws -> [Uuid] {
         try await visit { try $0.deletedVaults() }
     }
@@ -254,8 +253,8 @@ actor CoreActor {
     }
 
     /// Active categories whose name is close to `name`, for the "similar
-    /// categories" hint while typing a new one (docs task 3: suggest, never
-    /// block, `docs/v2/DISTILLATO_V1.md` §2.1).
+    /// categories" hint while typing a new one: it suggests, it never
+    /// blocks.
     func similarCategories(vaultId: Uuid, name: String) async throws -> [CategoryView] {
         try await visit { try $0.similarCategories(vaultId: vaultId, name: name) }
     }
@@ -303,7 +302,7 @@ actor CoreActor {
     }
 
     /// Templates with periods still waiting for a decision, as of `today`
-    /// (`docs/v2/ARCH.md` §4: the app passes "today" in the system timezone).
+    /// (the app passes "today" in the system timezone).
     func pendingRecurring(vaultId: Uuid, today: NaiveDate) async throws -> [PendingRecurring] {
         try await visit { try $0.pendingRecurring(vaultId: vaultId, today: today) }
     }
@@ -414,7 +413,7 @@ actor CoreActor {
     // MARK: - Sync
     //
     // The core writes and reads every sync body; `SyncEngine` only carries
-    // the strings to the server and back (`docs/v2/SYNC.md` §1).
+    // the strings to the server and back.
 
     func syncState(vaultId: Uuid) async throws -> SyncState {
         try await visit { try $0.syncState(vaultId: vaultId) }
@@ -422,7 +421,7 @@ actor CoreActor {
 
     /// The body of `POST /vaults/{id}/push`: at most `limit` commands of the
     /// outbox, in local order. The engine pushes again while the outbox is
-    /// not empty (`docs/v2/SYNC.md` §4.1).
+    /// not empty.
     func pushRequestJson(vaultId: Uuid, limit: UInt32) async throws -> String {
         try await visit { try $0.pushRequestJson(vaultId: vaultId, limit: limit) }
     }
@@ -440,7 +439,7 @@ actor CoreActor {
     }
 
     /// After a login: every vault's outbox is re-signed with the account's
-    /// username (`docs/v2/SYNC.md` §4.4), the deleted vaults' included, or
+    /// username, the deleted vaults' included, or
     /// their deletion would be refused as another author's for ever.
     func relabelEveryOutbox(author name: String) async throws {
         try await visit { handle in
@@ -539,7 +538,7 @@ struct VaultLoadRequest: Sendable {
     /// Thirteen boundaries: the twelve months ending with this one.
     let trailingBounds: [UtcDateTime]
     /// Fourteen boundaries: the epoch plus the thirteen month starts, so
-    /// bucket 0 is everything before January (`docs/v2/UI.md` §4).
+    /// bucket 0 is everything before January.
     let yearBounds: [UtcDateTime]
     /// The PERSONA filter; `nil` is everybody.
     let person: String?

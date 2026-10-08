@@ -1,8 +1,8 @@
 import Foundation
 import SparagneCore
 
-/// One chip under the ⌘K field: what the line will write, one field at a time
-/// (`docs/v2/UI.md` §6). `label` is the small word in front ("category",
+/// One chip under the ⌘K field: what the line will write, one field at a time.
+/// `label` is the small word in front ("category",
 /// "envelope", "when"); the kind and the amount speak for themselves and have
 /// none.
 struct QuickAddToken: Identifiable, Hashable, Sendable {

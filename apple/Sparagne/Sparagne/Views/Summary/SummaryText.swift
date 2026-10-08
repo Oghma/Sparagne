@@ -5,7 +5,7 @@ enum SummaryText {
     /// `"ottobre"`, `"October"`: the locale's own casing. The ledger's
     /// `LedgerDate.fullMonth` shouts for the grid's headings; running text
     /// ("fino a ottobre", "a settembre") reads wrong shouted
-    /// (`docs/v2/UI.md` §5: sentence case).
+    /// (sentence case).
     static func monthName(_ month: Int, locale: Locale = .autoupdatingCurrent) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = locale

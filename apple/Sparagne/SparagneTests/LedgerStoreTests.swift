@@ -6,7 +6,7 @@ import Testing
 
 /// The ledger's own state on `AppStore`: the month window, the direction and
 /// person filters, the aggregates behind the summary panel, and the writes the
-/// grid makes (`docs/v2/UI.md`).
+/// grid makes.
 struct LedgerStoreTests {
     private static func makeStore(author: String = "matteo") throws -> AppStore {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.ledger.\(UUID().uuidString)"))
@@ -438,7 +438,7 @@ struct LedgerStoreTests {
         #expect(LedgerAccessibility.label(for: voided).hasSuffix(String(localized: "deleted")))
     }
 
-    // MARK: - The optional WALLET column (`docs/v2/UI.md` §3)
+    // MARK: - The optional WALLET column
 
     @Test("The wallet column is off until it is asked for, and the choice is remembered")
     func walletColumnIsRememberedOff() throws {

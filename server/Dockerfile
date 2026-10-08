@@ -7,7 +7,7 @@
 #
 # Two stages: a Rust builder that compiles the release binary, and a slim
 # Debian runtime that only carries the binary, certificates and a non-root
-# user. See docs/v2/DEPLOY.md for how to run the resulting image.
+# user. See docs/DEPLOY.md for how to run the resulting image.
 
 ########################################
 # Builder
@@ -51,7 +51,7 @@ RUN apt-get update \
 
 COPY --from=builder /build/sparagne-server /usr/local/bin/sparagne-server
 # sqlite3 is also installed above so this can run as `docker compose exec
-# sparagne backup.sh` (docs/v2/DEPLOY.md, server/deploy/backup.sh).
+# sparagne backup.sh` (docs/DEPLOY.md, server/deploy/backup.sh).
 COPY server/deploy/backup.sh /usr/local/bin/backup.sh
 RUN chmod 755 /usr/local/bin/backup.sh
 

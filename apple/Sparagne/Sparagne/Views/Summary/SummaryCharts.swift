@@ -1,7 +1,7 @@
 import Charts
 import SwiftUI
 
-/// The two charts under the table (`docs/v2/UI.md` §2.2), side by side while
+/// The two charts under the table, side by side while
 /// they fit and stacked when they do not.
 struct SummaryCharts: View {
     let year: YearSummary

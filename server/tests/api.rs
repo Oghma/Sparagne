@@ -1,4 +1,4 @@
-//! HTTP acceptance tests for every row of `docs/v2/SYNC.md` §3.
+//! HTTP acceptance tests for every route of the API.
 //!
 //! The router runs in-process: no socket, no clock injection beyond the
 //! token TTL, one fresh in-memory pair of databases per test.

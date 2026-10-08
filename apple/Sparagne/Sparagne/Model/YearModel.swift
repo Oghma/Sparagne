@@ -1,8 +1,8 @@
 import Foundation
 import SparagneCore
 
-/// One person's movement in one bucket of the core's `year_breakdown`
-/// (`docs/v2/UI.md` §4). Bucket 0 is everything before January; 1...12 are
+/// One person's movement in one bucket of the core's `year_breakdown`.
+/// Bucket 0 is everything before January; 1...12 are
 /// the months of the year.
 struct YearRow: Hashable, Sendable {
     let bucket: Int
@@ -17,14 +17,13 @@ struct YearRow: Hashable, Sendable {
     let fundExpense: Int64
 }
 
-/// A capped envelope as the RIEPILOGO's fund cards show it (`docs/v2/UI.md`
-/// §2.2): how full it is against its cap.
+/// A capped envelope as the RIEPILOGO's fund cards show it: how full it is
+/// against its cap.
 struct FundGauge: Identifiable, Hashable, Sendable {
     let id: Uuid
     let name: String
     let cap: Int64
-    /// The balance for a net cap, the cumulative income for an income cap
-    /// (`DISTILLATO_V1.md` §2.2).
+    /// The balance for a net cap, the cumulative income for an income cap.
     let filled: Int64
     /// What the cap is measured on, named in the card's tag.
     let kind: Kind
@@ -51,7 +50,7 @@ struct FundGauge: Identifiable, Hashable, Sendable {
     }
 }
 
-/// One line of the RIEPILOGO's month table (`docs/v2/UI.md` §2.2), everybody
+/// One line of the RIEPILOGO's month table, everybody
 /// together, plus the running total of each person.
 struct YearMonth: Hashable, Sendable {
     let month: MonthKey
@@ -106,7 +105,7 @@ struct YearTableRow: Hashable, Sendable {
     let totalByPerson: [Int64]
 }
 
-/// The four numbers of the month on screen (`docs/v2/UI.md` §2.2), with the
+/// The four numbers of the month on screen, with the
 /// month before and the year so far for their sub-lines. Plain figures, so
 /// the deltas the cards print are checked without a window.
 ///
@@ -207,7 +206,7 @@ struct YearSummary: Sendable {
         )
     }
 
-    /// The table of `docs/v2/UI.md` §2.2, top to bottom: the opening cash
+    /// The RIEPILOGO's month table, top to bottom: the opening cash
     /// fund, the twelve months, the year's sum. Every decision the table
     /// draws (which row is on screen, which is blank, which went down) is
     /// made here so it can be tested.
@@ -256,8 +255,7 @@ struct YearSummary: Sendable {
     }
 
     /// Pure arithmetic over the query's rows and the vault's envelopes, so it
-    /// can be tested without a database (`docs/v2/UI.md` §2.2 for the
-    /// definitions).
+    /// can be tested without a database.
     static func build(year: Int, upTo: MonthKey, rows: [YearRow], flows: [FlowView]) -> YearSummary {
         let people = Self.people(in: rows)
         var byBucket: [Int: [YearRow]] = [:]
@@ -341,7 +339,7 @@ struct YearSummary: Sendable {
     }
 
     /// A "fondo" is an envelope with a cap, which makes the classification a
-    /// fact of the vault rather than a name (`docs/v2/UI.md` §2.2).
+    /// fact of the vault rather than a name.
     private static func funds(in flows: [FlowView]) -> [FundGauge] {
         flows.compactMap { flow in
             guard !flow.archived else { return nil }

@@ -1,5 +1,4 @@
-//! Server configuration, read from the environment (`docs/v2/SYNC.md` §2,
-//! `docs/v2/DEPLOY.md` §2).
+//! Server configuration, read from the environment (`docs/DEPLOY.md` §2).
 
 use std::str::FromStr;
 

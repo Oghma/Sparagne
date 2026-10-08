@@ -2,7 +2,7 @@ import Foundation
 import SparagneCore
 
 /// One line of the Mastro's grid: a stored transaction, or a recurring period
-/// that fell due and waits for a decision (`docs/v2/UI.md` §2.1, §2.5).
+/// that fell due and waits for a decision.
 enum LedgerLine: Identifiable, Hashable, Sendable {
     case row(TransactionRow)
     case pending(DuePeriod)

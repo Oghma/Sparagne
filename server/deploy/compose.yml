@@ -14,13 +14,13 @@
 #   printf '%s\n' "$PW" | docker compose exec -T sparagne sparagne-server user add alice
 #   docker compose exec sparagne sparagne-server user list
 #
-# See docs/v2/DEPLOY.md for the full first-run flow, accounts, backups and
+# See docs/DEPLOY.md for the full first-run flow, accounts, backups and
 # upgrades.
 
 services:
   sparagne:
     # A release named in .env rather than `latest`, so an upgrade is a choice
-    # made after a backup (docs/v2/DEPLOY.md §6).
+    # made after a backup (docs/DEPLOY.md §6).
     image: ghcr.io/oghma/sparagne-server:${SPARAGNE_VERSION:?set SPARAGNE_VERSION in .env}
     restart: unless-stopped
     volumes:

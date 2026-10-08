@@ -6,7 +6,7 @@ struct SparagneApp: App {
     // items and the ledger stay in sync without extra plumbing.
     @AppStorage("showVoided") private var showVoided = false
     @AppStorage("showTransfers") private var showTransfers = false
-    /// The optional WALLET column of the grid (`docs/v2/UI.md` §3): off by
+    /// The optional WALLET column of the grid: off by
     /// default, remembered here.
     @AppStorage("showWalletColumn") private var showWalletColumn = false
 
@@ -176,7 +176,7 @@ extension Notification.Name {
     static let duplicateLastRow = Notification.Name("it.oghma.sparagne.duplicateLastRow")
     /// ⌘⇧M: opens the management sheet.
     static let openManagement = Notification.Name("it.oghma.sparagne.openManagement")
-    /// ⌘E: exports the rows on screen as CSV (`docs/v2/UI.md` §6).
+    /// ⌘E: exports the rows on screen as CSV.
     static let exportCSV = Notification.Name("it.oghma.sparagne.exportCSV")
     /// Vault menu and palette: the onboarding sheet again, for another vault.
     static let newVault = Notification.Name("it.oghma.sparagne.newVault")

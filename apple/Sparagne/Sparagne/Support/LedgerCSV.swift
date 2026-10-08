@@ -1,7 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The ledger's CSV export (`docs/v2/UI.md` §6, ⌘E): a pure rendering over
+/// The ledger's CSV export (⌘E): a pure rendering over
 /// the rows already on screen, so the window only has to hand it what
 /// `AppStore.rows` already filtered (month, direction, person, search, and
 /// voided/transfers only when the View menu is showing them). Its `person`
@@ -12,7 +12,7 @@ import SparagneCore
 nonisolated enum LedgerCSV {
     static let header = "date,kind,envelope,category,description,person,amount,voided"
     /// With the optional WALLET column on, the file carries it in the same
-    /// place the grid does: after the description (`docs/v2/UI.md` §3).
+    /// place the grid does: after the description.
     static let headerWithWallet = "date,kind,envelope,category,description,wallet,person,amount,voided"
 
     static func header(wallet: Bool) -> String { wallet ? headerWithWallet : header }

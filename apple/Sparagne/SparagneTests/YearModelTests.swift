@@ -4,7 +4,7 @@ import Testing
 
 @testable import Sparagne
 
-/// The RIEPILOGO's arithmetic (`docs/v2/UI.md` §2.2). `YearSummary.build` is
+/// The RIEPILOGO's arithmetic. `YearSummary.build` is
 /// pure, so the year is checked here without a database: the query that feeds
 /// it is tested in the core.
 struct YearModelTests {

@@ -329,7 +329,7 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
 /// The name is a label: any non-blank one will do, even one the author
 /// already gave another vault. Nothing here may depend on the other vaults in
 /// the database, because a rebase replays this command next to whatever
-/// vaults the device holds by then (`docs/v2/SYNC.md` §3).
+/// vaults the device holds by then.
 fn create_vault(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,

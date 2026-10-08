@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The Ricorrenze tab (`docs/v2/UI.md` §2.5). On the left, what is waiting
+/// The Ricorrenze tab. On the left, what is waiting
 /// for a decision ("Da confermare"), what is coming ("Prossimi 30 giorni")
 /// and every template ("Modelli"); on the right, the inspector of the
 /// template picked in the table, or of a new one.

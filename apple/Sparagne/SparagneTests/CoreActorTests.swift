@@ -43,7 +43,7 @@ private actor Gate {
     }
 }
 
-/// The core lives on its own actor, off the main one (`docs/v2/ARCH.md` §8).
+/// The core lives on its own actor, off the main one.
 ///
 /// These are the properties the move is for: the window is never blocked while
 /// the core works, and two things asking at once are answered one at a time

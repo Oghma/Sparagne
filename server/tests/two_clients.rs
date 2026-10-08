@@ -1,11 +1,10 @@
-//! Two-client end-to-end acceptance test of Sparagne v2 sync, per
-//! `docs/v2/SYNC.md` §6.
+//! Two-client end-to-end acceptance test of Sparagne v2 sync.
 //!
 //! Two [`Core`]s in memory play alice and bob (and, for the permission test,
 //! carol), driven over HTTP against `sparagne_server::router` in-process with
 //! `tower::ServiceExt::oneshot` (see `common::Api`). The server's own log and
 //! projection is reachable through `Api::state` for assertions. `common::Client`
-//! implements the client-side algorithm of `docs/v2/SYNC.md` §4-§5.
+//! implements the client side of the sync, as the app does.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 

@@ -2,7 +2,7 @@ import SwiftUI
 import SparagneCore
 import UniformTypeIdentifiers
 
-/// The window (`docs/v2/UI.md` §2), top to bottom: the top bar, the sheet on
+/// The window, top to bottom: the top bar, the sheet on
 /// screen, and the sheet tabs with the sheet's status line. No sidebar and
 /// no inspector: the grid is editable in place, and everything that manages
 /// entities lives in the menus.
@@ -19,7 +19,7 @@ struct LedgerWindow: View {
     /// Driven by the two toggles in the Ledger menu.
     @AppStorage("showVoided") private var showVoided = false
     @AppStorage("showTransfers") private var showTransfers = false
-    /// The optional WALLET column of the grid (`docs/v2/UI.md` §3), off until
+    /// The optional WALLET column of the grid, off until
     /// the View menu turns it on.
     @AppStorage("showWalletColumn") private var showWalletColumn = false
 
@@ -81,8 +81,7 @@ struct LedgerWindow: View {
                 // far: a month past one page would otherwise be cut short.
                 await store.loadAll()
                 // The export carries the columns the grid is showing, so a
-                // file opened next to the window has the same shape
-                // (`UI.md` §6).
+                // file opened next to the window has the same shape.
                 exportDocument = CSVDocument(text: LedgerCSV.render(store.rows, wallet: store.showWalletColumn))
                 exportFileName = LedgerCSV.fileName(
                     vault: store.currentVault?.name ?? "",
@@ -177,7 +176,7 @@ struct LedgerWindow: View {
 // MARK: - CSV export
 
 /// The in-memory file `.fileExporter` writes: the ledger's own CSV text
-/// (`Support/LedgerCSV.swift`, `docs/v2/UI.md` §6, ⌘E). Export only, so
+/// (`Support/LedgerCSV.swift`, ⌘E). Export only, so
 /// reading back a foreign file is not a case this window has to handle.
 struct CSVDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.commaSeparatedText] }

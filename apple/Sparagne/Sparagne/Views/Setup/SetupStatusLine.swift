@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The Setup tab's status line (`docs/v2/UI.md` §2.3): how many wallets,
+/// The Setup tab's status line: how many wallets,
 /// envelopes and categories the vault has in use, archived ones left out, and
 /// when the last change was saved.
 struct SetupStatusLine: View {

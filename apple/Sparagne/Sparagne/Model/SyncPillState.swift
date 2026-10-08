@@ -1,8 +1,7 @@
 import Foundation
 
-/// Where the sync stands, as the top bar's pill and its popover say it
-/// (`docs/v2/SYNC.md` §5, `docs/v2/UI.md` §2.4), and as the Settings window
-/// words it: one place for the wording.
+/// Where the sync stands, as the top bar's pill and its popover say it, and
+/// as the Settings window words it: one place for the wording.
 ///
 /// Pure: built from the few `SyncEngine` fields it reads, so every state and
 /// the order they win in can be tested without an engine or a window

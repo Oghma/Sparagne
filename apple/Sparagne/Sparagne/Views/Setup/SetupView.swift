@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The SETUP view (`docs/v2/UI.md` §2.3): the vault's card, its wallets and
+/// The SETUP view: the vault's card, its wallets and
 /// its envelopes in the left column, its categories in the right one, as
 /// cards on the sheet. Two columns when the window has room for both at 520
 /// pt, one under the other when it does not.

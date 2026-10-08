@@ -1,5 +1,5 @@
 //! `sparagne-server user …`: accounts from the command line, for a server
-//! whose registration is closed (`docs/v2/DEPLOY.md` §3).
+//! whose registration is closed (`docs/DEPLOY.md` §3).
 //!
 //! It opens only `server.sqlite` in the data directory; WAL and the busy
 //! timeout make that safe while the server runs, and a revoked token stops

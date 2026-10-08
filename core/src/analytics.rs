@@ -1,10 +1,9 @@
-//! Aggregations behind the ledger's summary panel and the summary views
-//! (`docs/v2/UI.md` §4).
+//! Aggregations behind the ledger's summary panel and the summary views.
 //!
 //! Every query takes a half-open `[from, to)` range in UTC: the app computes
 //! the month boundaries with the system timezone, so the core never has to
 //! know about calendars or offsets. Voided rows and transfers are always out;
-//! `net_expense` follows `DISTILLATO_V1.md` §3.5 (`max(expense - refund, 0)`).
+//! `net_expense` is `max(expense - refund, 0)`.
 //!
 //! [`Core::bucket_totals`] and [`Core::year_breakdown`] take the boundaries of
 //! several consecutive ranges instead, so a whole year costs one query.
@@ -65,7 +64,7 @@ pub struct TopExpense {
 }
 
 /// One person's movement inside one bucket of the year summary, split the way
-/// the RIEPILOGO reads it (`docs/v2/UI.md` §2.2).
+/// the RIEPILOGO reads it.
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct BucketPersonTotals {
     /// Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
@@ -357,7 +356,7 @@ impl Core {
             .collect())
     }
 
-    /// Bucket x person breakdown behind the RIEPILOGO (`docs/v2/UI.md` §4).
+    /// Bucket x person breakdown behind the RIEPILOGO.
     ///
     /// The app passes the epoch followed by thirteen month starts, so bucket 0
     /// is everything that happened before the year. Amounts come from the flow

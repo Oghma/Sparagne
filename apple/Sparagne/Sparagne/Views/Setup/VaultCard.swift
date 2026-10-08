@@ -1,8 +1,8 @@
 import SwiftUI
 import SparagneCore
 
-/// The vault's own card at the top of SETUP's left column
-/// (`docs/v2/UI.md` §2.3): its name, its currency and who it is shared with.
+/// The vault's own card at the top of SETUP's left column:
+/// its name, its currency and who it is shared with.
 /// The name and the currency are facts here; renaming goes through the
 /// Vault menu, and a vault's currency never changes.
 struct VaultCard: View {

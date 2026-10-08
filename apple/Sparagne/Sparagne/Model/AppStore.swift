@@ -81,7 +81,7 @@ struct AppError: Identifiable, Equatable, Sendable, LocalizedError {
 ///
 /// The rows disappear immediately and a toast counts down; `undo()` cancels,
 /// and the window elapsing (or another destructive action, or quitting)
-/// commits one `VoidTransaction` per row (`docs/v2/DISTILLATO_V1.md` §2.4).
+/// commits one `VoidTransaction` per row.
 struct PendingUndo: Identifiable, Equatable, Sendable {
     /// The toast's own identity: a new void is a new toast, even for a row
     /// that was voided, undone and voided again.
@@ -109,7 +109,7 @@ struct PendingUndo: Identifiable, Equatable, Sendable {
 }
 
 /// One recurring period waiting for a decision: a template and the day it
-/// fell due (`docs/v2/DISTILLATO_V1.md` §2.3).
+/// fell due.
 struct DuePeriod: Identifiable, Hashable, Sendable {
     let template: RecurringView
     let date: NaiveDate
@@ -129,7 +129,7 @@ struct UpcomingPeriod: Identifiable, Hashable, Sendable {
 
 extension TransactionPatch {
     /// A patch that carries no field changes nothing, so it is never sent
-    /// (`UpdateTransaction` refuses it, `docs/v2/ARCH.md` §4).
+    /// (`UpdateTransaction` refuses it).
     var isEmpty: Bool { self == TransactionPatch() }
 }
 
@@ -143,11 +143,11 @@ extension RecurringPatch {
 ///
 /// The store holds no domain state of its own: `snapshot`, `categories` and
 /// `transactions` are query results, refreshed by `reload()` after every
-/// command (`docs/v2/ARCH.md` §2.2).
+/// command.
 ///
 /// The state lives on the main actor and is written there; the core lives on
 /// `CoreActor` and is reached only by awaiting it, so a long query costs a
-/// suspension and not a frozen window (`docs/v2/ARCH.md` §8). Every entry
+/// suspension and not a frozen window. Every entry
 /// point that touches the core is therefore `async`: views call them from a
 /// `Task`, tests await them.
 @Observable
@@ -158,7 +158,7 @@ final class AppStore {
     static let pageSize: UInt32 = 1000
     static let lastVaultKey = "lastVaultId"
     /// Shared with the View menu's `@AppStorage` toggle, so the preference
-    /// has one home (`docs/v2/UI.md` §3).
+    /// has one home.
     static let walletColumnKey = "showWalletColumn"
 
     // MARK: Dependencies
@@ -233,8 +233,7 @@ final class AppStore {
     private(set) var peopleInRows: [String] = []
     /// Everything the ledger's summary panel draws.
     private(set) var summary: LedgerSummary?
-    /// Everything the RIEPILOGO draws: the year of `month`, up to `month`
-    /// (`docs/v2/UI.md` §2.2).
+    /// Everything the RIEPILOGO draws: the year of `month`, up to `month`.
     private(set) var year: YearSummary?
     /// When the last command was applied, for the status bar's "saved at".
     private(set) var savedAt: Date?
@@ -279,7 +278,7 @@ final class AppStore {
 
     // MARK: Filters and view state
 
-    /// The month the ledger reads and writes (`docs/v2/UI.md` §2.1). Changing
+    /// The month the ledger reads and writes. Changing
     /// it reloads the rows and every aggregate together, so the panel never
     /// describes a different month from the table.
     ///
@@ -308,7 +307,7 @@ final class AppStore {
     /// The PERSONA filter: `nil` is everybody.
     var person: String? { didSet { if person != oldValue { filtersChanged() } } }
     /// Which of the two views is on screen; no reload, the data is the same.
-    /// The window opens on the RIEPILOGO (`docs/v2/UI.md` §2).
+    /// The window opens on the RIEPILOGO.
     var tab: LedgerTab = .summary { didSet { if tab != oldValue { tabFilter = "" } } }
     /// Nuova ricorrenza… was asked for (Vault menu, palette, the tab's add
     /// button): the Ricorrenze tab opens its inspector on a new template,
@@ -323,7 +322,7 @@ final class AppStore {
     var showVoided = false { didSet { if showVoided != oldValue { filtersChanged() } } }
     /// Transfers are in neither direction, so the View menu opts into them.
     var showTransfers = false { didSet { if showTransfers != oldValue { filtersChanged() } } }
-    /// The optional WALLET column (`docs/v2/UI.md` §3). Display only: it
+    /// The optional WALLET column. Display only: it
     /// changes what the grid draws and what ⌘E writes, never what is loaded,
     /// so it does not reload.
     var showWalletColumn: Bool {
@@ -481,7 +480,7 @@ final class AppStore {
 
     /// Re-reads everything after the log changed underneath the window: a
     /// sync that rebased the projection, a vault joined from the server, or
-    /// a login that relabelled the outbox (`docs/v2/SYNC.md` §5).
+    /// a login that relabelled the outbox.
     func refreshAfterSync() async {
         await guarded { try await adoptVaultList() }
     }
@@ -618,7 +617,7 @@ final class AppStore {
     }
 
     /// The RIEPILOGO's year: the `year_breakdown` rows of the same visit,
-    /// folded into the table the view draws (`docs/v2/UI.md` §4).
+    /// folded into the table the view draws.
     private static func year(month: MonthKey, from loaded: VaultLoad, flows: [FlowView]) -> YearSummary? {
         let rows = loaded.year.map {
             YearRow(
@@ -752,7 +751,7 @@ final class AppStore {
 
     /// Renames a vault everywhere its name shows: the picker, the title, the
     /// palette. The name is a label, so two vaults may share it, and the
-    /// currency never changes (`docs/v2/ARCH.md` §4).
+    /// currency never changes.
     func renameVault(_ vaultId: Uuid, name: String) async {
         await guarded {
             try await core.execute(vaultId: vaultId, .renameVault(name: name))
@@ -761,7 +760,7 @@ final class AppStore {
     }
 
     /// Deletes a vault with everything in it, for every member and on every
-    /// device once the command has synced (`docs/v2/SYNC.md` §4.6). Only the
+    /// device once the command has synced. Only the
     /// owner may; the core refuses anyone else. The window moves to another
     /// vault, or back to onboarding when it was the last one.
     func deleteVault(_ vaultId: Uuid) async {
@@ -823,7 +822,7 @@ final class AppStore {
     }
 
     /// Only the given fields change; Unallocated cannot be updated
-    /// (`.updateFlow`, `docs/v2/ARCH.md` §4).
+    /// (`.updateFlow`).
     func updateEnvelope(
         _ flowId: Uuid,
         name: String? = nil,
@@ -870,7 +869,7 @@ final class AppStore {
     }
 
     /// What the CATEGORY cells complete from besides `categories`: the aliases,
-    /// and the categories used in the last 90 days (`DISTILLATO_V1.md` §3.2).
+    /// and the categories used in the last 90 days.
     /// Loaded when a cell takes the caret, and only again after a reload:
     /// most reloads are never followed by typing a category.
     ///
@@ -908,7 +907,7 @@ final class AppStore {
 
     /// Active categories near `name`, nearest first; empty on a blank name
     /// or any core error. Used as a live, non-blocking hint while typing
-    /// (docs/v2/DISTILLATO_V1.md §2.1: "suggest, don't block").
+    /// (suggest, don't block).
     func similarCategories(name: String) async -> [CategoryView] {
         guard let vault = currentVault, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         return (try? await core.similarCategories(vaultId: vault.id, name: name)) ?? []
@@ -946,8 +945,7 @@ final class AppStore {
     }
 
     /// Refused when `previewCategoryMerge` reports conflicts; repoints every
-    /// transaction of `sourceId` to `targetId` and deletes the source
-    /// (`docs/v2/ARCH.md` §4).
+    /// transaction of `sourceId` to `targetId` and deletes the source.
     func mergeCategory(sourceId: Uuid, targetId: Uuid) async {
         await categoryCommand(.mergeCategory(sourceId: sourceId, targetId: targetId))
     }
@@ -955,7 +953,7 @@ final class AppStore {
     /// A category command, then the refresh of the picker list and the
     /// management table together. A full `reload()` because a rename
     /// propagates its denormalized name onto transactions and a merge
-    /// repoints them (`docs/v2/DISTILLATO_V1.md` §2.1): the loaded
+    /// repoints them: the loaded
     /// transactions page can be stale, not just the category lists.
     private func categoryCommand(_ command: Command) async {
         guard let vault = currentVault, !refusedAsReadOnly() else { return }
@@ -1170,7 +1168,7 @@ final class AppStore {
     // MARK: - Ledger writes
     //
     // The grid writes the same commands the quick-add line does; the only
-    // difference is where the fields come from (`docs/v2/UI.md` §2.1).
+    // difference is where the fields come from.
 
     /// The wallet a new row lands on. The core reads `nil` as "the only
     /// active wallet", which is exactly right for a one-wallet vault and an
@@ -1418,8 +1416,8 @@ final class AppStore {
     }
 
     /// Which marker (`#`, `@`, `>`, `!`) carried `fragment` in `text`, and
-    /// where: the grammar allows at most one of each
-    /// (`docs/v2/DISTILLATO_V1.md` §3.1), so one match per marker is all
+    /// where: the grammar allows at most one of each,
+    /// so one match per marker is all
     /// there is. A whole token wins over the start of a longer one: in
     /// `#elisir !eli` the person is `!eli`, not the `#eli` of the category.
     nonisolated static func marker(carrying fragment: String, in text: String) -> (marker: String, range: Range<String.Index>)? {

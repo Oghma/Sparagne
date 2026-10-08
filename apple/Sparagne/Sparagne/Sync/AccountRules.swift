@@ -1,6 +1,6 @@
 import Foundation
 
-/// The server's rules for an account (`docs/v2/SYNC.md` §3, register), checked
+/// The server's rules for an account (registration), checked
 /// in the form before anything is sent, so a refusal reads as a hint under
 /// the field instead of the server's English after a round trip.
 nonisolated enum AccountRules {

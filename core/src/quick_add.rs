@@ -7,7 +7,7 @@
 //! [`Command`] ready for [`crate::Core::execute`] and the ids its names
 //! resolved to.
 //!
-//! Grammar (see `docs/v2/DISTILLATO_V1.md` §3.1):
+//! Grammar:
 //!
 //! ```text
 //! [+|-|r] importo  [nota…]  [#categoria]  [@wallet]  [>busta]  [!persona]  [data]

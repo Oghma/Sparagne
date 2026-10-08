@@ -1,8 +1,8 @@
 import SwiftUI
 import SparagneCore
 
-/// Column geometry of the envelope table, as the canvas has it
-/// (`docs/v2/UI.md` §2.3): fixed widths so the header, the rows and the empty
+/// Column geometry of the envelope table, as the canvas has it:
+/// fixed widths so the header, the rows and the empty
 /// line agree without a layout pass. NOME takes what is left.
 private enum EnvelopeColumn {
     static let nameMinimum: CGFloat = 100
@@ -12,7 +12,7 @@ private enum EnvelopeColumn {
     static let balance: CGFloat = 120
 }
 
-/// The envelopes of the vault as an editable table (`docs/v2/UI.md` §2.3):
+/// The envelopes of the vault as an editable table:
 /// the last line adds one, every cell edits in place.
 ///
 /// Editing is per row, exactly as in the ledger (`Views/Ledger/LedgerGrid`):
@@ -103,7 +103,7 @@ struct EnvelopeTable: View {
         }
         .contextMenu {
             // Unallocated is a system envelope: the core refuses to update or
-            // archive it (`docs/v2/UI.md` §2.3).
+            // archive it.
             if !flow.isUnallocated, store.canWrite {
                 Button(String(localized: "Archive"), role: .destructive) {
                     Task { await store.archiveEnvelope(flow.id) }
@@ -267,8 +267,8 @@ struct EnvelopeTable: View {
     // MARK: - The empty line
 
     /// Always under the active envelopes: fill it left to right and press ↩.
-    /// SALDO is the opening allocation moved out of Unallocated
-    /// (`docs/v2/DISTILLATO_V1.md` §2.2), which the placeholder says.
+    /// SALDO is the opening allocation moved out of Unallocated,
+    /// which the placeholder says.
     private var newLineRow: some View {
         let active = focus?.row == nil && focus != nil
         return SetupRow(highlighted: active, editing: active) {
@@ -325,7 +325,7 @@ struct EnvelopeTable: View {
     }
 
     /// TIPO is a menu, not text: the three kinds are the whole vocabulary
-    /// (`docs/v2/UI.md` §2.3) and a typo has no meaning here. On the empty
+    /// and a typo has no meaning here. On the empty
     /// line an unchosen kind reads as "No cap" rather than "None".
     private func typeCell(_ line: Binding<EnvelopeDraft>, emptyLabel: String? = nil) -> some View {
         SetupCell(width: EnvelopeColumn.type) {
@@ -369,8 +369,7 @@ struct EnvelopeTable: View {
         negative ? String(localized: "yes") : String(localized: "no")
     }
 
-    /// A zero reads as background (`docs/v2/UI.md` §5 gives zeros to `dim`),
-    /// an overdrawn envelope as a warning.
+    /// A zero reads as background, an overdrawn envelope as a warning.
     private static func tint(balance: Int64) -> Color {
         if balance == 0 { return Ink.text3 }
         return balance < 0 ? Ink.negative : Ink.text
@@ -433,7 +432,7 @@ struct EnvelopeTable: View {
 
     /// Writes the draft back and says whether it went through. Only the cells
     /// that changed travel, so two people editing different envelopes of the
-    /// same vault do not conflict (`docs/v2/ARCH.md` §4).
+    /// same vault do not conflict.
     @discardableResult
     private func commit(_ flowId: Uuid) -> Bool {
         guard editing == flowId else { return true }
@@ -524,8 +523,8 @@ enum EnvelopeField: Hashable, CaseIterable {
 // MARK: - The three kinds of cap
 
 /// `FlowMode` as a flat choice, the way the TIPO column reads
-/// (`docs/v2/UI.md` §2.3: nessuno / netto / entrate). The mode is data, not a
-/// type (`docs/v2/DISTILLATO_V1.md` §2.2), so this is a lossless split into
+/// (nessuno / netto / entrate). The mode is data, not a
+/// type, so this is a lossless split into
 /// "which kind" plus "how much".
 enum EnvelopeCapKind: String, CaseIterable, Identifiable {
     case none

@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import SparagneCore
 
-/// Runs the client half of the sync protocol (`docs/v2/SYNC.md` §4-§5).
+/// Runs the client half of the sync protocol.
 ///
 /// A round first asks the server which vaults the account has and with what
 /// role, then for every local vault pushes what the outbox holds, a batch per
@@ -46,7 +46,7 @@ final class SyncEngine {
 
     static let pullLimit = 500
     /// How many commands go up in one `POST /push`. The core hands out the
-    /// outbox in slices of this size (`docs/v2/SYNC.md` §4.1).
+    /// outbox in slices of this size.
     static let pushLimit: UInt32 = 500
     /// A push or pull loop that neither finishes nor stalls is a bug; stop
     /// rather than hammer the server.
@@ -258,8 +258,8 @@ final class SyncEngine {
         // A vault deleted here still owes the server its last commands, the
         // `DeleteVault` among them. Until they are confirmed it syncs like a
         // live one (so a deletion the server already holds, from another
-        // device, is folded in as well); afterwards its log goes too
-        // (`docs/v2/SYNC.md` §4.6). Read again: a pull above may have just
+        // device, is folded in as well); afterwards its log goes too.
+        // Read again: a pull above may have just
         // deleted one.
         do {
             for vaultId in try await core.deletedVaults() {
@@ -307,8 +307,7 @@ final class SyncEngine {
     /// with `403` is folded in the same way. Either way the pull still runs,
     /// so the owner's changes keep arriving. A vault the server has never
     /// seen is created by the first push, whose first command is the
-    /// `CreateVault` that minted it: there is no separate route for it
-    /// (`docs/v2/SYNC.md` §3).
+    /// `CreateVault` that minted it: there is no separate route for it.
     private func syncVault(_ vaultId: Uuid, session: Session, listed: Set<Uuid>?) async throws -> Outcome {
         let state = try await core.syncState(vaultId: vaultId)
         let unlisted = listed.map { !$0.contains(vaultId) } ?? false
@@ -541,7 +540,7 @@ final class SyncEngine {
     }
 
     /// The username becomes the author of every command, so the outbox has to
-    /// be relabelled before it is pushed (`docs/v2/SYNC.md` §4.4). The
+    /// be relabelled before it is pushed. The
     /// server trims and lowercases the name; so does the app, before the
     /// name is sent, so both sides mean the same account.
     private func authenticate(username raw: String, password: String, registering: Bool) async {

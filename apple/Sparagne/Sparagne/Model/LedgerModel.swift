@@ -1,8 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// One calendar month, the unit the ledger reads and writes in
-/// (`docs/v2/UI.md` §2.1).
+/// One calendar month, the unit the ledger reads and writes in.
 ///
 /// All the range arithmetic lives here, in the system calendar, so the core
 /// only ever receives two UTC instants and never has to know about months,
@@ -47,7 +46,7 @@ struct MonthKey: Hashable, Sendable, Identifiable {
     }
 
     /// `"Agosto 2026"`: the top bar's month, in sentence case like every
-    /// other label of the window (`docs/v2/UI.md` §5), whatever case the
+    /// other label of the window, whatever case the
     /// locale gives its month names.
     func title(locale: Locale = .autoupdatingCurrent) -> String {
         let name = LedgerDate.fullMonth(month, locale: locale).lowercased(with: locale)
@@ -88,7 +87,7 @@ enum LedgerDirection: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// Refunds belong with expenses: they are a negative expense, and
-    /// `net_expense` nets them off (`DISTILLATO_V1.md` §3.5).
+    /// `net_expense` nets them off.
     var kinds: [TransactionKind] {
         switch self {
         case .expenses: [.expense, .refund]
@@ -212,16 +211,14 @@ enum DeleteTarget: Equatable, Sendable {
     }
 }
 
-/// The sheets of the tab bar at the bottom of the window (`docs/v2/UI.md`
-/// §2), in the bar's order, which is also ⌘1 to ⌘4; the window opens on the
-/// first.
+/// The sheets of the tab bar at the bottom of the window, in the bar's
+/// order, which is also ⌘1 to ⌘4; the window opens on the first.
 enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
     case summary
     case ledger
-    /// The recurring templates and the periods waiting for a decision
-    /// (§2.5).
+    /// The recurring templates and the periods waiting for a decision.
     case recurring
-    /// Envelopes and categories, as two editable tables (§2.3).
+    /// Envelopes and categories, as two editable tables.
     case setup
 
     var id: String { rawValue }

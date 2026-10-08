@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// "Da confermare" (`docs/v2/UI.md` §2.5): every period waiting for a
+/// "Da confermare": every period waiting for a
 /// decision, oldest first, with Salta and Registra for each and Registra
 /// tutte for the lot. A template never writes a transaction by itself; this
 /// card is where the user does it.

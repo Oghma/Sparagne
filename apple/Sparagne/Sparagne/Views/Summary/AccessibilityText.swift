@@ -2,7 +2,7 @@ import Foundation
 
 /// Pure formatting for the VoiceOver labels used across the RIEPILOGO
 /// (`SummaryView.swift`) and the ledger's summary panel
-/// (`Views/Ledger/SummaryPanel.swift`, `docs/v2/UI.md` §2.1-§2.2): kept out
+/// (`Views/Ledger/SummaryPanel.swift`): kept out
 /// of the views themselves so the text can be checked without a window.
 ///
 /// Every piece handed in here (labels, amounts) is already localized or

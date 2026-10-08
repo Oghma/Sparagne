@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The Ricorrenze tab's status line (`docs/v2/UI.md` §2.5): how many
+/// The Ricorrenze tab's status line: how many
 /// templates run and how many are archived, what the running ones cost and
 /// bring in a month (`RecurringMonthly`, hence "≈": a daily or weekly
 /// template is spread over the average month), and when the last change was

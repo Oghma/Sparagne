@@ -1,4 +1,4 @@
-//! Membership routes: who may read and write a vault (`docs/v2/SYNC.md` §3).
+//! Membership routes: who may read and write a vault.
 //!
 //! The owner's row is written when the vault is created and can never be
 //! changed or removed. Everyone else can leave on their own.

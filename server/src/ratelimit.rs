@@ -1,5 +1,5 @@
 //! Brakes on guessing passwords and on mass registration, in memory
-//! (`docs/v2/DEPLOY.md` §2).
+//! (`docs/DEPLOY.md` §2).
 //!
 //! Three kinds of bucket share one map: logins per username, logins per
 //! client address, registrations per client address. A bucket counts hits

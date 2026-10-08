@@ -11,7 +11,7 @@ CREATE TABLE vaults (
     created_at    INTEGER NOT NULL
 );
 -- No index on the name: vault names are labels and may repeat, even for the
--- same owner (`docs/v2/SYNC.md` §3).
+-- same owner.
 
 CREATE TABLE wallets (
     id         BLOB PRIMARY KEY,

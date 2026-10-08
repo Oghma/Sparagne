@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The line above the grid (`docs/v2/UI.md` §2.1): which rows the sheet
+/// The line above the grid: which rows the sheet
 /// shows. Direction, PERSONA, then three chips for what is off by default:
 /// transfers, voided rows and the WALLET column. The month and the search are
 /// in the top bar (`TopBar`), the figures in the tab bar's status line

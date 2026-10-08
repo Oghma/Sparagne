@@ -8,7 +8,7 @@ struct StatusItem: Hashable {
     var value: String?
 }
 
-/// The right-hand side of the tab bar (`docs/v2/UI.md` §5): a few figures
+/// The right-hand side of the tab bar: a few figures
 /// about the sheet on screen, the way a spreadsheet's status bar shows the
 /// count and the sum of a selection. Labels in `text3`, values in `text`,
 /// " · " between the entries.

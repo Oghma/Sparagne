@@ -4,8 +4,7 @@ import Foundation
 ///
 /// `path` is everything after the server's base URL, query string included
 /// (`/vaults/<id>/pull?since=0&limit=500`). The body is opaque `Data`: the
-/// engine hands over JSON the core wrote and never inspects a command
-/// (`docs/v2/SYNC.md` §1).
+/// engine hands over JSON the core wrote and never inspects a command.
 nonisolated struct SyncRequest: Sendable, Equatable {
     var method: String
     var path: String
@@ -27,7 +26,7 @@ nonisolated struct SyncResponse: Sendable, Equatable {
     var body: Data
     /// Header names are case-insensitive in HTTP, so they are kept
     /// lowercased and looked up through `header(_:)`. The protocol reads one:
-    /// `Retry-After` on a `429` (`docs/v2/SYNC.md` §3).
+    /// `Retry-After` on a `429`.
     private(set) var headers: [String: String]
 
     init(status: Int, body: Data = Data(), headers: [String: String] = [:]) {

@@ -1586,7 +1586,7 @@ public func FfiConverterTypeAliasView_lower(_ value: AliasView) -> RustBuffer {
 
 /**
  * One person's movement inside one bucket of the year summary, split the way
- * the RIEPILOGO reads it (`docs/v2/UI.md` §2.2).
+ * the RIEPILOGO reads it.
  */
 public struct BucketPersonTotals: Equatable, Hashable, Codable {
     /**
@@ -4642,8 +4642,8 @@ public struct TransactionFilter: Equatable, Hashable, Codable {
      */
     public var text: String?
     /**
-     * Exact `person`: the PERSONA filter of the ledger
-     * (`docs/v2/UI.md` §3). `None` = everybody.
+     * Exact `person`: the PERSONA filter of the ledger.
+     * `None` = everybody.
      */
     public var person: String?
     /**
@@ -4675,8 +4675,8 @@ public struct TransactionFilter: Equatable, Hashable, Codable {
          * Case-insensitive substring on note or category name.
          */text: String? = nil, 
         /**
-         * Exact `person`: the PERSONA filter of the ledger
-         * (`docs/v2/UI.md` §3). `None` = everybody.
+         * Exact `person`: the PERSONA filter of the ledger.
+         * `None` = everybody.
          */person: String? = nil, 
         /**
          * Oldest first, the reading order of the ledger. Cursors keep working:

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The sync state at the end of the top bar (`docs/v2/SYNC.md` §5): a dot
+/// The sync state at the end of the top bar: a dot
 /// and a few words, and a popover with the account, the counts and what can
 /// be done about the state. The words and the buttons come from
 /// `SyncPillState`, so the Settings window says the same.

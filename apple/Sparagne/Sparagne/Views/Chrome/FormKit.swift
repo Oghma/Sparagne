@@ -1,6 +1,6 @@
 import SwiftUI
 
-// The pieces every form of the app is drawn with (`docs/v2/UI.md` §5): the
+// The pieces every form of the app is drawn with: the
 // Ricorrenze inspector, the modal sheets and the Settings window. One
 // implementation, so a field in a sheet and a field in the inspector are the
 // same box and change together; only the density differs (`FormMetrics`).

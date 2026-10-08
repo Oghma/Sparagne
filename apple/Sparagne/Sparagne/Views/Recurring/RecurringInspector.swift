@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The Ricorrenze tab's inspector (`docs/v2/UI.md` §2.5): one template's
+/// The Ricorrenze tab's inspector: one template's
 /// fields, edited in place, or a new template written from scratch. The
 /// fields are a `RecurringDraft`; Salva sends only what changed, Annulla
 /// puts the saved values back, and the next four dates follow every

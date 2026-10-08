@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The spreadsheet (`docs/v2/UI.md` §2.1): one row per transaction, oldest
+/// The spreadsheet: one row per transaction, oldest
 /// first, the recurring periods due this month among them at their date
 /// (`PendingRowView`), and an always-empty last line for the next one.
 ///
@@ -244,7 +244,7 @@ struct LedgerGrid: View {
     }
 
     /// Selected rows are tinted with the accent, the palette's color for a
-    /// selection (`docs/v2/UI.md` §5), a shade deeper under the pointer. The
+    /// selection, a shade deeper under the pointer. The
     /// row being edited and the one under the pointer step up to the card
     /// ground; the focused cell carries its own ring (`cellFocusRing`).
     private func background(editing: Bool, selected: Bool, hovered: Bool) -> Color {
@@ -450,7 +450,7 @@ struct LedgerGrid: View {
     /// Writes the draft back and says whether it went through.
     ///
     /// Sends only what changed, so two people editing different cells of the
-    /// same row do not conflict (`docs/v2/ARCH.md` §4). A cell the parser or
+    /// same row do not conflict. A cell the parser or
     /// the core refuses keeps the row open with the draft intact and puts the
     /// focus back where the mistake is.
     @discardableResult

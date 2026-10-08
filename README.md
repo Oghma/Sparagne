@@ -15,7 +15,7 @@ Version 1 (Rust engine, HTTP server, Telegram bot, terminal UI) lives at tag
 ## Install
 
 Server and app share one version: a release tag `vX.Y.Z` names both. Upgrade
-the server before the apps (`docs/v2/DEPLOY.md` §6).
+the server before the apps (`docs/DEPLOY.md` §6).
 
 ### Server
 
@@ -29,7 +29,7 @@ docker compose up -d
 
 `gh attestation verify oci://ghcr.io/oghma/sparagne-server:<version> --repo
 Oghma/Sparagne` checks that an image was built by this repository's release
-workflow. `docs/v2/DEPLOY.md` has the full setup (TLS via Caddy, login
+workflow. `docs/DEPLOY.md` has the full setup (TLS via Caddy, login
 limits, backups, upgrades, building the image from the sources).
 
 Accounts can also be managed from the command line, which is the way to add
@@ -62,7 +62,7 @@ both use the same database (below).
 | `core/` | Rust crate: domain, commands, log, projection, queries, quick-add |
 | `apple/` | Swift package generated from the core and the macOS app |
 | `server/` | sync server |
-| `docs/v2/` | architecture, v1 distillation, inventories |
+| `docs/` | how to deploy the server (`DEPLOY.md`) |
 
 ## Build
 
@@ -110,4 +110,3 @@ report with the counts per entity, the v1 fields that have no v2 counterpart
 and the commands the core refused. The imported commands sit in the outbox and
 reach the server at the first sync.
 
-The design is in `docs/v2/ARCH.md`.

@@ -1,7 +1,7 @@
 //! Sparagne v2 sync server.
 //!
 //! Accounts, vault memberships and the per-vault command log, applied with
-//! the same `sparagne_core` the app uses. Protocol in `docs/v2/SYNC.md`.
+//! the same `sparagne_core` the app uses.
 
 pub mod admin;
 pub mod auth;

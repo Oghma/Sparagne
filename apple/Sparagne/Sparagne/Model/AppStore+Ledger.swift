@@ -3,7 +3,7 @@ import SparagneCore
 
 /// What the Mastro reads off the store beyond its rows: the lines of the grid
 /// with the due periods among them, the status line's figures, and the names
-/// a recurring template's ids stand for (`docs/v2/UI.md` §2.1). Computed only:
+/// a recurring template's ids stand for. Computed only:
 /// nothing here is stored or written.
 extension AppStore {
     /// What the grid's lines are made of: the rows on screen and the periods

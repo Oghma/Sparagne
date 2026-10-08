@@ -1,7 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// Who a row may be for (`docs/v2/UI.md` §3, PERSONA): the names the person
+/// Who a row may be for (the PERSONA column): the names the person
 /// cells, the quick-add line's `!name` and the owner picker choose among.
 extension AppStore {
     /// The members of the vault on screen, when the sync engine has heard

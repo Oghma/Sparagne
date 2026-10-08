@@ -1,10 +1,10 @@
-//! Shared harness for the sync acceptance tests (`docs/v2/SYNC.md`).
+//! Shared harness for the sync acceptance tests.
 //!
 //! `Api` is a trimmed copy of the request/response plumbing in `api.rs`: JSON
 //! in, JSON out, bearer tokens, the router driven in-process with
 //! `tower::ServiceExt::oneshot`. `Client` is a "real" client: an in-memory
-//! [`Core`], a token and a username, synced over HTTP exactly as
-//! `docs/v2/SYNC.md` §4-§5 prescribes.
+//! [`Core`], a token and a username, synced over HTTP exactly as the app
+//! does.
 
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used)]
 
@@ -222,7 +222,7 @@ impl Client {
             .expect("create_vault returns the vault id")
     }
 
-    /// `docs/v2/SYNC.md` §4-§5: push the outbox in batches until it is empty
+    /// Push the outbox in batches until it is empty
     /// (the first push also creates the vault, when the server has never seen
     /// it), then pull until the report says nothing more is waiting. Returns
     /// every [`SyncReport`] produced along the way.
@@ -266,7 +266,7 @@ impl Client {
         reports
     }
 
-    /// A vault not present locally: pull from zero (`docs/v2/SYNC.md` §4.3).
+    /// A vault not present locally: pull from zero.
     pub async fn join(&mut self, api: &Api, vault: Uuid) -> SyncReport {
         let res = api
             .get(&format!("/vaults/{vault}/pull?since=0"), &self.token)
@@ -382,7 +382,7 @@ pub fn projection(core: &Core, vault: Uuid) -> Projection {
 
 /// alice registers, creates "Casa" with a wallet holding 100.00 and an income
 /// of 50.00, and syncs; bob registers, is added as an editor and joins by
-/// pulling from zero. `docs/v2/SYNC.md` §6.
+/// pulling from zero.
 pub async fn basics(api: &Api) -> (Client, Client, Uuid, Uuid) {
     let mut alice = Client::register(api, "alice").await;
     let vault = alice.create_vault("Casa");

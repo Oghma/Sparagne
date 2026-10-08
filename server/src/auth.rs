@@ -1,4 +1,4 @@
-//! Accounts, password hashing and bearer tokens (`docs/v2/SYNC.md` §3).
+//! Accounts, password hashing and bearer tokens.
 //!
 //! Passwords are argon2id PHC strings; a token is 32 random bytes shown once
 //! as base64url and stored as its sha256 digest. Neither is ever logged.

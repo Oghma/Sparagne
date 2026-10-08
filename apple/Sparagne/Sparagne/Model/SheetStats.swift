@@ -1,7 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The figures of the Mastro's status line (`docs/v2/UI.md` §2.1): average,
+/// The figures of the Mastro's status line: average,
 /// count and sum, the way a spreadsheet's status bar reads the cells it is
 /// pointed at.
 ///

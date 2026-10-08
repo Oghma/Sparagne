@@ -19,7 +19,7 @@ struct CategoryCandidate: Identifiable, Equatable, Sendable {
 }
 
 /// The ranking behind the list: which categories match what was typed, best
-/// first (`docs/v2/DISTILLATO_V1.md` §3.2).
+/// first.
 ///
 /// Tiers first: the name from its start, then an alias from its start, then
 /// the name anywhere, then an alias anywhere; a category shows once, at its

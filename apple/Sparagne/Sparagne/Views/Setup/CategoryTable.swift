@@ -2,7 +2,7 @@ import SwiftUI
 import SparagneCore
 
 /// Column geometry, fixed so the header, the rows and the empty line agree
-/// without a layout pass (`docs/v2/UI.md` §2.3 and §5): the canvas's 140 for
+/// without a layout pass: the canvas's 140 for
 /// NOME, 80 for the usage and 36 for the action. ALIAS takes what is left.
 private enum CategoryColumn {
     static let name: CGFloat = 140
@@ -24,7 +24,7 @@ private struct CategoryCellFocus: Hashable {
     let field: CategoryField
 }
 
-/// The categories of the vault as an editable table (`docs/v2/UI.md` §2.3):
+/// The categories of the vault as an editable table:
 /// the last line adds one, names and aliases edit in place.
 ///
 /// Editing is per row, like the ledger's grid: clicking a cell opens the whole
@@ -159,7 +159,7 @@ struct CategoryTable: View {
     }
 
     /// The empty last line: a name, and under ALIAS the near names the core
-    /// knows, which suggest and never block (`docs/v2/DISTILLATO_V1.md` §2.1).
+    /// knows, which suggest and never block.
     private var newLine: some View {
         let active = focus == CategoryCellFocus(row: nil, field: .name)
         return SetupRow(highlighted: active, editing: active, separator: false) {
@@ -432,8 +432,8 @@ private struct CategoryRowView: View {
 // MARK: - The draft behind an edited row
 
 /// The text in the cells of the category row being edited, and the diff it
-/// implies. Plain strings and plain functions, so the rules of `docs/v2/UI.md`
-/// §2.3 can be tested without a view.
+/// implies. Plain strings and plain functions, so the rules of the CATEGORIE
+/// table can be tested without a view.
 struct CategoryDraft: Equatable {
     var name: String = ""
     /// The aliases as one comma-separated line, which is how the column reads.

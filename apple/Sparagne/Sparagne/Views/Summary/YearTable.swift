@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The RIEPILOGO's month by month table (`docs/v2/UI.md` §2.2): the opening
+/// The RIEPILOGO's month by month table: the opening
 /// cash fund, twelve months, the year's sums. It is drawing only; which row
 /// is on screen, blank or going down comes from `YearSummary.tableRows`.
 struct YearTable: View {
@@ -196,8 +196,8 @@ struct YearTable: View {
     // MARK: - Accessibility
 
     /// "Start of year, Total €750.00, elisa €200.00", "September, Income …",
-    /// "October, future month" (`docs/v2/UI.md` §2.2: a future month is drawn
-    /// blank), "2026, Income …".
+    /// "October, future month" (a future month is drawn blank), "2026, Income
+    /// …".
     private func label(_ row: YearTableRow) -> String {
         let name: String
         switch row.kind {

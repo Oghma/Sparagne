@@ -1,7 +1,6 @@
 # Sparagne (macOS app)
 
-SwiftUI/macOS front end for Sparagne v2 (see `docs/v2/ARCH.md` §2.2 and
-`docs/v2/UI.md`). It depends on the local `../SparagneCore` Swift package,
+SwiftUI/macOS front end for Sparagne v2. It depends on the local `../SparagneCore` Swift package,
 which wraps the Rust core over UniFFI; run `bash ../build-core.sh` once after
 cloning to produce its XCFramework.
 
@@ -30,7 +29,7 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Views/Sheets.swift` | Onboarding, new wallet/envelope, rename and edit-envelope sheets |
 | `Sparagne/Views/SyncViews.swift` | The rejected-changes and share sheets (the sync status is the top bar's `SyncPill`) |
 | `Sparagne/Views/UndoToast.swift` | The undo bar after a void |
-| `Sparagne/Sync/` | Transport, typed HTTP API, account and token store, and the sync engine (`docs/v2/SYNC.md` §5) |
+| `Sparagne/Sync/` | Transport, typed HTTP API, account and token store, and the sync engine |
 | `Sparagne/Support/` | Money and date formatting (`Formatters.swift`), the mockup's own money format (`LedgerFormat.swift`), the fixed dark palette, type scale and metrics (`Palette.swift`), the quick-add preview line (`QuickAddSummary.swift`), error headlines (`ErrorMessages.swift`) |
 
 Sync is off until an account is set up in Settings: server address, then
@@ -45,9 +44,8 @@ resolves inside the app container.
 ## Keyboard
 
 The window has no toolbar: the top bar and the sheet tabs along the bottom
-(Riepilogo · Mastro · Ricorrenze · Setup) are drawn by the app. The full table
-is `docs/v2/UI.md` §6; the shortcuts that reach across the whole window
-(`SparagneApp.swift`'s menu commands) are:
+(Riepilogo · Mastro · Ricorrenze · Setup) are drawn by the app. The shortcuts
+that reach across the whole window (`SparagneApp.swift`'s menu commands) are:
 
 | Key | Action |
 |---|---|

@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - The month's cards
 
-/// The four numbers of the month on screen (`docs/v2/UI.md` §2.2): income,
+/// The four numbers of the month on screen: income,
 /// expenses, savings and the rate, each with a line under it that compares it
 /// with the month before or the year so far. Only savings is colored:
 /// expenses are the ordinary run of a month, not an alarm.
@@ -91,7 +91,7 @@ private struct KPICard: View {
 
 // MARK: - Funds
 
-/// One card per capped envelope (`docs/v2/UI.md` §2.2). Nothing is drawn for
+/// One card per capped envelope. Nothing is drawn for
 /// a vault without caps.
 struct FundCards: View {
     let funds: [FundGauge]
@@ -145,7 +145,7 @@ private struct FundCard: View {
             }
         }
         // The bar is a drawn shape with no text of its own: the fund's name
-        // is the label, and the fill its value (`docs/v2/UI.md` §2.2).
+        // is the label, and the fill its value.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(fund.name)
         .accessibilityValue(

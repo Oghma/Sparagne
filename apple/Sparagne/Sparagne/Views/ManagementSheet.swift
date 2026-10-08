@@ -6,12 +6,12 @@ import SparagneCore
 /// and remove the copies of vaults no longer shared.
 ///
 /// Wallets, envelopes and categories live on the Setup tab, the recurring
-/// templates on the Ricorrenze tab (`docs/v2/UI.md` §2.3, §2.5); the sheet
+/// templates on the Ricorrenze tab; the sheet
 /// links to both instead of keeping a second, smaller copy of either.
 struct ManagementSheet: View {
     let store: AppStore
     /// Says what the account may do to this vault on the server — share,
-    /// rename, leave, delete (`docs/v2/SYNC.md` §3) — and which vaults are no
+    /// rename, leave, delete — and which vaults are no
     /// longer shared with it.
     let engine: SyncEngine?
     /// Requests one of `MainWindow`'s sheets; `MainWindow` owns the

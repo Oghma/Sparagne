@@ -1,7 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// When a template next wants something (`docs/v2/UI.md` §2.5): the
+/// When a template next wants something: the
 /// "Prossima" column of the templates table, and the inspector's "Prossime
 /// date".
 enum RecurringNext: Equatable {

@@ -172,8 +172,8 @@ pub struct TransactionFilter {
     /// Case-insensitive substring on note or category name.
     #[uniffi(default = None)]
     pub text: Option<String>,
-    /// Exact `person`: the PERSONA filter of the ledger
-    /// (`docs/v2/UI.md` §3). `None` = everybody.
+    /// Exact `person`: the PERSONA filter of the ledger.
+    /// `None` = everybody.
     #[uniffi(default = None)]
     pub person: Option<String>,
     /// Oldest first, the reading order of the ledger. Cursors keep working:

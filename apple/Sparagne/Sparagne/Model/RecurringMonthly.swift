@@ -2,8 +2,7 @@ import Foundation
 import SparagneCore
 
 /// What the templates that run cost and bring in, a month at a time: the
-/// "Uscite fisse al mese" and "Entrate fisse" of the Ricorrenze status line
-/// (`docs/v2/UI.md` §2.5).
+/// "Uscite fisse al mese" and "Entrate fisse" of the Ricorrenze status line.
 ///
 /// A month is not a whole number of days or weeks, so a daily or weekly
 /// template is spread over the average month: 365.25 days or 52.1775 weeks a

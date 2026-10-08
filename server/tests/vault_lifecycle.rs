@@ -1,5 +1,5 @@
 //! Renaming and deleting a vault across members, over the real router
-//! (`docs/v2/SYNC.md` §3 "Cancellazione del vault").
+//! (deleting a vault).
 //!
 //! Both are ordinary commands in the vault's log: the server applies them
 //! with the core, the members receive them with the next pull. The server

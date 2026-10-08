@@ -1,13 +1,13 @@
 import Foundation
 import SparagneCore
 
-/// The fields of the Ricorrenze inspector (`docs/v2/UI.md` §2.5), for a new
+/// The fields of the Ricorrenze inspector, for a new
 /// template or one being edited. A plain struct with no view in it, so what
 /// gets saved can be tested on its own.
 ///
 /// Editing sends only what changed (`patch(against:currency:)`), the
-/// convention `RecurringPatch` shares with `TransactionPatch`
-/// (`docs/v2/ARCH.md` §4). The patch has no `kind`, and cannot set a wallet
+/// convention `RecurringPatch` shares with `TransactionPatch`.
+/// The patch has no `kind`, and cannot set a wallet
 /// or an envelope back to none (`nil` means "unchanged"), so the draft never
 /// tries to: the kind is fixed once the template exists, and "any wallet" or
 /// Unallocated are offered only to a template that has none yet

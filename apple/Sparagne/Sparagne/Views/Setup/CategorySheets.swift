@@ -1,7 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The modal sheets of the CATEGORIE table (`docs/v2/UI.md` §2.3).
+/// The modal sheets of the CATEGORIE table.
 
 /// The subject of the merge sheet. `.sheet(item:)` needs an `Identifiable`
 /// and the core's `CategoryView` is not one.
@@ -12,7 +12,7 @@ struct MergeSubject: Identifiable {
 
 /// Merges `source` into a chosen target, previewing conflicts first and
 /// disabling Merge when the preview is not `ok`
-/// (`Core::preview_merge`, `docs/v2/ARCH.md` §4).
+/// (`Core::preview_merge`).
 ///
 /// Drawn with the form kit like the window's other sheets, so a dialog over
 /// the table reads as part of the same surface.

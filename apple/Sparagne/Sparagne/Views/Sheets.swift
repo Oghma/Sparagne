@@ -1,8 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// First run, and "New Vault…": a vault plus its first wallet
-/// (docs/v2/DISTILLATO_V1.md §3.6 introduces the three concepts here).
+/// First run, and "New Vault…": a vault plus its first wallet.
 struct OnboardingSheet: View {
     let isFirstRun: Bool
     /// The names of the other vaults the new one's owner already has
@@ -118,7 +117,7 @@ struct RenameSheet: View {
 /// The confirmation before `DeleteVault`, the one action no undo covers: the
 /// vault goes with its wallets, envelopes, transactions and recurring
 /// templates. It leaves each member's devices as they sync, while the server
-/// keeps its log so the deletion can reach them (`docs/v2/SYNC.md` §3-§4.6).
+/// keeps its log so the deletion can reach them.
 /// Reached from the Vault menu, the palette and the management sheet, so the
 /// wording lives in one place.
 struct DeleteVaultSheet: View {
@@ -146,7 +145,7 @@ struct DeleteVaultSheet: View {
 
 // MARK: - Vault names
 
-/// Vault names are labels (`docs/v2/SYNC.md` §3, "Nomi dei vault"): two
+/// Vault names are labels: two
 /// vaults may share one, even with the same owner. Nothing refuses a repeated
 /// name; the sheets warn, and the lists tell the two apart.
 enum VaultNaming {

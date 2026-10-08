@@ -1,7 +1,7 @@
 //! Client-side sync: outbox, push results, pull integration, rebase.
 //!
 //! Every test runs against a [`FakeServer`], a third in-memory [`Core`] that
-//! plays the part `docs/v2/SYNC.md` §3 gives the real server: apply a push in
+//! plays the part of the real server: apply a push in
 //! order with `execute`, hand out the log from a seq.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -33,7 +33,7 @@ fn quiet(server_last_seq: i64) -> SyncReport {
     }
 }
 
-/// The server of `SYNC.md` §3, minus HTTP and permissions.
+/// The sync server, minus HTTP and permissions.
 struct FakeServer {
     core: Core,
 }

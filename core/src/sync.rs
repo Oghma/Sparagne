@@ -1,7 +1,7 @@
 //! Sync protocol: wire types shared with the server and the client-side
 //! algorithm (outbox, push results, pull integration with rebase).
 //!
-//! See `docs/v2/SYNC.md`. The wire types are plain serde JSON; the client
+//! The wire types are plain serde JSON; the client
 //! never serializes commands itself, it asks the core for the push body and
 //! hands the server's responses back to it.
 
@@ -340,7 +340,7 @@ impl Core {
     /// Vaults the log still knows and the projection no longer holds: the ones
     /// a `DeleteVault` removed. Their outbox still has to reach the server,
     /// the deletion itself first of all, which is why the app pushes them
-    /// alongside the live vaults (`docs/v2/SYNC.md` §4 point 6).
+    /// alongside the live vaults.
     pub fn deleted_vaults(&self) -> Result<Vec<Uuid>> {
         let mut stmt = self.conn.prepare(
             "SELECT DISTINCT vault_id FROM commands
@@ -352,7 +352,7 @@ impl Core {
 
     /// Where the vault stands with the server. A vault this database has never
     /// seen reports all zeros rather than failing: the join flow asks before
-    /// the first pull creates it (`docs/v2/SYNC.md` §4 point 3).
+    /// the first pull creates it.
     pub fn sync_state(&self, vault_id: Uuid) -> Result<SyncState> {
         let (outbox, rejected) = self.conn.query_row(
             "SELECT COUNT(*) FILTER (WHERE status = 'applied' AND server_seq IS NULL),

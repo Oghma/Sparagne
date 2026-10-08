@@ -21,8 +21,7 @@ struct StatementImportSheet: View {
     /// banks call their exports.
     private static let fileTypes: [UTType] = [.commaSeparatedText, .tabSeparatedText, .plainText, .text]
 
-    /// Wider and taller than the other sheets: the review has eight columns
-    /// (`docs/v2/UI.md` §2.6).
+    /// Wider and taller than the other sheets: the review has eight columns.
     private static let size = CGSize(width: 880, height: 640)
 
     /// `model` is for previews, which open the sheet on a file already read.
