@@ -203,11 +203,13 @@ final class AppStore {
     var canWrite: Bool { currentVault != nil && !isReadOnly }
 
     /// The usernames of each vault's members, as the sync engine last heard
-    /// them from the server; empty while logged out (`SyncEngine
-    /// .publishMembers`).
-    private(set) var vaultMembers: [Uuid: [String]] = [:]
+    /// them from the server (`SyncEngine.publishMembers`). `nil` while
+    /// logged out and in a demo database, where no server checks a person;
+    /// logged in, a vault missing from it is one whose members are not
+    /// known yet.
+    private(set) var vaultMembers: [Uuid: [String]]?
 
-    func setVaultMembers(_ members: [Uuid: [String]]) {
+    func setVaultMembers(_ members: [Uuid: [String]]?) {
         vaultMembers = members
     }
 

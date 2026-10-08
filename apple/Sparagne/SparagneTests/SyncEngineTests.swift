@@ -552,7 +552,7 @@ struct SyncEngineTests {
         // Logged out, the server's list says nothing about the local name
         // the rows are signed with now: the names the vault knows stand in.
         await alice.engine.logOut()
-        #expect(alice.store.vaultMembers.isEmpty)
+        #expect(alice.store.vaultMembers == nil)
         #expect(alice.store.assignablePeople.first == AccountStore.systemAuthor)
         #expect(!alice.store.assignablePeople.contains("bob"))
     }

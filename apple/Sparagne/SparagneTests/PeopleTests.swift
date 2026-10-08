@@ -80,8 +80,27 @@ struct PeopleTests {
 
         // Logged out again: the engine hands over no members at all.
         await store.select(casa)
+        store.setVaultMembers(nil)
+        #expect(store.assignablePeople == ["matteo"])
+    }
+
+    @Test("Logged in before the members are heard, only the author may be named; logged out, the names the vault knows")
+    func loggedInWithoutMembers() async throws {
+        let store = try await Self.onboarded()
+        await store.setAuthor("elisa")
+        await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 1_000)
+        await store.setAuthor("matteo")
+        try await Self.template(owned: "paolo", in: store)
+
+        // Logged in, no list for this vault yet: elisa and paolo may have
+        // left it, and the server would refuse them.
         store.setVaultMembers([:])
         #expect(store.assignablePeople == ["matteo"])
+        #expect(throws: AppError.self) { try store.resolvePerson(named: "elisa") }
+
+        // Logged out, nobody checks: the names the vault knows.
+        store.setVaultMembers(nil)
+        #expect(store.assignablePeople == ["matteo", "elisa", "paolo"])
     }
 
     @Test("A typed name resolves exactly, then by a unique prefix, then by a unique substring")

@@ -486,7 +486,7 @@ final class SyncEngine {
     /// checks a person against its usernames, and a logged-out window signs
     /// its rows with a local name that is none of them.
     private func publishMembers() {
-        store.setVaultMembers(account.isLoggedIn ? account.vaultMembers : [:])
+        store.setVaultMembers(account.isLoggedIn ? account.vaultMembers : nil)
     }
 
     /// Asks the server who belongs to `vaultId`, remembers it and hands it

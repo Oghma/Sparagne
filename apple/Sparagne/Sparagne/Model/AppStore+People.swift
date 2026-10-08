@@ -8,12 +8,18 @@ extension AppStore {
     /// them from the server: the server refuses a row or a template put on
     /// anyone else (`not_a_member`), so nothing else is offered.
     ///
-    /// Otherwise (logged out, a demo database, a vault not pushed yet) there
-    /// is no list to check against, and the names the vault already knows
-    /// stand in: the current author first, then the persons of its rows and
-    /// the owners of its templates, each once.
+    /// Logged in before the list is heard (a vault not pushed yet, a first
+    /// launch offline), only the author is certain to pass: the persons of
+    /// old rows may be members who left, and offering them would only earn
+    /// a refusal at the next sync.
+    ///
+    /// Logged out or in a demo database no server checks anyone, and the
+    /// names the vault already knows stand in: the current author first,
+    /// then the persons of its rows and the owners of its templates, each
+    /// once.
     var assignablePeople: [String] {
-        if let vault = currentVault, let members = vaultMembers[vault.id], !members.isEmpty {
+        if let known = vaultMembers, let vault = currentVault {
+            guard let members = known[vault.id], !members.isEmpty else { return [currentAuthor] }
             return members
         }
         let owners = (recurringTemplates + pendingRecurringItems.map(\.template)).map(\.owner)
