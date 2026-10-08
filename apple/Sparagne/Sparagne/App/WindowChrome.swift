@@ -245,22 +245,9 @@ final class WindowChromeView: NSView {
         if buttonSpacing == nil {
             buttonSpacing = buttons[1].frame.minX - buttons[0].frame.minX
         }
-        // The title bar is 32 points on macOS 26 and later, enough for a
-        // 14-point button centred 22 points down; 28 on macOS 15, which is
-        // not, so there the container (and its title bar view) grows.
-        let buttonHeight = buttons[0].frame.height
-        let topInFrame = frameView.isFlipped ? 0 : frameView.bounds.height
-        let containerRect = container.frame
-        let containerBottomFromTop = frameView.isFlipped ? containerRect.maxY : topInFrame - containerRect.minY
-        let neededBottom = (barHeight + buttonHeight) / 2 + 1
-        if containerBottomFromTop < neededBottom {
-            var frame = containerRect
-            frame.size.height += neededBottom - containerBottomFromTop
-            if !frameView.isFlipped { frame.origin.y = topInFrame - frame.height }
-            container.frame = frame
-            titlebar.frame = container.bounds
-        }
-
+        // The title bar is 32 points tall on macOS 27, the app's minimum:
+        // room enough for a 14-point button centred 22 points down, so the
+        // container keeps the size AppKit gives it.
         let windowHeight = frameView.bounds.height
         let spacing = buttonSpacing ?? 20
         for (index, button) in buttons.enumerated() {

@@ -7,7 +7,7 @@ import PackageDescription
 // surface of the Rust core.
 let package = Package(
     name: "SparagneCore",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS("27.0")],
     products: [
         .library(name: "SparagneCore", targets: ["SparagneCore"])
     ],

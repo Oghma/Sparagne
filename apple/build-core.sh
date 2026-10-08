@@ -41,7 +41,7 @@ trap 'rm -rf "${work_dir}"' EXIT
 echo "==> Building ${CRATE} (release) for: ${TARGETS[*]}"
 # Must match `platforms:` in Package.swift, or the linker warns that the
 # archive was built for a newer macOS than the one being linked against.
-export MACOSX_DEPLOYMENT_TARGET=15.0
+export MACOSX_DEPLOYMENT_TARGET=27.0
 slices=()
 for target in "${TARGETS[@]}"; do
     cargo build --release --target "${target}" --package "${CRATE}"
