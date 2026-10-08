@@ -11,7 +11,8 @@ mod common;
 use common::{T0, all, at, entry, flow_cmd, wallet_cmd};
 use sparagne_core::{
     AliasView, CategoryView, Command, CommandEnvelope, Core, Currency, DomainError, Entry,
-    FlowMode, Frequency, RecurringView, Schedule, SyncReport, TransactionView, VaultSnapshot,
+    FlowMode, Frequency, RecurringView, Schedule, SyncReport, TransactionKind, TransactionPatch,
+    TransactionView, VaultSnapshot,
     sync::{PullResponse, PushOutcome, PushRequest, PushResponse, PushResult, SyncRecord},
 };
 use uuid::Uuid;
@@ -830,6 +831,107 @@ fn relabel_outbox_rewrites_the_author_of_what_is_not_yet_pushed() {
             .iter()
             .all(|t| t.created_by == "alice")
     );
+}
+
+#[test]
+fn relabelling_renames_the_people_the_outbox_named_by_the_local_name() {
+    let mut server = FakeServer::new();
+    let mut core = Core::open_in_memory().unwrap();
+    let vault = core
+        .execute(CommandEnvelope::create_vault(
+            "local",
+            "Casa",
+            Currency::Eur,
+        ))
+        .unwrap()
+        .result_id
+        .unwrap();
+    let wallet = exec(&mut core, vault, "local", wallet_cmd("Cash", 10_000));
+    let flow = unallocated(&core, vault);
+    let for_whom = |person: &str, amount: i64| {
+        Command::Expense(Entry {
+            person: Some(person.to_string()),
+            ..entry(amount, Some(wallet), Some(flow), Some("cibo"), T0)
+        })
+    };
+    // Logged out, the app offered the local name and somebody else's.
+    let mine = exec(&mut core, vault, "local", for_whom("local", 10_00));
+    let theirs = exec(&mut core, vault, "local", for_whom("elisa", 20_00));
+    // A patch that only moves the person to the local name: it must keep
+    // something to carry once relabelled.
+    exec(
+        &mut core,
+        vault,
+        "local",
+        Command::UpdateTransaction {
+            transaction_id: theirs,
+            patch: TransactionPatch {
+                person: Some(" local ".to_string()),
+                ..TransactionPatch::default()
+            },
+        },
+    );
+    let template = exec(
+        &mut core,
+        vault,
+        "local",
+        Command::CreateRecurring {
+            transaction_kind: TransactionKind::Expense,
+            amount: 5_00,
+            wallet_id: Some(wallet),
+            flow_id: None,
+            category: None,
+            note: None,
+            schedule: Schedule {
+                frequency: Frequency::Monthly { day: 1 },
+                interval: 1,
+                start_date: chrono::NaiveDate::from_ymd_opt(2023, 11, 1).unwrap(),
+                end_date: None,
+            },
+            owner: Some("local".to_string()),
+        },
+    );
+    let paid = exec(
+        &mut core,
+        vault,
+        "local",
+        Command::ExecuteRecurring {
+            recurring_id: template,
+            period_date: chrono::NaiveDate::from_ymd_opt(2023, 11, 1).unwrap(),
+            occurred_at: at(T0),
+            person: Some("local".to_string()),
+        },
+    );
+
+    core.relabel_outbox(vault, "alice").unwrap();
+
+    let outbox = core.outbox(vault).unwrap();
+    assert!(outbox.iter().all(|r| r.envelope.author == "alice"));
+    let named: Vec<&str> = outbox
+        .iter()
+        .flat_map(|r| r.envelope.command.named_people())
+        .collect();
+    assert_eq!(named, ["alice", "elisa", "alice", "alice", "alice"]);
+    let patch = outbox
+        .iter()
+        .find_map(|r| match &r.envelope.command {
+            Command::UpdateTransaction { patch, .. } => Some(patch.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert!(!patch.is_empty());
+    assert_eq!(patch.person.as_deref(), Some("alice"));
+
+    let person = |id: Uuid| core.transaction(vault, id).unwrap().person;
+    assert_eq!(person(mine), "alice");
+    assert_eq!(person(theirs), "alice");
+    assert_eq!(person(paid), "alice");
+    assert_eq!(core.list_recurring(vault, true).unwrap()[0].owner, "alice");
+
+    // The server takes the relabelled log and both sides agree.
+    sync(&mut core, &mut server, vault);
+    assert_eq!(core.sync_state(vault).unwrap().rejected, 0);
+    assert_eq!(projection(&core, vault), projection(&server.core, vault));
 }
 
 // ---------------------------------------------------------------------------

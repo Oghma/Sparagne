@@ -117,7 +117,7 @@ fn people_are_distinct_and_sorted_and_skip_voided_rows() {
 // -- flow x person ---------------------------------------------------------
 
 #[test]
-fn flow_person_totals_splits_by_envelope_and_author_with_net_expense() {
+fn flow_person_totals_splits_by_envelope_and_person_with_net_expense() {
     let s = shared_month();
     let rows =
         s.fx.core
@@ -200,6 +200,60 @@ fn flow_person_totals_rejects_an_inverted_range() {
             .flow_person_totals(s.fx.vault, utc(T0 + DAY), utc(T0))
             .unwrap_err();
     assert!(matches!(err, DomainError::InvalidCommand(_)));
+}
+
+#[test]
+fn every_aggregation_follows_the_person_not_who_recorded_the_row() {
+    let mut s = shared_month();
+    let vault = s.fx.vault;
+    // matteo records elisa's dinner on varie: hers in every view.
+    let mut dinner = entry(
+        40,
+        Some(s.fx.wallet),
+        Some(s.varie),
+        Some("Ristoranti"),
+        T0 + 5 * DAY,
+    );
+    dinner.person = Some("elisa".to_string());
+    run_as(&mut s.fx.core, vault, "matteo", Command::Expense(dinner));
+    let (from, to) = (utc(T0 - DAY), utc(T0 + 30 * DAY));
+    let elisa = || Some("elisa".to_string());
+    let core = &s.fx.core;
+
+    let matrix = core.flow_person_totals(vault, from, to).unwrap();
+    let cell = |flow: Uuid, person: &str| {
+        matrix
+            .iter()
+            .find(|r| r.flow_id == flow && r.person == person)
+            .map(|r| r.expense)
+    };
+    assert_eq!(cell(s.varie, "elisa"), Some(40));
+    assert_eq!(cell(s.varie, "matteo"), Some(25));
+    assert_eq!(cell(s.cash, "elisa"), Some(30));
+
+    let categories = core.category_totals(vault, from, to, elisa()).unwrap();
+    assert_eq!(
+        categories
+            .iter()
+            .map(|c| (c.name.as_str(), c.expense))
+            .collect::<Vec<_>>(),
+        [("Ristoranti", 40), ("Spesa", 30)]
+    );
+    let top = core.top_expenses(vault, from, to, elisa(), 10).unwrap();
+    assert_eq!(
+        top.iter()
+            .map(|t| (t.amount, t.person.as_str()))
+            .collect::<Vec<_>>(),
+        [(40, "elisa"), (30, "elisa")]
+    );
+    let buckets = core.bucket_totals(vault, vec![from, to], elisa()).unwrap();
+    assert_eq!(buckets[0].expense, 70);
+
+    let year = core.year_breakdown(vault, vec![from, to]).unwrap();
+    let elisa_year = year.iter().find(|r| r.person == "elisa").unwrap();
+    assert_eq!(elisa_year.cash_expense, 70);
+    let matteo_year = year.iter().find(|r| r.person == "matteo").unwrap();
+    assert_eq!(matteo_year.cash_expense, 90 + 25);
 }
 
 // -- categories ------------------------------------------------------------
