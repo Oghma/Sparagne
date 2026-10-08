@@ -11,7 +11,7 @@ import SparagneCore
 enum QuickAddSummary {
     static func describe(_ parsed: QuickAdd, currency: Currency, today: Date = Date()) -> String {
         switch parsed {
-        case .entry(let kind, let amount, let note, let category, let wallet, let flow, let date):
+        case .entry(let kind, let amount, let note, let category, let wallet, let flow, let date, _):
             var parts = ["\(marker(kind)) \(formatMoney(minor: amount, currency: currency))"]
             if let note, !note.isEmpty { parts.append(note) }
             if let category, !category.isEmpty { parts.append("#\(category)") }
@@ -58,7 +58,7 @@ enum QuickAddSummary {
     /// line has no `#category` of its own. `nil` for a transfer, which has no
     /// category, and for a line that already says one.
     static func noteWithoutCategory(_ parsed: QuickAdd) -> String? {
-        guard case .entry(_, _, let note, let category, _, _, _) = parsed,
+        guard case .entry(_, _, let note, let category, _, _, _, _) = parsed,
               category?.isEmpty ?? true,
               let note = note?.trimmingCharacters(in: .whitespacesAndNewlines),
               !note.isEmpty

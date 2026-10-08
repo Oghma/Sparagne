@@ -92,7 +92,7 @@ private struct E2EPeer {
                 walletId: nil,
                 flowId: nil,
                 text: nil,
-                author: nil,
+                person: nil,
                 ascending: true
             ),
             limit: 500,

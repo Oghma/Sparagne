@@ -43,7 +43,7 @@ enum QuickAddTokens {
         var tokens: [QuickAddToken]
         let when: DateSpec?
         switch parsed {
-        case .entry(let kind, let amount, _, let category, let wallet, let flow, let date):
+        case .entry(let kind, let amount, _, let category, let wallet, let flow, let date, _):
             tokens = [
                 QuickAddToken(role: .kind, label: nil, value: kindName(kind)),
                 QuickAddToken(role: .amount, label: nil, value: money(amount, currency)),

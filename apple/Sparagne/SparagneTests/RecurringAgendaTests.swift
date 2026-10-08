@@ -37,7 +37,8 @@ enum RecurringFixture {
             note: note,
             schedule: schedule,
             enabled: enabled,
-            archived: archived
+            archived: archived,
+            owner: "matteo"
         )
     }
 

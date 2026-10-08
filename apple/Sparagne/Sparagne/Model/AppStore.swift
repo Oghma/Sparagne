@@ -616,7 +616,7 @@ final class AppStore {
             walletId: nil,
             flowId: nil,
             text: text.isEmpty ? nil : text,
-            author: person,
+            person: person,
             ascending: true
         )
     }
@@ -1201,7 +1201,8 @@ final class AppStore {
                 vaultId: vault.id,
                 parsed: parsed,
                 now: Date(),
-                defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId)
+                defaults: QuickAddDefaults(walletId: lastWalletId, flowId: lastFlowId),
+                people: authors
             )
             // A row like one typed in the grid, and undone the same way.
             let minted = await core.envelope(vaultId: vault.id, resolved.command)

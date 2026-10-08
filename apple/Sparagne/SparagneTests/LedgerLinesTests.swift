@@ -28,6 +28,7 @@ struct LedgerLinesTests {
             category: "Spesa",
             categoryIsSystem: false,
             note: note,
+            person: "matteo",
             createdBy: "matteo",
             voided: false,
             walletId: "wallet",
@@ -55,7 +56,8 @@ struct LedgerLinesTests {
             note: note,
             schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: "2026-01-01", endDate: nil),
             enabled: true,
-            archived: false
+            archived: false,
+            owner: "matteo"
         )
         return DuePeriod(template: template, date: date)
     }

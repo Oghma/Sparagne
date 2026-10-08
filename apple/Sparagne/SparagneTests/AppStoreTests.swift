@@ -288,7 +288,7 @@ struct AppStoreTests {
             Issue.record("expected the line to parse")
             return
         }
-        guard case .entry(let kind, let amount, let note, _, _, _, _) = parsed else {
+        guard case .entry(let kind, let amount, let note, _, _, _, _, _) = parsed else {
             Issue.record("expected an entry")
             return
         }

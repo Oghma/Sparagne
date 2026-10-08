@@ -323,24 +323,27 @@ actor CoreActor {
     }
 
     /// The people who appear in the PERSONA column.
-    func authors(vaultId: Uuid) async throws -> [String] {
-        try await visit { try $0.authors(vaultId: vaultId) }
+    func people(vaultId: Uuid) async throws -> [String] {
+        try await visit { try $0.people(vaultId: vaultId) }
     }
 
     /// Turns a parsed quick-add line into a command plus the ids its names
-    /// resolved to, against the vault's active entities.
+    /// resolved to, against the vault's active entities and `people`, the
+    /// names a `!name` may pick.
     func resolveQuickAdd(
         vaultId: Uuid,
         parsed: QuickAdd,
         now: Date,
-        defaults: QuickAddDefaults
+        defaults: QuickAddDefaults,
+        people: [String]
     ) async throws -> ResolvedQuickAdd {
         try await visit {
             try $0.resolveQuickAdd(
                 vaultId: vaultId,
                 parsed: parsed,
                 now: CoreDate.offset(now),
-                defaults: defaults
+                defaults: defaults,
+                people: people
             )
         }
     }
@@ -370,7 +373,7 @@ actor CoreActor {
                     limit: request.limit,
                     cursor: nil
                 ),
-                authors: try handle.authors(vaultId: vaultId),
+                authors: try handle.people(vaultId: vaultId),
                 pendingRecurring: try handle.pendingRecurring(vaultId: vaultId, today: request.today),
                 flowPerson: try handle.flowPersonTotals(
                     vaultId: vaultId,
