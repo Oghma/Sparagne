@@ -18,36 +18,21 @@ struct LeaveVaultSheet: View {
     @State private var failureDetail: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "Leave Vault")).font(.headline)
-            Text(String(localized: "Leave \u{201C}\(vault.name)\u{201D}?"))
-            Text(String(localized: "Your changes still waiting to sync are sent first. Then the vault is removed from this Mac and you stop receiving its changes. Its owner and the other members keep it; only the owner can share it with you again."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
+        FormSheet(String(localized: "Leave Vault")) {
+            ConfirmationText(
+                question: String(localized: "Leave \u{201C}\(vault.name)\u{201D}?"),
+                consequences: String(localized: "Your changes still waiting to sync are sent first. Then the vault is removed from this Mac and you stop receiving its changes. Its owner and the other members keep it; only the owner can share it with you again.")
+            )
             if let failure {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(failure).font(.callout).foregroundStyle(.red)
-                    if let failureDetail {
-                        Text(failureDetail).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .fixedSize(horizontal: false, vertical: true)
+                FormNote(failure, tone: .negative, detail: failureDetail, indented: false)
             }
-
-            HStack {
-                if busy { ProgressView().controlSize(.small) }
-                Spacer()
-                Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                // Destructive, so ↩ does not trigger it.
-                Button(String(localized: "Leave"), role: .destructive) { leave() }
-                    .disabled(busy)
-            }
+        } footer: {
+            if busy { ProgressView().controlSize(.small) }
+            FormCancelButton { dismiss() }
+            // Destructive, so ↩ does not trigger it.
+            FormDestructiveButton(title: String(localized: "Leave")) { leave() }
+                .disabled(busy)
         }
-        .padding(20)
-        .frame(width: 420)
     }
 
     private func leave() {
