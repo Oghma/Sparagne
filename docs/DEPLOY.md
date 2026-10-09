@@ -334,6 +334,32 @@ of §6.1**:
    what reached the server in the meantime. The same holds for the local
    database of an app already upgraded.
 
+### 6.3 Moving to schema v5 (allocation plan)
+
+This version takes the core's schema to version 5: two new tables,
+`allocation_plans` (a vault's plan) and `allocation_runs` (the periods
+decided, one row per plan and period), and five new command kinds in the
+log: `create_allocation_plan`, `update_allocation_plan`,
+`execute_allocation`, `skip_allocation` and `reopen_allocation`. The order
+matters, and it is **the same as §6.2**:
+
+1. **Back up the server** (§4): `docker compose exec sparagne backup.sh`,
+   or `backup.sh` without Docker.
+2. **The server first, then the apps.** An old server refuses a push that
+   carries a command kind it does not know with `400`, so nobody could sync
+   an allocation. The other way round is worse: an old app cannot pull a
+   vault whose log holds one of these commands.
+3. **Then every app, right away.** Upgrade every Mac that syncs as soon as
+   the server is up.
+4. **Nobody creates a plan until every Mac of the vault runs the new app.**
+   Once the plan is in the log, an app of the previous version stops pulling
+   that vault.
+5. **Going back is a restore.** A v5 database does not open with a binary
+   or an app of the previous version (§6 point 2): going back means putting
+   the old binary back **and** restoring (§5) the backup of point 1, losing
+   what reached the server in the meantime. The same holds for the local
+   database of an app already upgraded.
+
 ## 7. Logs and health check
 
 - Structured logs on stdout through `tracing`, controlled by `RUST_LOG`

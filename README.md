@@ -71,6 +71,20 @@ cargo test
 cargo clippy --workspace --all-targets
 ```
 
+### Allocation plan
+
+The Riparto tab (⌘4) shares out the incomes that reached Unallocated among
+the envelopes, once per period of a schedule (usually monthly). A plan is an
+ordered list of lines, each an envelope with a fixed amount, a percentage of
+the total or whatever fills it up to its cap; the order is the priority when
+the total runs short. Nothing moves by itself: when a period is due the tab
+shows what each line would get, and you share it out (one transfer per
+envelope), skip the period, or reopen the latest decision to undo it. The
+tabs are Riepilogo (⌘1), Mastro (⌘2), Ricorrenze (⌘3), Riparto (⌘4) and
+Setup (⌘5). The plan lives in the vault, so every member sees it and a
+period is decided once; before creating one, upgrade every Mac that syncs
+(`docs/DEPLOY.md` §6.3).
+
 ### Statements, full export and backup
 
 File › Import Statement… (⇧⌘I) reads a bank or card CSV (UTF-8, falling back
