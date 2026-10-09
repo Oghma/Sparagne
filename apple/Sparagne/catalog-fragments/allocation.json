@@ -23,7 +23,7 @@
   "%@ short": {"en": "%@ short", "it": "mancano %@"},
   "A fixed line needs an amount above zero": {"en": "A fixed line needs an amount above zero", "it": "Una riga fissa vuole un importo maggiore di zero"},
   "A percentage goes from 0,01 to 100": {"en": "A percentage goes from 0,01 to 100", "it": "Una percentuale va da 0,01 a 100"},
-  "Add an envelope…": {"en": "Add an envelope…", "it": "Aggiungi busta…"},
+  "Add envelope…": {"en": "Add envelope…", "it": "Aggiungi busta…"},
   "Allocation plan": {"en": "Allocation plan", "it": "Piano di riparto"},
   "Amount or percentage": {"en": "Amount or percentage", "it": "Importo o percentuale"},
   "Balance after": {"en": "Balance after", "it": "Saldo dopo"},

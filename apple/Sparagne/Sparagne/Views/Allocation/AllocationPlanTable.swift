@@ -351,7 +351,7 @@ struct AllocationPlanTable: View {
                     .foregroundStyle(Ink.text3)
                     .accessibilityHidden(true)
             }
-            envelopeMenu(draft: $newLine, key: nil, placeholder: String(localized: "Add an envelope\u{2026}"))
+            envelopeMenu(draft: $newLine, key: nil, placeholder: String(localized: "Add envelope\u{2026}"))
             if active {
                 ruleEditor(draft: $newLine, focusKey: .newLine)
             } else {
