@@ -498,6 +498,7 @@ fn a_version_3_database_migrates_to_what_its_log_replays_to() {
              ALTER TABLE recurring_templates DROP COLUMN owner;
              DROP TABLE allocation_runs;
              DROP TABLE allocation_plans;
+             DROP INDEX ix_transactions_command;
              PRAGMA user_version = 3;",
         )
         .unwrap();
