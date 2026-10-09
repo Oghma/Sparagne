@@ -279,9 +279,9 @@ struct AllocationPlanningTests {
         #expect(AllocationText.toShareOut(1, bundle: it, locale: italian) == "1 da distribuire")
 
         #expect(AllocationText.incomes(2, after: "2026-08-27", since: "2026-06-27", bundle: it, locale: italian)
-            == "2 entrate arrivate in Non allocato dopo gio 27 ago")
+            == "2 entrate arrivate in Non allocato dopo l'ultimo riparto (gio 27 ago)")
         #expect(AllocationText.incomes(1, after: nil, since: "2026-06-27", bundle: it, locale: italian)
-            == "1 entrata arrivata in Non allocato da sab 27 giu")
+            == "1 entrata arrivata in Non allocato dal sab 27 giu")
         #expect(AllocationText.incomes(1, after: nil, since: "2026-06-27", bundle: en, locale: english)
             == "1 income reached Unallocated since Sat, Jun 27")
     }
@@ -370,8 +370,8 @@ private enum AllocationCatalog {
                 "%lld incomes reached Unallocated": ("%lld entrata arrivata in Non allocato", "%lld entrate arrivate in Non allocato"),
             ],
             strings: [
-                "%@ after %@": "%1$@ dopo %2$@",
-                "%@ since %@": "%1$@ da %2$@",
+                "%@ after the last allocation (%@)": "%1$@ dopo l'ultimo riparto (%2$@)",
+                "%@ since %@": "%1$@ dal %2$@",
             ]
         )
     }

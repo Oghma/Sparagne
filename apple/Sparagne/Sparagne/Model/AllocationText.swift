@@ -73,9 +73,11 @@ enum AllocationText {
 
     // MARK: - The period to share out
 
-    /// `"2 entrate arrivate in Non allocato dopo gio 27 ago"`: after the
-    /// latest decided period, or since the plan's start before the first.
-    /// A weekday leads the day, so the Italian needs no article.
+    /// `"2 entrate arrivate in Non allocato dopo l'ultimo riparto (gio 27
+    /// ago)"`: recorded after the latest decision, whatever day they carry,
+    /// which is how the core counts them; before the first decision, from the
+    /// plan's start (`"dal sab 27 giu"`), the one rule that is a date. A
+    /// weekday leads the day, so the Italian needs no elision.
     static func incomes(
         _ count: Int,
         after decided: NaiveDate?,
@@ -89,7 +91,7 @@ enum AllocationText {
         let arrived = String(localized: "\(count) incomes reached Unallocated", bundle: bundle, locale: locale)
         if let decided {
             let day = RecurringDayText.weekday(decided, locale: locale)
-            return String(localized: "\(arrived) after \(day)", bundle: bundle, locale: locale)
+            return String(localized: "\(arrived) after the last allocation (\(day))", bundle: bundle, locale: locale)
         }
         let day = RecurringDayText.weekday(start, locale: locale)
         return String(localized: "\(arrived) since \(day)", bundle: bundle, locale: locale)

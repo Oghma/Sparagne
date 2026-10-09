@@ -1,6 +1,6 @@
 {
-  "%@ after %@": {"en": "%1$@ after %2$@", "it": "%1$@ dopo %2$@"},
-  "%@ since %@": {"en": "%1$@ since %2$@", "it": "%1$@ da %2$@"},
+  "%@ after the last allocation (%@)": {"en": "%1$@ after the last allocation (%2$@)", "it": "%1$@ dopo l'ultimo riparto (%2$@)"},
+  "%@ since %@": {"en": "%1$@ since %2$@", "it": "%1$@ dal %2$@"},
   "%lld incomes reached Unallocated": {
     "en": {"one": "%lld income reached Unallocated", "other": "%lld incomes reached Unallocated"},
     "it": {"one": "%lld entrata arrivata in Non allocato", "other": "%lld entrate arrivate in Non allocato"}
