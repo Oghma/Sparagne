@@ -726,6 +726,19 @@ fn void_transaction(
             "transaction already voided".to_string(),
         ));
     }
+    void_live_transaction(tx, env, transaction_id, now)
+}
+
+/// Takes a live transaction of the vault out of the balances and marks it
+/// voided by the command's author. Its current legs are reversed with no rule
+/// checks, so a row edited since it was written comes out exactly too. The
+/// caller has checked that the row exists and is not voided yet.
+fn void_live_transaction(
+    tx: &Transaction<'_>,
+    env: &CommandEnvelope,
+    transaction_id: Uuid,
+    now: i64,
+) -> Result<()> {
     let legs: Vec<(String, Uuid, i64)> = {
         let mut stmt = tx.prepare(
             "SELECT target_kind, target_id, amount FROM legs WHERE transaction_id = ?1 ORDER BY ordinal",
