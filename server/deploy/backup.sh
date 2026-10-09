@@ -19,6 +19,10 @@
 # The dump then lands directly on the host under ./backups/<timestamp>/.
 set -euo pipefail
 
+# The retention's `find` returns to the starting directory, which may be one
+# this user cannot enter (root's home, for a `runuser` from there).
+cd /
+
 DATA_DIR="${DATA_DIR:-/data}"
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
