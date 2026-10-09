@@ -142,17 +142,20 @@ struct AllocationTab: View {
         )
     }
 
-    /// Sends `new` as the plan's whole list; the first one creates the plan
-    /// on the inspector's schedule, or on today's default while that one is
-    /// not a schedule. Says whether it went through.
-    private func save(_ new: [AllocationLine]) async -> Bool {
+    /// Sends `new` as the plan's whole list, which the table shows from now
+    /// on; the first one creates the plan on the inspector's schedule, or on
+    /// today's default while that one is not a schedule. The task says
+    /// whether it went through.
+    private func save(_ new: [AllocationLine]) -> Task<Bool, Never> {
         sentLines = new
         sends += 1
         let send = sends
         let start = schedule.isValid ? schedule.schedule : AllocationScheduleDraft(today: today).schedule
-        let saved = await store.saveAllocationLines(new, schedule: start)
-        if send == sends { sentLines = nil }
-        return saved
+        return Task {
+            let saved = await store.saveAllocationLines(new, schedule: start)
+            if send == sends { sentLines = nil }
+            return saved
+        }
     }
 }
 

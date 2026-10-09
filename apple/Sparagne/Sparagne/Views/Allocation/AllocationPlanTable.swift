@@ -4,10 +4,10 @@ import SparagneCore
 /// Column geometry of the plan's table, shared by the heading, the rows and
 /// the totals. Busta takes what is left. At the window's narrowest width the
 /// card has about 800 points beside the inspector; the widths below add up
-/// to 774 with Busta at its minimum.
+/// to 794 with Busta at its minimum.
 private enum PlanColumn {
     static let order: CGFloat = 28
-    static let envelopeMinimum: CGFloat = 100
+    static let envelopeMinimum: CGFloat = 120
     /// The open row's Fisso / % / Al tetto and the value box beside it.
     static let rule: CGFloat = 222
     static let room: CGFloat = 88
@@ -35,8 +35,9 @@ struct AllocationPlanTable: View {
     let preview: AllocationPreview?
     /// A period is due: a shortfall is news, and warns.
     let due: Bool
-    /// Sends the whole list; says whether it went through.
-    let save: ([AllocationLine]) async -> Bool
+    /// Sends the whole list, which the table shows at once; the task says
+    /// whether it went through.
+    let save: ([AllocationLine]) -> Task<Bool, Never>
 
     /// The open line, by the envelope it had when it was opened; the empty
     /// row is apart (`newLine`), so the two drafts never overwrite each
@@ -270,16 +271,20 @@ struct AllocationPlanTable: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(chosen ?? placeholder)
+                        .lineLimit(1)
                         .foregroundStyle(chosen == nil ? Ink.text3 : Ink.text)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(Ink.text3)
+                    Spacer(minLength: 0)
                 }
                 .font(Face.ui(12))
+                .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
+            // As in `FormMenu`: the plain style keeps the label as drawn.
+            .menuStyle(.button)
+            .buttonStyle(.plain)
             .menuIndicator(.hidden)
-            .fixedSize()
             .accessibilityLabel(String(localized: "Envelope"))
             .accessibilityValue(chosen ?? "")
         }
@@ -488,8 +493,9 @@ struct AllocationPlanTable: View {
             let typed = newLine
             newLine = AllocationLineDraft()
             focus = nil
+            let saving = save(updated)
             Task {
-                if !(await save(updated)) { newLine = typed }
+                if !(await saving.value) { newLine = typed }
             }
         } catch {
             refuse(error, at: .newLine)
@@ -534,7 +540,7 @@ struct AllocationPlanTable: View {
     }
 
     private func send(_ updated: [AllocationLine]) {
-        Task { await save(updated) }
+        _ = save(updated)
     }
 
     private func refuse(_ error: Error, at key: PlanFocus) {
