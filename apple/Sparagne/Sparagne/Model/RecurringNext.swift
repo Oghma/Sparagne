@@ -43,14 +43,36 @@ enum RecurringNext: Equatable {
         let isDue: Bool
     }
 
+    /// The most periods `due` looks at: as many as the core gives in one call.
+    static let dueLimit: UInt32 = 1_000
+
+    /// The periods of `schedule` up to `today` that are neither in `handled`
+    /// (recorded or skipped already) nor past the end date: what a running
+    /// template would have due once saved with this schedule, the same list
+    /// `Core::pending_recurring` keeps. A start moved back to January puts
+    /// every month since then here.
+    ///
+    /// Only the first `dueLimit` periods from the start are looked at, which
+    /// for a daily schedule is under three years.
+    ///
+    /// Throws the core's refusal of an invalid schedule.
+    static func due(
+        schedule: Schedule,
+        today: NaiveDate,
+        handled: Set<NaiveDate>,
+        occurrences: ScheduleOccurrences
+    ) throws -> [NaiveDate] {
+        try occurrences(schedule, schedule.startDate, dueLimit)
+            .prefix { $0 <= today }
+            .filter { !handled.contains($0) }
+    }
+
     /// The next `count` dates of a schedule, the periods still due first.
     ///
-    /// `due` is the saved template's due periods, and only means something
-    /// while the schedule on screen is the saved one: the caller passes `[]`
-    /// once the draft's schedule differs, since the core works the due list
-    /// out again from the schedule that gets saved. `from` is where the
-    /// future starts (today, or tomorrow when today's period has been
-    /// decided, as in `of`).
+    /// `due` is the periods waiting for a decision: the saved template's,
+    /// while the schedule on screen is the saved one, or those `due` works
+    /// out from the schedule being edited. `from` is where the future starts
+    /// (today, or tomorrow when today's period has been decided, as in `of`).
     ///
     /// Throws the core's refusal of an invalid schedule, which the inspector
     /// shows in place of the dates.

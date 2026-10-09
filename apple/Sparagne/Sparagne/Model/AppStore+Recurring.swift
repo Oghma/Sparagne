@@ -63,6 +63,15 @@ extension AppStore {
         pendingRecurringItems.first { $0.template.id == templateId }?.due.sorted() ?? []
     }
 
+    /// The periods of one template already recorded or skipped: the ones the
+    /// inspector leaves out when it works out the due periods of a schedule
+    /// being edited. Empty without a vault, or when the core refuses.
+    func handledPeriods(of templateId: Uuid) async -> Set<NaiveDate> {
+        guard let vault = currentVault else { return [] }
+        let runs = (try? await core.recurringRuns(vaultId: vault.id, recurringId: templateId)) ?? []
+        return Set(runs.map(\.periodDate))
+    }
+
     /// The Attiva switch: pauses or resumes a template, sending `enabled`
     /// and nothing else. A paused template is never due.
     func setRecurringEnabled(_ templateId: Uuid, _ enabled: Bool) async {

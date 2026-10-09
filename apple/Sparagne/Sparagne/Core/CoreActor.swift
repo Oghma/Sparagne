@@ -307,6 +307,11 @@ actor CoreActor {
         try await visit { try $0.pendingRecurring(vaultId: vaultId, today: today) }
     }
 
+    /// The periods of one template already recorded or skipped, oldest first.
+    func recurringRuns(vaultId: Uuid, recurringId: Uuid) async throws -> [RecurringRunView] {
+        try await visit { try $0.recurringRuns(vaultId: vaultId, recurringId: recurringId) }
+    }
+
     func transactions(
         vaultId: Uuid,
         filter: TransactionFilter,
