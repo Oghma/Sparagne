@@ -7,13 +7,13 @@
 
 mod common;
 
-use chrono::NaiveDate;
+use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
 use common::*;
 use sparagne_core::{
     AllocationBase, AllocationLine, AllocationPlanPatch, AllocationPlanView, AllocationPreview,
     AllocationRule, AllocationRunView, Command, CommandEnvelope, Core, Currency, DomainError,
-    FlowMode, FlowView, LineStatus, PendingAllocation, PreviewLine, RunOutcome, TransactionKind,
-    TransactionPatch, TransactionView, VaultSnapshot,
+    FlowMode, FlowView, LineStatus, PendingAllocation, PreviewLine, RunOutcome, TransactionFilter,
+    TransactionKind, TransactionPatch, TransactionView, VaultSnapshot,
     allocation::{FULL_PERCENT_BP, resolve},
     headroom, replay,
 };
@@ -212,31 +212,36 @@ fn room_of(flow: &FlowView) -> Option<i64> {
 
 /// `remaining` starts at the total; every line takes
 /// `min(wanted, room, remaining)`, with `wanted` the fixed amount, the
-/// percent of the whole total rounded down, or the headroom.
+/// percent of the whole total rounded down, or the headroom. A line that
+/// gets nothing by its status asks for nothing, has no room and keeps its
+/// envelope's balance (0 for an envelope the vault does not have); an ask
+/// below zero counts as nothing.
 fn reference(
     total: i64,
     lines: &[AllocationLine],
     flows: &[FlowView],
     unallocated: i64,
 ) -> AllocationPreview {
-    let mut remaining = total;
+    let mut remaining = total.max(0);
     let mut percent_total_bp = 0;
     let mut out = Vec::with_capacity(lines.len());
     for line in lines {
         if let AllocationRule::Percent { basis_points } = line.rule {
             percent_total_bp += basis_points;
         }
-        let nothing = |status: LineStatus| PreviewLine {
+        let nothing = |balance: i64, status: LineStatus| PreviewLine {
             flow_id: line.flow_id,
             rule: line.rule,
             wanted: 0,
             room: None,
             amount: 0,
-            balance_after: 0,
+            balance_after: balance,
             status,
         };
+        let known = flows.iter().find(|f| f.id == line.flow_id);
         let Some(flow) = live(flows, line.flow_id) else {
-            out.push(nothing(LineStatus::Archived));
+            let balance = known.map_or(0, |f| f.balance);
+            out.push(nothing(balance, LineStatus::Archived));
             continue;
         };
         let head = room_of(flow);
@@ -249,11 +254,12 @@ fn reference(
             AllocationRule::FillToCap => match head {
                 Some(head) => head,
                 None => {
-                    out.push(nothing(LineStatus::NoCap));
+                    out.push(nothing(flow.balance, LineStatus::NoCap));
                     continue;
                 }
             },
         };
+        let wanted = wanted.max(0);
         let room = head.map(|h| h.max(0));
         let mut amount = wanted.min(remaining);
         if let Some(room) = room {
@@ -288,35 +294,6 @@ fn reference(
     }
 }
 
-/// What the contract pins of a line: everything for a line that gets money
-/// or runs short; only the amount and the status for an `Archived` or
-/// `NoCap` line, whose `wanted`, `room` and `balance_after` the spec does
-/// not define.
-#[derive(Debug, PartialEq, Eq)]
-struct Pinned {
-    flow_id: Uuid,
-    rule: AllocationRule,
-    amount: i64,
-    status: LineStatus,
-    detail: Option<(i64, Option<i64>, i64)>,
-}
-
-fn pin(line: &PreviewLine) -> Pinned {
-    let detail = match line.status {
-        LineStatus::Archived | LineStatus::NoCap => None,
-        LineStatus::Full | LineStatus::CapLimited | LineStatus::Short => {
-            Some((line.wanted, line.room, line.balance_after))
-        }
-    };
-    Pinned {
-        flow_id: line.flow_id,
-        rule: line.rule,
-        amount: line.amount,
-        status: line.status,
-        detail,
-    }
-}
-
 fn assert_same_preview(got: &AllocationPreview, want: &AllocationPreview, context: &str) {
     assert_eq!(got.total, want.total, "{context}: total");
     assert_eq!(got.distributed, want.distributed, "{context}: distributed");
@@ -329,9 +306,7 @@ fn assert_same_preview(got: &AllocationPreview, want: &AllocationPreview, contex
         got.percent_total_bp, want.percent_total_bp,
         "{context}: percent_total_bp"
     );
-    let got_lines: Vec<Pinned> = got.lines.iter().map(pin).collect();
-    let want_lines: Vec<Pinned> = want.lines.iter().map(pin).collect();
-    assert_eq!(got_lines, want_lines, "{context}: lines");
+    assert_eq!(got.lines, want.lines, "{context}: lines");
 }
 
 fn amounts(preview: &AllocationPreview) -> Vec<i64> {
@@ -387,12 +362,23 @@ fn every_line_stays_within_its_wanted_its_room_and_what_is_left_of_the_total() {
                 LineStatus::Archived => {
                     assert!(live(&world.flows, line.flow_id).is_none(), "{at}: archived");
                     assert_eq!(line.amount, 0, "{at}: archived gets nothing");
+                    assert_eq!(line.wanted, 0, "{at}: archived asks for nothing");
+                    assert_eq!(line.room, None, "{at}: archived has no room");
+                    let known = world.flows.iter().find(|f| f.id == line.flow_id);
+                    assert_eq!(
+                        line.balance_after,
+                        known.map_or(0, |f| f.balance),
+                        "{at}: archived keeps its balance"
+                    );
                 }
                 LineStatus::NoCap => {
                     let flow = live(&world.flows, line.flow_id).unwrap();
                     assert_eq!(planned.rule, AllocationRule::FillToCap, "{at}: no cap");
                     assert_eq!(flow.mode, FlowMode::Unlimited, "{at}: no cap");
                     assert_eq!(line.amount, 0, "{at}: no cap gets nothing");
+                    assert_eq!(line.wanted, 0, "{at}: no cap asks for nothing");
+                    assert_eq!(line.room, None, "{at}: no cap has no room");
+                    assert_eq!(line.balance_after, flow.balance, "{at}: no cap keeps");
                 }
                 LineStatus::Full | LineStatus::CapLimited | LineStatus::Short => {
                     let flow = live(&world.flows, line.flow_id).unwrap();
@@ -843,29 +829,86 @@ fn extreme_totals_balances_and_caps_never_make_the_resolver_panic() {
                 let preview = resolve(total, &every_line[..k], &flows, balance);
                 assert_eq!(preview.lines.len(), k);
                 for (i, line) in preview.lines.iter().enumerate() {
-                    assert!(
-                        line.amount >= 0,
-                        "total {total} balance {balance} line {i}: {}",
-                        line.amount
-                    );
+                    let at = format!("total {total} balance {balance} line {i}");
+                    assert!(line.amount >= 0, "{at}: {}", line.amount);
+                    assert!(line.wanted >= 0, "{at}: wanted {}", line.wanted);
                     if let Some(room) = line.room {
-                        assert!(room >= 0, "total {total} line {i}: room {room}");
-                        assert!(line.amount <= room, "total {total} line {i}");
+                        assert!(room >= 0, "{at}: room {room}");
+                        assert!(line.amount <= room, "{at}");
                     }
+                    if total < 0 {
+                        assert_eq!(line.amount, 0, "{at}: a negative total gives nothing");
+                    }
+                    let flow = flows.iter().find(|f| f.id == line.flow_id).unwrap();
+                    assert_eq!(
+                        line.balance_after,
+                        flow.balance.saturating_add(line.amount),
+                        "{at}: the balance after saturates"
+                    );
                 }
                 let sum: i128 = preview.lines.iter().map(|l| i128::from(l.amount)).sum();
                 assert_eq!(i128::from(preview.distributed), sum, "total {total}");
+                assert_eq!(
+                    preview.remainder,
+                    total.max(0).saturating_sub(preview.distributed),
+                    "total {total}: the remainder saturates and is never below zero"
+                );
+                assert_eq!(
+                    preview.unallocated_after,
+                    balance.saturating_sub(preview.distributed),
+                    "total {total} balance {balance}: Unallocated after saturates"
+                );
                 if total >= 0 {
                     assert!(sum <= i128::from(total), "total {total}: over the total");
-                    assert_eq!(
-                        i128::from(preview.remainder),
-                        i128::from(total) - sum,
-                        "total {total}"
-                    );
                 }
             }
         }
     }
+
+    // A draft's asks below zero count as nothing and the line is Full with
+    // nothing, like an envelope already at its cap; so does a fill on an
+    // envelope found over its cap.
+    let drafts = resolve(100, &every_line[8..], &flows, 0);
+    let over_cap = drafts.lines[0];
+    assert_eq!(
+        (
+            over_cap.wanted,
+            over_cap.room,
+            over_cap.amount,
+            over_cap.status
+        ),
+        (0, Some(0), 0, LineStatus::Full)
+    );
+    assert_eq!(over_cap.balance_after, 2_000);
+    let negative = drafts.lines[4];
+    assert_eq!(negative.rule, AllocationRule::Fixed { amount: -7 });
+    assert_eq!(
+        (
+            negative.wanted,
+            negative.room,
+            negative.amount,
+            negative.status
+        ),
+        (0, None, 0, LineStatus::Full)
+    );
+    // The fixed ask on the envelope over its cap is stopped at zero too, and
+    // the fill on the income-capped envelope then takes the whole total.
+    let stopped = drafts.lines[1];
+    assert_eq!(
+        (stopped.wanted, stopped.room, stopped.amount, stopped.status),
+        (10, Some(0), 0, LineStatus::CapLimited)
+    );
+    assert_eq!(drafts.lines[2].amount, 100);
+    assert_eq!(drafts.distributed, 100);
+    // A negative total shares out nothing: the lines still say what they
+    // ask, a percent of it asks for nothing.
+    let nothing = resolve(-5, &every_line, &flows, 40);
+    assert_eq!(nothing.distributed, 0);
+    assert_eq!(nothing.remainder, 0, "nothing was there to keep");
+    assert_eq!(nothing.unallocated_after, 40);
+    assert!(nothing.lines.iter().all(|l| l.amount == 0 && l.wanted >= 0));
+    assert_eq!(nothing.lines[1].wanted, 0, "a percent of less than nothing");
+    assert_eq!(nothing.lines[0].wanted, i64::MAX, "a fixed ask stays");
 
     // The whole of i64::MAX goes to a single 100% line with nothing lost.
     let whole = resolve(i64::MAX, &[percent(zero_open.id, 10_000)], &flows, 0);
@@ -1015,6 +1058,13 @@ fn refused(fx: &mut Fx, what: &str, cmd: Command) -> DomainError {
         before,
         "{what}: changed something"
     );
+    err
+}
+
+/// [`refused`], with the error code the app relies on.
+fn refused_as(fx: &mut Fx, what: &str, code: &str, cmd: Command) -> DomainError {
+    let err = refused(fx, what, cmd);
+    assert_eq!(err.code(), code, "{what}: {err}");
     err
 }
 
@@ -1343,7 +1393,7 @@ fn deciding_the_latest_due_period_closes_the_missed_ones_and_an_earlier_one_is_r
             execute_at(plan, start(), 100, &[(a, 1)]),
         ),
     ] {
-        refused(&mut fx, what, cmd);
+        refused_as(&mut fx, what, "invalid_command", cmd);
     }
 
     // The total is the user's number: nothing in the base is no refusal.
@@ -1380,15 +1430,17 @@ fn nothing_is_pending_before_the_start_after_the_end_or_on_a_disabled_plan() {
             missed: 1
         })
     );
-    refused(
+    refused_as(
         &mut fx,
         "a day that is no period",
-        execute_at(plan, day(2026, 1, 2), 0, &[(a, 1)]),
+        "invalid_command",
+        execute_at(plan, day(2026, 1, 2), 100, &[(a, 1)]),
     );
-    refused(
+    refused_as(
         &mut fx,
         "a period after the end",
-        execute_at(plan, day(2026, 3, 1), 0, &[(a, 1)]),
+        "invalid_command",
+        execute_at(plan, day(2026, 3, 1), 100, &[(a, 1)]),
     );
 
     let disable = |enabled| {
@@ -1403,14 +1455,16 @@ fn nothing_is_pending_before_the_start_after_the_end_or_on_a_disabled_plan() {
     run(&mut fx.core, fx.vault, disable(false));
     assert_eq!(pending_on(&fx, day(2026, 6, 1)), None);
     assert!(!fx.core.allocation_plan(fx.vault).unwrap().unwrap().enabled);
-    refused(
+    refused_as(
         &mut fx,
         "a disabled plan",
-        execute_at(plan, day(2026, 2, 1), 0, &[(a, 1)]),
+        "invalid_command",
+        execute_at(plan, day(2026, 2, 1), 100, &[(a, 1)]),
     );
-    refused(
+    refused_as(
         &mut fx,
         "a disabled plan skipped",
+        "invalid_command",
         skip_cmd(plan, day(2026, 2, 1)),
     );
     run(&mut fx.core, fx.vault, disable(true));
@@ -1451,43 +1505,57 @@ fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() 
     let cases = [
         (
             "the same envelope twice",
+            "invalid_command",
             execute_at(plan, start(), total, &[(open, 100), (open, 200)]),
         ),
         (
             "an archived envelope",
+            "invalid_command",
             execute_at(plan, start(), total, &[(open, 100), (gone, 100)]),
         ),
         (
             "Unallocated as a target",
+            "invalid_flow",
             execute_at(plan, start(), total, &[(fx.unallocated, 100)]),
         ),
         (
             "moves above the total",
+            "invalid_amount",
             execute_at(plan, start(), 100, &[(open, 60), (capped, 50)]),
         ),
         (
             "a zero amount",
+            "invalid_amount",
             execute_at(plan, start(), total, &[(open, 100), (capped, 0)]),
         ),
         (
             "a negative amount",
+            "invalid_amount",
             execute_at(plan, start(), total, &[(open, -5)]),
         ),
-        ("no moves", execute_at(plan, start(), total, &[])),
+        (
+            "no moves",
+            "invalid_command",
+            execute_at(plan, start(), total, &[]),
+        ),
         (
             "a negative total",
+            "invalid_amount",
             execute_at(plan, start(), -1, &[(open, 1)]),
         ),
         (
             "an unknown envelope",
+            "not_found",
             execute_at(plan, start(), total, &[(unknown, 100)]),
         ),
         (
             "an unknown plan",
+            "not_found",
             execute_at(unknown, start(), total, &[(open, 100)]),
         ),
         (
             "moves whose sum overflows",
+            "invalid_amount",
             execute_at(
                 plan,
                 start(),
@@ -1496,22 +1564,25 @@ fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() 
             ),
         ),
     ];
-    for (what, cmd) in cases {
-        refused(&mut fx, what, cmd);
+    for (what, code, cmd) in cases {
+        refused_as(&mut fx, what, code, cmd);
     }
-    refused(
+    refused_as(
         &mut fx,
         "skip of an unknown plan",
+        "not_found",
         skip_cmd(unknown, start()),
     );
-    refused(
+    refused_as(
         &mut fx,
         "reopen of an unknown plan",
+        "not_found",
         reopen_cmd(unknown, start()),
     );
-    refused(
+    refused_as(
         &mut fx,
         "reopen with nothing decided",
+        "not_found",
         reopen_cmd(plan, start()),
     );
 
@@ -1536,36 +1607,50 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
     let mut bad_schedule = schedule;
     bad_schedule.interval = 0;
     let cases = [
-        ("no lines", plan_cmd(schedule, vec![])),
+        ("no lines", "invalid_command", plan_cmd(schedule, vec![])),
         (
             "the same envelope twice",
+            "invalid_command",
             plan_cmd(schedule, vec![fixed(a, 10), percent(a, 10)]),
         ),
         (
             "Unallocated",
+            "invalid_flow",
             plan_cmd(schedule, vec![fixed(fx.unallocated, 10)]),
         ),
-        ("a zero fixed amount", plan_cmd(schedule, vec![fixed(a, 0)])),
+        (
+            "a zero fixed amount",
+            "invalid_amount",
+            plan_cmd(schedule, vec![fixed(a, 0)]),
+        ),
         (
             "a negative fixed amount",
+            "invalid_amount",
             plan_cmd(schedule, vec![fixed(a, -1)]),
         ),
-        ("zero basis points", plan_cmd(schedule, vec![percent(a, 0)])),
+        (
+            "zero basis points",
+            "invalid_amount",
+            plan_cmd(schedule, vec![percent(a, 0)]),
+        ),
         (
             "more than the whole",
+            "invalid_amount",
             plan_cmd(schedule, vec![percent(a, FULL_PERCENT_BP + 1)]),
         ),
         (
             "an unknown envelope",
+            "not_found",
             plan_cmd(schedule, vec![fixed(Uuid::now_v7(), 10)]),
         ),
         (
             "a broken schedule",
+            "invalid_command",
             plan_cmd(bad_schedule, vec![fixed(a, 10)]),
         ),
     ];
-    for (what, cmd) in cases {
-        refused(&mut fx, what, cmd);
+    for (what, code, cmd) in cases {
+        refused_as(&mut fx, what, code, cmd);
         assert_eq!(fx.core.allocation_plan(fx.vault).unwrap(), None, "{what}");
     }
 
@@ -1593,10 +1678,15 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
         Some(plan.clone())
     );
 
-    for (what, patch) in [
-        ("an empty patch", AllocationPlanPatch::default()),
+    for (what, code, patch) in [
+        (
+            "an empty patch",
+            "invalid_command",
+            AllocationPlanPatch::default(),
+        ),
         (
             "lines with Unallocated",
+            "invalid_flow",
             AllocationPlanPatch {
                 lines: Some(vec![fixed(fx.unallocated, 1)]),
                 ..AllocationPlanPatch::default()
@@ -1604,6 +1694,7 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
         ),
         (
             "no lines",
+            "invalid_command",
             AllocationPlanPatch {
                 lines: Some(Vec::new()),
                 ..AllocationPlanPatch::default()
@@ -1611,22 +1702,24 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
         ),
         (
             "a broken schedule",
+            "invalid_command",
             AllocationPlanPatch {
                 schedule: Some(bad_schedule),
                 ..AllocationPlanPatch::default()
             },
         ),
     ] {
-        refused(&mut fx, what, update_plan_cmd(plan.id, patch));
+        refused_as(&mut fx, what, code, update_plan_cmd(plan.id, patch));
         assert_eq!(
             fx.core.allocation_plan(fx.vault).unwrap(),
             Some(plan.clone()),
             "{what}"
         );
     }
-    refused(
+    refused_as(
         &mut fx,
         "an unknown plan",
+        "not_found",
         update_plan_cmd(
             Uuid::now_v7(),
             AllocationPlanPatch {
@@ -2035,6 +2128,81 @@ fn each_income_is_counted_exactly_once_across_consecutive_decisions() {
     assert_eq!(seen, all_incomes);
 }
 
+#[test]
+fn the_start_of_the_plan_is_read_in_the_incomes_own_offset() {
+    let mut fx = setup();
+    let e = envelope(&mut fx, "E", FlowMode::Unlimited);
+    plan_from_start(&mut fx, vec![fixed(e, 10)]);
+    let income_at = |fx: &mut Fx, amount: i64, at: DateTime<FixedOffset>| {
+        let mut income = entry(amount, None, None, None, 0);
+        income.occurred_at = at;
+        run(&mut fx.core, fx.vault, Command::Income(income))
+            .result_id
+            .unwrap()
+    };
+    let rome = FixedOffset::east_opt(2 * 3600).unwrap();
+    let new_york = FixedOffset::west_opt(5 * 3600).unwrap();
+    // Half past midnight on the start day in Rome is still the day before
+    // in UTC: the income counts.
+    let counted = income_at(
+        &mut fx,
+        100,
+        rome.with_ymd_and_hms(2026, 1, 1, 0, 30, 0).unwrap(),
+    );
+    // Half past eleven the night before in New York is already the start
+    // day in UTC: it does not.
+    income_at(
+        &mut fx,
+        200,
+        new_york.with_ymd_and_hms(2025, 12, 31, 23, 30, 0).unwrap(),
+    );
+
+    let base = base_of(&fx);
+    assert_eq!(income_ids(&base), vec![counted]);
+    assert_eq!(base.total, 100);
+}
+
+/// The card lists its incomes as the ledger does, so the two never disagree
+/// on the order of a day: by date, then by id, whatever the log says.
+#[test]
+fn incomes_on_the_same_instant_keep_the_ledgers_order() {
+    let mut fx = setup();
+    let e = envelope(&mut fx, "E", FlowMode::Unlimited);
+    plan_from_start(&mut fx, vec![fixed(e, 10)]);
+    let at = secs(day(2026, 1, 5));
+    // The income recorded second carries the smaller id.
+    let envelope_with = |id: u128, amount: i64| CommandEnvelope {
+        id: Uuid::from_u128(id),
+        vault_id: fx.vault,
+        author: "alice".to_string(),
+        command: Command::Income(entry(amount, None, None, None, at)),
+    };
+    let first = envelope_with(0x0200, 100);
+    let second = envelope_with(0x0100, 200);
+    let first_id = fx.core.execute(first).unwrap().result_id.unwrap();
+    let second_id = fx.core.execute(second).unwrap().result_id.unwrap();
+    assert!(second_id < first_id);
+
+    let ledger: Vec<Uuid> = list(
+        &fx.core,
+        fx.vault,
+        &TransactionFilter {
+            ascending: true,
+            ..all()
+        },
+    )
+    .into_iter()
+    .map(|t| t.id)
+    .filter(|id| *id == first_id || *id == second_id)
+    .collect();
+    assert_eq!(ledger, vec![second_id, first_id]);
+    assert_eq!(
+        income_ids(&base_of(&fx)),
+        ledger,
+        "oldest first, then by id, as the ledger shows them"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Engine: reopen
 // ---------------------------------------------------------------------------
@@ -2150,18 +2318,18 @@ fn reopen_tolerates_a_move_voided_or_edited_in_the_meantime() {
     assert_eq!(balance_of(&fx, a), 300);
     assert_eq!(balance_of(&fx, b), 0);
     let run_view = runs_of(&fx).remove(0);
-    let voided: Vec<bool> = [a, b, c]
+    let as_now: Vec<(i64, bool)> = [a, b, c]
         .iter()
         .map(|f| {
-            run_view
-                .moves
-                .iter()
-                .find(|m| m.flow_id == *f)
-                .unwrap()
-                .voided
+            let m = run_view.moves.iter().find(|m| m.flow_id == *f).unwrap();
+            (m.amount, m.voided)
         })
         .collect();
-    assert_eq!(voided, vec![false, true, false]);
+    assert_eq!(
+        as_now,
+        vec![(300, false), (1_000, true), (500, false)],
+        "the run shows its moves as they are now"
+    );
 
     run(&mut fx.core, fx.vault, reopen_cmd(plan, start()));
     let after = projection(&fx.core, fx.vault);
@@ -2185,19 +2353,22 @@ fn reopen_is_refused_on_a_period_that_is_not_the_latest_decided_one() {
     );
     run(&mut fx.core, fx.vault, skip_cmd(plan, day(2026, 2, 1)));
 
-    refused(
+    refused_as(
         &mut fx,
         "an older decided period",
+        "invalid_command",
         reopen_cmd(plan, start()),
     );
-    refused(
+    refused_as(
         &mut fx,
         "a period never decided",
+        "not_found",
         reopen_cmd(plan, day(2026, 3, 1)),
     );
-    refused(
+    refused_as(
         &mut fx,
         "a day that is no period",
+        "not_found",
         reopen_cmd(plan, day(2026, 2, 2)),
     );
 
@@ -2215,11 +2386,115 @@ fn reopen_is_refused_on_a_period_that_is_not_the_latest_decided_one() {
     run(&mut fx.core, fx.vault, reopen_cmd(plan, start()));
     assert!(runs_of(&fx).is_empty());
     assert_eq!(balance_of(&fx, a), 0);
-    refused(
+    refused_as(
         &mut fx,
         "nothing decided any more",
+        "not_found",
         reopen_cmd(plan, start()),
     );
+}
+
+#[test]
+fn reopen_never_consults_the_schedule_or_the_switch() {
+    let mut fx = setup();
+    fund(&mut fx);
+    let a = envelope(&mut fx, "A", FlowMode::Unlimited);
+    let plan = plan_from_start(&mut fx, vec![fixed(a, 100)]);
+    income_on(&mut fx, 1_000, day(2026, 1, 3));
+    let before = projection(&fx.core, fx.vault);
+    run(
+        &mut fx.core,
+        fx.vault,
+        execute_at(plan, start(), 1_000, &[(a, 100)]),
+    );
+
+    // The 1st is no period of the plan any more, and the plan is off.
+    run(
+        &mut fx.core,
+        fx.vault,
+        update_plan_cmd(
+            plan,
+            AllocationPlanPatch {
+                schedule: Some(monthly_from(15, start())),
+                lines: None,
+                enabled: Some(false),
+            },
+        ),
+    );
+    let schedule = fx.core.allocation_plan(fx.vault).unwrap().unwrap().schedule;
+    assert!(!schedule.is_occurrence(start()));
+    refused_as(
+        &mut fx,
+        "a period of a plan switched off",
+        "invalid_command",
+        execute_at(plan, day(2026, 1, 15), 100, &[(a, 1)]),
+    );
+
+    run(&mut fx.core, fx.vault, reopen_cmd(plan, start()));
+    let after = projection(&fx.core, fx.vault);
+    assert_eq!(
+        after.snapshot, before.snapshot,
+        "a run row is enough to undo"
+    );
+    assert_eq!(after.base, before.base);
+    assert!(after.runs.is_empty());
+    assert!(transfers_of(&fx).iter().all(|t| t.voided));
+
+    // Switched back on, the first period of the new schedule is due.
+    run(
+        &mut fx.core,
+        fx.vault,
+        update_plan_cmd(
+            plan,
+            AllocationPlanPatch {
+                enabled: Some(true),
+                ..AllocationPlanPatch::default()
+            },
+        ),
+    );
+    assert_eq!(
+        pending_on(&fx, day(2026, 1, 20)),
+        Some(PendingAllocation {
+            plan_id: plan,
+            period_date: day(2026, 1, 15),
+            missed: 0
+        })
+    );
+}
+
+#[test]
+fn a_future_occurrence_can_be_decided_and_closes_what_lies_before_it() {
+    let mut fx = setup();
+    fund(&mut fx);
+    let a = envelope(&mut fx, "A", FlowMode::Unlimited);
+    let plan = plan_from_start(&mut fx, vec![fixed(a, 100)]);
+    income_on(&mut fx, 1_000, day(2026, 1, 3));
+
+    // The engine knows no today: any period of the schedule can be decided,
+    // and the app only ever offers the one due.
+    run(
+        &mut fx.core,
+        fx.vault,
+        execute_at(plan, day(2026, 6, 1), 1_000, &[(a, 100)]),
+    );
+    assert_eq!(pending_on(&fx, day(2026, 3, 15)), None);
+    assert_eq!(pending_on(&fx, day(2026, 6, 30)), None);
+    assert_eq!(
+        pending_on(&fx, day(2026, 7, 1)),
+        Some(PendingAllocation {
+            plan_id: plan,
+            period_date: day(2026, 7, 1),
+            missed: 0
+        })
+    );
+    refused_as(
+        &mut fx,
+        "a period before the one decided",
+        "invalid_command",
+        execute_at(plan, day(2026, 3, 1), 100, &[(a, 1)]),
+    );
+    assert_eq!(runs_of(&fx).len(), 1);
+    assert_eq!(base_of(&fx).incomes.len(), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -2290,9 +2565,10 @@ fn a_plan_of_another_vault_is_refused_on_every_command() {
     );
 
     // A move into their envelope from my plan is refused too.
-    refused(
+    refused_as(
         &mut fx,
         "their envelope as a target",
+        "not_found",
         execute_at(plan, start(), 1_000, &[(a, 50), (theirs, 50)]),
     );
     assert_eq!(projection(&fx.core, other), not_mine);
