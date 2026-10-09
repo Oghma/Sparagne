@@ -3,6 +3,7 @@
 //! Every command runs inside one SQLite transaction: validation, state
 //! changes and the log row commit together or not at all.
 
+mod allocation;
 mod batch;
 pub(crate) mod entities;
 mod recurring;
@@ -319,6 +320,41 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             recurring_id,
             period_date,
         } => recurring::skip_recurring(tx, env, *recurring_id, *period_date, now).map(|()| None),
+        Command::CreateAllocationPlan { schedule, lines } => {
+            allocation::create_plan(tx, env, schedule, lines, now).map(Some)
+        }
+        Command::UpdateAllocationPlan { plan_id, patch } => {
+            allocation::update_plan(tx, env, *plan_id, patch).map(|()| None)
+        }
+        Command::ExecuteAllocation {
+            plan_id,
+            period_date,
+            occurred_at,
+            total,
+            moves,
+            note,
+        } => allocation::execute_allocation(
+            tx,
+            env,
+            &allocation::ExecuteSpec {
+                plan_id: *plan_id,
+                period_date: *period_date,
+                occurred_at: *occurred_at,
+                total: *total,
+                moves,
+                note: note.as_deref(),
+            },
+            now,
+        )
+        .map(|()| None),
+        Command::SkipAllocation {
+            plan_id,
+            period_date,
+        } => allocation::skip_allocation(tx, env, *plan_id, *period_date, now).map(|()| None),
+        Command::ReopenAllocation {
+            plan_id,
+            period_date,
+        } => allocation::reopen_allocation(tx, env, *plan_id, *period_date, now).map(|()| None),
     }
 }
 

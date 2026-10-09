@@ -51,7 +51,7 @@ struct TopBar: View {
                     prompt: String(localized: "Search Setup"),
                     focused: $searchFocused
                 )
-            case .summary:
+            case .summary, .allocation:
                 EmptyView()
             }
             // The pill leads to the Ricorrenze tab, where the periods are
@@ -80,7 +80,7 @@ struct TopBar: View {
             switch store.tab {
             case .summary, .ledger: AddButton()
             case .recurring: NewRecurringButton(store: store)
-            case .setup: EmptyView()
+            case .allocation, .setup: EmptyView()
             }
         }
     }

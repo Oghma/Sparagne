@@ -20,13 +20,14 @@ use chrono::{DateTime, FixedOffset, NaiveDate, SecondsFormat, Utc};
 use uuid::Uuid;
 
 use crate::{
-    AliasView, BucketPersonTotals, CategorySuggestion, CategoryTotals, CategoryView, Command,
-    CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowPersonTotals, MergePreview,
-    Money, Page, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
-    RecurringView, RejectedCommand, Schedule, StatementDetection, StatementMapping,
-    StatementOptions, StatementPreset, StatementPreview, StatementReport, StatementRowOverride,
-    SyncReport, SyncState, TopExpense, TransactionFilter, TransactionView, VaultSnapshot,
-    VaultView,
+    AliasView, AllocationBase, AllocationLine, AllocationPlanView, AllocationPreview,
+    AllocationRunView, BucketPersonTotals, CategorySuggestion, CategoryTotals, CategoryView,
+    Command, CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowPersonTotals,
+    MergePreview, Money, Page, PendingAllocation, PendingRecurring, PeriodTotals, Receipt,
+    RecentUsage, RecurringRunView, RecurringView, RejectedCommand, Schedule, StatementDetection,
+    StatementMapping, StatementOptions, StatementPreset, StatementPreview, StatementReport,
+    StatementRowOverride, SyncReport, SyncState, TopExpense, TransactionFilter, TransactionView,
+    VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -332,6 +333,49 @@ impl CoreHandle {
         recurring_id: Uuid,
     ) -> Result<Vec<RecurringRunView>, DomainError> {
         self.lock()?.recurring_runs(vault_id, recurring_id)
+    }
+
+    /// The vault's allocation plan, if it has one.
+    pub fn allocation_plan(
+        &self,
+        vault_id: Uuid,
+    ) -> Result<Option<AllocationPlanView>, DomainError> {
+        self.lock()?.allocation_plan(vault_id)
+    }
+
+    /// The period of the allocation plan waiting for a decision on `today`,
+    /// if any. `today` comes from the app, in the system timezone.
+    pub fn pending_allocation(
+        &self,
+        vault_id: Uuid,
+        today: NaiveDate,
+    ) -> Result<Option<PendingAllocation>, DomainError> {
+        self.lock()?.pending_allocation(vault_id, today)
+    }
+
+    /// The incomes the next allocation shares out, and their total.
+    pub fn allocation_base(&self, vault_id: Uuid) -> Result<AllocationBase, DomainError> {
+        self.lock()?.allocation_base(vault_id)
+    }
+
+    /// `lines` worked out on `total` against the vault's envelopes as they
+    /// are now; the lines may be an unsaved draft.
+    pub fn preview_allocation(
+        &self,
+        vault_id: Uuid,
+        lines: Vec<AllocationLine>,
+        total: i64,
+    ) -> Result<AllocationPreview, DomainError> {
+        self.lock()?.preview_allocation(vault_id, &lines, total)
+    }
+
+    /// The allocation plan's decided periods, the most recent first.
+    pub fn allocation_runs(
+        &self,
+        vault_id: Uuid,
+        limit: u32,
+    ) -> Result<Vec<AllocationRunView>, DomainError> {
+        self.lock()?.allocation_runs(vault_id, limit)
     }
 
     /// Log entries of a vault with `seq > since_seq`, in order.

@@ -312,6 +312,34 @@ actor CoreActor {
         try await visit { try $0.recurringRuns(vaultId: vaultId, recurringId: recurringId) }
     }
 
+    // MARK: - Allocation plan
+    //
+    // The plan, its period due and the base it would share out also come
+    // with every `load`; these are for the screens that need them again.
+
+    func allocationPlan(vaultId: Uuid) async throws -> AllocationPlanView? {
+        try await visit { try $0.allocationPlan(vaultId: vaultId) }
+    }
+
+    func pendingAllocation(vaultId: Uuid, today: NaiveDate) async throws -> PendingAllocation? {
+        try await visit { try $0.pendingAllocation(vaultId: vaultId, today: today) }
+    }
+
+    func allocationBase(vaultId: Uuid) async throws -> AllocationBase {
+        try await visit { try $0.allocationBase(vaultId: vaultId) }
+    }
+
+    /// `lines` worked out on `total` against the envelopes as they are now;
+    /// the lines may be a draft nobody saved.
+    func previewAllocation(vaultId: Uuid, lines: [AllocationLine], total: Int64) async throws -> AllocationPreview {
+        try await visit { try $0.previewAllocation(vaultId: vaultId, lines: lines, total: total) }
+    }
+
+    /// The plan's decided periods, the most recent first.
+    func allocationRuns(vaultId: Uuid, limit: UInt32) async throws -> [AllocationRunView] {
+        try await visit { try $0.allocationRuns(vaultId: vaultId, limit: limit) }
+    }
+
     func transactions(
         vaultId: Uuid,
         filter: TransactionFilter,
@@ -379,6 +407,9 @@ actor CoreActor {
                 ),
                 people: try handle.people(vaultId: vaultId),
                 pendingRecurring: try handle.pendingRecurring(vaultId: vaultId, today: request.today),
+                allocationPlan: try handle.allocationPlan(vaultId: vaultId),
+                pendingAllocation: try handle.pendingAllocation(vaultId: vaultId, today: request.today),
+                allocationBase: try handle.allocationBase(vaultId: vaultId),
                 flowPerson: try handle.flowPersonTotals(
                     vaultId: vaultId,
                     from: request.monthFrom,
@@ -559,6 +590,12 @@ struct VaultLoad: Sendable {
     /// The persons of the live rows (`people()`), the PERSONA filter's segments.
     let people: [String]
     let pendingRecurring: [PendingRecurring]
+    /// The vault's allocation plan, `nil` until one is made.
+    let allocationPlan: AllocationPlanView?
+    /// The plan's period waiting for a decision today, if any.
+    let pendingAllocation: PendingAllocation?
+    /// The incomes the next allocation would share out.
+    let allocationBase: AllocationBase
     let flowPerson: [FlowPersonTotals]
     let categoryTotals: [CategoryTotals]
     /// `[the month before, the month]`, from the three-bound bucket query.

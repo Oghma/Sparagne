@@ -595,6 +595,21 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func aliases(vaultId: Uuid) throws  -> [AliasView]
     
     /**
+     * The incomes the next allocation shares out, and their total.
+     */
+    func allocationBase(vaultId: Uuid) throws  -> AllocationBase
+    
+    /**
+     * The vault's allocation plan, if it has one.
+     */
+    func allocationPlan(vaultId: Uuid) throws  -> AllocationPlanView?
+    
+    /**
+     * The allocation plan's decided periods, the most recent first.
+     */
+    func allocationRuns(vaultId: Uuid, limit: UInt32) throws  -> [AllocationRunView]
+    
+    /**
      * Folds the server's push response back into the log.
      */
     func applyPushResponseJson(vaultId: Uuid, json: String) throws  -> SyncReport
@@ -680,6 +695,12 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func listTransactions(vaultId: Uuid, filter: TransactionFilter, limit: UInt32, cursor: String?) throws  -> Page
     
     /**
+     * The period of the allocation plan waiting for a decision on `today`,
+     * if any. `today` comes from the app, in the system timezone.
+     */
+    func pendingAllocation(vaultId: Uuid, today: NaiveDate) throws  -> PendingAllocation?
+    
+    /**
      * Templates with periods still waiting for a decision. `today` comes from
      * the app, in the system timezone: the core never guesses one.
      */
@@ -695,6 +716,12 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
      * is all time.
      */
     func periodTotals(vaultId: Uuid, from: UtcDateTime?, to: UtcDateTime?) throws  -> PeriodTotals
+    
+    /**
+     * `lines` worked out on `total` against the vault's envelopes as they
+     * are now; the lines may be an unsaved draft.
+     */
+    func previewAllocation(vaultId: Uuid, lines: [AllocationLine], total: Int64) throws  -> AllocationPreview
     
     /**
      * What `MergeCategory` would refuse, without changing anything.
@@ -894,6 +921,46 @@ open func aliases(vaultId: Uuid)throws  -> [AliasView]  {
     uniffi_sparagne_core_fn_method_corehandle_aliases(
             self.uniffiCloneHandle(),
         FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The incomes the next allocation shares out, and their total.
+     */
+open func allocationBase(vaultId: Uuid)throws  -> AllocationBase  {
+    return try  FfiConverterTypeAllocationBase_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_allocation_base(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The vault's allocation plan, if it has one.
+     */
+open func allocationPlan(vaultId: Uuid)throws  -> AllocationPlanView?  {
+    return try  FfiConverterOptionTypeAllocationPlanView.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_allocation_plan(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The allocation plan's decided periods, the most recent first.
+     */
+open func allocationRuns(vaultId: Uuid, limit: UInt32)throws  -> [AllocationRunView]  {
+    return try  FfiConverterSequenceTypeAllocationRunView.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_allocation_runs(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterUInt32.lower(limit),uniffiCallStatus
     )
 })
 }
@@ -1138,6 +1205,21 @@ open func listTransactions(vaultId: Uuid, filter: TransactionFilter, limit: UInt
 }
     
     /**
+     * The period of the allocation plan waiting for a decision on `today`,
+     * if any. `today` comes from the app, in the system timezone.
+     */
+open func pendingAllocation(vaultId: Uuid, today: NaiveDate)throws  -> PendingAllocation?  {
+    return try  FfiConverterOptionTypePendingAllocation.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_pending_allocation(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeNaiveDate_lower(today),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * Templates with periods still waiting for a decision. `today` comes from
      * the app, in the system timezone: the core never guesses one.
      */
@@ -1177,6 +1259,22 @@ open func periodTotals(vaultId: Uuid, from: UtcDateTime? = nil, to: UtcDateTime?
         FfiConverterTypeUuid_lower(vaultId),
         FfiConverterOptionTypeUtcDateTime.lower(from),
         FfiConverterOptionTypeUtcDateTime.lower(to),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * `lines` worked out on `total` against the vault's envelopes as they
+     * are now; the lines may be an unsaved draft.
+     */
+open func previewAllocation(vaultId: Uuid, lines: [AllocationLine], total: Int64)throws  -> AllocationPreview  {
+    return try  FfiConverterTypeAllocationPreview_lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_preview_allocation(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterSequenceTypeAllocationLine.lower(lines),
+        FfiConverterInt64.lower(total),uniffiCallStatus
     )
 })
 }
@@ -1581,6 +1679,523 @@ public func FfiConverterTypeAliasView_lift(_ buf: RustBuffer) throws -> AliasVie
 #endif
 public func FfiConverterTypeAliasView_lower(_ value: AliasView) -> RustBuffer {
     return FfiConverterTypeAliasView.lower(value)
+}
+
+
+/**
+ * What the next execution shares out: the incomes that reached Unallocated
+ * since the plan's last decision.
+ */
+public struct AllocationBase: Equatable, Hashable, Codable {
+    /**
+     * The sum of `incomes`.
+     */
+    public var total: Int64
+    /**
+     * Oldest first.
+     */
+    public var incomes: [TransactionView]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The sum of `incomes`.
+         */total: Int64, 
+        /**
+         * Oldest first.
+         */incomes: [TransactionView]) {
+        self.total = total
+        self.incomes = incomes
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllocationBase: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllocationBase: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllocationBase {
+        return
+            try AllocationBase(
+                total: FfiConverterInt64.read(from: &buf), 
+                incomes: FfiConverterSequenceTypeTransactionView.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AllocationBase, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.total, into: &buf)
+        FfiConverterSequenceTypeTransactionView.write(value.incomes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationBase_lift(_ buf: RustBuffer) throws -> AllocationBase {
+    return try FfiConverterTypeAllocationBase.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationBase_lower(_ value: AllocationBase) -> RustBuffer {
+    return FfiConverterTypeAllocationBase.lower(value)
+}
+
+
+/**
+ * One line of a plan: an envelope and what it asks for.
+ */
+public struct AllocationLine: Equatable, Hashable, Codable {
+    public var flowId: Uuid
+    public var rule: AllocationRule
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(flowId: Uuid, rule: AllocationRule) {
+        self.flowId = flowId
+        self.rule = rule
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllocationLine: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllocationLine: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllocationLine {
+        return
+            try AllocationLine(
+                flowId: FfiConverterTypeUuid.read(from: &buf), 
+                rule: FfiConverterTypeAllocationRule.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AllocationLine, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterTypeAllocationRule.write(value.rule, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationLine_lift(_ buf: RustBuffer) throws -> AllocationLine {
+    return try FfiConverterTypeAllocationLine.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationLine_lower(_ value: AllocationLine) -> RustBuffer {
+    return FfiConverterTypeAllocationLine.lower(value)
+}
+
+
+/**
+ * One transfer out of Unallocated, as `ExecuteAllocation` carries it.
+ */
+public struct AllocationMove: Equatable, Hashable, Codable {
+    public var flowId: Uuid
+    /**
+     * Minor units, `> 0`.
+     */
+    public var amount: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(flowId: Uuid, 
+        /**
+         * Minor units, `> 0`.
+         */amount: Int64) {
+        self.flowId = flowId
+        self.amount = amount
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllocationMove: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllocationMove: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllocationMove {
+        return
+            try AllocationMove(
+                flowId: FfiConverterTypeUuid.read(from: &buf), 
+                amount: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AllocationMove, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterInt64.write(value.amount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationMove_lift(_ buf: RustBuffer) throws -> AllocationMove {
+    return try FfiConverterTypeAllocationMove.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationMove_lower(_ value: AllocationMove) -> RustBuffer {
+    return FfiConverterTypeAllocationMove.lower(value)
+}
+
+
+/**
+ * The fields `UpdateAllocationPlan` can change. `None` leaves the field as
+ * it is; `lines` replaces the whole list.
+ */
+public struct AllocationPlanPatch: Equatable, Hashable, Codable {
+    public var schedule: Schedule?
+    public var lines: [AllocationLine]?
+    /**
+     * A disabled plan has no period due.
+     */
+    public var enabled: Bool?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(schedule: Schedule? = nil, lines: [AllocationLine]? = nil, 
+        /**
+         * A disabled plan has no period due.
+         */enabled: Bool? = nil) {
+        self.schedule = schedule
+        self.lines = lines
+        self.enabled = enabled
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllocationPlanPatch: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllocationPlanPatch: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllocationPlanPatch {
+        return
+            try AllocationPlanPatch(
+                schedule: FfiConverterOptionTypeSchedule.read(from: &buf), 
+                lines: FfiConverterOptionSequenceTypeAllocationLine.read(from: &buf), 
+                enabled: FfiConverterOptionBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AllocationPlanPatch, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeSchedule.write(value.schedule, into: &buf)
+        FfiConverterOptionSequenceTypeAllocationLine.write(value.lines, into: &buf)
+        FfiConverterOptionBool.write(value.enabled, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationPlanPatch_lift(_ buf: RustBuffer) throws -> AllocationPlanPatch {
+    return try FfiConverterTypeAllocationPlanPatch.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationPlanPatch_lower(_ value: AllocationPlanPatch) -> RustBuffer {
+    return FfiConverterTypeAllocationPlanPatch.lower(value)
+}
+
+
+/**
+ * The vault's plan as the UI sees it.
+ */
+public struct AllocationPlanView: Equatable, Hashable, Codable {
+    public var id: Uuid
+    public var schedule: Schedule
+    /**
+     * In priority order.
+     */
+    public var lines: [AllocationLine]
+    public var enabled: Bool
+    public var createdBy: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: Uuid, schedule: Schedule, 
+        /**
+         * In priority order.
+         */lines: [AllocationLine], enabled: Bool, createdBy: String) {
+        self.id = id
+        self.schedule = schedule
+        self.lines = lines
+        self.enabled = enabled
+        self.createdBy = createdBy
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllocationPlanView: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllocationPlanView: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllocationPlanView {
+        return
+            try AllocationPlanView(
+                id: FfiConverterTypeUuid.read(from: &buf), 
+                schedule: FfiConverterTypeSchedule.read(from: &buf), 
+                lines: FfiConverterSequenceTypeAllocationLine.read(from: &buf), 
+                enabled: FfiConverterBool.read(from: &buf), 
+                createdBy: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AllocationPlanView, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.id, into: &buf)
+        FfiConverterTypeSchedule.write(value.schedule, into: &buf)
+        FfiConverterSequenceTypeAllocationLine.write(value.lines, into: &buf)
+        FfiConverterBool.write(value.enabled, into: &buf)
+        FfiConverterString.write(value.createdBy, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationPlanView_lift(_ buf: RustBuffer) throws -> AllocationPlanView {
+    return try FfiConverterTypeAllocationPlanView.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationPlanView_lower(_ value: AllocationPlanView) -> RustBuffer {
+    return FfiConverterTypeAllocationPlanView.lower(value)
+}
+
+
+/**
+ * A plan worked out on a total, line by line, in priority order.
+ */
+public struct AllocationPreview: Equatable, Hashable, Codable {
+    public var total: Int64
+    public var lines: [PreviewLine]
+    /**
+     * The sum of the amounts.
+     */
+    public var distributed: Int64
+    /**
+     * `total - distributed`: what stays in Unallocated.
+     */
+    public var remainder: Int64
+    /**
+     * Unallocated's balance once `distributed` is out. Negative when the
+     * total was raised above what Unallocated holds: a warning, not a
+     * refusal.
+     */
+    public var unallocatedAfter: Int64
+    /**
+     * The percent lines added up, in basis points; above
+     * [`FULL_PERCENT_BP`] the plan asks for more than the total.
+     */
+    public var percentTotalBp: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(total: Int64, lines: [PreviewLine], 
+        /**
+         * The sum of the amounts.
+         */distributed: Int64, 
+        /**
+         * `total - distributed`: what stays in Unallocated.
+         */remainder: Int64, 
+        /**
+         * Unallocated's balance once `distributed` is out. Negative when the
+         * total was raised above what Unallocated holds: a warning, not a
+         * refusal.
+         */unallocatedAfter: Int64, 
+        /**
+         * The percent lines added up, in basis points; above
+         * [`FULL_PERCENT_BP`] the plan asks for more than the total.
+         */percentTotalBp: UInt32) {
+        self.total = total
+        self.lines = lines
+        self.distributed = distributed
+        self.remainder = remainder
+        self.unallocatedAfter = unallocatedAfter
+        self.percentTotalBp = percentTotalBp
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllocationPreview: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllocationPreview: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllocationPreview {
+        return
+            try AllocationPreview(
+                total: FfiConverterInt64.read(from: &buf), 
+                lines: FfiConverterSequenceTypePreviewLine.read(from: &buf), 
+                distributed: FfiConverterInt64.read(from: &buf), 
+                remainder: FfiConverterInt64.read(from: &buf), 
+                unallocatedAfter: FfiConverterInt64.read(from: &buf), 
+                percentTotalBp: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AllocationPreview, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.total, into: &buf)
+        FfiConverterSequenceTypePreviewLine.write(value.lines, into: &buf)
+        FfiConverterInt64.write(value.distributed, into: &buf)
+        FfiConverterInt64.write(value.remainder, into: &buf)
+        FfiConverterInt64.write(value.unallocatedAfter, into: &buf)
+        FfiConverterUInt32.write(value.percentTotalBp, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationPreview_lift(_ buf: RustBuffer) throws -> AllocationPreview {
+    return try FfiConverterTypeAllocationPreview.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationPreview_lower(_ value: AllocationPreview) -> RustBuffer {
+    return FfiConverterTypeAllocationPreview.lower(value)
+}
+
+
+/**
+ * One decided period of the plan.
+ */
+public struct AllocationRunView: Equatable, Hashable, Codable {
+    public var periodDate: NaiveDate
+    public var outcome: RunOutcome
+    /**
+     * The total the moves were worked out on; 0 for a skipped period.
+     */
+    public var total: Int64
+    /**
+     * Empty for a skipped period.
+     */
+    public var moves: [RunMove]
+    public var createdBy: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(periodDate: NaiveDate, outcome: RunOutcome, 
+        /**
+         * The total the moves were worked out on; 0 for a skipped period.
+         */total: Int64, 
+        /**
+         * Empty for a skipped period.
+         */moves: [RunMove], createdBy: String) {
+        self.periodDate = periodDate
+        self.outcome = outcome
+        self.total = total
+        self.moves = moves
+        self.createdBy = createdBy
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension AllocationRunView: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllocationRunView: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllocationRunView {
+        return
+            try AllocationRunView(
+                periodDate: FfiConverterTypeNaiveDate.read(from: &buf), 
+                outcome: FfiConverterTypeRunOutcome.read(from: &buf), 
+                total: FfiConverterInt64.read(from: &buf), 
+                moves: FfiConverterSequenceTypeRunMove.read(from: &buf), 
+                createdBy: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AllocationRunView, into buf: inout [UInt8]) {
+        FfiConverterTypeNaiveDate.write(value.periodDate, into: &buf)
+        FfiConverterTypeRunOutcome.write(value.outcome, into: &buf)
+        FfiConverterInt64.write(value.total, into: &buf)
+        FfiConverterSequenceTypeRunMove.write(value.moves, into: &buf)
+        FfiConverterString.write(value.createdBy, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationRunView_lift(_ buf: RustBuffer) throws -> AllocationRunView {
+    return try FfiConverterTypeAllocationRunView.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationRunView_lower(_ value: AllocationRunView) -> RustBuffer {
+    return FfiConverterTypeAllocationRunView.lower(value)
 }
 
 
@@ -2604,6 +3219,81 @@ public func FfiConverterTypePage_lower(_ value: Page) -> RustBuffer {
 
 
 /**
+ * The period of the plan waiting for a decision.
+ */
+public struct PendingAllocation: Equatable, Hashable, Codable {
+    public var planId: Uuid
+    /**
+     * The most recent due period: the one to execute or skip.
+     */
+    public var periodDate: NaiveDate
+    /**
+     * Older due periods with no decision. Deciding `period_date` closes them
+     * too, and the incomes they saw are already in the total.
+     */
+    public var missed: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(planId: Uuid, 
+        /**
+         * The most recent due period: the one to execute or skip.
+         */periodDate: NaiveDate, 
+        /**
+         * Older due periods with no decision. Deciding `period_date` closes them
+         * too, and the incomes they saw are already in the total.
+         */missed: UInt32) {
+        self.planId = planId
+        self.periodDate = periodDate
+        self.missed = missed
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PendingAllocation: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePendingAllocation: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PendingAllocation {
+        return
+            try PendingAllocation(
+                planId: FfiConverterTypeUuid.read(from: &buf), 
+                periodDate: FfiConverterTypeNaiveDate.read(from: &buf), 
+                missed: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PendingAllocation, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.planId, into: &buf)
+        FfiConverterTypeNaiveDate.write(value.periodDate, into: &buf)
+        FfiConverterUInt32.write(value.missed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePendingAllocation_lift(_ buf: RustBuffer) throws -> PendingAllocation {
+    return try FfiConverterTypePendingAllocation.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePendingAllocation_lower(_ value: PendingAllocation) -> RustBuffer {
+    return FfiConverterTypePendingAllocation.lower(value)
+}
+
+
+/**
  * A template with the period dates still waiting for a decision.
  */
 public struct PendingRecurring: Equatable, Hashable, Codable {
@@ -2735,6 +3425,107 @@ public func FfiConverterTypePeriodTotals_lift(_ buf: RustBuffer) throws -> Perio
 #endif
 public func FfiConverterTypePeriodTotals_lower(_ value: PeriodTotals) -> RustBuffer {
     return FfiConverterTypePeriodTotals.lower(value)
+}
+
+
+/**
+ * One line of a preview.
+ */
+public struct PreviewLine: Equatable, Hashable, Codable {
+    public var flowId: Uuid
+    public var rule: AllocationRule
+    /**
+     * What the rule asks for before the cap and the total.
+     */
+    public var wanted: Int64
+    /**
+     * Room under the cap, never negative; `None` without a cap.
+     */
+    public var room: Int64?
+    /**
+     * What the envelope gets.
+     */
+    public var amount: Int64
+    /**
+     * The envelope's balance once `amount` is in.
+     */
+    public var balanceAfter: Int64
+    public var status: LineStatus
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(flowId: Uuid, rule: AllocationRule, 
+        /**
+         * What the rule asks for before the cap and the total.
+         */wanted: Int64, 
+        /**
+         * Room under the cap, never negative; `None` without a cap.
+         */room: Int64?, 
+        /**
+         * What the envelope gets.
+         */amount: Int64, 
+        /**
+         * The envelope's balance once `amount` is in.
+         */balanceAfter: Int64, status: LineStatus) {
+        self.flowId = flowId
+        self.rule = rule
+        self.wanted = wanted
+        self.room = room
+        self.amount = amount
+        self.balanceAfter = balanceAfter
+        self.status = status
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PreviewLine: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePreviewLine: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PreviewLine {
+        return
+            try PreviewLine(
+                flowId: FfiConverterTypeUuid.read(from: &buf), 
+                rule: FfiConverterTypeAllocationRule.read(from: &buf), 
+                wanted: FfiConverterInt64.read(from: &buf), 
+                room: FfiConverterOptionInt64.read(from: &buf), 
+                amount: FfiConverterInt64.read(from: &buf), 
+                balanceAfter: FfiConverterInt64.read(from: &buf), 
+                status: FfiConverterTypeLineStatus.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PreviewLine, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterTypeAllocationRule.write(value.rule, into: &buf)
+        FfiConverterInt64.write(value.wanted, into: &buf)
+        FfiConverterOptionInt64.write(value.room, into: &buf)
+        FfiConverterInt64.write(value.amount, into: &buf)
+        FfiConverterInt64.write(value.balanceAfter, into: &buf)
+        FfiConverterTypeLineStatus.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePreviewLine_lift(_ buf: RustBuffer) throws -> PreviewLine {
+    return try FfiConverterTypePreviewLine.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePreviewLine_lower(_ value: PreviewLine) -> RustBuffer {
+    return FfiConverterTypePreviewLine.lower(value)
 }
 
 
@@ -3404,6 +4195,77 @@ public func FfiConverterTypeResolvedQuickAdd_lift(_ buf: RustBuffer) throws -> R
 #endif
 public func FfiConverterTypeResolvedQuickAdd_lower(_ value: ResolvedQuickAdd) -> RustBuffer {
     return FfiConverterTypeResolvedQuickAdd.lower(value)
+}
+
+
+/**
+ * One transfer of an executed period.
+ */
+public struct RunMove: Equatable, Hashable, Codable {
+    public var flowId: Uuid
+    public var amount: Int64
+    public var transactionId: Uuid
+    /**
+     * Deleted from the ledger since.
+     */
+    public var voided: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(flowId: Uuid, amount: Int64, transactionId: Uuid, 
+        /**
+         * Deleted from the ledger since.
+         */voided: Bool) {
+        self.flowId = flowId
+        self.amount = amount
+        self.transactionId = transactionId
+        self.voided = voided
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RunMove: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRunMove: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RunMove {
+        return
+            try RunMove(
+                flowId: FfiConverterTypeUuid.read(from: &buf), 
+                amount: FfiConverterInt64.read(from: &buf), 
+                transactionId: FfiConverterTypeUuid.read(from: &buf), 
+                voided: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RunMove, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterInt64.write(value.amount, into: &buf)
+        FfiConverterTypeUuid.write(value.transactionId, into: &buf)
+        FfiConverterBool.write(value.voided, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRunMove_lift(_ buf: RustBuffer) throws -> RunMove {
+    return try FfiConverterTypeRunMove.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRunMove_lower(_ value: RunMove) -> RustBuffer {
+    return FfiConverterTypeRunMove.lower(value)
 }
 
 
@@ -5288,6 +6150,101 @@ public func FfiConverterTypeWalletView_lower(_ value: WalletView) -> RustBuffer 
 
 
 /**
+ * What one line of a plan asks for its envelope. Stored as data inside the
+ * plan's JSON, tagged by `rule`.
+ */
+
+public enum AllocationRule: Equatable, Hashable, Codable {
+    
+    /**
+     * The same amount every period, in minor units, `> 0`.
+     */
+    case fixed(amount: Int64
+    )
+    /**
+     * A share of the whole total, in basis points: `1..=10000`, so 12.5% is
+     * 1250. Rounded down to the minor unit.
+     */
+    case percent(basisPoints: UInt32
+    )
+    /**
+     * Whatever brings the envelope up to its cap: the room left under a
+     * net cap, or under an income cap. An envelope without a cap gets
+     * nothing.
+     */
+    case fillToCap
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AllocationRule: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllocationRule: FfiConverterRustBuffer {
+    typealias SwiftType = AllocationRule
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllocationRule {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .fixed(amount: try FfiConverterInt64.read(from: &buf)
+        )
+        
+        case 2: return .percent(basisPoints: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        case 3: return .fillToCap
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AllocationRule, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .fixed(amount):
+            writeInt(&buf, Int32(1))
+            FfiConverterInt64.write(amount, into: &buf)
+            
+        
+        case let .percent(basisPoints):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt32.write(basisPoints, into: &buf)
+            
+        
+        case .fillToCap:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationRule_lift(_ buf: RustBuffer) throws -> AllocationRule {
+    return try FfiConverterTypeAllocationRule.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllocationRule_lower(_ value: AllocationRule) -> RustBuffer {
+    return FfiConverterTypeAllocationRule.lower(value)
+}
+
+
+
+/**
  * Which sign the amount column gives money going out.
  */
 
@@ -5538,6 +6495,52 @@ public enum Command: Equatable, Hashable, Codable {
      */
     case skipRecurring(recurringId: Uuid, periodDate: NaiveDate
     )
+    /**
+     * The vault's allocation plan: `lines`, in priority order, shared out of
+     * Unallocated once per period of `schedule`. A vault holds at most one
+     * plan; its id is the command id. `lines` is not empty, names each
+     * envelope once and never Unallocated.
+     */
+    case createAllocationPlan(schedule: Schedule, lines: [AllocationLine]
+    )
+    /**
+     * Partial update; the patch must carry at least one field. `lines`
+     * replaces the whole list. Past runs are not touched.
+     */
+    case updateAllocationPlan(planId: Uuid, patch: AllocationPlanPatch
+    )
+    /**
+     * Shares out one due period: a `transfer_flow` transaction from
+     * Unallocated per move, with ids derived from the command id. The
+     * amounts are worked out by the app (`Core::preview_allocation`) and
+     * only checked here, so a later change to the plan never rewrites
+     * history. `period_date` must be due, undecided and later than every
+     * decided period; deciding it closes the older ones still due.
+     */
+    case executeAllocation(planId: Uuid, periodDate: NaiveDate, occurredAt: OffsetDateTime, 
+        /**
+         * The total the moves were worked out on; the moves add up to no
+         * more than it.
+         */total: Int64, 
+        /**
+         * Not empty, one per envelope, never Unallocated, each `> 0`.
+         */moves: [AllocationMove], 
+        /**
+         * The note of every transfer.
+         */note: String? = nil
+    )
+    /**
+     * Marks a due period as decided without moving anything. The incomes it
+     * saw stay in Unallocated: the next period counts from here.
+     */
+    case skipAllocation(planId: Uuid, periodDate: NaiveDate
+    )
+    /**
+     * Undoes the decision on the plan's latest decided period: voids the
+     * transfers it made that are still live and makes the period due again.
+     */
+    case reopenAllocation(planId: Uuid, periodDate: NaiveDate
+    )
 
 
 
@@ -5649,6 +6652,21 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         )
         
         case 31: return .skipRecurring(recurringId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
+        )
+        
+        case 32: return .createAllocationPlan(schedule: try FfiConverterTypeSchedule.read(from: &buf), lines: try FfiConverterSequenceTypeAllocationLine.read(from: &buf)
+        )
+        
+        case 33: return .updateAllocationPlan(planId: try FfiConverterTypeUuid.read(from: &buf), patch: try FfiConverterTypeAllocationPlanPatch.read(from: &buf)
+        )
+        
+        case 34: return .executeAllocation(planId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf), occurredAt: try FfiConverterTypeOffsetDateTime.read(from: &buf), total: try FfiConverterInt64.read(from: &buf), moves: try FfiConverterSequenceTypeAllocationMove.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 35: return .skipAllocation(planId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
+        )
+        
+        case 36: return .reopenAllocation(planId: try FfiConverterTypeUuid.read(from: &buf), periodDate: try FfiConverterTypeNaiveDate.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5846,6 +6864,40 @@ public struct FfiConverterTypeCommand: FfiConverterRustBuffer {
         case let .skipRecurring(recurringId,periodDate):
             writeInt(&buf, Int32(31))
             FfiConverterTypeUuid.write(recurringId, into: &buf)
+            FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
+            
+        
+        case let .createAllocationPlan(schedule,lines):
+            writeInt(&buf, Int32(32))
+            FfiConverterTypeSchedule.write(schedule, into: &buf)
+            FfiConverterSequenceTypeAllocationLine.write(lines, into: &buf)
+            
+        
+        case let .updateAllocationPlan(planId,patch):
+            writeInt(&buf, Int32(33))
+            FfiConverterTypeUuid.write(planId, into: &buf)
+            FfiConverterTypeAllocationPlanPatch.write(patch, into: &buf)
+            
+        
+        case let .executeAllocation(planId,periodDate,occurredAt,total,moves,note):
+            writeInt(&buf, Int32(34))
+            FfiConverterTypeUuid.write(planId, into: &buf)
+            FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
+            FfiConverterTypeOffsetDateTime.write(occurredAt, into: &buf)
+            FfiConverterInt64.write(total, into: &buf)
+            FfiConverterSequenceTypeAllocationMove.write(moves, into: &buf)
+            FfiConverterOptionString.write(note, into: &buf)
+            
+        
+        case let .skipAllocation(planId,periodDate):
+            writeInt(&buf, Int32(35))
+            FfiConverterTypeUuid.write(planId, into: &buf)
+            FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
+            
+        
+        case let .reopenAllocation(planId,periodDate):
+            writeInt(&buf, Int32(36))
+            FfiConverterTypeUuid.write(planId, into: &buf)
             FfiConverterTypeNaiveDate.write(periodDate, into: &buf)
             
         }
@@ -6472,6 +7524,111 @@ public func FfiConverterTypeLegTarget_lift(_ buf: RustBuffer) throws -> LegTarge
 #endif
 public func FfiConverterTypeLegTarget_lower(_ value: LegTarget) -> RustBuffer {
     return FfiConverterTypeLegTarget.lower(value)
+}
+
+
+
+/**
+ * How a line of a preview came out.
+ */
+
+public enum LineStatus: Equatable, Hashable, Codable, CaseIterable {
+    
+    /**
+     * It gets all it asks for; an envelope already full asks for nothing.
+     */
+    case full
+    /**
+     * The cap stopped it: it gets the room left.
+     */
+    case capLimited
+    /**
+     * The total ran out first: it gets what was left, possibly nothing.
+     */
+    case short
+    /**
+     * A fill-to-cap line on an envelope without a cap: nothing.
+     */
+    case noCap
+    /**
+     * The envelope is archived (or gone): nothing.
+     */
+    case archived
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LineStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLineStatus: FfiConverterRustBuffer {
+    typealias SwiftType = LineStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LineStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .full
+        
+        case 2: return .capLimited
+        
+        case 3: return .short
+        
+        case 4: return .noCap
+        
+        case 5: return .archived
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LineStatus, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .full:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .capLimited:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .short:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .noCap:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .archived:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLineStatus_lift(_ buf: RustBuffer) throws -> LineStatus {
+    return try FfiConverterTypeLineStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLineStatus_lower(_ value: LineStatus) -> RustBuffer {
+    return FfiConverterTypeLineStatus.lower(value)
 }
 
 
@@ -7446,6 +8603,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeAllocationPlanView: FfiConverterRustBuffer {
+    typealias SwiftType = AllocationPlanView?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAllocationPlanView.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAllocationPlanView.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCategorySuggestion: FfiConverterRustBuffer {
     typealias SwiftType = CategorySuggestion?
 
@@ -7462,6 +8643,30 @@ fileprivate struct FfiConverterOptionTypeCategorySuggestion: FfiConverterRustBuf
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeCategorySuggestion.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypePendingAllocation: FfiConverterRustBuffer {
+    typealias SwiftType = PendingAllocation?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePendingAllocation.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePendingAllocation.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -7582,6 +8787,30 @@ fileprivate struct FfiConverterOptionTypeTransactionKind: FfiConverterRustBuffer
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeTransactionKind.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionSequenceTypeAllocationLine: FfiConverterRustBuffer {
+    typealias SwiftType = [AllocationLine]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeAllocationLine.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeAllocationLine.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -7752,6 +8981,81 @@ fileprivate struct FfiConverterSequenceTypeAliasView: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAliasView.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeAllocationLine: FfiConverterRustBuffer {
+    typealias SwiftType = [AllocationLine]
+
+    public static func write(_ value: [AllocationLine], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAllocationLine.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AllocationLine] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AllocationLine]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeAllocationLine.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeAllocationMove: FfiConverterRustBuffer {
+    typealias SwiftType = [AllocationMove]
+
+    public static func write(_ value: [AllocationMove], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAllocationMove.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AllocationMove] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AllocationMove]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeAllocationMove.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeAllocationRunView: FfiConverterRustBuffer {
+    typealias SwiftType = [AllocationRunView]
+
+    public static func write(_ value: [AllocationRunView], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAllocationRunView.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AllocationRunView] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AllocationRunView]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeAllocationRunView.read(from: &buf))
         }
         return seq
     }
@@ -8035,6 +9339,31 @@ fileprivate struct FfiConverterSequenceTypePeriodTotals: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePreviewLine: FfiConverterRustBuffer {
+    typealias SwiftType = [PreviewLine]
+
+    public static func write(_ value: [PreviewLine], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePreviewLine.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PreviewLine] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PreviewLine]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePreviewLine.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeReceipt: FfiConverterRustBuffer {
     typealias SwiftType = [Receipt]
 
@@ -8127,6 +9456,31 @@ fileprivate struct FfiConverterSequenceTypeRejectedCommand: FfiConverterRustBuff
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeRejectedCommand.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRunMove: FfiConverterRustBuffer {
+    typealias SwiftType = [RunMove]
+
+    public static func write(_ value: [RunMove], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRunMove.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RunMove] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RunMove]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRunMove.read(from: &buf))
         }
         return seq
     }
@@ -8857,6 +10211,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_aliases() != 6737) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_method_corehandle_allocation_base() != 42159) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_allocation_plan() != 38413) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_allocation_runs() != 7546) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_method_corehandle_apply_push_response_json() != 58020) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8908,6 +10271,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sparagne_core_checksum_method_corehandle_list_transactions() != 35052) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sparagne_core_checksum_method_corehandle_pending_allocation() != 13198) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sparagne_core_checksum_method_corehandle_pending_recurring() != 33812) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8915,6 +10281,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_period_totals() != 68) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_preview_allocation() != 37697) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_preview_merge() != 37701) {

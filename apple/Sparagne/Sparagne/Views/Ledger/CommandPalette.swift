@@ -171,7 +171,7 @@ extension CommandPaletteModel {
             },
         ]
 
-        // Every sheet of the tab bar, in its order (⌘1 to ⌘4 from the View
+        // Every sheet of the tab bar, in its order (⌘1 to ⌘5 from the View
         // menu do the same).
         for tab in LedgerTab.allCases {
             actions.append(

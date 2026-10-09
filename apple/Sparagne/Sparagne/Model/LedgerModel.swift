@@ -212,12 +212,15 @@ enum DeleteTarget: Equatable, Sendable {
 }
 
 /// The sheets of the tab bar at the bottom of the window, in the bar's
-/// order, which is also ⌘1 to ⌘4; the window opens on the first.
+/// order, which is also ⌘1 to ⌘5; the window opens on the first.
 enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
     case summary
     case ledger
     /// The recurring templates and the periods waiting for a decision.
     case recurring
+    /// The allocation plan: what each envelope gets out of Unallocated, and
+    /// the period waiting to be shared out.
+    case allocation
     /// Envelopes and categories, as two editable tables.
     case setup
 
@@ -228,6 +231,7 @@ enum LedgerTab: String, CaseIterable, Identifiable, Sendable {
         case .summary: String(localized: "Summary")
         case .ledger: String(localized: "Ledger")
         case .recurring: String(localized: "Recurring")
+        case .allocation: String(localized: "Allocation")
         case .setup: String(localized: "Setup")
         }
     }

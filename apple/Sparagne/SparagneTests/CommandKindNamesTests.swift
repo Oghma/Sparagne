@@ -17,11 +17,13 @@ struct CommandKindNamesTests {
         "transfer_wallet", "transfer_flow", "update_transaction", "void_transaction",
         "create_recurring", "update_recurring", "archive_recurring", "restore_recurring",
         "execute_recurring", "skip_recurring",
+        "create_allocation_plan", "update_allocation_plan", "execute_allocation",
+        "skip_allocation", "reopen_allocation",
     ]
 
-    @Test("Every one of the 31 command kinds has its own name")
+    @Test("Every one of the 36 command kinds has its own name")
     func everyKindIsNamed() {
-        #expect(Self.kinds.count == 31)
+        #expect(Self.kinds.count == 36)
         let names = Self.kinds.map(CommandKindNames.name(for:))
         for (kind, name) in zip(Self.kinds, names) {
             #expect(name != kind, "\(kind) has no name")

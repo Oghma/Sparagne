@@ -27,10 +27,39 @@ UPDATE transactions SET person = created_by;
 ALTER TABLE recurring_templates ADD COLUMN owner TEXT NOT NULL DEFAULT '';
 UPDATE recurring_templates SET owner = created_by;
 ";
+/// The allocation plan and its decided periods. Before version 5 no command
+/// made a plan, so both tables start empty, as replaying the same log gives.
+const MIGRATION_V5: &str = "
+CREATE TABLE allocation_plans (
+    id         BLOB PRIMARY KEY,
+    vault_id   BLOB NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
+    schedule   TEXT NOT NULL,
+    lines      TEXT NOT NULL,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX ux_allocation_plans_vault ON allocation_plans(vault_id);
+CREATE TABLE allocation_runs (
+    plan_id     BLOB NOT NULL REFERENCES allocation_plans(id) ON DELETE CASCADE,
+    period_date TEXT NOT NULL,
+    outcome     TEXT NOT NULL,
+    total       INTEGER NOT NULL,
+    command_id  BLOB NOT NULL,
+    created_by  TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (plan_id, period_date)
+);
+";
 /// Every step, keyed by the version it leads to: a database at version `v`
 /// runs, in order, each step whose key is above `v`.
-const MIGRATIONS: &[(i64, &str)] = &[(2, MIGRATION_V2), (3, MIGRATION_V3), (4, MIGRATION_V4)];
-const SCHEMA_VERSION: i64 = 4;
+const MIGRATIONS: &[(i64, &str)] = &[
+    (2, MIGRATION_V2),
+    (3, MIGRATION_V3),
+    (4, MIGRATION_V4),
+    (5, MIGRATION_V5),
+];
+const SCHEMA_VERSION: i64 = 5;
 
 /// Handle to one local database (one file per account, many vaults).
 pub struct Core {
@@ -106,6 +135,15 @@ mod tests {
             .any(|name| name == column)
     }
 
+    fn has_table(conn: &Connection, name: &str) -> bool {
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+            [name],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
     fn has_index(conn: &Connection, name: &str) -> bool {
         conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1)",
@@ -136,19 +174,26 @@ mod tests {
             .command_id
     }
 
-    /// A file as `version` left it, holding alice's vault "Casa": the person
-    /// and owner columns are gone, before version 3 the index on the owner and
-    /// the vault name is back, and before version 2 the server seq column is
-    /// gone too.
+    /// A file as `version` left it, holding alice's vault "Casa": the
+    /// allocation tables are gone, before version 4 the person and owner
+    /// columns too, before version 3 the index on the owner and the vault
+    /// name is back, and before version 2 the server seq column is gone too.
     fn old_database(version: i64) -> (PathBuf, Uuid) {
         let path = temp_database();
         let casa = create_vault(&mut Core::open(&path).unwrap(), "Casa");
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch(
-            "ALTER TABLE transactions DROP COLUMN person;
-             ALTER TABLE recurring_templates DROP COLUMN owner;",
+            "DROP TABLE allocation_runs;
+             DROP TABLE allocation_plans;",
         )
         .unwrap();
+        if version < 4 {
+            conn.execute_batch(
+                "ALTER TABLE transactions DROP COLUMN person;
+                 ALTER TABLE recurring_templates DROP COLUMN owner;",
+            )
+            .unwrap();
+        }
         if version < 3 {
             conn.execute_batch(
                 "CREATE UNIQUE INDEX ux_vaults_owner_name ON vaults(owner_user_id, lower(name));",
@@ -177,6 +222,8 @@ mod tests {
         assert!(!has_index(&core.conn, "ux_vaults_owner_name"));
         assert!(has_column(&core.conn, "transactions", "person"));
         assert!(has_column(&core.conn, "recurring_templates", "owner"));
+        assert!(has_table(&core.conn, "allocation_plans"));
+        assert!(has_table(&core.conn, "allocation_runs"));
 
         let vaults = core.vaults().unwrap();
         assert_eq!(vaults.len(), 1);
@@ -199,6 +246,8 @@ mod tests {
         assert!(!has_index(&core.conn, "ux_vaults_owner_name"));
         assert!(has_column(&core.conn, "transactions", "person"));
         assert!(has_column(&core.conn, "recurring_templates", "owner"));
+        assert!(has_table(&core.conn, "allocation_plans"));
+        assert!(has_table(&core.conn, "allocation_runs"));
     }
 
     #[test]
@@ -212,6 +261,8 @@ mod tests {
                  ALTER TABLE commands DROP COLUMN server_seq;
                  ALTER TABLE transactions DROP COLUMN person;
                  ALTER TABLE recurring_templates DROP COLUMN owner;
+                 DROP TABLE allocation_runs;
+                 DROP TABLE allocation_plans;
                  PRAGMA user_version = 1;",
             )
             .unwrap();
@@ -238,6 +289,11 @@ mod tests {
     #[test]
     fn a_version_3_database_migrates_to_the_current_version() {
         migrates_from(3);
+    }
+
+    #[test]
+    fn a_version_4_database_migrates_to_the_current_version() {
+        migrates_from(4);
     }
 
     #[test]

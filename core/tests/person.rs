@@ -489,12 +489,15 @@ fn a_version_3_database_migrates_to_what_its_log_replays_to() {
         (vault, log, paid, template)
     };
 
-    // What version 3 left on disk: no person, no owner.
+    // What version 3 left on disk: no person, no owner, and none of the
+    // tables later versions added.
     {
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch(
             "ALTER TABLE transactions DROP COLUMN person;
              ALTER TABLE recurring_templates DROP COLUMN owner;
+             DROP TABLE allocation_runs;
+             DROP TABLE allocation_plans;
              PRAGMA user_version = 3;",
         )
         .unwrap();

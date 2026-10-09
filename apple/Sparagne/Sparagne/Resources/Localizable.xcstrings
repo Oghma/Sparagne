@@ -833,6 +833,22 @@
         }
       }
     },
+    "Allocation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allocation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riparto"
+          }
+        }
+      }
+    },
     "Already exists": {
       "localizations": {
         "en": {
@@ -1753,6 +1769,22 @@
         }
       }
     },
+    "Create allocation plan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create allocation plan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea piano di riparto"
+          }
+        }
+      }
+    },
     "Create category": {
       "localizations": {
         "en": {
@@ -2413,6 +2445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "modifica riga"
+          }
+        }
+      }
+    },
+    "Edit allocation plan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit allocation plan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica piano di riparto"
           }
         }
       }
@@ -5993,6 +6041,22 @@
         }
       }
     },
+    "Share out to envelopes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share out to envelopes"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distribuisci alle buste"
+          }
+        }
+      }
+    },
     "Share…": {
       "localizations": {
         "en": {
@@ -6149,6 +6213,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salta"
+          }
+        }
+      }
+    },
+    "Skip allocation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip allocation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salta riparto"
           }
         }
       }
@@ -7517,6 +7597,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ripristina"
+          }
+        }
+      }
+    },
+    "Undo allocation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo allocation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulla riparto"
           }
         }
       }

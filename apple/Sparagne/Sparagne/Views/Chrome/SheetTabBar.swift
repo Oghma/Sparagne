@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// The sheet tabs along the bottom of the window, as in a spreadsheet:
-/// Riepilogo · Mastro · Ricorrenze · Setup, plain words
+/// Riepilogo · Mastro · Ricorrenze · Riparto · Setup, plain words
 /// with the active one underlined in the accent, and on the right the status
-/// line of the sheet on screen. ⌘1 to ⌘4 select the same tabs from the View
+/// line of the sheet on screen. ⌘1 to ⌘5 select the same tabs from the View
 /// menu.
 struct SheetTabBar<Status: View>: View {
     let store: AppStore

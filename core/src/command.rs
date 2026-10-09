@@ -4,7 +4,11 @@ use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{Currency, DomainError, FlowMode, recurring::Schedule};
+use crate::{
+    Currency, DomainError, FlowMode,
+    allocation::{AllocationLine, AllocationMove, AllocationPlanPatch},
+    recurring::Schedule,
+};
 
 /// Kind of a transaction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum)]
@@ -270,6 +274,54 @@ pub enum Command {
         recurring_id: Uuid,
         period_date: NaiveDate,
     },
+
+    // -- Allocation ---------------------------------------------------------
+    /// The vault's allocation plan: `lines`, in priority order, shared out of
+    /// Unallocated once per period of `schedule`. A vault holds at most one
+    /// plan; its id is the command id. `lines` is not empty, names each
+    /// envelope once and never Unallocated.
+    CreateAllocationPlan {
+        schedule: Schedule,
+        lines: Vec<AllocationLine>,
+    },
+    /// Partial update; the patch must carry at least one field. `lines`
+    /// replaces the whole list. Past runs are not touched.
+    UpdateAllocationPlan {
+        plan_id: Uuid,
+        patch: AllocationPlanPatch,
+    },
+    /// Shares out one due period: a `transfer_flow` transaction from
+    /// Unallocated per move, with ids derived from the command id. The
+    /// amounts are worked out by the app (`Core::preview_allocation`) and
+    /// only checked here, so a later change to the plan never rewrites
+    /// history. `period_date` must be due, undecided and later than every
+    /// decided period; deciding it closes the older ones still due.
+    ExecuteAllocation {
+        plan_id: Uuid,
+        period_date: NaiveDate,
+        occurred_at: DateTime<FixedOffset>,
+        /// The total the moves were worked out on; the moves add up to no
+        /// more than it.
+        total: i64,
+        /// Not empty, one per envelope, never Unallocated, each `> 0`.
+        moves: Vec<AllocationMove>,
+        /// The note of every transfer.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[uniffi(default = None)]
+        note: Option<String>,
+    },
+    /// Marks a due period as decided without moving anything. The incomes it
+    /// saw stay in Unallocated: the next period counts from here.
+    SkipAllocation {
+        plan_id: Uuid,
+        period_date: NaiveDate,
+    },
+    /// Undoes the decision on the plan's latest decided period: voids the
+    /// transfers it made that are still live and makes the period due again.
+    ReopenAllocation {
+        plan_id: Uuid,
+        period_date: NaiveDate,
+    },
 }
 
 /// The fields [`Command::UpdateTransaction`] can change.
@@ -410,6 +462,11 @@ impl Command {
             Self::RestoreRecurring { .. } => "restore_recurring",
             Self::ExecuteRecurring { .. } => "execute_recurring",
             Self::SkipRecurring { .. } => "skip_recurring",
+            Self::CreateAllocationPlan { .. } => "create_allocation_plan",
+            Self::UpdateAllocationPlan { .. } => "update_allocation_plan",
+            Self::ExecuteAllocation { .. } => "execute_allocation",
+            Self::SkipAllocation { .. } => "skip_allocation",
+            Self::ReopenAllocation { .. } => "reopen_allocation",
         }
     }
 
@@ -421,7 +478,8 @@ impl Command {
             | Self::CreateFlow { occurred_at, .. }
             | Self::TransferWallet { occurred_at, .. }
             | Self::TransferFlow { occurred_at, .. }
-            | Self::ExecuteRecurring { occurred_at, .. } => Some(*occurred_at),
+            | Self::ExecuteRecurring { occurred_at, .. }
+            | Self::ExecuteAllocation { occurred_at, .. } => Some(*occurred_at),
             Self::Income(e) | Self::Expense(e) | Self::Refund(e) => Some(e.occurred_at),
             Self::UpdateTransaction { patch, .. } => patch.occurred_at,
             Self::CreateVault { .. }
@@ -445,7 +503,11 @@ impl Command {
             | Self::UpdateRecurring { .. }
             | Self::ArchiveRecurring { .. }
             | Self::RestoreRecurring { .. }
-            | Self::SkipRecurring { .. } => None,
+            | Self::SkipRecurring { .. }
+            | Self::CreateAllocationPlan { .. }
+            | Self::UpdateAllocationPlan { .. }
+            | Self::SkipAllocation { .. }
+            | Self::ReopenAllocation { .. } => None,
         }
     }
 
@@ -484,7 +546,12 @@ impl Command {
             | Self::VoidTransaction { .. }
             | Self::ArchiveRecurring { .. }
             | Self::RestoreRecurring { .. }
-            | Self::SkipRecurring { .. } => return Vec::new(),
+            | Self::SkipRecurring { .. }
+            | Self::CreateAllocationPlan { .. }
+            | Self::UpdateAllocationPlan { .. }
+            | Self::ExecuteAllocation { .. }
+            | Self::SkipAllocation { .. }
+            | Self::ReopenAllocation { .. } => return Vec::new(),
         };
         explicit_person(named.as_deref()).into_iter().collect()
     }
@@ -522,7 +589,12 @@ impl Command {
             | Self::VoidTransaction { .. }
             | Self::ArchiveRecurring { .. }
             | Self::RestoreRecurring { .. }
-            | Self::SkipRecurring { .. } => return false,
+            | Self::SkipRecurring { .. }
+            | Self::CreateAllocationPlan { .. }
+            | Self::UpdateAllocationPlan { .. }
+            | Self::ExecuteAllocation { .. }
+            | Self::SkipAllocation { .. }
+            | Self::ReopenAllocation { .. } => return false,
         };
         if explicit_person(slot.as_deref()) != Some(from) {
             return false;
