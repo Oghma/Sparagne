@@ -83,7 +83,9 @@ envelope), skip the period, or reopen the latest decision to undo it. The
 tabs are Riepilogo (⌘1), Mastro (⌘2), Ricorrenze (⌘3), Riparto (⌘4) and
 Setup (⌘5). The plan lives in the vault, so every member sees it and a
 period is decided once; before creating one, upgrade every Mac that syncs
-(`docs/DEPLOY.md` §6.3).
+(`docs/DEPLOY.md` §6.3). An income counts in one period only: edited or
+deleted after its period was shared out, it is not shared again; reopen the
+period to redo it.
 
 ### Statements, full export and backup
 

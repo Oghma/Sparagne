@@ -345,10 +345,11 @@ matters, and it is **the same as §6.2**:
 
 1. **Back up the server** (§4): `docker compose exec sparagne backup.sh`,
    or `backup.sh` without Docker.
-2. **The server first, then the apps.** An old server refuses a push that
-   carries a command kind it does not know with `400`, so nobody could sync
-   an allocation. The other way round is worse: an old app cannot pull a
-   vault whose log holds one of these commands.
+2. **The server first, then the apps.** An old server refuses with `400`
+   the whole push of an app that carries a command kind it does not know,
+   so that Mac stops syncing altogether until the server is upgraded. The
+   other way round is worse: an old app cannot pull a vault whose log holds
+   one of these commands.
 3. **Then every app, right away.** Upgrade every Mac that syncs as soon as
    the server is up.
 4. **Nobody creates a plan until every Mac of the vault runs the new app.**
