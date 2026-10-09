@@ -291,23 +291,13 @@ impl Core {
             Some(run) => Some(command_seq(&self.conn, run.command_id)?),
             None => None,
         };
-        let mut stmt = self.conn.prepare(
-            "SELECT t.id, t.occurred_at, t.occurred_offset
-             FROM transactions t JOIN categories c ON c.id = t.category_id
-             WHERE t.vault_id = ?1 AND t.kind = ?2 AND t.voided_at IS NULL
-               AND NOT (c.is_system = 1 AND c.name_norm = ?3)
-               AND EXISTS (
-                   SELECT 1 FROM legs l JOIN flows f ON f.id = l.target_id
-                   WHERE l.transaction_id = t.id AND l.target_kind = 'flow' AND l.amount > 0
-                     AND f.vault_id = t.vault_id AND f.system_kind = 'unallocated'
-               )
-               AND (?4 IS NULL OR (SELECT seq FROM commands WHERE id = t.command_id) > ?4)
-             ORDER BY t.occurred_at, t.id",
-        )?;
+        let unallocated = unallocated_flow(&self.conn, vault_id)?;
+        let mut stmt = self.conn.prepare(BASE_SQL)?;
         let rows: Vec<(Uuid, i64, i32)> = stmt
             .query_map(
                 params![
                     vault_id,
+                    unallocated,
                     TransactionKind::Income.as_str(),
                     OPENING_KEY,
                     after_seq
@@ -357,15 +347,7 @@ impl Core {
             return Ok(Vec::new());
         };
         let limit = usize::try_from(limit).unwrap_or(usize::MAX);
-        let mut stmt = self.conn.prepare(
-            "SELECT t.id, t.amount, t.voided_at IS NOT NULL,
-                    (SELECT l.target_id FROM legs l
-                     WHERE l.transaction_id = t.id AND l.target_kind = 'flow' AND l.amount > 0
-                     ORDER BY l.ordinal LIMIT 1)
-             FROM transactions t
-             WHERE t.vault_id = ?1 AND t.command_id = ?2
-             ORDER BY t.rowid",
-        )?;
+        let mut stmt = self.conn.prepare(MOVES_SQL)?;
         decided_runs(&self.conn, plan.id)?
             .into_iter()
             .take(limit)
@@ -412,6 +394,50 @@ impl Core {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// The base's incomes, oldest first: `?1` the vault, `?2` its Unallocated,
+/// `?3` the income kind, `?4` the opening category's key and `?5` the log seq
+/// they must come after (NULL before any decision).
+///
+/// The `+` before `l.target_kind` is there on purpose, keep it: it takes the
+/// column off `ix_legs_target`, which SQLite would otherwise pick to walk
+/// every flow leg of the database for each income, instead of the income's
+/// own two legs through the primary key. A test holds the plan in place.
+const BASE_SQL: &str = "
+    SELECT t.id, t.occurred_at, t.occurred_offset
+    FROM transactions t JOIN categories c ON c.id = t.category_id
+    WHERE t.vault_id = ?1 AND t.kind = ?3 AND t.voided_at IS NULL
+      AND NOT (c.is_system = 1 AND c.name_norm = ?4)
+      AND EXISTS (
+          SELECT 1 FROM legs l
+          WHERE l.transaction_id = t.id AND +l.target_kind = 'flow'
+            AND l.target_id = ?2 AND l.amount > 0
+      )
+      AND (?5 IS NULL OR (SELECT seq FROM commands WHERE id = t.command_id) > ?5)
+    ORDER BY t.occurred_at, t.id";
+
+/// The transfers of an executed run, in the order they were written, with
+/// the envelope each one brings money to: `?1` the vault, `?2` the run's
+/// command. The `+` keeps the legs on their primary key, as in [`BASE_SQL`].
+const MOVES_SQL: &str = "
+    SELECT t.id, t.amount, t.voided_at IS NOT NULL,
+           (SELECT l.target_id FROM legs l
+            WHERE l.transaction_id = t.id AND +l.target_kind = 'flow' AND l.amount > 0
+            ORDER BY l.ordinal LIMIT 1)
+    FROM transactions t
+    WHERE t.vault_id = ?1 AND t.command_id = ?2
+    ORDER BY t.rowid";
+
+/// The id of the vault's Unallocated.
+fn unallocated_flow(conn: &Connection, vault_id: Uuid) -> Result<Uuid> {
+    conn.query_row(
+        "SELECT id FROM flows WHERE vault_id = ?1 AND system_kind = 'unallocated'",
+        params![vault_id],
+        |r| r.get(0),
+    )
+    .optional()?
+    .ok_or_else(|| DomainError::InvalidFlow("missing Unallocated flow".to_string()))
+}
 
 const PLAN_COLUMNS: &str = "id, schedule, lines, enabled, created_by";
 
@@ -663,4 +689,59 @@ fn parse_date(value: &str) -> Result<NaiveDate> {
 
 fn invalid(message: &str) -> DomainError {
     DomainError::InvalidCommand(message.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    /// The `detail` column of `EXPLAIN QUERY PLAN` for `sql`, step by step.
+    fn query_plan(core: &Core, sql: &str, args: impl rusqlite::Params) -> Vec<String> {
+        let mut stmt = core
+            .conn
+            .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+            .unwrap();
+        stmt.query_map(args, |r| r.get(3))
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap()
+    }
+
+    /// The steps that read the legs (aliased `l`).
+    fn leg_steps(plan: &[String]) -> Vec<&String> {
+        plan.iter()
+            .filter(|step| step.contains(" l ") || step.ends_with(" l"))
+            .collect()
+    }
+
+    /// Every query that looks up a transaction's flow legs reaches them
+    /// through the primary key, by transaction, never by walking every flow
+    /// leg through `ix_legs_target`. A timing would be flaky; the plan is not.
+    #[test]
+    fn the_legs_of_a_transaction_are_found_by_its_id() {
+        let core = Core::open_in_memory().unwrap();
+        let id = Uuid::nil();
+        let plans = [
+            query_plan(
+                &core,
+                BASE_SQL,
+                params![id, id, "income", OPENING_KEY, None::<i64>],
+            ),
+            query_plan(&core, MOVES_SQL, params![id, id]),
+        ];
+        for plan in plans {
+            let legs = leg_steps(&plan);
+            assert!(!legs.is_empty(), "{plan:?}");
+            for step in legs {
+                assert!(step.starts_with("SEARCH l "), "{plan:?}");
+                assert!(step.contains("(transaction_id=?"), "{plan:?}");
+            }
+            assert!(
+                plan.iter().all(|step| !step.contains("ix_legs_target")),
+                "{plan:?}"
+            );
+        }
+    }
 }
