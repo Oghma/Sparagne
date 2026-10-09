@@ -87,6 +87,38 @@ struct RecurringNextTests {
         #expect(preview.map(\.isDue) == [true, false, false, false])
     }
 
+    @Test("A start moved back to January makes every month since then due")
+    func dueSinceStart() throws {
+        let schedule = RecurringFixture.schedule(.monthly(day: 16), from: "2026-01-01")
+        let due = try RecurringNext.due(schedule: schedule, today: Self.today, handled: [], occurrences: RecurringFixture.core)
+        #expect(due == [
+            "2026-01-16", "2026-02-16", "2026-03-16", "2026-04-16", "2026-05-16",
+            "2026-06-16", "2026-07-16", "2026-08-16", "2026-09-16",
+        ])
+    }
+
+    @Test("Periods recorded or skipped are not due again, and today's still is")
+    func dueLeavesHandledOut() throws {
+        let schedule = RecurringFixture.schedule(.monthly(day: 7), from: "2026-07-01")
+        let due = try RecurringNext.due(
+            schedule: schedule,
+            today: Self.today,
+            handled: ["2026-07-07", "2026-09-07"],
+            occurrences: RecurringFixture.core
+        )
+        #expect(due == ["2026-08-07", "2026-10-07"])
+    }
+
+    @Test("Nothing is due past the end date, nor from a start still ahead")
+    func dueBounds() throws {
+        let ended = RecurringFixture.schedule(.monthly(day: 1), from: "2026-01-01", until: "2026-03-31")
+        #expect(try RecurringNext.due(schedule: ended, today: Self.today, handled: [], occurrences: RecurringFixture.core)
+            == ["2026-01-01", "2026-02-01", "2026-03-01"])
+        let ahead = RecurringFixture.schedule(.monthly(day: 1), from: "2026-11-01")
+        #expect(try RecurringNext.due(schedule: ahead, today: Self.today, handled: [], occurrences: RecurringFixture.core)
+            .isEmpty)
+    }
+
     @Test("The preview of an invalid schedule throws the core's refusal")
     func previewInvalid() {
         #expect(throws: DomainError.self) {

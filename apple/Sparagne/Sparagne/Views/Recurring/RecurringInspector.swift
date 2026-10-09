@@ -30,7 +30,11 @@ struct RecurringInspector: View {
     /// depend on changes (`PreviewInputs`) rather than on every render: the
     /// inspector draws again on every keystroke, in the amount and the note
     /// too. `nil` until the first answer.
-    @State private var preview: Result<[RecurringNext.Preview], Error>?
+    @State private var preview: Result<NextDates, Error>?
+    /// The periods of the open template already recorded or skipped, left out
+    /// of the due periods of a schedule being edited. Empty for a new
+    /// template.
+    @State private var handled: Set<NaiveDate> = []
 
     init(
         store: AppStore,
@@ -89,6 +93,11 @@ struct RecurringInspector: View {
         }
         .onChange(of: previewInputs, initial: true) { _, inputs in
             preview = Self.previewDates(inputs)
+        }
+        // A period recorded or skipped from the due sheet changes the saved
+        // template's due list, and with it what has been handled.
+        .task(id: HandledKey(templateId: template?.id, due: template.map { store.dueDates(of: $0.id) } ?? [])) {
+            handled = if let template { await store.handledPeriods(of: template.id) } else { [] }
         }
     }
 
@@ -395,11 +404,16 @@ struct RecurringInspector: View {
                 EmptyView()
             case .success(let dates):
                 VStack(spacing: 0) {
-                    ForEach(dates, id: \.self) { line in
+                    ForEach(dates.lines, id: \.self) { line in
                         previewLine(line)
                     }
                 }
-                if dates.isEmpty {
+                if dates.moreDue > 0 {
+                    Text(String(localized: "and \(dates.moreDue) more to confirm"))
+                        .font(Face.ui(12))
+                        .foregroundStyle(Ink.text3)
+                }
+                if dates.lines.isEmpty {
                     Text(String(localized: "No dates left: the end date has passed"))
                         .font(Face.ui(12))
                         .foregroundStyle(Ink.text3)
@@ -413,32 +427,45 @@ struct RecurringInspector: View {
     }
 
     /// What the preview is worked out from. Cheap to read on every render,
-    /// unlike the answer: the schedule on screen, saved or not; the due
-    /// periods, which lead while the schedule is the saved one; and whether
-    /// today, for a running template, counts as decided when it is not among
-    /// them (`RecurringNext.of`).
+    /// unlike the answer: the schedule on screen, saved or not; the saved
+    /// due periods while the schedule is the saved one; the periods already
+    /// handled; and whether the template runs, which makes its past periods
+    /// due and today, when not among them, decided (`RecurringNext.of`).
+    /// A new template is created running.
     private var previewInputs: PreviewInputs {
         let schedule = draft.schedule
         let unchanged = template.map { $0.schedule == schedule } ?? false
         return PreviewInputs(
             schedule: schedule,
-            due: unchanged ? template.map { store.dueDates(of: $0.id) } ?? [] : [],
+            savedDue: unchanged ? template.map { store.dueDates(of: $0.id) } : nil,
+            handled: handled,
             today: today,
-            running: template.map { $0.enabled && !$0.archived } ?? false
+            running: template.map { $0.enabled && !$0.archived } ?? true
         )
     }
 
-    /// The next four dates of `inputs`, asked of the core.
-    private static func previewDates(_ inputs: PreviewInputs) -> Result<[RecurringNext.Preview], Error> {
+    /// The next four dates of `inputs`, asked of the core. A schedule being
+    /// edited has its due periods worked out from it, so a start moved back
+    /// shows the periods since then before they are saved as due.
+    private static func previewDates(_ inputs: PreviewInputs) -> Result<NextDates, Error> {
         let from = inputs.running ? (NaiveDay.adding(1, to: inputs.today) ?? inputs.today) : inputs.today
         return Result {
-            try RecurringNext.preview(
+            let due = try inputs.savedDue ?? (inputs.running
+                ? RecurringNext.due(
+                    schedule: inputs.schedule,
+                    today: inputs.today,
+                    handled: inputs.handled,
+                    occurrences: CoreSchedule.occurrences
+                )
+                : [])
+            let lines = try RecurringNext.preview(
                 schedule: inputs.schedule,
-                due: inputs.due,
+                due: due,
                 from: from,
                 count: 4,
                 occurrences: CoreSchedule.occurrences
             )
+            return NextDates(lines: lines, moreDue: due.count - lines.filter(\.isDue).count)
         }
     }
 
@@ -580,9 +607,24 @@ struct RecurringInspector: View {
 /// `.onChange`.
 private struct PreviewInputs: Equatable {
     let schedule: Schedule
-    let due: [NaiveDate]
+    /// `nil` once the schedule on screen is not the saved one.
+    let savedDue: [NaiveDate]?
+    let handled: Set<NaiveDate>
     let today: NaiveDate
     let running: Bool
+}
+
+/// The inspector's next dates, and how many due periods did not fit.
+private struct NextDates {
+    let lines: [RecurringNext.Preview]
+    let moreDue: Int
+}
+
+/// When the inspector asks the core again for the periods already handled:
+/// another template, or a change to its due list.
+private struct HandledKey: Equatable {
+    let templateId: Uuid?
+    let due: [NaiveDate]
 }
 
 /// A horizontal line through the middle of its frame, for a dashed rule.

@@ -8129,6 +8129,46 @@
         }
       }
     },
+    "and %lld more to confirm": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "and %lld more to confirm"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "and %lld more to confirm"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "e un'altra da confermare"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "e altre %lld da confermare"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "archived": {
       "localizations": {
         "en": {
