@@ -43,6 +43,17 @@ jobs:
       - name: Test
         run: cargo test --workspace --all-targets
 
+      - name: Shell scripts
+        # Every script through shellcheck, and the helpers install.sh and
+        # update.sh both carry kept identical.
+        run: |
+          shellcheck --severity=warning scripts/*.sh apple/build-core.sh server/deploy/*.sh
+          for f in install update; do
+            awk '/^# --- shared with/ {on = 1; next} /^# --- / {on = 0} on' \
+              "server/deploy/$f.sh" > "$RUNNER_TEMP/$f.shared"
+          done
+          diff -u "$RUNNER_TEMP/install.shared" "$RUNNER_TEMP/update.shared"
+
   # Licenses, duplicate crates and where crates come from (`deny.toml`). The
   # advisories are checked on their own schedule (`deps.yml`), so a new one
   # does not fail a change that has nothing to do with it.

@@ -14,7 +14,9 @@ gh attestation verify oci://ghcr.io/oghma/sparagne-server:{{VERSION}} --repo Ogh
 Without Docker (an LXC, a VM): the server as a static Linux binary is
 attached below, `sparagne-server-{{VERSION}}-<x86_64|aarch64>-unknown-linux-musl.tar.gz`
 with its `.sha256`; `gh attestation verify <archive> --repo Oghma/Sparagne`
-checks where it was built (`docs/DEPLOY.md` §3.3).
+checks where it was built. On a fresh Debian host, `sh install.sh {{VERSION}}`
+sets it all up; on an installed one, `sh /root/update.sh {{VERSION}}`
+updates it, its databases backed up first (`docs/DEPLOY.md` §3.3).
 
 **Upgrade the server before the apps**: back it up, set
 `SPARAGNE_VERSION={{VERSION}}` in `server/deploy/.env`, then

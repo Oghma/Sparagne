@@ -3,7 +3,7 @@ name: Release
 # A version tag (`v2.0.0`, `v2.1.0-beta.1`) publishes the server image to
 # ghcr.io/oghma/sparagne-server and the server as a static Linux binary, both
 # for amd64 and arm64, attests where each was built, and opens the GitHub
-# release. The app is not attached: it is built from the sources
+# release with the binaries and the install and update scripts. The app is not attached: it is built from the sources
 # (`scripts/build-app.sh`, README).
 on:
   push:
@@ -89,8 +89,8 @@ jobs:
 
   # The server as a static Linux binary, for a host without Docker (an LXC,
   # a VM): musl, with SQLite built in, so it runs on any distribution. The
-  # archive carries the systemd unit, the environment example and the backup
-  # script with it.
+  # archive carries the systemd unit, the environment example, the backup
+  # script and the install and update scripts with it.
   binary:
     strategy:
       fail-fast: true
@@ -133,7 +133,8 @@ jobs:
           mkdir -p "dist/${name}"
           cp "target/${TARGET}/release/sparagne-server" \
             server/deploy/sparagne-server.service server/deploy/.env.example \
-            server/deploy/backup.sh "dist/${name}/"
+            server/deploy/backup.sh server/deploy/install.sh server/deploy/update.sh \
+            "dist/${name}/"
           tar -C dist -czf "dist/${name}.tar.gz" "${name}"
           (cd dist && sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256")
 
@@ -237,4 +238,4 @@ jobs:
           case "$TAG" in *-*) prerelease=(--prerelease) ;; esac
           gh release create "$TAG" --verify-tag --title "Sparagne ${VERSION}" \
             --notes-file "$RUNNER_TEMP/notes.md" "${prerelease[@]}" \
-            "$RUNNER_TEMP"/binaries/*
+            "$RUNNER_TEMP"/binaries/* server/deploy/install.sh server/deploy/update.sh

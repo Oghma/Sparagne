@@ -152,8 +152,39 @@ that must not download anything): from a checkout of the repository,
 Every release also carries the server as a static Linux binary (musl, with
 SQLite built in), for amd64 and arm64, so it runs on any distribution:
 `sparagne-server-<version>-x86_64-unknown-linux-musl.tar.gz` (or
-`aarch64-…`), holding the binary, the systemd unit, `.env.example` and
-`backup.sh` (§4), plus its `.sha256`.
+`aarch64-…`), holding the binary, the systemd unit, `.env.example`,
+`backup.sh` (§4) and the two scripts below, plus its `.sha256`.
+
+**With the scripts.** On a fresh Debian host (a Proxmox LXC with Debian 13,
+a VM), as root:
+
+```sh
+curl -fLO https://github.com/Oghma/Sparagne/releases/latest/download/install.sh
+sh install.sh                 # --pre for pre-releases, or a version: sh install.sh 2.1.0
+```
+
+`install.sh` installs the packages it needs, fetches the archive for the
+host's architecture and checks it (its checksum, and its provenance too
+when `gh` is logged in), then creates the `sparagne` user, the data and
+backup directories and `/etc/sparagne.env` (registration closed unless
+`--allow-registration`), and installs the unit, a daily backup timer (03:30,
+kept 30 days) and the update script. By default it puts Caddy in front with
+HTTPS from Caddy's internal CA on the host's address (`--address` picks
+another); `--http` leaves Caddy out and serves plain HTTP on port 3000. It
+ends with the address to type in the app and what is left to do: trusting
+the CA's root on the Macs, the accounts. It refuses a host where Sparagne
+is already installed.
+
+`sh /root/update.sh` updates it: the latest release (`--pre` includes
+pre-releases, or name a version). It backs up both databases, installs the
+new binary, unit and backup script, starts the server and checks
+`/health`; a release that does not come up is rolled back, the databases
+included, since the new binary may already have migrated them.
+`/etc/sparagne.env` is never touched, and settings a new release adds are
+listed. A host installed by hand before the scripts existed adopts them
+with one run of `update.sh`, downloaded from a release.
+
+**By hand**, the same steps:
 
 ```sh
 V=2.0.0-beta.1; T=x86_64-unknown-linux-musl
@@ -242,7 +273,8 @@ or manual migration, only the normal start (§6).
      `compose.yml` and add `SPARAGNE_VERSION` to `.env` (`.env.example`).
    - Compose from the sources: `git pull`, then `docker compose -f
      compose.yml -f compose.build.yml up -d --build sparagne`.
-   - Without Docker: download and verify the new release's archive (§3.3),
+   - Without Docker: `sh /root/update.sh` (§3.3), which takes this backup
+     itself. By hand: download and verify the new release's archive,
      `install -m 755 sparagne-server /usr/local/bin/sparagne-server`,
      `systemctl restart sparagne-server`.
 2. The schema of `vaults.sqlite` **upgrades itself at start**: `Core::open`
