@@ -74,6 +74,8 @@ CREATE TABLE transactions (
     person          TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX ix_transactions_vault_time ON transactions(vault_id, occurred_at DESC, id DESC);
+-- The transactions a command wrote: how an allocation run finds its transfers.
+CREATE INDEX ix_transactions_command ON transactions(command_id);
 
 CREATE TABLE legs (
     transaction_id BLOB NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,

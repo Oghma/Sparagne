@@ -29,6 +29,9 @@ UPDATE recurring_templates SET owner = created_by;
 ";
 /// The allocation plan and its decided periods. Before version 5 no command
 /// made a plan, so both tables start empty, as replaying the same log gives.
+/// The index on `transactions.command_id` is how a run finds its transfers;
+/// it is created only if missing, since a file taken back to an older version
+/// by dropping the newer tables may still hold it.
 const MIGRATION_V5: &str = "
 CREATE TABLE allocation_plans (
     id         BLOB PRIMARY KEY,
@@ -50,6 +53,7 @@ CREATE TABLE allocation_runs (
     created_at  INTEGER NOT NULL,
     PRIMARY KEY (plan_id, period_date)
 );
+CREATE INDEX IF NOT EXISTS ix_transactions_command ON transactions(command_id);
 ";
 /// Every step, keyed by the version it leads to: a database at version `v`
 /// runs, in order, each step whose key is above `v`.
@@ -175,16 +179,18 @@ mod tests {
     }
 
     /// A file as `version` left it, holding alice's vault "Casa": the
-    /// allocation tables are gone, before version 4 the person and owner
-    /// columns too, before version 3 the index on the owner and the vault
-    /// name is back, and before version 2 the server seq column is gone too.
+    /// allocation tables and the index on the transactions' command are
+    /// gone, before version 4 the person and owner columns too, before
+    /// version 3 the index on the owner and the vault name is back, and
+    /// before version 2 the server seq column is gone too.
     fn old_database(version: i64) -> (PathBuf, Uuid) {
         let path = temp_database();
         let casa = create_vault(&mut Core::open(&path).unwrap(), "Casa");
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch(
             "DROP TABLE allocation_runs;
-             DROP TABLE allocation_plans;",
+             DROP TABLE allocation_plans;
+             DROP INDEX ix_transactions_command;",
         )
         .unwrap();
         if version < 4 {
@@ -224,6 +230,7 @@ mod tests {
         assert!(has_column(&core.conn, "recurring_templates", "owner"));
         assert!(has_table(&core.conn, "allocation_plans"));
         assert!(has_table(&core.conn, "allocation_runs"));
+        assert!(has_index(&core.conn, "ix_transactions_command"));
 
         let vaults = core.vaults().unwrap();
         assert_eq!(vaults.len(), 1);
@@ -248,6 +255,7 @@ mod tests {
         assert!(has_column(&core.conn, "recurring_templates", "owner"));
         assert!(has_table(&core.conn, "allocation_plans"));
         assert!(has_table(&core.conn, "allocation_runs"));
+        assert!(has_index(&core.conn, "ix_transactions_command"));
     }
 
     #[test]
@@ -263,6 +271,7 @@ mod tests {
                  ALTER TABLE recurring_templates DROP COLUMN owner;
                  DROP TABLE allocation_runs;
                  DROP TABLE allocation_plans;
+                 DROP INDEX ix_transactions_command;
                  PRAGMA user_version = 1;",
             )
             .unwrap();

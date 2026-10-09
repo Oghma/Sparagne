@@ -197,11 +197,7 @@ pub(super) fn reopen_allocation(
     }
     if run.outcome == RunOutcome::Executed {
         let live: Vec<Uuid> = {
-            let mut stmt = tx.prepare(
-                "SELECT id FROM transactions
-                 WHERE vault_id = ?1 AND command_id = ?2 AND voided_at IS NULL
-                 ORDER BY rowid",
-            )?;
+            let mut stmt = tx.prepare(LIVE_MOVES_SQL)?;
             stmt.query_map(params![env.vault_id, run.command_id], |r| r.get(0))?
                 .collect::<std::result::Result<_, _>>()?
         };
@@ -426,6 +422,13 @@ const MOVES_SQL: &str = "
     FROM transactions t
     WHERE t.vault_id = ?1 AND t.command_id = ?2
     ORDER BY t.rowid";
+
+/// The transfers of an executed run still live, in the order they were
+/// written: `?1` the vault, `?2` the run's command.
+const LIVE_MOVES_SQL: &str = "
+    SELECT id FROM transactions
+    WHERE vault_id = ?1 AND command_id = ?2 AND voided_at IS NULL
+    ORDER BY rowid";
 
 /// The id of the vault's Unallocated.
 fn unallocated_flow(conn: &Connection, vault_id: Uuid) -> Result<Uuid> {
@@ -739,6 +742,22 @@ mod tests {
             }
             assert!(
                 plan.iter().all(|step| !step.contains("ix_legs_target")),
+                "{plan:?}"
+            );
+        }
+    }
+
+    /// A run's transfers are found through the index on their command, not
+    /// by walking the vault's transactions.
+    #[test]
+    fn the_transfers_of_a_run_are_found_by_its_command() {
+        let core = Core::open_in_memory().unwrap();
+        let id = Uuid::nil();
+        for sql in [MOVES_SQL, LIVE_MOVES_SQL] {
+            let plan = query_plan(&core, sql, params![id, id]);
+            assert!(
+                plan.iter()
+                    .any(|step| step.contains("USING INDEX ix_transactions_command (command_id=?)")),
                 "{plan:?}"
             );
         }
