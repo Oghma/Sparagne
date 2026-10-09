@@ -13,7 +13,8 @@ struct SheetTabBar<Status: View>: View {
     var body: some View {
         HStack(spacing: 14) {
             ForEach(LedgerTab.allCases) { tab in
-                SheetTab(tab: tab, isActive: tab == store.tab, count: count(for: tab)) {
+                let count = count(for: tab)
+                SheetTab(tab: tab, isActive: tab == store.tab, count: count, spokenCount: spoken(tab, count)) {
                     store.tab = tab
                 }
             }
@@ -27,10 +28,20 @@ struct SheetTabBar<Status: View>: View {
         .overlay(alignment: .top) { Hairline() }
     }
 
-    /// What Ricorrenze carries beside its name: the periods to confirm, the
-    /// same count as the top bar's pill.
+    /// What a tab carries beside its name: on Ricorrenze the periods to
+    /// confirm, the same count as the top bar's pill; on Riparto one while
+    /// a period waits to be shared out.
     private func count(for tab: LedgerTab) -> Int {
-        tab == .recurring ? store.actionableDueCount : 0
+        switch tab {
+        case .recurring: store.actionableDueCount
+        case .allocation: store.actionableAllocationCount
+        case .summary, .ledger, .setup: 0
+        }
+    }
+
+    /// The count as VoiceOver reads it after the tab's name.
+    private func spoken(_ tab: LedgerTab, _ count: Int) -> String {
+        tab == .allocation ? AllocationText.toShareOut(count) : CountText.toConfirm(count)
     }
 }
 
@@ -40,6 +51,8 @@ private struct SheetTab: View {
     let tab: LedgerTab
     let isActive: Bool
     let count: Int
+    /// The count in words, for VoiceOver.
+    let spokenCount: String
     let select: () -> Void
 
     var body: some View {
@@ -72,6 +85,6 @@ private struct SheetTab: View {
     }
 
     private var accessibilityLabel: String {
-        count > 0 ? "\(tab.label), \(CountText.toConfirm(count))" : tab.label
+        count > 0 ? "\(tab.label), \(spokenCount)" : tab.label
     }
 }
