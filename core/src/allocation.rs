@@ -229,7 +229,8 @@ pub fn resolve(
         total,
         lines: resolved,
         distributed,
-        remainder: total.saturating_sub(distributed),
+        // A negative total shares nothing out and leaves nothing either.
+        remainder: total.max(0).saturating_sub(distributed),
         unallocated_after: unallocated_balance.saturating_sub(distributed),
         percent_total_bp,
     }
@@ -571,8 +572,10 @@ mod tests {
             outcome(&negative),
             vec![(0, LineStatus::Full), (0, LineStatus::Short)]
         );
+        assert_eq!(negative.total, -1_000);
         assert_eq!(negative.distributed, 0);
-        assert_eq!(negative.remainder, -1_000);
+        assert_eq!(negative.remainder, 0);
+        assert_eq!(negative.unallocated_after, 0);
     }
 
     #[test]
@@ -617,6 +620,7 @@ mod tests {
                 assert!(preview.lines.iter().all(|l| l.amount >= 0));
                 assert!(preview.lines.iter().all(|l| l.amount <= l.wanted));
                 assert!(preview.distributed <= total.max(0));
+                assert_eq!(preview.remainder, total.max(0) - preview.distributed);
                 assert_eq!(preview.percent_total_bp, u32::MAX);
             }
         }
