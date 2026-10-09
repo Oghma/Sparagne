@@ -145,6 +145,70 @@ pub(crate) fn leg_shape(
     }
 }
 
+/// Columns of `transactions t JOIN categories c ON c.id = t.category_id` that
+/// [`transaction_view`] reads, in its order.
+pub(crate) const TRANSACTION_VIEW_COLUMNS: &str = "t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at, t.created_by, t.person";
+
+/// A [`TransactionView`] from a row that starts with
+/// [`TRANSACTION_VIEW_COLUMNS`], read as [`Core::list_transactions`] reads
+/// its rows. The legs are left for [`load_legs`], which loads a whole list
+/// of views in one go.
+pub(crate) fn transaction_view(r: &rusqlite::Row<'_>) -> rusqlite::Result<TransactionView> {
+    let kind: String = r.get(1)?;
+    let at: i64 = r.get(2)?;
+    let off: i32 = r.get(3)?;
+    let voided_at: Option<i64> = r.get(9)?;
+    Ok(TransactionView {
+        id: r.get(0)?,
+        kind: TransactionKind::parse(&kind).unwrap_or(TransactionKind::Expense),
+        occurred_at: to_fixed(at, off),
+        amount: r.get(4)?,
+        category_id: r.get(5)?,
+        category: r.get(6)?,
+        category_is_system: r.get(7)?,
+        note: r.get(8)?,
+        person: r.get(11)?,
+        created_by: r.get(10)?,
+        voided: voided_at.is_some(),
+        wallet_id: None,
+        flow_id: None,
+        from_id: None,
+        to_id: None,
+        legs: Vec::new(),
+    })
+}
+
+/// Fills in the legs of `views` and the ids [`leg_shape`] sorts out of them,
+/// with one prepared statement for the whole list.
+pub(crate) fn load_legs(conn: &rusqlite::Connection, views: &mut [TransactionView]) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "SELECT target_kind, target_id, amount FROM legs WHERE transaction_id = ?1 ORDER BY ordinal",
+    )?;
+    for view in views {
+        view.legs = stmt
+            .query_map(params![view.id], |r| {
+                let kind: String = r.get(0)?;
+                let id: Uuid = r.get(1)?;
+                let target = if kind == "wallet" {
+                    LegTarget::Wallet { wallet_id: id }
+                } else {
+                    LegTarget::Flow { flow_id: id }
+                };
+                Ok(LegView {
+                    target,
+                    amount: r.get(2)?,
+                })
+            })?
+            .collect::<std::result::Result<_, _>>()?;
+        let (wallet_id, flow_id, from_id, to_id) = leg_shape(view.kind, &view.legs);
+        view.wallet_id = wallet_id;
+        view.flow_id = flow_id;
+        view.from_id = from_id;
+        view.to_id = to_id;
+    }
+    Ok(())
+}
+
 /// Filter for [`Core::list_transactions`]. Defaults hide voided rows and
 /// transfers.
 #[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Record)]

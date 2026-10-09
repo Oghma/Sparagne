@@ -22,14 +22,14 @@ use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use uuid::Uuid;
 
 use crate::{
-    CommandEnvelope, Core, DomainError, Result, TransactionKind,
+    CommandEnvelope, Core, DomainError, Result, TransactionKind, TransactionView,
     allocation::{
         AllocationBase, AllocationLine, AllocationMove, AllocationPlanPatch, AllocationPlanView,
         AllocationPreview, AllocationRule, AllocationRunView, FULL_PERCENT_BP, PendingAllocation,
         RunMove, resolve,
     },
     category::{OPENING_KEY, UNCATEGORIZED_KEY},
-    query::to_fixed,
+    query::{TRANSACTION_VIEW_COLUMNS, load_legs, transaction_view},
     recurring::{RunOutcome, Schedule},
 };
 
@@ -292,8 +292,8 @@ impl Core {
             None => None,
         };
         let unallocated = unallocated_flow(&self.conn, vault_id)?;
-        let mut stmt = self.conn.prepare(BASE_SQL)?;
-        let rows: Vec<(Uuid, i64, i32)> = stmt
+        let mut stmt = self.conn.prepare(&base_sql())?;
+        let mut incomes: Vec<TransactionView> = stmt
             .query_map(
                 params![
                     vault_id,
@@ -302,21 +302,16 @@ impl Core {
                     OPENING_KEY,
                     after_seq
                 ],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                transaction_view,
             )?
             .collect::<std::result::Result<_, _>>()?;
-
+        // The date where the income was recorded, in its own offset.
         let start = plan.schedule.start_date;
-        let mut total: i64 = 0;
-        let mut incomes = Vec::new();
-        for (id, at, offset) in rows {
-            if to_fixed(at, offset).date_naive() < start {
-                continue;
-            }
-            let income = self.transaction(vault_id, id)?;
-            total = total.saturating_add(income.amount);
-            incomes.push(income);
-        }
+        incomes.retain(|income| income.occurred_at.date_naive() >= start);
+        load_legs(&self.conn, &mut incomes)?;
+        let total = incomes
+            .iter()
+            .fold(0_i64, |total, income| total.saturating_add(income.amount));
         Ok(AllocationBase { total, incomes })
     }
 
@@ -395,30 +390,34 @@ impl Core {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// The base's incomes, oldest first: `?1` the vault, `?2` its Unallocated,
-/// `?3` the income kind, `?4` the opening category's key and `?5` the log seq
-/// they must come after (NULL before any decision).
+/// The base's incomes as [`transaction_view`] reads them, oldest first: `?1`
+/// the vault, `?2` its Unallocated, `?3` the income kind, `?4` the opening
+/// category's key and `?5` the log seq they must come after (NULL before any
+/// decision).
 ///
 /// The `+` before `l.target_kind` is there on purpose, keep it: it takes the
 /// column off `ix_legs_target`, which SQLite would otherwise pick to walk
 /// every flow leg of the database for each income, instead of the income's
 /// own two legs through the primary key. A test holds the plan in place.
-const BASE_SQL: &str = "
-    SELECT t.id, t.occurred_at, t.occurred_offset
-    FROM transactions t JOIN categories c ON c.id = t.category_id
-    WHERE t.vault_id = ?1 AND t.kind = ?3 AND t.voided_at IS NULL
-      AND NOT (c.is_system = 1 AND c.name_norm = ?4)
-      AND EXISTS (
-          SELECT 1 FROM legs l
-          WHERE l.transaction_id = t.id AND +l.target_kind = 'flow'
-            AND l.target_id = ?2 AND l.amount > 0
-      )
-      AND (?5 IS NULL OR (SELECT seq FROM commands WHERE id = t.command_id) > ?5)
-    ORDER BY t.occurred_at, t.id";
+fn base_sql() -> String {
+    format!(
+        "SELECT {TRANSACTION_VIEW_COLUMNS}
+         FROM transactions t JOIN categories c ON c.id = t.category_id
+         WHERE t.vault_id = ?1 AND t.kind = ?3 AND t.voided_at IS NULL
+           AND NOT (c.is_system = 1 AND c.name_norm = ?4)
+           AND EXISTS (
+               SELECT 1 FROM legs l
+               WHERE l.transaction_id = t.id AND +l.target_kind = 'flow'
+                 AND l.target_id = ?2 AND l.amount > 0
+           )
+           AND (?5 IS NULL OR (SELECT seq FROM commands WHERE id = t.command_id) > ?5)
+         ORDER BY t.occurred_at, t.id"
+    )
+}
 
 /// The transfers of an executed run, in the order they were written, with
 /// the envelope each one brings money to: `?1` the vault, `?2` the run's
-/// command. The `+` keeps the legs on their primary key, as in [`BASE_SQL`].
+/// command. The `+` keeps the legs on their primary key, as in [`base_sql`].
 const MOVES_SQL: &str = "
     SELECT t.id, t.amount, t.voided_at IS NOT NULL,
            (SELECT l.target_id FROM legs l
@@ -726,7 +725,7 @@ mod tests {
         let plans = [
             query_plan(
                 &core,
-                BASE_SQL,
+                &base_sql(),
                 params![id, id, "income", OPENING_KEY, None::<i64>],
             ),
             query_plan(&core, MOVES_SQL, params![id, id]),
