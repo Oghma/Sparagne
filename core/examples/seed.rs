@@ -9,11 +9,18 @@
 //! so the app opens on a month with rows in it whenever the file is written.
 //! The vault starts the way the app makes one, with the Italian categories
 //! and aliases of `apple/Sparagne/Sparagne/Model/DefaultCategories.swift`,
-//! then holds two wallets, three envelopes (one of them a capped fund),
-//! salaries, a household's expenses, transfers between wallets and between
-//! envelopes, refunds, rows without a category, a voided row and three
-//! recurring templates: the mortgage has this month's payment still due, and
-//! the gym was cancelled half way.
+//! then holds two wallets, five envelopes (two of them capped), salaries, a
+//! household's expenses, transfers between wallets and between envelopes,
+//! refunds, rows without a category, a voided row and three recurring
+//! templates: the mortgage has this month's payment still due, and the gym
+//! was cancelled half way.
+//!
+//! For the last five months the household shares its money out with an
+//! allocation plan: the incomes land in Unallocated and, on the 2nd of every
+//! month, the house gets a fixed share, savings, the holiday fund and the cash
+//! envelope a percent each, and the fun envelope is topped up to its cap. The
+//! periods were executed with what the preview gave, except one, skipped and
+//! shared out by hand, and this month's is still due.
 //!
 //! Who a row is for is not always who recorded it: matteo records a few of
 //! elisa's expenses for her, the gym is elisa's although matteo set it up,
@@ -32,7 +39,8 @@
 
 use chrono::{DateTime, Datelike, FixedOffset, Local, Months, NaiveDate, TimeZone};
 use sparagne_core::{
-    Command, CommandEnvelope, Core, Currency, Entry, FlowMode, Frequency, Schedule, TransactionKind,
+    AllocationLine, AllocationMove, AllocationRule, Command, CommandEnvelope, Core, Currency,
+    Entry, FlowMode, Frequency, Schedule, TransactionKind,
 };
 use uuid::Uuid;
 
@@ -232,7 +240,69 @@ impl Seeder {
             },
         );
     }
+
+    /// Shares out the period of `plan` that falls on `day`, when it has come,
+    /// the way the app does it: the plan worked out on the incomes since the
+    /// last decision, without the lines that get nothing, and a skip when no
+    /// line gets anything.
+    fn allocate(&mut self, who: &str, plan: Uuid, day: NaiveDate) {
+        let occurred_at = at(day, 9);
+        if occurred_at > self.now {
+            return;
+        }
+        let total = self.core.allocation_base(self.vault).unwrap().total;
+        let lines = self
+            .core
+            .allocation_plan(self.vault)
+            .unwrap()
+            .unwrap()
+            .lines;
+        let moves: Vec<AllocationMove> = self
+            .core
+            .preview_allocation(self.vault, &lines, total)
+            .unwrap()
+            .lines
+            .into_iter()
+            .filter(|line| line.amount > 0)
+            .map(|line| AllocationMove {
+                flow_id: line.flow_id,
+                amount: line.amount,
+            })
+            .collect();
+        if moves.is_empty() {
+            self.skip_allocation(who, plan, day);
+            return;
+        }
+        self.run(
+            who,
+            Command::ExecuteAllocation {
+                plan_id: plan,
+                period_date: day,
+                occurred_at,
+                total,
+                moves,
+                note: None,
+            },
+        );
+    }
+
+    /// Skips the period of `plan` that falls on `day`, when it has come.
+    fn skip_allocation(&mut self, who: &str, plan: Uuid, day: NaiveDate) {
+        if at(day, 9) > self.now {
+            return;
+        }
+        self.run(
+            who,
+            Command::SkipAllocation {
+                plan_id: plan,
+                period_date: day,
+            },
+        );
+    }
 }
+
+/// How many months, the current one included, the allocation plan has run.
+const PLAN_MONTHS: u32 = 5;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -323,6 +393,21 @@ fn main() {
         FlowMode::NetCapped { cap: 300_000 },
         60_000,
     );
+    // Only the allocation plan feeds these two.
+    let risparmi = envelope(&mut seed, "Risparmi", FlowMode::Unlimited, 0);
+    let svago = envelope(&mut seed, "Svago", FlowMode::NetCapped { cap: 20_000 }, 0);
+    let unallocated = seed.core.snapshot(vault).unwrap().unallocated_flow_id;
+
+    let line = |flow_id, rule| AllocationLine { flow_id, rule };
+    let plan_lines = vec![
+        line(casa, AllocationRule::Fixed { amount: 100_000 }),
+        line(risparmi, AllocationRule::Percent { basis_points: 1000 }),
+        line(vacanze, AllocationRule::Percent { basis_points: 500 }),
+        line(svago, AllocationRule::FillToCap),
+        line(cash, AllocationRule::Percent { basis_points: 5000 }),
+    ];
+    let plan_from = 12 - PLAN_MONTHS;
+    let mut plan = None;
 
     let row = |who, day, amount, wallet, flow, category, note| Row {
         who,
@@ -386,6 +471,25 @@ fn main() {
         let day = |n: u32| start.with_day(n).unwrap();
         let month = start.month();
         let current = start == this_month;
+        // Once the plan runs, the incomes wait in Unallocated for it, and the
+        // fun envelope pays for the evenings out.
+        let planned = index >= plan_from;
+        let income_flow = if planned { unallocated } else { cash };
+        let fun = if planned { svago } else { cash };
+        if index == plan_from {
+            plan = Some(seed.run(
+                "matteo",
+                Command::CreateAllocationPlan {
+                    schedule: Schedule {
+                        frequency: Frequency::Monthly { day: 2 },
+                        interval: 1,
+                        start_date: start,
+                        end_date: None,
+                    },
+                    lines: plan_lines.clone(),
+                },
+            ));
+        }
 
         // Salaries on the first, the thirteenth in December.
         let salary = 235_000 + seed.rng.between(-2_000, 4_000);
@@ -396,7 +500,7 @@ fn main() {
                 day(1),
                 salary,
                 conto,
-                cash,
+                income_flow,
                 Some("Stipendio"),
                 "stipendio",
             ),
@@ -408,11 +512,28 @@ fn main() {
                 day(1),
                 172_000,
                 conto,
-                cash,
+                income_flow,
                 Some("Stipendio"),
                 "stipendio",
             ),
         );
+
+        // The plan's period on the 2nd, worked out on the salaries. One month
+        // it was skipped and the envelopes filled by hand; this month's is
+        // left for the card.
+        if let Some(plan) = plan
+            && !current
+        {
+            let who = if index % 2 == 0 { "elisa" } else { "matteo" };
+            if index == plan_from + 2 {
+                seed.skip_allocation(who, plan, day(2));
+                seed.transfer_flow(day(2), 100_000, unallocated, casa, "quota casa");
+                seed.transfer_flow(day(2), 250_000, unallocated, cash, "a mano");
+            } else {
+                seed.allocate(who, plan, day(2));
+            }
+        }
+
         if month == 12 {
             seed.entry(
                 TransactionKind::Income,
@@ -421,7 +542,7 @@ fn main() {
                     day(15),
                     210_000,
                     conto,
-                    cash,
+                    income_flow,
                     Some("Stipendio"),
                     "tredicesima",
                 ),
@@ -433,7 +554,7 @@ fn main() {
                     day(15),
                     155_000,
                     conto,
-                    cash,
+                    income_flow,
                     Some("Stipendio"),
                     "tredicesima",
                 ),
@@ -448,16 +569,19 @@ fn main() {
                     day(28),
                     interest,
                     conto,
-                    cash,
+                    income_flow,
                     Some("Interessi"),
                     "interessi conto",
                 ),
             );
         }
 
-        // What the envelopes and the cash wallet get every month.
-        seed.transfer_flow(day(2), 100_000, cash, casa, "quota casa");
-        seed.transfer_flow(day(2), 15_000, cash, vacanze, "accantonamento");
+        // What the envelopes and the cash wallet get every month, by hand
+        // until the plan does it.
+        if !planned {
+            seed.transfer_flow(day(2), 100_000, cash, casa, "quota casa");
+            seed.transfer_flow(day(2), 15_000, cash, vacanze, "accantonamento");
+        }
         seed.transfer_wallet("matteo", day(7), 10_000, conto, contanti, "prelievo");
 
         // The templates. This month's mortgage is left for the banner; elisa
@@ -596,7 +720,7 @@ fn main() {
             day(26),
             cinema,
             conto,
-            cash,
+            fun,
             Some("cinema"),
             "cinema",
         ));
@@ -696,7 +820,7 @@ fn main() {
                     day(9),
                     5_500,
                     conto,
-                    cash,
+                    fun,
                     Some("Svago"),
                     "concerto",
                 ));
