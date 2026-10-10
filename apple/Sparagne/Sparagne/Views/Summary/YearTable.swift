@@ -142,7 +142,7 @@ struct YearTable: View {
                 }
             }
         case .sum:
-            Text("\(year.year)")
+            Text(verbatim: "\(year.year)")
         }
     }
 
