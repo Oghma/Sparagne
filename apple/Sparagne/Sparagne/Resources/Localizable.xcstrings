@@ -1649,6 +1649,22 @@
         }
       }
     },
+    "Cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tetto"
+          }
+        }
+      }
+    },
     "Cap type": {
       "localizations": {
         "en": {
@@ -2069,6 +2085,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collega un server…"
+          }
+        }
+      }
+    },
+    "Correct When and Start on the right, then press ↩ on the line again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correct When and Start on the right, then press ↩ on the line again."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correggi Quando e Inizio qui a destra, poi premi di nuovo ↩ sulla riga."
           }
         }
       }
@@ -3893,6 +3925,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Archiviate"
+          }
+        }
+      }
+    },
+    "In the meantime someone undid it or decided a later period. The history now shows where things stand.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the meantime someone undid it or decided a later period. The history now shows where things stand."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nel frattempo qualcuno l'ha annullato o ha deciso un periodo successivo. Lo storico ora mostra com'è la situazione."
           }
         }
       }
@@ -6329,6 +6377,38 @@
         }
       }
     },
+    "Reopen the Period": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen the Period"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riapri il periodo"
+          }
+        }
+      }
+    },
+    "Reopen the period of %@?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen the period of %@?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riaprire il periodo di %@?"
+          }
+        }
+      }
+    },
     "Repeat": {
       "localizations": {
         "en": {
@@ -7257,6 +7337,22 @@
         }
       }
     },
+    "Someone decided it already, on another Mac or before this window caught up. The tab now shows what was done.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone decided it already, on another Mac or before this window caught up. The tab now shows what was done."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualcuno l'ha già deciso, da un altro Mac o prima che questa finestra si aggiornasse. La scheda ora mostra cosa è stato fatto."
+          }
+        }
+      }
+    },
     "Something went wrong": {
       "localizations": {
         "en": {
@@ -8149,6 +8245,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Questo file non è testo"
+          }
+        }
+      }
+    },
+    "This period is no longer the latest decision": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This period is no longer the latest decision"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo periodo non è più l'ultima decisione"
+          }
+        }
+      }
+    },
+    "This period was already decided": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This period was already decided"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo periodo è già stato deciso"
           }
         }
       }
