@@ -269,6 +269,26 @@ final class AppStore {
     /// hence not `private(set)`: an extension in another file has to set it.
     var upcomingRecurring: [UpcomingPeriod] = []
 
+    // MARK: Allocation
+
+    /// The vault's allocation plan, `nil` until one is made; with the period
+    /// waiting for a decision and the incomes it would share out, refreshed
+    /// on every `reload()` like the due recurring periods, so the Riparto
+    /// tab's count and card follow a sync.
+    private(set) var allocationPlan: AllocationPlanView?
+    private(set) var pendingAllocation: PendingAllocation?
+    private(set) var allocationBase = AllocationBase(total: 0, incomes: [])
+    /// The plan's decided periods, most recent first. Written only by the
+    /// loader in `AppStore+Allocation.swift`, hence not `private(set)`.
+    var allocationRuns: [AllocationRunView] = []
+    /// The last Distribuisci, while its toast offers to undo it.
+    var allocationUndo: AllocationUndo?
+    /// A reopen on its way: the toast's Annulla and the history's go one at
+    /// a time, so the second never reaches a period the first reopened.
+    var allocationReopening = false
+    /// The history is asking before a reopen; the toast steps aside meanwhile.
+    var allocationConfirmingReopen = false
+
     // MARK: Setup
 
     /// Rows per category id over the last 90 days, voided excluded: the
@@ -525,6 +545,7 @@ final class AppStore {
         recentCategoryIds = []
         recurringTemplates = []
         upcomingRecurring = []
+        allocationRuns = []
         categoryUsage = [:]
         selection.clear()
         tabFilter = ""
@@ -552,6 +573,9 @@ final class AppStore {
             summary = nil
             year = nil
             pendingRecurringItems = []
+            allocationPlan = nil
+            pendingAllocation = nil
+            allocationBase = AllocationBase(total: 0, incomes: [])
             return
         }
         loadGeneration += 1
@@ -570,6 +594,9 @@ final class AppStore {
             loadedFilter = request.filter
             peopleInRows = loaded.people
             pendingRecurringItems = loaded.pendingRecurring
+            allocationPlan = loaded.allocationPlan
+            pendingAllocation = loaded.pendingAllocation
+            allocationBase = loaded.allocationBase
             summary = Self.summary(month: month, from: loaded)
             year = Self.year(month: month, from: loaded, flows: flows)
             rebuildRows()

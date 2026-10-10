@@ -3,6 +3,7 @@
 //! Every command runs inside one SQLite transaction: validation, state
 //! changes and the log row commit together or not at all.
 
+mod allocation;
 mod batch;
 pub(crate) mod entities;
 mod recurring;
@@ -319,6 +320,41 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
             recurring_id,
             period_date,
         } => recurring::skip_recurring(tx, env, *recurring_id, *period_date, now).map(|()| None),
+        Command::CreateAllocationPlan { schedule, lines } => {
+            allocation::create_plan(tx, env, schedule, lines, now).map(Some)
+        }
+        Command::UpdateAllocationPlan { plan_id, patch } => {
+            allocation::update_plan(tx, env, *plan_id, patch).map(|()| None)
+        }
+        Command::ExecuteAllocation {
+            plan_id,
+            period_date,
+            occurred_at,
+            total,
+            moves,
+            note,
+        } => allocation::execute_allocation(
+            tx,
+            env,
+            &allocation::ExecuteSpec {
+                plan_id: *plan_id,
+                period_date: *period_date,
+                occurred_at: *occurred_at,
+                total: *total,
+                moves,
+                note: note.as_deref(),
+            },
+            now,
+        )
+        .map(|()| None),
+        Command::SkipAllocation {
+            plan_id,
+            period_date,
+        } => allocation::skip_allocation(tx, env, *plan_id, *period_date, now).map(|()| None),
+        Command::ReopenAllocation {
+            plan_id,
+            period_date,
+        } => allocation::reopen_allocation(tx, env, *plan_id, *period_date, now).map(|()| None),
     }
 }
 
@@ -690,6 +726,19 @@ fn void_transaction(
             "transaction already voided".to_string(),
         ));
     }
+    void_live_transaction(tx, env, transaction_id, now)
+}
+
+/// Takes a live transaction of the vault out of the balances and marks it
+/// voided by the command's author. Its current legs are reversed with no rule
+/// checks, so a row edited since it was written comes out exactly too. The
+/// caller has checked that the row exists and is not voided yet.
+fn void_live_transaction(
+    tx: &Transaction<'_>,
+    env: &CommandEnvelope,
+    transaction_id: Uuid,
+    now: i64,
+) -> Result<()> {
     let legs: Vec<(String, Uuid, i64)> = {
         let mut stmt = tx.prepare(
             "SELECT target_kind, target_id, amount FROM legs WHERE transaction_id = ?1 ORDER BY ordinal",

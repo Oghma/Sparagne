@@ -40,6 +40,11 @@ enum CommandKindNames {
         case "restore_recurring": String(localized: "Restore recurring")
         case "execute_recurring": String(localized: "Run recurring")
         case "skip_recurring": String(localized: "Skip recurring")
+        case "create_allocation_plan": String(localized: "Create allocation plan")
+        case "update_allocation_plan": String(localized: "Edit allocation plan")
+        case "execute_allocation": String(localized: "Share out to envelopes")
+        case "skip_allocation": String(localized: "Skip allocation")
+        case "reopen_allocation": String(localized: "Undo allocation")
         default: kind
         }
     }

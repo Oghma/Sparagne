@@ -2,10 +2,11 @@
 
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used)]
 
-use chrono::{DateTime, FixedOffset, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
 use sparagne_core::{
-    Command, CommandEnvelope, Core, Currency, DomainError, Entry, FlowMode, Receipt,
-    TransactionFilter, TransactionView,
+    AllocationLine, AllocationMove, AllocationPlanPatch, AllocationRule, Command, CommandEnvelope,
+    Core, Currency, DomainError, Entry, FlowMode, Frequency, Receipt, Schedule, TransactionFilter,
+    TransactionView,
 };
 use uuid::Uuid;
 
@@ -131,4 +132,104 @@ pub fn all() -> TransactionFilter {
         include_transfers: true,
         ..Default::default()
     }
+}
+
+// ---------------------------------------------------------------------------
+// Allocation plan
+// ---------------------------------------------------------------------------
+
+pub fn day(y: i32, m: u32, d: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+}
+
+/// Noon UTC of `date`: when the fixtures say an execution happened.
+pub fn noon(date: NaiveDate) -> DateTime<FixedOffset> {
+    date.and_hms_opt(12, 0, 0).unwrap().and_utc().fixed_offset()
+}
+
+/// Every month on `day_of_month`, from `start`, open-ended.
+pub fn monthly_from(day_of_month: u8, start: NaiveDate) -> Schedule {
+    Schedule {
+        frequency: Frequency::Monthly { day: day_of_month },
+        interval: 1,
+        start_date: start,
+        end_date: None,
+    }
+}
+
+pub fn fixed(flow_id: Uuid, amount: i64) -> AllocationLine {
+    AllocationLine {
+        flow_id,
+        rule: AllocationRule::Fixed { amount },
+    }
+}
+
+pub fn percent(flow_id: Uuid, basis_points: u32) -> AllocationLine {
+    AllocationLine {
+        flow_id,
+        rule: AllocationRule::Percent { basis_points },
+    }
+}
+
+pub fn fill(flow_id: Uuid) -> AllocationLine {
+    AllocationLine {
+        flow_id,
+        rule: AllocationRule::FillToCap,
+    }
+}
+
+pub fn plan_cmd(schedule: Schedule, lines: Vec<AllocationLine>) -> Command {
+    Command::CreateAllocationPlan { schedule, lines }
+}
+
+pub fn update_plan_cmd(plan_id: Uuid, patch: AllocationPlanPatch) -> Command {
+    Command::UpdateAllocationPlan { plan_id, patch }
+}
+
+/// `moves` as `(flow, amount)` pairs, executed at noon of `period`.
+pub fn execute_cmd(plan_id: Uuid, period: NaiveDate, total: i64, moves: &[(Uuid, i64)]) -> Command {
+    Command::ExecuteAllocation {
+        plan_id,
+        period_date: period,
+        occurred_at: noon(period),
+        total,
+        moves: moves
+            .iter()
+            .map(|&(flow_id, amount)| AllocationMove { flow_id, amount })
+            .collect(),
+        note: None,
+    }
+}
+
+pub fn skip_cmd(plan_id: Uuid, period: NaiveDate) -> Command {
+    Command::SkipAllocation {
+        plan_id,
+        period_date: period,
+    }
+}
+
+pub fn reopen_cmd(plan_id: Uuid, period: NaiveDate) -> Command {
+    Command::ReopenAllocation {
+        plan_id,
+        period_date: period,
+    }
+}
+
+/// An income of `amount` into Unallocated on the only wallet, at `secs`;
+/// returns the transaction id.
+pub fn income_in(fx: &mut Fx, amount: i64, secs: i64) -> Uuid {
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::Income(entry(amount, None, None, None, secs)),
+    )
+    .result_id
+    .unwrap()
+}
+
+/// A new envelope with no opening allocation; returns its id.
+pub fn envelope(fx: &mut Fx, name: &str, mode: FlowMode) -> Uuid {
+    run(&mut fx.core, fx.vault, flow_cmd(name, mode, false, 0))
+        .result_id
+        .unwrap()
 }

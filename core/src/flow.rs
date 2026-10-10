@@ -31,6 +31,23 @@ impl FlowMode {
     }
 }
 
+/// How much more may come into a flow before its cap refuses it: what
+/// [`Flow::apply_leg_change`] accepts as a new positive leg. `None` for an
+/// unlimited flow.
+///
+/// Net-capped: `cap - balance`, which is more than the cap while the balance
+/// is negative (`allow_negative`). Income-capped: `cap - income_total`, since
+/// spending frees no room. Negative only for a projection that already breaks
+/// its cap, which the engine never writes.
+#[must_use]
+pub fn headroom(mode: FlowMode, balance: i64, income_total: Option<i64>) -> Option<i64> {
+    match mode {
+        FlowMode::Unlimited => None,
+        FlowMode::NetCapped { cap } => Some(cap.saturating_sub(balance)),
+        FlowMode::IncomeCapped { cap } => Some(cap.saturating_sub(income_total.unwrap_or(0))),
+    }
+}
+
 /// A flow as loaded from the projection.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Flow {
@@ -124,6 +141,32 @@ mod tests {
             allow_negative,
             archived: false,
         }
+    }
+
+    /// The room [`headroom`] reports is exactly what a new leg may bring in.
+    #[test]
+    fn headroom_is_what_a_new_leg_may_bring_in() {
+        let cases = [
+            (Some(1000), false, false, 300, 0),
+            (Some(1000), false, true, -250, 0),
+            (Some(1000), true, false, 0, 400),
+            (Some(1000), true, false, 120, 1000),
+        ];
+        for (cap, income_capped, allow_negative, balance, income_total) in cases {
+            let mut base = flow(cap, income_capped, allow_negative);
+            base.balance = balance;
+            if income_capped {
+                base.income_total = Some(income_total);
+            }
+            let room = headroom(base.mode(), base.balance, base.income_total).unwrap();
+            assert!(base.clone().apply_leg_change(0, room).is_ok());
+            assert_eq!(
+                base.clone().apply_leg_change(0, room + 1).unwrap_err(),
+                DomainError::MaxBalanceReached("Cash".to_string())
+            );
+        }
+        let open = flow(None, false, false);
+        assert_eq!(headroom(open.mode(), open.balance, open.income_total), None);
     }
 
     #[test]

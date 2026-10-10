@@ -146,6 +146,8 @@ struct LedgerWindow: View {
                 }
             case .recurring:
                 RecurringTab(store: store)
+            case .allocation:
+                AllocationTab(store: store)
             case .setup:
                 SetupView(store: store, engine: engine) { sheet = $0 }
             }
@@ -168,6 +170,7 @@ struct LedgerWindow: View {
         case .summary: SummaryStatusLine(store: store)
         case .ledger: LedgerStatusLine(store: store)
         case .recurring: RecurringStatusLine(store: store)
+        case .allocation: AllocationStatusLine(store: store)
         case .setup: SetupStatusLine(store: store)
         }
     }

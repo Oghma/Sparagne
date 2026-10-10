@@ -12,6 +12,7 @@
 //! - domain checks (flow caps, non-negativity) run on create and update, never
 //!   on void.
 
+pub mod allocation;
 mod analytics;
 mod category;
 mod command;
@@ -32,6 +33,11 @@ mod suggest;
 pub mod sync;
 mod usage;
 
+pub use allocation::{
+    AllocationBase, AllocationLine, AllocationMove, AllocationPlanPatch, AllocationPlanView,
+    AllocationPreview, AllocationRule, AllocationRunView, LineStatus, PendingAllocation,
+    PreviewLine, RunMove,
+};
 pub use analytics::{BucketPersonTotals, CategoryTotals, FlowPersonTotals, TopExpense};
 pub use category::{normalize_category_display, normalize_category_key, validate_category_name};
 pub use command::{
@@ -46,7 +52,7 @@ pub use ffi::{
     encode_statement_mapping, format_money, new_envelope, parse_money, parse_quick_add,
     resolve_date_spec, statement_presets,
 };
-pub use flow::{Flow, FlowMode, UNALLOCATED_NAME};
+pub use flow::{Flow, FlowMode, UNALLOCATED_NAME, headroom};
 pub use money::Money;
 pub use query::{
     CategoryView, FlowView, LegTarget, LegView, Page, TransactionFilter, TransactionView,

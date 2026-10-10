@@ -1,4 +1,4 @@
--- Sparagne v2 core schema, version 4 (`store.rs` migrates older files).
+-- Sparagne v2 core schema, version 5 (`store.rs` migrates older files).
 -- UUIDs are 16-byte BLOBs (v7 for entities, v5-derived for entities created
 -- inside a command). Timestamps are unix seconds (UTC); `occurred_offset` keeps
 -- the user's UTC offset in seconds.
@@ -74,6 +74,8 @@ CREATE TABLE transactions (
     person          TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX ix_transactions_vault_time ON transactions(vault_id, occurred_at DESC, id DESC);
+-- The transactions a command wrote: how an allocation run finds its transfers.
+CREATE INDEX ix_transactions_command ON transactions(command_id);
 
 CREATE TABLE legs (
     transaction_id BLOB NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
@@ -137,4 +139,31 @@ CREATE TABLE recurring_runs (
     command_id     BLOB NOT NULL,
     created_at     INTEGER NOT NULL,
     PRIMARY KEY (recurring_id, period_date)
+);
+
+-- The vault's allocation plan: envelope lines shared out of Unallocated once
+-- per period of the schedule. Nothing runs by itself: the app shows the period
+-- due and the user executes or skips it with a command. At most one per vault.
+CREATE TABLE allocation_plans (
+    id         BLOB PRIMARY KEY,         -- the CreateAllocationPlan command id
+    vault_id   BLOB NOT NULL REFERENCES vaults(id) ON DELETE CASCADE,
+    schedule   TEXT NOT NULL,            -- JSON of Schedule
+    lines      TEXT NOT NULL,            -- JSON array of AllocationLine, by priority
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX ux_allocation_plans_vault ON allocation_plans(vault_id);
+
+-- One row per period of the plan the user has decided on. The transfers of an
+-- executed period are the transactions whose command_id is the run's.
+CREATE TABLE allocation_runs (
+    plan_id     BLOB NOT NULL REFERENCES allocation_plans(id) ON DELETE CASCADE,
+    period_date TEXT NOT NULL,       -- ISO yyyy-mm-dd
+    outcome     TEXT NOT NULL,       -- executed|skipped
+    total       INTEGER NOT NULL,    -- what the moves were worked out on; 0 when skipped
+    command_id  BLOB NOT NULL,
+    created_by  TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (plan_id, period_date)
 );

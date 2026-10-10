@@ -33,6 +33,38 @@
         }
       }
     },
+    "%@ after the last allocation (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ after the last allocation (%2$@)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ dopo l'ultimo riparto (%2$@)"
+          }
+        }
+      }
+    },
+    "%@ gets %@ less": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ gets %2$@ less"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ riceve %2$@ in meno"
+          }
+        }
+      }
+    },
     "%@ in %@": {
       "localizations": {
         "en": {
@@ -93,6 +125,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ del tetto"
+          }
+        }
+      }
+    },
+    "%@ of the total": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of the total"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ del totale"
+          }
+        }
+      }
+    },
+    "%@ out of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ out of %2$@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ su %2$@"
+          }
+        }
+      }
+    },
+    "%@ short": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ short"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mancano %@"
+          }
+        }
+      }
+    },
+    "%@ since %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ since %2$@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ dal %2$@"
           }
         }
       }
@@ -282,6 +378,126 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld giorni fa"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld earlier periods included": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld earlier period included"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld earlier periods included"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "comprende %lld periodo precedente"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "comprende %lld periodi precedenti"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld envelopes": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld envelope"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld envelopes"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld busta"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld buste"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld incomes reached Unallocated": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld income reached Unallocated"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld incomes reached Unallocated"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld entrata arrivata in Non allocato"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld entrate arrivate in Non allocato"
                 }
               }
             }
@@ -489,6 +705,46 @@
         }
       }
     },
+    "%lld to share out": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld to share out"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld to share out"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld da distribuire"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld da distribuire"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld transactions deleted": {
       "localizations": {
         "en": {
@@ -557,6 +813,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Una busta con tetto ha bisogno di un importo"
+          }
+        }
+      }
+    },
+    "A fixed line needs an amount above zero": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A fixed line needs an amount above zero"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una riga fissa vuole un importo maggiore di zero"
+          }
+        }
+      }
+    },
+    "A percentage goes from 0,01 to 100": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A percentage goes from 0,01 to 100"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una percentuale va da 0,01 a 100"
           }
         }
       }
@@ -769,6 +1057,22 @@
         }
       }
     },
+    "Add envelope…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add envelope…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi busta…"
+          }
+        }
+      }
+    },
     "Add expense": {
       "localizations": {
         "en": {
@@ -833,6 +1137,38 @@
         }
       }
     },
+    "Allocation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allocation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riparto"
+          }
+        }
+      }
+    },
+    "Allocation plan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allocation plan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Piano di riparto"
+          }
+        }
+      }
+    },
     "Already exists": {
       "localizations": {
         "en": {
@@ -877,6 +1213,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importo"
+          }
+        }
+      }
+    },
+    "Amount or percentage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amount or percentage"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importo o percentuale"
           }
         }
       }
@@ -1201,6 +1553,22 @@
         }
       }
     },
+    "Balance after": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balance after"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saldo dopo"
+          }
+        }
+      }
+    },
     "Bank category": {
       "localizations": {
         "en": {
@@ -1277,6 +1645,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Annulla"
+          }
+        }
+      }
+    },
+    "Cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tetto"
           }
         }
       }
@@ -1705,6 +2089,22 @@
         }
       }
     },
+    "Correct When and Start on the right, then press ↩ on the line again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correct When and Start on the right, then press ↩ on the line again."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correggi Quando e Inizio qui a destra, poi premi di nuovo ↩ sulla riga."
+          }
+        }
+      }
+    },
     "Could not load more": {
       "localizations": {
         "en": {
@@ -1749,6 +2149,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Crea"
+          }
+        }
+      }
+    },
+    "Create allocation plan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create allocation plan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea piano di riparto"
           }
         }
       }
@@ -2273,6 +2689,22 @@
         }
       }
     },
+    "Detail": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detail"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dettaglio"
+          }
+        }
+      }
+    },
     "Direction": {
       "localizations": {
         "en": {
@@ -2333,6 +2765,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ignora tutte"
+          }
+        }
+      }
+    },
+    "Distributed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distributed"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distribuiti"
+          }
+        }
+      }
+    },
+    "Distributed %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distributed %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distribuiti %@"
           }
         }
       }
@@ -2413,6 +2877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "modifica riga"
+          }
+        }
+      }
+    },
+    "Edit allocation plan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit allocation plan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifica piano di riparto"
           }
         }
       }
@@ -3041,6 +3521,54 @@
         }
       }
     },
+    "Fixed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fisso"
+          }
+        }
+      }
+    },
+    "Fixed %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fisso %@"
+          }
+        }
+      }
+    },
+    "Fixed amounts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed amounts"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importi fissi"
+          }
+        }
+      }
+    },
     "Fixed expenses a month": {
       "localizations": {
         "en": {
@@ -3069,6 +3597,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entrate fisse"
+          }
+        }
+      }
+    },
+    "Fixed · % · To cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed · % · To cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fisso · % · Al tetto"
           }
         }
       }
@@ -3137,6 +3681,22 @@
         }
       }
     },
+    "Gets": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gets"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riceve"
+          }
+        }
+      }
+    },
     "Go to %@": {
       "localizations": {
         "en": {
@@ -3197,6 +3757,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nascondi colonna wallet"
+          }
+        }
+      }
+    },
+    "History": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storico"
           }
         }
       }
@@ -3349,6 +3925,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Archiviate"
+          }
+        }
+      }
+    },
+    "In the meantime someone undid it or decided a later period. The history now shows where things stand.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the meantime someone undid it or decided a later period. The history now shows where things stand."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nel frattempo qualcuno l'ha annullato o ha deciso un periodo successivo. Lo storico ora mostra com'è la situazione."
           }
         }
       }
@@ -3513,6 +4105,22 @@
         }
       }
     },
+    "Its transfers are deleted and the period is back to share out.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its transfers are deleted and the period is back to share out."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I suoi trasferimenti vengono eliminati e il periodo torna da distribuire."
+          }
+        }
+      }
+    },
     "Its wallets, envelopes, transactions and recurring templates go with it. It disappears from every device of every member as they sync; the server keeps its history only to bring the deletion to them. This cannot be undone.": {
       "localizations": {
         "en": {
@@ -3529,6 +4137,22 @@
         }
       }
     },
+    "Keep": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantieni"
+          }
+        }
+      }
+    },
     "Kind": {
       "localizations": {
         "en": {
@@ -3541,6 +4165,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tipo"
+          }
+        }
+      }
+    },
+    "Last allocation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last allocation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ultimo riparto"
           }
         }
       }
@@ -3673,6 +4313,22 @@
         }
       }
     },
+    "Left in Unallocated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left in Unallocated"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resta in Non allocato"
+          }
+        }
+      }
+    },
     "Limit": {
       "localizations": {
         "en": {
@@ -3701,6 +4357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Riga %lld"
+          }
+        }
+      }
+    },
+    "Lines": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lines"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Righe"
           }
         }
       }
@@ -3989,6 +4661,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Più di un wallet corrisponde a “%@”"
+          }
+        }
+      }
+    },
+    "Move Down": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Down"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta giù"
+          }
+        }
+      }
+    },
+    "Move Up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Up"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta su"
           }
         }
       }
@@ -4393,6 +5097,38 @@
         }
       }
     },
+    "No allocation plan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No allocation plan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun piano di riparto"
+          }
+        }
+      }
+    },
+    "No allocation plan yet: add an envelope to the plan below to start one.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No allocation plan yet: add an envelope to the plan below to start one."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ancora nessun piano di riparto: aggiungi una busta al piano qui sotto per crearlo."
+          }
+        }
+      }
+    },
     "No cap": {
       "localizations": {
         "en": {
@@ -4441,6 +5177,22 @@
         }
       }
     },
+    "No envelope left to add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No envelope left to add"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna busta da aggiungere"
+          }
+        }
+      }
+    },
     "No envelope named “%@”": {
       "localizations": {
         "en": {
@@ -4453,6 +5205,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessuna busta chiamata “%@”"
+          }
+        }
+      }
+    },
+    "No income reached Unallocated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No income reached Unallocated"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna entrata arrivata in Non allocato"
           }
         }
       }
@@ -4485,6 +5253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessun comando corrispondente"
+          }
+        }
+      }
+    },
+    "No period decided yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No period decided yet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun periodo deciso finora"
           }
         }
       }
@@ -4729,6 +5513,70 @@
         }
       }
     },
+    "Nothing to flag.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to flag."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niente da segnalare."
+          }
+        }
+      }
+    },
+    "Nothing to share out until %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to share out until %@."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niente da distribuire fino a %@."
+          }
+        }
+      }
+    },
+    "Nothing to share out: the plan has no periods left.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to share out: the plan has no periods left."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niente da distribuire: il piano non ha più periodi."
+          }
+        }
+      }
+    },
+    "Nothing to share out: the plan is paused.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to share out: the plan is paused."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niente da distribuire: il piano è in pausa."
+          }
+        }
+      }
+    },
     "Nothing was refused": {
       "localizations": {
         "en": {
@@ -4937,6 +5785,22 @@
         }
       }
     },
+    "Outcome": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outcome"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esito"
+          }
+        }
+      }
+    },
     "Owner": {
       "localizations": {
         "en": {
@@ -5001,6 +5865,70 @@
         }
       }
     },
+    "Percentages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Percentages"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Percentuali"
+          }
+        }
+      }
+    },
+    "Percentages add up to %@: nothing to flag.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Percentages add up to %@: nothing to flag."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le percentuali sommano %@: niente da segnalare."
+          }
+        }
+      }
+    },
+    "Percentages add up to %@: the total does not cover them all.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Percentages add up to %@: the total does not cover them all."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le percentuali sommano %@: il totale non basta per tutte."
+          }
+        }
+      }
+    },
+    "Period": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Period"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Periodo"
+          }
+        }
+      }
+    },
     "Person": {
       "localizations": {
         "en": {
@@ -5029,6 +5957,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Persona, %@"
+          }
+        }
+      }
+    },
+    "Pick an envelope for the line": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick an envelope for the line"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli la busta della riga"
           }
         }
       }
@@ -5321,6 +6265,22 @@
         }
       }
     },
+    "Remove from the Plan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from the Plan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rimuovi dal piano"
+          }
+        }
+      }
+    },
     "Rename Vault": {
       "localizations": {
         "en": {
@@ -5413,6 +6373,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rinomina…"
+          }
+        }
+      }
+    },
+    "Reopen the Period": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen the Period"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riapri il periodo"
+          }
+        }
+      }
+    },
+    "Reopen the period of %@?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen the period of %@?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riaprire il periodo di %@?"
           }
         }
       }
@@ -5577,6 +6569,22 @@
         }
       }
     },
+    "Room": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Room"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spazio"
+          }
+        }
+      }
+    },
     "Rounded": {
       "localizations": {
         "en": {
@@ -5637,6 +6645,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Righe 90 gg"
+          }
+        }
+      }
+    },
+    "Rule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rule"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regola"
           }
         }
       }
@@ -5993,6 +7017,38 @@
         }
       }
     },
+    "Share out %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share out %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distribuisci %@"
+          }
+        }
+      }
+    },
+    "Share out to envelopes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share out to envelopes"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distribuisci alle buste"
+          }
+        }
+      }
+    },
     "Share…": {
       "localizations": {
         "en": {
@@ -6153,6 +7209,22 @@
         }
       }
     },
+    "Skip allocation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip allocation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salta riparto"
+          }
+        }
+      }
+    },
     "Skip recurring": {
       "localizations": {
         "en": {
@@ -6261,6 +7333,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alcune modifiche sono state rifiutate"
+          }
+        }
+      }
+    },
+    "Someone decided it already, on another Mac or before this window caught up. The tab now shows what was done.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone decided it already, on another Mac or before this window caught up. The tab now shows what was done."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualcuno l'ha già deciso, da un altro Mac o prima che questa finestra si aggiornasse. La scheda ora mostra cosa è stato fatto."
           }
         }
       }
@@ -6713,6 +7801,22 @@
         }
       }
     },
+    "That envelope already has a line in the plan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That envelope already has a line in the plan"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quella busta ha già una riga nel piano"
+          }
+        }
+      }
+    },
     "That marker appears twice": {
       "localizations": {
         "en": {
@@ -6809,6 +7913,22 @@
         }
       }
     },
+    "The first allocation counts the incomes from the start date; the later ones those that arrived after the last allocation, shared out or skipped.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first allocation counts the incomes from the start date; the later ones those that arrived after the last allocation, shared out or skipped."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il primo riparto conta le entrate dalla data d'inizio; i successivi quelle arrivate dopo l'ultimo riparto, distribuito o saltato."
+          }
+        }
+      }
+    },
     "The first row of the file names no column": {
       "localizations": {
         "en": {
@@ -6885,6 +8005,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Il proprietario ha smesso di condividere questi vault con te, oppure sono stati tolti dal server. Quello che era già sincronizzato resta qui, in sola lettura, finché non lo rimuovi."
+          }
+        }
+      }
+    },
+    "The period is back to share out.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The period is back to share out."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il periodo torna da distribuire."
+          }
+        }
+      }
+    },
+    "The plan in figures": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plan in figures"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il piano in cifre"
+          }
+        }
+      }
+    },
+    "The plan starts with its first line.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plan starts with its first line."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il piano nasce con la prima riga."
           }
         }
       }
@@ -7081,6 +8249,38 @@
         }
       }
     },
+    "This period is no longer the latest decision": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This period is no longer the latest decision"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo periodo non è più l'ultima decisione"
+          }
+        }
+      }
+    },
+    "This period was already decided": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This period was already decided"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo periodo è già stato deciso"
+          }
+        }
+      }
+    },
     "This server is not accepting new accounts": {
       "localizations": {
         "en": {
@@ -7093,6 +8293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Questo server non accetta nuovi account"
+          }
+        }
+      }
+    },
+    "This vault has no allocation plan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault has no allocation plan."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questo vault non ha un piano di riparto."
           }
         }
       }
@@ -7161,6 +8377,22 @@
         }
       }
     },
+    "To cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Al tetto"
+          }
+        }
+      }
+    },
     "To confirm": {
       "localizations": {
         "en": {
@@ -7205,6 +8437,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Per ripristinarlo, esci da Sparagne, cancella sparagne.sqlite-wal e sparagne.sqlite-shm se ci sono, e sostituisci sparagne.sqlite con questo backup, rinominato sparagne.sqlite. Il database è in:\n%@"
+          }
+        }
+      }
+    },
+    "To share out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To share out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da distribuire"
+          }
+        }
+      }
+    },
+    "To share out · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To share out · %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da distribuire · %@"
           }
         }
       }
@@ -7309,6 +8573,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Totale = risparmio + fondo cassa − uscite dei fondi"
+          }
+        }
+      }
+    },
+    "Total to share out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total to share out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Totale da ripartire"
           }
         }
       }
@@ -7489,6 +8769,38 @@
         }
       }
     },
+    "Unallocated after": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unallocated after"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non allocato dopo"
+          }
+        }
+      }
+    },
+    "Unallocated would go to %@: the total is more than it holds.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unallocated would go to %@: the total is more than it holds."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non allocato andrebbe a %@: il totale è più di quanto contiene."
+          }
+        }
+      }
+    },
     "Uncategorized": {
       "localizations": {
         "en": {
@@ -7517,6 +8829,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ripristina"
+          }
+        }
+      }
+    },
+    "Undo allocation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo allocation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulla riparto"
+          }
+        }
+      }
+    },
+    "Undo the Allocation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo the Allocation"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulla il riparto"
+          }
+        }
+      }
+    },
+    "Undo the allocation of %@?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo the allocation of %@?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annullare il riparto di %@?"
           }
         }
       }
@@ -7581,6 +8941,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Data illeggibile"
+          }
+        }
+      }
+    },
+    "Up to the cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Up to the cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fino al tetto"
+          }
+        }
+      }
+    },
+    "Up to the cap %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Up to the cap %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fino al tetto %@"
           }
         }
       }
@@ -7757,6 +9149,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wallet, buste e categorie"
+          }
+        }
+      }
+    },
+    "Warnings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warnings"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avvisi"
           }
         }
       }
@@ -8129,6 +9537,118 @@
         }
       }
     },
+    "allocation.enabled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attivo"
+          }
+        }
+      }
+    },
+    "allocation.next": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prossimo"
+          }
+        }
+      }
+    },
+    "allocation.outcome.executed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distribuito"
+          }
+        }
+      }
+    },
+    "allocation.outcome.skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saltato"
+          }
+        }
+      }
+    },
+    "allocation.status.fixed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fissi"
+          }
+        }
+      }
+    },
+    "allocation.undo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annulla"
+          }
+        }
+      }
+    },
+    "already full": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "already full"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "già piena"
+          }
+        }
+      }
+    },
     "and %lld more to confirm": {
       "localizations": {
         "en": {
@@ -8181,6 +9701,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "archiviata"
+          }
+        }
+      }
+    },
+    "at the cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "at the cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "al tetto"
+          }
+        }
+      }
+    },
+    "can be corrected by hand": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "can be corrected by hand"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "si può correggere a mano"
           }
         }
       }
@@ -8345,6 +9897,22 @@
         }
       }
     },
+    "complete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "complete"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "completo"
+          }
+        }
+      }
+    },
     "current": {
       "localizations": {
         "en": {
@@ -8421,6 +9989,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "eliminata"
+          }
+        }
+      }
+    },
+    "due every %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "due every %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "da distribuire ogni %@"
+          }
+        }
+      }
+    },
+    "due every %@ %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "due every %1$@ %2$lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "da distribuire ogni %2$lld %1$@"
+          }
+        }
+      }
+    },
+    "due on day %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "due on day %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "da distribuire ogni %lld"
           }
         }
       }
@@ -8569,6 +10185,38 @@
         }
       }
     },
+    "gets %@ instead of %@: the total does not cover every line.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gets %1$@ instead of %2$@: the total does not cover every line."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "riceve %1$@ invece di %2$@: il totale non basta per tutte le righe."
+          }
+        }
+      }
+    },
+    "has no cap, so its line gets nothing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "has no cap, so its line gets nothing."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "non ha un tetto, quindi la sua riga non riceve nulla."
+          }
+        }
+      }
+    },
     "in progress": {
       "localizations": {
         "en": {
@@ -8617,6 +10265,38 @@
         }
       }
     },
+    "incomes handled by hand": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "incomes handled by hand"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "entrate gestite a mano"
+          }
+        }
+      }
+    },
+    "is archived, so its line gets nothing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "is archived, so its line gets nothing."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "è archiviata, quindi la sua riga non riceve nulla."
+          }
+        }
+      }
+    },
     "month": {
       "localizations": {
         "en": {
@@ -8661,6 +10341,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "no"
+          }
+        }
+      }
+    },
+    "no cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "senza tetto"
           }
         }
       }
@@ -8757,6 +10453,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "saldo di apertura"
+          }
+        }
+      }
+    },
+    "paused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "paused"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in pausa"
+          }
+        }
+      }
+    },
+    "percentages %@ · fixed %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "percentages %1$@ · fixed %2$@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "percentuali %1$@ · fissi %2$@"
           }
         }
       }
@@ -8985,6 +10713,38 @@
         }
       }
     },
+    "the order is the priority: when the total runs short, the last lines get less": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the order is the priority: when the total runs short, the last lines get less"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "l'ordine è la priorità: se il totale non basta, le ultime righe ricevono meno"
+          }
+        }
+      }
+    },
+    "the order is the priority: when the total runs short, the last lines get less · ⌥↑ ⌥↓ move the line": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the order is the priority: when the total runs short, the last lines get less · ⌥↑ ⌥↓ move the line"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "l'ordine è la priorità: se il totale non basta, le ultime righe ricevono meno · ⌥↑ ⌥↓ spostano la riga"
+          }
+        }
+      }
+    },
     "to confirm": {
       "localizations": {
         "en": {
@@ -9045,6 +10805,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "trasferimento %@"
+          }
+        }
+      }
+    },
+    "undoing the latest allocation deletes its transfers and puts it back to share out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "undoing the latest allocation deletes its transfers and puts it back to share out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "annullare l'ultimo riparto elimina i suoi trasferimenti e lo rimette da distribuire"
           }
         }
       }

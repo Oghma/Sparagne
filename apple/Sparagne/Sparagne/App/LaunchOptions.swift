@@ -10,7 +10,7 @@ import Foundation
 /// signed by people who are not the account, never reach a server.
 ///
 /// `-SparagneTab ledger` opens the window on one sheet tab (`summary`,
-/// `ledger`, `recurring`, `setup`), and `-SparagneSheet manage` opens one of
+/// `ledger`, `recurring`, `allocation`, `setup`), and `-SparagneSheet manage` opens one of
 /// the window's sheets or the Settings window, so a screenshot of either
 /// needs no keyboard driving.
 ///
