@@ -162,14 +162,28 @@ struct AllocationLineDraft: Equatable {
 
 /// Money as the plan's cells take it: the window writes `4.250,00`, with a
 /// dot between thousands that the core's `parseMoney` does not read, so the
-/// dots before a decimal comma are dropped first.
+/// dots before a decimal comma are dropped first. Without a comma, dots that
+/// each start a group of exactly three digits (`1.400`, `12.500.000`) are
+/// thousands too; any other dot is the decimal point (`4250.5`).
 enum AllocationMoney {
     static func parse(_ text: String, currency: Currency) throws -> Int64 {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let comma = trimmed.lastIndex(of: ","), trimmed[..<comma].contains(".") {
             trimmed = trimmed[..<comma].replacingOccurrences(of: ".", with: "") + trimmed[comma...]
+        } else if !trimmed.contains(","), groupedInThousands(trimmed) {
+            trimmed = trimmed.replacingOccurrences(of: ".", with: "")
         }
         return try parseMoney(text: trimmed, currency: currency)
+    }
+
+    /// `1.400`, `12.500.000`, with a sign or not: one to three digits, then
+    /// one or more dots each followed by exactly three.
+    private static func groupedInThousands(_ text: String) -> Bool {
+        let unsigned = text.first == "-" || text.first == "+" ? text.dropFirst() : Substring(text)
+        let groups = unsigned.split(separator: ".", omittingEmptySubsequences: false)
+        guard groups.count >= 2, let first = groups.first, (1...3).contains(first.count) else { return false }
+        let digits: (Substring) -> Bool = { $0.allSatisfy { ("0"..."9").contains($0) } }
+        return digits(first) && groups.dropFirst().allSatisfy { $0.count == 3 && digits($0) }
     }
 
     /// The amount, or `nil` while the text is not one.

@@ -68,13 +68,25 @@ struct AllocationDraftTests {
         #expect(AllocationMoney.amount("1.234.567,89", currency: .eur) == 123_456_789)
         #expect(AllocationMoney.amount("4250,00", currency: .eur) == 425_000)
         #expect(AllocationMoney.amount("4250.5", currency: .eur) == 425_050)
+        #expect(AllocationMoney.amount("1.40", currency: .eur) == 140)
         #expect(AllocationMoney.amount("4250", currency: .eur) == 425_000)
         #expect(AllocationMoney.amount(" 0 ", currency: .eur) == 0)
-        // A dot alone is the decimal point, and three decimals are too many.
-        #expect(AllocationMoney.amount("1.400", currency: .eur) == nil)
         #expect(AllocationMoney.amount("abc", currency: .eur) == nil)
         #expect(AllocationMoney.amount("", currency: .eur) == nil)
         #expect(AllocationMoney.amount(LedgerMoney.bare(425_000), currency: .eur) == 425_000)
+    }
+
+    @Test("Without a comma, dots that each start three digits are thousands, as an Italian 1.400 is")
+    func thousandsWithoutDecimals() {
+        #expect(AllocationMoney.amount("1.400", currency: .eur) == 140_000)
+        #expect(AllocationMoney.amount("12.500.000", currency: .eur) == 1_250_000_000)
+        #expect(AllocationMoney.amount("-1.400", currency: .eur) == -140_000)
+        // Not thousands: the first group is too long, or a group is not three
+        // digits, so the dot is a decimal point with too many decimals.
+        #expect(AllocationMoney.amount("1234.567", currency: .eur) == nil)
+        #expect(AllocationMoney.amount("1.4000", currency: .eur) == nil)
+        #expect(AllocationMoney.amount("1.400.5", currency: .eur) == nil)
+        #expect(AllocationMoney.amount(".400", currency: .eur) == nil)
     }
 
     // MARK: - A line
