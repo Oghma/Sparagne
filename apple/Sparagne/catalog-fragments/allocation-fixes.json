@@ -1,0 +1,10 @@
+{
+  "Cap": {"en": "Cap", "it": "Tetto"},
+  "Correct When and Start on the right, then press ↩ on the line again.": {"en": "Correct When and Start on the right, then press ↩ on the line again.", "it": "Correggi Quando e Inizio qui a destra, poi premi di nuovo ↩ sulla riga."},
+  "In the meantime someone undid it or decided a later period. The history now shows where things stand.": {"en": "In the meantime someone undid it or decided a later period. The history now shows where things stand.", "it": "Nel frattempo qualcuno l'ha annullato o ha deciso un periodo successivo. Lo storico ora mostra com'è la situazione."},
+  "Reopen the Period": {"en": "Reopen the Period", "it": "Riapri il periodo"},
+  "Reopen the period of %@?": {"en": "Reopen the period of %@?", "it": "Riaprire il periodo di %@?"},
+  "Someone decided it already, on another Mac or before this window caught up. The tab now shows what was done.": {"en": "Someone decided it already, on another Mac or before this window caught up. The tab now shows what was done.", "it": "Qualcuno l'ha già deciso, da un altro Mac o prima che questa finestra si aggiornasse. La scheda ora mostra cosa è stato fatto."},
+  "This period is no longer the latest decision": {"en": "This period is no longer the latest decision", "it": "Questo periodo non è più l'ultima decisione"},
+  "This period was already decided": {"en": "This period was already decided", "it": "Questo periodo è già stato deciso"}
+}

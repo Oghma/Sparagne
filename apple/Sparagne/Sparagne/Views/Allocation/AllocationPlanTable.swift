@@ -35,6 +35,9 @@ struct AllocationPlanTable: View {
     let preview: AllocationPreview?
     /// A period is due: a shortfall is news, and warns.
     let due: Bool
+    /// Whether a row is open, for the inspector: its ↩ and esc wait while
+    /// one is.
+    @Binding var rowOpen: Bool
     /// Sends the whole list, which the table shows at once; the task says
     /// whether it went through.
     let save: ([AllocationLine]) -> Task<Bool, Never>
@@ -78,6 +81,7 @@ struct AllocationPlanTable: View {
             newLine = AllocationLineDraft()
         }
         .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
+        .onChange(of: editing != nil || focus != nil, initial: true) { _, open in rowOpen = open }
         // Turned read-only under an open row: it could not be saved.
         .onChange(of: store.isReadOnly) { _, _ in cancel() }
     }
@@ -333,6 +337,8 @@ struct AllocationPlanTable: View {
                             commitFocused()
                             return .handled
                         }
+                        .accessibilityLabel(String(localized: "Cap"))
+                        .accessibilityValue(cap.map(LedgerMoney.bare) ?? String(localized: "no cap"))
                 }
             }
         }

@@ -17,6 +17,9 @@ struct AllocationInspector: View {
     let preview: AllocationPreview?
     let due: Bool
     let today: NaiveDate
+    /// Whether Salva and Annulla take ↩ and esc: not while a row of the
+    /// table is open, whose own ↩ and esc they are.
+    var shortcuts = true
 
     /// A command in flight: Salva and the switch wait for it.
     @State private var working = false
@@ -274,16 +277,16 @@ struct AllocationInspector: View {
                 if store.canWrite, draft.isDirty(against: plan) {
                     Button(String(localized: "Cancel")) { draft = AllocationScheduleDraft(schedule: plan.schedule) }
                         .buttonStyle(.chrome(.ghost, small: true))
-                        .keyboardShortcut(.cancelAction)
+                        .keyboardShortcut(shortcuts ? .cancelAction : nil)
                     if draft.isValid {
                         Button(String(localized: "Save")) {
                             let schedule = draft.schedule
                             run { await store.setAllocationSchedule(schedule) }
                         }
                         .buttonStyle(.chrome(.primary, small: true))
-                        .keyboardShortcut(.defaultAction)
+                        .keyboardShortcut(shortcuts ? .defaultAction : nil)
                     }
-                } else if let hint = plan.enabled ? AllocationText.cadenceHint(plan.schedule) : String(localized: "paused") {
+                } else if let hint = footerHint(plan) {
                     Text(hint)
                         .font(Face.ui(11.5))
                         .foregroundStyle(Ink.text3)
@@ -305,6 +308,14 @@ struct AllocationInspector: View {
         .overlay(alignment: .top) { Hairline() }
         .background(Ink.bg)
         .accessibilityElement(children: .contain)
+    }
+
+    /// The footer's right side: when the plan shares out, or that it is
+    /// paused, where the switch on the left does not say it already in
+    /// words (a vault only read shows "in pausa" there).
+    private func footerHint(_ plan: AllocationPlanView) -> String? {
+        if plan.enabled { return AllocationText.cadenceHint(plan.schedule) }
+        return store.canWrite ? String(localized: "paused") : nil
     }
 
     /// "Attivo": the plan's, masculine in Italian, where a template's

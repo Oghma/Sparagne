@@ -18,6 +18,12 @@ struct AllocationDueCard: View {
     /// The total typed, `nil` while it is not an amount of zero or more.
     let total: Int64?
     let preview: AllocationPreview?
+    /// The plan's lines as the table shows them, which Distribuisci sends
+    /// worked out (`AppStore.executeAllocation`).
+    let lines: [AllocationLine]
+    /// An edit of the plan is on its way: the period waits for it, so what
+    /// is decided is the plan the table shows once it is saved.
+    let saving: Bool
 
     /// A command in flight. The buttons wait for it: a double click would
     /// decide the same period twice, and the core would refuse the second.
@@ -80,12 +86,13 @@ struct AllocationDueCard: View {
                     .buttonStyle(.chrome(.ghost, small: true))
                     Button(String(localized: "Share out \(LedgerMoney.bare(preview?.distributed ?? 0))")) {
                         guard let total else { return }
-                        run { await store.executeAllocation(total: total) }
+                        let shown = lines
+                        run { await store.executeAllocation(total: total, lines: shown) }
                     }
                     .buttonStyle(.chrome(.primary, small: true))
                     .disabled(total == nil || preview == nil)
                 }
-                .disabled(working)
+                .disabled(working || saving)
             }
         }
         .frame(minHeight: 22)

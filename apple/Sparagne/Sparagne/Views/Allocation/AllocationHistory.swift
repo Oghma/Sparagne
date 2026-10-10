@@ -20,7 +20,6 @@ struct AllocationHistory: View {
 
     /// The period whose Annulla was pressed, while the alert asks.
     @State private var confirming: AllocationRunView?
-    @State private var working = false
 
     var body: some View {
         Panel(padding: 0) {
@@ -49,16 +48,12 @@ struct AllocationHistory: View {
             }
         }
         .alert(
-            confirming.map { String(localized: "Undo the allocation of \(RecurringDayText.weekday($0.periodDate))?") } ?? "",
+            confirming.map(Self.question) ?? "",
             isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
             presenting: confirming
         ) { run in
-            Button(String(localized: "Undo the Allocation"), role: .destructive) {
-                working = true
-                Task {
-                    await store.reopenAllocation(periodDate: run.periodDate)
-                    working = false
-                }
+            Button(Self.confirmation(run), role: .destructive) {
+                Task { await store.reopenAllocation(periodDate: run.periodDate) }
             }
             Button(String(localized: "Keep"), role: .cancel) {}
         } message: { run in
@@ -66,6 +61,25 @@ struct AllocationHistory: View {
                 ? String(localized: "Its transfers are deleted and the period is back to share out.")
                 : String(localized: "The period is back to share out."))
         }
+        // The toast after Distribuisci offers the same period: it steps aside
+        // while the alert asks, so only one of the two can be answered.
+        .onChange(of: confirming != nil) { _, asking in store.allocationConfirmingReopen = asking }
+        .onDisappear { store.allocationConfirmingReopen = false }
+    }
+
+    /// The alert's question: a shared-out period is undone, a skipped one
+    /// reopened.
+    private static func question(_ run: AllocationRunView) -> String {
+        let day = RecurringDayText.weekday(run.periodDate)
+        return run.outcome == .executed
+            ? String(localized: "Undo the allocation of \(day)?")
+            : String(localized: "Reopen the period of \(day)?")
+    }
+
+    private static func confirmation(_ run: AllocationRunView) -> String {
+        run.outcome == .executed
+            ? String(localized: "Undo the Allocation")
+            : String(localized: "Reopen the Period")
     }
 
     private var header: some View {
@@ -105,7 +119,7 @@ struct AllocationHistory: View {
                 if latest, store.canWrite {
                     Button(String(localized: "allocation.undo", defaultValue: "Undo")) { confirming = run }
                         .buttonStyle(.chrome(.ghost, small: true))
-                        .disabled(working)
+                        .disabled(store.allocationReopening)
                 } else {
                     Text(verbatim: "")
                 }

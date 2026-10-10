@@ -30,6 +30,9 @@ struct AllocationTab: View {
     /// The inspector's Quando and Inizio, which a new plan is also created
     /// with.
     @State private var schedule = AllocationScheduleDraft(today: CoreDate.day(Date()))
+    /// A row of the table is open: ↩ and esc are its, not the inspector's
+    /// Salva and Annulla.
+    @State private var rowOpen = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -40,13 +43,16 @@ struct AllocationTab: View {
                         today: today,
                         totalText: $totalText,
                         total: total,
-                        preview: preview
+                        preview: preview,
+                        lines: lines,
+                        saving: sentLines != nil
                     )
                     AllocationPlanTable(
                         store: store,
                         lines: lines,
                         preview: preview,
                         due: due != nil,
+                        rowOpen: $rowOpen,
                         save: save
                     )
                     if store.allocationPlan != nil {
@@ -63,7 +69,8 @@ struct AllocationTab: View {
                 lines: lines,
                 preview: preview,
                 due: due != nil,
-                today: today
+                today: today,
+                shortcuts: !rowOpen
             )
             .frame(width: RecurringTab.inspectorWidth)
         }
@@ -82,7 +89,8 @@ struct AllocationTab: View {
             vaultId: store.currentVault?.id,
             planId: store.allocationPlan?.id,
             pending: store.pendingAllocation,
-            base: store.allocationBase.total
+            base: store.allocationBase.total,
+            snapshot: store.snapshot
         )) {
             await store.loadAllocationRuns()
         }
@@ -143,14 +151,22 @@ struct AllocationTab: View {
     }
 
     /// Sends `new` as the plan's whole list, which the table shows from now
-    /// on; the first one creates the plan on the inspector's schedule, or on
-    /// today's default while that one is not a schedule. The task says
-    /// whether it went through.
+    /// on; the first one creates the plan on the inspector's schedule, and is
+    /// refused while that one is not a schedule. The task says whether it
+    /// went through.
     private func save(_ new: [AllocationLine]) -> Task<Bool, Never> {
+        if store.allocationPlan == nil, !schedule.isValid {
+            store.presentedError = AppError(
+                code: "invalid_command",
+                message: String(localized: "Correct When and Start on the right, then press \u{21A9} on the line again."),
+                headline: String(localized: "These settings do not make a schedule")
+            )
+            return Task { false }
+        }
         sentLines = new
         sends += 1
         let send = sends
-        let start = schedule.isValid ? schedule.schedule : AllocationScheduleDraft(today: today).schedule
+        let start = schedule.schedule
         return Task {
             let saved = await store.saveAllocationLines(new, schedule: start)
             if send == sends { sentLines = nil }
@@ -169,12 +185,15 @@ private struct PreviewInputs: Equatable {
     let flows: [FlowView]
 }
 
-/// When the history is loaded again.
+/// When the history is loaded again: whenever the vault does, since a
+/// decision, a reopen or a transfer of a run voided by a sync all come with a
+/// reload.
 private struct RunsKey: Equatable {
     let vaultId: Uuid?
     let planId: Uuid?
     let pending: PendingAllocation?
     let base: Int64
+    let snapshot: VaultSnapshot?
 }
 
 /// When the card's total starts again from the base.

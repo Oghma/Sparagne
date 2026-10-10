@@ -11,8 +11,6 @@ struct AllocationUndoToast: View {
     let undo: AllocationUndo
     let store: AppStore
 
-    @State private var working = false
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 14) {
@@ -21,16 +19,13 @@ struct AllocationUndoToast: View {
                     .foregroundStyle(Ink.text)
                 Spacer(minLength: 0)
                 Button(String(localized: "allocation.undo", defaultValue: "Undo")) {
-                    working = true
-                    Task {
-                        await store.undoAllocation()
-                        working = false
-                    }
+                    Task { await store.undoAllocation() }
                 }
                 .buttonStyle(.plain)
                 .font(Face.row)
                 .foregroundStyle(Ink.accent)
-                .disabled(working)
+                // One reopen at a time, whichever Annulla started it.
+                .disabled(store.allocationReopening)
             }
             TimelineView(.animation) { context in
                 MeterBar(fraction: 1 - undo.progress(at: context.date), tint: Ink.accent, height: 2)

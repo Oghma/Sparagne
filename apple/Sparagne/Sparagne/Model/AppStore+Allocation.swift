@@ -80,24 +80,26 @@ extension AppStore {
 
     // MARK: - Deciding the period
 
-    /// Distribuisci: the plan worked out on `total`, the total on screen, and
-    /// the amounts it gives sent as they are, so a replay moves the same
-    /// money whatever the plan says by then. Worked out again here rather
-    /// than taken from the card, which may still be showing the answer for
-    /// the total before the last keystroke.
+    /// Distribuisci: `lines`, the plan as the tab shows it, worked out on
+    /// `total`, the total on screen, and the amounts they give sent as they
+    /// are, so a replay moves the same money whatever the plan says by then.
+    /// The lines are the tab's rather than the saved plan's: an edit still on
+    /// its way would otherwise be shown and not sent. Worked out again here
+    /// rather than taken from the card, which may still be showing the answer
+    /// for the total before the last keystroke. `nil` is the saved plan.
     ///
     /// The transfers are dated on the period's day at the time of the click,
     /// as a recorded recurring period is. A period where no line gets
     /// anything is skipped (`AllocationDecision`). A refusal reloads, so the
     /// card shows what the core sees now; one that goes through leaves the
     /// toast that undoes it.
-    func executeAllocation(total: Int64, now: Date = Date()) async {
+    func executeAllocation(total: Int64, lines: [AllocationLine]? = nil, now: Date = Date()) async {
         guard let vault = currentVault, let plan = allocationPlan,
               let pending = pendingAllocation, pending.planId == plan.id
         else { return }
         let preview: AllocationPreview
         do {
-            preview = try await core.previewAllocation(vaultId: vault.id, lines: plan.lines, total: total)
+            preview = try await core.previewAllocation(vaultId: vault.id, lines: lines ?? plan.lines, total: total)
         } catch {
             report(error)
             return
@@ -127,16 +129,22 @@ extension AppStore {
                 duration: Self.allocationUndoWindow
             )
         } else if !applied, !isReadOnly {
+            explainRefusal(AllocationRefusal.decision)
             await reload()
         }
         await loadAllocationRuns()
     }
 
     /// Salta: the period is decided with nothing moved, and its incomes stay
-    /// in Unallocated, out of the next period's total.
+    /// in Unallocated, out of the next period's total. A refusal reloads, as
+    /// Distribuisci's does.
     func skipAllocation() async {
         guard let vault = currentVault, let pending = pendingAllocation else { return }
-        await apply([.skipAllocation(planId: pending.planId, periodDate: pending.periodDate)], in: vault.id)
+        let applied = await apply([.skipAllocation(planId: pending.planId, periodDate: pending.periodDate)], in: vault.id)
+        if !applied, !isReadOnly {
+            explainRefusal(AllocationRefusal.decision)
+            await reload()
+        }
         await loadAllocationRuns()
     }
 
@@ -159,11 +167,30 @@ extension AppStore {
         if allocationUndo?.id == id { allocationUndo = nil }
     }
 
+    /// One reopen at a time (`allocationReopening`): the toast and the
+    /// history can both offer the same period, and a second click would only
+    /// be refused. A refusal (someone undid it, or decided a later period,
+    /// in the meantime) takes the toast away, since what it would undo is no
+    /// longer there, and reloads to show what is.
     private func reopenAllocation(planId: Uuid, periodDate: NaiveDate, in vaultId: Uuid) async {
+        guard !allocationReopening else { return }
+        allocationReopening = true
+        defer { allocationReopening = false }
         let applied = await apply([.reopenAllocation(planId: planId, periodDate: periodDate)], in: vaultId)
-        if applied, allocationUndo?.planId == planId, allocationUndo?.periodDate == periodDate {
+        if applied {
+            if allocationUndo?.planId == planId, allocationUndo?.periodDate == periodDate { allocationUndo = nil }
+        } else if !isReadOnly {
+            explainRefusal(AllocationRefusal.reopen)
             allocationUndo = nil
+            if vaultId == currentVault?.id { await reload() }
         }
         await loadAllocationRuns()
+    }
+
+    /// Puts the household's words on the refusal `apply` has just shown,
+    /// when `explain` has some for it.
+    private func explainRefusal(_ explain: (AppError) -> AppError?) {
+        guard let shown = presentedError, let better = explain(shown) else { return }
+        presentedError = better
     }
 }

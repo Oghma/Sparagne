@@ -117,9 +117,11 @@ struct MainWindow: View {
             }
             .animation(.default, value: store.pendingUndo)
             // Distribuisci's own toast, for the vault on screen; the void's
-            // goes first when both are up.
+            // goes first when both are up, and the history's Annulla while it
+            // asks.
             .overlay(alignment: .bottom) {
-                if store.pendingUndo == nil, let undo = store.allocationUndo, undo.vaultId == store.currentVault?.id {
+                if store.pendingUndo == nil, !store.allocationConfirmingReopen,
+                   let undo = store.allocationUndo, undo.vaultId == store.currentVault?.id {
                     AllocationUndoToast(undo: undo, store: store)
                         .padding(.bottom, 48)
                         .transition(.move(edge: .bottom).combined(with: .opacity))

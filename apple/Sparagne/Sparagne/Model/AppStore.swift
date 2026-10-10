@@ -283,6 +283,11 @@ final class AppStore {
     var allocationRuns: [AllocationRunView] = []
     /// The last Distribuisci, while its toast offers to undo it.
     var allocationUndo: AllocationUndo?
+    /// A reopen on its way: the toast's Annulla and the history's go one at
+    /// a time, so the second never reaches a period the first reopened.
+    var allocationReopening = false
+    /// The history is asking before a reopen; the toast steps aside meanwhile.
+    var allocationConfirmingReopen = false
 
     // MARK: Setup
 
