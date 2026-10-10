@@ -1,13 +1,13 @@
 import Charts
 import SwiftUI
 
-/// The two charts under the table, side by side while
-/// they fit and stacked when they do not.
+/// The two charts under the table, side by side at half
+/// the width each.
 struct SummaryCharts: View {
     let year: YearSummary
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 420), spacing: 8, alignment: .top)], spacing: 8) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: 2), spacing: 8) {
             CashFlowCard(year: year)
             CashFundCard(year: year)
         }

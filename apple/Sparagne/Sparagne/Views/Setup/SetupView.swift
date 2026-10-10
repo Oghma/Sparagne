@@ -3,8 +3,8 @@ import SparagneCore
 
 /// The SETUP view: the vault's card, its wallets and
 /// its envelopes in the left column, its categories in the right one, as
-/// cards on the sheet. Two columns when the window has room for both at 520
-/// pt, one under the other when it does not.
+/// cards on the sheet. Two columns of half the width each: the window's
+/// minimum width always has room for both.
 struct SetupView: View {
     let store: AppStore
     /// `nil` before the database is open and in a demo database: the vault's
@@ -16,7 +16,7 @@ struct SetupView: View {
     var body: some View {
         ScrollView {
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 520), spacing: 10, alignment: .top)],
+                columns: Array(repeating: GridItem(.flexible(), spacing: 10, alignment: .top), count: 2),
                 alignment: .leading,
                 spacing: 10
             ) {
