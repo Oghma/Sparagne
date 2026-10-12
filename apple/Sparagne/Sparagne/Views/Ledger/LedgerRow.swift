@@ -121,7 +121,9 @@ enum LedgerAccessibility {
         if row.envelopeDisplay != TransactionRow.placeholder {
             parts.append(String(localized: "envelope \(row.envelopeDisplay)"))
         }
-        if showsWallet, row.walletDisplay != TransactionRow.placeholder {
+        // A wallet transfer's route is on screen whatever the column, in
+        // the description's tag (`TransactionRow.transferRoute`).
+        if showsWallet || row.kind == .transferWallet, row.walletDisplay != TransactionRow.placeholder {
             parts.append(String(localized: "wallet \(row.walletDisplay)"))
         }
         parts.append(person(row.person))
@@ -398,7 +400,7 @@ struct LedgerRowView: View {
             DayLabel(date: row.occurredAt, tint: ink(Ink.text), struck: row.voided)
         }
         .onTapGesture { onOpen(.date) }
-        GridCell(width: GridColumn.flow) { text(row.envelopeDisplay, Ink.text2) }
+        GridCell(width: GridColumn.flow) { text(row.envelopeColumn, Ink.text2) }
             .onTapGesture { onOpen(row.isTransfer ? .note : .flow) }
         GridCell(width: GridColumn.category) { text(row.category, categoryTint) }
             .onTapGesture { onOpen(.category) }
@@ -411,6 +413,9 @@ struct LedgerRowView: View {
                 }
                 if row.kind == .refund {
                     RowTag(text: String(localized: "refund"), tint: Ink.positive)
+                }
+                if let route = row.transferRoute {
+                    RowTag(text: route, tint: ink(Ink.text2))
                 }
             }
         }
@@ -501,9 +506,12 @@ struct LedgerRowView: View {
     private func envelopeCell(_ flowId: Binding<Uuid?>) -> some View {
         GridCell(width: GridColumn.flow) {
             if row.isTransfer {
-                Text(row.envelopeDisplay)
+                // The route's tag is not drawn while the note is a field:
+                // the source stays here, the whole route on hover.
+                Text(row.envelopeColumn)
                     .font(Face.row)
                     .foregroundStyle(Ink.text3)
+                    .help(ifAny: row.transferRoute)
             } else {
                 EnvelopeSelectCell(
                     flowId: flowId,

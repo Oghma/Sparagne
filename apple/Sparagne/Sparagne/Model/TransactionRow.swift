@@ -54,8 +54,23 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
 
     let walletDisplay: String
     let envelopeDisplay: String
+    /// What the ENVELOPE column writes: an entry's envelope, a transfer
+    /// between envelopes' source. The column has no room for two names, so
+    /// the whole route goes after the description (`transferRoute`).
+    let envelopeColumn: String
 
     var isTransfer: Bool { kind == .transferWallet || kind == .transferFlow }
+
+    /// A transfer's two ends, "Unallocated → Spesa" or "Conto → Contanti":
+    /// the ledger tags the description with it, where both names fit, so a
+    /// transfer says where the money went. `nil` for an entry.
+    var transferRoute: String? {
+        switch kind {
+        case .transferFlow: envelopeDisplay
+        case .transferWallet: walletDisplay
+        case .income, .expense, .refund: nil
+        }
+    }
 
     /// Recorded by one member for another: the PERSONA cell then says who
     /// typed it, on hover and to VoiceOver.
@@ -84,16 +99,19 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
             flowId = nil
             walletDisplay = Self.arrow(names.wallet(view.fromId), names.wallet(view.toId))
             envelopeDisplay = Self.placeholder
+            envelopeColumn = Self.placeholder
         case .transferFlow:
             flowId = view.fromId
             walletId = nil
             walletDisplay = Self.placeholder
             envelopeDisplay = Self.arrow(names.flow(view.fromId), names.flow(view.toId))
+            envelopeColumn = names.flow(view.fromId) ?? Self.placeholder
         case .income, .expense, .refund:
             walletId = view.walletId
             flowId = view.flowId
             walletDisplay = names.wallet(view.walletId) ?? Self.placeholder
             envelopeDisplay = names.flow(view.flowId) ?? Self.placeholder
+            envelopeColumn = envelopeDisplay
         }
     }
 

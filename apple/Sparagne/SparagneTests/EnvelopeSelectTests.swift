@@ -168,7 +168,7 @@ struct EnvelopeSelectTests {
         #expect(patch.flowId == nil)
     }
 
-    @Test("A transfer between envelopes opens with no envelope to pick and sends none")
+    @Test("A transfer between envelopes shows its route, opens with no envelope to pick and sends none")
     func transferLeavesTheLegs() async throws {
         let (store, _) = try await Self.household()
         await store.submit(quickAdd: "tf> 10.00 >cash >viaggi")
@@ -176,6 +176,10 @@ struct EnvelopeSelectTests {
         await store.settle()
         #expect(store.presentedError == nil)
         let transfer = try #require(store.rows.first { $0.kind == .transferFlow })
+        // The column has room for the source; the route goes after the note.
+        #expect(transfer.envelopeColumn == "Cash")
+        #expect(transfer.transferRoute == "Cash \u{2192} Viaggi")
+        #expect(store.rows.first { $0.note == "coop" }?.transferRoute == nil)
 
         var draft = RowDraft(row: transfer, store: store)
         #expect(draft.flowId == nil)
