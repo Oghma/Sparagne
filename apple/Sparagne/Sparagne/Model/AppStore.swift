@@ -1231,7 +1231,7 @@ final class AppStore {
     /// so rows entered on the same day keep their typing order.
     ///
     /// A `nil` envelope means "the sticky default", not Unallocated: an empty
-    /// FLOW cell has to behave like the last row, not like a system envelope
+    /// ENVELOPE cell has to behave like the last row, not like a system envelope
     /// the user never picked. A `nil` kind is the direction on screen's; a
     /// duplicate passes its source's, so a refund copied stays a refund.
     ///
@@ -1314,34 +1314,13 @@ final class AppStore {
         }
     }
 
-    /// Resolves what was typed in the FLOW cell to an envelope, with the same
+    /// Resolves what was typed in the WALLET cell to a wallet, with the same
     /// precedence the core's quick-add resolver uses: exact, then unique
     /// prefix, then unique substring (`core/src/quick_add.rs`). Returns `nil`
     /// for blank text, meaning "leave the default".
     ///
     /// Synchronous on purpose: the names come from the loaded snapshot, not
     /// from the core, so a cell can be validated while it is being typed.
-    func resolveFlow(named text: String) throws -> Uuid? {
-        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !needle.isEmpty else { return nil }
-        let candidates = flows.map { (id: $0.id, name: flowName($0).lowercased()) }
-        if let exact = candidates.first(where: { $0.name == needle }) { return exact.id }
-        for matches in [
-            candidates.filter { $0.name.hasPrefix(needle) },
-            candidates.filter { $0.name.contains(needle) },
-        ] {
-            if matches.count == 1 { return matches[0].id }
-            if matches.count > 1 {
-                throw DomainError.InvalidCommand(
-                    message: String(localized: "More than one envelope matches \u{201C}\(text)\u{201D}")
-                )
-            }
-        }
-        throw DomainError.NotFound(message: String(localized: "No envelope named \u{201C}\(text)\u{201D}"))
-    }
-
-    /// The WALLET cell's resolver, the same precedence `resolveFlow` uses.
-    /// Returns `nil` for blank text, meaning "leave the default".
     func resolveWallet(named text: String) throws -> Uuid? {
         let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return nil }

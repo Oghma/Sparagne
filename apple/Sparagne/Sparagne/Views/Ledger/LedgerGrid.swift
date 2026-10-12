@@ -44,6 +44,9 @@ struct LedgerGrid: View {
     /// The list under the CATEGORY cell being typed into: one for the whole
     /// grid, drawn over it rather than inside a row (`completionList`).
     @State private var completion = CategoryCompletionModel()
+    /// The list under the ENVELOPE cell that has the caret, drawn the same
+    /// way (`envelopeList`).
+    @State private var envelopes = EnvelopeChoiceModel()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -64,6 +67,9 @@ struct LedgerGrid: View {
         }
         .overlayPreferenceValue(CategoryCompletionAnchor.self) { anchor in
             completionList(at: anchor)
+        }
+        .overlayPreferenceValue(EnvelopeChoiceAnchor.self) { anchor in
+            envelopeList(at: anchor)
         }
         .background(Ink.sheet)
         // The vault turned read-only under an open row (the owner changed the
@@ -213,6 +219,7 @@ struct LedgerGrid: View {
             draft: isEditing ? $draft : nil,
             focus: $focus,
             completion: completion,
+            envelopes: envelopes,
             onOpen: { field in open(row, at: field) },
             onCommit: { submit(row.id) },
             onCancel: cancelEditing,
@@ -325,6 +332,7 @@ struct LedgerGrid: View {
             draft: $newRow,
             focus: $focus,
             completion: completion,
+            envelopes: envelopes,
             onCommit: commitNewRow,
             onCancel: { gridFocused = true },
             showsWallet: store.showWalletColumn
@@ -349,6 +357,24 @@ struct LedgerGrid: View {
                 // Three points in from the cell's edge and one up into its
                 // row, as the canvas hangs it (`.ac`).
                 CategoryCompletionList(completion: completion)
+                    .offset(
+                        x: cell.minX - GridColumn.padding + 3,
+                        y: fitsBelow ? cell.maxY - 1 : cell.minY - height + 1
+                    )
+            }
+        }
+    }
+
+    /// The ENVELOPE cell's list, hung as the CATEGORY cell's is and for the
+    /// same reasons.
+    @ViewBuilder
+    private func envelopeList(at anchor: Anchor<CGRect>?) -> some View {
+        if let anchor, envelopes.isOpen {
+            GeometryReader { proxy in
+                let cell = proxy[anchor]
+                let height = EnvelopeChoiceList.height(for: envelopes.choices.count)
+                let fitsBelow = cell.maxY + height <= proxy.size.height
+                EnvelopeChoiceList(choices: envelopes)
                     .offset(
                         x: cell.minX - GridColumn.padding + 3,
                         y: fitsBelow ? cell.maxY - 1 : cell.minY - height + 1
@@ -606,7 +632,10 @@ struct RowDraftError: Error {
 /// store, which owns the core.
 struct RowDraft {
     var day = Date()
-    var flow = ""
+    /// Picked from the ENVELOPE cell's list, never typed (`EnvelopeSelectCell`).
+    /// `nil` on the empty line is the sticky default; on a transfer it is
+    /// nothing, since the cell does not open there.
+    var flowId: Uuid?
     var category = ""
     var note = ""
     var wallet = ""
@@ -638,7 +667,10 @@ struct RowDraft {
     init(row: TransactionRow, store: AppStore) {
         kind = row.kind
         day = row.occurredAt
-        flow = row.envelopeDisplay == TransactionRow.placeholder ? "" : row.envelopeDisplay
+        // A transfer's ENVELOPE cell is an arrow between two envelopes, not
+        // one envelope: it stays read-only, and the commit leaves the legs
+        // alone, as the WALLET cell does.
+        flowId = row.isTransfer ? nil : row.flowId
         category = row.category
         note = row.note
         // A transfer's WALLET cell is an arrow between two wallets, not a
@@ -656,9 +688,7 @@ struct RowDraft {
         var draft = RowDraft()
         let now = Date()
         draft.day = MonthKey(now) == store.month ? now : store.month.start()
-        if let id = store.defaultFlowId, let flow = store.flows.first(where: { $0.id == id }) {
-            draft.flow = store.flowName(flow)
-        }
+        draft.flowId = store.defaultFlowId
         if store.showWalletColumn { draft.wallet = store.defaultWalletName ?? "" }
         draft.person = store.currentAuthor
         return draft
@@ -690,14 +720,13 @@ struct RowDraft {
         person: String?
     )? {
         guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        let resolvedFlow = try cell(.flow) { try store.resolveFlow(named: flow) }
         let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: wallet) }
         let resolvedPerson = try cell(.person) { try store.resolvePerson(named: person) }
         let parsedAmount = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
         let trimmed = category.trimmingCharacters(in: .whitespacesAndNewlines)
         return (
             day: day,
-            flowId: resolvedFlow ?? store.defaultFlowId,
+            flowId: flowId ?? store.defaultFlowId,
             // An empty cell showing a suggestion saves what it shows.
             category: trimmed.isEmpty ? suggestedCategory : trimmed,
             note: note,
@@ -725,8 +754,9 @@ struct RowDraft {
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedNote != row.note { patch.note = trimmedNote }
 
-        let resolvedFlow = try cell(.flow) { try store.resolveFlow(named: flow) }
-        if let flowId = resolvedFlow, flowId != row.flowId { patch.flowId = flowId }
+        // An envelope the row is on stays as it is even once archived: only
+        // a pick from the list moves it.
+        if !row.isTransfer, let flowId, flowId != row.flowId { patch.flowId = flowId }
 
         // Only when the cell was actually retyped: a row sitting on an
         // archived wallet still shows its name, which no longer resolves.

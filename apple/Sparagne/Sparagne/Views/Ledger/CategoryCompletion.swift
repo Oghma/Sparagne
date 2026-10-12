@@ -300,19 +300,12 @@ extension View {
 struct CategoryCompletionList: View {
     let completion: CategoryCompletionModel
 
-    static let rowHeight: CGFloat = 24
-    static let width: CGFloat = 244
-    private static let groupHeight: CGFloat = 20
-    private static let footerHeight: CGFloat = 32
-    /// `#18181C`: a step above the raised ground of the focused cell it
-    /// hangs from, so the list reads as floating over the grid.
-    private static let ground = Color(hex: 0x18181C)
-
     /// What the list will measure, for the grid to decide whether it fits
     /// under the cell or has to open upwards.
     static func height(for candidates: [CategoryCandidate]) -> CGFloat {
         let groups = (candidates.contains { $0.alias == nil } ? 1 : 0) + (candidates.contains { $0.alias != nil } ? 1 : 0)
-        return 2 + 8 + CGFloat(groups) * groupHeight + CGFloat(candidates.count) * rowHeight + footerHeight
+        return FloatingList.chrome + CGFloat(groups) * FloatingList.groupHeight
+            + CGFloat(candidates.count) * FloatingList.rowHeight
     }
 
     var body: some View {
@@ -332,26 +325,13 @@ struct CategoryCompletionList: View {
                     row(index: index, candidate: candidate)
                 }
             }
-            footer
+            FloatingListFooter()
         }
-        .padding(4)
-        .frame(width: Self.width, alignment: .leading)
-        .background(Self.ground, in: shape)
-        .overlay(shape.strokeBorder(Ink.line2, lineWidth: 1))
-        .shadow(color: .black.opacity(0.6), radius: 18, y: 14)
+        .floatingList()
     }
 
-    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 8) }
-
     private func group(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(Face.ui(10, .semibold))
-            .tracking(0.5)
-            .foregroundStyle(Ink.text3)
-            .padding(.horizontal, 7)
-            .padding(.bottom, 2)
-            .frame(height: Self.groupHeight, alignment: .bottomLeading)
-            .accessibilityAddTraits(.isHeader)
+        FloatingListGroup(title: title)
     }
 
     private func row(index: Int, candidate: CategoryCandidate) -> some View {
@@ -373,13 +353,7 @@ struct CategoryCompletionList: View {
                 }
             }
         }
-        .font(Face.row)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .padding(.horizontal, 7)
-        .frame(height: Self.rowHeight)
-        .background(active ? Ink.accent.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
-        .contentShape(Rectangle())
+        .floatingListRow(active: active)
         .onHover { inside in
             if inside { completion.highlight(index) }
         }
@@ -398,9 +372,69 @@ struct CategoryCompletionList: View {
         completion.highlight(index)
         completion.pick()
     }
+}
 
-    /// The keys the cell takes while the list is open.
-    private var footer: some View {
+// MARK: - The floating list's pieces
+
+/// What the lists hung from a grid cell share (`.ac`): the CATEGORY cell's
+/// completions and the ENVELOPE cell's choices look and measure the same.
+enum FloatingList {
+    static let rowHeight: CGFloat = 24
+    static let width: CGFloat = 244
+    static let groupHeight: CGFloat = 20
+    static let footerHeight: CGFloat = 32
+    /// The border, the padding and the footer: what a list measures beyond
+    /// its groups and rows.
+    static let chrome: CGFloat = 2 + 8 + footerHeight
+    /// `#18181C`: a step above the raised ground of the focused cell it
+    /// hangs from, so the list reads as floating over the grid.
+    static let ground = Color(hex: 0x18181C)
+}
+
+extension View {
+    /// The list's card: padded, on its own ground, with a hairline border
+    /// and a deep shadow, so it reads as floating over the grid.
+    func floatingList() -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8)
+        return padding(4)
+            .frame(width: FloatingList.width, alignment: .leading)
+            .background(FloatingList.ground, in: shape)
+            .overlay(shape.strokeBorder(Ink.line2, lineWidth: 1))
+            .shadow(color: .black.opacity(0.6), radius: 18, y: 14)
+    }
+
+    /// An entry: the highlighted one is tinted with the accent rather than
+    /// filled with it, so its text stays legible.
+    func floatingListRow(active: Bool) -> some View {
+        font(Face.row)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 7)
+            .frame(height: FloatingList.rowHeight)
+            .background(active ? Ink.accent.opacity(0.14) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+            .contentShape(Rectangle())
+    }
+}
+
+/// A group's small upper-case label.
+struct FloatingListGroup: View {
+    let title: String
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(Face.ui(10, .semibold))
+            .tracking(0.5)
+            .foregroundStyle(Ink.text3)
+            .padding(.horizontal, 7)
+            .padding(.bottom, 2)
+            .frame(height: FloatingList.groupHeight, alignment: .bottomLeading)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The keys the cell takes while its list is open.
+struct FloatingListFooter: View {
+    var body: some View {
         VStack(spacing: 0) {
             Hairline()
             HStack(spacing: 10) {
@@ -413,7 +447,7 @@ struct CategoryCompletionList: View {
             .padding(.top, 6)
         }
         .padding(.top, 4)
-        .frame(height: Self.footerHeight, alignment: .top)
+        .frame(height: FloatingList.footerHeight, alignment: .top)
         .accessibilityElement(children: .combine)
     }
 }

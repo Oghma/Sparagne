@@ -27,12 +27,12 @@ extension AppStore {
     }
 
     /// Resolves what was typed in a PERSONA cell to one of
-    /// `assignablePeople`, with the precedence of `resolveFlow` and of the
+    /// `assignablePeople`, with the precedence of `resolveWallet` and of the
     /// core's `!name` (exact, then unique prefix, then unique substring), so
     /// `eli` is Elisa wherever it is typed. Returns `nil` for blank text,
     /// meaning "leave it to the default".
     ///
-    /// Synchronous, like `resolveFlow`: the names are already loaded.
+    /// Synchronous, like `resolveWallet`: the names are already loaded.
     func resolvePerson(named text: String) throws -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let needle = trimmed.lowercased()

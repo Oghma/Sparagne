@@ -82,7 +82,7 @@ struct BulkCategoryPopover: View {
             }
         }
         .padding(14)
-        .frame(width: CategoryCompletionList.width + 28)
+        .frame(width: FloatingList.width + 28)
         .background(Ink.card)
         .onAppear { focused = true }
         .task { await store.loadCategoryCompletion() }

@@ -279,23 +279,6 @@ struct LedgerStoreTests {
         #expect(store.presentedError == nil)
     }
 
-    // MARK: - Name resolution in the FLOW cell
-
-    @Test("The envelope cell resolves exactly, then by prefix, and complains when it cannot")
-    func flowCellResolution() async throws {
-        let (store, envelope) = try await Self.household()
-
-        #expect(try store.resolveFlow(named: "Cash") == envelope.id)
-        #expect(try store.resolveFlow(named: "ca") == envelope.id)
-        #expect(try store.resolveFlow(named: "  ") == nil)
-
-        #expect(throws: DomainError.self) { try store.resolveFlow(named: "vacanze") }
-
-        // Two envelopes sharing a prefix are ambiguous, not a coin toss.
-        await store.createEnvelope(name: "Casa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
-        #expect(throws: DomainError.self) { try store.resolveFlow(named: "cas") }
-    }
-
     // MARK: - The draft behind a row being edited
 
     @Test("A committed row sends the cells that changed and nothing else")
@@ -346,7 +329,7 @@ struct LedgerStoreTests {
         // The current month: the line is ready for a row entered today.
         let today = RowDraft.blank(in: store)
         #expect(calendar.isDateInToday(today.day))
-        #expect(today.flow == envelope.name)
+        #expect(today.flowId == envelope.id)
 
         // Any other month has no "today", so the line starts on its first day.
         store.month = store.month.adding(months: -3)
@@ -354,7 +337,7 @@ struct LedgerStoreTests {
         let past = RowDraft.blank(in: store)
         #expect(past.day == store.month.start())
         #expect(calendar.component(.day, from: past.day) == 1)
-        #expect(past.flow == envelope.name)
+        #expect(past.flowId == envelope.id)
     }
 
     // MARK: - A category suggested by the note
@@ -496,7 +479,7 @@ struct LedgerStoreTests {
         var draft = RowDraft(row: row, store: store)
         #expect(draft.wallet == "Conto")
 
-        // Typed into the cell, resolved the way the FLOW cell resolves names.
+        // Typed into the cell: exact, then unique prefix, then unique substring.
         draft.wallet = "conta"
         let patch = try draft.patch(against: row, store: store)
         #expect(patch.walletId == cash.id)

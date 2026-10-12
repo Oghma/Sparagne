@@ -4817,22 +4817,6 @@
         }
       }
     },
-    "More than one envelope matches “%@”": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "More than one envelope matches “%@”"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Più di una busta corrisponde a “%@”"
-          }
-        }
-      }
-    },
     "More than one person matches “%@”": {
       "localizations": {
         "en": {
@@ -5489,18 +5473,18 @@
         }
       }
     },
-    "No envelope named “%@”": {
+    "No envelope matches “%@”": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No envelope named “%@”"
+            "value": "No envelope matches “%@”"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nessuna busta chiamata “%@”"
+            "value": "Nessuna busta corrisponde a “%@”"
           }
         }
       }

@@ -330,6 +330,8 @@ struct LedgerRowView: View {
     @FocusState.Binding var focus: CellFocus?
     /// The grid's one completion list, for the CATEGORY cell.
     let completion: CategoryCompletionModel
+    /// The grid's one envelope list, for the ENVELOPE cell.
+    let envelopes: EnvelopeChoiceModel
     let onOpen: (RowField) -> Void
     let onCommit: () -> Void
     let onCancel: () -> Void
@@ -354,7 +356,7 @@ struct LedgerRowView: View {
 
             if let draft {
                 DayCell(day: draft.day, month: store.month, focus: $focus, key: key(.date))
-                textCell(.flow, width: GridColumn.flow)
+                envelopeCell(draft.flowId)
                 GridCell(width: GridColumn.category) {
                     CategoryCell(
                         text: draft.category,
@@ -397,7 +399,7 @@ struct LedgerRowView: View {
         }
         .onTapGesture { onOpen(.date) }
         GridCell(width: GridColumn.flow) { text(row.envelopeDisplay, Ink.text2) }
-            .onTapGesture { onOpen(.flow) }
+            .onTapGesture { onOpen(row.isTransfer ? .note : .flow) }
         GridCell(width: GridColumn.category) { text(row.category, categoryTint) }
             .onTapGesture { onOpen(.category) }
         GridCell {
@@ -493,6 +495,29 @@ struct LedgerRowView: View {
         }
     }
 
+    /// A transfer's envelopes are its two ends, as its wallets are
+    /// (`walletCell`): the cell stays read-only for those rows.
+    @ViewBuilder
+    private func envelopeCell(_ flowId: Binding<Uuid?>) -> some View {
+        GridCell(width: GridColumn.flow) {
+            if row.isTransfer {
+                Text(row.envelopeDisplay)
+                    .font(Face.row)
+                    .foregroundStyle(Ink.text3)
+            } else {
+                EnvelopeSelectCell(
+                    flowId: flowId,
+                    placeholder: row.envelopeDisplay,
+                    store: store,
+                    choices: envelopes,
+                    focus: $focus,
+                    key: key(.flow),
+                    onSubmit: onCommit
+                )
+            }
+        }
+    }
+
     /// A transfer's wallets are its two ends, not a field: `UpdateTransaction`
     /// moves them with `from_id`/`to_id`, which the grid does not edit, so the
     /// cell stays read-only for those rows.
@@ -537,13 +562,12 @@ struct LedgerRowView: View {
     private func binding(_ field: RowField) -> Binding<String> {
         guard let draft else { return .constant("") }
         switch field {
-        case .flow: return draft.flow
         case .category: return draft.category
         case .note: return draft.note
         case .wallet: return draft.wallet
         case .person: return draft.person
         case .amount: return draft.amount
-        case .date: return .constant("")
+        case .date, .flow: return .constant("")
         }
     }
 }
@@ -664,6 +688,8 @@ struct NewRowView: View {
     @FocusState.Binding var focus: CellFocus?
     /// The grid's one completion list, for the CATEGORY cell.
     let completion: CategoryCompletionModel
+    /// The grid's one envelope list, for the ENVELOPE cell.
+    let envelopes: EnvelopeChoiceModel
     let onCommit: () -> Void
     /// esc threw the line away: the grid takes the keyboard back, so ⌘A and
     /// ⌫ over a row have somewhere to land, as after esc on an open row.
@@ -681,7 +707,17 @@ struct NewRowView: View {
                     .accessibilityHidden(true)
             }
             DayCell(day: $draft.day, month: store.month, focus: $focus, key: CellFocus(row: nil, field: .date))
-            field($draft.flow, .flow, String(localized: "Envelope"), width: GridColumn.flow)
+            GridCell(width: GridColumn.flow) {
+                EnvelopeSelectCell(
+                    flowId: $draft.flowId,
+                    placeholder: String(localized: "Envelope"),
+                    store: store,
+                    choices: envelopes,
+                    focus: $focus,
+                    key: CellFocus(row: nil, field: .flow),
+                    onSubmit: onCommit
+                )
+            }
             GridCell(width: GridColumn.category) {
                 CategoryCell(
                     text: $draft.category,
