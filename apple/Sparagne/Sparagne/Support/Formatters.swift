@@ -80,6 +80,11 @@ enum CountText {
         String(localized: "\(count) transactions deleted", bundle: bundle, locale: locale)
     }
 
+    /// `"2 transfers"`: what a move between envelopes writes, one per line.
+    static func transfers(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
+        String(localized: "\(count) transfers", bundle: bundle, locale: locale)
+    }
+
     /// `"5 days ago"` under a due period's date, `"today"` for one due today.
     static func daysAgo(_ count: Int, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent) -> String {
         count <= 0

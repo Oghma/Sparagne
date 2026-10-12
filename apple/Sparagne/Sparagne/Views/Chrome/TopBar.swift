@@ -71,16 +71,17 @@ struct TopBar: View {
     }
 
     /// What the tab on screen adds: a row on the Riepilogo and the Mastro, a
-    /// template on the Ricorrenze; the Setup tab adds in its tables' own
-    /// empty lines. Nothing for an account that only reads the vault, which
-    /// could not save what it typed.
+    /// template on the Ricorrenze, a one-off move on the Riparto; the Setup
+    /// tab adds in its tables' own empty lines. Nothing for an account that
+    /// only reads the vault, which could not save what it typed.
     @ViewBuilder
     private var addButton: some View {
         if store.canWrite {
             switch store.tab {
             case .summary, .ledger: AddButton()
             case .recurring: NewRecurringButton(store: store)
-            case .allocation, .setup: EmptyView()
+            case .allocation: MoveBetweenEnvelopesButton()
+            case .setup: EmptyView()
             }
         }
     }
@@ -241,6 +242,25 @@ struct AddButton: View {
                 Text(String(localized: "Add"))
                 KeyCap(text: "\u{2318}K")
                     .accessibilityHidden(true)
+            }
+        }
+        .buttonStyle(.chrome())
+    }
+}
+
+/// The Riparto tab's "Move between envelopes…": the one-off sheet, as the
+/// Vault menu and the palette open it. No key cap: the menu item has no
+/// shortcut.
+struct MoveBetweenEnvelopesButton: View {
+    var body: some View {
+        Button {
+            NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text(String(localized: "Move between envelopes\u{2026}"))
             }
         }
         .buttonStyle(.chrome())

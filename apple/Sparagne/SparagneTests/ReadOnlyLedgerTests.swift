@@ -48,6 +48,27 @@ struct ReadOnlyLedgerTests {
         #expect(!store.rows.contains { $0.note == "hotel" })
     }
 
+    @Test("Move between envelopes is refused with a message, and the core never hears of it")
+    func moveIsRefused() async throws {
+        let (store, calls) = try await Self.viewer()
+        let vault = try #require(store.currentVault).id
+        // An envelope to move to, made while the vault could still be written.
+        store.setReadOnlyVaults([])
+        await store.createEnvelope(name: "Vacanze", mode: .unlimited, allowNegative: false, openingAllocation: 0)
+        store.setReadOnlyVaults([vault])
+        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        let holiday = try #require(store.flows.first { $0.name == "Vacanze" })
+        var draft = EnvelopeMoveDraft(sourceId: unallocated.id, day: CoreDate.day(Date()))
+        draft.add(holiday.id)
+        draft.setAmount("10", for: holiday.id)
+        #expect(draft.check(flows: store.flows, currency: store.currency).canMove)
+
+        let before = await calls.count
+        #expect(!(await store.moveBetweenEnvelopes(draft)))
+        #expect(store.presentedError?.code == "forbidden")
+        #expect(await calls.count == before)
+    }
+
     @Test("Nuova ricorrenza… asks for nothing in a vault that is only read")
     func noNewRecurring() async throws {
         let (store, _) = try await Self.viewer()

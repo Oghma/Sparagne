@@ -49,6 +49,22 @@
         }
       }
     },
+    "%@ can take %@ more before its cap: %@ too much.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ can take %2$@ more before its cap: %3$@ too much."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ può ricevere ancora %2$@ prima del tetto: %3$@ di troppo."
+          }
+        }
+      }
+    },
     "%@ gets %@ less": {
       "localizations": {
         "en": {
@@ -65,6 +81,22 @@
         }
       }
     },
+    "%@ goes below zero, which it allows.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ goes below zero, which it allows."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ va sotto zero: è consentito."
+          }
+        }
+      }
+    },
     "%@ in %@": {
       "localizations": {
         "en": {
@@ -77,6 +109,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ a %@"
+          }
+        }
+      }
+    },
+    "%@ is %@ short and cannot go below zero.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ is %2$@ short and cannot go below zero."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A %1$@ mancano %2$@ e non può andare sotto zero."
           }
         }
       }
@@ -785,6 +833,46 @@
         }
       }
     },
+    "%lld transfers": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transfer"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transfers"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld trasferimento"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld trasferimenti"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "-12.50 pizza #food @cash >groceries": {
       "localizations": {
         "en": {
@@ -1057,6 +1145,22 @@
         }
       }
     },
+    "Add an envelope to move money to": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add an envelope to move money to"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi una busta a cui spostare i soldi"
+          }
+        }
+      }
+    },
     "Add envelope…": {
       "localizations": {
         "en": {
@@ -1213,6 +1317,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importo"
+          }
+        }
+      }
+    },
+    "Amount for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amount for %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importo per %@"
           }
         }
       }
@@ -2849,6 +2969,22 @@
         }
       }
     },
+    "Each line becomes a transfer in the ledger, with the same note and date. All of them go through or none does: if one line cannot, nothing moves.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each line becomes a transfer in the ledger, with the same note and date. All of them go through or none does: if one line cannot, nothing moves."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogni riga diventa un trasferimento nel Mastro, con la stessa nota e la stessa data. Passano tutti o nessuno: se una riga non può passare, non si sposta niente."
+          }
+        }
+      }
+    },
     "Edit": {
       "localizations": {
         "en": {
@@ -3521,6 +3657,22 @@
         }
       }
     },
+    "Fix %@ to move": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fix %@ to move"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correggi %@ per spostare"
+          }
+        }
+      }
+    },
     "Fixed": {
       "localizations": {
         "en": {
@@ -3645,6 +3797,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Frequenza"
+          }
+        }
+      }
+    },
+    "From": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da"
           }
         }
       }
@@ -4313,6 +4481,22 @@
         }
       }
     },
+    "Left in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left in %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resta in %@"
+          }
+        }
+      }
+    },
     "Left in Unallocated": {
       "localizations": {
         "en": {
@@ -4437,6 +4621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Accedi di nuovo per riprendere la sincronizzazione; le modifiche aspettano su questo Mac."
+          }
+        }
+      }
+    },
+    "Lower the amounts to move": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lower the amounts to move"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbassa gli importi per spostare"
           }
         }
       }
@@ -4665,6 +4865,54 @@
         }
       }
     },
+    "Move": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta"
+          }
+        }
+      }
+    },
+    "Move %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta %@"
+          }
+        }
+      }
+    },
+    "Move Between Envelopes…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Between Envelopes…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta tra buste…"
+          }
+        }
+      }
+    },
     "Move Down": {
       "localizations": {
         "en": {
@@ -4693,6 +4941,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sposta su"
+          }
+        }
+      }
+    },
+    "Move between envelopes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move between envelopes"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta tra buste"
+          }
+        }
+      }
+    },
+    "Move between envelopes…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move between envelopes…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sposta tra buste…"
           }
         }
       }
@@ -5173,6 +5453,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessuna data: la fine è già passata"
+          }
+        }
+      }
+    },
+    "No envelope can hold that much.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No envelope can hold that much."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna busta può contenere tanto."
           }
         }
       }
@@ -5685,6 +5981,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sulle entrate"
+          }
+        }
+      }
+    },
+    "Once only: the allocation plan and its periods stay as they are.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Once only: the allocation plan and its periods stay as they are."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una volta sola: il piano di riparto e i suoi periodi restano come sono."
           }
         }
       }
@@ -6233,6 +6545,22 @@
         }
       }
     },
+    "Remove %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Togli %@"
+          }
+        }
+      }
+    },
     "Remove alias": {
       "localizations": {
         "en": {
@@ -6277,6 +6605,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rimuovi dal piano"
+          }
+        }
+      }
+    },
+    "Remove its line to move the rest.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove its line to move the rest."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Togli la riga per spostare il resto."
+          }
+        }
+      }
+    },
+    "Remove the line that is no longer there": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove the line that is no longer there"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Togli la riga che non c'è più"
           }
         }
       }
@@ -7913,6 +8273,22 @@
         }
       }
     },
+    "The envelope to move from is no longer there": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The envelope to move from is no longer there"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La busta di partenza non c'è più"
+          }
+        }
+      }
+    },
     "The first allocation counts the incomes from the start date; the later ones those that arrived after the last allocation, shared out or skipped.": {
       "localizations": {
         "en": {
@@ -8377,6 +8753,22 @@
         }
       }
     },
+    "To": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A"
+          }
+        }
+      }
+    },
     "To cap": {
       "localizations": {
         "en": {
@@ -8389,6 +8781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Al tetto"
+          }
+        }
+      }
+    },
+    "To cap: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To cap: %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Al tetto: %@"
           }
         }
       }
@@ -8717,6 +9125,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scrivi un comando: questo vault è in sola lettura"
+          }
+        }
+      }
+    },
+    "Type an amount above zero, such as 250 or 1.000,50.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type an amount above zero, such as 250 or 1.000,50."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi un importo maggiore di zero, come 250 o 1.000,50."
+          }
+        }
+      }
+    },
+    "Type an amount for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type an amount for %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrivi un importo per %@"
           }
         }
       }
@@ -9721,6 +10161,22 @@
         }
       }
     },
+    "balance %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "balance %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "saldo %@"
+          }
+        }
+      }
+    },
     "can be corrected by hand": {
       "localizations": {
         "en": {
@@ -10377,6 +10833,38 @@
         }
       }
     },
+    "no longer there": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no longer there"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "non c'è più"
+          }
+        }
+      }
+    },
+    "not an amount": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "not an amount"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "non è un importo"
+          }
+        }
+      }
+    },
     "of %@ · %@": {
       "localizations": {
         "en": {
@@ -10453,6 +10941,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "saldo di apertura"
+          }
+        }
+      }
+    },
+    "optional": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "optional"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "facoltativa"
+          }
+        }
+      }
+    },
+    "over the cap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "over the cap"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oltre il tetto"
           }
         }
       }
@@ -10773,6 +11293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "oggi"
+          }
+        }
+      }
+    },
+    "too large": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "too large"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "troppo grande"
           }
         }
       }

@@ -274,6 +274,15 @@ extension CommandPaletteModel {
                     store.requestNewRecurring()
                 }
             )
+            actions.append(
+                PaletteAction(
+                    id: "envelopes.move",
+                    title: String(localized: "Move Between Envelopes\u{2026}"),
+                    keywords: ["move", "transfer", "sposta", "trasferisci", "buste", "envelope", "riparto", "allocation"]
+                ) {
+                    NotificationCenter.default.post(name: .moveBetweenEnvelopes, object: nil)
+                }
+            )
         }
 
         actions.append(contentsOf: [

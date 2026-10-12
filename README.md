@@ -87,6 +87,16 @@ period is decided once; before creating one, upgrade every Mac that syncs
 deleted after its period was shared out, it is not shared again; reopen the
 period to redo it.
 
+For a one-off share, Move Between Envelopes… (the Riparto tab's top bar, the
+Vault menu or the palette) moves money from one envelope, Unallocated by
+default, into several at once: one transfer per line, with the same date and
+note, sent all together or not at all (on a shared vault the server still
+judges each transfer on its own). A line over its envelope's cap, or a
+source that would go below zero when it may not, keeps it from moving;
+Unallocated below zero is only pointed out. It decides no period and leaves
+the plan as it is. Each transfer is an ordinary ledger row, the same as
+`tf> 500 >unallocated >emergenze` typed in the quick-add line.
+
 ### Statements, full export and backup
 
 File › Import Statement… (⇧⌘I) reads a bank or card CSV (UTF-8, falling back

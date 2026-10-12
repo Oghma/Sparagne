@@ -44,7 +44,7 @@ enum LaunchOptions {
 
     /// The sheet to open once the vault is on screen, `nil` for none:
     /// `vault`, `renameVault`, `deleteVault`, `leaveVault`, `share`, `manage`,
-    /// `importStatement`, `rejected` or `settings`,
+    /// `importStatement`, `move`, `rejected` or `settings`,
     /// matched without regard to case. The ones about sharing need an
     /// account, so a demo database opens nothing for them.
     static var sheet: String? {

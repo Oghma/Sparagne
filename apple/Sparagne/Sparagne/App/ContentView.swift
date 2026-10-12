@@ -81,6 +81,7 @@ struct MainWindow: View {
         case rejected
         case manage
         case importStatement
+        case moveBetweenEnvelopes
 
         var id: String {
             switch self {
@@ -92,6 +93,7 @@ struct MainWindow: View {
             case .rejected: "rejected"
             case .manage: "manage"
             case .importStatement: "importStatement"
+            case .moveBetweenEnvelopes: "moveBetweenEnvelopes"
             }
         }
     }
@@ -160,6 +162,9 @@ struct MainWindow: View {
             .onReceive(NotificationCenter.default.publisher(for: .importStatement)) { _ in
                 if store.currentVault != nil { sheet = .importStatement }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .moveBetweenEnvelopes)) { _ in
+                if store.canWrite { sheet = .moveBetweenEnvelopes }
+            }
             // Back Up Database and Export All Transactions: file panels owned
             // by the exporter (`Support/VaultExporter.swift`).
             .modifier(VaultExportHandlers(store: store))
@@ -213,6 +218,7 @@ struct MainWindow: View {
         case "share": sheet = .share(vault)
         case "manage": sheet = .manage
         case "importstatement": sheet = .importStatement
+        case "move": if store.canWrite { sheet = .moveBetweenEnvelopes }
         case "rejected": sheet = .rejected
         default: break
         }
@@ -257,6 +263,8 @@ struct MainWindow: View {
             ManagementSheet(store: store, engine: engine, present: { sheet = $0 })
         case .importStatement:
             StatementImportSheet(store: store)
+        case .moveBetweenEnvelopes:
+            EnvelopeMoveSheet(store: store)
         }
     }
 }
