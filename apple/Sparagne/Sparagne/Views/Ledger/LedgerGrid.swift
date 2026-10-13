@@ -52,7 +52,7 @@ struct LedgerGrid: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            GridHeader(showsWallet: store.showWalletColumn)
+            GridHeader(store: store, showsWallet: store.showWalletColumn)
                 .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
             GeometryReader { viewport in
                 ScrollView {

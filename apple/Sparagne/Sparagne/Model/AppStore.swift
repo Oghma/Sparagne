@@ -160,6 +160,7 @@ final class AppStore {
     /// Shared with the View menu's `@AppStorage` toggle, so the preference
     /// has one home.
     static let walletColumnKey = "showWalletColumn"
+    static let ledgerColumnsKey = "ledgerColumnWidths"
 
     // MARK: Dependencies
 
@@ -350,6 +351,10 @@ final class AppStore {
             if showWalletColumn != oldValue { defaults.set(showWalletColumn, forKey: Self.walletColumnKey) }
         }
     }
+    /// The ledger's column widths, dragged in its header. Display only, as the
+    /// WALLET column is; saved when a drag ends (`saveLedgerColumns`), not at
+    /// every step of it.
+    var ledgerColumns = LedgerColumnWidths()
     /// Debounced by the view; call `reload()` when it settles. The selection
     /// goes at the first keystroke, not with the reload: it named rows of the
     /// list being narrowed.
@@ -400,7 +405,19 @@ final class AppStore {
         self.sleeper = sleeper
         self.defaultCategories = defaultCategories
         showWalletColumn = defaults.bool(forKey: Self.walletColumnKey)
+        ledgerColumns = LedgerColumnWidths(stored: defaults.dictionary(forKey: Self.ledgerColumnsKey))
         currentAuthor = core.initialAuthor
+    }
+
+    /// Keeps the widths dragged in the ledger's header for the next launch.
+    func saveLedgerColumns() {
+        defaults.set(ledgerColumns.stored, forKey: Self.ledgerColumnsKey)
+    }
+
+    /// View > Reset Column Widths: every column back to the width it opens at.
+    func resetLedgerColumns() {
+        ledgerColumns = LedgerColumnWidths()
+        saveLedgerColumns()
     }
 
     /// The engine calls this on login and logout, and when Settings change

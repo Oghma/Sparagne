@@ -12,14 +12,8 @@ enum GridColumn {
     /// A cell's horizontal padding, on each side (`Metrics.cellPad`).
     static let padding: CGFloat = Metrics.cellPad
     static let ordinal: CGFloat = 34 - 2 * padding
-    static let date: CGFloat = 60 - 2 * padding
-    static let flow: CGFloat = 84 - 2 * padding
-    static let category: CGFloat = 124 - 2 * padding
-    /// The optional WALLET column, between DESCRIZIONE
-    /// and PERSONA when the View menu turns it on.
-    static let wallet: CGFloat = 84 - 2 * padding
-    static let person: CGFloat = 84 - 2 * padding
-    static let amount: CGFloat = 96 - 2 * padding
+    // The other columns are dragged wider or narrower in the header: their
+    // widths are `AppStore.ledgerColumns` (`LedgerColumn`).
     /// The track after IMPORTO for the trash icon of the row under the
     /// pointer (`RowActionTrack`): the whole track, with no cell padding
     /// around it, just wide enough for the 20-point button.
@@ -57,45 +51,65 @@ struct GridCell<Content: View>: View {
     var alignment: Alignment = .leading
     @ViewBuilder var content: Content
 
+    @ViewBuilder
     var body: some View {
+        if width == nil {
+            // DESCRIZIONE takes what the other columns leave, and never more:
+            // a tag and two buttons that do not fit are cut at the cell's
+            // edge rather than pushing the row wider than the sheet, where
+            // its columns would no longer line up with the header's.
+            cell
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: alignment)
+                .padding(.horizontal, GridColumn.padding)
+                .clipped()
+                .contentShape(Rectangle())
+        } else {
+            cell
+                .frame(width: width, alignment: alignment)
+                .padding(.horizontal, GridColumn.padding)
+                // The whole column is the click target. SwiftUI does not
+                // hit-test the transparent part of a frame, so without this a
+                // short "Casa" or the "—" of an empty note would leave most of
+                // its cell dead and the row would refuse to open.
+                .contentShape(Rectangle())
+        }
+    }
+
+    private var cell: some View {
         content
             .lineLimit(1)
             .truncationMode(.tail)
-            .frame(width: width, alignment: alignment)
-            .frame(maxWidth: width == nil ? .infinity : nil, alignment: alignment)
-            .padding(.horizontal, GridColumn.padding)
-            // The whole column is the click target. SwiftUI does not hit-test
-            // the transparent part of a frame, so without this a short "Casa"
-            // or the "—" of an empty note would leave most of its cell dead
-            // and the row would refuse to open.
-            .contentShape(Rectangle())
     }
 }
 
 /// The column headings: small, medium weight, `text3`, on the sheet's own
 /// ground (`.r.hd`). The grid draws the stronger rule under them.
 struct GridHeader: View {
+    let store: AppStore
     /// The optional WALLET column, off by default.
     var showsWallet = false
+
+    private var columns: LedgerColumnWidths { store.ledgerColumns }
 
     var body: some View {
         HStack(spacing: 0) {
             GridCell(width: GridColumn.ordinal, alignment: .trailing) {
                 heading("#", spoken: String(localized: "Number"))
             }
-            GridCell(width: GridColumn.date) { heading(RowField.date.label) }
-            GridCell(width: GridColumn.flow) { heading(RowField.flow.label) }
-            GridCell(width: GridColumn.category) { heading(RowField.category.label) }
+            GridCell(width: columns[.date]) { heading(RowField.date.label) }
+            GridCell(width: columns[.flow]) { heading(RowField.flow.label) }
+            GridCell(width: columns[.category]) { heading(RowField.category.label) }
             GridCell { heading(RowField.note.label) }
             if showsWallet {
-                GridCell(width: GridColumn.wallet) { heading(RowField.wallet.label) }
+                GridCell(width: columns[.wallet]) { heading(RowField.wallet.label) }
             }
-            GridCell(width: GridColumn.person) { heading(RowField.person.label) }
-            GridCell(width: GridColumn.amount, alignment: .trailing) { heading(RowField.amount.label) }
+            GridCell(width: columns[.person]) { heading(RowField.person.label) }
+            GridCell(width: columns[.amount], alignment: .trailing) { heading(RowField.amount.label) }
             RowActionTrack()
         }
         .frame(height: Metrics.headerHeight)
         .background(Ink.sheet)
+        .overlay { ColumnResizeHandles(store: store, showsWallet: showsWallet) }
     }
 
     /// A column heading, announced as one, and `#` as a word.
@@ -203,10 +217,13 @@ struct RowTag: View {
             .font(Face.ui(10, .semibold))
             .foregroundStyle(tint)
             .lineLimit(1)
-            .fixedSize()
             .padding(.horizontal, 5)
             .frame(height: 16)
             .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+            // Its whole width before the text beside it gets any, and "…"
+            // only once that text is gone: in a narrow cell it shortens
+            // rather than spilling into the next column.
+            .layoutPriority(1)
     }
 }
 
@@ -344,6 +361,8 @@ struct LedgerRowView: View {
 
     private var editing: Bool { draft != nil }
 
+    private var columns: LedgerColumnWidths { store.ledgerColumns }
+
     var body: some View {
         HStack(spacing: 0) {
             GridCell(width: GridColumn.ordinal, alignment: .trailing) {
@@ -357,9 +376,9 @@ struct LedgerRowView: View {
             .onTapGesture { onOpen(.note) }
 
             if let draft {
-                DayCell(day: draft.day, month: store.month, focus: $focus, key: key(.date))
+                DayCell(day: draft.day, month: store.month, width: columns[.date], focus: $focus, key: key(.date))
                 envelopeCell(draft.flowId)
-                GridCell(width: GridColumn.category) {
+                GridCell(width: columns[.category]) {
                     CategoryCell(
                         text: draft.category,
                         placeholder: "",
@@ -396,13 +415,13 @@ struct LedgerRowView: View {
 
     @ViewBuilder
     private var display: some View {
-        GridCell(width: GridColumn.date) {
+        GridCell(width: columns[.date]) {
             DayLabel(date: row.occurredAt, tint: ink(Ink.text), struck: row.voided)
         }
         .onTapGesture { onOpen(.date) }
-        GridCell(width: GridColumn.flow) { text(row.envelopeColumn, Ink.text2) }
+        GridCell(width: columns[.flow]) { text(row.envelopeColumn, Ink.text2) }
             .onTapGesture { onOpen(row.isTransfer ? .note : .flow) }
-        GridCell(width: GridColumn.category) { text(row.category, categoryTint) }
+        GridCell(width: columns[.category]) { text(row.category, categoryTint) }
             .onTapGesture { onOpen(.category) }
         GridCell {
             HStack(spacing: 6) {
@@ -421,16 +440,16 @@ struct LedgerRowView: View {
         }
         .onTapGesture { onOpen(.note) }
         if showsWallet {
-            GridCell(width: GridColumn.wallet) { text(row.walletDisplay, Ink.text2) }
+            GridCell(width: columns[.wallet]) { text(row.walletDisplay, Ink.text2) }
                 .onTapGesture { onOpen(row.isTransfer ? .note : .wallet) }
         }
         // Who typed a row recorded for someone else is on hover only: the
         // column stays one short name wide.
-        GridCell(width: GridColumn.person) { text(row.person, Ink.text2) }
+        GridCell(width: columns[.person]) { text(row.person, Ink.text2) }
             .help(ifAny: row.isOnBehalf ? Self.recordedByHelp(row.recordedBy) : nil)
             .onTapGesture { onOpen(row.isPersonEditable ? .person : .note) }
-        GridCell(width: GridColumn.amount, alignment: .trailing) {
-            text(amountText, amountTint)
+        GridCell(width: columns[.amount], alignment: .trailing) {
+            text(Self.amountText(row), amountTint)
         }
         .onTapGesture { onOpen(.amount) }
     }
@@ -452,7 +471,7 @@ struct LedgerRowView: View {
 
     /// The figure without the symbol, as the canvas writes the column. A
     /// refund carries a minus: it takes money off the month's expenses.
-    private var amountText: String {
+    static func amountText(_ row: TransactionRow) -> String {
         let bare = LedgerMoney.bare(row.absoluteAmount)
         return row.kind == .refund ? "\u{2212}\(bare)" : bare
     }
@@ -487,7 +506,7 @@ struct LedgerRowView: View {
     }
 
     private var amountCell: some View {
-        GridCell(width: GridColumn.amount, alignment: .trailing) {
+        GridCell(width: columns[.amount], alignment: .trailing) {
             TextField("", text: binding(.amount))
                 .textFieldStyle(.plain)
                 .font(Face.row)
@@ -504,7 +523,7 @@ struct LedgerRowView: View {
     /// (`walletCell`): the cell stays read-only for those rows.
     @ViewBuilder
     private func envelopeCell(_ flowId: Binding<Uuid?>) -> some View {
-        GridCell(width: GridColumn.flow) {
+        GridCell(width: columns[.flow]) {
             if row.isTransfer {
                 // The route's tag is not drawn while the note is a field:
                 // the source stays here, the whole route on hover.
@@ -532,13 +551,13 @@ struct LedgerRowView: View {
     @ViewBuilder
     private var walletCell: some View {
         if row.isTransfer {
-            GridCell(width: GridColumn.wallet) {
+            GridCell(width: columns[.wallet]) {
                 Text(row.walletDisplay)
                     .font(Face.row)
                     .foregroundStyle(Ink.text3)
             }
         } else {
-            textCell(.wallet, width: GridColumn.wallet)
+            textCell(.wallet, width: columns[.wallet])
         }
     }
 
@@ -549,12 +568,12 @@ struct LedgerRowView: View {
         if row.isPersonEditable {
             textCell(
                 .person,
-                width: GridColumn.person,
+                width: columns[.person],
                 hint: row.isOnBehalf ? LedgerAccessibility.recordedBy(row.recordedBy) : ""
             )
             .help(ifAny: row.isOnBehalf ? Self.recordedByHelp(row.recordedBy) : nil)
         } else {
-            GridCell(width: GridColumn.person) {
+            GridCell(width: columns[.person]) {
                 Text(row.person)
                     .font(Face.row)
                     .foregroundStyle(Ink.text3)
@@ -600,6 +619,8 @@ struct PendingRowView: View {
 
     private var template: RecurringView { period.template }
 
+    private var columns: LedgerColumnWidths { store.ledgerColumns }
+
     var body: some View {
         HStack(spacing: 0) {
             GridCell(width: GridColumn.ordinal, alignment: .trailing) {
@@ -607,17 +628,25 @@ struct PendingRowView: View {
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(Ink.text3)
             }
-            GridCell(width: GridColumn.date) {
+            GridCell(width: columns[.date]) {
                 DayLabel(date: CoreDate.localDay(period.date) ?? store.month.start(), tint: Ink.text2)
             }
-            GridCell(width: GridColumn.flow) { Text(store.envelopeName(template.flowId)) }
-            GridCell(width: GridColumn.category) { Text(category) }
+            GridCell(width: columns[.flow]) { Text(store.envelopeName(template.flowId)) }
+            GridCell(width: columns[.category]) { Text(category) }
             GridCell {
                 HStack(spacing: 6) {
-                    if let note = template.note, !note.isEmpty {
-                        Text(note)
+                    // The note and its tag while both fit, the note alone
+                    // when they do not: the hatching and the two buttons
+                    // already say the period is waiting. Offered the room
+                    // before the spacer, or it would get only half of it.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) {
+                            note
+                            RowTag(text: String(localized: "to confirm"), tint: Ink.accent)
+                        }
+                        note
                     }
-                    RowTag(text: String(localized: "to confirm"), tint: Ink.accent)
+                    .layoutPriority(1)
                     Spacer(minLength: 6)
                     if !store.isReadOnly {
                         Button(String(localized: "Skip")) { run { await store.skipRecurring(template.id, periodDate: period.date) } }
@@ -635,15 +664,15 @@ struct PendingRowView: View {
                 .disabled(working)
             }
             if showsWallet {
-                GridCell(width: GridColumn.wallet) { Text(store.walletName(template.walletId)) }
+                GridCell(width: columns[.wallet]) { Text(store.walletName(template.walletId)) }
             }
             // The template's owner: the row is theirs, whoever records it.
-            GridCell(width: GridColumn.person) {
+            GridCell(width: columns[.person]) {
                 Text(template.owner)
                     .foregroundStyle(ownerLeft ? Ink.negative : Ink.text3)
                     .help(ifAny: ownerLeft ? AppStore.noLongerAMember : nil)
             }
-            GridCell(width: GridColumn.amount, alignment: .trailing) {
+            GridCell(width: columns[.amount], alignment: .trailing) {
                 Text(LedgerMoney.bare(template.amount))
             }
             RowActionTrack()
@@ -663,6 +692,13 @@ struct PendingRowView: View {
                 }
                 Button(String(localized: "Skip")) { run { await store.skipRecurring(template.id, periodDate: period.date) } }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var note: some View {
+        if let note = template.note, !note.isEmpty {
+            Text(note)
         }
     }
 
@@ -706,6 +742,8 @@ struct NewRowView: View {
     /// wallet; showing it lets the wallet be picked per row.
     var showsWallet = false
 
+    private var columns: LedgerColumnWidths { store.ledgerColumns }
+
     var body: some View {
         HStack(spacing: 0) {
             GridCell(width: GridColumn.ordinal, alignment: .trailing) {
@@ -714,8 +752,8 @@ struct NewRowView: View {
                     .foregroundStyle(Ink.accent)
                     .accessibilityHidden(true)
             }
-            DayCell(day: $draft.day, month: store.month, focus: $focus, key: CellFocus(row: nil, field: .date))
-            GridCell(width: GridColumn.flow) {
+            DayCell(day: $draft.day, month: store.month, width: columns[.date], focus: $focus, key: CellFocus(row: nil, field: .date))
+            GridCell(width: columns[.flow]) {
                 EnvelopeSelectCell(
                     flowId: $draft.flowId,
                     placeholder: String(localized: "Envelope"),
@@ -726,7 +764,7 @@ struct NewRowView: View {
                     onSubmit: onCommit
                 )
             }
-            GridCell(width: GridColumn.category) {
+            GridCell(width: columns[.category]) {
                 CategoryCell(
                     text: $draft.category,
                     // The history's guess for the note, saved if the cell is
@@ -747,13 +785,13 @@ struct NewRowView: View {
                     $draft.wallet,
                     .wallet,
                     store.defaultWalletName ?? String(localized: "Wallet"),
-                    width: GridColumn.wallet
+                    width: columns[.wallet]
                 )
             }
             // The author until another name is typed; emptied, it still
             // means the author, and says so.
-            field($draft.person, .person, store.currentAuthor, width: GridColumn.person)
-            GridCell(width: GridColumn.amount, alignment: .trailing) {
+            field($draft.person, .person, store.currentAuthor, width: columns[.person])
+            GridCell(width: columns[.amount], alignment: .trailing) {
                 let key = CellFocus(row: nil, field: .amount)
                 // A title, not a prompt: a prompt ignores the trailing
                 // alignment and would sit at the cell's left edge. A zero
@@ -822,20 +860,23 @@ struct NewRowView: View {
 struct DayCell: View {
     @Binding var day: Date
     let month: MonthKey
+    /// The DATA column's, as dragged in the header.
+    let width: CGFloat
     @FocusState.Binding var focus: CellFocus?
     let key: CellFocus
 
     @State private var text = ""
 
-    init(day: Binding<Date>, month: MonthKey, focus: FocusState<CellFocus?>.Binding, key: CellFocus) {
+    init(day: Binding<Date>, month: MonthKey, width: CGFloat, focus: FocusState<CellFocus?>.Binding, key: CellFocus) {
         _day = day
         self.month = month
+        self.width = width
         _focus = focus
         self.key = key
     }
 
     var body: some View {
-        GridCell(width: GridColumn.date) {
+        GridCell(width: width) {
             TextField("", text: $text)
                 .textFieldStyle(.plain)
                 .font(Face.row)

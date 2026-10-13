@@ -65,6 +65,22 @@
         }
       }
     },
+    "%@ column width": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ column width"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Larghezza colonna %@"
+          }
+        }
+      }
+    },
     "%@ gets %@ less": {
       "localizations": {
         "en": {
@@ -6885,6 +6901,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esito"
+          }
+        }
+      }
+    },
+    "Reset Column Widths": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Column Widths"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripristina larghezza colonne"
           }
         }
       }

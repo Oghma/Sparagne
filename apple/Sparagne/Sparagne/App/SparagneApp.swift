@@ -56,6 +56,9 @@ struct SparagneApp: App {
             CommandGroup(after: .toolbar) {
                 Toggle(String(localized: "Show Wallet Column"), isOn: $showWalletColumn)
                     .keyboardShortcut("w", modifiers: [.command, .shift])
+                // The widths dragged in the ledger's header.
+                Button(String(localized: "Reset Column Widths")) { store?.resetLedgerColumns() }
+                    .disabled(store?.ledgerColumns.isStandard ?? true)
 
                 Divider()
 
