@@ -186,6 +186,11 @@ private struct CashFlowCard: View {
 /// The wallets' balance at the end of each month, from the opening fund. A
 /// month where it went down is marked, so a bad month is visible without
 /// reading the table.
+///
+/// With two or more people and no PERSONA filter, a thin line per person
+/// runs under the household's: each one's share of it. In today's month,
+/// a dashed tail carries the pace of the finished months on to December
+/// (`YearSummary.projection`).
 private struct CashFundCard: View {
     let year: YearSummary
 
@@ -193,6 +198,14 @@ private struct CashFundCard: View {
         /// 0 is the start of the year, 1...12 the months.
         let id: Int
         let total: Int64
+    }
+
+    /// One person's share of TOTALE, from the start of the year.
+    private struct PersonLine: Identifiable {
+        /// The person's place in `YearSummary.people`.
+        let id: Int
+        let name: String
+        let points: [Point]
     }
 
     private var points: [Point] {
@@ -204,21 +217,51 @@ private struct CashFundCard: View {
         zip(points, points.dropFirst()).filter { $0.1.total < $0.0.total }.map(\.1)
     }
 
+    /// None under the PERSONA filter, where the one line would be the
+    /// household's own, nor with one person.
+    private var personLines: [PersonLine] {
+        guard year.person == nil, year.people.count >= 2 else { return [] }
+        return year.people.enumerated().compactMap { index, name in
+            guard year.initialByPerson.indices.contains(index) else { return nil }
+            let months = year.elapsed.compactMap { month in
+                month.totalByPerson.indices.contains(index)
+                    ? Point(id: month.month.month, total: month.totalByPerson[index]) : nil
+            }
+            return PersonLine(id: index, name: name, points: [Point(id: 0, total: year.initialByPerson[index])] + months)
+        }
+    }
+
+    /// From the last finished month to December, where the year would end
+    /// at their pace. Empty unless the month on screen is today's and one
+    /// finished before it.
+    private var tail: [Point] {
+        guard let projection = year.projection, let last = year.finished.last else { return [] }
+        return [Point(id: last.month.month, total: last.total), Point(id: 12, total: projection.yearEnd)]
+    }
+
+    /// The last month on the axis: December when the tail reaches it.
+    private var lastMonth: Int { tail.isEmpty ? max(points.last?.id ?? 1, 1) : 12 }
+
     private var scale: (lower: Double, upper: Double, step: Double) {
-        ChartScale.nice(points.map { ChartScale.major($0.total) }, includeZero: false)
+        let values = (points + personLines.flatMap(\.points) + tail).map { ChartScale.major($0.total) }
+        return ChartScale.nice(values, includeZero: false)
     }
 
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(String(localized: "Cash fund \u{00B7} total at month end"))
-                        .font(Face.label)
-                        .foregroundStyle(Ink.text2)
-                    Spacer(minLength: 8)
-                    Text(String(localized: "\(growth) since the start of the year"))
-                        .font(Face.label)
-                        .foregroundStyle(Ink.text3)
+                // The growth of every person makes the line long: under the
+                // title when the two do not fit side by side.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        title
+                        Spacer(minLength: 8)
+                        growthLine
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        title
+                        growthLine
+                    }
                 }
                 chart
             }
@@ -228,8 +271,33 @@ private struct CashFundCard: View {
         .accessibilityValue(spoken)
     }
 
-    private var growth: String {
-        SummaryText.signed(LedgerMoney.bare(year.growth), positive: year.growth >= 0)
+    private var title: some View {
+        Text(String(localized: "Cash fund \u{00B7} total at month end"))
+            .font(Face.label)
+            .foregroundStyle(Ink.text2)
+            .lineLimit(1)
+    }
+
+    private var growthLine: some View {
+        Text(growthText)
+            .font(Face.label)
+            .foregroundStyle(Ink.text3)
+            .lineLimit(1)
+    }
+
+    /// `+29.966,23 since the start of the year · elisa +9.180,23 · matteo
+    /// +20.786,00`: each person's growth after the household's, up to three
+    /// people; past that the line would not fit, and the "By person" card
+    /// has them all.
+    private var growthText: String {
+        let total = String(localized: "\(signed(year.growth)) since the start of the year")
+        let people = year.personFigures
+        guard year.person == nil, (2...3).contains(people.count) else { return total }
+        return ([total] + people.map { "\($0.person) \(signed($0.growth))" }).joined(separator: " \u{00B7} ")
+    }
+
+    private func signed(_ amount: Int64) -> String {
+        SummaryText.signed(LedgerMoney.bare(amount), positive: amount >= 0)
     }
 
     private var chart: some View {
@@ -243,9 +311,57 @@ private struct CashFundCard: View {
                     yEnd: .value("", ChartScale.major(point.total))
                 )
                 .foregroundStyle(Ink.chartIncome.opacity(0.12))
-                LineMark(x: .value("", Double(point.id)), y: .value("", ChartScale.major(point.total)))
+                LineMark(
+                    x: .value("", Double(point.id)),
+                    y: .value("", ChartScale.major(point.total)),
+                    series: .value("", "total")
+                )
+                .foregroundStyle(Ink.chartIncome)
+                .lineStyle(StrokeStyle(lineWidth: 2, lineJoin: .round))
+            }
+            ForEach(personLines) { line in
+                ForEach(line.points) { point in
+                    LineMark(
+                        x: .value("", Double(point.id)),
+                        y: .value("", ChartScale.major(point.total)),
+                        series: .value("", "person-\(line.id)")
+                    )
+                    .foregroundStyle(Ink.text3)
+                    .lineStyle(StrokeStyle(lineWidth: 1, lineJoin: .round))
+                }
+                // The name at the end of the line: the header says who grew
+                // how much, this says which line is whose.
+                if let end = line.points.last {
+                    PointMark(x: .value("", Double(end.id)), y: .value("", ChartScale.major(end.total)))
+                        .symbolSize(10)
+                        .foregroundStyle(Ink.text3)
+                        .annotation(position: .top, alignment: .trailing, spacing: 2) {
+                            Text(line.name)
+                                .font(Face.small)
+                                .foregroundStyle(Ink.text3)
+                                .fixedSize()
+                        }
+                }
+            }
+            ForEach(tail) { point in
+                LineMark(
+                    x: .value("", Double(point.id)),
+                    y: .value("", ChartScale.major(point.total)),
+                    series: .value("", "projection")
+                )
+                .foregroundStyle(Ink.chartIncome)
+                .lineStyle(StrokeStyle(lineWidth: 1.5, lineJoin: .round, dash: [4, 4]))
+            }
+            if let end = tail.last {
+                PointMark(x: .value("", Double(end.id)), y: .value("", ChartScale.major(end.total)))
+                    .symbolSize(16)
                     .foregroundStyle(Ink.chartIncome)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineJoin: .round))
+                    .annotation(position: .top, alignment: .trailing, spacing: 4) {
+                        Text(LedgerMoney.bare(end.total))
+                            .font(Face.ui(11, .medium))
+                            .foregroundStyle(Ink.text2)
+                            .fixedSize()
+                    }
             }
             ForEach(drops) { point in
                 PointMark(x: .value("", Double(point.id)), y: .value("", ChartScale.major(point.total)))
@@ -264,20 +380,36 @@ private struct CashFundCard: View {
                     }
             }
         }
-        .chartXScale(domain: 0...Double(max(points.last?.id ?? 1, 1)), range: ChartAxes.monthRange)
+        .chartXScale(domain: 0...Double(lastMonth), range: ChartAxes.monthRange)
         .chartYScale(domain: scale.lower...scale.upper)
-        .chartXAxis { ChartAxes.months(upTo: points.last?.id ?? 1, includeStart: true) }
+        .chartXAxis { ChartAxes.months(upTo: lastMonth, includeStart: true) }
         .chartYAxis { ChartAxes.money(scale) }
         .chartLegend(.hidden)
         .chartPlotStyle { $0.frame(height: 180) }
     }
 
-    /// "start 750.00, jan 1,085.00, …": the TOTALE line, one point per
-    /// spoken word instead of a shape with no numbers of its own.
+    /// "+29.966,23 since the start of the year · elisa +9.180,23; start
+    /// 750.00, jan 1,085.00, …; projected year end €36,000.00; elisa: start
+    /// …": the header, the TOTALE line, one point per spoken word instead
+    /// of a shape with no numbers of its own, then where the year would end
+    /// and each person's line.
     private var spoken: String {
-        let opening = "\(String(localized: "start")) \(LedgerMoney.amount(year.initial))"
-        let months = year.elapsed.map { "\(LedgerDate.shortMonth($0.month.month)) \(LedgerMoney.amount($0.total))" }
-        return ([opening] + months).joined(separator: ", ")
+        var parts = [growthText, Self.spoken(points)]
+        if let projection = year.projection {
+            parts.append(String(localized: "projected year end \(LedgerMoney.amount(projection.yearEnd))"))
+        }
+        for line in personLines {
+            parts.append("\(line.name): \(Self.spoken(line.points))")
+        }
+        return parts.joined(separator: "; ")
+    }
+
+    private static func spoken(_ points: [Point]) -> String {
+        points.map { point in
+            let name = point.id == 0 ? String(localized: "start") : LedgerDate.shortMonth(point.id)
+            return "\(name) \(LedgerMoney.amount(point.total))"
+        }
+        .joined(separator: ", ")
     }
 }
 
