@@ -45,6 +45,17 @@ enum LedgerMoney {
         return formatter.string(from: ratio).map { "\($0)%" }
     }
 
+    /// Savings as a share of income, as the summary card and the ledger's
+    /// panel write it: `"73%"`, `"-26%"`, and `"< -100%"` once more than twice
+    /// the income went out. Past that the figure only says how little came
+    /// in: 0,07 € of interest against a month of expenses reads -394500%.
+    /// `nil` with no income, so the caller can print a dash.
+    static func savingsRate(_ savings: Int64, of income: Int64) -> String? {
+        guard income > 0 else { return nil }
+        guard savings >= -income else { return "< -100%" }
+        return percent(savings, of: income, decimals: 0)
+    }
+
     /// A month-over-month delta as the cards show it: `"+4,2%"`, or `nil` when
     /// the previous period was zero (the delta divides by `|previous|`,
     /// which is undefined there).

@@ -200,3 +200,21 @@ struct ScheduleFormattingTests {
         #expect(text == "Ogni anno il 5 settembre")
     }
 }
+
+/// Savings as a share of income, on the summary card and the ledger's panel.
+struct SavingsRateTests {
+    @Test("A rate is a whole percent; with no income there is none, for a dash")
+    func ordinaryRates() {
+        #expect(LedgerMoney.savingsRate(7_300, of: 10_000) == "73%")
+        #expect(LedgerMoney.savingsRate(-2_600, of: 10_000) == "-26%")
+        #expect(LedgerMoney.savingsRate(-10_000, of: 10_000) == "-100%")
+        #expect(LedgerMoney.savingsRate(-500, of: 0) == nil)
+    }
+
+    @Test("Below -100% the figure only says how little came in, so it reads as less than -100%")
+    func tinyIncome() {
+        // September: 0,07 € of interest against 276,22 € of expenses.
+        #expect(LedgerMoney.savingsRate(-27_615, of: 7) == "< -100%")
+        #expect(LedgerMoney.savingsRate(-10_001, of: 10_000) == "< -100%")
+    }
+}

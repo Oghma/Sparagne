@@ -145,7 +145,7 @@ struct SavingsHero: View {
 
     /// `"66%"`; nothing when there was no income to divide by.
     private var share: String? {
-        LedgerMoney.percent(summary.savings, of: summary.totals.income, decimals: 0)
+        LedgerMoney.savingsRate(summary.savings, of: summary.totals.income)
     }
 
     /// `"▼ 180,14 su settembre"`: the change in savings since the month

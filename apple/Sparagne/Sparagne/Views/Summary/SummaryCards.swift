@@ -33,8 +33,8 @@ struct MonthCards: View {
             )
             KPICard(
                 title: String(localized: "Savings rate"),
-                value: percent(kpis.rate),
-                caption: String(localized: "\(percent(kpis.yearRate)) year to date")
+                value: rate(kpis.savings, of: kpis.income),
+                caption: String(localized: "\(rate(kpis.yearSavings, of: kpis.yearIncome)) year to date")
             )
         }
     }
@@ -52,9 +52,8 @@ struct MonthCards: View {
     }
 
     /// A rate over no income is a dash, never a fake 0%.
-    private func percent(_ ratio: Double?) -> String {
-        guard let ratio else { return TransactionRow.placeholder }
-        return "\(Int((ratio * 100).rounded()))%"
+    private func rate(_ savings: Int64, of income: Int64) -> String {
+        LedgerMoney.savingsRate(savings, of: income) ?? TransactionRow.placeholder
     }
 }
 
