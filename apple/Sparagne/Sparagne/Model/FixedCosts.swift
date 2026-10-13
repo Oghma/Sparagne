@@ -14,9 +14,19 @@ struct FixedCosts: Hashable, Sendable {
 
     /// `nil` without an enabled expense template: the card then says so
     /// instead of showing a zero.
+    ///
+    /// The income is the average of the finished months, not of the month on
+    /// screen: a live month has not been paid in full yet, and one month's
+    /// salary is too uneven to measure a commitment on.
     static func build(templates: [RecurringView], year: YearSummary) -> FixedCosts? {
-        // A stub for now.
-        _ = (templates, year)
-        return nil
+        let monthly = RecurringMonthly.totals(templates).expenses
+        guard monthly != 0 else { return nil }
+        let finished = year.finished
+        var shareOfIncome: Double?
+        if !finished.isEmpty {
+            let averageIncome = Double(finished.reduce(Int64(0)) { $0 + $1.income }) / Double(finished.count)
+            if averageIncome > 0 { shareOfIncome = Double(monthly) / averageIncome }
+        }
+        return FixedCosts(monthly: monthly, shareOfIncome: shareOfIncome)
     }
 }
