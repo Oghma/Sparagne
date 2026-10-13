@@ -37,6 +37,10 @@
     "en": "Allocation due · %@",
     "it": "Riparto in attesa · %@"
   },
+  "Expenses by category · year": {
+    "en": "Expenses by category · year",
+    "it": "Uscite per categoria · anno"
+  },
   "Fixed costs · monthly": {
     "en": "Fixed costs · monthly",
     "it": "Spese fisse · al mese"
@@ -45,6 +49,22 @@
     "en": "Growth",
     "it": "Crescita"
   },
+  "Heaviest expenses · year": {
+    "en": "Heaviest expenses · year",
+    "it": "Uscite più grosse dell'anno"
+  },
+  "Months × categories": {
+    "en": "Months × categories",
+    "it": "Mesi × categorie"
+  },
+  "No expenses this year": {
+    "en": "No expenses this year",
+    "it": "Nessuna uscita quest'anno"
+  },
+  "Nothing spent this year": {
+    "en": "Nothing spent this year",
+    "it": "Nessuna spesa quest'anno"
+  },
   "Other": {
     "en": "Other",
     "it": "altre"
@@ -52,6 +72,10 @@
   "Rate": {
     "en": "Rate",
     "it": "Tasso"
+  },
+  "Show in the ledger": {
+    "en": "Show in the ledger",
+    "it": "Mostra nel Mastro"
   },
   "balance at month end · income and expenses of the year": {
     "en": "balance at month end · income and expenses of the year",

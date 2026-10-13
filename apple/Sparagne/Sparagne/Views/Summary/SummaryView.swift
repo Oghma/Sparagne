@@ -5,13 +5,14 @@ import SparagneCore
 /// screen, the way the household's spreadsheet reads it.
 ///
 /// Everything here is drawing: the arithmetic is `YearSummary` and the
-/// models read with it (`AppStore.envelopeYear`, `fixedCosts`, …), which
+/// models read with it (`AppStore.yearCategories`, `envelopeYear`, …), which
 /// are tested on their own, so the views of this folder only decide colors
 /// and widths.
 ///
 /// Top to bottom: the heading with the PERSONA control, the things to do,
 /// the month's cards, the funds, the month table, the people beside the
-/// envelopes, and the two charts.
+/// envelopes, the two charts, the categories beside the heaviest expenses,
+/// and the months by categories.
 struct SummaryView: View {
     let year: YearSummary
     /// The models read with the year, and the PERSONA filter the heading
@@ -43,6 +44,14 @@ struct SummaryView: View {
                 YearTable(year: year)
                 peopleAndEnvelopes
                 SummaryCharts(year: year)
+                SideBySide {
+                    CategoryYearCard(categories: store.yearCategories)
+                } trailing: {
+                    TopExpensesCard(expenses: store.topExpenses, store: store)
+                }
+                if let heat = store.categoryHeat, !heat.rows.isEmpty {
+                    CategoryHeatCard(heat: heat)
+                }
             }
         }
         .padding(Metrics.gutter)
