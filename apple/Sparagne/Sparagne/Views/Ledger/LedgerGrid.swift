@@ -44,7 +44,7 @@ struct LedgerGrid: View {
     /// "Set Envelope…", the same way.
     @State private var showsBulkEnvelope = false
     /// The list under the CATEGORY cell being typed into: one for the whole
-    /// grid, drawn over it rather than inside a row (`completionList`).
+    /// grid, drawn over it rather than inside a row (`hangingCategoryList`).
     @State private var completion = CategoryCompletionModel()
     /// The list under the ENVELOPE cell that has the caret, drawn the same
     /// way (`envelopeList`).
@@ -67,9 +67,8 @@ struct LedgerGrid: View {
                 SelectionBar(store: store, showsCategory: $showsBulkCategory, showsEnvelope: $showsBulkEnvelope)
             }
         }
-        .overlayPreferenceValue(CategoryCompletionAnchor.self) { anchor in
-            completionList(at: anchor)
-        }
+        // Three points in from the cell's edge, as the canvas hangs it (`.ac`).
+        .hangingCategoryList(completion, inset: 3 - GridColumn.padding)
         .overlayPreferenceValue(EnvelopeChoiceAnchor.self) { anchor in
             envelopeList(at: anchor)
         }
@@ -344,33 +343,14 @@ struct LedgerGrid: View {
             .background(focus?.row == nil && focus != nil ? Ink.card : Color.clear)
     }
 
-    // MARK: - The completion list
+    // MARK: - The envelope list
 
-    /// The CATEGORY cell's list, hung from the bottom of its row, or from the
+    /// The ENVELOPE cell's list, hung from the bottom of its row, or from the
     /// top when there is no room below (the empty line, a row at the bottom
-    /// of the window). Drawn over the whole grid, outside the scroll view, so
-    /// no later row covers it, the scroll view does not clip it, and a click
-    /// on it is not a click on the grid that would close the row.
-    @ViewBuilder
-    private func completionList(at anchor: Anchor<CGRect>?) -> some View {
-        if let anchor, completion.isOpen {
-            GeometryReader { proxy in
-                let cell = proxy[anchor]
-                let height = CategoryCompletionList.height(for: completion.candidates)
-                let fitsBelow = cell.maxY + height <= proxy.size.height
-                // Three points in from the cell's edge and one up into its
-                // row, as the canvas hangs it (`.ac`).
-                CategoryCompletionList(completion: completion)
-                    .offset(
-                        x: cell.minX - GridColumn.padding + 3,
-                        y: fitsBelow ? cell.maxY - 1 : cell.minY - height + 1
-                    )
-            }
-        }
-    }
-
-    /// The ENVELOPE cell's list, hung as the CATEGORY cell's is and for the
-    /// same reasons.
+    /// of the window), as the CATEGORY cell's is (`hangingCategoryList`) and
+    /// for the same reasons: drawn over the whole grid, outside the scroll
+    /// view, so no later row covers it, the scroll view does not clip it, and
+    /// a click on it is not a click on the grid that would close the row.
     @ViewBuilder
     private func envelopeList(at anchor: Anchor<CGRect>?) -> some View {
         if let anchor, envelopes.isOpen {

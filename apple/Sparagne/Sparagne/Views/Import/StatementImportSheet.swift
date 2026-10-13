@@ -15,6 +15,10 @@ struct StatementImportSheet: View {
     let store: AppStore
     @State private var model: StatementImportModel
     @State private var choosingFile = false
+    /// The list under the review's CATEGORY field being typed into
+    /// (`StatementReview`). Held here because the footer's ↩ and esc are
+    /// the list's while it is open.
+    @State private var completion = CategoryCompletionModel()
     @Environment(\.dismiss) private var dismiss
 
     /// What the file panel offers: CSV, TSV and plain text, which is what
@@ -75,7 +79,7 @@ struct StatementImportSheet: View {
             ScrollView { StatementMappingEditor(model: model) }
                 .scrollBounceBehavior(.basedOnSize)
         case .review:
-            StatementReview(model: model)
+            StatementReview(model: model, completion: completion)
         case .report:
             if let report = model.report {
                 ScrollView { StatementReportView(report: report) }
@@ -166,7 +170,9 @@ struct StatementImportSheet: View {
 
     /// Cancel (esc), the way back, and the page's next move (↩). On the
     /// review, esc goes back to the columns rather than closing the sheet,
-    /// so a stray esc never throws the mapping away.
+    /// so a stray esc never throws the mapping away; and while a CATEGORY
+    /// field's list is open both keys are the list's (`completing`), or ↩
+    /// would pick and import at once.
     @ViewBuilder
     private var buttons: some View {
         if store.isReadOnly {
@@ -183,9 +189,9 @@ struct StatementImportSheet: View {
                 FormPrimaryButton(title: String(localized: "Preview")) { model.step = .review }
                     .disabled(model.preview == nil || model.previewProblem != nil)
             case .review:
-                FormCancelButton(title: String(localized: "Back")) { model.step = .mapping }
+                FormCancelButton(title: String(localized: "Back"), shortcut: !completion.isOpen) { model.step = .mapping }
                     .disabled(model.isImporting)
-                FormPrimaryButton(title: String(localized: "Import \(model.counts.new) rows")) {
+                FormPrimaryButton(title: String(localized: "Import \(model.counts.new) rows"), shortcut: !completion.isOpen) {
                     Task { await model.runImport() }
                 }
                 .disabled(model.counts.new == 0 || model.isImporting || model.isPreviewing || model.preview == nil)

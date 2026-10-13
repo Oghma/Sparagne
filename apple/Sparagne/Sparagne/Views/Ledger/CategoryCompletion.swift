@@ -290,6 +290,99 @@ extension View {
     }
 }
 
+// MARK: - Outside the grid
+
+/// A CATEGORY field in a form rather than in the grid: the Ricorrenze
+/// inspector's. The box of a `FormTextField`, completing as the CATEGORY
+/// cell does (`completing`): typing opens the list, ↑↓ move in it, ↩ and ⇥
+/// pick, esc closes it. A name nobody has used yet still becomes a new
+/// category when a row is recorded under it, as it does from a cell; the
+/// list is there so that a slip of the keys does not.
+///
+/// The list is drawn by the form that holds the field
+/// (`hangingCategoryList`), over everything else, so the form's scroll view
+/// never clips it. ⇥ leaves the caret in the field after its pick: a form
+/// has no next cell to send it to, and the next ⇥ moves on as it always did.
+struct CategoryFormField: View {
+    let label: String
+    @Binding var text: String
+    let store: AppStore
+    let completion: CategoryCompletionModel
+
+    @FocusState private var focused: Bool
+    @Environment(\.formMetrics) private var metrics
+
+    /// The one field of its form: the model is the form's own.
+    private static let owner = "form"
+
+    var body: some View {
+        FormBox(focused: metrics.showsFocus && focused) {
+            // An empty prompt rather than none, as `FormTextField` has it:
+            // the label column already says what the field is.
+            TextField(label, text: $text, prompt: Text(verbatim: ""))
+                .textFieldStyle(.plain)
+                .labelsHidden()
+                .focused($focused)
+                .accessibilityLabel(label)
+                .completing(text: $text, owner: Self.owner, isFocused: focused, store: store, completion: completion)
+        }
+        .categoryListAnchor(owner: Self.owner, isFocused: focused, store: store, completion: completion)
+    }
+}
+
+extension View {
+    /// What a completing field outside the grid adds to `completing`: the
+    /// recent categories and the aliases loaded as the field takes the caret,
+    /// as a CATEGORY cell loads them; the list closed as the caret goes; and
+    /// where the field is, for `hangingCategoryList` to hang the list from.
+    /// On the box of a form field rather than on the text in it, so the list
+    /// hangs from the box's edge.
+    func categoryListAnchor(
+        owner: AnyHashable,
+        isFocused: Bool,
+        store: AppStore,
+        completion: CategoryCompletionModel
+    ) -> some View {
+        onChange(of: isFocused) { _, now in
+            if now {
+                Task { await store.loadCategoryCompletion() }
+            } else if completion.owner == owner {
+                completion.close()
+            }
+        }
+        .anchorPreference(key: CategoryCompletionAnchor.self, value: .bounds) {
+            completion.owner == owner ? $0 : nil
+        }
+    }
+
+    /// The CATEGORY list hung from the field that opened it, over everything
+    /// else in this view: from the field's bottom edge, or from its top when
+    /// there is no room below. For the view that holds the grid, the form or
+    /// the table, outside any scroll view, so the list is never clipped by
+    /// one, no later row covers it, and a click on it is not a click on what
+    /// is under it (in the grid, one that would close the row). `inset`
+    /// moves the list along the field's edge: a grid cell's starts three
+    /// points in from the cell's edge rather than from its padded text.
+    func hangingCategoryList(_ completion: CategoryCompletionModel, inset: CGFloat = 0) -> some View {
+        overlayPreferenceValue(CategoryCompletionAnchor.self) { anchor in
+            if let anchor, completion.isOpen {
+                GeometryReader { proxy in
+                    let field = proxy[anchor]
+                    let height = CategoryCompletionList.height(for: completion.candidates)
+                    let fitsBelow = field.maxY + height <= proxy.size.height
+                    // One point up into the field, as the canvas hangs it
+                    // (`.ac`).
+                    CategoryCompletionList(completion: completion)
+                        .offset(
+                            x: field.minX + inset,
+                            y: fitsBelow ? field.maxY - 1 : field.minY - height + 1
+                        )
+                }
+            }
+        }
+    }
+}
+
 // MARK: - The list
 
 /// The entries under the cell (`.ac`): a floating list of choices, not a

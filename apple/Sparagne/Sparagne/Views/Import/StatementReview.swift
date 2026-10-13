@@ -3,14 +3,19 @@ import SparagneCore
 
 /// The review page: every row of the file with what the core would do with
 /// it. A new row can be ticked off (it goes to the core as `skip`) and its
-/// category typed; a category typed here may create one, the bank's never
-/// does (`core/src/statement/mod.rs`).
+/// category typed, with the list the ledger's CATEGORY cell offers; a
+/// category typed here may create one, the bank's never does
+/// (`core/src/statement/mod.rs`).
 ///
 /// Ruled like the window's tables (`SetupHeaderRow`, `SetupRow`,
 /// `GridCell`), and pulled out by a cell's padding so the first column
 /// lines up with the sheet's title.
 struct StatementReview: View {
     @Bindable var model: StatementImportModel
+    /// The list under the CATEGORY field being typed into, one for the
+    /// page: the sheet holds it, since its footer's keys yield to the list
+    /// while it is open.
+    let completion: CategoryCompletionModel
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,12 +24,14 @@ struct StatementReview: View {
                 LazyVStack(spacing: 0) {
                     let names = NameBook(snapshot: model.store.snapshot)
                     ForEach(model.preview?.rows ?? [], id: \.line) { row in
-                        StatementReviewRow(model: model, row: row, names: names)
+                        StatementReviewRow(model: model, row: row, names: names, completion: completion)
                     }
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
         }
+        // Hung as the grid hangs it, three points in from the cell's edge.
+        .hangingCategoryList(completion, inset: 3 - GridColumn.padding)
         .padding(.horizontal, -Metrics.cellPad)
     }
 
@@ -71,6 +78,9 @@ private struct StatementReviewRow: View {
     @Bindable var model: StatementImportModel
     let row: StatementRow
     let names: NameBook
+    let completion: CategoryCompletionModel
+
+    @FocusState private var categoryFocused: Bool
 
     private var isNew: Bool { row.status == .new }
     private var included: Bool { model.isIncluded(row.line) }
@@ -147,7 +157,9 @@ private struct StatementReviewRow: View {
         }
     }
 
-    /// Editable on a new entry; the other wallet on a transfer; the bank's
+    /// Editable on a new entry, completing as the ledger's CATEGORY cell
+    /// does (`completing`): typing opens the list, ↑↓ move in it, ↩ and ⇥
+    /// pick, esc closes it; the other wallet on a transfer; the bank's
     /// match, dimmed, on a row that will not be imported.
     ///
     /// The placeholder of an empty field is drawn here in the dim ink, not
@@ -157,22 +169,22 @@ private struct StatementReviewRow: View {
     private var category: some View {
         if StatementImportModel.takesCategory(row) {
             let text = model.categoryText(for: row)
+            let typed = Binding(
+                get: { model.categoryText(for: row) },
+                set: { model.setCategory($0, for: row.line) }
+            )
             ZStack(alignment: .leading) {
                 if text.isEmpty {
                     Text(String(localized: "category…"))
                         .foregroundStyle(Ink.text3)
                         .allowsHitTesting(false)
                 }
-                TextField(
-                    String(localized: "Category"),
-                    text: Binding(
-                        get: { model.categoryText(for: row) },
-                        set: { model.setCategory($0, for: row.line) }
-                    ),
-                    prompt: Text(verbatim: "")
-                )
-                .textFieldStyle(.plain)
-                .foregroundStyle(ink)
+                TextField(String(localized: "Category"), text: typed, prompt: Text(verbatim: ""))
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(ink)
+                    .focused($categoryFocused)
+                    .completing(text: typed, owner: row.line, isFocused: categoryFocused, store: model.store, completion: completion)
+                    .categoryListAnchor(owner: row.line, isFocused: categoryFocused, store: model.store, completion: completion)
             }
             .disabled(!included)
         } else if row.kind == .transferWallet, let wallet = names.wallet(row.counterWalletId) {

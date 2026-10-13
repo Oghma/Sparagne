@@ -395,28 +395,33 @@ struct FormSheet<Content: View, Footer: View>: View {
     }
 }
 
-/// Cancel: a ghost button, and esc.
+/// Cancel: a ghost button, and esc. `shortcut: false` leaves esc to a field
+/// of the sheet that has a use for it, such as a list to close.
 struct FormCancelButton: View {
     var title = String(localized: "Cancel")
+    var shortcut = true
     let action: () -> Void
 
     var body: some View {
         Button(title, role: .cancel, action: action)
             .buttonStyle(.chrome(.ghost))
-            .keyboardShortcut(.cancelAction)
+            .keyboardShortcut(shortcut ? .cancelAction : nil)
     }
 }
 
-/// The action the sheet is for: the accent, and ↩.
+/// The action the sheet is for: the accent, and ↩. `shortcut: false` leaves
+/// ↩ to a field of the sheet that has a use for it, such as a list to pick
+/// from.
 struct FormPrimaryButton: View {
     let title: String
     var role: ButtonRole?
+    var shortcut = true
     let action: () -> Void
 
     var body: some View {
         Button(title, role: role, action: action)
             .buttonStyle(.chrome(.primary))
-            .keyboardShortcut(.defaultAction)
+            .keyboardShortcut(shortcut ? .defaultAction : nil)
     }
 }
 

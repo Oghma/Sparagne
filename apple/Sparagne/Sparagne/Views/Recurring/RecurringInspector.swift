@@ -35,6 +35,8 @@ struct RecurringInspector: View {
     /// of the due periods of a schedule being edited. Empty for a new
     /// template.
     @State private var handled: Set<NaiveDate> = []
+    /// The list under the CATEGORY field (`CategoryFormField`).
+    @State private var completion = CategoryCompletionModel()
 
     init(
         store: AppStore,
@@ -78,6 +80,7 @@ struct RecurringInspector: View {
             footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .hangingCategoryList(completion)
         .background(Ink.bg)
         // The saved template moved under the open draft (a save, the table's
         // switch, a sync): an untouched draft follows it, an edited one keeps
@@ -231,7 +234,7 @@ struct RecurringInspector: View {
                 }
             }
             FormRow(String(localized: "Category")) {
-                FormTextField(label: String(localized: "Category"), text: $draft.category)
+                CategoryFormField(label: String(localized: "Category"), text: $draft.category, store: store, completion: completion)
             }
             FormRow(String(localized: "Note")) {
                 FormTextField(label: String(localized: "Note"), text: $draft.note)
@@ -530,11 +533,11 @@ struct RecurringInspector: View {
                     if isDirty {
                         Button(String(localized: "Cancel")) { draft = RecurringDraft(template: template) }
                             .buttonStyle(.chrome(.ghost, small: true))
-                            .keyboardShortcut(.cancelAction)
+                            .keyboardShortcut(shortcut(.cancelAction))
                         if draft.isValid(currency: currency), isPreviewValid {
                             Button(String(localized: "Save")) { save(template) }
                                 .buttonStyle(.chrome(.primary, small: true))
-                                .keyboardShortcut(.defaultAction)
+                                .keyboardShortcut(shortcut(.defaultAction))
                         }
                     }
                 }
@@ -542,10 +545,10 @@ struct RecurringInspector: View {
                 Spacer(minLength: 8)
                 Button(String(localized: "Cancel")) { finishedCreating(nil) }
                     .buttonStyle(.chrome(.ghost, small: true))
-                    .keyboardShortcut(.cancelAction)
+                    .keyboardShortcut(shortcut(.cancelAction))
                 Button(String(localized: "Create")) { create() }
                     .buttonStyle(.chrome(.primary, small: true))
-                    .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut(shortcut(.defaultAction))
                     .disabled(!draft.isValid(currency: currency) || !isPreviewValid)
             }
         }
@@ -561,6 +564,15 @@ struct RecurringInspector: View {
     private var isDirty: Bool {
         guard let template else { return false }
         return draft.isDirty(against: template, currency: currency)
+    }
+
+    /// ↩ and esc for the footer's buttons, except while the CATEGORY list is
+    /// open: they are the list's then (`completing`), as the riparto
+    /// inspector leaves them to an open row of the plan. A shortcut would
+    /// take the key before the field saw it, and ↩ would pick and save at
+    /// once.
+    private func shortcut(_ key: KeyboardShortcut) -> KeyboardShortcut? {
+        completion.isOpen ? nil : key
     }
 
     private var isPreviewValid: Bool {
