@@ -93,7 +93,11 @@ default, into several at once: one transfer per line, with the same date and
 note, sent all together or not at all (on a shared vault the server still
 judges each transfer on its own). A line over its envelope's cap, or a
 source that would go below zero when it may not, keeps it from moving;
-Unallocated below zero is only pointed out. It decides no period and leaves
+Unallocated below zero is only pointed out. The balances are those of the
+date chosen: a move dated in the past can take only what the source held
+that day and still holds at its lowest afterwards, so money that came in
+later is not there to move, and the sheet names the day of that lowest
+point. It decides no period and leaves
 the plan as it is. Each transfer is an ordinary ledger row, the same as
 `tf> 500 >unallocated >emergenze` typed in the quick-add line.
 

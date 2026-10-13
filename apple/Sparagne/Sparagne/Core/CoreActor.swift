@@ -244,6 +244,12 @@ actor CoreActor {
         try await visit { try $0.snapshot(vaultId: vaultId) }
     }
 
+    /// Each envelope's balance at `from` and the lowest and highest it
+    /// reaches afterwards, for a transfer dated then.
+    func flowBalanceRanges(vaultId: Uuid, from: UtcDateTime) async throws -> [FlowBalanceRange] {
+        try await visit { try $0.flowBalanceRanges(vaultId: vaultId, from: from) }
+    }
+
     func categories(vaultId: Uuid, includeArchived: Bool = false) async throws -> [CategoryView] {
         try await visit { try $0.categories(vaultId: vaultId, includeArchived: includeArchived) }
     }

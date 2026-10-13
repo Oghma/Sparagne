@@ -226,6 +226,80 @@ struct EnvelopeMoveTests {
         #expect(!check.canMove)
     }
 
+    // MARK: - The day of the move
+
+    /// What the envelopes held on 11 October and how they went afterwards:
+    /// Unallocated had 1.000,00 that day and only 200,00 on the 20th, before
+    /// the incomes that took it to today's 5.000,00; Affitto had nothing and
+    /// still had 50,00 at its lowest; Vacanze had 1.000,00 and got as high as
+    /// 2.900,00 on the way to today's 2.672,50.
+    private static let pastBalances: [Uuid: EnvelopeMoveBalance] = [
+        unallocatedId: EnvelopeMoveBalance(balance: 100_000, low: 20_000, lowOn: "2026-10-20", high: 500_000),
+        rentId: EnvelopeMoveBalance(balance: 0, low: 0, lowOn: nil, high: 20_000),
+        holidayId: EnvelopeMoveBalance(balance: 100_000, low: 100_000, lowOn: nil, high: 290_000),
+    ]
+
+    private static func pastCheck(_ draft: EnvelopeMoveDraft) -> EnvelopeMoveCheck {
+        draft.check(flows: flows, currency: .eur, balances: pastBalances)
+    }
+
+    @Test("On a past day the source gives what it held then, and the lowest it gets afterwards is named with its day")
+    func pastDaySource() {
+        let check = Self.pastCheck(Self.draft([(Self.rentId, "300")]))
+        #expect(check.sourceBalance?.balance == 100_000)
+        // Today's 5.000,00 would leave 4.700,00; that day leaves 700,00.
+        #expect(check.sourceAfter == 70_000)
+        #expect(check.sourceLowAfter?.amount == -10_000)
+        #expect(check.sourceLowAfter?.on == "2026-10-20")
+        // Unallocated may go below zero: pointed out with the day, and the move goes.
+        #expect(check.sourceState == .belowZero(shortfall: 10_000, on: "2026-10-20"))
+        #expect(check.canMove)
+
+        let fits = Self.pastCheck(Self.draft([(Self.rentId, "200")]))
+        #expect(fits.sourceState == .fine)
+        #expect(fits.sourceLowAfter?.amount == 0)
+    }
+
+    @Test("An envelope that may not go below zero is stopped by its lowest point after the day, not by today's balance")
+    func pastDayShort() {
+        let balances = Self.pastBalances.merging(
+            [Self.rentId: EnvelopeMoveBalance(balance: 20_000, low: 5_000, lowOn: "2026-10-20", high: 20_000)]
+        ) { _, new in new }
+        let check = Self.draft(from: Self.rentId, [(Self.holidayId, "100")])
+            .check(flows: Self.flows, currency: .eur, balances: balances)
+        // Today Affitto holds 200,00 and 100,00 would fit.
+        #expect(check.sourceAfter == 10_000)
+        #expect(check.sourceState == .short(shortfall: 5_000, on: "2026-10-20"))
+        #expect(check.blocker == .sourceShort(shortfall: 5_000))
+        #expect(Self.draft(from: Self.rentId, [(Self.holidayId, "100")])
+            .commands(flows: Self.flows, currency: .eur, balances: balances, occurredAt: "2026-10-11T09:30:00+02:00")
+            .isEmpty)
+    }
+
+    @Test("A cap on the balance has to hold at the envelope's highest point after the day; one on the income counts what came in")
+    func pastDayCap() {
+        let check = Self.pastCheck(Self.draft([(Self.holidayId, "200"), (Self.carId, "100")]))
+        let holiday = check.rows[0]
+        #expect(holiday.balance?.balance == 100_000)
+        #expect(holiday.room == 10_000)
+        #expect(holiday.issue == .overCap(excess: 10_000))
+        #expect(holiday.after == 120_000)
+        // Auto has no figures for the day, so it is taken as it is now.
+        let car = check.rows[1]
+        #expect(car.room == 10_000)
+        #expect(car.issue == nil)
+        #expect(car.after == 20_000)
+    }
+
+    @Test("The instant of the lowest point is read as a day where the Mac is")
+    func lowestDay() throws {
+        let rome = try #require(TimeZone(identifier: "Europe/Rome"))
+        let late = FlowBalanceRange(flowId: Self.unallocatedId, balance: 100, low: -50, lowAt: "2026-01-04T23:30:00Z", high: 300)
+        #expect(EnvelopeMoveBalance(late, timeZone: rome) == EnvelopeMoveBalance(balance: 100, low: -50, lowOn: "2026-01-05", high: 300))
+        let none = FlowBalanceRange(flowId: Self.unallocatedId, balance: 100, low: 100, lowAt: nil, high: 100)
+        #expect(EnvelopeMoveBalance(none, timeZone: rome).lowOn == nil)
+    }
+
     // MARK: - The transfers
 
     @Test("One transfer per line, out of the source, on the time given, with the note trimmed or none")

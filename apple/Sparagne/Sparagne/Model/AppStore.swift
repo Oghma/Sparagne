@@ -1573,7 +1573,7 @@ final class AppStore {
     /// core, through the same alert a refused command gets. The views already
     /// hide what would write; this catches what they cannot, like a quick-add
     /// line typed and sent.
-    private func refusedAsReadOnly() -> Bool {
+    func refusedAsReadOnly() -> Bool {
         guard isReadOnly else { return false }
         presentedError = AppError(
             code: "forbidden",

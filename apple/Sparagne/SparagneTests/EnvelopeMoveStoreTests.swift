@@ -122,6 +122,43 @@ struct EnvelopeMoveStoreTests {
         #expect(try Self.flow(store, "Auto").incomeTotal == 30_000)
     }
 
+    @Test("A past day reads what the envelopes held then: money that came in later is not there to move")
+    func pastDay() async throws {
+        let store = try await Self.vault()
+        #expect(await store.moveBetweenEnvelopes(try Self.draft(store, [("Affitto", "300")])))
+        let rent = try Self.flow(store, "Affitto").id
+        let unallocated = try Self.unallocated(store).id
+        let today = CoreDate.day(Date())
+        let tenDaysAgo = CoreDate.day(Date().addingTimeInterval(-10 * 86_400))
+
+        let then = try #require(await store.envelopeBalances(on: tenDaysAgo))
+        // The opening balance and the 300,00 came today: then, nothing.
+        #expect(then[unallocated]?.balance == 0)
+        #expect(then[unallocated]?.low == 0)
+        #expect(then[unallocated]?.lowOn == nil)
+        #expect(then[rent]?.balance == 0)
+        let now = try #require(await store.envelopeBalances(on: today))
+        #expect(now[unallocated]?.balance == 70_000)
+        #expect(now[rent]?.balance == 30_000)
+
+        // Affitto may not go below zero, and ten days ago it held nothing.
+        var back = EnvelopeMoveDraft(sourceId: rent, day: tenDaysAgo)
+        back.add(unallocated)
+        back.setAmount("100", for: unallocated)
+        #expect(back.check(flows: store.flows, currency: store.currency, balances: then).blocker == .sourceShort(shortfall: 10_000))
+        #expect(!(await store.moveBetweenEnvelopes(back)))
+        #expect(store.presentedError == nil)
+        #expect(try Self.flow(store, "Affitto").balance == 30_000)
+
+        // Unallocated may: dated ten days ago it is only pointed out, and goes.
+        var early = EnvelopeMoveDraft(sourceId: unallocated, day: tenDaysAgo)
+        early.add(rent)
+        early.setAmount("50", for: rent)
+        #expect(early.check(flows: store.flows, currency: store.currency, balances: then).sourceState == .belowZero(shortfall: 5_000))
+        #expect(await store.moveBetweenEnvelopes(early))
+        #expect(try Self.flow(store, "Affitto").balance == 35_000)
+    }
+
     @Test("Money moves back into Unallocated from another envelope too")
     func fromAnEnvelope() async throws {
         let store = try await Self.vault()

@@ -81,6 +81,22 @@
         }
       }
     },
+    "%@ goes %@ below zero on %@, which it allows.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ goes %2$@ below zero on %3$@, which it allows."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ va sotto zero di %2$@ il %3$@: è consentito."
+          }
+        }
+      }
+    },
     "%@ goes below zero, which it allows.": {
       "localizations": {
         "en": {
@@ -125,6 +141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "A %1$@ mancano %2$@ e non può andare sotto zero."
+          }
+        }
+      }
+    },
+    "%@ is %@ short on %@ and cannot go below zero.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ is %2$@ short on %3$@ and cannot go below zero."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A %1$@ mancano %2$@ il %3$@ e non può andare sotto zero."
           }
         }
       }
@@ -4637,6 +4669,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abbassa gli importi per spostare"
+          }
+        }
+      }
+    },
+    "Lowest on %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lowest on %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimo il %@"
           }
         }
       }
@@ -10157,6 +10205,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "saldo %@"
+          }
+        }
+      }
+    },
+    "balance on %@ %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "balance on %1$@ %2$@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "saldo al %1$@ %2$@"
           }
         }
       }

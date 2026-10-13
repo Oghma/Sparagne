@@ -23,11 +23,20 @@ private enum MoveColumn {
 /// which line to fix. Unallocated below zero is only pointed out, as the
 /// Riparto's preview does. The rules are `EnvelopeMoveCheck`'s; the store
 /// sends the lines as one batch (`AppStore.moveBetweenEnvelopes`).
+///
+/// Every figure is the envelope's on the day chosen, not today's: a move
+/// dated in the past can only use what the source held then and still holds
+/// at its lowest afterwards, and the totals name that day when it comes
+/// later.
 struct EnvelopeMoveSheet: View {
     let store: AppStore
 
     @Environment(\.dismiss) private var dismiss
     @State private var draft: EnvelopeMoveDraft
+    /// The envelopes from the draft's day on, read again when the day or a
+    /// balance changes. Empty until the first answer: the envelopes as they
+    /// are now stand in, which is what a move dated today sees.
+    @State private var balances: [Uuid: EnvelopeMoveBalance] = [:]
     @State private var moving = false
     @State private var hovered: Uuid?
     @FocusState private var focused: Uuid?
@@ -39,7 +48,7 @@ struct EnvelopeMoveSheet: View {
     }
 
     var body: some View {
-        let check = draft.check(flows: store.flows, currency: store.currency)
+        let check = draft.check(flows: store.flows, currency: store.currency, balances: balances)
         FormSheet(
             String(localized: "Move between envelopes"),
             subtitle: String(localized: "Once only: the allocation plan and its periods stay as they are."),
@@ -78,11 +87,24 @@ struct EnvelopeMoveSheet: View {
                 draft.setSource(unallocated)
             }
         }
+        // A sync or a row edited elsewhere changes a balance: the day's
+        // figures are read again with it. A failed read keeps the last ones
+        // and is on the alert; Sposta checks again before it sends anyway.
+        .task(id: BalancesKey(day: draft.day, flows: store.flows)) {
+            if let loaded = await store.envelopeBalances(on: draft.day) {
+                balances = loaded
+            }
+        }
+    }
+
+    private struct BalancesKey: Equatable {
+        let day: NaiveDate
+        let flows: [FlowView]
     }
 
     // MARK: - Da
 
-    /// The source, and its balance beside it.
+    /// The source, and its balance beside it on the day chosen.
     private func source(_ check: EnvelopeMoveCheck) -> some View {
         HStack(spacing: 10) {
             FormPicker(
@@ -92,13 +114,20 @@ struct EnvelopeMoveSheet: View {
                 title: name
             )
             .frame(width: 240)
-            if let balance = check.source?.balance {
-                Text(String(localized: "balance \(LedgerMoney.bare(balance))"))
+            if let balance = check.sourceBalance?.balance {
+                Text(balanceLabel(balance))
                     .font(Face.ui(12))
                     .foregroundStyle(Ink.text3)
                     .monospacedDigit()
             }
         }
+    }
+
+    /// `saldo 1.000,00` today, `saldo al 31 dic 2025 0,00` on another day.
+    private func balanceLabel(_ balance: Int64) -> String {
+        draft.day == CoreDate.day(Date())
+            ? String(localized: "balance \(LedgerMoney.bare(balance))")
+            : String(localized: "balance on \(RecurringDayText.full(draft.day)) \(LedgerMoney.bare(balance))")
     }
 
     // MARK: - The lines
@@ -147,7 +176,7 @@ struct EnvelopeMoveSheet: View {
                 Text(title).foregroundStyle(row.envelope == nil ? Ink.text3 : Ink.text)
             }
             cell(width: MoveColumn.figure, alignment: .trailing) {
-                Text(row.envelope.map { LedgerMoney.bare($0.balance) } ?? TransactionRow.placeholder)
+                Text(row.balance.map { LedgerMoney.bare($0.balance) } ?? TransactionRow.placeholder)
                     .foregroundStyle(Ink.text2)
             }
             cell(width: MoveColumn.figure, alignment: .trailing) {
@@ -296,6 +325,13 @@ struct EnvelopeMoveSheet: View {
                 if let after = check.sourceAfter {
                     figure(String(localized: "Left in \(sourceName)"), after, negative: after < 0)
                 }
+                if let lowest = check.sourceLowAfter {
+                    figure(
+                        String(localized: "Lowest on \(RecurringDayText.full(lowest.on))"),
+                        lowest.amount,
+                        negative: lowest.amount < 0
+                    )
+                }
                 if !check.rows.isEmpty {
                     Text(CountText.transfers(check.rows.count))
                         .foregroundStyle(Ink.text3)
@@ -304,11 +340,23 @@ struct EnvelopeMoveSheet: View {
             .font(Face.ui(12))
             .monospacedDigit()
             switch check.sourceState {
-            case .belowZero:
+            case .belowZero(_, nil):
                 FormNote(String(localized: "\(sourceName) goes below zero, which it allows."), tone: .warning, indented: false)
-            case .short(let shortfall):
+            case .belowZero(let shortfall, let day?):
+                FormNote(
+                    String(localized: "\(sourceName) goes \(LedgerMoney.bare(shortfall)) below zero on \(RecurringDayText.full(day)), which it allows."),
+                    tone: .warning,
+                    indented: false
+                )
+            case .short(let shortfall, nil):
                 FormNote(
                     String(localized: "\(sourceName) is \(LedgerMoney.bare(shortfall)) short and cannot go below zero."),
+                    tone: .negative,
+                    indented: false
+                )
+            case .short(let shortfall, let day?):
+                FormNote(
+                    String(localized: "\(sourceName) is \(LedgerMoney.bare(shortfall)) short on \(RecurringDayText.full(day)) and cannot go below zero."),
                     tone: .negative,
                     indented: false
                 )

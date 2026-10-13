@@ -30,6 +30,24 @@ pub struct FlowView {
     pub is_unallocated: bool,
 }
 
+/// What an envelope holds at one instant, and how low and how high its
+/// balance goes from then on, up to the last row on record (rows dated in
+/// the future included): what a transfer dated then can take out or bring
+/// in without the envelope crossing zero or its cap at some later point.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct FlowBalanceRange {
+    pub flow_id: Uuid,
+    /// The live legs dated before the instant.
+    pub balance: i64,
+    /// The lowest the balance gets from the instant on, `balance` included.
+    pub low: i64,
+    /// When it first gets there; `None` when `balance` is already the
+    /// lowest.
+    pub low_at: Option<DateTime<Utc>>,
+    /// The highest, `balance` included.
+    pub high: i64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct CategoryView {
     pub id: Uuid,
@@ -352,6 +370,83 @@ impl Core {
             flows,
             unallocated_flow_id,
         })
+    }
+
+    /// Every envelope of the vault, archived included, in the snapshot's
+    /// order, with its balance at `from` and the lowest and highest it
+    /// reaches afterwards.
+    ///
+    /// The cached `flows.balance` is only the end of the story: a transfer
+    /// dated in the past also changes every balance after it, so the most it
+    /// can take out of an envelope is `low`, not what the envelope holds
+    /// today. Legs of the same instant are summed before they count, so the
+    /// order rows are stored in cannot invent a dip between them.
+    pub fn flow_balance_ranges(
+        &self,
+        vault_id: Uuid,
+        from: DateTime<Utc>,
+    ) -> Result<Vec<FlowBalanceRange>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM flows WHERE vault_id = ?1
+             ORDER BY (system_kind IS NULL), lower(name)",
+        )?;
+        let mut ranges = stmt
+            .query_map(params![vault_id], |r| {
+                Ok(FlowBalanceRange {
+                    flow_id: r.get(0)?,
+                    balance: 0,
+                    low: 0,
+                    low_at: None,
+                    high: 0,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT l.target_id, t.occurred_at, SUM(l.amount)
+             FROM legs l
+             JOIN transactions t ON t.id = l.transaction_id
+             WHERE t.vault_id = ?1 AND t.voided_at IS NULL AND l.target_kind = 'flow'
+             GROUP BY l.target_id, t.occurred_at
+             ORDER BY l.target_id, t.occurred_at",
+        )?;
+        let mut rows = stmt.query(params![vault_id])?;
+        let from = from.timestamp();
+        // Rows come grouped by envelope and in time order, so `running` only
+        // restarts when the envelope changes.
+        let mut current: Option<(Uuid, usize)> = None;
+        let mut running = 0_i64;
+        while let Some(row) = rows.next()? {
+            let flow_id: Uuid = row.get(0)?;
+            let at: i64 = row.get(1)?;
+            let amount: i64 = row.get(2)?;
+            let index = match current {
+                Some((id, index)) if id == flow_id => index,
+                _ => {
+                    running = 0;
+                    let Some(index) = ranges.iter().position(|r| r.flow_id == flow_id) else {
+                        current = None;
+                        continue;
+                    };
+                    current = Some((flow_id, index));
+                    index
+                }
+            };
+            running = running.saturating_add(amount);
+            let range = &mut ranges[index];
+            if at < from {
+                range.balance = running;
+                range.low = running;
+                range.high = running;
+            } else {
+                if running < range.low {
+                    range.low = running;
+                    range.low_at = DateTime::from_timestamp(at, 0);
+                }
+                range.high = range.high.max(running);
+            }
+        }
+        Ok(ranges)
     }
 
     pub fn categories(&self, vault_id: Uuid, include_archived: bool) -> Result<Vec<CategoryView>> {

@@ -55,8 +55,8 @@ pub use ffi::{
 pub use flow::{Flow, FlowMode, UNALLOCATED_NAME, headroom};
 pub use money::Money;
 pub use query::{
-    CategoryView, FlowView, LegTarget, LegView, Page, TransactionFilter, TransactionView,
-    VaultSnapshot, WalletView, replay,
+    CategoryView, FlowBalanceRange, FlowView, LegTarget, LegView, Page, TransactionFilter,
+    TransactionView, VaultSnapshot, WalletView, replay,
 };
 pub use recurring::{
     Frequency, PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule,

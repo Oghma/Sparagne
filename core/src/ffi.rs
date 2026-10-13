@@ -22,12 +22,12 @@ use uuid::Uuid;
 use crate::{
     AliasView, AllocationBase, AllocationLine, AllocationPlanView, AllocationPreview,
     AllocationRunView, BucketPersonTotals, CategorySuggestion, CategoryTotals, CategoryView,
-    Command, CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowPersonTotals,
-    MergePreview, Money, Page, PendingAllocation, PendingRecurring, PeriodTotals, Receipt,
-    RecentUsage, RecurringRunView, RecurringView, RejectedCommand, Schedule, StatementDetection,
-    StatementMapping, StatementOptions, StatementPreset, StatementPreview, StatementReport,
-    StatementRowOverride, SyncReport, SyncState, TopExpense, TransactionFilter, TransactionView,
-    VaultSnapshot, VaultView,
+    Command, CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowBalanceRange,
+    FlowPersonTotals, MergePreview, Money, Page, PendingAllocation, PendingRecurring, PeriodTotals,
+    Receipt, RecentUsage, RecurringRunView, RecurringView, RejectedCommand, Schedule,
+    StatementDetection, StatementMapping, StatementOptions, StatementPreset, StatementPreview,
+    StatementReport, StatementRowOverride, SyncReport, SyncState, TopExpense, TransactionFilter,
+    TransactionView, VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -157,6 +157,17 @@ impl CoreHandle {
     /// Wallets and flows of a vault with their balances.
     pub fn snapshot(&self, vault_id: Uuid) -> Result<VaultSnapshot, DomainError> {
         self.lock()?.snapshot(vault_id)
+    }
+
+    /// Each flow's balance at `from` and the lowest and highest it reaches
+    /// afterwards: what a transfer dated `from` can move without a flow
+    /// crossing zero or its cap later on.
+    pub fn flow_balance_ranges(
+        &self,
+        vault_id: Uuid,
+        from: UtcDateTime,
+    ) -> Result<Vec<FlowBalanceRange>, DomainError> {
+        self.lock()?.flow_balance_ranges(vault_id, from)
     }
 
     pub fn categories(

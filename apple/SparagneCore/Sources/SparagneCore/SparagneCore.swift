@@ -661,6 +661,13 @@ public protocol CoreHandleProtocol: AnyObject, Sendable {
     func executeBatch(envelopes: [CommandEnvelope]) throws  -> [Receipt]
     
     /**
+     * Each flow's balance at `from` and the lowest and highest it reaches
+     * afterwards: what a transfer dated `from` can move without a flow
+     * crossing zero or its cap later on.
+     */
+    func flowBalanceRanges(vaultId: Uuid, from: UtcDateTime) throws  -> [FlowBalanceRange]
+    
+    /**
      * Envelope x person matrix over `[from, to)`.
      */
     func flowPersonTotals(vaultId: Uuid, from: UtcDateTime, to: UtcDateTime) throws  -> [FlowPersonTotals]
@@ -1098,6 +1105,22 @@ open func executeBatch(envelopes: [CommandEnvelope])throws  -> [Receipt]  {
     uniffi_sparagne_core_fn_method_corehandle_execute_batch(
             self.uniffiCloneHandle(),
         FfiConverterSequenceTypeCommandEnvelope.lower(envelopes),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Each flow's balance at `from` and the lowest and highest it reaches
+     * afterwards: what a transfer dated `from` can move without a flow
+     * crossing zero or its cap later on.
+     */
+open func flowBalanceRanges(vaultId: Uuid, from: UtcDateTime)throws  -> [FlowBalanceRange]  {
+    return try  FfiConverterSequenceTypeFlowBalanceRange.lift(try rustCallWithError(FfiConverterTypeDomainError_lift) {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_method_corehandle_flow_balance_ranges(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeUuid_lower(vaultId),
+        FfiConverterTypeUtcDateTime_lower(from),uniffiCallStatus
     )
 })
 }
@@ -2815,6 +2838,104 @@ public func FfiConverterTypeEntry_lift(_ buf: RustBuffer) throws -> Entry {
 #endif
 public func FfiConverterTypeEntry_lower(_ value: Entry) -> RustBuffer {
     return FfiConverterTypeEntry.lower(value)
+}
+
+
+/**
+ * What an envelope holds at one instant, and how low and how high its
+ * balance goes from then on, up to the last row on record (rows dated in
+ * the future included): what a transfer dated then can take out or bring
+ * in without the envelope crossing zero or its cap at some later point.
+ */
+public struct FlowBalanceRange: Equatable, Hashable, Codable {
+    public var flowId: Uuid
+    /**
+     * The live legs dated before the instant.
+     */
+    public var balance: Int64
+    /**
+     * The lowest the balance gets from the instant on, `balance` included.
+     */
+    public var low: Int64
+    /**
+     * When it first gets there; `None` when `balance` is already the
+     * lowest.
+     */
+    public var lowAt: UtcDateTime?
+    /**
+     * The highest, `balance` included.
+     */
+    public var high: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(flowId: Uuid, 
+        /**
+         * The live legs dated before the instant.
+         */balance: Int64, 
+        /**
+         * The lowest the balance gets from the instant on, `balance` included.
+         */low: Int64, 
+        /**
+         * When it first gets there; `None` when `balance` is already the
+         * lowest.
+         */lowAt: UtcDateTime?, 
+        /**
+         * The highest, `balance` included.
+         */high: Int64) {
+        self.flowId = flowId
+        self.balance = balance
+        self.low = low
+        self.lowAt = lowAt
+        self.high = high
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FlowBalanceRange: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFlowBalanceRange: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FlowBalanceRange {
+        return
+            try FlowBalanceRange(
+                flowId: FfiConverterTypeUuid.read(from: &buf), 
+                balance: FfiConverterInt64.read(from: &buf), 
+                low: FfiConverterInt64.read(from: &buf), 
+                lowAt: FfiConverterOptionTypeUtcDateTime.read(from: &buf), 
+                high: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FlowBalanceRange, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.flowId, into: &buf)
+        FfiConverterInt64.write(value.balance, into: &buf)
+        FfiConverterInt64.write(value.low, into: &buf)
+        FfiConverterOptionTypeUtcDateTime.write(value.lowAt, into: &buf)
+        FfiConverterInt64.write(value.high, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFlowBalanceRange_lift(_ buf: RustBuffer) throws -> FlowBalanceRange {
+    return try FfiConverterTypeFlowBalanceRange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFlowBalanceRange_lower(_ value: FlowBalanceRange) -> RustBuffer {
+    return FfiConverterTypeFlowBalanceRange.lower(value)
 }
 
 
@@ -9189,6 +9310,31 @@ fileprivate struct FfiConverterSequenceTypeCommandRecord: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFlowBalanceRange: FfiConverterRustBuffer {
+    typealias SwiftType = [FlowBalanceRange]
+
+    public static func write(_ value: [FlowBalanceRange], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFlowBalanceRange.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FlowBalanceRange] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FlowBalanceRange]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFlowBalanceRange.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFlowPersonTotals: FfiConverterRustBuffer {
     typealias SwiftType = [FlowPersonTotals]
 
@@ -10248,6 +10394,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_execute_batch() != 57257) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_method_corehandle_flow_balance_ranges() != 39063) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_method_corehandle_flow_person_totals() != 61392) {
