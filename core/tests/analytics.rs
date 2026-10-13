@@ -1145,7 +1145,7 @@ fn month_range() -> (DateTime<Utc>, DateTime<Utc>) {
 }
 
 #[test]
-fn openings_are_still_read_by_the_year_breakdown_and_the_bucket_totals() {
+fn openings_are_read_by_the_year_breakdown_alone() {
     let s = shared_month_with_openings();
     let (from, to) = month_range();
     let year =
@@ -1157,13 +1157,100 @@ fn openings_are_still_read_by_the_year_breakdown_and_the_bucket_totals() {
     assert_eq!(opening("matteo"), 10_000);
     assert_eq!(opening("elisa"), -1_500);
 
-    // A sum by kind over the whole ledger keeps them.
+    // The month's income and expense used to count them too, so the panel's
+    // hero disagreed with its by-person and category figures; now they are
+    // the ordinary rows only.
     let buckets =
         s.fx.core
             .bucket_totals(s.fx.vault, vec![from, to], None)
             .unwrap();
-    assert_eq!(buckets[0].income, 900 + 10_000);
-    assert_eq!(buckets[0].expense, 30 + 100 + 25 + 45 + 1_500);
+    assert_eq!(buckets[0].income, 900);
+    assert_eq!(buckets[0].expense, 30 + 100 + 25 + 45);
+}
+
+#[test]
+fn bucket_totals_leave_openings_out() {
+    let s = shared_month_with_openings();
+    // Both openings and elisa's ordinary 45 fall in the second bucket.
+    let bounds = vec![utc(T0), utc(T0 + 5 * DAY), utc(T0 + 30 * DAY)];
+    let sums = |person: Option<&str>| {
+        s.fx.core
+            .bucket_totals(s.fx.vault, bounds.clone(), person.map(str::to_string))
+            .unwrap()
+            .into_iter()
+            .map(|b| (b.income, b.expense, b.refund, b.net_expense))
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(sums(None), [(900, 155, 10, 145), (0, 45, 0, 45)]);
+    // Elisa's -1.500 card is no expense, her 45 beside it is.
+    assert_eq!(sums(Some("elisa")), [(0, 30, 0, 30), (0, 45, 0, 45)]);
+    // Matteo's 10.000 account is no income: nothing of his in bucket 1.
+    assert_eq!(sums(Some("matteo")), [(900, 125, 10, 115), (0, 0, 0, 0)]);
+}
+
+#[test]
+fn the_month_panel_figures_agree_with_wallets_opened_in_the_month() {
+    let s = shared_month_with_openings();
+    let (from, to) = month_range();
+    let core = &s.fx.core;
+    let vault = s.fx.vault;
+
+    // The hero: income and net expense of the month.
+    let hero = &core.bucket_totals(vault, vec![from, to], None).unwrap()[0];
+    assert_eq!((hero.income, hero.net_expense), (900, 190));
+
+    // The by-person card: every person's income less net expense over the
+    // envelopes adds up to the hero's savings, person by person too.
+    let matrix = core.flow_person_totals(vault, from, to).unwrap();
+    let saved = |person: &str| -> i64 {
+        matrix
+            .iter()
+            .filter(|r| r.person == person)
+            .map(|r| r.income - r.net_expense)
+            .sum()
+    };
+    let people = core.people(vault).unwrap();
+    assert_eq!(
+        people.iter().map(|p| saved(p)).sum::<i64>(),
+        hero.income - hero.net_expense
+    );
+    for person in &people {
+        let own = &core
+            .bucket_totals(vault, vec![from, to], Some(person.clone()))
+            .unwrap()[0];
+        assert_eq!(saved(person), own.income - own.net_expense, "{person}");
+    }
+
+    // The category list: no refund here exceeds its category's expenses,
+    // so the categories' net expenses add up to the hero's.
+    let categories = core.category_totals(vault, from, to, None).unwrap();
+    assert_eq!(
+        categories.iter().map(|c| c.net_expense).sum::<i64>(),
+        hero.net_expense
+    );
+
+    // A month whose only row is a wallet opened with 10.000 has nothing to
+    // show anywhere: no income, no savings, no activity by person.
+    let mut fx = setup();
+    open_wallet(&mut fx.core, fx.vault, "alice", "Conto", 10_000, T0 + DAY);
+    let only = &fx
+        .core
+        .bucket_totals(fx.vault, vec![from, to], None)
+        .unwrap()[0];
+    assert_eq!((only.income, only.net_expense), (0, 0));
+    assert!(
+        fx.core
+            .flow_person_totals(fx.vault, from, to)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        fx.core
+            .category_totals(fx.vault, from, to, None)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]

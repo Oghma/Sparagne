@@ -8,12 +8,13 @@
 //!
 //! A wallet's opening balance is posted as an income (an expense when
 //! negative) on Unallocated with the system category `Opening`, but it is
-//! neither earned nor spent: [`Core::year_breakdown`] reads it for FONDO CASSA,
-//! and [`Core::flow_person_totals`], [`Core::category_totals`],
-//! [`Core::category_bucket_totals`] and [`Core::top_expenses`] leave it out.
-//! [`Core::bucket_totals`] keeps it, a sum by kind over the whole ledger like
-//! `period_totals`, and so does [`Core::balance_breakdown`], where it is money
-//! that is there.
+//! neither earned nor spent. [`Core::bucket_totals`],
+//! [`Core::flow_person_totals`], [`Core::category_totals`],
+//! [`Core::category_bucket_totals`] and [`Core::top_expenses`] leave it out,
+//! so every income, expense and savings figure of the summary agrees.
+//! [`Core::year_breakdown`] reads it on purpose, for FONDO CASSA, and
+//! [`Core::balance_breakdown`] counts it as money that is there. Outside this
+//! module, [`Core::period_totals`] keeps it too: a plain sum by kind.
 //!
 //! [`Core::bucket_totals`], [`Core::year_breakdown`],
 //! [`Core::category_bucket_totals`] and [`Core::balance_breakdown`] take the
@@ -412,6 +413,12 @@ impl Core {
     /// Totals of the `bounds.len() - 1` consecutive ranges the boundaries
     /// describe: `[b0, b1)`, `[b1, b2)`, ... The app passes 13 month starts to
     /// get the twelve bars of a year, so leap years and DST stay in Swift.
+    ///
+    /// Wallets' opening balances are left out, as in
+    /// [`Core::flow_person_totals`] and [`Core::category_totals`], so the
+    /// month panel's income and savings agree with its by-person and category
+    /// figures: an opening balance is neither earned nor spent, and
+    /// [`Core::year_breakdown`] reads it for FONDO CASSA.
     pub fn bucket_totals(
         &self,
         vault_id: Uuid,
@@ -421,13 +428,17 @@ impl Core {
         check_bounds(&bounds, "bucket_totals")?;
 
         let edges: Vec<i64> = bounds.iter().map(|b| b.timestamp()).collect();
-        let (where_sql, args) = scope(
+        let (where_sql, args) = without_openings(scope(
             vault_id,
             bounds[0],
             bounds[bounds.len() - 1],
             person.as_deref(),
+        ));
+        let sql = format!(
+            "SELECT t.occurred_at, t.kind, t.amount
+             FROM transactions t JOIN categories c ON c.id = t.category_id
+             {where_sql}"
         );
-        let sql = format!("SELECT t.occurred_at, t.kind, t.amount FROM transactions t {where_sql}");
 
         // One pass over the range, bucketed in Rust: a year of a personal
         // ledger is a few thousand rows, and this keeps the SQL free of a
