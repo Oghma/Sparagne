@@ -71,6 +71,22 @@ cargo test
 cargo clippy --workspace --all-targets
 ```
 
+### Summary
+
+The Riepilogo tab (⌘1) is the year at a glance, up to the month on screen:
+a strip of what needs doing (recurring periods to decide, an allocation
+period waiting, rows without a category; a click opens the tab that deals
+with it), five cards of the month (income, expenses, savings, the savings
+rate and the fixed costs the recurring expenses commit), the capped
+envelopes with their bars, the month-by-month table (with a column per
+wallet when two or more move in the year, and one per person), the people
+and the envelopes of the year, the cash flow and the cash fund as charts,
+the year's expenses by category beside its ten heaviest (a click opens the
+row in the Mastro), and a months × categories grid. Only the month today
+falls in is drawn as still going, its last segment dashed and the cash fund
+projected to December at the pace of the finished months; a past month is a
+fact. The person chosen in the Mastro's filter is chosen here too.
+
 ### Allocation plan
 
 The Riparto tab (⌘4) shares out the incomes that reached Unallocated among
@@ -81,15 +97,7 @@ the total runs short. Nothing moves by itself: when a period is due the tab
 shows what each line would get, and you share it out (one transfer per
 envelope), skip the period, or reopen the latest decision to undo it. The
 tabs are Riepilogo (⌘1), Mastro (⌘2), Ricorrenze (⌘3), Riparto (⌘4) and
-Setup (⌘5). The Riepilogo is the year at a glance: a strip of what needs doing
-(recurring periods to decide, an allocation period waiting, rows without a
-category), five cards of the month (income, expenses, savings, savings rate,
-fixed costs), the capped envelopes, the month-by-month table (with a column
-per wallet when the vault has two or more moving, and per person), the
-envelopes and the people of the year, the cash flow and the cash fund as
-charts (the current month dashed, with a projection to December), the year's
-expenses by category beside its ten heaviest, and a months × categories grid.
-The person chosen in the Mastro's filter is chosen here too. The plan lives in the vault, so every member sees it and a
+Setup (⌘5). The plan lives in the vault, so every member sees it and a
 period is decided once; before creating one, upgrade every Mac that syncs
 (`docs/DEPLOY.md` §6.3). An income counts in one period only: edited or
 deleted after its period was shared out, it is not shared again; reopen the
