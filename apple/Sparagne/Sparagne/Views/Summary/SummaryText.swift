@@ -47,18 +47,6 @@ enum SummaryText {
         return (formatter.string(from: NSNumber(value: fraction * 100)) ?? "0") + "%"
     }
 
-    /// TASSO as the savings-rate card writes it (`LedgerMoney.savingsRate`):
-    /// `"73%"`, `"-26%"`, and `"< -100%"` once more than twice the income
-    /// went out, where the figure would only say how little came in. The
-    /// model hands the ratio already worked out (`YearMonth.rate`,
-    /// `PersonYear.rate`); `nil` without income, so the caller prints a
-    /// dash.
-    static func rate(_ rate: Double?) -> String? {
-        guard let rate else { return nil }
-        guard rate >= -1 else { return "< -100%" }
-        return percent(rate)
-    }
-
     // MARK: - Categories
 
     /// The core names its two system categories in English; the RIEPILOGO
@@ -89,7 +77,7 @@ enum SummaryText {
     ) -> String {
         switch kind {
         case .dueRecurring(let count):
-            return String(localized: "\(count) recurring to decide", bundle: bundle, locale: locale)
+            return String(localized: "\(count) recurring to confirm", bundle: bundle, locale: locale)
         case .pendingAllocation(let period, let missed):
             let day = RecurringDayText.weekday(period, locale: locale)
             let due = String(localized: "Allocation due \u{00B7} \(day)", bundle: bundle, locale: locale)

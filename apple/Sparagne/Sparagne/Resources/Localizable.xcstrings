@@ -737,7 +737,7 @@
         }
       }
     },
-    "%lld recurring to decide": {
+    "%lld recurring to confirm": {
       "localizations": {
         "en": {
           "variations": {
@@ -745,13 +745,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld recurring to decide"
+                  "value": "%lld recurring to confirm"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld recurring to decide"
+                  "value": "%lld recurring to confirm"
                 }
               }
             }
@@ -763,13 +763,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld ricorrenza da decidere"
+                  "value": "%lld ricorrenza da confermare"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld ricorrenze da decidere"
+                  "value": "%lld ricorrenze da confermare"
                 }
               }
             }

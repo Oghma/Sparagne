@@ -53,25 +53,6 @@ struct SummaryTextTests {
         #expect(SummaryText.percent(0.125, decimals: 1) == "12,5%")
     }
 
-    @Test("TASSO reads as the savings-rate card reads the same two figures")
-    func rateMatchesTheCard() {
-        let figures: [(savings: Int64, income: Int64)] = [(731, 1_000), (-260, 1_000), (0, 500), (-1_000, 1_000), (1_000, 1_000)]
-        for (savings, income) in figures {
-            #expect(SummaryText.rate(Double(savings) / Double(income)) == LedgerMoney.savingsRate(savings, of: income))
-        }
-    }
-
-    @Test("Past -100% a rate only says how little came in, as the card says it")
-    func rateBelowMinusOneHundredIsClamped() {
-        #expect(SummaryText.rate(-3_945) == "< -100%")
-        #expect(SummaryText.rate(-1.0001) == "< -100%")
-        #expect(SummaryText.rate(-1) == "-100%")
-    }
-
-    @Test func noRateIsNilForTheCallerToDash() {
-        #expect(SummaryText.rate(nil) == nil)
-    }
-
     @Test("A category of the vault keeps its name, even one called like a system category")
     func userCategoryKeepsItsName() {
         #expect(SummaryText.categoryName("spesa", isSystem: false) == "spesa")
@@ -100,8 +81,8 @@ struct SummaryTextTests {
         func chip(_ kind: SummaryTodoItem.Kind) -> String {
             SummaryText.todo(kind, bundle: catalog, locale: Self.english)
         }
-        #expect(chip(.dueRecurring(count: 1)) == "1 recurring to decide")
-        #expect(chip(.dueRecurring(count: 3)) == "3 recurring to decide")
+        #expect(chip(.dueRecurring(count: 1)) == "1 recurring to confirm")
+        #expect(chip(.dueRecurring(count: 3)) == "3 recurring to confirm")
         #expect(chip(.uncategorized(count: 1)) == "1 row without a category")
         #expect(chip(.uncategorized(count: 14)) == "14 rows without a category")
     }
@@ -126,8 +107,8 @@ struct SummaryTextTests {
         func chip(_ kind: SummaryTodoItem.Kind) -> String {
             SummaryText.todo(kind, bundle: catalog, locale: Self.italian)
         }
-        #expect(chip(.dueRecurring(count: 1)) == "1 ricorrenza da decidere")
-        #expect(chip(.dueRecurring(count: 2)) == "2 ricorrenze da decidere")
+        #expect(chip(.dueRecurring(count: 1)) == "1 ricorrenza da confermare")
+        #expect(chip(.dueRecurring(count: 2)) == "2 ricorrenze da confermare")
         #expect(chip(.uncategorized(count: 1)) == "1 riga senza categoria")
         #expect(
             chip(.pendingAllocation(period: "2026-09-27", missed: 1))
@@ -142,7 +123,7 @@ struct SummaryTextTests {
 private enum SummaryCatalog {
     static func english() throws -> Bundle {
         try bundle(language: "en", plurals: [
-            "%lld recurring to decide": ("%lld recurring to decide", "%lld recurring to decide"),
+            "%lld recurring to confirm": ("%lld recurring to confirm", "%lld recurring to confirm"),
             "%lld rows without a category": ("%lld row without a category", "%lld rows without a category"),
             "%lld earlier": ("%lld earlier", "%lld earlier"),
         ])
@@ -152,7 +133,7 @@ private enum SummaryCatalog {
         try bundle(
             language: "it",
             plurals: [
-                "%lld recurring to decide": ("%lld ricorrenza da decidere", "%lld ricorrenze da decidere"),
+                "%lld recurring to confirm": ("%lld ricorrenza da confermare", "%lld ricorrenze da confermare"),
                 "%lld rows without a category": ("%lld riga senza categoria", "%lld righe senza categoria"),
                 "%lld earlier": ("%lld precedente", "%lld precedenti"),
             ],

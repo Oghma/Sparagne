@@ -43,9 +43,9 @@ struct PersonYearCard: View {
             ),
             Line(
                 id: "rate", name: String(localized: "Rate"),
-                text: { SummaryText.rate($0.rate) ?? TransactionRow.placeholder },
-                tint: { $0.rate == nil ? Ink.text3 : Ink.text2 },
-                spoken: { SummaryText.rate($0.rate) ?? TransactionRow.placeholder }
+                text: { LedgerMoney.savingsRate($0.savings, of: $0.income) ?? TransactionRow.placeholder },
+                tint: { $0.income > 0 ? Ink.text2 : Ink.text3 },
+                spoken: { LedgerMoney.savingsRate($0.savings, of: $0.income) ?? TransactionRow.placeholder }
             ),
             Line(
                 id: "growth", name: String(localized: "Growth"),

@@ -205,14 +205,16 @@ struct YearTable: View {
     }
 
     /// TASSO, in the secondary ink: it restates RISPARMIO beside it as a
-    /// share. Empty on the opening row, which has no income to measure it
-    /// on; a dash on a future month, as every other cell of it, and on a
-    /// month without income, as the savings-rate card prints one.
+    /// share, worked out from the row's two figures by the same formatter as
+    /// the savings-rate card, so the two never round a half apart. Empty on
+    /// the opening row, which has no income to measure it on; a dash on a
+    /// future month, as every other cell of it, and on a month without
+    /// income, as the card prints one.
     private func rateCell(_ row: YearTableRow) -> some View {
         Group {
             if row.kind == .opening {
                 Text(verbatim: "")
-            } else if let rate = SummaryText.rate(row.rate) {
+            } else if let rate = LedgerMoney.savingsRate(row.savings ?? 0, of: row.income ?? 0) {
                 Text(rate).foregroundStyle(Ink.text2)
             } else {
                 Text(TransactionRow.placeholder).foregroundStyle(Ink.text3)
@@ -273,7 +275,7 @@ struct YearTable: View {
         add(String(localized: "Income"), row.income)
         add(String(localized: "Expenses"), row.cashExpense)
         add(String(localized: "Savings"), row.savings)
-        if let rate = SummaryText.rate(row.rate) {
+        if let rate = LedgerMoney.savingsRate(row.savings ?? 0, of: row.income ?? 0) {
             figures.append((String(localized: "Rate"), rate))
         }
         add(String(localized: "Cash fund"), row.carried)
