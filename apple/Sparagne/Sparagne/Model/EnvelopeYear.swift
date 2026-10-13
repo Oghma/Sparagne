@@ -32,6 +32,12 @@ struct EnvelopeYear: Hashable, Sendable {
     /// envelope x person matrix over January up to the month on screen,
     /// `balances` its `balance_breakdown` on the envelopes over the year's
     /// bounds (bucket 0 before January), `people` the columns.
+    ///
+    /// The balance sums every bucket up to the month on screen, bucket 0
+    /// included, so it is where the envelope stood at the end of that month,
+    /// moves of the allocation plan and all. Income and expense come from the
+    /// matrix instead, which reads income, expense and refund rows only: a
+    /// move between envelopes is neither earned nor spent.
     static func build(
         flows: [FlowView],
         flowPerson: [FlowPersonTotals],
@@ -39,8 +45,41 @@ struct EnvelopeYear: Hashable, Sendable {
         upTo: MonthKey,
         people: [String]
     ) -> EnvelopeYear {
-        // A stub for now.
-        _ = (flows, flowPerson, balances, upTo)
-        return EnvelopeYear(people: people, rows: [])
+        var balance: [Uuid: Int64] = [:]
+        for delta in balances where delta.bucket <= upTo.month {
+            balance[delta.targetId, default: 0] += delta.delta
+        }
+        var lines: [Uuid: [FlowPersonTotals]] = [:]
+        for line in flowPerson { lines[line.flowId, default: []].append(line) }
+
+        let ordered = flows.filter(\.isUnallocated) + flows.filter { !$0.isUnallocated }
+        let rows = ordered.map { flow in
+            let flowLines = lines[flow.id, default: []]
+            return EnvelopeYearRow(
+                id: flow.id,
+                name: flow.name,
+                isUnallocated: flow.isUnallocated,
+                capKind: Self.capKind(flow.mode),
+                balance: balance[flow.id, default: 0],
+                income: flowLines.reduce(0) { $0 + $1.income },
+                // The core nets expense against refund per envelope and
+                // person; the envelope's figure is the sum of those.
+                expense: flowLines.reduce(0) { $0 + $1.netExpense },
+                expenseByPerson: people.map { name in
+                    flowLines.filter { $0.person == name }.reduce(0) { $0 + $1.netExpense }
+                }
+            )
+        }
+        return EnvelopeYear(people: people, rows: rows)
+    }
+
+    /// What the cap is measured on, as the fund cards say it; `nil` without
+    /// a cap.
+    private static func capKind(_ mode: FlowMode) -> FundGauge.Kind? {
+        switch mode {
+        case .unlimited: nil
+        case .netCapped: .balance
+        case .incomeCapped: .income
+        }
     }
 }
