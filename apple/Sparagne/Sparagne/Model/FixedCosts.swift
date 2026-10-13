@@ -18,8 +18,14 @@ struct FixedCosts: Hashable, Sendable {
     /// The income is the average of the finished months, not of the month on
     /// screen: a live month has not been paid in full yet, and one month's
     /// salary is too uneven to measure a commitment on.
+    ///
+    /// Under PERSONA (`year.person`) the year's income is that person's, so
+    /// only the templates whose rows are theirs (`owner`, as a row's person)
+    /// are measured on it: the household's rent over one salary would be a
+    /// share nobody pays.
     static func build(templates: [RecurringView], year: YearSummary) -> FixedCosts? {
-        let monthly = RecurringMonthly.totals(templates).expenses
+        let owned = year.person.map { person in templates.filter { $0.owner == person } } ?? templates
+        let monthly = RecurringMonthly.totals(owned).expenses
         guard monthly != 0 else { return nil }
         let finished = year.finished
         var shareOfIncome: Double?

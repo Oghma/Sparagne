@@ -87,4 +87,44 @@ struct FixedCostsTests {
         #expect(FixedCosts.build(templates: [], year: year) == nil)
         #expect(FixedCosts.build(templates: Array(Self.templates.dropFirst()), year: year) == nil)
     }
+
+    // MARK: - PERSONA
+
+    /// Elisa earns 1.500 a month and Matteo 2.500, January to March; the rent
+    /// is Matteo's, the gym Elisa's.
+    private static func household(person: String?) -> YearSummary {
+        let rows = (1...3).flatMap { month in
+            [
+                YearRow(bucket: month, person: "elisa", income: 150_000, opening: 0, cashExpense: 0, fundExpense: 0),
+                YearRow(bucket: month, person: "matteo", income: 250_000, opening: 0, cashExpense: 0, fundExpense: 0),
+            ]
+        }
+        return YearSummary.build(year: 2026, upTo: april, rows: rows, flows: [], person: person, today: april)
+    }
+
+    private static var householdTemplates: [RecurringView] {
+        [
+            RecurringFixture.template(amount: 100_000, note: "affitto", owner: "matteo"),
+            RecurringFixture.template(amount: 15_000, note: "palestra", owner: "elisa"),
+        ]
+    }
+
+    @Test("Everybody's fixed costs are measured on everybody's income")
+    func everybody() throws {
+        let costs = try #require(FixedCosts.build(templates: Self.householdTemplates, year: Self.household(person: nil)))
+        #expect(costs.monthly == 115_000)
+        #expect(costs.shareOfIncome == 115_000.0 / 400_000.0)
+    }
+
+    @Test("Under PERSONA only the person's own templates are measured on the person's income")
+    func underPersona() throws {
+        let elisa = try #require(FixedCosts.build(templates: Self.householdTemplates, year: Self.household(person: "elisa")))
+        #expect(elisa.monthly == 15_000)
+        #expect(elisa.shareOfIncome == 0.1)
+        let matteo = try #require(FixedCosts.build(templates: Self.householdTemplates, year: Self.household(person: "matteo")))
+        #expect(matteo.monthly == 100_000)
+        #expect(matteo.shareOfIncome == 0.4)
+        // Somebody with no template of their own has no fixed costs.
+        #expect(FixedCosts.build(templates: Self.householdTemplates, year: Self.household(person: "giulia")) == nil)
+    }
 }
