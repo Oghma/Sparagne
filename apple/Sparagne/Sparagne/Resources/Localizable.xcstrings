@@ -3193,6 +3193,62 @@
         }
       }
     },
+    "Envelope Change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envelope Change"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cambio busta"
+          }
+        }
+      }
+    },
+    "Envelope of %lld rows": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Envelope of %lld row"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Envelope of %lld rows"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Busta di %lld riga"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Busta di %lld righe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Envelopes": {
       "localizations": {
         "en": {
@@ -7373,6 +7429,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Imposta categoria…"
+          }
+        }
+      }
+    },
+    "Set Envelope": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Envelope"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imposta busta"
+          }
+        }
+      }
+    },
+    "Set Envelope…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Envelope…"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imposta busta…"
           }
         }
       }

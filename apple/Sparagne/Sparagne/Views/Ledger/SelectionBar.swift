@@ -12,6 +12,8 @@ struct SelectionBar: View {
     @Bindable var store: AppStore
     /// "Set Category…", from this bar or from a selected row's context menu.
     @Binding var showsCategory: Bool
+    /// "Set Envelope…", the same way.
+    @Binding var showsEnvelope: Bool
 
     var body: some View {
         let targets = store.bulkTargets.count
@@ -30,6 +32,12 @@ struct SelectionBar: View {
                 .disabled(targets == 0)
                 .popover(isPresented: $showsCategory, arrowEdge: .top) {
                     BulkCategoryPopover(store: store, isPresented: $showsCategory)
+                }
+            Button(String(localized: "Set Envelope\u{2026}")) { showsEnvelope = true }
+                .buttonStyle(RowButtonStyle())
+                .disabled(targets == 0)
+                .popover(isPresented: $showsEnvelope, arrowEdge: .top) {
+                    BulkEnvelopePopover(store: store, isPresented: $showsEnvelope)
                 }
             Spacer()
             KeyHint(key: "\u{232B}", label: String(localized: "delete"))
@@ -92,5 +100,74 @@ struct BulkCategoryPopover: View {
         let chosen = name
         isPresented = false
         Task { await store.setSelectionCategory(chosen) }
+    }
+}
+
+/// "Set Envelope…": the ENVELOPE cell's list, for every selected row at once
+/// (`EnvelopeChoiceModel`). Typing narrows it, ↑↓ move in it, ↩, ⇥ or a click
+/// moves the rows to the highlighted envelope and dismisses; esc dismisses
+/// and nothing moves. The envelope the rows share, if they all share one,
+/// is ticked.
+struct BulkEnvelopePopover: View {
+    @Bindable var store: AppStore
+    @Binding var isPresented: Bool
+
+    @State private var query = ""
+    @State private var choices = EnvelopeChoiceModel()
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: String(localized: "Envelope of \(store.bulkTargets.count) rows"))
+            TextField(String(localized: "Envelope"), text: $query)
+                .textFieldStyle(.plain)
+                .font(Face.row)
+                .foregroundStyle(Ink.text)
+                .focused($focused)
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .background(Ink.bg, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Ink.line2, lineWidth: 1))
+                .onKeyPress(.upArrow) {
+                    choices.move(by: -1)
+                    return .handled
+                }
+                .onKeyPress(.downArrow) {
+                    choices.move(by: 1)
+                    return .handled
+                }
+                .onKeyPress(.tab) {
+                    choices.pick()
+                    return .handled
+                }
+                .onSubmit { choices.pick() }
+                .onChange(of: query) { _, new in choices.filter(new) }
+            if choices.isOpen {
+                EnvelopeChoiceList(choices: choices)
+            }
+            HStack {
+                Spacer()
+                Button(String(localized: "Cancel"), role: .cancel) { isPresented = false }
+                Button(String(localized: "Set Envelope")) { choices.pick() }
+                    .disabled(choices.selected == nil)
+            }
+        }
+        .padding(14)
+        .frame(width: FloatingList.width + 28)
+        .background(Ink.card)
+        .onAppear {
+            choices.open(
+                owner: "bulk",
+                envelopes: EnvelopeChoiceModel.envelopes(in: store),
+                current: store.bulkEnvelope,
+                write: apply
+            )
+            focused = true
+        }
+    }
+
+    private func apply(_ flowId: Uuid) {
+        isPresented = false
+        Task { await store.setSelectionEnvelope(flowId) }
     }
 }

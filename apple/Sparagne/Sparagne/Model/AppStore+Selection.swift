@@ -2,8 +2,8 @@ import Foundation
 import SparagneCore
 
 /// Row selection and the bulk actions over it: ⌘-click, ⇧-click and ⌘A pick
-/// rows of the ledger, the selection bar voids them or files them under one
-/// category.
+/// rows of the ledger, the selection bar voids them, files them under one
+/// category or moves them to one envelope.
 ///
 /// The gestures only say which rows; the grid decides which gesture a click
 /// was (`LedgerGrid.open`), so everything here runs without a window.
@@ -70,5 +70,35 @@ extension AppStore {
         }
         guard await apply(Self.updates(forward), in: vault.id) else { return }
         recordPatches(forward, inverse: inverse, vaultId: vault.id, name: String(localized: "Category Change"))
+    }
+
+    /// "Set Envelope…": every target moved to `flowId` in one batch, all or
+    /// nothing, as "Set Category…" is. A row already on it is left out, so
+    /// nothing is sent, and nothing is undone, for it. An envelope that may
+    /// not go negative refuses the batch when the rows would take it below
+    /// zero, and every row stays where it was.
+    ///
+    /// One undo step puts every row back on its own envelope. The rows stay
+    /// selected, so the next action can follow on the same ones.
+    func setSelectionEnvelope(_ flowId: Uuid) async {
+        guard let vault = currentVault else { return }
+        let forward = bulkTargets
+            .filter { $0.flowId != flowId }
+            .map { RowPatch(id: $0.id, patch: TransactionPatch(flowId: flowId)) }
+        guard !forward.isEmpty else { return }
+        // Read before the write: undo puts back what is stored now.
+        let inverse = forward.compactMap { change in
+            storedInverse(of: change.patch, for: change.id).map { RowPatch(id: change.id, patch: $0) }
+        }
+        guard await apply(Self.updates(forward), in: vault.id) else { return }
+        recordPatches(forward, inverse: inverse, vaultId: vault.id, name: String(localized: "Envelope Change"))
+    }
+
+    /// The envelope every target is on, when they all share one: the list of
+    /// "Set Envelope…" ticks it. `nil` when they are spread over several.
+    var bulkEnvelope: Uuid? {
+        let envelopes = Set(bulkTargets.map(\.flowId))
+        guard envelopes.count == 1 else { return nil }
+        return envelopes.first ?? nil
     }
 }

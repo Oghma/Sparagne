@@ -41,6 +41,8 @@ struct LedgerGrid: View {
     @FocusState private var gridFocused: Bool
     /// "Set Category…", from the selection bar or a selected row's menu.
     @State private var showsBulkCategory = false
+    /// "Set Envelope…", the same way.
+    @State private var showsBulkEnvelope = false
     /// The list under the CATEGORY cell being typed into: one for the whole
     /// grid, drawn over it rather than inside a row (`completionList`).
     @State private var completion = CategoryCompletionModel()
@@ -62,7 +64,7 @@ struct LedgerGrid: View {
             // With rows picked, a line under the sheet says what can be done
             // to all of them at once.
             if store.canWrite, store.selection.count > 1 {
-                SelectionBar(store: store, showsCategory: $showsBulkCategory)
+                SelectionBar(store: store, showsCategory: $showsBulkCategory, showsEnvelope: $showsBulkEnvelope)
             }
         }
         .overlayPreferenceValue(CategoryCompletionAnchor.self) { anchor in
@@ -316,6 +318,8 @@ struct LedgerGrid: View {
     private var bulkMenu: some View {
         let targets = store.bulkTargets.count
         Button(String(localized: "Set Category\u{2026}")) { showsBulkCategory = true }
+            .disabled(targets == 0)
+        Button(String(localized: "Set Envelope\u{2026}")) { showsBulkEnvelope = true }
             .disabled(targets == 0)
         Divider()
         Button(String(localized: "Delete \(targets) Rows"), role: .destructive) {
