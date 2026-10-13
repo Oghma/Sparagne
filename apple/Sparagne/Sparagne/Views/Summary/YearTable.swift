@@ -11,7 +11,10 @@ struct YearTable: View {
     let year: YearSummary
 
     private static let monthWidth: CGFloat = 116
-    private static let figureWidth: CGFloat = 92
+    /// `-12.345,67` and its padding. Two wallets and two people make ten
+    /// figures across: at this width they still fit the narrowest window
+    /// without scrolling.
+    private static let figureWidth: CGFloat = 88
     /// TASSO holds `-26%` at most, `< -100%` at worst: it sits close to
     /// RISPARMIO, the figure it is the share of, at the same width in a wide
     /// window as in a narrow one.
@@ -90,9 +93,12 @@ struct YearTable: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
     }
 
+    /// A long title ("Fund expenses") narrows a little rather than lose its
+    /// end on the narrowest window.
     private func headerTitle(_ title: String, flexible: Bool) -> some View {
         Text(title)
             .lineLimit(1)
+            .minimumScaleFactor(0.85)
             .padding(.horizontal, Metrics.cellPad)
             .frame(minWidth: Self.figureWidth, maxWidth: flexible ? .infinity : Self.figureWidth, alignment: .trailing)
     }
