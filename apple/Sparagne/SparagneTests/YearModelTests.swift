@@ -43,9 +43,9 @@ struct YearModelTests {
     }
 
     private static func build(
-        year: Int = 2026, rows: [YearRow], flows: [FlowView] = [], upTo: MonthKey = upTo
+        year: Int = 2026, rows: [YearRow], flows: [FlowView] = [], upTo: MonthKey = upTo, vaultPeople: [String] = []
     ) -> YearSummary {
-        YearSummary.build(year: year, upTo: upTo, rows: rows, flows: flows)
+        YearSummary.build(year: year, upTo: upTo, rows: rows, flows: flows, vaultPeople: vaultPeople)
     }
 
     // MARK: - People and the opening cash fund
@@ -54,6 +54,17 @@ struct YearModelTests {
     func peopleAreColumns() {
         let year = Self.build(rows: Self.household)
         #expect(year.people == ["elisa", "matteo"])
+    }
+
+    @Test("A year with no rows for someone in the vault still has their column, at zero")
+    func everyYearHasTheVaultsColumns() {
+        let empty = Self.build(year: 2025, rows: [], upTo: MonthKey(year: 2025, month: 12), vaultPeople: ["matteo"])
+        #expect(empty.people == ["matteo"])
+        #expect(empty.initialByPerson == [0])
+        #expect(empty.months.allSatisfy { $0.totalByPerson == [0] })
+
+        let merged = Self.build(rows: [Self.row(1, "Elisa", income: 100)], vaultPeople: ["matteo", "Elisa"])
+        #expect(merged.people == ["Elisa", "matteo"])
     }
 
     @Test("FONDO CASSA INIZIALE is everything that happened before January")

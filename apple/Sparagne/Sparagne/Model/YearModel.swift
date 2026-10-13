@@ -256,8 +256,19 @@ struct YearSummary: Sendable {
 
     /// Pure arithmetic over the query's rows and the vault's envelopes, so it
     /// can be tested without a database.
-    static func build(year: Int, upTo: MonthKey, rows: [YearRow], flows: [FlowView]) -> YearSummary {
-        let people = Self.people(in: rows)
+    ///
+    /// `vaultPeople` are the persons of every live row of the vault
+    /// (`AppStore.peopleInRows`): each gets a column in every year, so a year
+    /// before someone's first row, or one viewed at a month before it, has
+    /// the same columns as the rest, at zero.
+    static func build(
+        year: Int,
+        upTo: MonthKey,
+        rows: [YearRow],
+        flows: [FlowView],
+        vaultPeople: [String] = []
+    ) -> YearSummary {
+        let people = Self.people(in: rows, vaultPeople: vaultPeople)
         var byBucket: [Int: [YearRow]] = [:]
         for row in rows { byBucket[row.bucket, default: []].append(row) }
 
@@ -317,11 +328,11 @@ struct YearSummary: Sendable {
     /// One column per person, de-duplicated in the core's order and then
     /// sorted case-insensitively, so two runs of the same vault always put
     /// the columns in the same place.
-    private static func people(in rows: [YearRow]) -> [String] {
+    private static func people(in rows: [YearRow], vaultPeople: [String]) -> [String] {
         var seen = Set<String>()
         var people: [String] = []
-        for row in rows where seen.insert(row.person).inserted {
-            people.append(row.person)
+        for person in vaultPeople + rows.map(\.person) where seen.insert(person).inserted {
+            people.append(person)
         }
         return people.sorted { $0.lowercased() < $1.lowercased() }
     }

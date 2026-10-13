@@ -40,12 +40,11 @@ struct SummaryView: View {
         .background(Ink.sheet)
     }
 
-    /// A fresh vault: nothing carried in, nothing moved all year.
-    private var isBlank: Bool {
-        year.initial == 0 && year.months.allSatisfy {
-            $0.income == 0 && $0.cashExpense == 0 && $0.fundExpense == 0 && $0.total == 0
-        }
-    }
+    /// A fresh vault: not one live row, in any year. A year that is only
+    /// empty still draws its table, of zeros and dashes, so every year reads
+    /// the same: whether the year has rows after the month on screen, or
+    /// before it in another year, changes nothing on screen.
+    private var isBlank: Bool { store.peopleInRows.isEmpty }
 
     /// `2026  fino a ottobre`. A past year has no "up to": it is full.
     private var heading: some View {

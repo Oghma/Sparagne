@@ -673,7 +673,7 @@ final class AppStore {
                 fundExpense: $0.fundExpense
             )
         }
-        return YearSummary.build(year: month.year, upTo: month, rows: rows, flows: flows)
+        return YearSummary.build(year: month.year, upTo: month, rows: rows, flows: flows, vaultPeople: loaded.people)
     }
 
     /// Appends the next page, if any: the grid asks when its last row comes
