@@ -20,8 +20,29 @@ extension AppStore {
     /// One of the RIEPILOGO's top expenses was clicked: the Mastro on the
     /// row's month, the row selected and scrolled into view once
     /// (`revealedRow`, which the grid consumes).
+    ///
+    /// The list has to be one the row is in: USCITE, with nothing searched.
+    /// PERSONA stays as it is, since the top expenses were read with it. The
+    /// selection waits for the reload the month or the direction queue, and
+    /// `reload()` makes it; on a vault only read there is none, and the grid
+    /// only scrolls.
     func reveal(transactionId: Uuid, occurredAt: OffsetDateTime) {
-        // A stub for now.
-        _ = (transactionId, occurredAt)
+        guard let date = CoreDate.date(occurredAt) else { return }
+        let target = MonthKey(date)
+        let queuesReload = month != target || direction != .expenses
+        let searched = !searchText.isEmpty
+        revealedRow = transactionId
+        tab = .ledger
+        direction = .expenses
+        searchText = ""
+        month = target
+        guard !queuesReload else { return }
+        // The month on screen already: a search narrowed it, and the list
+        // has to come back whole; otherwise the row is there now.
+        if searched {
+            scheduleReload()
+        } else {
+            selectRevealedRow()
+        }
     }
 }

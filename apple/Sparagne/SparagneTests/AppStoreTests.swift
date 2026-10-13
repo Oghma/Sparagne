@@ -496,6 +496,139 @@ struct AppStoreTests {
             #expect(store.rows.filter { $0.note == "Rent" }.count == countBefore)
         }
     }
+
+    // MARK: - The RIEPILOGO
+
+    @Test("The summary's categories, envelopes, top expenses and strip come from the same load as its table")
+    func summaryExtras() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-12.50 pizza #food")
+        #expect(store.presentedError == nil)
+
+        let year = try #require(store.year)
+        // The month on screen is the month of today.
+        #expect(year.today == store.month)
+        #expect(year.isLive)
+        #expect(store.yearCategories.map(\.name) == ["food"])
+        #expect(store.yearCategories.first?.amount == 1250)
+        #expect(store.yearCategories.first?.share == 1)
+        #expect(store.categoryHeat?.rows.map(\.name) == ["food"])
+        #expect(store.topExpenses.map(\.note) == ["pizza"])
+        let envelopes = try #require(store.envelopeYear)
+        #expect(envelopes.rows.first?.isUnallocated == true)
+        #expect(envelopes.rows.count == store.flows.count)
+        #expect(envelopes.rows.reduce(0) { $0 + $1.expense } == 1250)
+        #expect(envelopes.people == year.people)
+        // No template, no plan, every row with a category.
+        #expect(store.fixedCosts == nil)
+        #expect(store.summaryTodo.isEmpty)
+        // The load carries every template, so the Ricorrenze tab needs no
+        // visit of its own to be current.
+        #expect(store.recurringTemplates.isEmpty)
+    }
+
+    @Test("A recurring expense shows in the summary's fixed costs and its due periods on the strip")
+    func summaryFixedCostsAndStrip() async throws {
+        let store = try await Self.onboarded()
+        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
+        await store.createRecurring(
+            kind: .expense,
+            amount: 50_000,
+            walletId: nil,
+            flowId: nil,
+            category: "Casa",
+            note: "affitto",
+            schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: CoreDate.day(monthAgo), endDate: nil)
+        )
+        #expect(store.presentedError == nil)
+        #expect(store.fixedCosts?.monthly == 50_000)
+        #expect(store.dueRecurringCount > 0)
+        #expect(store.summaryTodo.first?.kind == .dueRecurring(count: store.dueRecurringCount))
+        #expect(store.summaryTodo.first?.tab == .recurring)
+    }
+
+    @Test("Revealing a top expense opens the Mastro on its month, the row selected for the grid to scroll to")
+    func revealTopExpense() async throws {
+        let store = try await Self.onboarded()
+        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
+        store.month = MonthKey(monthAgo)
+        await store.settle()
+        await store.addRow(day: monthAgo, flowId: nil, category: "food", note: "pizza", amount: 1_250)
+        #expect(store.presentedError == nil)
+        let pizza = try #require(store.transactions.first { $0.note == "pizza" })
+
+        // Somewhere else: this month, the income, a search, the summary.
+        store.month = MonthKey(Date())
+        store.direction = .income
+        store.searchText = "affitto"
+        store.tab = .summary
+        await store.settle()
+
+        store.reveal(transactionId: pizza.id, occurredAt: pizza.occurredAt)
+        await store.settle()
+
+        #expect(store.tab == .ledger)
+        #expect(store.month == MonthKey(monthAgo))
+        #expect(store.direction == .expenses)
+        #expect(store.searchText.isEmpty)
+        #expect(store.rows.contains { $0.id == pizza.id })
+        #expect(store.selection.ids == [pizza.id])
+        #expect(store.revealedRow == pizza.id)
+    }
+
+    @Test("Revealing a row of the month on screen selects it at once, and a search on it is cleared by a reload")
+    func revealOnTheMonthOnScreen() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-12.50 pizza #food")
+        await store.submit(quickAdd: "-3.00 caffè #bar")
+        let pizza = try #require(store.topExpenses.first { $0.note == "pizza" })
+        store.tab = .summary
+
+        store.reveal(transactionId: pizza.transactionId, occurredAt: pizza.occurredAt)
+        #expect(store.selection.ids == [pizza.transactionId])
+        #expect(store.tab == .ledger)
+
+        // A search that hides the row: the list comes back whole.
+        store.searchText = "caffè"
+        await store.reload()
+        #expect(!store.rows.contains { $0.id == pizza.transactionId })
+        store.reveal(transactionId: pizza.transactionId, occurredAt: pizza.occurredAt)
+        await store.settle()
+        #expect(store.searchText.isEmpty)
+        #expect(store.selection.ids == [pizza.transactionId])
+    }
+
+    @Test("On a vault only read, revealing moves to the row without selecting it")
+    func revealReadOnly() async throws {
+        let store = try await Self.onboarded()
+        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
+        store.month = MonthKey(monthAgo)
+        await store.settle()
+        await store.addRow(day: monthAgo, flowId: nil, category: "food", note: "pizza", amount: 1_250)
+        let pizza = try #require(store.transactions.first { $0.note == "pizza" })
+        store.month = MonthKey(Date())
+        await store.settle()
+        store.setReadOnlyVaults([try #require(store.currentVault?.id)])
+
+        store.reveal(transactionId: pizza.id, occurredAt: pizza.occurredAt)
+        await store.settle()
+
+        #expect(store.tab == .ledger)
+        #expect(store.month == MonthKey(monthAgo))
+        #expect(store.revealedRow == pizza.id)
+        #expect(store.rows.contains { $0.id == pizza.id })
+        #expect(store.selection.isEmpty)
+    }
+
+    @Test("A date the app cannot read reveals nothing")
+    func revealUnreadableDate() async throws {
+        let store = try await Self.onboarded()
+        let month = store.month
+        store.reveal(transactionId: "nope", occurredAt: "not a date")
+        #expect(store.tab == .summary)
+        #expect(store.month == month)
+        #expect(store.revealedRow == nil)
+    }
 }
 
 struct MonthKeyTests {
