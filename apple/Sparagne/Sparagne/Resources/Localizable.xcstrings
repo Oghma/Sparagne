@@ -193,6 +193,22 @@
         }
       }
     },
+    "%@ of average income": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of average income"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ delle entrate medie"
+          }
+        }
+      }
+    },
     "%@ of income": {
       "localizations": {
         "en": {
@@ -481,6 +497,46 @@
         }
       }
     },
+    "%lld earlier": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld earlier"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld earlier"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld precedente"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld precedenti"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld earlier periods included": {
       "localizations": {
         "en": {
@@ -681,6 +737,46 @@
         }
       }
     },
+    "%lld recurring to decide": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld recurring to decide"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld recurring to decide"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ricorrenza da decidere"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ricorrenze da decidere"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld refused": {
       "localizations": {
         "en": {
@@ -754,6 +850,46 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld righe selezionate"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld rows without a category": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld row without a category"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rows without a category"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld riga senza categoria"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld righe senza categoria"
                 }
               }
             }
@@ -1301,6 +1437,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Riparto"
+          }
+        }
+      }
+    },
+    "Allocation due · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allocation due · %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riparto in attesa · %@"
           }
         }
       }
@@ -3665,6 +3817,22 @@
         }
       }
     },
+    "Expenses by category · year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expenses by category · year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uscite per categoria · anno"
+          }
+        }
+      }
+    },
     "Expenses · %@": {
       "localizations": {
         "en": {
@@ -3825,6 +3993,22 @@
         }
       }
     },
+    "Fixed costs · monthly": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed costs · monthly"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spese fisse · al mese"
+          }
+        }
+      }
+    },
     "Fixed expenses a month": {
       "localizations": {
         "en": {
@@ -3981,6 +4165,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vai a %@"
+          }
+        }
+      }
+    },
+    "Growth": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Growth"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crescita"
+          }
+        }
+      }
+    },
+    "Heaviest expenses · year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heaviest expenses · year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uscite più grosse dell'anno"
           }
         }
       }
@@ -4921,6 +5137,22 @@
         }
       }
     },
+    "Months × categories": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Months × categories"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mesi × categorie"
+          }
+        }
+      }
+    },
     "More actions": {
       "localizations": {
         "en": {
@@ -5609,6 +5841,22 @@
         }
       }
     },
+    "No expenses this year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No expenses this year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna uscita quest'anno"
+          }
+        }
+      }
+    },
     "No income reached Unallocated": {
       "localizations": {
         "en": {
@@ -5893,6 +6141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nessuna spesa questo mese"
+          }
+        }
+      }
+    },
+    "Nothing spent this year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing spent this year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna spesa quest'anno"
           }
         }
       }
@@ -6185,6 +6449,22 @@
         }
       }
     },
+    "Other": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "altre"
+          }
+        }
+      }
+    },
     "Other Value": {
       "localizations": {
         "en": {
@@ -6469,6 +6749,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aggiunta rapida…"
+          }
+        }
+      }
+    },
+    "Rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasso"
           }
         }
       }
@@ -7637,6 +7933,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mostra nel Finder"
+          }
+        }
+      }
+    },
+    "Show in the ledger": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show in the ledger"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra nel Mastro"
           }
         }
       }
@@ -10329,6 +10641,22 @@
         }
       }
     },
+    "balance at month end · income and expenses of the year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "balance at month end · income and expenses of the year"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "saldo a fine mese · entrate e uscite dell'anno"
+          }
+        }
+      }
+    },
     "balance on %@ %@": {
       "localizations": {
         "en": {
@@ -11017,6 +11345,22 @@
         }
       }
     },
+    "no recurring expenses": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no recurring expenses"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nessuna uscita ricorrente"
+          }
+        }
+      }
+    },
     "not an amount": {
       "localizations": {
         "en": {
@@ -11173,6 +11517,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "percentuali %1$@ · fissi %2$@"
+          }
+        }
+      }
+    },
+    "projected year end %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "projected year end %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fine anno prevista %@"
           }
         }
       }
