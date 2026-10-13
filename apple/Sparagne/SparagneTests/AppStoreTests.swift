@@ -678,7 +678,7 @@ struct AppStoreTests {
 
     // MARK: - The RIEPILOGO under PERSONA and on a vault only read
 
-    @Test("The envelope table keeps every person's column under PERSONA, its figures being everybody's")
+    @Test("The envelope table's people and figures stay everybody's under PERSONA; the view decides what it draws")
     func envelopePeopleIgnoreThePersonFilter() async throws {
         let store = try await Self.onboarded()
         await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 1_000, person: "elisa")

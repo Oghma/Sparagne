@@ -102,7 +102,7 @@ private struct KPICard: View {
         // reads "Income · September, 1,234.56, 4,250.00 in August" instead of
         // three separate swipes.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(AccessibilityText.card(title: title, value: value, caption: caption ?? ""))
+        .accessibilityLabel(AccessibilityText.card(title: title, value: value, caption: caption))
     }
 }
 

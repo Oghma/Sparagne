@@ -181,10 +181,11 @@ struct LedgerStoreTests {
         let (store, envelope) = try await Self.household()
         let summary = try #require(store.summary)
 
-        // 100.00 opening + 3000.00 salary in, 950.00 + 50.00 out.
-        #expect(summary.totals.income == 400_000)
+        // 3000.00 salary in, 950.00 + 50.00 out: the 100.00 opening balance
+        // is neither earned nor spent, so it feeds the cash fund alone.
+        #expect(summary.totals.income == 300_000)
         #expect(summary.totals.netExpense == 100_000)
-        #expect(summary.savings == 300_000)
+        #expect(summary.savings == 200_000)
         #expect(summary.netExpense(flow: envelope.id) == 100_000)
 
         // Heaviest category first.
@@ -194,7 +195,7 @@ struct LedgerStoreTests {
         // Twelve buckets ending with this month.
         #expect(summary.trailing.count == 12)
         #expect(summary.trailingMonths.last == store.month)
-        #expect(summary.trailing.last?.income == 400_000)
+        #expect(summary.trailing.last?.income == 300_000)
 
         #expect(summary.spendByPerson.first?.person == "matteo")
     }

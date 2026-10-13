@@ -59,7 +59,9 @@ struct TopExpensesCard: View {
                     .foregroundStyle(Ink.text)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(category)
+                // A row without a note is titled by its category, which is
+                // then not repeated beside it.
+                Text(note == nil ? "" : category)
                     .foregroundStyle(Ink.text2)
                     .truncationMode(.tail)
                     .frame(width: Self.categoryWidth, alignment: .leading)

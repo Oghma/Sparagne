@@ -4196,7 +4196,7 @@
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uscite più grosse dell'anno"
+            "value": "Uscite più grosse · anno"
           }
         }
       }
@@ -6460,7 +6460,7 @@
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "altre"
+            "value": "Altre"
           }
         }
       }
