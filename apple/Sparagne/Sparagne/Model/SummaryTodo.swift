@@ -37,8 +37,26 @@ enum SummaryTodo {
         pendingAllocation: PendingAllocation?,
         yearCategories: [CategoryTotals]
     ) -> [SummaryTodoItem] {
-        // A stub for now.
-        _ = (dueRecurring, pendingAllocation, yearCategories)
-        return []
+        var items: [SummaryTodoItem] = []
+        if dueRecurring > 0 {
+            items.append(SummaryTodoItem(kind: .dueRecurring(count: dueRecurring), tab: .recurring))
+        }
+        if let pending = pendingAllocation {
+            items.append(
+                SummaryTodoItem(
+                    kind: .pendingAllocation(period: pending.periodDate, missed: Int(pending.missed)),
+                    tab: .allocation
+                )
+            )
+        }
+        // The system category's name, not its localized label: the core
+        // keeps it in English whatever the window's language.
+        let uncategorized = yearCategories
+            .filter { $0.isSystem && $0.name.lowercased() == "uncategorized" }
+            .reduce(0) { $0 + Int($1.count) }
+        if uncategorized > 0 {
+            items.append(SummaryTodoItem(kind: .uncategorized(count: uncategorized), tab: .ledger))
+        }
+        return items
     }
 }
