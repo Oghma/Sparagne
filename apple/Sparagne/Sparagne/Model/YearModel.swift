@@ -114,7 +114,9 @@ struct YearMonth: Hashable, Sendable {
 struct Projection: Hashable, Sendable {
     /// The finished months the pace is read from.
     let finishedMonths: Int
-    /// `(TOTALE of the last finished month - initial) / finishedMonths`.
+    /// What the finished months earned less everything they spent, cash and
+    /// funds, over `finishedMonths`: the move of TOTALE without the wallets
+    /// opened meanwhile, which are money found, not money saved.
     let monthlyGrowth: Int64
     /// That TOTALE plus `monthlyGrowth` for every month still to come.
     let yearEnd: Int64
@@ -234,7 +236,8 @@ struct YearSummary: Sendable {
     /// The month on screen: decides the year and which months are future.
     let upTo: MonthKey
     /// The month today falls in, `nil` when nobody said: decides whether the
-    /// month on screen is still going (`isLive`).
+    /// month on screen is still going (`isLive`) and which months are over
+    /// (`finished`).
     let today: MonthKey?
     /// The PERSONA filter the rows were read with; `nil` is everybody. With
     /// one, `people` is just that person.
@@ -263,14 +266,22 @@ struct YearSummary: Sendable {
     /// segment is dashed and the year can be projected from it.
     var isLive: Bool { today == upTo }
 
-    /// The elapsed months that are over: all of them, or all but the live
-    /// one. What averages and projections are read from.
-    var finished: [YearMonth] { isLive ? Array(elapsed.dropLast()) : elapsed }
+    /// The elapsed months that are over: the ones before the month of today
+    /// when it is known, so neither the live month nor a month after it
+    /// (December looked at in October, empty so far) weighs on an average;
+    /// every elapsed month when nobody said what today is. What averages
+    /// and projections are read from.
+    var finished: [YearMonth] {
+        guard let today else { return elapsed }
+        return elapsed.filter { ($0.month.year, $0.month.month) < (today.year, today.month) }
+    }
 
     /// Where the year would end at the pace of the finished months; `nil`
     /// unless the month on screen is live and a month has finished before it.
     ///
-    /// The pace is whole minor units: the division rounds toward zero, so a
+    /// The pace is what the months earned less what they spent, so a wallet
+    /// opened in January is not read as a saving to repeat every month. It
+    /// is whole minor units: the division rounds toward zero, so a
     /// projection never promises the cent a month the arithmetic cannot
     /// split. The months still to come include the live one, which has not
     /// finished either.
@@ -279,7 +290,7 @@ struct YearSummary: Sendable {
         let finished = self.finished
         guard let last = finished.last else { return nil }
         let count = Int64(finished.count)
-        let monthlyGrowth = (last.total - initial) / count
+        let monthlyGrowth = finished.reduce(0) { $0 + $1.income - $1.cashExpense - $1.fundExpense } / count
         return Projection(
             finishedMonths: finished.count,
             monthlyGrowth: monthlyGrowth,
@@ -489,7 +500,13 @@ struct YearSummary: Sendable {
             initialByPerson: initialByPerson,
             months: months,
             funds: Self.funds(in: flows),
-            walletColumns: person == nil ? Self.walletColumns(wallets: wallets, deltas: walletBalances) : []
+            walletColumns: person == nil
+                ? Self.walletColumns(
+                    wallets: wallets,
+                    deltas: walletBalances,
+                    through: months.filter { !$0.isFuture }.count
+                )
+                : []
         )
     }
 
@@ -502,14 +519,22 @@ struct YearSummary: Sendable {
     /// running sum is the balance at the end of each month, transfers
     /// between wallets included. A delta for a wallet the vault no longer
     /// lists, or in a bucket past December, is left out.
-    private static func walletColumns(wallets: [WalletView], deltas: [BalanceDelta]) -> [WalletYearColumn] {
+    ///
+    /// Whether a wallet has a column is read up to `through`, the last month
+    /// drawn: one opened in November is not there yet with March on screen,
+    /// and would be a column of zeros.
+    private static func walletColumns(
+        wallets: [WalletView],
+        deltas: [BalanceDelta],
+        through: Int
+    ) -> [WalletYearColumn] {
         var buckets: [Uuid: [Int64]] = [:]
         var inYear = Set<Uuid>()
         for delta in deltas where (0...12).contains(delta.bucket) {
             buckets[delta.targetId, default: Array(repeating: 0, count: 13)][delta.bucket] += delta.delta
             // A wallet closed before the year comes back with legs that net
             // to nothing: it has no column.
-            if delta.delta != 0 { inYear.insert(delta.targetId) }
+            if delta.delta != 0, delta.bucket <= through { inYear.insert(delta.targetId) }
         }
         let shown = wallets.filter { inYear.contains($0.id) }
         guard shown.count >= 2 else { return [] }

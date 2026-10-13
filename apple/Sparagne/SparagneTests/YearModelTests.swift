@@ -490,6 +490,22 @@ struct YearModelTests {
         #expect(Self.build(rows: Self.household, today: MonthKey(year: 2026, month: 10)).finished.count == 9)
     }
 
+    @Test("A month on screen after today is not over: the finished months stop before today")
+    func finishedStopsAtToday() {
+        let december = MonthKey(year: 2026, month: 12)
+        let year = Self.build(rows: Self.household, upTo: december, today: MonthKey(year: 2026, month: 10))
+        // Every month is drawn, but October is going and the two after it
+        // have not begun.
+        #expect(year.elapsed.count == 12)
+        #expect(year.finished.map(\.month.month) == Array(1...9))
+        #expect(!year.isLive)
+        // A past year is over whole, a year to come not at all.
+        let past = Self.build(year: 2025, rows: Self.household, upTo: december, today: MonthKey(year: 2026, month: 10))
+        #expect(past.finished.count == 12)
+        // Nobody said what today is: every month drawn counts.
+        #expect(Self.build(rows: Self.household, upTo: december).finished.count == 12)
+    }
+
     /// An opening of 1.000,00 and three finished months, the third with a
     /// cent the pace cannot split; April is still going.
     private static var threeMonths: [YearRow] {
@@ -515,6 +531,30 @@ struct YearModelTests {
         #expect(projection.yearEnd == 549_999 + 149_999 * 9)
         #expect(projection.averageSavings == 159_999)
         #expect(projection.averageExpense == 140_000)
+    }
+
+    @Test("A wallet opened in a finished month raises TOTALE, not the pace")
+    func projectionIgnoresOpenings() throws {
+        let april = MonthKey(year: 2026, month: 4)
+        let rows = Self.threeMonths + [Self.row(2, "matteo", opening: 1_200_000)]
+        let year = Self.build(rows: rows, upTo: april, today: april)
+        #expect(year.months[2].total == 1_749_999)
+        let projection = try #require(year.projection)
+        #expect(projection.monthlyGrowth == 149_999)
+        // The year ends from where March left it, the wallet included.
+        #expect(projection.yearEnd == 1_749_999 + 149_999 * 9)
+
+        // A wallet of 12.000 opened in January, with February live: the
+        // pace is January's savings alone.
+        let february = MonthKey(year: 2026, month: 2)
+        let opened = Self.build(
+            rows: [Self.row(1, "matteo", income: 200_000, opening: 1_200_000, cashExpense: 150_000)],
+            upTo: february,
+            today: february
+        )
+        let pace = try #require(opened.projection)
+        #expect(pace.monthlyGrowth == 50_000)
+        #expect(pace.yearEnd == 1_250_000 + 50_000 * 11)
     }
 
     @Test("A pace that loses money rounds toward zero")
@@ -651,6 +691,29 @@ struct YearModelTests {
             ]
         )
         #expect(still.walletColumns.isEmpty)
+    }
+
+    @Test("A wallet whose first movement is after the month on screen has no column yet")
+    func walletOpenedLaterHasNoColumnYet() {
+        let wallets = Self.householdWallets + [Self.wallet("Nuovo")]
+        let balances = Self.householdBalances + [Self.delta(11, "Nuovo", 50_000)]
+        let march = Self.build(
+            rows: Self.household, upTo: MonthKey(year: 2026, month: 3), wallets: wallets, walletBalances: balances
+        )
+        #expect(march.walletColumns.map(\.name) == ["Cash", "Conto", "Carta"])
+        // The running sums still go on to December.
+        #expect(march.walletColumns[0].balances[11] == 280_000)
+        // Carta opened in March: with February on screen it is not there
+        // either, and two wallets are left.
+        let february = Self.build(
+            rows: Self.household, upTo: MonthKey(year: 2026, month: 2), wallets: wallets, walletBalances: balances
+        )
+        #expect(february.walletColumns.map(\.name) == ["Cash", "Conto"])
+        // December on screen: November has happened.
+        let december = Self.build(
+            rows: Self.household, upTo: MonthKey(year: 2026, month: 12), wallets: wallets, walletBalances: balances
+        )
+        #expect(december.walletColumns.map(\.name) == ["Cash", "Conto", "Carta", "Nuovo"])
     }
 
     @Test("Under PERSONA the wallets have no column: their balance is the family's, not the person's")
