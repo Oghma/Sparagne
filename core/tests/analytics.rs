@@ -1100,6 +1100,178 @@ fn balance_breakdown_rejects_bad_boundaries() {
     }
 }
 
+// -- opening balances ------------------------------------------------------
+
+/// The shared month plus two wallets opened inside it: matteo's account at
+/// 10.000, posted as an income on Unallocated, and elisa's credit card at
+/// -1.500, posted as an expense, both with the system category `Opening`.
+/// Next to the card, an ordinary 45 of Spesa for elisa.
+fn shared_month_with_openings() -> Shared {
+    let mut s = shared_month();
+    let vault = s.fx.vault;
+    open_wallet(
+        &mut s.fx.core,
+        vault,
+        "matteo",
+        "Conto",
+        10_000,
+        T0 + 5 * DAY,
+    );
+    open_wallet(
+        &mut s.fx.core,
+        vault,
+        "elisa",
+        "Carta",
+        -1_500,
+        T0 + 6 * DAY,
+    );
+    run_as(
+        &mut s.fx.core,
+        vault,
+        "elisa",
+        Command::Expense(entry(
+            45,
+            Some(s.fx.wallet),
+            Some(s.cash),
+            Some("Spesa"),
+            T0 + 6 * DAY,
+        )),
+    );
+    s
+}
+
+fn month_range() -> (DateTime<Utc>, DateTime<Utc>) {
+    (utc(T0 - DAY), utc(T0 + 30 * DAY))
+}
+
+#[test]
+fn openings_are_still_read_by_the_year_breakdown_and_the_bucket_totals() {
+    let s = shared_month_with_openings();
+    let (from, to) = month_range();
+    let year =
+        s.fx.core
+            .year_breakdown(s.fx.vault, vec![from, to])
+            .unwrap();
+    let opening = |person: &str| year.iter().find(|r| r.person == person).unwrap().opening;
+    // Both openings are in the ledger, and FONDO CASSA reads them signed.
+    assert_eq!(opening("matteo"), 10_000);
+    assert_eq!(opening("elisa"), -1_500);
+
+    // A sum by kind over the whole ledger keeps them.
+    let buckets =
+        s.fx.core
+            .bucket_totals(s.fx.vault, vec![from, to], None)
+            .unwrap();
+    assert_eq!(buckets[0].income, 900 + 10_000);
+    assert_eq!(buckets[0].expense, 30 + 100 + 25 + 45 + 1_500);
+}
+
+#[test]
+fn flow_person_totals_leave_openings_out() {
+    let s = shared_month_with_openings();
+    let (from, to) = month_range();
+    let rows = s.fx.core.flow_person_totals(s.fx.vault, from, to).unwrap();
+
+    // Neither opening shows on Unallocated, for matteo or for elisa.
+    assert!(
+        rows.iter().all(|r| r.flow_id != s.fx.unallocated),
+        "{rows:?}"
+    );
+    let cell = |flow: Uuid, person: &str| {
+        rows.iter()
+            .find(|r| r.flow_id == flow && r.person == person)
+            .map(|r| (r.income, r.expense, r.refund))
+    };
+    // The ordinary rows beside them all count, elisa's 45 included.
+    assert_eq!(cell(s.cash, "elisa"), Some((0, 30 + 45, 0)));
+    assert_eq!(cell(s.cash, "matteo"), Some((900, 100, 10)));
+    assert_eq!(cell(s.varie, "matteo"), Some((0, 25, 0)));
+    assert_eq!(rows.len(), 3);
+}
+
+#[test]
+fn category_totals_leave_openings_out() {
+    let s = shared_month_with_openings();
+    let (from, to) = month_range();
+    let all =
+        s.fx.core
+            .category_totals(s.fx.vault, from, to, None)
+            .unwrap();
+    assert_eq!(
+        all.iter()
+            .map(|c| (c.name.as_str(), c.income, c.net_expense))
+            .collect::<Vec<_>>(),
+        [
+            ("Casa", 0, 90),
+            ("Spesa", 0, 75),
+            ("Svago", 0, 25),
+            ("Stipendio", 900, 0),
+        ]
+    );
+    assert!(all.iter().all(|c| !c.is_system));
+
+    let elisa =
+        s.fx.core
+            .category_totals(s.fx.vault, from, to, Some("elisa".to_string()))
+            .unwrap();
+    assert_eq!(
+        elisa
+            .iter()
+            .map(|c| (c.name.as_str(), c.net_expense, c.count))
+            .collect::<Vec<_>>(),
+        [("Spesa", 75, 2)]
+    );
+}
+
+#[test]
+fn category_bucket_totals_leave_openings_out() {
+    let s = shared_month_with_openings();
+    // The openings and elisa's 45 fall in the second bucket.
+    let bounds = vec![utc(T0), utc(T0 + 5 * DAY), utc(T0 + 30 * DAY)];
+    let rows =
+        s.fx.core
+            .category_bucket_totals(s.fx.vault, bounds.clone(), None)
+            .unwrap();
+    assert_eq!(
+        cells(&rows),
+        [
+            (0, "Casa", 90, 2),
+            (0, "Spesa", 30, 1),
+            (0, "Svago", 25, 1),
+            (1, "Spesa", 45, 1),
+        ]
+    );
+    assert!(rows.iter().all(|r| !r.is_system));
+
+    let elisa =
+        s.fx.core
+            .category_bucket_totals(s.fx.vault, bounds, Some("elisa".to_string()))
+            .unwrap();
+    assert_eq!(cells(&elisa), [(0, "Spesa", 30, 1), (1, "Spesa", 45, 1)]);
+}
+
+#[test]
+fn top_expenses_leave_openings_out() {
+    let s = shared_month_with_openings();
+    let (from, to) = month_range();
+    // The card's 1.500 would lead the list.
+    let top =
+        s.fx.core
+            .top_expenses(s.fx.vault, from, to, None, 10)
+            .unwrap();
+    assert_eq!(
+        top.iter().map(|t| t.amount).collect::<Vec<_>>(),
+        [100, 45, 30, 25]
+    );
+    assert!(top.iter().all(|t| !t.category_is_system));
+
+    let elisa =
+        s.fx.core
+            .top_expenses(s.fx.vault, from, to, Some("elisa".to_string()), 10)
+            .unwrap();
+    assert_eq!(elisa.iter().map(|t| t.amount).collect::<Vec<_>>(), [45, 30]);
+}
+
 // -- filter additions ------------------------------------------------------
 
 #[test]
