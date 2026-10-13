@@ -1,7 +1,19 @@
 {
+  "%@ of average income": {
+    "en": "%@ of average income",
+    "it": "%@ delle entrate medie"
+  },
+  "Fixed costs · monthly": {
+    "en": "Fixed costs · monthly",
+    "it": "Spese fisse · al mese"
+  },
   "Rate": {
     "en": "Rate",
     "it": "Tasso"
+  },
+  "no recurring expenses": {
+    "en": "no recurring expenses",
+    "it": "nessuna uscita ricorrente"
   },
   "projected year end %@": {
     "en": "projected year end %@",
