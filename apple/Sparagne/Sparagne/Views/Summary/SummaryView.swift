@@ -103,8 +103,9 @@ struct SummaryView: View {
             EnvelopeYearTable(envelopes: envelopes, showsPeople: year.person == nil && envelopes.people.count > 1)
         }
         if showsPeople {
-            // Half the width each; with no envelope the card keeps its half,
-            // as a chart does alone on its line.
+            // The card takes two fifths, the table the rest: the card has a
+            // column per person, the table six and more. With no envelope
+            // the card keeps its share, as a chart does alone on its line.
             SideBySide {
                 PersonYearCard(year: year)
             } trailing: {
@@ -116,15 +117,18 @@ struct SummaryView: View {
     }
 }
 
-/// Two cards on one line, half the width each and as tall as the taller
-/// one, so they end on the same line.
+/// Two cards on one line, the leading one two fifths of the page's width
+/// and the trailing one the rest, as tall as the taller one so they end on
+/// the same line. Two fifths of the window, not of the line: the window's
+/// gutter is inside the difference, and at the narrowest window the table
+/// still has the room its six columns and two people need.
 private struct SideBySide<Leading: View, Trailing: View>: View {
     @ViewBuilder var leading: Leading
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            leading.frame(maxWidth: .infinity)
+            leading.containerRelativeFrame(.horizontal, count: 5, span: 2, spacing: 8)
             trailing.frame(maxWidth: .infinity)
         }
         .fixedSize(horizontal: false, vertical: true)
