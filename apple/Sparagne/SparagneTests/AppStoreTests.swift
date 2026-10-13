@@ -629,6 +629,109 @@ struct AppStoreTests {
         #expect(store.month == month)
         #expect(store.revealedRow == nil)
     }
+
+    @Test("A row that is not in the month it was asked for is not left armed")
+    func revealOfAMissingRow() async throws {
+        let store = try await Self.onboarded()
+        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
+
+        // Another month: the load that lands has no such row.
+        store.reveal(transactionId: "gone", occurredAt: CoreDate.offset(monthAgo))
+        await store.settle()
+        #expect(store.month == MonthKey(monthAgo))
+        #expect(store.tab == .ledger)
+        #expect(store.revealedRow == nil)
+        #expect(store.selection.isEmpty)
+
+        // The month on screen already, nothing searched: no load at all.
+        store.reveal(transactionId: "gone", occurredAt: CoreDate.offset(monthAgo))
+        #expect(store.revealedRow == nil)
+    }
+
+    @Test("The row asked for is forgotten by a load of another month, and by another vault")
+    func revealedRowGoesWithTheList() async throws {
+        let store = try await Self.onboarded()
+        await store.submit(quickAdd: "-12.50 pizza #food")
+        let pizza = try #require(store.topExpenses.first { $0.note == "pizza" })
+        let vault = try #require(store.currentVault)
+        // Only read, so nothing selects it and the id stays for the grid.
+        store.setReadOnlyVaults([vault.id])
+
+        store.reveal(transactionId: pizza.transactionId, occurredAt: pizza.occurredAt)
+        await store.settle()
+        #expect(store.revealedRow == pizza.transactionId)
+        // The user moves on before the grid got to it.
+        store.stepMonth(by: -1)
+        await store.settle()
+        #expect(store.revealedRow == nil)
+        // Back on its month, it is not selected under the user either.
+        store.setReadOnlyVaults([])
+        store.stepMonth(by: 1)
+        await store.settle()
+        #expect(store.selection.isEmpty)
+
+        store.reveal(transactionId: pizza.transactionId, occurredAt: pizza.occurredAt)
+        #expect(store.revealedRow == pizza.transactionId)
+        await store.select(vault)
+        #expect(store.revealedRow == nil)
+    }
+
+    // MARK: - The RIEPILOGO under PERSONA and on a vault only read
+
+    @Test("The envelope table keeps every person's column under PERSONA, its figures being everybody's")
+    func envelopePeopleIgnoreThePersonFilter() async throws {
+        let store = try await Self.onboarded()
+        await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "coop", amount: 1_000, person: "elisa")
+        await store.submit(quickAdd: "-12.50 pizza #food")
+        #expect(store.presentedError == nil)
+        let everybody = try #require(store.envelopeYear)
+        #expect(everybody.people == ["elisa", "tester"])
+
+        store.person = "elisa"
+        await store.settle()
+        #expect(store.year?.people == ["elisa"])
+        let filtered = try #require(store.envelopeYear)
+        #expect(filtered.people == ["elisa", "tester"])
+        #expect(filtered.rows.reduce(0) { $0 + $1.expense } == 2_250)
+        let unallocated = try #require(filtered.rows.first)
+        #expect(unallocated.expenseByPerson == [1_000, 1_250])
+    }
+
+    @Test("On a vault only read the strip offers no period to decide, and still counts the rows without a category")
+    func stripOnAReadOnlyVault() async throws {
+        let store = try await Self.onboarded()
+        let monthAgo = try #require(Calendar.current.date(byAdding: .month, value: -1, to: Date()))
+        await store.createRecurring(
+            kind: .expense,
+            amount: 50_000,
+            walletId: nil,
+            flowId: nil,
+            category: "Casa",
+            note: "affitto",
+            schedule: Schedule(frequency: .monthly(day: 1), interval: 1, startDate: CoreDate.day(monthAgo), endDate: nil)
+        )
+        await store.createEnvelope(name: "Affitto", mode: .unlimited, allowNegative: false, openingAllocation: 0)
+        let affitto = try #require(store.flows.first { $0.name == "Affitto" })
+        let saved = await store.saveAllocationLines(
+            [AllocationLine(flowId: affitto.id, rule: .fixed(amount: 1_000))],
+            schedule: AllocationScheduleDraft(today: CoreDate.day(Date())).schedule
+        )
+        #expect(saved)
+        // From Unallocated: Affitto holds nothing yet.
+        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        await store.addRow(day: Date(), flowId: unallocated.id, category: nil, note: "boh", amount: 500)
+        #expect(store.presentedError == nil)
+        #expect(store.summaryTodo.map(\.tab) == [.recurring, .allocation, .ledger])
+
+        // The role arrives after the load, and then a load again.
+        store.setReadOnlyVaults([try #require(store.currentVault?.id)])
+        #expect(store.summaryTodo.map(\.kind) == [.uncategorized(count: 1)])
+        await store.reload()
+        #expect(store.summaryTodo.map(\.kind) == [.uncategorized(count: 1)])
+        // The plan's period and the recurring ones are still there to see.
+        #expect(store.pendingAllocation != nil)
+        #expect(store.dueRecurringCount > 0)
+    }
 }
 
 struct MonthKeyTests {

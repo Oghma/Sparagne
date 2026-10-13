@@ -29,9 +29,14 @@ struct SummaryTodoItem: Identifiable, Hashable, Sendable {
 
 /// The RIEPILOGO's strip of things to do; empty, the strip is not drawn.
 enum SummaryTodo {
-    /// `dueRecurring` is `AppStore.dueRecurringCount`, `pendingAllocation`
-    /// the plan's period due today, `yearCategories` the year's category
+    /// `dueRecurring` is `AppStore.actionableDueCount`, `pendingAllocation`
+    /// the plan's period due today (`nil` on a vault the account only reads:
+    /// neither can be decided there), `yearCategories` the year's category
     /// totals, whose system row Uncategorized counts the rows without one.
+    ///
+    /// Those totals are read with the PERSONA filter, so under it the count
+    /// is that person's rows without a category: the ledger the chip opens
+    /// keeps the filter, and shows the same rows.
     static func items(
         dueRecurring: Int,
         pendingAllocation: PendingAllocation?,

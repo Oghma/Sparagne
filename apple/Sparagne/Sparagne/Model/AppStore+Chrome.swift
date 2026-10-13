@@ -26,23 +26,29 @@ extension AppStore {
     /// selection waits for the reload the month or the direction queue, and
     /// `reload()` makes it; on a vault only read there is none, and the grid
     /// only scrolls.
+    ///
+    /// The list is set before the tab and the id: the ledger must not come
+    /// up on the old month's rows with the row already asked for.
     func reveal(transactionId: Uuid, occurredAt: OffsetDateTime) {
         guard let date = CoreDate.date(occurredAt) else { return }
         let target = MonthKey(date)
         let queuesReload = month != target || direction != .expenses
         let searched = !searchText.isEmpty
-        revealedRow = transactionId
-        tab = .ledger
+        month = target
         direction = .expenses
         searchText = ""
-        month = target
+        revealedRow = transactionId
+        tab = .ledger
         guard !queuesReload else { return }
         // The month on screen already: a search narrowed it, and the list
-        // has to come back whole; otherwise the row is there now.
+        // has to come back whole; otherwise the row is there now, or not
+        // in this list at all (voided, past the first page).
         if searched {
             scheduleReload()
-        } else {
+        } else if rows.contains(where: { $0.id == transactionId }) {
             selectRevealedRow()
+        } else {
+            revealedRow = nil
         }
     }
 }
