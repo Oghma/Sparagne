@@ -30,4 +30,31 @@ enum SummaryText {
     static func signed(_ text: String, positive: Bool) -> String {
         positive ? "+\(text)" : text
     }
+
+    // MARK: - Shares
+
+    /// `"38%"`: a fraction of one written as the cards write a share, the
+    /// ledger's comma and no decimals unless asked (`LedgerMoney.percent`,
+    /// which takes two amounts where the model hands a ratio).
+    static func percent(_ fraction: Double, decimals: Int = 0) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.decimalSeparator = ","
+        formatter.groupingSeparator = "."
+        formatter.minimumFractionDigits = decimals
+        formatter.maximumFractionDigits = decimals
+        return (formatter.string(from: NSNumber(value: fraction * 100)) ?? "0") + "%"
+    }
+
+    /// TASSO as the savings-rate card writes it (`LedgerMoney.savingsRate`):
+    /// `"73%"`, `"-26%"`, and `"< -100%"` once more than twice the income
+    /// went out, where the figure would only say how little came in. The
+    /// model hands the ratio already worked out (`YearMonth.rate`,
+    /// `PersonYear.rate`); `nil` without income, so the caller prints a
+    /// dash.
+    static func rate(_ rate: Double?) -> String? {
+        guard let rate else { return nil }
+        guard rate >= -1 else { return "< -100%" }
+        return percent(rate)
+    }
 }

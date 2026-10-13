@@ -1,4 +1,8 @@
 {
+  "Rate": {
+    "en": "Rate",
+    "it": "Tasso"
+  },
   "projected year end %@": {
     "en": "projected year end %@",
     "it": "fine anno prevista %@"

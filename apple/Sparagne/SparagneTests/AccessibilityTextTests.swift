@@ -41,3 +41,33 @@ struct AccessibilityTextTests {
         #expect(label == "Income, Elisa: €1,200.00")
     }
 }
+
+/// `SummaryText` is the RIEPILOGO's small pure text
+/// (`Views/Summary/SummaryText.swift`), checked the same way.
+struct SummaryTextTests {
+    @Test("A share is written with the ledger's comma, without decimals unless asked")
+    func percentOfAFraction() {
+        #expect(SummaryText.percent(0.38) == "38%")
+        #expect(SummaryText.percent(0) == "0%")
+        #expect(SummaryText.percent(0.125, decimals: 1) == "12,5%")
+    }
+
+    @Test("TASSO reads as the savings-rate card reads the same two figures")
+    func rateMatchesTheCard() {
+        let figures: [(savings: Int64, income: Int64)] = [(731, 1_000), (-260, 1_000), (0, 500), (-1_000, 1_000), (1_000, 1_000)]
+        for (savings, income) in figures {
+            #expect(SummaryText.rate(Double(savings) / Double(income)) == LedgerMoney.savingsRate(savings, of: income))
+        }
+    }
+
+    @Test("Past -100% a rate only says how little came in, as the card says it")
+    func rateBelowMinusOneHundredIsClamped() {
+        #expect(SummaryText.rate(-3_945) == "< -100%")
+        #expect(SummaryText.rate(-1.0001) == "< -100%")
+        #expect(SummaryText.rate(-1) == "-100%")
+    }
+
+    @Test func noRateIsNilForTheCallerToDash() {
+        #expect(SummaryText.rate(nil) == nil)
+    }
+}
