@@ -3,14 +3,19 @@ import SwiftUI
 
 /// The two charts under the table, side by side at half
 /// the width each.
+///
+/// The two cards are as tall as each other, with the charts at the bottom:
+/// a header that wraps on a narrow window (the cash fund's growth by
+/// person) lowers neither chart, so the two month axes stay on one line.
 struct SummaryCharts: View {
     let year: YearSummary
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: 2), spacing: 8) {
-            CashFlowCard(year: year)
-            CashFundCard(year: year)
+        HStack(alignment: .top, spacing: 8) {
+            CashFlowCard(year: year).frame(maxWidth: .infinity)
+            CashFundCard(year: year).frame(maxWidth: .infinity)
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -64,7 +69,7 @@ private struct CashFlowCard: View {
 
     var body: some View {
         Panel {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(String(localized: "Cash flow"))
                         .font(Face.label)
@@ -72,8 +77,10 @@ private struct CashFlowCard: View {
                     Spacer(minLength: 8)
                     ChartLegend(entries: series.map { ($0.name, $0.tint) })
                 }
+                Spacer(minLength: 8)
                 chart
             }
+            .frame(maxHeight: .infinity)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "Cash flow"))
@@ -242,14 +249,27 @@ private struct CashFundCard: View {
     /// The last month on the axis: December when the tail reaches it.
     private var lastMonth: Int { tail.isEmpty ? max(points.last?.id ?? 1, 1) : 12 }
 
+    /// A tenth of the span above the highest point: the figure written over
+    /// the last month, or over December's projection, needs the room, or it
+    /// would be drawn over the card's header.
     private var scale: (lower: Double, upper: Double, step: Double) {
-        let values = (points + personLines.flatMap(\.points) + tail).map { ChartScale.major($0.total) }
+        var values = (points + personLines.flatMap(\.points) + tail).map { ChartScale.major($0.total) }
+        if let high = values.max(), let low = values.min() {
+            values.append(high + (high - low) * 0.1)
+        }
         return ChartScale.nice(values, includeZero: false)
+    }
+
+    /// The person whose line ends lowest: their name goes under the line's
+    /// end, the others' over it, so two shares that end close apart do not
+    /// write one name over the other.
+    private var lowestLine: Int? {
+        personLines.min { ($0.points.last?.total ?? 0) < ($1.points.last?.total ?? 0) }?.id
     }
 
     var body: some View {
         Panel {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
                 // The growth of every person makes the line long: under the
                 // title when the two do not fit side by side.
                 ViewThatFits(in: .horizontal) {
@@ -263,8 +283,10 @@ private struct CashFundCard: View {
                         growthLine
                     }
                 }
+                Spacer(minLength: 8)
                 chart
             }
+            .frame(maxHeight: .infinity)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "Cash fund"))
@@ -303,6 +325,10 @@ private struct CashFundCard: View {
     private var chart: some View {
         let scale = scale
         let last = points.last
+        let lowest = lowestLine
+        // A figure written over a point stays inside the chart: it is cut
+        // or moved in, never drawn over the header.
+        let inside = AnnotationOverflowResolution(x: .fit(to: .chart), y: .fit(to: .chart))
         return Chart {
             ForEach(points) { point in
                 AreaMark(
@@ -335,7 +361,10 @@ private struct CashFundCard: View {
                     PointMark(x: .value("", Double(end.id)), y: .value("", ChartScale.major(end.total)))
                         .symbolSize(10)
                         .foregroundStyle(Ink.text3)
-                        .annotation(position: .top, alignment: .trailing, spacing: 2) {
+                        .annotation(
+                            position: line.id == lowest ? .bottom : .top, alignment: .trailing, spacing: 2,
+                            overflowResolution: inside
+                        ) {
                             Text(line.name)
                                 .font(Face.small)
                                 .foregroundStyle(Ink.text3)
@@ -356,7 +385,7 @@ private struct CashFundCard: View {
                 PointMark(x: .value("", Double(end.id)), y: .value("", ChartScale.major(end.total)))
                     .symbolSize(16)
                     .foregroundStyle(Ink.chartIncome)
-                    .annotation(position: .top, alignment: .trailing, spacing: 4) {
+                    .annotation(position: .top, alignment: .trailing, spacing: 4, overflowResolution: inside) {
                         Text(LedgerMoney.bare(end.total))
                             .font(Face.ui(11, .medium))
                             .foregroundStyle(Ink.text2)
@@ -372,7 +401,7 @@ private struct CashFundCard: View {
                 PointMark(x: .value("", Double(last.id)), y: .value("", ChartScale.major(last.total)))
                     .symbolSize(44)
                     .foregroundStyle(Ink.chartIncome)
-                    .annotation(position: .top, alignment: .trailing, spacing: 4) {
+                    .annotation(position: .top, alignment: .trailing, spacing: 4, overflowResolution: inside) {
                         Text(LedgerMoney.bare(last.total))
                             .font(Face.ui(11.5, .semibold))
                             .foregroundStyle(Ink.text)
