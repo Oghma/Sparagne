@@ -82,6 +82,42 @@ pub struct BucketPersonTotals {
     pub fund_expense: i64,
 }
 
+/// One category's net expense inside one bucket: the months x categories
+/// grid of the RIEPILOGO.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct BucketCategoryTotals {
+    /// Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
+    pub bucket: u32,
+    pub category_id: Uuid,
+    pub name: String,
+    /// `true` for `Opening` and `Uncategorized`: the app localizes the name.
+    pub is_system: bool,
+    /// `max(expense - refund, 0)` inside the bucket.
+    pub net_expense: i64,
+    /// Expense and refund rows behind the figure, voided excluded.
+    pub count: u32,
+}
+
+/// Which side of the legs a balance breakdown reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum TargetKind {
+    Wallet,
+    Flow,
+}
+
+/// What one wallet or envelope gained or lost inside one bucket: the signed
+/// sum of its legs, transfers included, voided rows excluded. Bucket 0 of the
+/// RIEPILOGO's bounds is everything before January, so it is the balance the
+/// year starts with.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct BucketTargetTotals {
+    /// Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
+    pub bucket: u32,
+    /// The wallet or the envelope, by `target`.
+    pub target_id: Uuid,
+    pub delta: i64,
+}
+
 /// The six sums [`BucketPersonTotals`] is folded from: expenses and refunds
 /// stay apart until the end, because each group nets on its own.
 #[derive(Default)]
@@ -456,6 +492,37 @@ impl Core {
                 .then_with(|| a.person.to_lowercase().cmp(&b.person.to_lowercase()))
         });
         Ok(out)
+    }
+
+    /// Bucket x category net expense over the ranges `bounds` describe, for
+    /// one person or everybody: expense and refund rows only, each bucket
+    /// netting on its own. Ordered by bucket, then heaviest first.
+    pub fn category_bucket_totals(
+        &self,
+        vault_id: Uuid,
+        bounds: Vec<DateTime<Utc>>,
+        person: Option<String>,
+    ) -> Result<Vec<BucketCategoryTotals>> {
+        check_bounds(&bounds, "category_bucket_totals")?;
+        let _ = (vault_id, person);
+        // A stub for now.
+        Ok(Vec::new())
+    }
+
+    /// Bucket x wallet (or x envelope) signed movement over the ranges
+    /// `bounds` describe: every live leg on that side, transfers included.
+    /// Only pairs with movement come back; an archived target with legs in
+    /// the range is among them.
+    pub fn balance_breakdown(
+        &self,
+        vault_id: Uuid,
+        bounds: Vec<DateTime<Utc>>,
+        target: TargetKind,
+    ) -> Result<Vec<BucketTargetTotals>> {
+        check_bounds(&bounds, "balance_breakdown")?;
+        let _ = (vault_id, target);
+        // A stub for now.
+        Ok(Vec::new())
     }
 
     /// The heaviest expenses of the range, largest first.

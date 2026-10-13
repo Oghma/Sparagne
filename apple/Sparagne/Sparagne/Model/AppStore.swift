@@ -239,6 +239,27 @@ final class AppStore {
     /// When the last command was applied, for the status bar's "saved at".
     private(set) var savedAt: Date?
 
+    // MARK: The RIEPILOGO beyond its table
+    //
+    // Read with the year, from the same visit, so none of them describes a
+    // different month, person or vault from the table.
+
+    /// The year's categories, heaviest first, eight and "other".
+    private(set) var yearCategories: [CategoryShare] = []
+    /// The months x categories grid.
+    private(set) var categoryHeat: CategoryHeat?
+    /// Every active envelope's year.
+    private(set) var envelopeYear: EnvelopeYear?
+    /// What the recurring expenses commit a month, `nil` without any.
+    private(set) var fixedCosts: FixedCosts?
+    /// The strip of things to do; empty, it is not drawn.
+    private(set) var summaryTodo: [SummaryTodoItem] = []
+    /// The year's heaviest expenses, largest first.
+    private(set) var topExpenses: [TopExpense] = []
+    /// A row the Mastro's grid scrolls to once it is on screen (`reveal`),
+    /// and then sets back to `nil`: not `private(set)`, the grid consumes it.
+    var revealedRow: Uuid?
+
     // MARK: Category management (the SETUP tab)
 
     /// Active and archived categories, for the Categories table;
@@ -589,6 +610,12 @@ final class AppStore {
             peopleInRows = []
             summary = nil
             year = nil
+            yearCategories = []
+            categoryHeat = nil
+            envelopeYear = nil
+            fixedCosts = nil
+            summaryTodo = []
+            topExpenses = []
             pendingRecurringItems = []
             allocationPlan = nil
             pendingAllocation = nil
@@ -632,6 +659,7 @@ final class AppStore {
         let bounds = month.bounds()
         let trailing = month.trailingYear()
         let epoch = CoreDate.utcString(Date(timeIntervalSince1970: 0))
+        let yearBounds = MonthKey.yearBounds(month.year)
         return VaultLoadRequest(
             vaultId: vaultId,
             filter: filter,
@@ -640,7 +668,9 @@ final class AppStore {
             monthTo: bounds.to,
             previousStart: CoreDate.utcString(month.adding(months: -1).start()),
             trailingBounds: trailing.bounds,
-            yearBounds: [epoch] + MonthKey.yearBounds(month.year),
+            yearBounds: [epoch] + yearBounds,
+            yearFrom: yearBounds[0],
+            yearTo: bounds.to,
             person: person,
             today: CoreDate.day(Date())
         )
