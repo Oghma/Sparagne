@@ -40,17 +40,42 @@ struct CategoryHeat: Hashable, Sendable {
 
     /// 0...1 of `maximum`; 0 when the grid is empty.
     func intensity(_ value: Int64) -> Double {
-        // A stub for now.
-        _ = value
-        return 0
+        guard maximum > 0 else { return 0 }
+        return min(max(Double(value) / Double(maximum), 0), 1)
     }
 
     /// `shares` are the lines of the year's category list, `buckets` the
     /// core's month x category rows over the same bounds as the year
     /// breakdown; a category past the list's own lines lands on "other".
+    ///
+    /// Bucket 0 is everything before January, and is no column; neither is
+    /// a month after the one on screen, whose cells stay zero. A category the
+    /// list leaves out with no "other" line (it spent nothing over the year,
+    /// a refund having made up for it) has no line here either.
     static func build(buckets: [CategoryBucket], shares: [CategoryShare], upTo: MonthKey) -> CategoryHeat {
-        // A stub for now.
-        _ = (buckets, shares)
-        return CategoryHeat(rows: [], elapsedMonths: upTo.month, maximum: 0)
+        let elapsedMonths = min(max(upTo.month, 0), 12)
+        let named = Set(shares.compactMap(\.categoryId))
+        var sums: [Uuid: [Int64]] = [:]
+        var other = Array(repeating: Int64(0), count: 12)
+        for bucket in buckets where (1...12).contains(bucket.bucket) && bucket.bucket <= elapsedMonths {
+            if named.contains(bucket.categoryId) {
+                sums[bucket.categoryId, default: Array(repeating: 0, count: 12)][bucket.bucket - 1] += bucket.netExpense
+            } else {
+                other[bucket.bucket - 1] += bucket.netExpense
+            }
+        }
+
+        let rows = shares.map { share in
+            CategoryHeatRow(
+                categoryId: share.categoryId,
+                name: share.name,
+                isSystem: share.isSystem,
+                isOther: share.isOther,
+                cells: share.categoryId.flatMap { sums[$0] }
+                    ?? (share.isOther ? other : Array(repeating: 0, count: 12))
+            )
+        }
+        let maximum = rows.lazy.flatMap(\.cells).max() ?? 0
+        return CategoryHeat(rows: rows, elapsedMonths: elapsedMonths, maximum: max(maximum, 0))
     }
 }
