@@ -3,13 +3,59 @@
     "en": "%@ of average income",
     "it": "%@ delle entrate medie"
   },
+  "%lld earlier": {
+    "en": {
+      "one": "%lld earlier",
+      "other": "%lld earlier"
+    },
+    "it": {
+      "one": "%lld precedente",
+      "other": "%lld precedenti"
+    }
+  },
+  "%lld recurring to decide": {
+    "en": {
+      "one": "%lld recurring to decide",
+      "other": "%lld recurring to decide"
+    },
+    "it": {
+      "one": "%lld ricorrenza da decidere",
+      "other": "%lld ricorrenze da decidere"
+    }
+  },
+  "%lld rows without a category": {
+    "en": {
+      "one": "%lld row without a category",
+      "other": "%lld rows without a category"
+    },
+    "it": {
+      "one": "%lld riga senza categoria",
+      "other": "%lld righe senza categoria"
+    }
+  },
+  "Allocation due · %@": {
+    "en": "Allocation due · %@",
+    "it": "Riparto in attesa · %@"
+  },
   "Fixed costs · monthly": {
     "en": "Fixed costs · monthly",
     "it": "Spese fisse · al mese"
   },
+  "Growth": {
+    "en": "Growth",
+    "it": "Crescita"
+  },
+  "Other": {
+    "en": "Other",
+    "it": "altre"
+  },
   "Rate": {
     "en": "Rate",
     "it": "Tasso"
+  },
+  "balance at month end · income and expenses of the year": {
+    "en": "balance at month end · income and expenses of the year",
+    "it": "saldo a fine mese · entrate e uscite dell'anno"
   },
   "no recurring expenses": {
     "en": "no recurring expenses",
