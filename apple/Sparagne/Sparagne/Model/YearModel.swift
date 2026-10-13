@@ -101,10 +101,11 @@ struct YearMonth: Hashable, Sendable {
     /// The same TOTALE per person, in `YearSummary.people` order.
     var totalByPerson: [Int64] { byPerson.map(\.total) }
 
-    /// TASSO: savings over income, `nil` with no income.
+    /// TASSO: savings over income, `nil` with no income. The rule of
+    /// `MonthKPIs.rate`, so a card and its row print the same percent; a
+    /// month that spent more than it earned has a negative one.
     var rate: Double? {
-        // A stub for now.
-        nil
+        income > 0 ? Double(savings) / Double(income) : nil
     }
 }
 
@@ -145,7 +146,9 @@ struct WalletYearColumn: Identifiable, Hashable, Sendable {
     let name: String
     /// The balance the year starts with.
     let initial: Int64
-    /// January first, always twelve; a future month repeats the last known.
+    /// The balance at the end of each month, January first, always twelve.
+    /// A month after the one on screen carries the running sum, and the
+    /// table draws it as a dash anyway.
     let balances: [Int64]
 }
 
@@ -265,15 +268,40 @@ struct YearSummary: Sendable {
 
     /// Where the year would end at the pace of the finished months; `nil`
     /// unless the month on screen is live and a month has finished before it.
+    ///
+    /// The pace is whole minor units: the division rounds toward zero, so a
+    /// projection never promises the cent a month the arithmetic cannot
+    /// split. The months still to come include the live one, which has not
+    /// finished either.
     var projection: Projection? {
-        // A stub for now.
-        nil
+        guard isLive else { return nil }
+        let finished = self.finished
+        guard let last = finished.last else { return nil }
+        let count = Int64(finished.count)
+        let monthlyGrowth = (last.total - initial) / count
+        return Projection(
+            finishedMonths: finished.count,
+            monthlyGrowth: monthlyGrowth,
+            yearEnd: last.total + monthlyGrowth * (12 - count),
+            averageSavings: finished.reduce(0) { $0 + $1.savings } / count,
+            averageExpense: finished.reduce(0) { $0 + $1.cashExpense } / count
+        )
     }
 
-    /// Each person's year so far, in `people` order.
+    /// Each person's year so far, in `people` order: the same months the
+    /// table sums, so the card's expenses are the person's share of USCITE
+    /// and its growth the move of their share of TOTALE.
     var personFigures: [PersonYear] {
-        // A stub for now.
-        []
+        let elapsed = self.elapsed
+        let closing = closingByPerson
+        return people.enumerated().map { index, name in
+            PersonYear(
+                person: name,
+                income: elapsed.reduce(0) { $0 + $1.byPerson[index].income },
+                expenses: elapsed.reduce(0) { $0 + $1.byPerson[index].cashExpense },
+                growth: closing[index] - initialByPerson[index]
+            )
+        }
     }
 
     /// The year's flows so far: income, expenses and savings add up over a
@@ -392,16 +420,17 @@ struct YearSummary: Sendable {
         wallets: [WalletView] = [],
         walletBalances: [BalanceDelta] = []
     ) -> YearSummary {
-        // A stub for now: the filter, the wallet columns and the figures
-        // derived from them are still to come.
-        _ = (person, wallets, walletBalances)
-        let people = Self.people(in: rows, vaultPeople: vaultPeople)
+        // Under PERSONA everybody else's rows go before anything is summed,
+        // so TOTALE and FONDO CASSA are that person's share; the one column
+        // is theirs even in a year with no row of theirs.
+        let rows = person.map { name in rows.filter { $0.person == name } } ?? rows
+        let people = person.map { [$0] } ?? Self.people(in: rows, vaultPeople: vaultPeople)
         var byBucket: [Int: [YearRow]] = [:]
         for row in rows { byBucket[row.bucket, default: []].append(row) }
 
         // Bucket 0 is everything before January: it opens the recurrence.
-        let initialByPerson = people.map { person in
-            Self.closing(byBucket[0, default: []].filter { $0.person == person })
+        let initialByPerson = people.map { name in
+            Self.closing(byBucket[0, default: []].filter { $0.person == name })
         }
 
         var months: [YearMonth] = []
@@ -418,8 +447,8 @@ struct YearSummary: Sendable {
 
             var byPerson: [PersonMonth] = []
             byPerson.reserveCapacity(people.count)
-            for (index, person) in people.enumerated() {
-                let personRows = monthRows.filter { $0.person == person }
+            for (index, name) in people.enumerated() {
+                let personRows = monthRows.filter { $0.person == name }
                 let personIncome = personRows.reduce(0) { $0 + $1.income }
                 let personCash = personRows.reduce(0) { $0 + $1.cashExpense }
                 let personFunds = personRows.reduce(0) { $0 + $1.fundExpense }
@@ -459,8 +488,39 @@ struct YearSummary: Sendable {
             initialByPerson: initialByPerson,
             months: months,
             funds: Self.funds(in: flows),
-            walletColumns: []
+            walletColumns: Self.walletColumns(wallets: wallets, deltas: walletBalances)
         )
+    }
+
+    /// One column per wallet that moved or held money in the year, in the
+    /// order of `wallets`; none with fewer than two, when TOTALE already is
+    /// the one wallet's balance.
+    ///
+    /// The deltas are on the same bounds as the year's rows, so bucket 0 is
+    /// the balance the year starts with and every month adds its own: the
+    /// running sum is the balance at the end of each month, transfers
+    /// between wallets included. A delta for a wallet the vault no longer
+    /// lists, or in a bucket past December, is left out.
+    private static func walletColumns(wallets: [WalletView], deltas: [BalanceDelta]) -> [WalletYearColumn] {
+        var buckets: [Uuid: [Int64]] = [:]
+        var inYear = Set<Uuid>()
+        for delta in deltas where (0...12).contains(delta.bucket) {
+            buckets[delta.targetId, default: Array(repeating: 0, count: 13)][delta.bucket] += delta.delta
+            // A wallet closed before the year comes back with legs that net
+            // to nothing: it has no column.
+            if delta.delta != 0 { inYear.insert(delta.targetId) }
+        }
+        let shown = wallets.filter { inYear.contains($0.id) }
+        guard shown.count >= 2 else { return [] }
+        return shown.map { wallet in
+            let slots = buckets[wallet.id] ?? Array(repeating: 0, count: 13)
+            var running = slots[0]
+            let balances = slots[1...].map { delta in
+                running += delta
+                return running
+            }
+            return WalletYearColumn(id: wallet.id, name: wallet.name, initial: slots[0], balances: balances)
+        }
     }
 
     /// One column per person, de-duplicated in the core's order and then

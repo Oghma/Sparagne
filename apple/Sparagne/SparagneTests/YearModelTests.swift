@@ -43,9 +43,27 @@ struct YearModelTests {
     }
 
     private static func build(
-        year: Int = 2026, rows: [YearRow], flows: [FlowView] = [], upTo: MonthKey = upTo, vaultPeople: [String] = []
+        year: Int = 2026,
+        rows: [YearRow],
+        flows: [FlowView] = [],
+        upTo: MonthKey = upTo,
+        vaultPeople: [String] = [],
+        person: String? = nil,
+        today: MonthKey? = nil,
+        wallets: [WalletView] = [],
+        walletBalances: [BalanceDelta] = []
     ) -> YearSummary {
-        YearSummary.build(year: year, upTo: upTo, rows: rows, flows: flows, vaultPeople: vaultPeople)
+        YearSummary.build(
+            year: year,
+            upTo: upTo,
+            rows: rows,
+            flows: flows,
+            vaultPeople: vaultPeople,
+            person: person,
+            today: today,
+            wallets: wallets,
+            walletBalances: walletBalances
+        )
     }
 
     // MARK: - People and the opening cash fund
@@ -392,6 +410,247 @@ struct YearModelTests {
             ]
         )
         #expect(year.funds.map(\.kind) == [.balance, .income])
+    }
+
+    // MARK: - PERSONA
+
+    @Test("Under PERSONA the other person's rows are gone before anything is summed, and the one column is theirs")
+    func personFilter() {
+        let year = Self.build(rows: Self.household, vaultPeople: ["matteo", "elisa", "giulia"], person: "elisa")
+        #expect(year.person == "elisa")
+        #expect(year.people == ["elisa"])
+        #expect(year.initialByPerson == [200_000])
+        #expect(year.initial == 200_000)
+        // January is elisa's alone: matteo's 3.000,00 are not there.
+        #expect(year.months[0].income == 200_000)
+        #expect(year.months[0].cashExpense == 50_000)
+        #expect(year.months[0].fundExpense == 0)
+        #expect(year.months[0].total == 350_000)
+        #expect(year.months[0].totalByPerson == [350_000])
+        // March was matteo's, opening included: nothing moves for elisa.
+        #expect(year.months[2].income == 0)
+        #expect(year.months[2].total == 350_000)
+        #expect(year.closingTotal == 445_000)
+    }
+
+    @Test("A person with no rows in the year gets a column of zeros under PERSONA")
+    func personFilterWithoutRows() {
+        let year = Self.build(rows: Self.household, person: "giulia")
+        #expect(year.people == ["giulia"])
+        #expect(year.initialByPerson == [0])
+        let zeros = year.months.allSatisfy { $0.income == 0 && $0.total == 0 && $0.totalByPerson == [0] }
+        #expect(zeros)
+        #expect(year.personFigures == [PersonYear(person: "giulia", income: 0, expenses: 0, growth: 0)])
+        #expect(year.personFigures[0].rate == nil)
+    }
+
+    @Test("Each person's figures add up to the month's, every month")
+    func byPersonSumsToTheMonth() {
+        let year = Self.build(rows: Self.household + [Self.row(5, "elisa", income: 1_000, cashExpense: 70_000)])
+        for month in year.months {
+            #expect(month.byPerson.count == year.people.count)
+            #expect(month.byPerson.reduce(0) { $0 + $1.income } == month.income)
+            #expect(month.byPerson.reduce(0) { $0 + $1.cashExpense } == month.cashExpense)
+            #expect(month.byPerson.reduce(0) { $0 + $1.fundExpense } == month.fundExpense)
+            #expect(month.byPerson.reduce(0) { $0 + $1.total } == month.total)
+        }
+        // January: elisa, then matteo.
+        #expect(
+            year.months[0].byPerson == [
+                PersonMonth(income: 200_000, cashExpense: 50_000, fundExpense: 0, total: 350_000),
+                PersonMonth(income: 300_000, cashExpense: 95_000, fundExpense: 20_000, total: 735_000),
+            ]
+        )
+    }
+
+    // MARK: - TASSO
+
+    @Test("TASSO is savings over income, absent without income and negative when the month spent more")
+    func monthRate() {
+        let year = Self.build(rows: Self.household + [Self.row(4, "matteo", income: 100_000, cashExpense: 150_000)])
+        #expect(year.months[0].rate == 355_000.0 / 500_000.0)
+        // February has no rows, and a month with expenses only has no rate.
+        #expect(year.months[1].rate == nil)
+        #expect(Self.build(rows: [Self.row(1, "matteo", cashExpense: 1)]).months[0].rate == nil)
+        #expect(year.months[3].rate == -0.5)
+        // The table prints the month's own.
+        #expect(year.tableRows[4].rate == -0.5)
+        #expect(year.tableRows[0].rate == nil)
+    }
+
+    // MARK: - The month of today
+
+    @Test("The month on screen is live only when it is the month of today")
+    func liveMonth() {
+        #expect(Self.build(rows: Self.household, today: Self.upTo).isLive)
+        #expect(!Self.build(rows: Self.household, today: MonthKey(year: 2026, month: 10)).isLive)
+        #expect(!Self.build(rows: Self.household).isLive)
+        // A live month is not finished; a past one is.
+        #expect(Self.build(rows: Self.household, today: Self.upTo).finished.count == 8)
+        #expect(Self.build(rows: Self.household, today: MonthKey(year: 2026, month: 10)).finished.count == 9)
+    }
+
+    /// An opening of 1.000,00 and three finished months, the third with a
+    /// cent the pace cannot split; April is still going.
+    private static var threeMonths: [YearRow] {
+        [
+            row(0, "matteo", opening: 100_000),
+            row(1, "matteo", income: 300_000, cashExpense: 100_000),
+            row(2, "matteo", income: 300_000, cashExpense: 200_000),
+            row(3, "matteo", income: 300_000, cashExpense: 120_001, fundExpense: 30_000),
+            row(4, "matteo", income: 50_000),
+        ]
+    }
+
+    @Test("The projection reads the pace of the finished months and runs it to December")
+    func projection() throws {
+        let april = MonthKey(year: 2026, month: 4)
+        let year = Self.build(rows: Self.threeMonths, upTo: april, today: april)
+        #expect(year.months[2].total == 549_999)
+        let projection = try #require(year.projection)
+        #expect(projection.finishedMonths == 3)
+        // 4.499,99 over three months, the third of a cent dropped.
+        #expect(projection.monthlyGrowth == 149_999)
+        // April is not over: nine months still to come, April included.
+        #expect(projection.yearEnd == 549_999 + 149_999 * 9)
+        #expect(projection.averageSavings == 159_999)
+        #expect(projection.averageExpense == 140_000)
+    }
+
+    @Test("A pace that loses money rounds toward zero")
+    func projectionLosingMoney() throws {
+        let april = MonthKey(year: 2026, month: 4)
+        let rows = [
+            Self.row(0, "matteo", opening: 1_000),
+            Self.row(1, "matteo", cashExpense: 4),
+            Self.row(2, "matteo", cashExpense: 3),
+            Self.row(3, "matteo", cashExpense: 3),
+        ]
+        let projection = try #require(Self.build(rows: rows, upTo: april, today: april).projection)
+        #expect(projection.monthlyGrowth == -3)
+        #expect(projection.yearEnd == 990 - 3 * 9)
+        #expect(projection.averageSavings == -3)
+    }
+
+    @Test("No projection for a live January, for a month gone by, or when nobody said what today is")
+    func noProjection() {
+        let january = MonthKey(year: 2026, month: 1)
+        #expect(Self.build(rows: Self.threeMonths, upTo: january, today: january).projection == nil)
+        let april = MonthKey(year: 2026, month: 4)
+        #expect(Self.build(rows: Self.threeMonths, upTo: april, today: MonthKey(year: 2026, month: 5)).projection == nil)
+        #expect(Self.build(rows: Self.threeMonths, upTo: april).projection == nil)
+    }
+
+    // MARK: - Per persona
+
+    @Test("Each person's year: income, USCITE and how much their share of TOTALE moved")
+    func personFigures() {
+        let year = Self.build(rows: Self.household)
+        #expect(
+            year.personFigures == [
+                PersonYear(person: "elisa", income: 300_000, expenses: 50_000, growth: 245_000),
+                PersonYear(person: "matteo", income: 600_000, expenses: 195_000, growth: 485_000),
+            ]
+        )
+        for (index, figures) in year.personFigures.enumerated() {
+            #expect(figures.growth == year.closingByPerson[index] - year.initialByPerson[index])
+        }
+        #expect(year.personFigures.reduce(0) { $0 + $1.growth } == year.growth)
+        #expect(year.personFigures.reduce(0) { $0 + $1.expenses } == year.yearCashExpense)
+        #expect(year.personFigures[0].rate == 250_000.0 / 300_000.0)
+    }
+
+    @Test("A person who earned nothing has no rate")
+    func personWithoutIncome() {
+        let year = Self.build(rows: [Self.row(0, "elisa", opening: 1_000), Self.row(1, "elisa", cashExpense: 500)])
+        #expect(year.personFigures == [PersonYear(person: "elisa", income: 0, expenses: 500, growth: -500)])
+        #expect(year.personFigures[0].rate == nil)
+    }
+
+    // MARK: - Wallet columns
+
+    private static func wallet(_ name: String, archived: Bool = false) -> WalletView {
+        WalletView(id: name, name: name, balance: 0, archived: archived)
+    }
+
+    private static func delta(_ bucket: Int, _ wallet: String, _ delta: Int64) -> BalanceDelta {
+        BalanceDelta(bucket: bucket, targetId: wallet, delta: delta)
+    }
+
+    /// The household's money, wallet by wallet: Conto and Cash before the
+    /// year, a move from Conto to Cash in February, Carta opened in March,
+    /// and an old wallet that never moves.
+    private static var householdWallets: [WalletView] {
+        [wallet("Cash"), wallet("Conto"), wallet("Carta"), wallet("Vecchio", archived: true)]
+    }
+
+    private static var householdBalances: [BalanceDelta] {
+        [
+            delta(0, "Conto", 550_000),
+            delta(0, "Cash", 200_000),
+            delta(1, "Conto", 400_000),
+            delta(1, "Cash", -65_000),
+            delta(2, "Conto", -50_000),
+            delta(2, "Cash", 50_000),
+            delta(3, "Conto", 200_000),
+            delta(3, "Carta", 100_000),
+            delta(9, "Cash", 95_000),
+        ]
+    }
+
+    @Test("Every wallet with money in the year has a column, and the columns add up to TOTALE")
+    func walletColumnsAddUp() {
+        let year = Self.build(
+            rows: Self.household, wallets: Self.householdWallets, walletBalances: Self.householdBalances
+        )
+        // The vault's order; the wallet that never moved has no column.
+        #expect(year.walletColumns.map(\.name) == ["Cash", "Conto", "Carta"])
+        #expect(year.walletColumns.map(\.initial) == [200_000, 550_000, 0])
+        #expect(year.walletColumns.map(\.initial).reduce(0, +) == year.initial)
+        for (index, month) in year.elapsed.enumerated() {
+            #expect(year.walletColumns.reduce(0) { $0 + $1.balances[index] } == month.total)
+        }
+        #expect(year.walletColumns.allSatisfy { $0.balances.count == 12 })
+        #expect(Array(year.walletColumns[0].balances[0...2]) == [135_000, 185_000, 185_000])
+        #expect(Array(year.walletColumns[1].balances[0...2]) == [950_000, 900_000, 1_100_000])
+        // A month after the one on screen carries the running balance.
+        #expect(year.walletColumns[0].balances[11] == 280_000)
+    }
+
+    @Test("The table's wallet cells: the opening balances, each month's and where the year ended")
+    func walletCellsOfTheTable() {
+        let rows = Self.build(
+            rows: Self.household, wallets: Self.householdWallets, walletBalances: Self.householdBalances
+        ).tableRows
+        #expect(rows[0].byWallet == [200_000, 550_000, 0])
+        #expect(rows[3].byWallet == [185_000, 1_100_000, 100_000])
+        #expect(rows[10].byWallet.isEmpty)
+        #expect(rows[13].byWallet == [280_000, 1_100_000, 100_000])
+    }
+
+    @Test("One wallet in the year has no column: TOTALE already is its balance")
+    func oneWalletHasNoColumn() {
+        let one = Self.build(
+            rows: Self.household,
+            wallets: [Self.wallet("Conto")],
+            walletBalances: [Self.delta(0, "Conto", 750_000)]
+        )
+        #expect(one.walletColumns.isEmpty)
+        let noCells = one.tableRows.allSatisfy { $0.byWallet.isEmpty }
+        #expect(noCells)
+        // A second wallet whose legs net to nothing before the year, and one
+        // the vault does not list, do not make two.
+        let still = Self.build(
+            rows: Self.household,
+            wallets: [Self.wallet("Conto"), Self.wallet("Chiuso")],
+            walletBalances: [
+                Self.delta(0, "Conto", 750_000),
+                Self.delta(0, "Chiuso", 0),
+                Self.delta(1, "Altrove", 5_000),
+                Self.delta(13, "Chiuso", 5_000),
+            ]
+        )
+        #expect(still.walletColumns.isEmpty)
     }
 
     // MARK: - Chart scale
