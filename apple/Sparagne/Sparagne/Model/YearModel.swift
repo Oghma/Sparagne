@@ -250,7 +250,8 @@ struct YearSummary: Sendable {
     let funds: [FundGauge]
     /// One column per wallet with a balance or a movement in the year, in
     /// the vault's order; empty with fewer than two, when the TOTALE column
-    /// already says it all.
+    /// already says it all, and under the PERSONA filter: a wallet is the
+    /// family's, and its balance would not add up to one person's TOTALE.
     let walletColumns: [WalletYearColumn]
 
     var initial: Int64 { initialByPerson.reduce(0, +) }
@@ -488,7 +489,7 @@ struct YearSummary: Sendable {
             initialByPerson: initialByPerson,
             months: months,
             funds: Self.funds(in: flows),
-            walletColumns: Self.walletColumns(wallets: wallets, deltas: walletBalances)
+            walletColumns: person == nil ? Self.walletColumns(wallets: wallets, deltas: walletBalances) : []
         )
     }
 

@@ -653,6 +653,16 @@ struct YearModelTests {
         #expect(still.walletColumns.isEmpty)
     }
 
+    @Test("Under PERSONA the wallets have no column: their balance is the family's, not the person's")
+    func noWalletColumnsUnderPersonFilter() {
+        let filtered = Self.build(
+            rows: Self.household, person: "elisa",
+            wallets: Self.householdWallets, walletBalances: Self.householdBalances
+        )
+        #expect(filtered.walletColumns.isEmpty)
+        #expect(filtered.tableRows.allSatisfy { $0.byWallet.isEmpty })
+    }
+
     // MARK: - Chart scale
 
     @Test("The axis covers the data on a 1-2-5 step, and a flow chart keeps its zero")
