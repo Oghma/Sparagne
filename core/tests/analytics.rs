@@ -1,6 +1,7 @@
 //! Tests for the ledger aggregations: people, the
 //! envelope x person matrix, the category breakdown, the twelve-month buckets,
-//! the top expenses and the year breakdown behind the RIEPILOGO.
+//! the top expenses, and the year breakdown, the months x categories grid and
+//! the balance breakdown behind the RIEPILOGO.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -9,7 +10,8 @@ mod common;
 use chrono::{DateTime, TimeZone, Utc};
 use common::*;
 use sparagne_core::{
-    Command, CommandEnvelope, Core, DomainError, FlowMode, Receipt, TransactionFilter,
+    BucketCategoryTotals, Command, CommandEnvelope, Core, DomainError, FlowMode, Receipt,
+    TargetKind, TransactionFilter,
 };
 use uuid::Uuid;
 
@@ -254,6 +256,16 @@ fn every_aggregation_follows_the_person_not_who_recorded_the_row() {
     assert_eq!(elisa_year.cash_expense, 70);
     let matteo_year = year.iter().find(|r| r.person == "matteo").unwrap();
     assert_eq!(matteo_year.cash_expense, 90 + 25);
+
+    let grid = core
+        .category_bucket_totals(vault, vec![from, to], elisa())
+        .unwrap();
+    assert_eq!(
+        grid.iter()
+            .map(|c| (c.name.as_str(), c.net_expense))
+            .collect::<Vec<_>>(),
+        [("Ristoranti", 40), ("Spesa", 30)]
+    );
 }
 
 // -- categories ------------------------------------------------------------
@@ -557,6 +569,535 @@ fn year_breakdown_rejects_bad_boundaries() {
             .year_breakdown(s.fx.vault, vec![utc(T0 + DAY), utc(T0)]),
         Err(DomainError::InvalidCommand(_))
     ));
+}
+
+// -- months x categories ---------------------------------------------------
+
+/// `(bucket, name, net_expense, count)` in the order the query returns them.
+fn cells(rows: &[BucketCategoryTotals]) -> Vec<(u32, &str, i64, u32)> {
+    rows.iter()
+        .map(|r| (r.bucket, r.name.as_str(), r.net_expense, r.count))
+        .collect()
+}
+
+/// Three buckets of two days each: [T0, +2d), [+2d, +4d), [+4d, +6d).
+fn two_day_bounds() -> Vec<DateTime<Utc>> {
+    vec![
+        utc(T0),
+        utc(T0 + 2 * DAY),
+        utc(T0 + 4 * DAY),
+        utc(T0 + 6 * DAY),
+    ]
+}
+
+#[test]
+fn category_bucket_totals_put_a_row_on_a_boundary_in_the_later_bucket() {
+    let s = shared_month();
+    let rows =
+        s.fx.core
+            .category_bucket_totals(s.fx.vault, two_day_bounds(), None)
+            .unwrap();
+
+    // Matteo's 100 on Casa sits exactly on +2d and his 10 refund exactly on
+    // +4d: each opens the later bucket. The refund is alone there, so Casa
+    // reads zero in bucket 2. The 900 of income is no expense at all.
+    assert_eq!(
+        cells(&rows),
+        [
+            (0, "Spesa", 30, 1),
+            (1, "Casa", 100, 1),
+            (1, "Svago", 25, 1),
+            (2, "Casa", 0, 1),
+        ]
+    );
+    assert!(rows.iter().all(|r| !r.is_system));
+}
+
+#[test]
+fn category_bucket_totals_net_refunds_inside_the_bucket_and_floor_at_zero() {
+    let mut s = shared_month();
+    let bounds = vec![utc(T0), utc(T0 + 30 * DAY)];
+    let rows =
+        s.fx.core
+            .category_bucket_totals(s.fx.vault, bounds.clone(), None)
+            .unwrap();
+    // Casa: 100 spent, 10 back, two rows behind it.
+    assert_eq!(
+        cells(&rows),
+        [(0, "Casa", 90, 2), (0, "Spesa", 30, 1), (0, "Svago", 25, 1)]
+    );
+
+    // A refund larger than what Svago spent floors it at zero, still counted.
+    run_as(
+        &mut s.fx.core,
+        s.fx.vault,
+        "matteo",
+        Command::Refund(entry(
+            40,
+            Some(s.fx.wallet),
+            Some(s.varie),
+            Some("Svago"),
+            T0 + 5 * DAY,
+        )),
+    );
+    let rows =
+        s.fx.core
+            .category_bucket_totals(s.fx.vault, bounds, None)
+            .unwrap();
+    assert_eq!(
+        cells(&rows),
+        [(0, "Casa", 90, 2), (0, "Spesa", 30, 1), (0, "Svago", 0, 2)]
+    );
+}
+
+#[test]
+fn category_bucket_totals_leave_voided_rows_out() {
+    let mut s = shared_month();
+    let vault = s.fx.vault;
+    let w = Some(s.fx.wallet);
+    let trip = run_as(
+        &mut s.fx.core,
+        vault,
+        "matteo",
+        Command::Expense(entry(500, w, Some(s.cash), Some("Viaggi"), T0 + 5 * DAY)),
+    )
+    .result_id
+    .unwrap();
+    let refund = run_as(
+        &mut s.fx.core,
+        vault,
+        "matteo",
+        Command::Refund(entry(30, w, Some(s.cash), Some("Casa"), T0 + 5 * DAY)),
+    )
+    .result_id
+    .unwrap();
+    for id in [trip, refund] {
+        run(
+            &mut s.fx.core,
+            vault,
+            Command::VoidTransaction { transaction_id: id },
+        );
+    }
+
+    let rows =
+        s.fx.core
+            .category_bucket_totals(vault, vec![utc(T0), utc(T0 + 30 * DAY)], None)
+            .unwrap();
+    // No Viaggi at all, and Casa is back to 100 - 10 over its two live rows.
+    assert_eq!(
+        cells(&rows),
+        [(0, "Casa", 90, 2), (0, "Spesa", 30, 1), (0, "Svago", 25, 1)]
+    );
+}
+
+#[test]
+fn category_bucket_totals_can_be_filtered_by_person() {
+    let s = shared_month();
+    let bounds = vec![utc(T0), utc(T0 + 30 * DAY)];
+    let for_person = |person: &str| {
+        s.fx.core
+            .category_bucket_totals(s.fx.vault, bounds.clone(), Some(person.to_string()))
+            .unwrap()
+    };
+
+    assert_eq!(cells(&for_person("elisa")), [(0, "Spesa", 30, 1)]);
+    assert_eq!(
+        cells(&for_person("matteo")),
+        [(0, "Casa", 90, 2), (0, "Svago", 25, 1)]
+    );
+    assert!(for_person("nobody").is_empty());
+}
+
+#[test]
+fn category_bucket_totals_order_by_bucket_then_heaviest_then_name() {
+    let mut s = shared_month();
+    let vault = s.fx.vault;
+    let w = Some(s.fx.wallet);
+    // Two more rows in bucket 1: Affitto would come first by name and comes
+    // last by weight; bollette ties with Svago and goes first because the
+    // name compares case-insensitively.
+    run_as(
+        &mut s.fx.core,
+        vault,
+        "matteo",
+        Command::Expense(entry(5, w, Some(s.varie), Some("Affitto"), T0 + 3 * DAY)),
+    );
+    run_as(
+        &mut s.fx.core,
+        vault,
+        "matteo",
+        Command::Expense(entry(25, w, Some(s.varie), Some("bollette"), T0 + 3 * DAY)),
+    );
+
+    let rows =
+        s.fx.core
+            .category_bucket_totals(vault, two_day_bounds(), None)
+            .unwrap();
+    // Bucket 0's 30 comes before bucket 1's 100: the bucket orders first.
+    assert_eq!(
+        cells(&rows),
+        [
+            (0, "Spesa", 30, 1),
+            (1, "Casa", 100, 1),
+            (1, "bollette", 25, 1),
+            (1, "Svago", 25, 1),
+            (1, "Affitto", 5, 1),
+            (2, "Casa", 0, 1),
+        ]
+    );
+}
+
+#[test]
+fn category_bucket_totals_reject_bad_boundaries() {
+    let s = shared_month();
+    for bounds in [
+        vec![],
+        vec![utc(T0)],
+        vec![utc(T0 + DAY), utc(T0)],
+        vec![utc(T0), utc(T0), utc(T0 + DAY)],
+    ] {
+        assert!(matches!(
+            s.fx.core.category_bucket_totals(s.fx.vault, bounds, None),
+            Err(DomainError::InvalidCommand(_))
+        ));
+    }
+}
+
+// -- balance breakdown -----------------------------------------------------
+
+/// `(bucket, target, delta)` in the order the query returns them.
+fn deltas(
+    core: &Core,
+    vault: Uuid,
+    bounds: Vec<DateTime<Utc>>,
+    target: TargetKind,
+) -> Vec<(u32, Uuid, i64)> {
+    core.balance_breakdown(vault, bounds, target)
+        .unwrap()
+        .into_iter()
+        .map(|r| (r.bucket, r.target_id, r.delta))
+        .collect()
+}
+
+/// The epoch, then two stretches of thirty days from the day after `T0`:
+/// what the app passes, with months of a fixed length.
+fn month_bounds() -> Vec<DateTime<Utc>> {
+    vec![
+        utc(0),
+        utc(T0 + DAY),
+        utc(T0 + 31 * DAY),
+        utc(T0 + 61 * DAY),
+    ]
+}
+
+#[test]
+fn balance_breakdown_moves_a_wallet_transfer_from_one_wallet_to_the_other() {
+    let mut fx = setup();
+    let conto = run(&mut fx.core, fx.vault, wallet_cmd("Conto", 0))
+        .result_id
+        .unwrap();
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::Income(entry(
+            500,
+            Some(fx.wallet),
+            None,
+            Some("Stipendio"),
+            T0 + 2 * DAY,
+        )),
+    );
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::TransferWallet {
+            amount: 200,
+            from_wallet_id: fx.wallet,
+            to_wallet_id: conto,
+            note: None,
+            occurred_at: at(T0 + 3 * DAY),
+        },
+    );
+
+    // The transfer opens a bucket of its own: [T0 + 3d, T0 + 31d).
+    let bounds = vec![utc(0), utc(T0 + DAY), utc(T0 + 3 * DAY), utc(T0 + 31 * DAY)];
+    let wallets = deltas(&fx.core, fx.vault, bounds.clone(), TargetKind::Wallet);
+    assert_eq!(wallets[0], (1, fx.wallet, 500));
+    let transfer: Vec<(Uuid, i64)> = wallets
+        .iter()
+        .filter(|(bucket, ..)| *bucket == 2)
+        .map(|&(_, id, delta)| (id, delta))
+        .collect();
+    assert_eq!(transfer.len(), 2);
+    assert!(transfer.contains(&(fx.wallet, -200)));
+    assert!(transfer.contains(&(conto, 200)));
+    assert_eq!(transfer.iter().map(|(_, delta)| delta).sum::<i64>(), 0);
+    // Bucket first, then the id byte by byte.
+    assert!(
+        wallets
+            .windows(2)
+            .all(|w| (w[0].0, w[0].1) < (w[1].0, w[1].1))
+    );
+
+    // A wallet transfer has no envelope legs: the envelopes only see the
+    // income.
+    assert_eq!(
+        deltas(&fx.core, fx.vault, bounds, TargetKind::Flow),
+        [(1, fx.unallocated, 500)]
+    );
+}
+
+#[test]
+fn balance_breakdown_puts_an_opening_before_the_first_month_in_bucket_zero() {
+    let mut fx = setup();
+    // Opened at T0, before the first month boundary at T0 + 1d.
+    let risparmi = run(&mut fx.core, fx.vault, wallet_cmd("Risparmi", 5_000))
+        .result_id
+        .unwrap();
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::Expense(entry(300, Some(risparmi), None, Some("Casa"), T0 + 2 * DAY)),
+    );
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::Income(entry(
+            1_200,
+            Some(risparmi),
+            None,
+            Some("Stipendio"),
+            T0 + 40 * DAY,
+        )),
+    );
+
+    // The fixture's Cash wallet opened at zero, so it never moved.
+    let wallets = deltas(&fx.core, fx.vault, month_bounds(), TargetKind::Wallet);
+    assert_eq!(
+        wallets,
+        [
+            (0, risparmi, 5_000),
+            (1, risparmi, -300),
+            (2, risparmi, 1_200)
+        ]
+    );
+    // Summed bucket by bucket, the deltas are the balance at the end of each.
+    let running: Vec<i64> = wallets
+        .iter()
+        .scan(0, |balance, &(_, _, delta)| {
+            *balance += delta;
+            Some(*balance)
+        })
+        .collect();
+    assert_eq!(running, [5_000, 4_700, 5_900]);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, risparmi), 5_900);
+
+    // The opening lands on Unallocated on the envelope side.
+    let flows = deltas(&fx.core, fx.vault, month_bounds(), TargetKind::Flow);
+    assert_eq!(flows[0], (0, fx.unallocated, 5_000));
+}
+
+#[test]
+fn balance_breakdown_of_the_envelopes_matches_the_year_breakdown_bucket_by_bucket() {
+    let mut fx = setup();
+    let vault = fx.vault;
+    let w = Some(fx.wallet);
+    let spesa = run(
+        &mut fx.core,
+        vault,
+        flow_cmd("Spesa", FlowMode::Unlimited, true, 0),
+    )
+    .result_id
+    .unwrap();
+    let fondo = run(
+        &mut fx.core,
+        vault,
+        flow_cmd("Fondo", FlowMode::NetCapped { cap: 100_000 }, true, 0),
+    )
+    .result_id
+    .unwrap();
+
+    // Bucket 0: an opening and an expense before the first month.
+    open_wallet(&mut fx.core, vault, "alice", "Risparmi", 700, T0);
+    run_as(
+        &mut fx.core,
+        vault,
+        "elisa",
+        Command::Expense(entry(50, w, Some(spesa), Some("Spesa"), T0)),
+    );
+    // Bucket 1: income, a share of it moved to Spesa, expenses on both
+    // envelopes, a refund on the capped one and another opening.
+    run_as(
+        &mut fx.core,
+        vault,
+        "alice",
+        Command::Income(entry(1_000, w, None, Some("Stipendio"), T0 + 2 * DAY)),
+    );
+    let move_to = |from: Uuid, to: Uuid, amount: i64, secs: i64| Command::TransferFlow {
+        amount,
+        from_flow_id: from,
+        to_flow_id: to,
+        note: None,
+        occurred_at: at(secs),
+    };
+    run(
+        &mut fx.core,
+        vault,
+        move_to(fx.unallocated, spesa, 400, T0 + 3 * DAY),
+    );
+    run_as(
+        &mut fx.core,
+        vault,
+        "elisa",
+        Command::Expense(entry(150, w, Some(spesa), Some("Spesa"), T0 + 4 * DAY)),
+    );
+    run_as(
+        &mut fx.core,
+        vault,
+        "matteo",
+        Command::Expense(entry(80, w, Some(fondo), Some("Casa"), T0 + 5 * DAY)),
+    );
+    run_as(
+        &mut fx.core,
+        vault,
+        "matteo",
+        Command::Refund(entry(20, w, Some(fondo), Some("Casa"), T0 + 6 * DAY)),
+    );
+    open_wallet(&mut fx.core, vault, "alice", "Conto", 250, T0 + 7 * DAY);
+    // Bucket 2: a transfer between envelopes and nothing else.
+    run(
+        &mut fx.core,
+        vault,
+        move_to(spesa, fondo, 30, T0 + 40 * DAY),
+    );
+
+    let flows = deltas(&fx.core, vault, month_bounds(), TargetKind::Flow);
+    let year = fx.core.year_breakdown(vault, month_bounds()).unwrap();
+    let moved = |bucket: u32| -> i64 {
+        flows
+            .iter()
+            .filter(|(b, ..)| *b == bucket)
+            .map(|(_, _, delta)| delta)
+            .sum()
+    };
+    let earned = |bucket: u32| -> i64 {
+        year.iter()
+            .filter(|r| r.bucket == bucket)
+            .map(|r| r.income + r.opening - r.cash_expense - r.fund_expense)
+            .sum()
+    };
+    // 700 - 50; 1.000 + 250 - 150 - (80 - 20); the transfer nets to zero.
+    for (bucket, expected) in [(0, 650), (1, 1_040), (2, 0)] {
+        assert_eq!(moved(bucket), expected, "envelopes in bucket {bucket}");
+        assert_eq!(earned(bucket), expected, "year in bucket {bucket}");
+    }
+
+    // The transfer still shows as movement on both envelopes.
+    let last: Vec<(Uuid, i64)> = flows
+        .iter()
+        .filter(|(b, ..)| *b == 2)
+        .map(|&(_, id, delta)| (id, delta))
+        .collect();
+    assert_eq!(last.len(), 2);
+    assert!(last.contains(&(spesa, -30)) && last.contains(&(fondo, 30)));
+    // Inside bucket 1 the transfer is part of each envelope's delta.
+    let in_month = |id: Uuid| {
+        flows
+            .iter()
+            .find(|&&(b, target, _)| b == 1 && target == id)
+            .map(|&(_, _, delta)| delta)
+    };
+    assert_eq!(in_month(fx.unallocated), Some(1_000 - 400 + 250));
+    assert_eq!(in_month(spesa), Some(400 - 150));
+    assert_eq!(in_month(fondo), Some(-80 + 20));
+}
+
+#[test]
+fn balance_breakdown_keeps_an_archived_wallet_with_movement_in_the_range() {
+    let mut fx = setup();
+    let vecchio = run(&mut fx.core, fx.vault, wallet_cmd("Vecchio", 300))
+        .result_id
+        .unwrap();
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::TransferWallet {
+            amount: 300,
+            from_wallet_id: vecchio,
+            to_wallet_id: fx.wallet,
+            note: None,
+            occurred_at: at(T0 + 5 * DAY),
+        },
+    );
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::ArchiveWallet { wallet_id: vecchio },
+    );
+
+    let wallets = deltas(&fx.core, fx.vault, month_bounds(), TargetKind::Wallet);
+    assert_eq!(wallets.len(), 3);
+    assert!(wallets.contains(&(0, vecchio, 300)));
+    assert!(wallets.contains(&(1, vecchio, -300)));
+    assert!(wallets.contains(&(1, fx.wallet, 300)));
+}
+
+#[test]
+fn balance_breakdown_leaves_voided_rows_and_rows_past_the_range_out() {
+    let mut fx = setup();
+    let w = Some(fx.wallet);
+    let income = run(
+        &mut fx.core,
+        fx.vault,
+        Command::Income(entry(500, w, None, Some("Stipendio"), T0 + 2 * DAY)),
+    )
+    .result_id
+    .unwrap();
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::Expense(entry(100, w, None, Some("Spesa"), T0 + 3 * DAY)),
+    );
+    // Past the last boundary.
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::Expense(entry(70, w, None, Some("Spesa"), T0 + 90 * DAY)),
+    );
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::VoidTransaction {
+            transaction_id: income,
+        },
+    );
+
+    assert_eq!(
+        deltas(&fx.core, fx.vault, month_bounds(), TargetKind::Wallet),
+        [(1, fx.wallet, -100)]
+    );
+    assert_eq!(
+        deltas(&fx.core, fx.vault, month_bounds(), TargetKind::Flow),
+        [(1, fx.unallocated, -100)]
+    );
+}
+
+#[test]
+fn balance_breakdown_rejects_bad_boundaries() {
+    let fx = setup();
+    for target in [TargetKind::Wallet, TargetKind::Flow] {
+        for bounds in [
+            vec![],
+            vec![utc(T0)],
+            vec![utc(T0 + DAY), utc(T0)],
+            vec![utc(T0), utc(T0), utc(T0 + DAY)],
+        ] {
+            assert!(matches!(
+                fx.core.balance_breakdown(fx.vault, bounds, target),
+                Err(DomainError::InvalidCommand(_))
+            ));
+        }
+    }
 }
 
 // -- filter additions ------------------------------------------------------
