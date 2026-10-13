@@ -16,9 +16,9 @@ struct SummaryCharts: View {
 
 // MARK: - Cash flow
 
-/// ENTRATE, USCITE and RISPARMIO month by month. The line into the month on
-/// screen is dashed: that month is not over, so the segment is a promise and
-/// not a fact.
+/// ENTRATE, USCITE and RISPARMIO month by month. The line into today's
+/// month is dashed: that month is not over, so the segment is a promise and
+/// not a fact. A month gone by is drawn solid, even as the last one.
 private struct CashFlowCard: View {
     let year: YearSummary
 
@@ -41,8 +41,9 @@ private struct CashFlowCard: View {
 
     private var months: [YearMonth] { year.elapsed }
 
-    /// Whether the last month drawn is the one on screen, still going.
-    private var endsUnfinished: Bool { months.last?.month == year.upTo }
+    /// Whether the last month drawn is still going: the one on screen, and
+    /// the one today falls in. August looked at in October is over.
+    private var endsUnfinished: Bool { year.isLive && months.last?.month == year.upTo }
 
     /// Finished months, then the segment into the unfinished one.
     private var solid: [YearMonth] { endsUnfinished ? Array(months.dropLast()) : months }
@@ -134,7 +135,7 @@ private struct CashFlowCard: View {
             }
         }
         .chartXSelection(value: $selected)
-        .chartXScale(domain: 1...Double(max(months.last?.month.month ?? 2, 2)), range: .plotDimension(padding: 8))
+        .chartXScale(domain: 1...Double(max(months.last?.month.month ?? 2, 2)), range: ChartAxes.monthRange)
         .chartYScale(domain: scale.lower...scale.upper)
         .chartXAxis { ChartAxes.months(upTo: months.last?.month.month ?? 1) }
         .chartYAxis { ChartAxes.money(scale) }
@@ -263,7 +264,7 @@ private struct CashFundCard: View {
                     }
             }
         }
-        .chartXScale(domain: 0...Double(max(points.last?.id ?? 1, 1)), range: .plotDimension(padding: 8))
+        .chartXScale(domain: 0...Double(max(points.last?.id ?? 1, 1)), range: ChartAxes.monthRange)
         .chartYScale(domain: scale.lower...scale.upper)
         .chartXAxis { ChartAxes.months(upTo: points.last?.id ?? 1, includeStart: true) }
         .chartYAxis { ChartAxes.money(scale) }
@@ -285,9 +286,18 @@ private struct CashFundCard: View {
 /// The axes both charts share, in the palette: Swift Charts' defaults are the
 /// system's, which are far too bright on this ground.
 private enum ChartAxes {
+    /// The months' x range. The last month's label is centered on the
+    /// plot's trailing edge, where the money axis sits: left to resolve the
+    /// collision itself, Swift Charts dropped it, and the month on screen
+    /// went missing under its own line. The padding at the end keeps the
+    /// label clear of that axis.
+    static let monthRange = PlotDimensionScaleRange.plotDimension(startPadding: 8, endPadding: 14)
+
     static func months(upTo last: Int, includeStart: Bool = false) -> some AxisContent {
         AxisMarks(values: Array((includeStart ? 0 : 1)...max(last, 1)).map(Double.init)) { value in
-            AxisValueLabel {
+            // Every month gets its label: twelve short names fit half the
+            // window, and the one dropped first was always the last.
+            AxisValueLabel(collisionResolution: .disabled) {
                 if let month = value.as(Double.self) {
                     Text(month == 0 ? String(localized: "start") : LedgerDate.shortMonth(Int(month)))
                         .font(Face.small)
