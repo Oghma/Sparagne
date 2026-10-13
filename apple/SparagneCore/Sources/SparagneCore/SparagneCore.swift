@@ -2280,7 +2280,8 @@ public struct BucketCategoryTotals: Equatable, Hashable, Codable {
     public var categoryId: Uuid
     public var name: String
     /**
-     * `true` for `Opening` and `Uncategorized`: the app localizes the name.
+     * `true` for `Uncategorized`, which the app localizes; `Opening` never
+     * reaches this row, its balances being neither earned nor spent.
      */
     public var isSystem: Bool
     /**
@@ -2299,7 +2300,8 @@ public struct BucketCategoryTotals: Equatable, Hashable, Codable {
          * Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
          */bucket: UInt32, categoryId: Uuid, name: String, 
         /**
-         * `true` for `Opening` and `Uncategorized`: the app localizes the name.
+         * `true` for `Uncategorized`, which the app localizes; `Opening` never
+         * reaches this row, its balances being neither earned nor spent.
          */isSystem: Bool, 
         /**
          * `max(expense - refund, 0)` inside the bucket.
@@ -2638,7 +2640,8 @@ public struct CategoryTotals: Equatable, Hashable, Codable {
     public var categoryId: Uuid
     public var name: String
     /**
-     * `true` for `Opening` and `Uncategorized`: the app localizes the name.
+     * `true` for `Uncategorized`, which the app localizes; `Opening` never
+     * reaches this row, its balances being neither earned nor spent.
      */
     public var isSystem: Bool
     public var income: Int64
@@ -2657,7 +2660,8 @@ public struct CategoryTotals: Equatable, Hashable, Codable {
     // declare one manually.
     public init(categoryId: Uuid, name: String, 
         /**
-         * `true` for `Opening` and `Uncategorized`: the app localizes the name.
+         * `true` for `Uncategorized`, which the app localizes; `Opening` never
+         * reaches this row, its balances being neither earned nor spent.
          */isSystem: Bool, income: Int64, expense: Int64, refund: Int64, 
         /**
          * `max(expense - refund, 0)`.

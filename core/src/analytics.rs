@@ -53,7 +53,8 @@ pub struct FlowPersonTotals {
 pub struct CategoryTotals {
     pub category_id: Uuid,
     pub name: String,
-    /// `true` for `Opening` and `Uncategorized`: the app localizes the name.
+    /// `true` for `Uncategorized`, which the app localizes; `Opening` never
+    /// reaches this row, its balances being neither earned nor spent.
     pub is_system: bool,
     pub income: i64,
     pub expense: i64,
@@ -104,7 +105,8 @@ pub struct BucketCategoryTotals {
     pub bucket: u32,
     pub category_id: Uuid,
     pub name: String,
-    /// `true` for `Opening` and `Uncategorized`: the app localizes the name.
+    /// `true` for `Uncategorized`, which the app localizes; `Opening` never
+    /// reaches this row, its balances being neither earned nor spent.
     pub is_system: bool,
     /// `max(expense - refund, 0)` inside the bucket.
     pub net_expense: i64,
