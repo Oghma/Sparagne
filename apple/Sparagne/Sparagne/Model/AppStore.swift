@@ -196,6 +196,9 @@ final class AppStore {
         // Every bulk action writes: rows picked before the role changed have
         // nothing left to be picked for.
         if isReadOnly { selection.clear() }
+        // Nor are the strip's periods to decide, when the role arrives after
+        // the load.
+        rebuildSummaryTodo()
     }
 
     /// Whether the vault on screen is read-only for this account.
@@ -238,6 +241,34 @@ final class AppStore {
     private(set) var year: YearSummary?
     /// When the last command was applied, for the status bar's "saved at".
     private(set) var savedAt: Date?
+
+    // MARK: The RIEPILOGO beyond its table
+    //
+    // Read with the year, from the same visit, so none of them describes a
+    // different month, person or vault from the table.
+
+    /// The year's categories, heaviest first, eight and "other".
+    private(set) var yearCategories: [CategoryShare] = []
+    /// The months x categories grid.
+    private(set) var categoryHeat: CategoryHeat?
+    /// Every active envelope's year.
+    private(set) var envelopeYear: EnvelopeYear?
+    /// What the recurring expenses commit a month, `nil` without any.
+    private(set) var fixedCosts: FixedCosts?
+    /// The strip of things to do; empty, it is not drawn.
+    private(set) var summaryTodo: [SummaryTodoItem] = []
+    /// The year's category totals as the core gave them, for the strip's
+    /// count of rows without a category when the strip is redone without a
+    /// load (a role that changed).
+    @ObservationIgnored private var yearCategoryTotals: [CategoryTotals] = []
+    /// The year's heaviest expenses, largest first.
+    private(set) var topExpenses: [TopExpense] = []
+    /// A row the Mastro's grid scrolls to (`reveal`), and then sets back to
+    /// `nil`: not `private(set)`, the grid consumes it. It does so only once
+    /// the row is among `rows`; a load of the list on screen that does not
+    /// hold it (voided, past the first page, another month by now) sets it
+    /// back to `nil` itself, and so does another vault.
+    var revealedRow: Uuid?
 
     // MARK: Category management (the SETUP tab)
 
@@ -473,7 +504,10 @@ final class AppStore {
     /// Queues a reload behind whatever is already loading. The filters are
     /// plain properties so the views can bind to them, and a `didSet` cannot
     /// await.
-    private func scheduleReload() {
+    ///
+    /// Not private: `reveal` queues one when only the search changed, which
+    /// reloads nothing by itself (the window debounces it).
+    func scheduleReload() {
         queuedGeneration += 1
         let previous = queuedLoad
         queuedLoad = Task { [weak self] in
@@ -565,6 +599,8 @@ final class AppStore {
         allocationRuns = []
         categoryUsage = [:]
         selection.clear()
+        // It names a row of the vault being left.
+        revealedRow = nil
         tabFilter = ""
         // A void still counting down is not undone by leaving: it carries its
         // own vault, so it lands where its rows are, and the vault it left
@@ -589,6 +625,13 @@ final class AppStore {
             peopleInRows = []
             summary = nil
             year = nil
+            yearCategories = []
+            categoryHeat = nil
+            envelopeYear = nil
+            fixedCosts = nil
+            summaryTodo = []
+            yearCategoryTotals = []
+            topExpenses = []
             pendingRecurringItems = []
             allocationPlan = nil
             pendingAllocation = nil
@@ -611,15 +654,29 @@ final class AppStore {
             loadedFilter = request.filter
             peopleInRows = loaded.people
             pendingRecurringItems = loaded.pendingRecurring
+            // Every template, archived included, as the Ricorrenze tab lists
+            // them: a sync that brings one keeps that tab current too.
+            recurringTemplates = loaded.recurringTemplates
             allocationPlan = loaded.allocationPlan
             pendingAllocation = loaded.pendingAllocation
             allocationBase = loaded.allocationBase
             summary = Self.summary(month: month, from: loaded)
-            year = Self.year(month: month, from: loaded, flows: flows)
+            let year = Self.year(month: month, from: loaded, flows: flows, person: person, today: MonthKey(Date()))
+            self.year = year
+            loadYearExtras(from: loaded, year: year)
             rebuildRows()
             // A sync or a void can take selected rows away: they must not
             // ride along, unseen, in the next bulk action.
             selection.retain(Set(rows.map(\.id)))
+            selectRevealedRow()
+            // The list on screen came back without the row asked for: voided,
+            // past the first page, or another month by now. Kept, the id
+            // would select the row under the user on a later load of its
+            // month. A load that answered filters changed since (one in the
+            // air when the row was asked for) says nothing about it.
+            if let id = revealedRow, request.filter == filter, !rows.contains(where: { $0.id == id }) {
+                revealedRow = nil
+            }
             // A person who has left the vault's history must not stay
             // selected, or the ledger shows an empty month with no way back.
             // Clearing it queues the reload that fetches the whole month.
@@ -632,6 +689,7 @@ final class AppStore {
         let bounds = month.bounds()
         let trailing = month.trailingYear()
         let epoch = CoreDate.utcString(Date(timeIntervalSince1970: 0))
+        let yearBounds = MonthKey.yearBounds(month.year)
         return VaultLoadRequest(
             vaultId: vaultId,
             filter: filter,
@@ -640,7 +698,9 @@ final class AppStore {
             monthTo: bounds.to,
             previousStart: CoreDate.utcString(month.adding(months: -1).start()),
             trailingBounds: trailing.bounds,
-            yearBounds: [epoch] + MonthKey.yearBounds(month.year),
+            yearBounds: [epoch] + yearBounds,
+            yearFrom: yearBounds[0],
+            yearTo: bounds.to,
             person: person,
             today: CoreDate.day(Date())
         )
@@ -661,8 +721,18 @@ final class AppStore {
     }
 
     /// The RIEPILOGO's year: the `year_breakdown` rows of the same visit,
-    /// folded into the table the view draws.
-    private static func year(month: MonthKey, from loaded: VaultLoad, flows: [FlowView]) -> YearSummary? {
+    /// folded into the table the view draws. `today` is a parameter, not the
+    /// clock, so the function stays pure.
+    ///
+    /// Every wallet goes in, archived ones too: one emptied in March still
+    /// held money in January, and its column says so.
+    private static func year(
+        month: MonthKey,
+        from loaded: VaultLoad,
+        flows: [FlowView],
+        person: String?,
+        today: MonthKey
+    ) -> YearSummary {
         let rows = loaded.year.map {
             YearRow(
                 bucket: Int($0.bucket),
@@ -673,7 +743,80 @@ final class AppStore {
                 fundExpense: $0.fundExpense
             )
         }
-        return YearSummary.build(year: month.year, upTo: month, rows: rows, flows: flows, vaultPeople: loaded.people)
+        return YearSummary.build(
+            year: month.year,
+            upTo: month,
+            rows: rows,
+            flows: flows,
+            vaultPeople: loaded.people,
+            person: person,
+            today: today,
+            wallets: loaded.snapshot.wallets,
+            walletBalances: loaded.walletBalances.map(Self.delta)
+        )
+    }
+
+    /// Everything the RIEPILOGO draws besides its table, from the same visit
+    /// and for the same month and person. After `pendingRecurringItems`,
+    /// which the strip of things to do counts.
+    private func loadYearExtras(from loaded: VaultLoad, year: YearSummary) {
+        yearCategories = SummaryCategories.rows(loaded.yearCategories)
+        categoryHeat = CategoryHeat.build(
+            buckets: loaded.categoryBuckets.map {
+                CategoryBucket(
+                    bucket: Int($0.bucket),
+                    categoryId: $0.categoryId,
+                    name: $0.name,
+                    isSystem: $0.isSystem,
+                    netExpense: $0.netExpense,
+                    count: Int($0.count)
+                )
+            },
+            shares: yearCategories,
+            upTo: month
+        )
+        // The envelopes are the family's whatever PERSONA says, like the
+        // funds: their figures come from the unfiltered matrix, and so do
+        // their columns, every person of the vault's rows in the core's
+        // order.
+        envelopeYear = EnvelopeYear.build(
+            flows: flows,
+            flowPerson: loaded.yearFlowPerson,
+            balances: loaded.flowBalances.map(Self.delta),
+            upTo: month,
+            people: loaded.people
+        )
+        // Under PERSONA, `year.person` keeps the templates to that person's.
+        fixedCosts = FixedCosts.build(templates: loaded.recurringTemplates, year: year)
+        yearCategoryTotals = loaded.yearCategories
+        rebuildSummaryTodo()
+        topExpenses = loaded.yearTopExpenses
+    }
+
+    /// The strip from what is loaded: only what this account can act on, so
+    /// a vault it only reads has no periods to decide, recurring or of the
+    /// allocation plan. The rows without a category follow PERSONA, like the
+    /// ledger the chip opens.
+    private func rebuildSummaryTodo() {
+        summaryTodo = SummaryTodo.items(
+            dueRecurring: actionableDueCount,
+            pendingAllocation: isReadOnly ? nil : pendingAllocation,
+            yearCategories: yearCategoryTotals
+        )
+    }
+
+    private static func delta(_ row: BucketTargetTotals) -> BalanceDelta {
+        BalanceDelta(bucket: Int(row.bucket), targetId: row.targetId, delta: row.delta)
+    }
+
+    /// The row `reveal` asked for, selected alone once its month is on
+    /// screen. Left to the grid to scroll to and clear; a vault only read
+    /// has no selection to make. Not private: `reveal` calls it straight
+    /// away when the row's list is the one already on screen.
+    func selectRevealedRow() {
+        guard let id = revealedRow, canWrite, rows.contains(where: { $0.id == id }) else { return }
+        selection.clear()
+        selection.toggle(id)
     }
 
     /// Appends the next page, if any: the grid asks when its last row comes

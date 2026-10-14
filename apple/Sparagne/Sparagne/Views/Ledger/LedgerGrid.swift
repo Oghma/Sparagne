@@ -55,11 +55,20 @@ struct LedgerGrid: View {
             GridHeader(store: store, showsWallet: store.showWalletColumn)
                 .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
             GeometryReader { viewport in
-                ScrollView {
-                    lines(viewportHeight: viewport.size.height)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        lines(viewportHeight: viewport.size.height)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .background { selectionKeys }
+                    // A row asked for from the RIEPILOGO's heaviest expenses:
+                    // the grid may appear before the month's rows are loaded,
+                    // so it looks again as they arrive.
+                    .onAppear { reveal(with: proxy) }
+                    .onChange(of: store.revealedRow) { _, _ in reveal(with: proxy) }
+                    .onChange(of: store.rows.count) { _, _ in reveal(with: proxy) }
+                    .onChange(of: store.rows.first?.id) { _, _ in reveal(with: proxy) }
                 }
-                .scrollBounceBehavior(.basedOnSize)
-                .background { selectionKeys }
             }
             // With rows picked, a line under the sheet says what can be done
             // to all of them at once.
@@ -169,6 +178,26 @@ struct LedgerGrid: View {
             editing: focus != nil || editing != nil,
             canWrite: store.canWrite
         )
+    }
+
+    // MARK: - A row revealed
+
+    /// Scrolls the row `AppStore.reveal` asked for to the middle of the
+    /// sheet, once it is among the rows, and lets it go: the request is
+    /// consumed, so coming back to the tab later does not jump again. Until
+    /// the row is loaded the request waits.
+    private func reveal(with proxy: ScrollViewProxy) {
+        guard let id = store.revealedRow, let row = store.rows.first(where: { $0.id == id }) else { return }
+        // The rows' identity in the `ForEach` is their line's, not the
+        // transaction's id.
+        let target = LedgerLine.row(row).id
+        // The next turn of the run loop: on the first appearance the lazy
+        // stack has not laid its rows out yet, and the scroll would land
+        // nowhere.
+        Task { @MainActor in
+            proxy.scrollTo(target, anchor: .center)
+            if store.revealedRow == id { store.revealedRow = nil }
+        }
     }
 
     // MARK: - The lines

@@ -2,11 +2,26 @@
 //!
 //! Every query takes a half-open `[from, to)` range in UTC: the app computes
 //! the month boundaries with the system timezone, so the core never has to
-//! know about calendars or offsets. Voided rows and transfers are always out;
+//! know about calendars or offsets. Voided rows are always out, and so are
+//! transfers except in [`Core::balance_breakdown`], which follows the money;
 //! `net_expense` is `max(expense - refund, 0)`.
 //!
-//! [`Core::bucket_totals`] and [`Core::year_breakdown`] take the boundaries of
-//! several consecutive ranges instead, so a whole year costs one query.
+//! A wallet's opening balance is posted as an income (an expense when
+//! negative) on Unallocated with the system category `Opening`, but it is
+//! neither earned nor spent. [`Core::bucket_totals`],
+//! [`Core::flow_person_totals`], [`Core::category_totals`],
+//! [`Core::category_bucket_totals`] and [`Core::top_expenses`] leave it out,
+//! so every income, expense and savings figure of the summary agrees.
+//! [`Core::year_breakdown`] reads it on purpose, for FONDO CASSA, and
+//! [`Core::balance_breakdown`] counts it as money that is there. Outside this
+//! module, [`Core::period_totals`] keeps it too: a plain sum by kind.
+//!
+//! [`Core::bucket_totals`], [`Core::year_breakdown`],
+//! [`Core::category_bucket_totals`] and [`Core::balance_breakdown`] take the
+//! boundaries of several consecutive ranges instead, so a whole year costs one
+//! query.
+
+use std::collections::BTreeMap;
 
 use chrono::{DateTime, FixedOffset, Utc};
 use rusqlite::{params_from_iter, types::Value};
@@ -39,7 +54,8 @@ pub struct FlowPersonTotals {
 pub struct CategoryTotals {
     pub category_id: Uuid,
     pub name: String,
-    /// `true` for `Opening` and `Uncategorized`: the app localizes the name.
+    /// `true` for `Uncategorized`, which the app localizes; `Opening` never
+    /// reaches this row, its balances being neither earned nor spent.
     pub is_system: bool,
     pub income: i64,
     pub expense: i64,
@@ -82,6 +98,43 @@ pub struct BucketPersonTotals {
     pub fund_expense: i64,
 }
 
+/// One category's net expense inside one bucket: the months x categories
+/// grid of the RIEPILOGO.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct BucketCategoryTotals {
+    /// Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
+    pub bucket: u32,
+    pub category_id: Uuid,
+    pub name: String,
+    /// `true` for `Uncategorized`, which the app localizes; `Opening` never
+    /// reaches this row, its balances being neither earned nor spent.
+    pub is_system: bool,
+    /// `max(expense - refund, 0)` inside the bucket.
+    pub net_expense: i64,
+    /// Expense and refund rows behind the figure, voided excluded.
+    pub count: u32,
+}
+
+/// Which side of the legs a balance breakdown reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum TargetKind {
+    Wallet,
+    Flow,
+}
+
+/// What one wallet or envelope gained or lost inside one bucket: the signed
+/// sum of its legs, transfers included, voided rows excluded. Bucket 0 of the
+/// RIEPILOGO's bounds is everything before January, so it is the balance the
+/// year starts with.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct BucketTargetTotals {
+    /// Index of the gap between consecutive `bounds`: 0 is `[b0, b1)`.
+    pub bucket: u32,
+    /// The wallet or the envelope, by `target`.
+    pub target_id: Uuid,
+    pub delta: i64,
+}
+
 /// The six sums [`BucketPersonTotals`] is folded from: expenses and refunds
 /// stay apart until the end, because each group nets on its own.
 #[derive(Default)]
@@ -92,6 +145,17 @@ struct YearSlot {
     cash_refund: i64,
     fund_expense: i64,
     fund_refund: i64,
+}
+
+/// What [`BucketCategoryTotals`] is folded from: expenses and refunds stay
+/// apart until the end, so the bucket nets once.
+#[derive(Default)]
+struct CategorySlot {
+    name: String,
+    is_system: bool,
+    expense: i64,
+    refund: i64,
+    count: u32,
 }
 
 /// Folds the three kind sums into [`PeriodTotals`].
@@ -140,6 +204,33 @@ fn check_bounds(bounds: &[DateTime<Utc>], query: &str) -> Result<()> {
     Ok(())
 }
 
+/// The bucket `at` falls in: bucket `i` is `[edges[i], edges[i + 1])`, so a
+/// row exactly on an edge belongs to the later bucket. `None` outside
+/// `[edges[0], edges[last])`.
+fn bucket_of(edges: &[i64], at: i64) -> Option<usize> {
+    // partition_point gives the first edge strictly greater than `at`; minus
+    // one is the bucket that contains it.
+    let bucket = edges.partition_point(|&edge| edge <= at).checked_sub(1)?;
+    (bucket + 1 < edges.len()).then_some(bucket)
+}
+
+/// Narrows a [`scope`] to rows other than wallets' opening balances, for the
+/// queries that join `categories c`: an opening balance is neither earned nor
+/// spent.
+fn without_openings((mut sql, mut args): (String, Vec<Value>)) -> (String, Vec<Value>) {
+    sql.push_str(" AND NOT (c.is_system AND c.name_norm = ?)");
+    args.push(Value::Text(OPENING_KEY.to_string()));
+    (sql, args)
+}
+
+/// `legs.target_kind` of the side a [`TargetKind`] names.
+const fn leg_kind(target: TargetKind) -> &'static str {
+    match target {
+        TargetKind::Wallet => "wallet",
+        TargetKind::Flow => "flow",
+    }
+}
+
 /// `WHERE` shared by every aggregation: one vault, live rows, entries only,
 /// inside the range, optionally one person: who the rows are for
 /// (`transactions.person`), not who recorded them.
@@ -182,7 +273,9 @@ impl Core {
     }
 
     /// Envelope x person matrix over the range. Only pairs with movement are
-    /// returned; the app fills the gaps with zeros.
+    /// returned; the app fills the gaps with zeros. Wallets' opening balances
+    /// are left out: an opening balance is neither earned nor spent, and
+    /// [`Core::year_breakdown`] reads it for FONDO CASSA.
     pub fn flow_person_totals(
         &self,
         vault_id: Uuid,
@@ -190,11 +283,12 @@ impl Core {
         to: DateTime<Utc>,
     ) -> Result<Vec<FlowPersonTotals>> {
         check_range(from, to)?;
-        let (where_sql, args) = scope(vault_id, from, to, None);
+        let (where_sql, args) = without_openings(scope(vault_id, from, to, None));
         let sql = format!(
             "SELECT l.target_id, t.person, t.kind, SUM(ABS(l.amount))
              FROM transactions t
              JOIN legs l ON l.transaction_id = t.id AND l.target_kind = 'flow'
+             JOIN categories c ON c.id = t.category_id
              {where_sql}
              GROUP BY l.target_id, t.person, t.kind
              ORDER BY lower(t.person)"
@@ -245,7 +339,10 @@ impl Core {
         Ok(out)
     }
 
-    /// Category breakdown over the range, heaviest net expense first.
+    /// Category breakdown over the range, heaviest net expense first. Wallets'
+    /// opening balances are left out, so `Opening` never has a row: an
+    /// opening balance is neither earned nor spent, and
+    /// [`Core::year_breakdown`] reads it for FONDO CASSA.
     pub fn category_totals(
         &self,
         vault_id: Uuid,
@@ -254,7 +351,7 @@ impl Core {
         person: Option<String>,
     ) -> Result<Vec<CategoryTotals>> {
         check_range(from, to)?;
-        let (where_sql, args) = scope(vault_id, from, to, person.as_deref());
+        let (where_sql, args) = without_openings(scope(vault_id, from, to, person.as_deref()));
         let sql = format!(
             "SELECT t.category_id, c.name, c.is_system, t.kind, SUM(t.amount), COUNT(*)
              FROM transactions t JOIN categories c ON c.id = t.category_id
@@ -316,6 +413,12 @@ impl Core {
     /// Totals of the `bounds.len() - 1` consecutive ranges the boundaries
     /// describe: `[b0, b1)`, `[b1, b2)`, ... The app passes 13 month starts to
     /// get the twelve bars of a year, so leap years and DST stay in Swift.
+    ///
+    /// Wallets' opening balances are left out, as in
+    /// [`Core::flow_person_totals`] and [`Core::category_totals`], so the
+    /// month panel's income and savings agree with its by-person and category
+    /// figures: an opening balance is neither earned nor spent, and
+    /// [`Core::year_breakdown`] reads it for FONDO CASSA.
     pub fn bucket_totals(
         &self,
         vault_id: Uuid,
@@ -325,13 +428,17 @@ impl Core {
         check_bounds(&bounds, "bucket_totals")?;
 
         let edges: Vec<i64> = bounds.iter().map(|b| b.timestamp()).collect();
-        let (where_sql, args) = scope(
+        let (where_sql, args) = without_openings(scope(
             vault_id,
             bounds[0],
             bounds[bounds.len() - 1],
             person.as_deref(),
+        ));
+        let sql = format!(
+            "SELECT t.occurred_at, t.kind, t.amount
+             FROM transactions t JOIN categories c ON c.id = t.category_id
+             {where_sql}"
         );
-        let sql = format!("SELECT t.occurred_at, t.kind, t.amount FROM transactions t {where_sql}");
 
         // One pass over the range, bucketed in Rust: a year of a personal
         // ledger is a few thousand rows, and this keeps the SQL free of a
@@ -343,10 +450,9 @@ impl Core {
             let at: i64 = row.get(0)?;
             let kind: String = row.get(1)?;
             let amount: i64 = row.get(2)?;
-            // partition_point gives the first edge strictly greater than `at`;
-            // minus one is the bucket that contains it.
-            let bucket = edges.partition_point(|&edge| edge <= at).saturating_sub(1);
-            if let Some((income, expense, refund)) = sums.get_mut(bucket) {
+            if let Some((income, expense, refund)) =
+                bucket_of(&edges, at).and_then(|bucket| sums.get_mut(bucket))
+            {
                 accumulate(&kind, amount, income, expense, refund);
             }
         }
@@ -397,13 +503,11 @@ impl Core {
             let uncapped: bool = row.get(5)?;
             let amount: i64 = row.get(6)?;
 
-            // partition_point gives the first edge strictly greater than
-            // `at`; minus one is the bucket that contains it. The scope keeps
-            // `at` inside the outer range, so the index is always a bucket.
-            let bucket = edges.partition_point(|&edge| edge <= at).saturating_sub(1);
-            if bucket >= edges.len() - 1 {
+            // The scope keeps `at` inside the outer range, so there is always
+            // a bucket.
+            let Some(bucket) = bucket_of(&edges, at) else {
                 continue;
-            }
+            };
             let slot = match slots
                 .iter_mut()
                 .find(|((b, p), _)| *b == bucket && *p == person)
@@ -458,7 +562,166 @@ impl Core {
         Ok(out)
     }
 
-    /// The heaviest expenses of the range, largest first.
+    /// Bucket x category net expense over the ranges `bounds` describe, for
+    /// one person (`transactions.person`) or everybody: the RIEPILOGO's
+    /// months x categories grid.
+    ///
+    /// Expense and refund rows only, live, transfers out; each (bucket,
+    /// category) pair nets on its own, `max(expense - refund, 0)`, and
+    /// `count` is the expense and refund rows behind it. Buckets follow
+    /// [`Core::year_breakdown`]: bucket `i` is `[bounds[i], bounds[i + 1])`,
+    /// so a row exactly on a boundary belongs to the later one. Only pairs
+    /// with at least one row come back, a refund alone among them at zero.
+    /// Ordered by bucket, then heaviest first, then by name
+    /// case-insensitively, as [`Core::category_totals`] sorts.
+    ///
+    /// Wallets' opening balances are left out, so `Opening` never has a row:
+    /// an opening balance is neither earned nor spent, and
+    /// [`Core::year_breakdown`] reads it for FONDO CASSA.
+    pub fn category_bucket_totals(
+        &self,
+        vault_id: Uuid,
+        bounds: Vec<DateTime<Utc>>,
+        person: Option<String>,
+    ) -> Result<Vec<BucketCategoryTotals>> {
+        check_bounds(&bounds, "category_bucket_totals")?;
+
+        let edges: Vec<i64> = bounds.iter().map(|b| b.timestamp()).collect();
+        let (where_sql, args) = without_openings(scope(
+            vault_id,
+            bounds[0],
+            bounds[bounds.len() - 1],
+            person.as_deref(),
+        ));
+        let sql = format!(
+            "SELECT t.occurred_at, t.category_id, c.name, c.is_system, t.kind, t.amount
+             FROM transactions t JOIN categories c ON c.id = t.category_id
+             {where_sql} AND t.kind IN ('expense', 'refund')"
+        );
+
+        // Bucketed in Rust like year_breakdown: a year of a personal ledger
+        // is a few thousand rows, and the SQL stays free of a CASE ladder.
+        let mut slots: BTreeMap<(usize, Uuid), CategorySlot> = BTreeMap::new();
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query(params_from_iter(args.iter()))?;
+        while let Some(row) = rows.next()? {
+            let Some(bucket) = bucket_of(&edges, row.get(0)?) else {
+                continue;
+            };
+            let category_id: Uuid = row.get(1)?;
+            let name: String = row.get(2)?;
+            let is_system: bool = row.get(3)?;
+            let kind: String = row.get(4)?;
+            let amount: i64 = row.get(5)?;
+
+            let slot = slots
+                .entry((bucket, category_id))
+                .or_insert_with(|| CategorySlot {
+                    name,
+                    is_system,
+                    ..CategorySlot::default()
+                });
+            match kind.as_str() {
+                "expense" => slot.expense += amount,
+                "refund" => slot.refund += amount,
+                _ => {}
+            }
+            slot.count += 1;
+        }
+
+        let mut out: Vec<BucketCategoryTotals> = slots
+            .into_iter()
+            .map(|((bucket, category_id), slot)| BucketCategoryTotals {
+                bucket: u32::try_from(bucket).unwrap_or(u32::MAX),
+                category_id,
+                name: slot.name,
+                is_system: slot.is_system,
+                net_expense: (slot.expense - slot.refund).max(0),
+                count: slot.count,
+            })
+            .collect();
+        out.sort_by(|a, b| {
+            a.bucket
+                .cmp(&b.bucket)
+                .then_with(|| b.net_expense.cmp(&a.net_expense))
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                .then_with(|| a.category_id.cmp(&b.category_id))
+        });
+        Ok(out)
+    }
+
+    /// Bucket x wallet (or x envelope) signed movement over the ranges
+    /// `bounds` describe: the sum of the `target` legs of every live row of
+    /// the vault, of any kind, transfers included, voided rows out.
+    ///
+    /// Buckets follow [`Core::year_breakdown`]: bucket `i` is `[bounds[i],
+    /// bounds[i + 1])`, so a row exactly on a boundary belongs to the later
+    /// one. A pair comes back when the target has at least one leg in the
+    /// bucket, even if its legs net to zero there; an archived wallet or
+    /// envelope with legs in the range is among them. Ordered by bucket, then
+    /// by `target_id` byte by byte (`Uuid`'s order, and the order SQLite
+    /// sorts the id's BLOB in).
+    ///
+    /// Summing one target's deltas over buckets `0..=m` gives its balance at
+    /// the end of bucket `m`, at `bounds[m + 1]`, as long as `bounds[0]` is
+    /// before the vault's first row (the app passes the epoch). On the
+    /// envelope side, the deltas of every envelope in a bucket sum to
+    /// `income + opening - cash_expense - fund_expense` of
+    /// [`Core::year_breakdown`] for that bucket, summed over its persons:
+    /// transfers between envelopes net to zero. That holds while nobody's
+    /// refunds in the bucket exceed their expenses on the same group of
+    /// envelopes, where `year_breakdown` floors at zero.
+    pub fn balance_breakdown(
+        &self,
+        vault_id: Uuid,
+        bounds: Vec<DateTime<Utc>>,
+        target: TargetKind,
+    ) -> Result<Vec<BucketTargetTotals>> {
+        check_bounds(&bounds, "balance_breakdown")?;
+
+        let edges: Vec<i64> = bounds.iter().map(|b| b.timestamp()).collect();
+        // Not `scope`: it keeps entries only, and here a transfer moves money
+        // like any other row.
+        let sql = "SELECT t.occurred_at, l.target_id, l.amount
+                   FROM transactions t
+                   JOIN legs l ON l.transaction_id = t.id AND l.target_kind = ?1
+                   WHERE t.vault_id = ?2 AND t.voided_at IS NULL
+                     AND t.occurred_at >= ?3 AND t.occurred_at < ?4";
+        let args = [
+            Value::Text(leg_kind(target).to_string()),
+            blob(vault_id),
+            Value::Integer(bounds[0].timestamp()),
+            Value::Integer(bounds[bounds.len() - 1].timestamp()),
+        ];
+
+        // Bucketed in Rust like year_breakdown; the map's key order is the
+        // output order.
+        let mut deltas: BTreeMap<(usize, Uuid), i64> = BTreeMap::new();
+        let mut stmt = self.conn.prepare(sql)?;
+        let mut rows = stmt.query(params_from_iter(args.iter()))?;
+        while let Some(row) = rows.next()? {
+            let Some(bucket) = bucket_of(&edges, row.get(0)?) else {
+                continue;
+            };
+            let target_id: Uuid = row.get(1)?;
+            let amount: i64 = row.get(2)?;
+            *deltas.entry((bucket, target_id)).or_default() += amount;
+        }
+
+        Ok(deltas
+            .into_iter()
+            .map(|((bucket, target_id), delta)| BucketTargetTotals {
+                bucket: u32::try_from(bucket).unwrap_or(u32::MAX),
+                target_id,
+                delta,
+            })
+            .collect())
+    }
+
+    /// The heaviest expenses of the range, largest first. The opening balance
+    /// of a wallet opened below zero is left out: an opening balance is
+    /// neither earned nor spent, and [`Core::year_breakdown`] reads it for
+    /// FONDO CASSA.
     pub fn top_expenses(
         &self,
         vault_id: Uuid,
@@ -468,7 +731,9 @@ impl Core {
         limit: u32,
     ) -> Result<Vec<TopExpense>> {
         check_range(from, to)?;
-        let (where_sql, mut args) = scope(vault_id, from, to, person.as_deref());
+        // The opening's argument goes in before the LIMIT's: both are
+        // positional.
+        let (where_sql, mut args) = without_openings(scope(vault_id, from, to, person.as_deref()));
         let sql = format!(
             "SELECT t.id, t.occurred_at, t.occurred_offset, t.note, c.name, c.is_system,
                     t.person, t.amount

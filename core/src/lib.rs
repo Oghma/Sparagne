@@ -38,7 +38,10 @@ pub use allocation::{
     AllocationPreview, AllocationRule, AllocationRunView, LineStatus, PendingAllocation,
     PreviewLine, RunMove,
 };
-pub use analytics::{BucketPersonTotals, CategoryTotals, FlowPersonTotals, TopExpense};
+pub use analytics::{
+    BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals, CategoryTotals, FlowPersonTotals,
+    TargetKind, TopExpense,
+};
 pub use category::{normalize_category_display, normalize_category_key, validate_category_name};
 pub use command::{
     Command, CommandEnvelope, CommandRecord, Entry, Receipt, RecurringPatch, TransactionKind,

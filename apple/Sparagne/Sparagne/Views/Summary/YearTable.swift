@@ -3,11 +3,25 @@ import SwiftUI
 /// The RIEPILOGO's month by month table: the opening
 /// cash fund, twelve months, the year's sums. It is drawing only; which row
 /// is on screen, blank or going down comes from `YearSummary.tableRows`.
+///
+/// After TOTALE, one column per wallet when the vault has two or more (with
+/// one, TOTALE already is its balance), then one per person, unless the
+/// PERSONA filter is on: the one column left would repeat TOTALE.
 struct YearTable: View {
     let year: YearSummary
 
     private static let monthWidth: CGFloat = 116
-    private static let figureWidth: CGFloat = 92
+    /// `-12.345,67` and its padding. Two wallets and two people make ten
+    /// figures across: at this width they still fit the narrowest window
+    /// without scrolling.
+    private static let figureWidth: CGFloat = 88
+    /// TASSO holds `-26%` at most, `< -100%` at worst: it sits close to
+    /// RISPARMIO, the figure it is the share of, at the same width in a wide
+    /// window as in a narrow one.
+    private static let rateWidth: CGFloat = 64
+
+    /// The person columns, none under the PERSONA filter.
+    private var people: [String] { year.person == nil ? year.people : [] }
 
     var body: some View {
         Panel {
@@ -40,36 +54,53 @@ struct YearTable: View {
                 line(row, flexible: flexible)
             }
         }
-        .frame(minWidth: Self.monthWidth + 2 * Metrics.cellPad + CGFloat(6 + year.people.count) * Self.figureWidth)
+        .frame(minWidth: minWidth)
+    }
+
+    /// The month, six figures, TASSO, the wallets and the people.
+    private var minWidth: CGFloat {
+        let figures = 6 + year.walletColumns.count + people.count
+        return Self.monthWidth + 2 * Metrics.cellPad + CGFloat(figures) * Self.figureWidth + Self.rateWidth
     }
 
     // MARK: - Header
 
     private func header(flexible: Bool) -> some View {
-        var titles = [
-            String(localized: "Income"),
-            String(localized: "Expenses"),
-            String(localized: "Savings"),
-            String(localized: "Cash fund"),
-            String(localized: "Fund expenses"),
-            String(localized: "Total"),
-        ]
-        titles.append(contentsOf: year.people)
-        return HStack(spacing: 0) {
+        HStack(spacing: 0) {
             Text(String(localized: "Month"))
                 .frame(width: Self.monthWidth, alignment: .leading)
                 .padding(.horizontal, Metrics.cellPad)
-            ForEach(Array(titles.enumerated()), id: \.offset) { _, title in
-                Text(title)
-                    .lineLimit(1)
-                    .padding(.horizontal, Metrics.cellPad)
-                    .frame(minWidth: Self.figureWidth, maxWidth: flexible ? .infinity : Self.figureWidth, alignment: .trailing)
+            headerTitle(String(localized: "Income"), flexible: flexible)
+            headerTitle(String(localized: "Expenses"), flexible: flexible)
+            headerTitle(String(localized: "Savings"), flexible: flexible)
+            Text(String(localized: "Rate"))
+                .lineLimit(1)
+                .padding(.horizontal, Metrics.cellPad)
+                .frame(width: Self.rateWidth, alignment: .trailing)
+            headerTitle(String(localized: "Cash fund"), flexible: flexible)
+            headerTitle(String(localized: "Fund expenses"), flexible: flexible)
+            headerTitle(String(localized: "Total"), flexible: flexible)
+            ForEach(year.walletColumns) { wallet in
+                headerTitle(wallet.name, flexible: flexible)
+            }
+            ForEach(Array(people.enumerated()), id: \.offset) { _, person in
+                headerTitle(person, flexible: flexible)
             }
         }
         .font(Face.ui(11, .medium))
         .foregroundStyle(Ink.text3)
         .frame(height: Metrics.headerHeight)
         .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
+    }
+
+    /// A long title ("Fund expenses") narrows a little rather than lose its
+    /// end on the narrowest window.
+    private func headerTitle(_ title: String, flexible: Bool) -> some View {
+        Text(title)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .padding(.horizontal, Metrics.cellPad)
+            .frame(minWidth: Self.figureWidth, maxWidth: flexible ? .infinity : Self.figureWidth, alignment: .trailing)
     }
 
     // MARK: - Rows
@@ -89,10 +120,17 @@ struct YearTable: View {
                 row.savings, row: row, flexible: flexible, weight: weight,
                 tint: isSum ? ((row.savings ?? 0) >= 0 ? Ink.positive : Ink.negative) : ((row.savings ?? 0) < 0 ? Ink.negative : Ink.text)
             )
+            rateCell(row)
             figure(row.carried, row: row, flexible: flexible, weight: weight, tint: Ink.text2)
             figure(row.fundExpense, row: row, flexible: flexible, weight: weight)
             totalCell(row, flexible: flexible)
-            ForEach(Array(year.people.enumerated()), id: \.offset) { index, _ in
+            ForEach(Array(year.walletColumns.enumerated()), id: \.offset) { index, _ in
+                figure(
+                    row.byWallet.indices.contains(index) ? row.byWallet[index] : nil,
+                    row: row, flexible: flexible, weight: weight, tint: isSum ? Ink.text : Ink.text2
+                )
+            }
+            ForEach(Array(people.enumerated()), id: \.offset) { index, _ in
                 figure(
                     row.totalByPerson.indices.contains(index) ? row.totalByPerson[index] : nil,
                     row: row, flexible: flexible, weight: weight, tint: isSum ? Ink.text : Ink.text2
@@ -166,6 +204,27 @@ struct YearTable: View {
         .frame(minWidth: Self.figureWidth, maxWidth: flexible ? .infinity : Self.figureWidth, alignment: .trailing)
     }
 
+    /// TASSO, in the secondary ink: it restates RISPARMIO beside it as a
+    /// share, worked out from the row's two figures by the same formatter as
+    /// the savings-rate card, so the two never round a half apart. Empty on
+    /// the opening row, which has no income to measure it on; a dash on a
+    /// future month, as every other cell of it, and on a month without
+    /// income, as the card prints one.
+    private func rateCell(_ row: YearTableRow) -> some View {
+        Group {
+            if row.kind == .opening {
+                Text(verbatim: "")
+            } else if let rate = LedgerMoney.savingsRate(row.savings ?? 0, of: row.income ?? 0) {
+                Text(rate).foregroundStyle(Ink.text2)
+            } else {
+                Text(TransactionRow.placeholder).foregroundStyle(Ink.text3)
+            }
+        }
+        .lineLimit(1)
+        .padding(.horizontal, Metrics.cellPad)
+        .frame(width: Self.rateWidth, alignment: .trailing)
+    }
+
     /// TOTALE carries the verdict of the month: down on the line before is the
     /// one thing worth seeing at a glance.
     private func totalCell(_ row: YearTableRow, flexible: Bool) -> some View {
@@ -195,7 +254,8 @@ struct YearTable: View {
 
     // MARK: - Accessibility
 
-    /// "Start of year, Total €750.00, elisa €200.00", "September, Income …",
+    /// "Start of year, Total €750.00, elisa €200.00", "September, Income …,
+    /// Savings …, Rate 27%, …, Conto €1,200.00, elisa …",
     /// "October, future month" (a future month is drawn blank), "2026, Income
     /// …".
     private func label(_ row: YearTableRow) -> String {
@@ -215,10 +275,16 @@ struct YearTable: View {
         add(String(localized: "Income"), row.income)
         add(String(localized: "Expenses"), row.cashExpense)
         add(String(localized: "Savings"), row.savings)
+        if let rate = LedgerMoney.savingsRate(row.savings ?? 0, of: row.income ?? 0) {
+            figures.append((String(localized: "Rate"), rate))
+        }
         add(String(localized: "Cash fund"), row.carried)
         add(String(localized: "Fund expenses"), row.fundExpense)
         add(String(localized: "Total"), row.total)
-        for (index, person) in year.people.enumerated() where row.totalByPerson.indices.contains(index) {
+        for (index, wallet) in year.walletColumns.enumerated() where row.byWallet.indices.contains(index) {
+            figures.append((wallet.name, LedgerMoney.amount(row.byWallet[index])))
+        }
+        for (index, person) in people.enumerated() where row.totalByPerson.indices.contains(index) {
             figures.append((person, LedgerMoney.amount(row.totalByPerson[index])))
         }
         return AccessibilityText.monthRow(month: name, figures: figures)

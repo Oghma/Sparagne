@@ -397,8 +397,13 @@ actor CoreActor {
     /// The month and the month before come from a single `bucket_totals` call
     /// with three boundaries, which is the only totals query that takes a
     /// person, so the whole window honours the PERSONA filter. The envelope x
-    /// person matrix stays unfiltered on purpose: it *is* the per-person
-    /// breakdown, and filtering it would blank every column but one.
+    /// person matrices stay unfiltered on purpose: they *are* the per-person
+    /// breakdown, and filtering them would blank every column but one.
+    ///
+    /// The RIEPILOGO's year reads `[yearFrom, yearTo)`, January up to the end
+    /// of the month on screen, for the categories, the top expenses and the
+    /// envelopes; the bucketed queries take the same `yearBounds` as the year
+    /// breakdown, so bucket 0 is everything before January in all of them.
     func load(_ request: VaultLoadRequest) async throws -> VaultLoad {
         try await visit { handle in
             let vaultId = request.vaultId
@@ -437,10 +442,47 @@ actor CoreActor {
                     bounds: request.trailingBounds,
                     person: request.person
                 ),
-                year: try handle.yearBreakdown(vaultId: vaultId, bounds: request.yearBounds)
+                year: try handle.yearBreakdown(vaultId: vaultId, bounds: request.yearBounds),
+                yearCategories: try handle.categoryTotals(
+                    vaultId: vaultId,
+                    from: request.yearFrom,
+                    to: request.yearTo,
+                    person: request.person
+                ),
+                yearTopExpenses: try handle.topExpenses(
+                    vaultId: vaultId,
+                    from: request.yearFrom,
+                    to: request.yearTo,
+                    person: request.person,
+                    limit: Self.topExpensesLimit
+                ),
+                yearFlowPerson: try handle.flowPersonTotals(
+                    vaultId: vaultId,
+                    from: request.yearFrom,
+                    to: request.yearTo
+                ),
+                recurringTemplates: try handle.listRecurring(vaultId: vaultId, includeArchived: true),
+                categoryBuckets: try handle.categoryBucketTotals(
+                    vaultId: vaultId,
+                    bounds: request.yearBounds,
+                    person: request.person
+                ),
+                walletBalances: try handle.balanceBreakdown(
+                    vaultId: vaultId,
+                    bounds: request.yearBounds,
+                    target: .wallet
+                ),
+                flowBalances: try handle.balanceBreakdown(
+                    vaultId: vaultId,
+                    bounds: request.yearBounds,
+                    target: .flow
+                )
             )
         }
     }
+
+    /// How many of the year's heaviest expenses the RIEPILOGO lists.
+    static let topExpensesLimit: UInt32 = 10
 
     /// The management list (archived included) and the aliases, together.
     func categoryManagement(vaultId: Uuid) async throws -> CategoryManagement {
@@ -582,6 +624,10 @@ struct VaultLoadRequest: Sendable {
     /// Fourteen boundaries: the epoch plus the thirteen month starts, so
     /// bucket 0 is everything before January.
     let yearBounds: [UtcDateTime]
+    /// `[January 1st, the end of the month on screen)` of the year on screen:
+    /// the range of the RIEPILOGO's categories, top expenses and envelopes.
+    let yearFrom: UtcDateTime
+    let yearTo: UtcDateTime
     /// The PERSONA filter; `nil` is everybody.
     let person: String?
     /// Today in the system timezone, for the recurring periods that are due.
@@ -608,6 +654,24 @@ struct VaultLoad: Sendable {
     let monthPair: [PeriodTotals]
     let trailing: [PeriodTotals]
     let year: [BucketPersonTotals]
+    /// The year so far (`[yearFrom, yearTo)`) by category, heaviest first,
+    /// for the PERSONA filter: the RIEPILOGO's categories and its count of
+    /// rows without one.
+    let yearCategories: [CategoryTotals]
+    /// The year's heaviest expenses, largest first, for the PERSONA filter.
+    let yearTopExpenses: [TopExpense]
+    /// The envelope x person matrix of the year so far, unfiltered.
+    let yearFlowPerson: [FlowPersonTotals]
+    /// Every template, archived included: the fixed costs card reads the
+    /// enabled ones, the Ricorrenze tab the lot.
+    let recurringTemplates: [RecurringView]
+    /// Bucket x category net expense on `yearBounds`, for the PERSONA filter.
+    let categoryBuckets: [BucketCategoryTotals]
+    /// Bucket x wallet signed movement on `yearBounds`: summed up, each
+    /// wallet's balance at the end of every month.
+    let walletBalances: [BucketTargetTotals]
+    /// The same for the envelopes.
+    let flowBalances: [BucketTargetTotals]
 }
 
 /// The two lists the Categories table reads together.

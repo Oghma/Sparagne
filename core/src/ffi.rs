@@ -21,13 +21,14 @@ use uuid::Uuid;
 
 use crate::{
     AliasView, AllocationBase, AllocationLine, AllocationPlanView, AllocationPreview,
-    AllocationRunView, BucketPersonTotals, CategorySuggestion, CategoryTotals, CategoryView,
-    Command, CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowBalanceRange,
-    FlowPersonTotals, MergePreview, Money, Page, PendingAllocation, PendingRecurring, PeriodTotals,
-    Receipt, RecentUsage, RecurringRunView, RecurringView, RejectedCommand, Schedule,
-    StatementDetection, StatementMapping, StatementOptions, StatementPreset, StatementPreview,
-    StatementReport, StatementRowOverride, SyncReport, SyncState, TopExpense, TransactionFilter,
-    TransactionView, VaultSnapshot, VaultView,
+    AllocationRunView, BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals,
+    CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, CommandRecord,
+    Core, Currency, DomainError, FlowBalanceRange, FlowPersonTotals, MergePreview, Money, Page,
+    PendingAllocation, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
+    RecurringView, RejectedCommand, Schedule, StatementDetection, StatementMapping,
+    StatementOptions, StatementPreset, StatementPreview, StatementReport, StatementRowOverride,
+    SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter, TransactionView,
+    VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -305,6 +306,31 @@ impl CoreHandle {
         bounds: Vec<UtcDateTime>,
     ) -> Result<Vec<BucketPersonTotals>, DomainError> {
         self.lock()?.year_breakdown(vault_id, bounds)
+    }
+
+    /// Bucket x category net expense over the ranges between consecutive
+    /// `bounds`: the RIEPILOGO's months x categories grid.
+    #[uniffi::method(default(person = None))]
+    pub fn category_bucket_totals(
+        &self,
+        vault_id: Uuid,
+        bounds: Vec<UtcDateTime>,
+        person: Option<String>,
+    ) -> Result<Vec<BucketCategoryTotals>, DomainError> {
+        self.lock()?
+            .category_bucket_totals(vault_id, bounds, person)
+    }
+
+    /// Bucket x wallet, or x envelope, signed movement over the ranges
+    /// between consecutive `bounds`, transfers included: the balance of each
+    /// at the end of every month, once the buckets are summed up.
+    pub fn balance_breakdown(
+        &self,
+        vault_id: Uuid,
+        bounds: Vec<UtcDateTime>,
+        target: TargetKind,
+    ) -> Result<Vec<BucketTargetTotals>, DomainError> {
+        self.lock()?.balance_breakdown(vault_id, bounds, target)
     }
 
     /// The heaviest expenses of `[from, to)`, largest first.

@@ -2,18 +2,21 @@ import SwiftUI
 
 // MARK: - The month's cards
 
-/// The four numbers of the month on screen: income,
+/// The five numbers of the month on screen: income,
 /// expenses, savings and the rate, each with a line under it that compares it
-/// with the month before or the year so far. Only savings is colored:
-/// expenses are the ordinary run of a month, not an alarm.
+/// with the month before or the year so far, and what the recurring expenses
+/// commit every month. Only savings is colored: expenses are the ordinary
+/// run of a month, not an alarm.
 struct MonthCards: View {
     let kpis: MonthKPIs
     let month: MonthKey
+    /// `nil` without an enabled recurring expense: the fifth card says so.
+    let fixedCosts: FixedCosts?
 
     var body: some View {
-        // Always four across: an adaptive grid opens a fifth, empty column on
-        // a wide window, and the window is never narrower than four cards.
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 160), spacing: 8), count: 4), spacing: 8) {
+        // Always five across: an adaptive grid opens a sixth, empty column on
+        // a wide window, and the window is never narrower than five cards.
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 150), spacing: 8), count: 5), spacing: 8) {
             KPICard(
                 title: String(localized: "Income \u{00B7} \(name)"),
                 value: LedgerMoney.bare(kpis.income),
@@ -36,7 +39,22 @@ struct MonthCards: View {
                 value: rate(kpis.savings, of: kpis.income),
                 caption: String(localized: "\(rate(kpis.yearSavings, of: kpis.yearIncome)) year to date")
             )
+            KPICard(
+                title: String(localized: "Fixed costs \u{00B7} monthly"),
+                value: fixedCosts.map { "\u{2248} " + LedgerMoney.bare($0.monthly) } ?? TransactionRow.placeholder,
+                caption: fixedCaption
+            )
         }
+    }
+
+    /// "≈" as the Ricorrenze status line writes it: a weekly template is
+    /// spread over the average month, so the figure is near, not exact. The
+    /// line under it is the slice of an average month's income that is;
+    /// blank with no income to measure it on.
+    private var fixedCaption: String? {
+        guard let fixedCosts else { return String(localized: "no recurring expenses") }
+        guard let share = fixedCosts.shareOfIncome else { return nil }
+        return String(localized: "\(SummaryText.percent(share)) of average income")
     }
 
     private var name: String { SummaryText.monthName(month.month) }
@@ -57,7 +75,7 @@ struct MonthCards: View {
     }
 }
 
-/// One of the four numbers across the top.
+/// One of the five numbers across the top.
 private struct KPICard: View {
     let title: String
     let value: String
@@ -84,7 +102,7 @@ private struct KPICard: View {
         // reads "Income · September, 1,234.56, 4,250.00 in August" instead of
         // three separate swipes.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(AccessibilityText.card(title: title, value: value, caption: caption ?? ""))
+        .accessibilityLabel(AccessibilityText.card(title: title, value: value, caption: caption))
     }
 }
 
@@ -124,12 +142,7 @@ private struct FundCard: View {
                         .font(Face.ui(12, .semibold))
                         .foregroundStyle(Ink.text)
                         .lineLimit(1)
-                    Text(tagText)
-                        .font(Face.ui(10, .semibold))
-                        .foregroundStyle(Ink.text3)
-                        .padding(.horizontal, 5)
-                        .frame(height: 16)
-                        .background(Ink.raised, in: RoundedRectangle(cornerRadius: 4))
+                    CapTag(kind: fund.kind)
                 }
                 HStack(alignment: .firstTextBaseline) {
                     Text(LedgerMoney.bare(fund.filled))
@@ -160,13 +173,6 @@ private struct FundCard: View {
         LedgerMoney.percent(fund.filled, of: fund.cap, decimals: 0) ?? TransactionRow.placeholder
     }
 
-    private var tagText: String {
-        switch fund.kind {
-        case .balance: String(localized: "cap on balance")
-        case .income: String(localized: "cap on income")
-        }
-    }
-
     private var bar: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
@@ -177,5 +183,29 @@ private struct FundCard: View {
             }
         }
         .frame(height: 5)
+    }
+}
+
+/// What a fund's cap is measured on, the small tag after its name: on a
+/// fund card and on the fund's line of the envelope table, so the two read
+/// the same.
+struct CapTag: View {
+    let kind: FundGauge.Kind
+
+    var body: some View {
+        Text(Self.text(kind))
+            .font(Face.ui(10, .semibold))
+            .foregroundStyle(Ink.text3)
+            .lineLimit(1)
+            .padding(.horizontal, 5)
+            .frame(height: 16)
+            .background(Ink.raised, in: RoundedRectangle(cornerRadius: 4))
+    }
+
+    static func text(_ kind: FundGauge.Kind) -> String {
+        switch kind {
+        case .balance: String(localized: "cap on balance")
+        case .income: String(localized: "cap on income")
+        }
     }
 }

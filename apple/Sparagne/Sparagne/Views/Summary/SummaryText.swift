@@ -1,4 +1,5 @@
 import Foundation
+import SparagneCore
 
 /// Small pure pieces of text the RIEPILOGO shares between its parts.
 enum SummaryText {
@@ -29,5 +30,61 @@ enum SummaryText {
     /// prints the minus.
     static func signed(_ text: String, positive: Bool) -> String {
         positive ? "+\(text)" : text
+    }
+
+    // MARK: - Shares
+
+    /// `"38%"`: a fraction of one written as the cards write a share, the
+    /// ledger's comma and no decimals unless asked (`LedgerMoney.percent`,
+    /// which takes two amounts where the model hands a ratio).
+    static func percent(_ fraction: Double, decimals: Int = 0) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.decimalSeparator = ","
+        formatter.groupingSeparator = "."
+        formatter.minimumFractionDigits = decimals
+        formatter.maximumFractionDigits = decimals
+        return (formatter.string(from: NSNumber(value: fraction * 100)) ?? "0") + "%"
+    }
+
+    // MARK: - Categories
+
+    /// The core names its two system categories in English; the RIEPILOGO
+    /// says them in the user's language, as the Mastro's panel does
+    /// (`CategoryBreakdown.name`). The line that folds the lighter
+    /// categories is "Other".
+    static func categoryName(_ name: String, isSystem: Bool, isOther: Bool = false) -> String {
+        if isOther { return String(localized: "Other") }
+        guard isSystem else { return name }
+        switch name.lowercased() {
+        case "uncategorized": return String(localized: "Uncategorized")
+        case "opening": return String(localized: "Opening")
+        default: return name
+        }
+    }
+
+    // MARK: - Things to do
+
+    /// A chip of the strip under the heading: `"2 ricorrenze da decidere"`,
+    /// `"Riparto in attesa · dom 27 set · 2 precedenti"`, `"14 righe senza
+    /// categoria"`. The period is written as the Riparto's due card writes
+    /// it (`RecurringDayText.weekday`).
+    ///
+    /// `bundle` is the catalog to read the plural keys from, as `CountText`
+    /// takes it.
+    static func todo(
+        _ kind: SummaryTodoItem.Kind, bundle: Bundle = .main, locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        switch kind {
+        case .dueRecurring(let count):
+            return String(localized: "\(count) recurring to confirm", bundle: bundle, locale: locale)
+        case .pendingAllocation(let period, let missed):
+            let day = RecurringDayText.weekday(period, locale: locale)
+            let due = String(localized: "Allocation due \u{00B7} \(day)", bundle: bundle, locale: locale)
+            guard missed > 0 else { return due }
+            return "\(due) \u{00B7} \(String(localized: "\(missed) earlier", bundle: bundle, locale: locale))"
+        case .uncategorized(let count):
+            return String(localized: "\(count) rows without a category", bundle: bundle, locale: locale)
+        }
     }
 }

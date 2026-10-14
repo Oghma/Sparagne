@@ -22,18 +22,7 @@ struct FilterBar: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel(String(localized: "Direction"))
 
-            // One person has nobody to filter out. The persons of the rows,
-            // not the vault's members: a member with no row would filter the
-            // month down to nothing.
-            if store.peopleInRows.count > 1 {
-                SegmentedStrip(
-                    options: [nil] + store.peopleInRows.map(Optional.some),
-                    selection: $store.person,
-                    label: { $0 ?? String(localized: "Everyone") }
-                )
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel(String(localized: "Person"))
-            }
+            PersonSegments(store: store)
 
             Rectangle()
                 .fill(Ink.line2)
