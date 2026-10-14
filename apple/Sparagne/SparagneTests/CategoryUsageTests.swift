@@ -14,15 +14,23 @@ struct CategoryUsageTests {
         )
     }
 
-    @Test("The window is the 90 days up to now")
+    @Test("The window is the 12 months up to now")
     func windowBounds() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
         let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 7, hour: 12)))
         let window = CategoryUsage.window(endingAt: now, calendar: calendar)
         #expect(window.end == now)
-        #expect(window.start == calendar.date(from: DateComponents(year: 2026, month: 7, day: 9, hour: 12)))
-        #expect(window.end.timeIntervalSince(window.start) == 90 * 86_400)
+        #expect(window.start == calendar.date(from: DateComponents(year: 2025, month: 10, day: 7, hour: 12)))
+    }
+
+    @Test("A window ending on 29 February starts on the 28th a year earlier")
+    func windowFromLeapDay() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        let now = try #require(calendar.date(from: DateComponents(year: 2028, month: 2, day: 29, hour: 9)))
+        let window = CategoryUsage.window(endingAt: now, calendar: calendar)
+        #expect(window.start == calendar.date(from: DateComponents(year: 2027, month: 2, day: 28, hour: 9)))
     }
 
     @Test("Counts map to the category ids; a category the core omits has none")

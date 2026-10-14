@@ -323,7 +323,7 @@ final class AppStore {
 
     // MARK: Setup
 
-    /// Rows per category id over the last 90 days, voided excluded: the
+    /// Rows per category id over the last 12 months, voided excluded: the
     /// usage column of the SETUP categories. Written only by its loader
     /// (`AppStore+Usage.swift`), so not `private(set)` for the same reason.
     var categoryUsage: [Uuid: Int] = [:]

@@ -7409,18 +7409,18 @@
         }
       }
     },
-    "Rows 90 d": {
+    "Rows 12 m": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rows 90 d"
+            "value": "Rows 12 m"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Righe 90 gg"
+            "value": "Righe 12 mesi"
           }
         }
       }

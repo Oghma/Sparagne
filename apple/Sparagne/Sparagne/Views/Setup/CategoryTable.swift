@@ -92,7 +92,7 @@ struct CategoryTable: View {
         SetupHeaderRow {
             SetupCell(width: CategoryColumn.name) { Text(String(localized: "Name")) }
             SetupCell { Text(String(localized: "Aliases")) }
-            SetupCell(width: CategoryColumn.usage, alignment: .trailing) { Text(String(localized: "Rows 90 d")) }
+            SetupCell(width: CategoryColumn.usage, alignment: .trailing) { Text(String(localized: "Rows 12 m")) }
             SetupCell(width: SetupColumn.action) { EmptyView() }
         }
     }
@@ -304,7 +304,7 @@ struct CategoryTable: View {
 private struct CategoryRowView: View {
     let category: CategoryView
     let aliases: [String]
-    /// Rows in the last 90 days.
+    /// Rows in the last 12 months.
     let usage: Int
     /// Non-nil while this row is the one being edited.
     let draft: Binding<CategoryDraft>?
