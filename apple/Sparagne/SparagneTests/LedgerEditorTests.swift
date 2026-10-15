@@ -558,6 +558,41 @@ struct LedgerEditorTests {
         #expect(try Self.row("pane", in: store).kind == .expense)
     }
 
+    @Test("The PERSONA filter saves the cell; showing the transfers saves it too and keeps the cursor on its row")
+    func filtersSaveTheCell() async throws {
+        let (store, editor) = try await Self.household()
+        let coop = try Self.row("coop", in: store)
+
+        editor.select(Self.cell(coop, .note))
+        editor.type("conad")
+        store.person = "matteo"
+        #expect(editor.cursor == nil)
+        await store.settle()
+        #expect(store.presentedError == nil)
+        #expect(store.rows.first { $0.id == coop.id }?.note == "conad")
+
+        editor.select(Self.cell(coop, .category))
+        editor.type("Altro")
+        store.showTransfers = true
+        #expect(editor.cursor == Self.cell(coop, .category))
+        #expect(!editor.isEditing)
+        await store.settle()
+        #expect(store.rows.first { $0.id == coop.id }?.category == "Altro")
+        #expect(editor.cursor == Self.cell(coop, .category))
+    }
+
+    @Test("A new name for the author follows into the new line's PERSONA, unless it names someone else")
+    func newLineFollowsTheAuthor() async throws {
+        let (store, editor) = try await Self.household()
+        #expect(editor.newLine.person == "matteo")
+        await store.setAuthor("Matteo L")
+        #expect(editor.newLine.person == "Matteo L")
+
+        editor.newLine.person = "elisa"
+        await store.setAuthor("matteo")
+        #expect(editor.newLine.person == "elisa")
+    }
+
     @Test("Leaving the Mastro's tab saves the cell and lets the cursor go")
     func tabSwitchSaves() async throws {
         let (store, editor) = try await Self.household()
