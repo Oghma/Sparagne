@@ -192,6 +192,21 @@ struct GridEventMechanicsTests {
         #expect(sheet.cursor == nil)
     }
 
+    @Test("Of two key handlers around a field, the one applied last hears the key first")
+    func handlerOrder() async throws {
+        let log = HandlerLog()
+        let host = HostedWindow(HandlerOrderView(log: log))
+        defer { host.close() }
+        await host.settle { host.fieldEditor != nil }
+
+        host.post(.tab)
+        host.post(.enter)
+        await host.settle { log.heard.count == 2 }
+        #expect(log.heard == ["outer \u{9}", "outer \u{D}"])
+        // The inner handlers, and the field's own ↩, never heard them.
+        #expect(!log.submitted)
+    }
+
     @Test("⇥ and ⇧⇥ pass through the CATEGORY and ENVELOPE cells to the grid while their lists are closed")
     func tabsThroughTheCells() async throws {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.mechanics.\(UUID().uuidString)"))
@@ -437,6 +452,41 @@ private struct ProtoSheetView: View {
         press.modifiers.isDisjoint(with: [.command, .control])
             && !press.characters.isEmpty
             && press.characters.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) && !(0xF700...0xF8FF).contains($0.value) }
+    }
+}
+
+// MARK: - The order of key handlers
+
+@Observable
+private final class HandlerLog {
+    var heard: [String] = []
+    var submitted = false
+}
+
+private struct HandlerOrderView: View {
+    let log: HandlerLog
+
+    @FocusState private var focused: Bool
+    @State private var text = ""
+
+    var body: some View {
+        TextField("", text: $text)
+            .focused($focused)
+            .onKeyPress(keys: [.tab, .return]) { press in
+                log.heard.append("inner \(press.characters)")
+                return .handled
+            }
+            .onSubmit { log.submitted = true }
+            .onKeyPress(phases: .down) { press in
+                log.heard.append("outer \(press.characters)")
+                return .handled
+            }
+            .frame(width: 200)
+            .frame(width: 900, height: 420)
+            .task {
+                try? await Task.sleep(for: .milliseconds(100))
+                focused = true
+            }
     }
 }
 

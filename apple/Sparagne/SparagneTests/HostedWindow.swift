@@ -30,8 +30,12 @@ final class HostedWindow {
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// Takes the view out of the window as well: a view left alive in a
+    /// closed window still hears app-wide notifications (⌘D's), and its
+    /// fields would take the caret from the next test's.
     func close() {
         window.orderOut(nil)
+        window.contentView = nil
         window.close()
     }
 
@@ -111,6 +115,9 @@ final class HostedWindow {
     func postClick(at point: CGPoint, count: Int = 1, modifiers: NSEvent.ModifierFlags = []) {
         guard let content = window.contentView else { return }
         let location = content.convert(point, to: nil)
+        if let hit = content.hitTest(content.superview?.convert(location, from: nil) ?? location) {
+            FirstClick.accept(on: type(of: hit))
+        }
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             let event = NSEvent.mouseEvent(
                 with: type,
@@ -164,4 +171,20 @@ private final class KeyedWindow: NSWindow {
 /// never comes, and SwiftUI's gestures never see it.
 private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+/// The same for the views SwiftUI puts inside the hosting view, a scroll
+/// view's content among them: their class is SwiftUI's own, so its
+/// `acceptsFirstMouse(for:)` is replaced, for the test process only, by one
+/// that says yes.
+private enum FirstClick {
+    private static var accepted: Set<ObjectIdentifier> = []
+
+    static func accept(on viewClass: AnyClass) {
+        guard accepted.insert(ObjectIdentifier(viewClass)).inserted else { return }
+        let selector = #selector(NSView.acceptsFirstMouse(for:))
+        guard let method = class_getInstanceMethod(viewClass, selector) else { return }
+        let yes: @convention(block) (AnyObject, NSEvent?) -> Bool = { _, _ in true }
+        class_replaceMethod(viewClass, selector, imp_implementationWithBlock(yes), method_getTypeEncoding(method))
+    }
 }
