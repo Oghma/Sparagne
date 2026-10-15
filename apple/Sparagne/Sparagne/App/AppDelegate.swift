@@ -19,10 +19,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The Mastro's cell being typed into is left as a click outside the
     /// grid leaves it: saved, and the new line registered if it has an
     /// amount (`LedgerEditor.finish`). The quit waits for those writes too.
-    /// One refused is lost with the app, as it would be on any other way out.
+    /// A cell that refuses to be saved stops the quit: its error is on the
+    /// alert and the cell on screen, being edited as typed, and the next
+    /// quit, once it is fixed or taken back with esc, goes ahead.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let store else { return .terminateNow }
-        store.ledgerEditor.finish()
+        guard store.ledgerEditor.finish() else {
+            // From another tab the cell would not be in sight.
+            store.tab = .ledger
+            return .terminateCancel
+        }
         guard store.pendingUndo != nil || store.ledgerEditor.hasPendingWrites else { return .terminateNow }
         Task {
             await store.ledgerEditor.settle()

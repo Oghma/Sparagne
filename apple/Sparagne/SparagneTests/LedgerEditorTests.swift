@@ -662,6 +662,30 @@ struct LedgerEditorTests {
         #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
     }
 
+    @Test("Quitting with a cell that refuses to be saved stays, the cell on screen being edited; after esc it quits")
+    func quittingWithARefusedCellStays() async throws {
+        let (store, editor) = try await Self.household()
+        let coop = try Self.row("coop", in: store)
+        editor.select(Self.cell(coop, .amount))
+        editor.type("abc")
+        store.tab = .summary
+        store.presentedError = nil
+        let delegate = AppDelegate()
+        delegate.store = store
+        delegate.replyToTermination = { _ in Issue.record("no deferred reply was asked for") }
+
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateCancel)
+        #expect(store.presentedError != nil)
+        #expect(store.tab == .ledger)
+        #expect(editor.cursor == Self.cell(coop, .amount))
+        #expect(editor.isEditing)
+        #expect(editor.text == "abc")
+
+        editor.cancel()
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
+        #expect(store.rows.first { $0.id == coop.id }?.absoluteAmount == 5_000)
+    }
+
     @Test("A cursor on a row that leaves the screen goes with it: a delete, a search that leaves it out")
     func vanishedRowDropsTheCursor() async throws {
         let (store, editor) = try await Self.household()
