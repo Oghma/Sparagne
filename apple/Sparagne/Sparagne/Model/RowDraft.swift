@@ -15,6 +15,19 @@ struct RowDraftError: Error {
     let underlying: Error
 }
 
+/// The fields of a new row as the new line resolved and parsed them
+/// (`RowDraft.entry`), ready for `AppStore.addRow`.
+typealias RowEntry = (
+    day: Date,
+    flowId: Uuid?,
+    category: String?,
+    note: String,
+    amount: Int64,
+    walletId: Uuid?,
+    kind: TransactionKind?,
+    person: String?
+)
+
 /// The text in the cells of the row being edited. Everything is a string
 /// until it commits, so a half-typed amount never has to be a number.
 ///
@@ -97,18 +110,7 @@ struct RowDraft {
     /// The fields of a new row, resolved and parsed. `nil` when the amount
     /// cell is still empty: tabbing to the end of a blank line and pressing ↩
     /// is not an error, it is nothing.
-    func entry(
-        store: AppStore
-    ) throws -> (
-        day: Date,
-        flowId: Uuid?,
-        category: String?,
-        note: String,
-        amount: Int64,
-        walletId: Uuid?,
-        kind: TransactionKind?,
-        person: String?
-    )? {
+    func entry(store: AppStore) throws -> RowEntry? {
         guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: wallet) }
         let resolvedPerson = try cell(.person) { try store.resolvePerson(named: person) }
@@ -128,50 +130,111 @@ struct RowDraft {
     }
 
     /// The diff against the row as it is stored: only the cells that changed.
+    ///
+    /// The cells are read in this order, so a draft wrong in two places
+    /// sends the focus to its amount first.
     func patch(against row: TransactionRow, store: AppStore) throws -> TransactionPatch {
         var patch = TransactionPatch()
+        for field in [RowField.amount, .category, .note, .flow, .wallet, .person, .date] {
+            try add(field, against: row, store: store, to: &patch)
+        }
+        return patch
+    }
 
-        // An emptied amount cell leaves the amount alone: clearing it is not a
-        // way to say zero, and the core would refuse zero anyway.
-        if !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+    /// The diff for `field` alone: what saving one cell of a stored row
+    /// sends (`LedgerEditor`). The other cells are not even read, so a value
+    /// a sync wrote into one of them meanwhile is never written back over.
+    func patch(_ field: RowField, against row: TransactionRow, store: AppStore) throws -> TransactionPatch {
+        var patch = TransactionPatch()
+        try add(field, against: row, store: store, to: &patch)
+        return patch
+    }
+
+    private func add(
+        _ field: RowField,
+        against row: TransactionRow,
+        store: AppStore,
+        to patch: inout TransactionPatch
+    ) throws {
+        switch field {
+        case .amount:
+            // An emptied amount cell leaves the amount alone: clearing it is
+            // not a way to say zero, and the core would refuse zero anyway.
+            guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             let parsed = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
             if parsed != row.absoluteAmount, parsed > 0 { patch.amount = parsed }
-        }
 
-        let trimmedCategory = category.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedCategory != row.category { patch.category = trimmedCategory }
+        case .category:
+            let trimmedCategory = category.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedCategory != row.category { patch.category = trimmedCategory }
 
-        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedNote != row.note { patch.note = trimmedNote }
+        case .note:
+            let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedNote != row.note { patch.note = trimmedNote }
 
-        // An envelope the row is on stays as it is even once archived: only
-        // a pick from the list moves it.
-        if !row.isTransfer, let flowId, flowId != row.flowId { patch.flowId = flowId }
+        case .flow:
+            // An envelope the row is on stays as it is even once archived:
+            // only a pick from the list moves it.
+            if !row.isTransfer, let flowId, flowId != row.flowId { patch.flowId = flowId }
 
-        // Only when the cell was actually retyped: a row sitting on an
-        // archived wallet still shows its name, which no longer resolves.
-        let trimmedWallet = wallet.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedWallet.isEmpty, trimmedWallet != row.walletDisplay {
+        case .wallet:
+            // Only when the cell was actually retyped: a row sitting on an
+            // archived wallet still shows its name, which no longer resolves.
+            let trimmedWallet = wallet.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedWallet.isEmpty, trimmedWallet != row.walletDisplay else { return }
             let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: trimmedWallet) }
             if let walletId = resolvedWallet, walletId != row.walletId { patch.walletId = walletId }
-        }
 
-        // Only when retyped, as the wallet: a row for someone who has left
-        // the vault still shows their name, which no longer resolves. Back
-        // to whoever recorded it is said with a blank, the patch's own word
-        // for it, rather than with a name.
-        let trimmedPerson = person.trimmingCharacters(in: .whitespacesAndNewlines)
-        if row.isPersonEditable, !trimmedPerson.isEmpty, trimmedPerson != row.person {
+        case .person:
+            // Only when retyped, as the wallet: a row for someone who has
+            // left the vault still shows their name, which no longer
+            // resolves. Back to whoever recorded it is said with a blank, the
+            // patch's own word for it, rather than with a name.
+            let trimmedPerson = person.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard row.isPersonEditable, !trimmedPerson.isEmpty, trimmedPerson != row.person else { return }
             let resolvedPerson = try cell(.person) { try store.resolvePerson(named: trimmedPerson) }
             if let name = resolvedPerson, name != row.person {
                 patch.person = name == row.recordedBy ? "" : name
             }
-        }
 
-        if !Calendar.current.isDate(day, inSameDayAs: row.occurredAt) {
-            patch.occurredAt = AppStore.stamp(day: day, likeTimeOf: row.occurredAt)
+        case .date:
+            if !Calendar.current.isDate(day, inSameDayAs: row.occurredAt) {
+                patch.occurredAt = AppStore.stamp(day: day, likeTimeOf: row.occurredAt)
+            }
         }
-        return patch
+    }
+
+    // MARK: - One cell at a time
+
+    /// What `field` says when it is typed into from what it holds: the
+    /// bare day number for DATA, as `DayCell` starts from, and nothing for
+    /// ENVELOPE, whose text only narrows its list (the pick is `flowId`).
+    func text(of field: RowField, calendar: Calendar = .current) -> String {
+        switch field {
+        case .date: "\(calendar.component(.day, from: day))"
+        case .flow: ""
+        case .category: category
+        case .note: note
+        case .wallet: wallet
+        case .person: person
+        case .amount: amount
+        }
+    }
+
+    /// `field` as the cell being edited left it: `text`, or for ENVELOPE the
+    /// envelope picked from its list. A DATA text that means no date leaves
+    /// the day alone, as the cell has always snapped back.
+    mutating func set(_ field: RowField, text: String, flowId pick: Uuid?, in month: MonthKey) {
+        switch field {
+        case .date:
+            if let parsed = LedgerDate.parseDay(text, in: month) { day = parsed }
+        case .flow: flowId = pick
+        case .category: category = text
+        case .note: note = text
+        case .wallet: wallet = text
+        case .person: person = text
+        case .amount: amount = text
+        }
     }
 
     /// Runs a cell's parse, tagging whatever it throws with the cell it came

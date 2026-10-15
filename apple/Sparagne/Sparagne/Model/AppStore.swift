@@ -192,10 +192,14 @@ final class AppStore {
     private(set) var readOnlyVaultIds: Set<Uuid> = []
 
     func setReadOnlyVaults(_ ids: Set<Uuid>) {
+        let wasReadOnly = isReadOnly
         readOnlyVaultIds = ids
         // Every bulk action writes: rows picked before the role changed have
         // nothing left to be picked for.
         if isReadOnly { selection.clear() }
+        // Nor can the cell being typed into be saved, nor the new line
+        // registered: the Mastro has nothing open any more.
+        if isReadOnly, !wasReadOnly { ledgerEditor.reset() }
         // Nor are the strip's periods to decide, when the role arrives after
         // the load.
         rebuildSummaryTodo()
@@ -336,7 +340,20 @@ final class AppStore {
     ///
     /// A `didSet` cannot await, so it queues the reload; `settle()` is how a
     /// caller waits for the queue to drain.
-    var month = MonthKey(Date()) { didSet { if month != oldValue { filtersChanged() } } }
+    ///
+    /// The Mastro's cell being typed into is saved first, while the rows it
+    /// belongs to are still the ones loaded, and its new line registered if
+    /// it has an amount (`LedgerEditor.finish`); the new line then starts
+    /// over on the new month. A save refused is lost, its error on the alert.
+    var month = MonthKey(Date()) {
+        willSet { if newValue != month { ledgerEditor.finish() } }
+        didSet {
+            if month != oldValue {
+                ledgerEditor.reset()
+                filtersChanged()
+            }
+        }
+    }
 
     /// ⌥⌘← and ⌥⌘→, and the palette: `months` back (negative) or forward.
     func stepMonth(by months: Int) {
@@ -355,12 +372,38 @@ final class AppStore {
         newRecurringRequested = true
         tab = .recurring
     }
-    var direction: LedgerDirection = .expenses { didSet { if direction != oldValue { filtersChanged() } } }
-    /// The PERSONA filter: `nil` is everybody.
-    var person: String? { didSet { if person != oldValue { filtersChanged() } } }
+    /// USCITE or ENTRATE. The Mastro's cell is saved first and the new line
+    /// starts over, as with the month.
+    var direction: LedgerDirection = .expenses {
+        willSet { if newValue != direction { ledgerEditor.finish() } }
+        didSet {
+            if direction != oldValue {
+                ledgerEditor.reset()
+                filtersChanged()
+            }
+        }
+    }
+    /// The PERSONA filter: `nil` is everybody. The Mastro's cell is saved
+    /// first and the new line starts over, as with the month.
+    var person: String? {
+        willSet { if newValue != person { ledgerEditor.finish() } }
+        didSet {
+            if person != oldValue {
+                ledgerEditor.reset()
+                filtersChanged()
+            }
+        }
+    }
     /// Which of the two views is on screen; no reload, the data is the same.
     /// The window opens on the RIEPILOGO.
-    var tab: LedgerTab = .summary { didSet { if tab != oldValue { tabFilter = "" } } }
+    ///
+    /// Leaving the Mastro saves its cell and registers its new line, as a
+    /// click outside the grid does. A cell that refuses to save stays as it
+    /// was typed, being edited, for when the Mastro comes back.
+    var tab: LedgerTab = .summary {
+        willSet { if tab == .ledger, newValue != .ledger { ledgerEditor.finish() } }
+        didSet { if tab != oldValue { tabFilter = "" } }
+    }
     /// Nuova ricorrenza… was asked for (Vault menu, palette, the tab's add
     /// button): the Ricorrenze tab opens its inspector on a new template,
     /// when it appears or at once if it is on screen, and sets this back
@@ -371,15 +414,27 @@ final class AppStore {
     /// that typing there never reloads the ledger; cleared with the tab and
     /// the vault, since it named rows of the table that is gone.
     var tabFilter = ""
-    var showVoided = false { didSet { if showVoided != oldValue { filtersChanged() } } }
+    /// The deleted rows, struck through. Hiding them, like showing or hiding
+    /// the transfers, can take the row of the Mastro's cell off screen, so
+    /// the cell is saved first; the cursor goes with its row, if it goes
+    /// (`LedgerEditor.rowsChanged`).
+    var showVoided = false {
+        willSet { if newValue != showVoided { ledgerEditor.saveEditedCell() } }
+        didSet { if showVoided != oldValue { filtersChanged() } }
+    }
     /// Transfers are in neither direction, so the View menu opts into them.
-    var showTransfers = false { didSet { if showTransfers != oldValue { filtersChanged() } } }
+    var showTransfers = false {
+        willSet { if newValue != showTransfers { ledgerEditor.saveEditedCell() } }
+        didSet { if showTransfers != oldValue { filtersChanged() } }
+    }
     /// The optional WALLET column. Display only: it
     /// changes what the grid draws and what ⌘E writes, never what is loaded,
     /// so it does not reload.
     var showWalletColumn: Bool {
         didSet {
-            if showWalletColumn != oldValue { defaults.set(showWalletColumn, forKey: Self.walletColumnKey) }
+            guard showWalletColumn != oldValue else { return }
+            defaults.set(showWalletColumn, forKey: Self.walletColumnKey)
+            ledgerEditor.walletColumnChanged()
         }
     }
     /// The ledger's column widths, dragged in its header. Display only, as the
@@ -460,8 +515,12 @@ final class AppStore {
     /// The engine calls this on login and logout, and when Settings change
     /// the local name: the core stamps it on every command from now on.
     func setAuthor(_ name: String) async {
+        let previous = currentAuthor
         await core.setAuthor(name)
         currentAuthor = name
+        // The Mastro's new line is for the author unless its PERSONA cell
+        // was set to someone else: it follows the new name.
+        if ledgerEditor.newLine.person == previous { ledgerEditor.newLine.person = name }
     }
 
     // MARK: - Derived
@@ -525,8 +584,10 @@ final class AppStore {
     /// Waits until every queued reload has finished, including any a reload
     /// queued itself (a stale PERSONA being cleared). The views never need
     /// this; anything that reads the store straight after writing a filter
-    /// does. An undo or redo pressed before is written first.
+    /// does. The Mastro's cells saved and an undo or redo pressed before are
+    /// written first.
     func settle() async {
+        await ledgerEditor.settle()
         await history.settle()
         while queuedLoad != nil {
             let generation = queuedGeneration
@@ -577,6 +638,8 @@ final class AppStore {
             needsOnboarding = true
             currentVault = nil
             history.clear()
+            // The Mastro's cell went with its vault: nowhere to save it.
+            ledgerEditor.reset()
             await reload()
             return
         }
@@ -591,6 +654,14 @@ final class AppStore {
     }
 
     func select(_ vault: VaultView) async {
+        // The Mastro's cell being typed into, and its new line, belong to the
+        // vault being left: written there, and waited for, before the vault
+        // on screen changes under the write. A vault a sync deleted has
+        // nowhere to write them.
+        if let leaving = currentVault, vaults.contains(where: { $0.id == leaving.id }) {
+            ledgerEditor.finish()
+            await ledgerEditor.settle()
+        }
         currentVault = vault
         defaults.set(vault.id, forKey: Self.lastVaultKey)
         lastWalletId = nil
@@ -616,6 +687,8 @@ final class AppStore {
         // reach back into it.
         history.clear()
         await reload()
+        // After the load, so the new line starts on this vault's envelope.
+        ledgerEditor.reset()
     }
 
     /// Snapshot, categories, the summary aggregates and the first page of
@@ -642,6 +715,7 @@ final class AppStore {
             allocationPlan = nil
             pendingAllocation = nil
             allocationBase = AllocationBase(total: 0, incomes: [])
+            ledgerEditor.rowsChanged()
             return
         }
         loadGeneration += 1
@@ -674,6 +748,8 @@ final class AppStore {
             // A sync or a void can take selected rows away: they must not
             // ride along, unseen, in the next bulk action.
             selection.retain(Set(rows.map(\.id)))
+            // Nor may the Mastro's cursor stay on a row that is gone.
+            ledgerEditor.rowsChanged()
             selectRevealedRow()
             // The list on screen came back without the row asked for: voided,
             // past the first page, or another month by now. Kept, the id
@@ -1622,6 +1698,8 @@ final class AppStore {
         guard let vault = currentVault, !isReadOnly, !ids.isEmpty else { return }
         await flushPendingUndo()
         pendingUndo = PendingUndo(ids: ids, vaultId: vault.id, startedAt: Date(), duration: undoWindow)
+        // The rows are hidden now, the cursor with them if it was on one.
+        ledgerEditor.rowsChanged()
         // ⌘Z while the toast is up is the toast's own Undo.
         history.recordPendingVoid(name: String(localized: "Delete Transactions")) { [weak self] in self?.undo() }
         let window = undoWindow
@@ -1676,9 +1754,16 @@ final class AppStore {
 
     /// Sends only the fields that changed, and makes the edit undoable.
     func update(transactionId: Uuid, patch: TransactionPatch) async {
-        guard let vault = currentVault, !patch.isEmpty, !refusedAsReadOnly() else { return }
         // Read before the write: undo puts back what is stored now.
-        let inverse = storedInverse(of: patch, for: transactionId)
+        await update(transactionId: transactionId, patch: patch, inverse: storedInverse(of: patch, for: transactionId))
+    }
+
+    /// `update` with the undo step's inverse read by the caller when the
+    /// edit was made (`storedInverse`): the ledger's cells queue their
+    /// writes (`LedgerEditor`), and a cell saved on the way to another month
+    /// gets its turn after that month's rows have replaced its own.
+    func update(transactionId: Uuid, patch: TransactionPatch, inverse: TransactionPatch?) async {
+        guard let vault = currentVault, !patch.isEmpty, !refusedAsReadOnly() else { return }
         await guarded {
             try await core.execute(
                 vaultId: vault.id,

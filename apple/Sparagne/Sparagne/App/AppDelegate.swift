@@ -15,9 +15,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// quitting before that would leave the rows live on the next launch,
     /// after the user saw them go. So the quit waits for the void to be
     /// written, then goes ahead whatever the core answered.
+    ///
+    /// The Mastro's cell being typed into is left as a click outside the
+    /// grid leaves it: saved, and the new line registered if it has an
+    /// amount (`LedgerEditor.finish`). The quit waits for those writes too.
+    /// One refused is lost with the app, as it would be on any other way out.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let store, store.pendingUndo != nil else { return .terminateNow }
+        guard let store else { return .terminateNow }
+        store.ledgerEditor.finish()
+        guard store.pendingUndo != nil || store.ledgerEditor.hasPendingWrites else { return .terminateNow }
         Task {
+            await store.ledgerEditor.settle()
             await store.flushPendingUndo()
             replyToTermination(true)
         }
