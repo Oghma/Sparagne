@@ -187,47 +187,49 @@ struct CategoryCompletionAnchor: PreferenceKey {
     }
 }
 
-/// A CATEGORY cell that completes: typing opens the list, ↑↓ move in it, ↩
-/// and ⇥ pick, esc closes it. With the list closed every key does what it
-/// did before: ↩ saves the row, ⇥ moves on, esc throws the draft away.
+/// The CATEGORY cell while it is typed into: typing opens the list, ↑↓ move
+/// in it, ↩ and ⇥ pick, esc closes it. With the list closed every key does
+/// what it does in the other cells (`cellKeys`): ↩ saves the cell, ⇥ and the
+/// arrows move the cursor, esc puts the cell back as it was.
+///
+/// A cell typed into from a key pressed on it opens the list on that key at
+/// once; one opened with ↩, F2 or a double click waits for a keystroke, so
+/// ↑ ↓ still move the cursor off a category left as it is.
 struct CategoryCell: View {
-    @Binding var text: String
     let placeholder: String
     var placeholderTint: Color = Ink.text3
     let store: AppStore
     let completion: CategoryCompletionModel
-    @FocusState.Binding var focus: CellFocus?
     let key: CellFocus
-    let onSubmit: () -> Void
+    let edited: EditedCell
 
     var body: some View {
-        TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(placeholderTint))
+        TextField("", text: edited.text, selection: edited.selection, prompt: Text(placeholder).foregroundStyle(placeholderTint))
             .textFieldStyle(.plain)
             .font(Face.row)
             .foregroundStyle(Ink.text)
             .accessibilityLabel(RowField.category.label)
-            .focused($focus, equals: key)
-            .onSubmit(onSubmit)
-            .cellFocusRing(focus == key)
-            .completing(text: $text, owner: key, isFocused: focus == key, store: store, completion: completion) {
-                // ⇥ picks and moves on to DESCRIZIONE, as it would have. After
-                // the pick has reached the field, or leaving it would write
-                // back what was typed.
-                Task { focus = CellFocus(row: key.row, field: .note) }
+            .focused(edited.focus, equals: key)
+            .cellFocusRing(true)
+            .cellKeys(edited, key: key)
+            // The cell is a field only while it is typed into, so every
+            // change of its text is typing, or a pick. After `cellKeys`, so
+            // the list hears its keys first.
+            .completing(text: edited.text, owner: key, isFocused: true, store: store, completion: completion) {
+                // ⇥ picks and moves on, as it would have with nothing to
+                // pick: the name is already in the editor's text, which the
+                // move saves.
+                edited.editor.move(.tab)
             }
-            // The recent categories and the aliases, once the cell has the
-            // caret. A click on the CATEGORY cell of a closed row focuses it
-            // in the update that builds this view, where `onChange` does not
-            // fire, hence `onAppear` as well.
+            // The recent categories and the aliases, as the cell becomes a
+            // field.
+            .task { await store.loadCategoryCompletion() }
             .onAppear {
-                if focus == key { Task { await store.loadCategoryCompletion() } }
+                guard edited.typed, !edited.text.wrappedValue.isEmpty else { return }
+                completion.textChanged(edited.text.wrappedValue, owner: key, store: store) { edited.text.wrappedValue = $0 }
             }
-            .onChange(of: focus) { old, new in
-                if new == key {
-                    Task { await store.loadCategoryCompletion() }
-                } else if old == key, completion.owner == AnyHashable(key) {
-                    completion.close()
-                }
+            .onDisappear {
+                if completion.owner == AnyHashable(key) { completion.close() }
             }
             // The whole row's height, so the grid can hang the list from the
             // row's bottom edge rather than from the text's.
@@ -240,9 +242,11 @@ struct CategoryCell: View {
 
 extension View {
     /// The keys and the text watch every completing field shares: the grid's
-    /// CATEGORY cells and the bulk "Set Category…" field. `afterTab` runs once
-    /// ⇥ has picked; the key itself is consumed, so the field decides where
-    /// the caret goes.
+    /// CATEGORY cell, the bulk "Set Category…" field, the Ricorrenze
+    /// inspector's and the statement review's. `afterTab` runs once ⇥ has
+    /// picked; the key itself is consumed, so the field decides where the
+    /// caret goes. With the list closed every key is left to whatever holds
+    /// the field.
     ///
     /// Only typing opens the list: text that changes while the field is not
     /// being typed into (a duplicated row landing in the empty line) does not.
@@ -360,10 +364,18 @@ extension View {
     /// there is no room below. For the view that holds the grid, the form or
     /// the table, outside any scroll view, so the list is never clipped by
     /// one, no later row covers it, and a click on it is not a click on what
-    /// is under it (in the grid, one that would close the row). `inset`
+    /// is under it (in the grid, one that would save the cell). `inset`
     /// moves the list along the field's edge: a grid cell's starts three
     /// points in from the cell's edge rather than from its padded text.
-    func hangingCategoryList(_ completion: CategoryCompletionModel, inset: CGFloat = 0) -> some View {
+    ///
+    /// `placed` hears where the list is, in this view's coordinates, and
+    /// `nil` once it is gone: the grid lets a click there through to the list
+    /// rather than saving the cell the list belongs to (`LedgerGrid`).
+    func hangingCategoryList(
+        _ completion: CategoryCompletionModel,
+        inset: CGFloat = 0,
+        placed: @escaping (CGRect?) -> Void = { _ in }
+    ) -> some View {
         overlayPreferenceValue(CategoryCompletionAnchor.self) { anchor in
             if let anchor, completion.isOpen {
                 GeometryReader { proxy in
@@ -372,11 +384,16 @@ extension View {
                     let fitsBelow = field.maxY + height <= proxy.size.height
                     // One point up into the field, as the canvas hangs it
                     // (`.ac`).
+                    let frame = CGRect(
+                        x: field.minX + inset,
+                        y: fitsBelow ? field.maxY - 1 : field.minY - height + 1,
+                        width: FloatingList.width,
+                        height: height
+                    )
                     CategoryCompletionList(completion: completion)
-                        .offset(
-                            x: field.minX + inset,
-                            y: fitsBelow ? field.maxY - 1 : field.minY - height + 1
-                        )
+                        .offset(x: frame.minX, y: frame.minY)
+                        .onChange(of: frame, initial: true) { _, new in placed(new) }
+                        .onDisappear { placed(nil) }
                 }
             }
         }

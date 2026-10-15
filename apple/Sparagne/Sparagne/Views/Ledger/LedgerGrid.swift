@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SparagneCore
 
@@ -5,29 +6,27 @@ import SparagneCore
 /// first, the recurring periods due this month among them at their date
 /// (`PendingRowView`), and an always-empty last line for the next one.
 ///
-/// Editing is per row, not per cell: clicking a cell opens the whole row for
-/// editing with the focus on that cell, ⇥ walks the fields, ↩ commits the diff
-/// as one `UpdateTransaction` and esc throws the draft away, so a row is never
-/// half-written.
+/// Edited as a spreadsheet is, a cell at a time (`LedgerEditor`, which the
+/// store owns). One cell is selected, the cursor, drawn with an accent ring;
+/// a click selects it, the arrows, ⇥ and ⇧⇥ move it. A key typed on it
+/// replaces what it says and starts typing into it; ↩, F2 or a double click
+/// type into it from what it says. Only that cell is a text field; every
+/// other cell, the rest of its row included, is drawn as text.
 ///
-/// Leaving the row saves it too, the way a spreadsheet does: ⇥ off IMPORTO, a
-/// click on another row or on the search field all commit what was typed. esc
-/// is the only way to lose it.
+/// The cell typed into is written the moment it is left, whichever way: ↩,
+/// ⇥ or an arrow, a click on another cell or anywhere outside the grid, the
+/// search field taking the keyboard. esc puts it back as it was. The empty
+/// line is registered when the cursor leaves it with an amount in it.
 ///
-/// ⌘-click and ⇧-click pick rows instead of opening one, and ⌘A picks them all
-/// while no cell is being edited: the selection the bulk actions work on
-/// (`SelectionBar`, `AppStore+Selection.swift`). The grid takes the keyboard
-/// then (`selectionKeys`), so ⌫ deletes what is selected and esc lets it go,
-/// while a text field keeps its own ⌘A and ⌫ as long as it is being typed
-/// into. With nothing selected, ⌫ deletes the row under the pointer, the one
-/// showing its trash icon (`DeleteTarget`).
+/// ⌘-click and ⇧-click pick rows instead, and ⌘A picks them all while no
+/// cell is being typed into: the selection the bulk actions work on
+/// (`SelectionBar`, `AppStore+Selection.swift`). Picking hides the cursor.
+/// With no cursor, ⌫ deletes what is picked, or with nothing picked the row
+/// under the pointer, the one showing its trash icon (`DeleteTarget`); ⌘⌫
+/// deletes the picked rows or the cursor's.
 struct LedgerGrid: View {
     @Bindable var store: AppStore
 
-    /// Which row is open for editing; `nil` is the new-row line at the bottom.
-    @State private var editing: Uuid?
-    @State private var draft = RowDraft()
-    @State private var newRow = RowDraft()
     /// The row under the pointer, so the eye can follow it across a grid that
     /// is much wider than a line of text. Its trash icon shows, and ⌫ with
     /// nothing selected deletes it.
@@ -35,10 +34,30 @@ struct LedgerGrid: View {
     /// The lines as last worked out: the body runs again on every pointer
     /// move and keystroke, and the lines change only with their input.
     @State private var linesCache = LedgerLines.Cache()
+    /// The cell being typed into, which is the editor's cursor while it is
+    /// editing (`followEditor`).
     @FocusState private var focus: CellFocus?
-    /// The grid as a whole, when no cell has the caret: what ⌘A, ⌫ and esc
-    /// reach while rows are being picked rather than typed into.
+    /// The grid as a whole, while a cell is selected and not typed into, or
+    /// rows are picked: what the arrows, the typed keys, ↩, ⌘A, ⌫ and esc
+    /// reach then (`selectionKeys`).
     @FocusState private var gridFocused: Bool
+    /// The caret in the cell being typed into.
+    @State private var caret: TextSelection?
+    /// Typing has just started, and the caret is on its way to the end of
+    /// what the cell says (`fieldKey`, `caretLanded`).
+    @State private var placesCaret = false
+    /// The caret was put at the end once the field had taken the keyboard:
+    /// from then on the field's caret landing there is the grid's doing.
+    @State private var caretSent = false
+    /// Typing started from a key pressed on the selected cell
+    /// (`EditedCell.typed`).
+    @State private var typed = false
+    /// Counts the times the cursor's line was asked back into sight by a key
+    /// typed while its field was out of it (`gridKey`).
+    @State private var cursorWanted = 0
+    /// Where a click can land, for the click watcher to tell the grid's cells
+    /// from the rest of the window.
+    @State private var frames = GridFrames()
     /// "Set Category…", from the selection bar or a selected row's menu.
     @State private var showsBulkCategory = false
     /// "Set Envelope…", the same way.
@@ -46,9 +65,16 @@ struct LedgerGrid: View {
     /// The list under the CATEGORY cell being typed into: one for the whole
     /// grid, drawn over it rather than inside a row (`hangingCategoryList`).
     @State private var completion = CategoryCompletionModel()
-    /// The list under the ENVELOPE cell that has the caret, drawn the same
-    /// way (`envelopeList`).
+    /// The list under the ENVELOPE cell being typed into, drawn the same way
+    /// (`envelopeList`).
     @State private var envelopes = EnvelopeChoiceModel()
+
+    /// The grid's own coordinates, which the click watcher measures in.
+    nonisolated private static let space = "ledger.grid"
+    /// The empty line's identity among the lines, for the scroll to find it.
+    nonisolated private static let newLineID = "ledger.new-line"
+
+    private var editor: LedgerEditor { store.ledgerEditor }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,6 +84,9 @@ struct LedgerGrid: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         lines(viewportHeight: viewport.size.height)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+                                frames.content = $0
+                            }
                     }
                     .scrollBounceBehavior(.basedOnSize)
                     .background { selectionKeys }
@@ -68,7 +97,17 @@ struct LedgerGrid: View {
                     .onChange(of: store.revealedRow) { _, _ in reveal(with: proxy) }
                     .onChange(of: store.rows.count) { _, _ in reveal(with: proxy) }
                     .onChange(of: store.rows.first?.id) { _, _ in reveal(with: proxy) }
+                    // The cursor's line stays in sight, as ↑ ↓ ⇥ take it
+                    // along the sheet and as typing starts on it.
+                    .onChange(of: editor.cursor) { _, _ in scrollToCursor(with: proxy) }
+                    .onChange(of: editor.isEditing) { _, editing in
+                        if editing { scrollToCursor(with: proxy) }
+                    }
+                    .onChange(of: cursorWanted) { _, _ in scrollToCursor(with: proxy) }
                 }
+            }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+                frames.viewport = $0
             }
             // With rows picked, a line under the sheet says what can be done
             // to all of them at once.
@@ -77,71 +116,55 @@ struct LedgerGrid: View {
             }
         }
         // Three points in from the cell's edge, as the canvas hangs it (`.ac`).
-        .hangingCategoryList(completion, inset: 3 - GridColumn.padding)
+        .hangingCategoryList(completion, inset: 3 - GridColumn.padding) { frames.categoryList = $0 }
         .overlayPreferenceValue(EnvelopeChoiceAnchor.self) { anchor in
             envelopeList(at: anchor)
         }
         .background(Ink.sheet)
-        // The vault turned read-only under an open row (the owner changed the
-        // role): the row could not be saved, so it closes.
-        .onChange(of: store.isReadOnly) { _, _ in resetEditing() }
-        // The month and the vault change what the empty line means, so its
-        // draft starts over with them. A sync landing or a void must not:
-        // those move `store.rows` under a line that is being typed.
-        .onChange(of: store.month) { _, _ in
-            resetEditing()
-            newRow = RowDraft.blank(in: store)
+        .background {
+            GridClickWatcher(
+                frames: frames,
+                isWatching: editor.isEditing,
+                onClick: { clickLanded(at: $0) },
+                onKeyboardLost: keyboardLost
+            )
         }
-        .onChange(of: store.currentVault?.id) { _, _ in
-            resetEditing()
-            newRow = RowDraft.blank(in: store)
-        }
-        .onChange(of: store.direction) { _, new in
-            resetEditing()
-            // A duplicated refund belongs to USCITE: saved from ENTRATE it
-            // would vanish from the list it was typed into.
-            if let kind = newRow.kind, !new.kinds.contains(kind) { newRow = RowDraft.blank(in: store) }
-        }
-        // Showing the column fills the empty line's cell with the sticky
-        // default; hiding it puts that value back out of reach.
-        .onChange(of: store.showWalletColumn) { _, _ in
-            resetEditing()
-            newRow = RowDraft.blank(in: store)
-        }
-        // A login or a new local name changes who the author is: the empty
-        // line follows, unless its PERSONA cell was already set to someone.
-        .onChange(of: store.currentAuthor) { old, new in
-            if newRow.person == old { newRow.person = new }
-        }
-        .onChange(of: focus) { _, new in
-            commitIfLeft(new)
-            // Typing into a cell is editing, not picking: one or the other.
-            if new != nil { store.clearSelection() }
-        }
+        .coordinateSpace(.named(Self.space))
+        // The month, the lists, the tab, the vault and its role, the WALLET
+        // column and the author are the store's to tell the editor about
+        // (`LedgerEditor.finish`, `reset`, `walletColumnChanged`): the grid
+        // only follows where the cursor ends up.
+        .onChange(of: editor.isEditing) { _, _ in followEditor() }
+        .onChange(of: editor.cursor) { _, _ in followEditor() }
+        .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
         .onAppear {
-            newRow = RowDraft.blank(in: store)
-            // ⌘A works from the start, before any row was clicked.
-            if focus == nil { gridFocused = true }
+            followEditor()
+            // ⌘A works from the start, before any cell was clicked.
+            if editor.cursor == nil { gridFocused = true }
         }
-        .task(id: newRow.note) { await suggestCategory() }
+        .onReceive(NotificationCenter.default.publisher(for: NSTextView.didChangeSelectionNotification)) {
+            caretLanded($0)
+        }
+        .task(id: editor.newLineNote) { await suggestCategory() }
         .onReceive(NotificationCenter.default.publisher(for: .duplicateLastRow)) { _ in
             duplicateLast()
         }
     }
 
-    // MARK: - The keys of a selection
+    // MARK: - The keys of the grid
 
-    /// Where the keyboard goes while rows are picked rather than typed into:
-    /// ⌘A takes every row, ⌫ and ⌦ delete the selection, or with none the
-    /// row under the pointer (`deleteTarget`), esc lets the selection go.
+    /// Where the keyboard goes while no cell is being typed into: a selected
+    /// cell's keys (the arrows, ⇥, ↩, F2, esc, a typed character, ⌫), and
+    /// those of the rows picked (⌘A, ⌫, esc).
     ///
     /// An invisible view behind the rows, not the scroll view itself: a
     /// focusable container would take the focus on every click inside it,
-    /// before the click reached a cell, and so close the row being edited
-    /// under the pointer. Nothing here can be clicked, only focused from code
-    /// (`pick`, `submit`, `cancelEditing`); and since no cell is inside it, a
-    /// key typed into a cell never reaches these handlers, which only ever see
-    /// keys while no cell has the caret.
+    /// before the click reached a cell, and so take the caret from the cell
+    /// being typed into under the pointer. Nothing here can be clicked, only
+    /// focused from code (`followEditor`, `pick`). Since no cell is inside
+    /// it, a key typed into a cell never reaches it; the keys typed on a
+    /// selected cell faster than its field takes the caret do, and are added
+    /// to what was typed (`LedgerEditor.type`).
     private var selectionKeys: some View {
         Color.clear
             .focusable()
@@ -149,35 +172,307 @@ struct LedgerGrid: View {
             .focused($gridFocused)
             // Menu's Select All, which a focused text field would take first.
             .onCommand(#selector(NSResponder.selectAll(_:))) { selectAll() }
-            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
-                switch deleteTarget {
-                case .selection:
-                    Task { await store.voidSelection() }
-                case .row(let id):
-                    Task { await store.void(transactionId: id) }
-                case .none:
-                    return .ignored
-                }
-                return .handled
-            }
-            .onKeyPress(.escape) {
-                guard focus == nil, !store.selection.isEmpty else { return .ignored }
-                store.clearSelection()
-                return .handled
-            }
+            .onKeyPress(phases: [.down, .repeat]) { gridKey($0) }
             .accessibilityHidden(true)
     }
 
-    /// What ⌫ deletes now. The hovered row is looked up among the rows on
-    /// screen: one just deleted is gone from them while the pointer has not
-    /// moved yet, and a second ⌫ must find nothing there.
-    private var deleteTarget: DeleteTarget {
-        DeleteTarget.resolve(
+    private func gridKey(_ press: KeyPress) -> KeyPress.Result {
+        let key = press.key
+        // Typing into a cell whose field is not on screen: its row comes
+        // back into sight, and its field with it.
+        if editor.isEditing, focus == nil { cursorWanted += 1 }
+        if GridKey.isDelete(key) {
+            if press.modifiers.contains(.command) { return commandDelete() }
+            guard press.modifiers.isDisjoint(with: [.option, .control, .shift]) else { return .ignored }
+            if editor.isEditing {
+                // A ⌫ typed before the field took the caret.
+                if !editor.text.isEmpty { editor.text.removeLast() }
+                return .handled
+            }
+            if editor.cursor != nil {
+                typeOnCursor("")
+                return .handled
+            }
+            return deleteRows()
+        }
+        if key == .escape {
+            let handled = editor.cursor != nil || !store.selection.isEmpty
+            if editor.cursor != nil { editor.cancel() }
+            store.clearSelection()
+            return handled ? .handled : .ignored
+        }
+        guard editor.cursor != nil else { return .ignored }
+        if let move = GridKey.move(for: press) {
+            editor.move(move)
+            return .handled
+        }
+        if key == .return, GridKey.isPlain(press) {
+            if editor.isEditing {
+                // A ↩ typed before the field took the caret.
+                editor.confirm()
+            } else {
+                edit(nil)
+            }
+            return .handled
+        }
+        if key == GridKey.f2 {
+            if !editor.isEditing { edit(nil) }
+            return .handled
+        }
+        if GridKey.isTyping(press) {
+            typeOnCursor(press.characters)
+            return .handled
+        }
+        return .ignored
+    }
+
+    /// The keys a cell being typed into leaves to the grid (`cellKeys`):
+    /// ⇥ ⇧⇥ ↑ ↓ save it and move, esc puts it back. ← → move the caret.
+    ///
+    /// The field selects all it holds as it takes the caret, and the update
+    /// that puts the caret back after it can come a moment after the next
+    /// key: until the caret is there (`caretLanded`), a typed key is added to
+    /// the editor's text here rather than given to the field to replace what
+    /// it has selected (`GridEventMechanicsTests`). Any other key, ← or ⌫,
+    /// is the field's, and from then on so is every key.
+    private func fieldKey(_ press: KeyPress) -> KeyPress.Result {
+        if let move = GridKey.move(for: press), move != .left, move != .right {
+            editor.move(move)
+            return .handled
+        }
+        if press.key == .escape {
+            editor.cancel()
+            return .handled
+        }
+        guard placesCaret else { return .ignored }
+        guard GridKey.isTyping(press) else {
+            placesCaret = false
+            return .ignored
+        }
+        editor.type(press.characters)
+        caret = caretAtEnd
+        return .handled
+    }
+
+    /// The field's caret moved. Once it stands at the end of what the cell
+    /// says, after the grid put it there, the field has taken over and the
+    /// keys typed from then on are its own, wherever the caret goes next.
+    /// The field reports it as AppKit's text view does, which is where the
+    /// caret really is, not where the grid asked for it.
+    private func caretLanded(_ notification: Notification) {
+        guard placesCaret, caretSent, let field = notification.object as? NSTextView,
+              let window = frames.window, field.window === window, window.firstResponder === field,
+              field.string == editor.text
+        else { return }
+        let selection = field.selectedRange()
+        if selection.length == 0, selection.location == (field.string as NSString).length {
+            placesCaret = false
+        }
+    }
+
+    /// The caret goes to the end of what the cell says, once its field has
+    /// the keyboard (`focusMoved`).
+    private func placeCaret() {
+        placesCaret = true
+        caretSent = false
+        caret = caretAtEnd
+    }
+
+    /// A key typed on the selected cell: it replaces what the cell says, or
+    /// with "" (⌫) empties it, and the cell's field takes the caret after
+    /// it. A cell that cannot be typed into beeps.
+    private func typeOnCursor(_ characters: String) {
+        let starting = !editor.isEditing
+        guard editor.type(characters) else {
+            NSSound.beep()
+            return
+        }
+        if starting { typed = true }
+        placeCaret()
+    }
+
+    /// ↩, F2, a double click or VoiceOver's Edit: `cell` (the cursor's, when
+    /// `nil`) is typed into from what it says, the caret after it.
+    ///
+    /// Refused, it beeps when the cell cannot be typed into, and then it is
+    /// selected; a cell being left that refused to be saved has said why
+    /// already, and keeps the caret.
+    private func edit(_ cell: CellFocus?) {
+        let target = cell ?? editor.cursor
+        guard editor.edit(cell) else {
+            if editor.cursor == target, !editor.isEditing { NSSound.beep() }
+            return
+        }
+        typed = false
+        placeCaret()
+    }
+
+    private var caretAtEnd: TextSelection { TextSelection(insertionPoint: editor.text.endIndex) }
+
+    /// What ⌫ deletes with no cursor. The hovered row is looked up among the
+    /// rows on screen: one just deleted is gone from them while the pointer
+    /// has not moved yet, and a second ⌫ must find nothing there.
+    private func deleteRows() -> KeyPress.Result {
+        let target = DeleteTarget.resolve(
             selection: store.selectedRows.map(\.id),
             hovered: hovered.flatMap { id in store.rows.first { $0.id == id } },
-            editing: focus != nil || editing != nil,
+            editing: editor.isEditing,
             canWrite: store.canWrite
         )
+        return run(target)
+    }
+
+    /// ⌘⌫: the rows picked, or with none the row the cursor is on.
+    private func commandDelete() -> KeyPress.Result {
+        let target = DeleteTarget.resolveCommandDelete(
+            selection: store.selectedRows.map(\.id),
+            cursorRow: editor.cursor?.row.flatMap { id in store.rows.first { $0.id == id } },
+            editing: editor.isEditing,
+            canWrite: store.canWrite
+        )
+        return run(target)
+    }
+
+    private func run(_ target: DeleteTarget) -> KeyPress.Result {
+        switch target {
+        case .selection:
+            Task { await store.voidSelection() }
+        case .row(let id):
+            Task { await store.void(transactionId: id) }
+        case .none:
+            return .ignored
+        }
+        return .handled
+    }
+
+    // MARK: - The focus
+
+    /// The keyboard follows the editor: the cell typed into has the caret,
+    /// after what it says; with a cell only selected the grid has the keys;
+    /// with no cursor the keyboard stays where it is, the search field
+    /// included.
+    private func followEditor() {
+        if editor.isEditing, let cursor = editor.cursor {
+            guard focus != cursor else { return }
+            placeCaret()
+            focus = cursor
+        } else {
+            // The field goes with the editing, and the caret with it: setting
+            // `focus` to nil here could take it from the search field a click
+            // has just given it to.
+            placesCaret = false
+            typed = false
+            if editor.cursor != nil { gridFocused = true }
+        }
+    }
+
+    /// The field takes the caret selecting all it holds: the caret goes back
+    /// after what was typed.
+    ///
+    /// The field losing the keyboard while it is still typed into is one of
+    /// two things. Another field took it, the search field or ⌘K's: the cell
+    /// is saved, as a click away from it saves it; one that refuses stays as
+    /// typed, its error shown, until it is come back to, and the other field
+    /// keeps the keyboard. Or nothing took it: the row went out of the lazy
+    /// sheet as it scrolled, and the field with it (which SwiftUI does not
+    /// always report: `keyboardLost` hears it from the window). The cell is
+    /// still typed into; the grid takes the keys meanwhile, which go on
+    /// adding to it and bring its row back into sight, and the field takes
+    /// them back as it comes into sight (`fieldAppeared`).
+    private func focusMoved(from old: CellFocus?, to new: CellFocus?) {
+        if new != nil {
+            // Typing into a cell is editing, not picking: one or the other.
+            store.clearSelection()
+            if new == editor.cursor, placesCaret {
+                caret = caretAtEnd
+                caretSent = true
+            }
+        }
+        guard let old, editor.isEditing, editor.cursor == old, new != old else { return }
+        if frames.window?.firstResponder is NSText {
+            // A click there already saved the cell, or was refused, on its
+            // way (`clickLanded`): once is enough to say why. The focus is
+            // told as the click's mouse-up is handled.
+            let clicked = [.leftMouseDown, .leftMouseUp].contains(NSApp.currentEvent?.type)
+            if !clicked { editor.finish() }
+        } else {
+            gridFocused = true
+        }
+    }
+
+    /// The window's keyboard went to no view, the field of the cell being
+    /// typed into gone with its row (`focusMoved`): the grid takes the keys.
+    private func keyboardLost() {
+        guard editor.isEditing else { return }
+        gridFocused = true
+    }
+
+    /// The field of the cell being typed into came into sight, its row back
+    /// in the lazy sheet: while the grid holds the keys for it
+    /// (`focusMoved`), it takes them back, the caret at the end.
+    private func fieldAppeared(_ cell: CellFocus) {
+        guard editor.isEditing, editor.cursor == cell, focus != cell, gridFocused else { return }
+        placeCaret()
+        focus = cell
+    }
+
+    // MARK: - The clicks
+
+    /// A click on a cell: ⌘-click and ⇧-click pick its row, a first click
+    /// selects the cell, the second of a double click types into it. The
+    /// cells only report a tap, so the count and the modifiers are read off
+    /// the event being handled, the mouse-up of that click.
+    private func click(_ cell: CellFocus) {
+        let event = NSApp.currentEvent
+        let modifiers = event?.modifierFlags ?? NSEvent.modifierFlags
+        if let id = cell.row, modifiers.contains(.command) || modifiers.contains(.shift),
+           let row = store.rows.first(where: { $0.id == id }) {
+            pick(row, extending: !modifiers.contains(.command))
+            return
+        }
+        store.clearSelection()
+        if editor.isEditing, editor.cursor == cell { return }
+        if (event?.clickCount ?? 1) >= 2 {
+            edit(cell)
+        } else {
+            editor.select(cell)
+        }
+    }
+
+    /// A click anywhere in the window while a cell is being typed into, seen
+    /// before it lands (`GridClickWatcher`). On a cell, the cell's own click
+    /// saves it and moves the cursor; on the CATEGORY or ENVELOPE list the
+    /// list picks. Anywhere else, the search field, the tab bar, a due
+    /// period, the ruled lines under the sheet, the cell is saved and the
+    /// cursor goes. Every click goes on to what it was aimed at: a cell that
+    /// refuses to be saved stays as typed, its error shown.
+    ///
+    /// Whatever it lands on, the caret is the field's from then on: a click
+    /// inside it puts the caret where it fell (`fieldKey`).
+    private func clickLanded(at point: CGPoint) {
+        guard editor.isEditing else { return }
+        placesCaret = false
+        if frames.categoryList?.contains(point) == true || frames.envelopeList?.contains(point) == true { return }
+        if isOnCell(point) { return }
+        editor.finish()
+    }
+
+    /// Whether `point` is on a cell of a stored row or of the empty line,
+    /// the # column included: the sheet's pitch is fixed, so the line under
+    /// the point is known from how far down the lines it is. The trash
+    /// icon's track, a due period and the ruled lines below are not cells.
+    private func isOnCell(_ point: CGPoint) -> Bool {
+        guard frames.viewport.contains(point) else { return false }
+        let x = point.x - frames.content.minX
+        let y = point.y - frames.content.minY
+        guard x >= 0, x < frames.content.width - GridColumn.action, y >= 0 else { return false }
+        let index = Int(y / Metrics.rowHeight)
+        let lines = linesCache.lines
+        if lines.indices.contains(index) {
+            if case .row = lines[index] { return true }
+            return false
+        }
+        return index == lines.count && store.canWrite
     }
 
     // MARK: - A row revealed
@@ -200,6 +495,19 @@ struct LedgerGrid: View {
         }
     }
 
+    /// Keeps the cursor's line in sight, the empty line included, moving
+    /// the sheet by as little as it takes: a line already in sight does not
+    /// move it.
+    private func scrollToCursor(with proxy: ScrollViewProxy) {
+        guard let cursor = editor.cursor else { return }
+        if let id = cursor.row {
+            guard let row = store.rows.first(where: { $0.id == id }) else { return }
+            proxy.scrollTo(LedgerLine.row(row).id, anchor: nil)
+        } else {
+            proxy.scrollTo(Self.newLineID, anchor: nil)
+        }
+    }
+
     // MARK: - The lines
 
     /// The rows with the due periods among them (`AppStore.ledgerLinesInput`),
@@ -215,12 +523,13 @@ struct LedgerGrid: View {
         // yet, and gets a symbol instead.
         let ordinals = linesCache.ordinals
         let drawn = CGFloat(lines.count + (store.canWrite ? 1 : 0)) * Metrics.rowHeight
+        let edited = editedCell
         return LazyVStack(spacing: 0) {
             ForEach(lines) { line in
                 switch line {
                 case .row(let row):
                     let index = ordinals[row.id] ?? 0
-                    rowView(index: index, row: row)
+                    rowView(index: index, row: row, edited: edited)
                         .rowRule()
                         .onAppear { if index == rows.count - 1 { loadNextPage() } }
                 case .pending(let period):
@@ -229,33 +538,62 @@ struct LedgerGrid: View {
                 }
             }
             // A viewer's ledger is a report: nothing to type into.
-            if store.canWrite { newRowView.rowRule() }
+            if store.canWrite { newRowView(edited: edited).rowRule().id(Self.newLineID) }
             EmptyRowLines()
                 .frame(height: max(2 * Metrics.rowHeight, viewportHeight - drawn))
         }
     }
 
+    /// What the cell being typed into needs, the same for every line.
+    private var editedCell: EditedCell {
+        EditedCell(
+            editor: editor,
+            focus: $focus,
+            selection: $caret,
+            typed: typed,
+            keys: fieldKey,
+            appeared: fieldAppeared
+        )
+    }
+
+    /// The cursor as the line `row` (nil = the empty line) sees it.
+    private func cursor(on row: Uuid?) -> LineCursor? {
+        guard let cursor = editor.cursor, cursor.row == row else { return nil }
+        return LineCursor(field: cursor.field, editing: editor.isEditing)
+    }
+
     // MARK: - Existing rows
 
+    /// A stored row as the sheet draws it: with the cells saved into it that
+    /// no reload has given back yet (`LedgerEditor.shown`), so a cell just
+    /// left says what it was saved as at once. Only what is drawn and read
+    /// out changes; the line keeps the stored row's place, and everything
+    /// that finds a row, the cursor, the selection, the pointer, the reveal
+    /// and the paging, finds it by its id.
+    private func rowView(index: Int, row: TransactionRow, edited: EditedCell) -> some View {
+        ShownRow(row: row, editor: editor) { shown in
+            storedRow(index: index, row: shown, edited: edited)
+        }
+    }
+
     @ViewBuilder
-    private func rowView(index: Int, row: TransactionRow) -> some View {
-        let isEditing = editing == row.id
+    private func storedRow(index: Int, row: TransactionRow, edited: EditedCell) -> some View {
+        let cursor = cursor(on: row.id)
+        let isEditing = cursor?.editing == true
         let isSelected = store.selection.contains(row.id)
         LedgerRowView(
             ordinal: index + 1,
             row: row,
             store: store,
             showsWallet: store.showWalletColumn,
-            draft: isEditing ? $draft : nil,
-            focus: $focus,
+            cursor: cursor,
+            edited: edited,
             completion: completion,
             envelopes: envelopes,
-            onOpen: { field in open(row, at: field) },
-            onCommit: { submit(row.id) },
-            onCancel: cancelEditing,
+            onClick: { field in click(CellFocus(row: row.id, field: field)) },
             onDelete: trashAction(for: row, editing: isEditing)
         )
-        .background(background(editing: isEditing, selected: isSelected, hovered: hovered == row.id))
+        .background(background(selected: isSelected, hovered: hovered == row.id))
         .onHover { inside in
             if inside {
                 hovered = row.id
@@ -263,8 +601,8 @@ struct LedgerGrid: View {
                 hovered = nil
             }
         }
-        // VoiceOver reads a closed row as one sentence; an open one is a group
-        // of fields, each with its column's name.
+        // VoiceOver reads a row as one sentence; while one of its cells is
+        // typed into, as the cells, that one a field with its column's name.
         .accessibilityElement(children: isEditing ? .contain : .ignore)
         .accessibilityLabel(LedgerAccessibility.label(for: row, showsWallet: store.showWalletColumn))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -281,11 +619,10 @@ struct LedgerGrid: View {
     }
 
     /// Selected rows are tinted with the accent, the palette's color for a
-    /// selection, a shade deeper under the pointer. The
-    /// row being edited and the one under the pointer step up to the card
-    /// ground; the focused cell carries its own ring (`cellFocusRing`).
-    private func background(editing: Bool, selected: Bool, hovered: Bool) -> Color {
-        if editing { return Ink.card }
+    /// selection, a shade deeper under the pointer; the row under the
+    /// pointer steps up to the card ground. The cursor's cell carries its
+    /// own ring (`cellSelectionRing`, `cellFocusRing`).
+    private func background(selected: Bool, hovered: Bool) -> Color {
         if selected { return Ink.accent.opacity(hovered ? 0.2 : 0.14) }
         return hovered ? Ink.card : Color.clear
     }
@@ -312,23 +649,23 @@ struct LedgerGrid: View {
 
     /// The trash icon's action, for the row under the pointer only, as the
     /// SETUP tables show their archive icon: a sheet full of icons would be
-    /// noise. None on the row being edited, whose last cell is being typed
-    /// into, and none where the context menu's Delete is off: a vault this
-    /// account only reads, a row deleted already. The due periods and the
-    /// empty line are not rows and never get one.
+    /// noise. None on the row whose cell is being typed into, and none where
+    /// the context menu's Delete is off: a vault this account only reads, a
+    /// row deleted already. The due periods and the empty line are not rows
+    /// and never get one.
     private func trashAction(for row: TransactionRow, editing: Bool) -> (() -> Void)? {
         guard hovered == row.id, !editing, store.canWrite, DeleteTarget.isDeletable(row) else { return nil }
         return { delete(row) }
     }
 
-    /// What VoiceOver offers on a row: the context menu's actions, the click
-    /// that opens it, and the ⌘-click that picks it, since neither gesture is
-    /// at hand without a pointer.
+    /// What VoiceOver offers on a row: the context menu's actions, the
+    /// double click that types into its DESCRIZIONE, and the ⌘-click that
+    /// picks it, since neither gesture is at hand without a pointer.
     @ViewBuilder
     private func rowActions(_ row: TransactionRow, selected: Bool) -> some View {
         if store.canWrite {
             if !row.voided {
-                Button(String(localized: "Edit")) { open(row, at: .note) }
+                Button(String(localized: "Edit")) { edit(CellFocus(row: row.id, field: .note)) }
             }
             if !row.isTransfer {
                 Button(String(localized: "Duplicate")) { duplicate(row) }
@@ -358,18 +695,16 @@ struct LedgerGrid: View {
 
     // MARK: - The empty line
 
-    private var newRowView: some View {
+    private func newRowView(edited: EditedCell) -> some View {
         NewRowView(
             store: store,
-            draft: $newRow,
-            focus: $focus,
+            cursor: cursor(on: nil),
+            edited: edited,
             completion: completion,
             envelopes: envelopes,
-            onCommit: commitNewRow,
-            onCancel: { gridFocused = true },
-            showsWallet: store.showWalletColumn
+            showsWallet: store.showWalletColumn,
+            onClick: { field in click(CellFocus(row: nil, field: field)) }
         )
-            .background(focus?.row == nil && focus != nil ? Ink.card : Color.clear)
     }
 
     // MARK: - The envelope list
@@ -378,8 +713,7 @@ struct LedgerGrid: View {
     /// top when there is no room below (the empty line, a row at the bottom
     /// of the window), as the CATEGORY cell's is (`hangingCategoryList`) and
     /// for the same reasons: drawn over the whole grid, outside the scroll
-    /// view, so no later row covers it, the scroll view does not clip it, and
-    /// a click on it is not a click on the grid that would close the row.
+    /// view, so no later row covers it and the scroll view does not clip it.
     @ViewBuilder
     private func envelopeList(at anchor: Anchor<CGRect>?) -> some View {
         if let anchor, envelopes.isOpen {
@@ -387,11 +721,16 @@ struct LedgerGrid: View {
                 let cell = proxy[anchor]
                 let height = EnvelopeChoiceList.height(for: envelopes.choices.count)
                 let fitsBelow = cell.maxY + height <= proxy.size.height
+                let frame = CGRect(
+                    x: cell.minX - GridColumn.padding + 3,
+                    y: fitsBelow ? cell.maxY - 1 : cell.minY - height + 1,
+                    width: FloatingList.width,
+                    height: height
+                )
                 EnvelopeChoiceList(choices: envelopes)
-                    .offset(
-                        x: cell.minX - GridColumn.padding + 3,
-                        y: fitsBelow ? cell.maxY - 1 : cell.minY - height + 1
-                    )
+                    .offset(x: frame.minX, y: frame.minY)
+                    .onChange(of: frame, initial: true) { _, new in frames.envelopeList = new }
+                    .onDisappear { frames.envelopeList = nil }
             }
         }
     }
@@ -405,64 +744,13 @@ struct LedgerGrid: View {
         Task { await store.loadMore() }
     }
 
-    /// Opens `row` with the caret in `field`, saving whatever line was open
-    /// before. A row that refuses to save stays open and keeps the focus, so
-    /// the click that would have left it does not lose it.
-    ///
-    /// The click may have been a ⌘-click or a ⇧-click, which pick the row
-    /// instead. The cells only report a tap, so the modifiers are read off the
-    /// event being handled.
-    private func open(_ row: TransactionRow, at field: RowField) {
-        let modifiers = NSEvent.modifierFlags
-        if modifiers.contains(.command) || modifiers.contains(.shift) {
-            pick(row, extending: !modifiers.contains(.command))
-            return
-        }
-        store.clearSelection()
-        guard !row.voided, store.canWrite else { return }
-        if editing == row.id {
-            // Another cell of the row already open: move the caret only, or
-            // the draft would be rebuilt from the stored row and lose the edit.
-            focus = CellFocus(row: row.id, field: field)
-            return
-        }
-        if let editing, !commit(editing) { return }
-        editing = row.id
-        draft = RowDraft(row: row, store: store)
-        focus = CellFocus(row: row.id, field: field)
-    }
-
-    /// esc: throw the draft away. `editing` is cleared before the focus, so
-    /// the focus change that follows does not read as "left the row" and save
-    /// what esc was meant to undo.
-    private func resetEditing() {
-        editing = nil
-        focus = nil
-    }
-
-    /// esc from a row: the draft goes and the grid keeps the keyboard, so ⌘A
-    /// has somewhere to land.
-    private func cancelEditing() {
-        resetEditing()
-        gridFocused = true
-    }
-
-    /// ↩: save the row and close it.
-    private func submit(_ rowId: Uuid) {
-        if commit(rowId) {
-            focus = nil
-            gridFocused = true
-        }
-    }
-
-    /// ⌘-click toggles `row`, ⇧-click extends to it. The row being edited is
-    /// saved first, as any click away from it saves it; one that refuses to
-    /// save keeps the caret, and nothing is picked. The grid takes the
-    /// keyboard, so ⌫ and esc reach the selection.
+    /// ⌘-click toggles `row`, ⇧-click extends to it. The cell being typed
+    /// into is saved first, as any click away from it saves it; one that
+    /// refuses to be saved keeps the caret, and nothing is picked. The
+    /// cursor goes, and the grid takes the keyboard, so ⌫ and esc reach the
+    /// selection.
     private func pick(_ row: TransactionRow, extending: Bool) {
-        guard store.canWrite else { return }
-        if let editing, !commit(editing) { return }
-        focus = nil
+        guard store.canWrite, editor.finish() else { return }
         gridFocused = true
         if extending {
             store.extendSelection(to: row.id)
@@ -471,88 +759,25 @@ struct LedgerGrid: View {
         }
     }
 
-    /// ⌘A with no cell being edited: every row on screen.
+    /// ⌘A with no cell being typed into: every row on screen, the cursor
+    /// gone as with any pick.
     private func selectAll() {
-        guard focus == nil, store.canWrite else { return }
+        guard !editor.isEditing, store.canWrite, editor.finish() else { return }
         store.selectAllRows()
         gridFocused = true
-    }
-
-    /// The commit on blur a spreadsheet does: ⇥ off IMPORTO lands on the empty
-    /// line, a click lands on another row or on the search field, and in every
-    /// case the line being left is written.
-    private func commitIfLeft(_ new: CellFocus?) {
-        guard let editing, new?.row != editing else { return }
-        commit(editing)
-    }
-
-    /// Writes the draft back and says whether it went through.
-    ///
-    /// Sends only what changed, so two people editing different cells of the
-    /// same row do not conflict. A cell the parser or
-    /// the core refuses keeps the row open with the draft intact and puts the
-    /// focus back where the mistake is.
-    @discardableResult
-    private func commit(_ rowId: Uuid) -> Bool {
-        guard editing == rowId else { return true }
-        guard let row = store.rows.first(where: { $0.id == rowId }) else {
-            // Voided, or carried out of the month by a sync while it was open.
-            editing = nil
-            return true
-        }
-        do {
-            let patch = try draft.patch(against: row, store: store)
-            editing = nil
-            // The write goes to the core actor; the row closes now, because
-            // the draft was already checked against the cells.
-            if !patch.isEmpty { Task { await store.update(transactionId: rowId, patch: patch) } }
-            return true
-        } catch let failure as RowDraftError {
-            store.report(failure.underlying)
-            focus = CellFocus(row: rowId, field: failure.field)
-            return false
-        } catch {
-            store.report(error)
-            return false
-        }
-    }
-
-    private func commitNewRow() {
-        do {
-            guard let entry = try newRow.entry(store: store), entry.amount > 0 else { return }
-            Task {
-                await store.addRow(
-                    day: entry.day,
-                    flowId: entry.flowId,
-                    category: entry.category,
-                    note: entry.note,
-                    amount: entry.amount,
-                    walletId: entry.walletId,
-                    kind: entry.kind,
-                    person: entry.person
-                )
-            }
-            newRow = RowDraft.blank(in: store)
-            focus = CellFocus(row: nil, field: .date)
-        } catch let failure as RowDraftError {
-            store.report(failure.underlying)
-            focus = CellFocus(row: nil, field: failure.field)
-        } catch {
-            store.report(error)
-        }
     }
 
     /// The empty line's note has been still for a moment: ask the core what
     /// the vault files it under, for the CATEGORY cell to show while it is
     /// empty. An answer that comes back after the note moved on is dropped.
     private func suggestCategory() async {
-        let note = newRow.note.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard store.canWrite, !note.isEmpty, newRow.suggestion?.note != note else { return }
+        let note = editor.newLineNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard store.canWrite, !note.isEmpty, editor.newLine.suggestion?.note != note else { return }
         guard (try? await Task.sleep(for: .milliseconds(250))) != nil else { return }
         guard let category = await store.suggestedCategory(forNote: note),
-              newRow.note.trimmingCharacters(in: .whitespacesAndNewlines) == note
+              editor.newLineNote.trimmingCharacters(in: .whitespacesAndNewlines) == note
         else { return }
-        newRow.suggestion = NoteSuggestion(note: note, category: category)
+        editor.newLine.suggestion = NoteSuggestion(note: note, category: category)
     }
 
     /// The trash icon: the row alone, through the context menu's own path,
@@ -563,11 +788,10 @@ struct LedgerGrid: View {
     }
 
     /// ⌘D and the context menu: copy a row into the empty line, ready to be
-    /// tweaked and saved.
+    /// tweaked and saved, the caret in its IMPORTO.
     private func duplicate(_ row: TransactionRow) {
-        guard !store.isReadOnly, let copy = RowDraft.duplicate(of: row, store: store) else { return }
-        newRow = copy
-        focus = CellFocus(row: nil, field: .amount)
+        guard !store.isReadOnly else { return }
+        editor.duplicate(row)
     }
 
     /// ⌘D with nothing selected duplicates the last row of the month that is
@@ -578,232 +802,175 @@ struct LedgerGrid: View {
     }
 }
 
-// MARK: - Focus
+// MARK: - A row as shown
 
-/// A cell: which row (nil = the new line) and which field.
-struct CellFocus: Hashable {
-    let row: Uuid?
-    let field: RowField
+/// Hands `content` the row as the sheet shows it (`LedgerEditor.shown`). A
+/// view of its own, so that a save redraws the row it was saved into, and
+/// that row only.
+private struct ShownRow<Content: View>: View {
+    let row: TransactionRow
+    let editor: LedgerEditor
+    @ViewBuilder let content: (TransactionRow) -> Content
+
+    var body: some View {
+        content(editor.shown(row))
+    }
 }
 
-/// The cells a row is typed into.
-///
-/// Nothing here drives the traversal. ⇥ and ⇧⇥ are the system's, walking the
-/// focusable views in layout order, and the order of the cases is only the
-/// order the cells are laid out in. A closed row holds no text field, so from
-/// IMPORTO of the row being edited ⇥ reaches the DATA cell of the empty line
-/// and never gets stuck on the rows in between; ⇧⇥ from DATA goes back up to
-/// the header, whose search field is the previous focusable view. Both leave
-/// the row, which is what `commitIfLeft` is for.
-enum RowField: Hashable, CaseIterable {
-    case date
-    case flow
-    case category
-    case note
-    /// Only in the hierarchy while the optional WALLET column is on.
-    case wallet
-    /// Who the row is for: one of `AppStore.assignablePeople`. Not a field on
-    /// a transfer, which is always its author's.
-    case person
-    case amount
+// MARK: - Keys
 
-    /// The column heading, which is what VoiceOver calls the cell: an open
-    /// row's fields have no placeholder to be read instead.
-    var label: String {
-        switch self {
-        case .date: String(localized: "Date")
-        case .flow: String(localized: "Envelope")
-        case .category: String(localized: "Category")
-        case .note: String(localized: "Description")
-        case .wallet: String(localized: "Wallet")
-        case .person: String(localized: "Person")
-        case .amount: String(localized: "Amount")
+/// What the grid makes of a key press, with no SwiftUI state in it.
+enum GridKey {
+    /// F2, which types into the selected cell as ↩ does.
+    static let f2 = KeyEquivalent("\u{F705}")
+    /// ⇧⇥, which arrives as its own character rather than as ⇥ with ⇧.
+    static let backTab = KeyEquivalent("\u{19}")
+
+    /// ⌫ arrives as U+007F, which a handler for any key gets as it is, not
+    /// as `.delete`; ⌦ as `.deleteForward`.
+    static func isDelete(_ key: KeyEquivalent) -> Bool {
+        key == .delete || key == .deleteForward || key == KeyEquivalent("\u{7F}")
+    }
+
+    /// No modifier that changes what the key means: ⇧, ⌥, ⌃ or ⌘.
+    static func isPlain(_ press: KeyPress) -> Bool {
+        press.modifiers.isDisjoint(with: [.shift, .option, .control, .command])
+    }
+
+    /// The arrows and ⇥ with no modifier, and ⇧⇥.
+    static func move(for press: KeyPress) -> CursorMove? {
+        if press.key == backTab { return .backTab }
+        if press.key == .tab {
+            if press.modifiers.contains(.shift) { return .backTab }
+            return press.modifiers.isDisjoint(with: [.option, .control, .command]) ? .tab : nil
+        }
+        guard isPlain(press) else { return nil }
+        switch press.key {
+        case .upArrow: return .up
+        case .downArrow: return .down
+        case .leftArrow: return .left
+        case .rightArrow: return .right
+        default: return nil
+        }
+    }
+
+    /// A character to type: anything printable, with ⇧ or ⌥ if need be (`@`
+    /// is ⌥ò on an Italian keyboard), but not a ⌘ or ⌃ shortcut, and not
+    /// the private characters AppKit gives the arrows and function keys.
+    static func isTyping(_ press: KeyPress) -> Bool {
+        guard press.modifiers.isDisjoint(with: [.command, .control]), !press.characters.isEmpty else { return false }
+        return press.characters.unicodeScalars.allSatisfy { scalar in
+            !CharacterSet.controlCharacters.contains(scalar) && !(0xF700...0xF8FF).contains(scalar.value)
         }
     }
 }
 
-// MARK: - The draft behind an edited row
+// MARK: - The click watcher
 
-/// A category the core suggested for a note (`AppStore.suggestedCategory`),
-/// and the note it was for.
-struct NoteSuggestion: Equatable, Sendable {
-    let note: String
-    let category: String
+/// Where a click can land in the grid, in the grid's own coordinates, as last
+/// laid out. A reference rather than state: the frames move as the sheet
+/// scrolls, and nothing has to be drawn again for that.
+final class GridFrames {
+    /// The scroll view.
+    var viewport = CGRect.zero
+    /// The lines inside it, which move with the scroll.
+    var content = CGRect.zero
+    /// The CATEGORY and ENVELOPE lists while they are open.
+    var categoryList: CGRect?
+    var envelopeList: CGRect?
+    /// The grid's window, whose first responder says where the keyboard
+    /// went (`LedgerGrid.focusMoved`).
+    weak var window: NSWindow?
 }
 
-/// A cell that refused what was typed. The grid reports `underlying`, which
-/// carries the core's own message, and puts the focus back on `field`.
-struct RowDraftError: Error {
-    let field: RowField
-    let underlying: Error
+/// Sees every left click in the grid's window before the window hands it
+/// on, while `isWatching`, and tells `onClick` with the point in the grid's
+/// coordinates; the click always goes on. A click on a scroll bar is the
+/// scroll bar's and never told. It also tells `frames` which window the grid
+/// is in, and `onKeyboardLost` when that window's keyboard goes to no view
+/// at all.
+private struct GridClickWatcher: NSViewRepresentable {
+    let frames: GridFrames
+    let isWatching: Bool
+    let onClick: (CGPoint) -> Void
+    let onKeyboardLost: () -> Void
+
+    func makeNSView(context: Context) -> GridClickWatcherView {
+        let view = GridClickWatcherView()
+        view.frames = frames
+        updateNSView(view, context: context)
+        return view
+    }
+
+    func updateNSView(_ view: GridClickWatcherView, context: Context) {
+        view.isWatching = isWatching
+        view.onClick = onClick
+        view.onKeyboardLost = onKeyboardLost
+    }
+
+    static func dismantleNSView(_ view: GridClickWatcherView, coordinator: ()) {
+        view.stop()
+    }
 }
 
-/// The text in the cells of the row being edited. Everything is a string
-/// until it commits, so a half-typed amount never has to be a number.
-///
-/// Main-actor bound because resolving a name or parsing an amount reads the
-/// store, which owns the core.
-struct RowDraft {
-    var day = Date()
-    /// Picked from the ENVELOPE cell's list, never typed (`EnvelopeSelectCell`).
-    /// `nil` on the empty line is the sticky default; on a transfer it is
-    /// nothing, since the cell does not open there.
-    var flowId: Uuid?
-    var category = ""
-    var note = ""
-    var wallet = ""
-    /// A name typed, resolved against `AppStore.assignablePeople` when the
-    /// row is saved. Blank leaves it to the default: the author on a new
-    /// row, whoever it is for already on a stored one.
-    var person = ""
-    var amount = ""
-    /// What the new line is written as. `nil` is the direction on screen's
-    /// (`LedgerDirection.newRowKind`); a duplicate keeps its source's, so a
-    /// refund copied into the line is saved as a refund, not an expense.
-    var kind: TransactionKind?
-    /// The category the vault's history files the note under, as the core
-    /// suggested it for the note it was asked about. The empty line shows it
-    /// in its CATEGORY cell while that is empty, and saves it if it still is.
-    var suggestion: NoteSuggestion?
+/// The watcher's view, behind the whole grid so its bounds are the grid's.
+/// Measured from the top left, as SwiftUI measures.
+final class GridClickWatcherView: NSView {
+    var frames: GridFrames?
+    var isWatching = false
+    var onClick: ((CGPoint) -> Void)?
+    /// The window's keyboard went to no view at all, while `isWatching`.
+    var onKeyboardLost: (() -> Void)?
+    private var monitor: Any?
+    private var responder: NSKeyValueObservation?
 
-    nonisolated init() {}
+    override var isFlipped: Bool { true }
 
-    /// The suggestion, while it is still about the note in the cell: one
-    /// keystroke in DESCRIZIONE and it no longer is.
-    var suggestedCategory: String? {
-        guard let suggestion, suggestion.note == note.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            return nil
+    /// Never the target of a click itself.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        frames?.window = window
+        stop()
+        guard window != nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self, self.isWatching, event.window === self.window else { return event }
+            if self.isOnScroller(event) { return event }
+            self.onClick?(self.convert(event.locationInWindow, from: nil))
+            return event
         }
-        return suggestion.category
-    }
-
-    init(row: TransactionRow, store: AppStore) {
-        kind = row.kind
-        day = row.occurredAt
-        // A transfer's ENVELOPE cell is an arrow between two envelopes, not
-        // one envelope: it stays read-only, and the commit leaves the legs
-        // alone, as the WALLET cell does.
-        flowId = row.isTransfer ? nil : row.flowId
-        category = row.category
-        note = row.note
-        // A transfer's WALLET cell is an arrow between two wallets, not a
-        // name: nothing the cell could resolve, so it opens empty and the
-        // commit leaves the legs alone.
-        wallet = row.isTransfer || row.walletDisplay == TransactionRow.placeholder ? "" : row.walletDisplay
-        person = row.person
-        amount = LedgerMoney.editable(row.absoluteAmount)
-    }
-
-    /// A new line: today if the month on screen is the current one, its first
-    /// day otherwise, the sticky envelope already filled in, and the author
-    /// as its person, which is who a row is for unless the cell says another.
-    static func blank(in store: AppStore) -> RowDraft {
-        var draft = RowDraft()
-        let now = Date()
-        draft.day = MonthKey(now) == store.month ? now : store.month.start()
-        draft.flowId = store.defaultFlowId
-        if store.showWalletColumn { draft.wallet = store.defaultWalletName ?? "" }
-        draft.person = store.currentAuthor
-        return draft
-    }
-
-    /// `row` copied into the empty line, dated today, ready to be tweaked and
-    /// saved (⌘D and the context menu). `nil` for a transfer: the line has one
-    /// wallet and one envelope, and a transfer's two ends fit neither.
-    static func duplicate(of row: TransactionRow, store: AppStore) -> RowDraft? {
-        guard !row.isTransfer else { return nil }
-        var draft = RowDraft(row: row, store: store)
-        draft.day = Date()
-        return draft
-    }
-
-    /// The fields of a new row, resolved and parsed. `nil` when the amount
-    /// cell is still empty: tabbing to the end of a blank line and pressing ↩
-    /// is not an error, it is nothing.
-    func entry(
-        store: AppStore
-    ) throws -> (
-        day: Date,
-        flowId: Uuid?,
-        category: String?,
-        note: String,
-        amount: Int64,
-        walletId: Uuid?,
-        kind: TransactionKind?,
-        person: String?
-    )? {
-        guard !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: wallet) }
-        let resolvedPerson = try cell(.person) { try store.resolvePerson(named: person) }
-        let parsedAmount = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
-        let trimmed = category.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (
-            day: day,
-            flowId: flowId ?? store.defaultFlowId,
-            // An empty cell showing a suggestion saves what it shows.
-            category: trimmed.isEmpty ? suggestedCategory : trimmed,
-            note: note,
-            amount: parsedAmount,
-            walletId: resolvedWallet,
-            kind: kind,
-            person: resolvedPerson
-        )
-    }
-
-    /// The diff against the row as it is stored: only the cells that changed.
-    func patch(against row: TransactionRow, store: AppStore) throws -> TransactionPatch {
-        var patch = TransactionPatch()
-
-        // An emptied amount cell leaves the amount alone: clearing it is not a
-        // way to say zero, and the core would refuse zero anyway.
-        if !amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let parsed = try cell(.amount) { try parseMoney(text: amount, currency: store.currency) }
-            if parsed != row.absoluteAmount, parsed > 0 { patch.amount = parsed }
-        }
-
-        let trimmedCategory = category.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedCategory != row.category { patch.category = trimmedCategory }
-
-        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedNote != row.note { patch.note = trimmedNote }
-
-        // An envelope the row is on stays as it is even once archived: only
-        // a pick from the list moves it.
-        if !row.isTransfer, let flowId, flowId != row.flowId { patch.flowId = flowId }
-
-        // Only when the cell was actually retyped: a row sitting on an
-        // archived wallet still shows its name, which no longer resolves.
-        let trimmedWallet = wallet.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedWallet.isEmpty, trimmedWallet != row.walletDisplay {
-            let resolvedWallet = try cell(.wallet) { try store.resolveWallet(named: trimmedWallet) }
-            if let walletId = resolvedWallet, walletId != row.walletId { patch.walletId = walletId }
-        }
-
-        // Only when retyped, as the wallet: a row for someone who has left
-        // the vault still shows their name, which no longer resolves. Back
-        // to whoever recorded it is said with a blank, the patch's own word
-        // for it, rather than with a name.
-        let trimmedPerson = person.trimmingCharacters(in: .whitespacesAndNewlines)
-        if row.isPersonEditable, !trimmedPerson.isEmpty, trimmedPerson != row.person {
-            let resolvedPerson = try cell(.person) { try store.resolvePerson(named: trimmedPerson) }
-            if let name = resolvedPerson, name != row.person {
-                patch.person = name == row.recordedBy ? "" : name
+        // A field taken out of the window with its row, as the lazy sheet
+        // scrolls, leaves the keyboard to the window itself, and SwiftUI's
+        // focus does not say so. Told after the change, which comes in the
+        // middle of a layout.
+        responder = window?.observe(\.firstResponder) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, self.isWatching, let window = self.window,
+                          window.firstResponder == nil || window.firstResponder === window
+                    else { return }
+                    self.onKeyboardLost?()
+                }
             }
         }
-
-        if !Calendar.current.isDate(day, inSameDayAs: row.occurredAt) {
-            patch.occurredAt = AppStore.stamp(day: day, likeTimeOf: row.occurredAt)
-        }
-        return patch
     }
 
-    /// Runs a cell's parse, tagging whatever it throws with the cell it came
-    /// from so the grid can send the focus back there.
-    private func cell<T>(_ field: RowField, _ work: () throws -> T) throws -> T {
-        do {
-            return try work()
-        } catch {
-            throw RowDraftError(field: field, underlying: error)
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        responder = nil
+    }
+
+    private func isOnScroller(_ event: NSEvent) -> Bool {
+        guard let content = window?.contentView else { return false }
+        // `hitTest` takes the point in the coordinates of the view's parent.
+        let point = content.superview?.convert(event.locationInWindow, from: nil) ?? event.locationInWindow
+        var view = content.hitTest(point)
+        while let current = view {
+            if current is NSScroller { return true }
+            view = current.superview
         }
+        return false
     }
 }
