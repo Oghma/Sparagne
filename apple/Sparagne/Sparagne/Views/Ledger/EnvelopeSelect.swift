@@ -171,6 +171,9 @@ struct EnvelopeSelectCell: View {
                 .accessibilityLabel(RowField.flow.label)
                 .accessibilityValue(query.wrappedValue.isEmpty ? (name ?? placeholder) : query.wrappedValue)
                 .focused(edited.focus, equals: key)
+                // On the field, inside the list's keys below, which SwiftUI
+                // asks first.
+                .cellKeys(edited)
             // The mark of a select. A click on it opens the list, and closes
             // it when open.
             Image(systemName: "chevron.up.chevron.down")
@@ -214,7 +217,6 @@ struct EnvelopeSelectCell: View {
             query.wrappedValue = ""
             return .handled
         }
-        .cellKeys(edited)
         // A cell typed into from a letter opens the list narrowed to it.
         .onAppear {
             open()

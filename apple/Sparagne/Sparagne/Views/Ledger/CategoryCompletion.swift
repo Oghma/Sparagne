@@ -211,15 +211,16 @@ struct CategoryCell: View {
             .accessibilityLabel(RowField.category.label)
             .focused(edited.focus, equals: key)
             .cellFocusRing(true)
+            .cellKeys(edited)
             // The cell is a field only while it is typed into, so every
-            // change of its text is typing, or a pick.
+            // change of its text is typing, or a pick. After `cellKeys`, so
+            // the list hears its keys first.
             .completing(text: edited.text, owner: key, isFocused: true, store: store, completion: completion) {
                 // ⇥ picks and moves on, as it would have with nothing to
                 // pick: the name is already in the editor's text, which the
                 // move saves.
                 edited.editor.move(.tab)
             }
-            .cellKeys(edited)
             // The recent categories and the aliases, as the cell becomes a
             // field.
             .task { await store.loadCategoryCompletion() }

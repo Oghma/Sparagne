@@ -633,10 +633,14 @@ struct EditedCell {
 }
 
 extension View {
-    /// The keys every cell being typed into shares, outside the keys of its
-    /// own: ↩ saves it and keeps it selected, and what the cell leaves goes
-    /// to the grid (`EditedCell.keys`). Outside, so the CATEGORY and ENVELOPE
-    /// lists, while open, take ↑ ↓ ↩ ⇥ and esc first.
+    /// The keys every cell being typed into shares: ↩ saves it and keeps it
+    /// selected, and what the cell leaves goes to the grid
+    /// (`EditedCell.keys`).
+    ///
+    /// SwiftUI gives a key to the handler applied last first, the one
+    /// furthest from the field: the CATEGORY and ENVELOPE cells apply their
+    /// lists' keys after these, so that a list, while open, takes ↑ ↓ ↩ ⇥
+    /// and esc before the grid does (`GridEventMechanicsTests`).
     func cellKeys(_ edited: EditedCell) -> some View {
         onSubmit { edited.editor.confirm() }
             .onKeyPress(phases: [.down, .repeat], action: edited.keys)

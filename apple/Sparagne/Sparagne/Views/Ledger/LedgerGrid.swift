@@ -110,18 +110,10 @@ struct LedgerGrid: View {
             GridClickWatcher(isWatching: editor.isEditing) { clickLanded(at: $0) }
         }
         .coordinateSpace(.named(Self.space))
-        // The vault turned read-only under a cell being typed into (the
-        // owner changed the role): it could not be saved, so it closes. The
-        // WALLET column shown or hidden moves the cells the cursor walks, and
-        // changes what the empty line holds. The month, the lists and the
-        // vault are the store's to save and close (`LedgerEditor.finish`).
-        .onChange(of: store.isReadOnly) { _, _ in editor.reset() }
-        .onChange(of: store.showWalletColumn) { _, _ in editor.reset() }
-        // A login or a new local name changes who the author is: the empty
-        // line follows, unless its PERSONA cell was already set to someone.
-        .onChange(of: store.currentAuthor) { old, new in
-            if editor.newLine.person == old { editor.newLine.person = new }
-        }
+        // The month, the lists, the tab, the vault and its role, the WALLET
+        // column and the author are the store's to tell the editor about
+        // (`LedgerEditor.finish`, `reset`, `walletColumnChanged`): the grid
+        // only follows where the cursor ends up.
         .onChange(of: editor.isEditing) { _, _ in followEditor() }
         .onChange(of: editor.cursor) { _, _ in followEditor() }
         .onChange(of: focus) { old, new in focusMoved(from: old, to: new) }
@@ -251,9 +243,14 @@ struct LedgerGrid: View {
 
     /// ↩, F2, a double click or VoiceOver's Edit: `cell` (the cursor's, when
     /// `nil`) is typed into from what it says, the caret after it.
+    ///
+    /// Refused, it beeps when the cell cannot be typed into, and then it is
+    /// selected; a cell being left that refused to be saved has said why
+    /// already, and keeps the caret.
     private func edit(_ cell: CellFocus?) {
+        let target = cell ?? editor.cursor
         guard editor.edit(cell) else {
-            NSSound.beep()
+            if editor.cursor == target, !editor.isEditing { NSSound.beep() }
             return
         }
         typed = false
@@ -312,9 +309,11 @@ struct LedgerGrid: View {
             caret = caretAtEnd
             focus = cursor
         } else {
+            // The field goes with the editing, and the caret with it: setting
+            // `focus` to nil here could take it from the search field a click
+            // has just given it to.
             placesCaret = false
             typed = false
-            if focus != nil { focus = nil }
             if editor.cursor != nil { gridFocused = true }
         }
     }
@@ -350,9 +349,6 @@ struct LedgerGrid: View {
         store.clearSelection()
         if editor.isEditing, editor.cursor == cell { return }
         if (event?.clickCount ?? 1) >= 2 {
-            // The first click of the two selected it already, unless a cell
-            // that refused to be saved kept the cursor.
-            guard editor.cursor == cell || editor.select(cell) else { return }
             edit(cell)
         } else {
             editor.select(cell)
