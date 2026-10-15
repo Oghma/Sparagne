@@ -25,7 +25,7 @@ which is the only thing that talks to `CoreHandle`).
 | `Sparagne/Views/Setup/` | The Setup tab (⌘4, ⌘⇧C): vault card, wallets, envelopes and categories as editable tables, the merge sheet |
 | `Sparagne/Model/YearModel.swift` | `YearSummary.build`, the arithmetic behind the Riepilogo; beside it in `Model/` `SummaryCategories`, `CategoryHeat`, `EnvelopeYear`, `FixedCosts` and `SummaryTodo` |
 | `Sparagne/Views/Chrome/PersonSegments.swift` | The person control, shared by the Mastro's filter bar and the Riepilogo's heading |
-| `Sparagne/Model/` (other) | Pure models, tested without a window: `LedgerLines` (due periods among the rows), `SheetStats`, `QuickAddTokens`, `SyncPillState`, `RecurringAgenda` / `RecurringDraft` / `RecurringNext` / `RecurringMonthly` |
+| `Sparagne/Model/` (other) | Pure models, tested without a window: `LedgerLines` (due periods among the rows), `LedgerCursor` (where each key moves the grid's cursor), `LedgerEditor` (the cell being typed into, written when it is left), `RowDraft`, `SheetStats`, `QuickAddTokens`, `SyncPillState`, `RecurringAgenda` / `RecurringDraft` / `RecurringNext` / `RecurringMonthly` |
 | `Sparagne/Views/ManagementSheet.swift` | Vault picker plus wallet and envelope balances and management (⌘⇧M); the window has no sidebar |
 | `Sparagne/Views/Sheets.swift` | Onboarding, new wallet/envelope, rename and edit-envelope sheets |
 | `Sparagne/Views/SyncViews.swift` | The rejected-changes and share sheets (the sync status is the top bar's `SyncPill`) |
@@ -59,6 +59,28 @@ that reach across the whole window (`SparagneApp.swift`'s menu commands) are:
 | `⌘⇧C` | the Setup tab: wallets, envelopes and categories |
 | `⌘⇧V` / `⌘⇧T` | show voided rows / show transfers |
 | `⌥←` / `⌥→` | previous / next month |
+
+The Mastro's grid is edited a cell at a time, as a spreadsheet is
+(`LedgerEditor`, `LedgerCursor`). A click selects a cell, a double click
+types into it, and a cell is written the moment it is left, whichever way:
+another cell, a click outside the grid, another tab, month or list, or
+quitting. Only that cell's field goes out, and each one is its own Edit ▸
+Undo step. The new line at the bottom is recorded when the cursor leaves it
+with an amount in it.
+
+| Key | On a selected cell | While typing into it |
+|---|---|---|
+| a character | replaces what the cell says | types |
+| `↩` / `F2` | types into it, keeping what it says | writes it, the cell stays selected; on the new line, records it |
+| `⇥` / `⇧⇥` | next / previous cell, onto the next row at the end of a line | writes it and moves on |
+| `↑` `↓` | the cell above / below | writes it and moves on (in the CATEGORY and ENVELOPE lists, moves in the list) |
+| `←` `→` | the cell to the left / right | moves the caret |
+| `esc` | no cursor; on the new line, empties it | puts the cell back as it was |
+| `⌫` | empties the cell and types into it | deletes a character |
+| `⌘⌫` | deletes the row | |
+
+With no cell selected, `⌫` deletes the rows picked with `⌘`-click and
+`⇧`-click (`⌘A` picks them all), or the row under the pointer.
 
 ## Commands
 
