@@ -2,6 +2,7 @@ import AppKit
 import SparagneCore
 import SwiftUI
 import Testing
+import Vision
 
 @testable import Sparagne
 
@@ -507,6 +508,40 @@ struct LedgerGridKeyTests {
         #expect(grid.store.rows[0].note == "abcd")
     }
 
+    // MARK: - A cell just saved
+
+    @Test("A cell just left says what it was saved as while the write is still on its way, and after it lands")
+    func savedCellShownAtOnce() async throws {
+        let gate = CoreGate()
+        let grid = try await GridUnderTest(coreProbe: { await gate.pass() })
+        defer { grid.close() }
+        let pane = try #require(grid.store.rows.first)
+
+        grid.host.postClick(at: grid.point(line: 0, .note))
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 0, .note) }
+        grid.host.post(typing: "focaccia")
+        await grid.host.settle { grid.editor.text == "focaccia" }
+        await gate.arm()
+        grid.host.post(.tab)
+        await gate.holding()
+        await grid.host.settle { grid.drawnText().contains("focaccia") }
+
+        // The store still has the row as it was loaded; the sheet draws it
+        // as saved.
+        #expect(grid.store.rows.first { $0.id == pane.id }?.note == "pane")
+        #expect(grid.editor.cursor == CellFocus(row: pane.id, field: .person))
+        let held = grid.drawnText()
+        #expect(held.contains("focaccia"))
+        #expect(!held.contains("pane"))
+
+        await gate.release()
+        await grid.settle()
+        #expect(grid.store.rows.first { $0.id == pane.id }?.note == "focaccia")
+        let landed = grid.drawnText()
+        #expect(landed.contains("focaccia"))
+        #expect(!landed.contains("pane"))
+    }
+
     // MARK: - A cell that refuses
 
     @Test("A new line refused as the cursor leaves it hands the caret to IMPORTO with what IMPORTO says")
@@ -565,6 +600,39 @@ struct LedgerGridKeyTests {
 
 // MARK: - The grid in a window
 
+/// Holds the next call to reach the core until it is released, so a test can
+/// keep one of the editor's writes on its way while it looks at the sheet.
+private actor CoreGate {
+    private var armed = false
+    private var held: CheckedContinuation<Void, Never>?
+    private var watchers: [CheckedContinuation<Void, Never>] = []
+
+    func arm() { armed = true }
+
+    /// The core's probe: every call goes through, but the first one after
+    /// `arm` waits here.
+    func pass() async {
+        guard armed else { return }
+        armed = false
+        await withCheckedContinuation { continuation in
+            held = continuation
+            for watcher in watchers { watcher.resume() }
+            watchers = []
+        }
+    }
+
+    /// Returns once a call is being held.
+    func holding() async {
+        guard held == nil else { return }
+        await withCheckedContinuation { watchers.append($0) }
+    }
+
+    func release() {
+        held?.resume()
+        held = nil
+    }
+}
+
 /// What the window holds besides the grid: a search field over it, which
 /// the tests click on or give the keyboard to.
 @Observable
@@ -609,9 +677,14 @@ private final class GridUnderTest {
 
     var editor: LedgerEditor { store.ledgerEditor }
 
-    init() async throws {
+    /// `coreProbe` hears every call that reaches the core (`CoreGate`).
+    init(coreProbe: (@Sendable () async -> Void)? = nil) async throws {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.grid.\(UUID().uuidString)"))
-        store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults, undoWindow: .seconds(60))
+        store = AppStore(
+            core: try CoreActor.inMemory(author: "matteo", probe: coreProbe),
+            defaults: defaults,
+            undoWindow: .seconds(60)
+        )
         await store.bootstrap()
         await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
         await store.createEnvelope(name: "Spesa", mode: .unlimited, allowNegative: true, openingAllocation: 0)
@@ -686,6 +759,22 @@ private final class GridUnderTest {
         }
         await settle()
         #expect(store.rows.count == 3 + count)
+    }
+
+    /// The words drawn in the window, read off a picture of it as a person
+    /// would read them: what the cells show, which no accessor of the
+    /// views says.
+    func drawnText() -> [String] {
+        guard let content = host.window.contentView,
+              let picture = content.bitmapImageRepForCachingDisplay(in: content.bounds)
+        else { return [] }
+        content.cacheDisplay(in: content.bounds, to: picture)
+        guard let image = picture.cgImage else { return [] }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+        try? VNImageRequestHandler(cgImage: image).perform([request])
+        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
     }
 
     /// The grid's scroll view, and how far down it is scrolled.
