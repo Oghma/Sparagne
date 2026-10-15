@@ -5,6 +5,42 @@ import Testing
 
 @testable import Sparagne
 
+/// Holds the next call to reach the core until it is released, so a test can
+/// keep one of the editor's writes on its way while the window moves on, and
+/// counts every call that reaches it.
+private actor CoreGate {
+    private(set) var calls = 0
+    private var armed = false
+    private var held: CheckedContinuation<Void, Never>?
+    private var watchers: [CheckedContinuation<Void, Never>] = []
+
+    func arm() { armed = true }
+
+    /// The core's probe: every call goes through, but the first one after
+    /// `arm` waits here.
+    func pass() async {
+        calls += 1
+        guard armed else { return }
+        armed = false
+        await withCheckedContinuation { continuation in
+            held = continuation
+            for watcher in watchers { watcher.resume() }
+            watchers = []
+        }
+    }
+
+    /// Returns once a call is being held.
+    func holding() async {
+        guard held == nil else { return }
+        await withCheckedContinuation { watchers.append($0) }
+    }
+
+    func release() {
+        held?.resume()
+        held = nil
+    }
+}
+
 /// The Mastro edited cell by cell (`LedgerEditor`), driven the way the grid
 /// drives it, a key or a click at a time, over a real in-memory core: a cell
 /// is written the moment it is left, alone, and the new line when the cursor
@@ -13,9 +49,11 @@ struct LedgerEditorTests {
     /// Vault `Casa` with wallet `Conto` and envelope `Cash` beside
     /// Unallocated, and two expenses of today on Cash: `mutuo` 950.00, then
     /// `coop` 50.00, filed under Spesa. The Mastro is the tab on screen.
-    private static func household() async throws -> (store: AppStore, editor: LedgerEditor) {
+    private static func household(
+        probe: (@Sendable () async -> Void)? = nil
+    ) async throws -> (store: AppStore, editor: LedgerEditor) {
         let defaults = try #require(UserDefaults(suiteName: "sparagne.editor.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
+        let store = AppStore(core: try CoreActor.inMemory(author: "matteo", probe: probe), defaults: defaults)
         await store.bootstrap()
         await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
         await store.createEnvelope(name: "Cash", mode: .unlimited, allowNegative: true, openingAllocation: 0)
@@ -725,6 +763,49 @@ struct LedgerEditorTests {
         #expect(editor.newLine.wallet.isEmpty)
         await store.settle()
         #expect(store.presentedError == nil)
+    }
+
+    @Test(
+        "A write queued for a vault a sync deleted is dropped, not sent to the vault on screen by then",
+        .timeLimit(.minutes(1))
+    )
+    func writeForADeletedVaultIsDropped() async throws {
+        let gate = CoreGate()
+        let (store, editor) = try await Self.household(probe: { await gate.pass() })
+        let casa = try #require(store.currentVault)
+        let coop = try Self.row("coop", in: store)
+        await store.createVault(name: "Ufficio", walletName: "Cassa", openingBalance: 0)
+        let ufficio = try #require(store.currentVault)
+        await store.select(casa)
+
+        // The note's write is held on its way to the core; the new line's
+        // waits behind it.
+        await gate.arm()
+        editor.select(Self.cell(coop, .note))
+        editor.type("conad")
+        editor.select(Self.newLine(.note))
+        editor.type("pane")
+        editor.select(Self.newLine(.amount))
+        editor.type("2")
+        #expect(editor.finish())
+        await gate.holding()
+
+        // Meanwhile another member deletes Casa, and the sync moves the
+        // window to the vault left.
+        try await store.core.execute(vaultId: casa.id, .deleteVault)
+        await store.refreshAfterSync()
+        #expect(store.currentVault?.id == ufficio.id)
+
+        // The note's write, on its way already, is refused with its vault;
+        // the new line's never reaches the core, which would refuse it in
+        // Ufficio too, with an alert about an envelope nobody can see.
+        let before = await gate.calls
+        await gate.release()
+        await store.settle()
+        #expect(await gate.calls == before)
+        #expect(store.currentVault?.id == ufficio.id)
+        #expect(!store.rows.contains { $0.note == "pane" })
+        #expect(!editor.hasPendingWrites)
     }
 
     @Test("A PERSONA filter a sync leaves without rows is cleared without ending the cell being typed into")

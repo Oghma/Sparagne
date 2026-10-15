@@ -258,7 +258,9 @@ final class LedgerEditor {
                 // Read now, not when the write gets its turn: by then the
                 // rows of another month may have replaced this one.
                 let inverse = store.storedInverse(of: patch, for: id)
-                write { await store.update(transactionId: id, patch: patch, inverse: inverse) }
+                write { store in
+                    await store.update(transactionId: id, patch: patch, inverse: inverse)
+                }
             }
         } catch {
             store.report((error as? RowDraftError)?.underlying ?? error)
@@ -302,7 +304,7 @@ final class LedgerEditor {
         case .success(let entry):
             guard let entry, entry.amount > 0 else { return .nothing }
             let kind = entry.kind ?? store.direction.newRowKind
-            write {
+            write { store in
                 await store.addRow(
                     day: entry.day,
                     flowId: entry.flowId,
@@ -378,15 +380,21 @@ final class LedgerEditor {
         return RowDraft(row: stored, store: store)
     }
 
+    // MARK: - The writes
+
     /// Queues a write behind those already sent, so they land in the order
-    /// the cells were left.
-    private func write(_ work: @escaping @MainActor () async -> Void) {
+    /// the cells were left. It is for the vault on screen now: if another
+    /// vault is on screen by its turn (the one it was for deleted, by a sync
+    /// or by its owner, with no chance to wait for it), it is dropped without
+    /// a word rather than sent to the wrong vault.
+    private func write(_ work: @escaping @MainActor (AppStore) async -> Void) {
+        guard let store, let vaultId = store.currentVault?.id else { return }
         queued += 1
         inFlight += 1
         let previous = writes
         writes = Task { [weak self] in
             await previous?.value
-            await work()
+            if store.currentVault?.id == vaultId { await work(store) }
             self?.inFlight -= 1
         }
     }

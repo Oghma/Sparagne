@@ -1046,6 +1046,13 @@ final class AppStore {
         // A row waiting on the undo toast dies with its vault: voiding it
         // now would only be refused.
         if pendingUndo?.vaultId == vaultId { undo() }
+        // Nor is the Mastro's cell being typed into to be saved there, and
+        // what it already sent lands before the vault goes rather than
+        // after, where it could only be refused.
+        if vaultId == currentVault?.id {
+            ledgerEditor.reset()
+            await ledgerEditor.settle()
+        }
         await guarded {
             try await core.execute(vaultId: vaultId, .deleteVault)
             try await adoptVaultList()
