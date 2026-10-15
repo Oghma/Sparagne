@@ -564,8 +564,20 @@ struct LedgerGrid: View {
 
     // MARK: - Existing rows
 
-    @ViewBuilder
+    /// A stored row as the sheet draws it: with the cells saved into it that
+    /// no reload has given back yet (`LedgerEditor.shown`), so a cell just
+    /// left says what it was saved as at once. Only what is drawn and read
+    /// out changes; the line keeps the stored row's place, and everything
+    /// that finds a row, the cursor, the selection, the pointer, the reveal
+    /// and the paging, finds it by its id.
     private func rowView(index: Int, row: TransactionRow, edited: EditedCell) -> some View {
+        ShownRow(row: row, editor: editor) { shown in
+            storedRow(index: index, row: shown, edited: edited)
+        }
+    }
+
+    @ViewBuilder
+    private func storedRow(index: Int, row: TransactionRow, edited: EditedCell) -> some View {
         let cursor = cursor(on: row.id)
         let isEditing = cursor?.editing == true
         let isSelected = store.selection.contains(row.id)
@@ -787,6 +799,21 @@ struct LedgerGrid: View {
     private func duplicateLast() {
         guard let last = store.lastRow else { return }
         duplicate(last)
+    }
+}
+
+// MARK: - A row as shown
+
+/// Hands `content` the row as the sheet shows it (`LedgerEditor.shown`). A
+/// view of its own, so that a save redraws the row it was saved into, and
+/// that row only.
+private struct ShownRow<Content: View>: View {
+    let row: TransactionRow
+    let editor: LedgerEditor
+    @ViewBuilder let content: (TransactionRow) -> Content
+
+    var body: some View {
+        content(editor.shown(row))
     }
 }
 
