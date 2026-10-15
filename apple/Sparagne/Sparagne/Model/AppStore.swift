@@ -400,6 +400,11 @@ final class AppStore {
     /// clear it.
     var selection = RowSelection()
 
+    /// The Mastro's cursor and the cell being typed into: here rather than in
+    /// the grid, so a tab switch keeps it and a change of month, list or
+    /// vault saves it first (`LedgerEditor.finish`).
+    @ObservationIgnored let ledgerEditor = LedgerEditor()
+
     // MARK: Transient
 
     private(set) var pendingUndo: PendingUndo?
@@ -438,6 +443,7 @@ final class AppStore {
         showWalletColumn = defaults.bool(forKey: Self.walletColumnKey)
         ledgerColumns = LedgerColumnWidths(stored: defaults.dictionary(forKey: Self.ledgerColumnsKey))
         currentAuthor = core.initialAuthor
+        ledgerEditor.attach(self)
     }
 
     /// Keeps the widths dragged in the ledger's header for the next launch.

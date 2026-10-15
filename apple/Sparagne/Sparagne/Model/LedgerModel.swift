@@ -209,6 +209,19 @@ enum DeleteTarget: Equatable, Sendable {
     static func isDeletable(_ row: TransactionRow) -> Bool {
         !row.voided
     }
+
+    /// ⌘⌫: the rows picked, as ⌫ deletes them, or with none the row the
+    /// cursor is on (`LedgerEditor.cursor`). Nothing while a cell is being
+    /// typed into, on the new line, or on a vault only read.
+    static func resolveCommandDelete(
+        selection: [Uuid],
+        cursorRow: TransactionRow?,
+        editing: Bool,
+        canWrite: Bool
+    ) -> DeleteTarget {
+        // A stub for now.
+        .none
+    }
 }
 
 /// The sheets of the tab bar at the bottom of the window, in the bar's
