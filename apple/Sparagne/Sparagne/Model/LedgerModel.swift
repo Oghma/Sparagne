@@ -219,8 +219,11 @@ enum DeleteTarget: Equatable, Sendable {
         editing: Bool,
         canWrite: Bool
     ) -> DeleteTarget {
-        // A stub for now.
-        .none
+        guard canWrite, !editing else { return .none }
+        if !selection.isEmpty { return .selection(selection) }
+        // The new line has no row to delete: esc is how it is emptied.
+        guard let cursorRow, isDeletable(cursorRow) else { return .none }
+        return .row(cursorRow.id)
     }
 }
 

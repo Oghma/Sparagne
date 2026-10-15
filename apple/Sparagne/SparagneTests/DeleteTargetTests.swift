@@ -73,6 +73,41 @@ struct DeleteTargetTests {
         #expect(DeleteTarget.resolve(selection: [], hovered: hovered, editing: false, canWrite: true) == .none)
     }
 
+    // MARK: - ⌘⌫
+
+    @Test("⌘⌫ deletes the rows picked, whatever row the cursor is on")
+    func commandDeleteTakesTheSelectionFirst() {
+        let cursorRow = Self.row("c")
+        let target = DeleteTarget.resolveCommandDelete(
+            selection: ["a", "b"],
+            cursorRow: cursorRow,
+            editing: false,
+            canWrite: true
+        )
+        #expect(target == .selection(["a", "b"]))
+    }
+
+    @Test("⌘⌫ with nothing picked deletes the row the cursor is on")
+    func commandDeleteTakesTheCursorRow() {
+        let cursorRow = Self.row("c")
+        #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: cursorRow, editing: false, canWrite: true) == .row("c"))
+        let transfer = Self.row("t", kind: .transferFlow)
+        #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: transfer, editing: false, canWrite: true) == .row("t"))
+    }
+
+    @Test("⌘⌫ deletes nothing on the new line, on a deleted row, while a cell is typed into, or on a vault only read")
+    func commandDeleteDeletesNothing() {
+        let cursorRow = Self.row("c")
+        // The new line: no row under the cursor.
+        #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: nil, editing: false, canWrite: true) == .none)
+        let voided = Self.row("v", voided: true)
+        #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: voided, editing: false, canWrite: true) == .none)
+        #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: cursorRow, editing: true, canWrite: true) == .none)
+        #expect(DeleteTarget.resolveCommandDelete(selection: ["a"], cursorRow: cursorRow, editing: true, canWrite: true) == .none)
+        #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: cursorRow, editing: false, canWrite: false) == .none)
+        #expect(DeleteTarget.resolveCommandDelete(selection: ["a"], cursorRow: cursorRow, editing: false, canWrite: false) == .none)
+    }
+
     @Test("A transfer under the pointer is deleted alone, as its context menu deletes it")
     func transferAloneIsDeletable() {
         for kind in [TransactionKind.transferWallet, .transferFlow] {

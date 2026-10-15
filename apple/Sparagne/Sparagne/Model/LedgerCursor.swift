@@ -76,8 +76,44 @@ struct LedgerCursor {
     /// stored row that is the new line, and from the new line it is the new
     /// line's own DATA, which by then is a blank line again (`LedgerEditor`).
     func target(of move: CursorMove, from cell: CellFocus) -> CellFocus {
-        // A stub for now.
-        cell
+        let lines = self.lines
+        let fields = self.fields
+        // A cell on a row no longer on screen, or in a column hidden since,
+        // has nowhere to go from: the editor drops it (`rowsChanged`).
+        guard let line = lines.firstIndex(of: cell.row), let column = fields.firstIndex(of: cell.field) else {
+            return cell
+        }
+        switch move {
+        case .up:
+            guard line > 0 else { return cell }
+            return CellFocus(row: lines[line - 1], field: cell.field)
+        case .down:
+            guard line < lines.count - 1 else { return cell }
+            return CellFocus(row: lines[line + 1], field: cell.field)
+        case .left:
+            guard column > 0 else { return cell }
+            return CellFocus(row: cell.row, field: fields[column - 1])
+        case .right:
+            guard column < fields.count - 1 else { return cell }
+            return CellFocus(row: cell.row, field: fields[column + 1])
+        case .tab:
+            if column < fields.count - 1 { return CellFocus(row: cell.row, field: fields[column + 1]) }
+            if line < lines.count - 1 { return CellFocus(row: lines[line + 1], field: fields[0]) }
+            // The new line wraps onto itself: by the time the cursor lands,
+            // what it said has been registered and it is blank again. The
+            // last row of a vault only read has no line after it.
+            return cell.row == nil ? CellFocus(row: nil, field: fields[0]) : cell
+        case .backTab:
+            if column > 0 { return CellFocus(row: cell.row, field: fields[column - 1]) }
+            guard line > 0 else { return cell }
+            return CellFocus(row: lines[line - 1], field: fields[fields.count - 1])
+        }
+    }
+
+    /// The lines the cursor walks, top to bottom: each stored row by its id,
+    /// then `nil`, the new line, when there is one.
+    private var lines: [Uuid?] {
+        rows.map { Optional($0.id) } + (canWrite ? [nil] : [])
     }
 
     /// Whether `cell` can be typed into. Any cell can be selected; typing
@@ -87,7 +123,15 @@ struct LedgerCursor {
     /// On a transfer, ENVELOPE, WALLET and PERSONA are its two ends and its
     /// author, so only DATA, CATEGORIA, DESCRIZIONE and IMPORTO can.
     func isEditable(_ cell: CellFocus) -> Bool {
-        // A stub for now.
-        false
+        guard canWrite, fields.contains(cell.field) else { return false }
+        // The new line: every cell it shows.
+        guard let id = cell.row else { return true }
+        guard let row = rows.first(where: { $0.id == id }), !row.voided else { return false }
+        guard row.isTransfer else { return true }
+        return Self.transferFields.contains(cell.field)
     }
+
+    /// What can be typed into on a transfer: everything but its two ends and
+    /// its author, which is what its open row has always allowed.
+    private static let transferFields: Set<RowField> = [.date, .category, .note, .amount]
 }
