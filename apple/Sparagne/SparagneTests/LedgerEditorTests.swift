@@ -499,6 +499,64 @@ struct LedgerEditorTests {
         #expect(store.rows.filter { $0.note == "coop" }.map(\.absoluteAmount) == [5_000, 6_000])
     }
 
+    @Test("A copy left as ⌘D made it is not registered by leaving it, nor by a change of month")
+    func untouchedCopyIsNotRegistered() async throws {
+        let (store, editor) = try await Self.household()
+        let coop = try Self.row("coop", in: store)
+        let mutuo = try Self.row("mutuo", in: store)
+
+        editor.duplicate(coop)
+        // The amount saved as it came is no change.
+        #expect(editor.move(.left))
+        #expect(editor.select(Self.cell(mutuo, .note)))
+        #expect(editor.newLine.note == "coop")
+        #expect(editor.select(Self.newLine(.note)))
+        #expect(editor.finish())
+        await store.settle()
+        #expect(store.rows.count == 2)
+        #expect(editor.newLine.amount == "50.00")
+
+        editor.duplicate(coop)
+        store.stepMonth(by: -1)
+        await store.settle()
+        store.stepMonth(by: 1)
+        await store.settle()
+        #expect(store.presentedError == nil)
+        #expect(store.rows.count == 2)
+        #expect(editor.newLine.note.isEmpty)
+    }
+
+    @Test("A copy with a cell changed is registered by leaving it; ↩ registers one unchanged; esc twice throws it away")
+    func changedCopyIsRegistered() async throws {
+        let (store, editor) = try await Self.household()
+        let coop = try Self.row("coop", in: store)
+        let mutuo = try Self.row("mutuo", in: store)
+
+        editor.duplicate(coop)
+        editor.text = "60.00"
+        #expect(editor.move(.left))
+        #expect(editor.select(Self.cell(mutuo, .note)))
+        #expect(editor.newLine.note.isEmpty)
+        await store.settle()
+        #expect(store.rows.filter { $0.note == "coop" }.map(\.absoluteAmount) == [5_000, 6_000])
+
+        editor.duplicate(mutuo)
+        editor.confirm()
+        #expect(editor.cursor == Self.newLine(.date))
+        await store.settle()
+        #expect(store.rows.filter { $0.note == "mutuo" }.count == 2)
+
+        editor.duplicate(coop)
+        editor.cancel()
+        #expect(editor.cursor == Self.newLine(.amount))
+        editor.cancel()
+        #expect(editor.cursor == nil)
+        #expect(editor.newLine.note.isEmpty)
+        #expect(editor.newLine.amount.isEmpty)
+        await store.settle()
+        #expect(store.rows.count == 4)
+    }
+
     // MARK: - The window moving under a cell
 
     @Test("A month changed with a cell open writes it to its row, as one undoable step")

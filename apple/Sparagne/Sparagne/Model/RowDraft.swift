@@ -237,6 +237,16 @@ struct RowDraft {
         }
     }
 
+    /// Whether `field` says something else here than in `other`: a day is
+    /// the same day whatever its time, an envelope the same pick.
+    func differs(in field: RowField, from other: RowDraft) -> Bool {
+        switch field {
+        case .date: !Calendar.current.isDate(day, inSameDayAs: other.day)
+        case .flow: flowId != other.flowId
+        default: text(of: field) != other.text(of: field)
+        }
+    }
+
     /// Runs a cell's parse, tagging whatever it throws with the cell it came
     /// from so the grid can send the focus back there.
     private func cell<T>(_ field: RowField, _ work: () throws -> T) throws -> T {

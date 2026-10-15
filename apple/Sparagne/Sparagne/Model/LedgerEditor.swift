@@ -29,6 +29,9 @@ final class LedgerEditor {
     @ObservationIgnored private var writes: Task<Void, Never>?
     @ObservationIgnored private var queued = 0
     @ObservationIgnored private var inFlight = 0
+    /// The new line holds a copy made by `duplicate` that no cell has
+    /// changed yet: leaving it keeps it as it is, only ↩ registers it.
+    @ObservationIgnored private var holdsUntouchedCopy = false
 
     /// The selected cell, `nil` when the grid has none.
     private(set) var cursor: CellFocus?
@@ -128,7 +131,8 @@ final class LedgerEditor {
 
     /// ↩ while editing: the cell is saved and stays selected. On the new
     /// line with an amount, the line is registered and the cursor goes to
-    /// DATA of the blank line that takes its place.
+    /// DATA of the blank line that takes its place: a copy made by ⌘D too,
+    /// changed or not, since ↩ is how it is confirmed.
     func confirm() {
         guard let at = cursor, isEditing, saveEditedCell() else { return }
         guard at.row == nil, register() == .registered else { return }
@@ -146,7 +150,7 @@ final class LedgerEditor {
             stopEditing()
             return
         }
-        if at.row == nil, let store { newLine = RowDraft.blank(in: store) }
+        if at.row == nil, let store { blankNewLine(in: store) }
         place(at: nil)
     }
 
@@ -166,10 +170,16 @@ final class LedgerEditor {
     func reset() {
         place(at: nil)
         newLine = store.map { RowDraft.blank(in: $0) } ?? RowDraft()
+        holdsUntouchedCopy = false
     }
 
     /// ⌘D and the context menu: `row` copied into the new line, the caret in
     /// its IMPORTO (`RowDraft.duplicate`).
+    ///
+    /// The copy is not registered by the cursor leaving it as it came: one
+    /// click away would otherwise record a row nobody confirmed. Once a cell
+    /// of it says something else it is the user's line, and leaving
+    /// registers it as it would any other; ↩ registers it either way.
     func duplicate(_ row: TransactionRow) {
         guard let store, store.canWrite, let copy = RowDraft.duplicate(of: row, store: store) else { return }
         // A stored cell being typed into is saved, as any move away from it
@@ -179,6 +189,7 @@ final class LedgerEditor {
             guard saveEditedCell() else { return }
         }
         newLine = copy
+        holdsUntouchedCopy = true
         place(at: CellFocus(row: nil, field: .amount))
         begin(with: copy.amount)
     }
@@ -238,7 +249,9 @@ final class LedgerEditor {
     func saveEditedCell() -> Bool {
         guard let store, isEditing, let at = cursor else { return true }
         guard let id = at.row else {
+            let before = newLine
             newLine.set(at.field, text: text, flowId: flowId, in: store.month)
+            if holdsUntouchedCopy, newLine.differs(in: at.field, from: before) { holdsUntouchedCopy = false }
             stopEditing()
             return true
         }
@@ -275,12 +288,13 @@ final class LedgerEditor {
     /// What every way out of a cell does before the cursor moves: the cell
     /// being edited is saved, and the new line registered when the cursor
     /// leaves it for `row`, a stored row, or with `wrapping` for the world
-    /// outside the grid or the new line again after ⇥ off its end. `false`
-    /// when either was refused; the cursor is then on the cell to fix.
+    /// outside the grid or the new line again after ⇥ off its end. A copy no
+    /// cell has changed stays as it is. `false` when either was refused; the
+    /// cursor is then on the cell to fix.
     private func leave(for row: Uuid?, wrapping: Bool) -> Bool {
         guard let at = cursor else { return true }
         guard saveEditedCell() else { return false }
-        if at.row == nil, row != nil || wrapping {
+        if at.row == nil, row != nil || wrapping, !holdsUntouchedCopy {
             return register() != .refused
         }
         return true
@@ -317,6 +331,7 @@ final class LedgerEditor {
                 )
             }
             newLine = Self.next(after: entry, in: store)
+            holdsUntouchedCopy = false
             return .registered
         case .failure(let error):
             store.report((error as? RowDraftError)?.underlying ?? error)
@@ -341,6 +356,11 @@ final class LedgerEditor {
             next.wallet = wallet.name
         }
         return next
+    }
+
+    private func blankNewLine(in store: AppStore) {
+        newLine = RowDraft.blank(in: store)
+        holdsUntouchedCopy = false
     }
 
     // MARK: - The cursor
