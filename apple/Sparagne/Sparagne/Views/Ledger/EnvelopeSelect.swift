@@ -173,7 +173,7 @@ struct EnvelopeSelectCell: View {
                 .focused(edited.focus, equals: key)
                 // On the field, inside the list's keys below, which SwiftUI
                 // asks first.
-                .cellKeys(edited)
+                .cellKeys(edited, key: key)
             // The mark of a select. A click on it opens the list, and closes
             // it when open.
             Image(systemName: "chevron.up.chevron.down")

@@ -211,7 +211,7 @@ struct CategoryCell: View {
             .accessibilityLabel(RowField.category.label)
             .focused(edited.focus, equals: key)
             .cellFocusRing(true)
-            .cellKeys(edited)
+            .cellKeys(edited, key: key)
             // The cell is a field only while it is typed into, so every
             // change of its text is typing, or a pick. After `cellKeys`, so
             // the list hears its keys first.

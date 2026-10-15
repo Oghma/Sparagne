@@ -44,11 +44,17 @@ struct LedgerGrid: View {
     /// The caret in the cell being typed into.
     @State private var caret: TextSelection?
     /// Typing has just started, and the caret is on its way to the end of
-    /// what the cell says (`fieldKey`).
+    /// what the cell says (`fieldKey`, `caretLanded`).
     @State private var placesCaret = false
+    /// The caret was put at the end once the field had taken the keyboard:
+    /// from then on the field's caret landing there is the grid's doing.
+    @State private var caretSent = false
     /// Typing started from a key pressed on the selected cell
     /// (`EditedCell.typed`).
     @State private var typed = false
+    /// Counts the times the cursor's line was asked back into sight by a key
+    /// typed while its field was out of it (`gridKey`).
+    @State private var cursorWanted = 0
     /// Where a click can land, for the click watcher to tell the grid's cells
     /// from the rest of the window.
     @State private var frames = GridFrames()
@@ -65,6 +71,8 @@ struct LedgerGrid: View {
 
     /// The grid's own coordinates, which the click watcher measures in.
     nonisolated private static let space = "ledger.grid"
+    /// The empty line's identity among the lines, for the scroll to find it.
+    nonisolated private static let newLineID = "ledger.new-line"
 
     private var editor: LedgerEditor { store.ledgerEditor }
 
@@ -89,6 +97,13 @@ struct LedgerGrid: View {
                     .onChange(of: store.revealedRow) { _, _ in reveal(with: proxy) }
                     .onChange(of: store.rows.count) { _, _ in reveal(with: proxy) }
                     .onChange(of: store.rows.first?.id) { _, _ in reveal(with: proxy) }
+                    // The cursor's line stays in sight, as ↑ ↓ ⇥ take it
+                    // along the sheet and as typing starts on it.
+                    .onChange(of: editor.cursor) { _, _ in scrollToCursor(with: proxy) }
+                    .onChange(of: editor.isEditing) { _, editing in
+                        if editing { scrollToCursor(with: proxy) }
+                    }
+                    .onChange(of: cursorWanted) { _, _ in scrollToCursor(with: proxy) }
                 }
             }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
@@ -107,7 +122,12 @@ struct LedgerGrid: View {
         }
         .background(Ink.sheet)
         .background {
-            GridClickWatcher(isWatching: editor.isEditing) { clickLanded(at: $0) }
+            GridClickWatcher(
+                frames: frames,
+                isWatching: editor.isEditing,
+                onClick: { clickLanded(at: $0) },
+                onKeyboardLost: keyboardLost
+            )
         }
         .coordinateSpace(.named(Self.space))
         // The month, the lists, the tab, the vault and its role, the WALLET
@@ -121,6 +141,9 @@ struct LedgerGrid: View {
             followEditor()
             // ⌘A works from the start, before any cell was clicked.
             if editor.cursor == nil { gridFocused = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSTextView.didChangeSelectionNotification)) {
+            caretLanded($0)
         }
         .task(id: editor.newLineNote) { await suggestCategory() }
         .onReceive(NotificationCenter.default.publisher(for: .duplicateLastRow)) { _ in
@@ -155,6 +178,9 @@ struct LedgerGrid: View {
 
     private func gridKey(_ press: KeyPress) -> KeyPress.Result {
         let key = press.key
+        // Typing into a cell whose field is not on screen: its row comes
+        // back into sight, and its field with it.
+        if editor.isEditing, focus == nil { cursorWanted += 1 }
         if GridKey.isDelete(key) {
             if press.modifiers.contains(.command) { return commandDelete() }
             guard press.modifiers.isDisjoint(with: [.option, .control, .shift]) else { return .ignored }
@@ -205,9 +231,10 @@ struct LedgerGrid: View {
     ///
     /// The field selects all it holds as it takes the caret, and the update
     /// that puts the caret back after it can come a moment after the next
-    /// key: until the caret is there, a typed key is added to the editor's
-    /// text here rather than given to the field to replace what it has
-    /// selected (`GridEventMechanicsTests`).
+    /// key: until the caret is there (`caretLanded`), a typed key is added to
+    /// the editor's text here rather than given to the field to replace what
+    /// it has selected (`GridEventMechanicsTests`). Any other key, ← or ⌫,
+    /// is the field's, and from then on so is every key.
     private func fieldKey(_ press: KeyPress) -> KeyPress.Result {
         if let move = GridKey.move(for: press), move != .left, move != .right {
             editor.move(move)
@@ -217,14 +244,38 @@ struct LedgerGrid: View {
             editor.cancel()
             return .handled
         }
-        guard placesCaret, GridKey.isTyping(press) else { return .ignored }
-        if caret == caretAtEnd {
+        guard placesCaret else { return .ignored }
+        guard GridKey.isTyping(press) else {
             placesCaret = false
             return .ignored
         }
         editor.type(press.characters)
         caret = caretAtEnd
         return .handled
+    }
+
+    /// The field's caret moved. Once it stands at the end of what the cell
+    /// says, after the grid put it there, the field has taken over and the
+    /// keys typed from then on are its own, wherever the caret goes next.
+    /// The field reports it as AppKit's text view does, which is where the
+    /// caret really is, not where the grid asked for it.
+    private func caretLanded(_ notification: Notification) {
+        guard placesCaret, caretSent, let field = notification.object as? NSTextView,
+              let window = frames.window, field.window === window, window.firstResponder === field,
+              field.string == editor.text
+        else { return }
+        let selection = field.selectedRange()
+        if selection.length == 0, selection.location == (field.string as NSString).length {
+            placesCaret = false
+        }
+    }
+
+    /// The caret goes to the end of what the cell says, once its field has
+    /// the keyboard (`focusMoved`).
+    private func placeCaret() {
+        placesCaret = true
+        caretSent = false
+        caret = caretAtEnd
     }
 
     /// A key typed on the selected cell: it replaces what the cell says, or
@@ -237,8 +288,7 @@ struct LedgerGrid: View {
             return
         }
         if starting { typed = true }
-        placesCaret = true
-        caret = caretAtEnd
+        placeCaret()
     }
 
     /// ↩, F2, a double click or VoiceOver's Edit: `cell` (the cursor's, when
@@ -254,8 +304,7 @@ struct LedgerGrid: View {
             return
         }
         typed = false
-        placesCaret = true
-        caret = caretAtEnd
+        placeCaret()
     }
 
     private var caretAtEnd: TextSelection { TextSelection(insertionPoint: editor.text.endIndex) }
@@ -305,8 +354,7 @@ struct LedgerGrid: View {
     private func followEditor() {
         if editor.isEditing, let cursor = editor.cursor {
             guard focus != cursor else { return }
-            placesCaret = true
-            caret = caretAtEnd
+            placeCaret()
             focus = cursor
         } else {
             // The field goes with the editing, and the caret with it: setting
@@ -319,17 +367,53 @@ struct LedgerGrid: View {
     }
 
     /// The field takes the caret selecting all it holds: the caret goes back
-    /// after what was typed. Something else taking the keyboard from the
-    /// cell being typed into, the search field, ⌘K, saves it as a click
-    /// away from it does; refused, the caret goes back to the cell.
+    /// after what was typed.
+    ///
+    /// The field losing the keyboard while it is still typed into is one of
+    /// two things. Another field took it, the search field or ⌘K's: the cell
+    /// is saved, as a click away from it saves it; one that refuses stays as
+    /// typed, its error shown, until it is come back to, and the other field
+    /// keeps the keyboard. Or nothing took it: the row went out of the lazy
+    /// sheet as it scrolled, and the field with it (which SwiftUI does not
+    /// always report: `keyboardLost` hears it from the window). The cell is
+    /// still typed into; the grid takes the keys meanwhile, which go on
+    /// adding to it and bring its row back into sight, and the field takes
+    /// them back as it comes into sight (`fieldAppeared`).
     private func focusMoved(from old: CellFocus?, to new: CellFocus?) {
         if new != nil {
             // Typing into a cell is editing, not picking: one or the other.
             store.clearSelection()
-            if new == editor.cursor, placesCaret { caret = caretAtEnd }
+            if new == editor.cursor, placesCaret {
+                caret = caretAtEnd
+                caretSent = true
+            }
         }
         guard let old, editor.isEditing, editor.cursor == old, new != old else { return }
-        if !editor.finish() { focus = old }
+        if frames.window?.firstResponder is NSText {
+            // A click there already saved the cell, or was refused, on its
+            // way (`clickLanded`): once is enough to say why. The focus is
+            // told as the click's mouse-up is handled.
+            let clicked = [.leftMouseDown, .leftMouseUp].contains(NSApp.currentEvent?.type)
+            if !clicked { editor.finish() }
+        } else {
+            gridFocused = true
+        }
+    }
+
+    /// The window's keyboard went to no view, the field of the cell being
+    /// typed into gone with its row (`focusMoved`): the grid takes the keys.
+    private func keyboardLost() {
+        guard editor.isEditing else { return }
+        gridFocused = true
+    }
+
+    /// The field of the cell being typed into came into sight, its row back
+    /// in the lazy sheet: while the grid holds the keys for it
+    /// (`focusMoved`), it takes them back, the caret at the end.
+    private func fieldAppeared(_ cell: CellFocus) {
+        guard editor.isEditing, editor.cursor == cell, focus != cell, gridFocused else { return }
+        placeCaret()
+        focus = cell
     }
 
     // MARK: - The clicks
@@ -360,13 +444,17 @@ struct LedgerGrid: View {
     /// saves it and moves the cursor; on the CATEGORY or ENVELOPE list the
     /// list picks. Anywhere else, the search field, the tab bar, a due
     /// period, the ruled lines under the sheet, the cell is saved and the
-    /// cursor goes, and the click goes on to what it was aimed at. A cell
-    /// that refuses to be saved keeps the caret, and the click is dropped.
-    private func clickLanded(at point: CGPoint) -> Bool {
-        guard editor.isEditing else { return true }
-        if frames.categoryList?.contains(point) == true || frames.envelopeList?.contains(point) == true { return true }
-        if isOnCell(point) { return true }
-        return editor.finish()
+    /// cursor goes. Every click goes on to what it was aimed at: a cell that
+    /// refuses to be saved stays as typed, its error shown.
+    ///
+    /// Whatever it lands on, the caret is the field's from then on: a click
+    /// inside it puts the caret where it fell (`fieldKey`).
+    private func clickLanded(at point: CGPoint) {
+        guard editor.isEditing else { return }
+        placesCaret = false
+        if frames.categoryList?.contains(point) == true || frames.envelopeList?.contains(point) == true { return }
+        if isOnCell(point) { return }
+        editor.finish()
     }
 
     /// Whether `point` is on a cell of a stored row or of the empty line,
@@ -407,6 +495,19 @@ struct LedgerGrid: View {
         }
     }
 
+    /// Keeps the cursor's line in sight, the empty line included, moving
+    /// the sheet by as little as it takes: a line already in sight does not
+    /// move it.
+    private func scrollToCursor(with proxy: ScrollViewProxy) {
+        guard let cursor = editor.cursor else { return }
+        if let id = cursor.row {
+            guard let row = store.rows.first(where: { $0.id == id }) else { return }
+            proxy.scrollTo(LedgerLine.row(row).id, anchor: nil)
+        } else {
+            proxy.scrollTo(Self.newLineID, anchor: nil)
+        }
+    }
+
     // MARK: - The lines
 
     /// The rows with the due periods among them (`AppStore.ledgerLinesInput`),
@@ -437,7 +538,7 @@ struct LedgerGrid: View {
                 }
             }
             // A viewer's ledger is a report: nothing to type into.
-            if store.canWrite { newRowView(edited: edited).rowRule() }
+            if store.canWrite { newRowView(edited: edited).rowRule().id(Self.newLineID) }
             EmptyRowLines()
                 .frame(height: max(2 * Metrics.rowHeight, viewportHeight - drawn))
         }
@@ -445,7 +546,14 @@ struct LedgerGrid: View {
 
     /// What the cell being typed into needs, the same for every line.
     private var editedCell: EditedCell {
-        EditedCell(editor: editor, focus: $focus, selection: $caret, typed: typed, keys: fieldKey)
+        EditedCell(
+            editor: editor,
+            focus: $focus,
+            selection: $caret,
+            typed: typed,
+            keys: fieldKey,
+            appeared: fieldAppeared
+        )
     }
 
     /// The cursor as the line `row` (nil = the empty line) sees it.
@@ -743,26 +851,34 @@ final class GridFrames {
     /// The CATEGORY and ENVELOPE lists while they are open.
     var categoryList: CGRect?
     var envelopeList: CGRect?
+    /// The grid's window, whose first responder says where the keyboard
+    /// went (`LedgerGrid.focusMoved`).
+    weak var window: NSWindow?
 }
 
 /// Sees every left click in the grid's window before the window hands it
-/// on, while `isWatching`, and asks `onClick` about it with the point in
-/// the grid's coordinates; `false` drops the click. A click on a scroll
-/// bar is the scroll bar's and never asked about.
+/// on, while `isWatching`, and tells `onClick` with the point in the grid's
+/// coordinates; the click always goes on. A click on a scroll bar is the
+/// scroll bar's and never told. It also tells `frames` which window the grid
+/// is in, and `onKeyboardLost` when that window's keyboard goes to no view
+/// at all.
 private struct GridClickWatcher: NSViewRepresentable {
+    let frames: GridFrames
     let isWatching: Bool
-    let onClick: (CGPoint) -> Bool
+    let onClick: (CGPoint) -> Void
+    let onKeyboardLost: () -> Void
 
     func makeNSView(context: Context) -> GridClickWatcherView {
         let view = GridClickWatcherView()
-        view.isWatching = isWatching
-        view.onClick = onClick
+        view.frames = frames
+        updateNSView(view, context: context)
         return view
     }
 
     func updateNSView(_ view: GridClickWatcherView, context: Context) {
         view.isWatching = isWatching
         view.onClick = onClick
+        view.onKeyboardLost = onKeyboardLost
     }
 
     static func dismantleNSView(_ view: GridClickWatcherView, coordinator: ()) {
@@ -773,9 +889,13 @@ private struct GridClickWatcher: NSViewRepresentable {
 /// The watcher's view, behind the whole grid so its bounds are the grid's.
 /// Measured from the top left, as SwiftUI measures.
 final class GridClickWatcherView: NSView {
+    var frames: GridFrames?
     var isWatching = false
-    var onClick: ((CGPoint) -> Bool)?
+    var onClick: ((CGPoint) -> Void)?
+    /// The window's keyboard went to no view at all, while `isWatching`.
+    var onKeyboardLost: (() -> Void)?
     private var monitor: Any?
+    private var responder: NSKeyValueObservation?
 
     override var isFlipped: Bool { true }
 
@@ -784,19 +904,35 @@ final class GridClickWatcherView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        frames?.window = window
         stop()
         guard window != nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             guard let self, self.isWatching, event.window === self.window else { return event }
             if self.isOnScroller(event) { return event }
-            let point = self.convert(event.locationInWindow, from: nil)
-            return self.onClick?(point) == false ? nil : event
+            self.onClick?(self.convert(event.locationInWindow, from: nil))
+            return event
+        }
+        // A field taken out of the window with its row, as the lazy sheet
+        // scrolls, leaves the keyboard to the window itself, and SwiftUI's
+        // focus does not say so. Told after the change, which comes in the
+        // middle of a layout.
+        responder = window?.observe(\.firstResponder) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, self.isWatching, let window = self.window,
+                          window.firstResponder == nil || window.firstResponder === window
+                    else { return }
+                    self.onKeyboardLost?()
+                }
+            }
         }
     }
 
     func stop() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        responder = nil
     }
 
     private func isOnScroller(_ event: NSEvent) -> Bool {

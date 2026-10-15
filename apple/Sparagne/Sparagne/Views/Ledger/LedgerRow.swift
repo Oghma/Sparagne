@@ -627,6 +627,8 @@ struct EditedCell {
     /// what was typed.
     let typed: Bool
     let keys: (KeyPress) -> KeyPress.Result
+    /// The field came into sight (`LedgerGrid.fieldAppeared`).
+    let appeared: (CellFocus) -> Void
 
     var text: Binding<String> { Bindable(editor).text }
     var flowId: Binding<Uuid?> { Bindable(editor).flowId }
@@ -635,15 +637,17 @@ struct EditedCell {
 extension View {
     /// The keys every cell being typed into shares: ↩ saves it and keeps it
     /// selected, and what the cell leaves goes to the grid
-    /// (`EditedCell.keys`).
+    /// (`EditedCell.keys`). The field also tells the grid as it comes into
+    /// sight, which gives it the keyboard back after a scroll took it away.
     ///
     /// SwiftUI gives a key to the handler applied last first, the one
     /// furthest from the field: the CATEGORY and ENVELOPE cells apply their
     /// lists' keys after these, so that a list, while open, takes ↑ ↓ ↩ ⇥
     /// and esc before the grid does (`GridEventMechanicsTests`).
-    func cellKeys(_ edited: EditedCell) -> some View {
+    func cellKeys(_ edited: EditedCell, key: CellFocus) -> some View {
         onSubmit { edited.editor.confirm() }
             .onKeyPress(phases: [.down, .repeat], action: edited.keys)
+            .onAppear { edited.appeared(key) }
     }
 }
 
@@ -671,7 +675,7 @@ struct CellField: View {
             .accessibilityHint(hint)
             .focused(edited.focus, equals: key)
             .cellFocusRing(true)
-            .cellKeys(edited)
+            .cellKeys(edited, key: key)
     }
 
     @ViewBuilder
