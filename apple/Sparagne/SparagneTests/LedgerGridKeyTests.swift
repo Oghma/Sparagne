@@ -162,7 +162,7 @@ struct LedgerGridKeyTests {
         #expect(grid.store.rows[0].note == "pane nero")
     }
 
-    @Test("A click on the ruled lines under the sheet saves the cell too; one the cell refuses keeps the caret in it and goes nowhere")
+    @Test("A click on the ruled lines under the sheet saves the cell too; one the cell refuses to be saved leaves it as typed and still lands")
     func clickBelowAndRefusal() async throws {
         let grid = try await GridUnderTest()
         defer { grid.close() }
@@ -178,21 +178,24 @@ struct LedgerGridKeyTests {
         #expect(grid.editor.cursor == nil)
         #expect(grid.store.rows[2].note == "cappuccino")
 
-        // An amount that is no amount: the click outside is refused with
-        // the core's message, and the cell keeps the caret.
+        // An amount that is no amount: saving it is refused with the core's
+        // message, and the cell stays as typed; the click still lands.
         grid.host.postClick(at: grid.point(line: 2, .amount))
         await grid.host.settle { grid.editor.cursor != nil }
         grid.host.post(typing: "abc")
-        await grid.host.settle { grid.editor.text == "abc" }
+        await grid.host.settle { grid.host.fieldEditor?.string == "abc" }
         grid.host.postClick(at: GridUnderTest.search)
-        await grid.host.settle { grid.store.presentedError != nil }
+        await grid.host.settle { grid.store.presentedError != nil && grid.probe.searchFocused }
         #expect(grid.store.presentedError != nil)
+        #expect(grid.probe.searchFocused)
         #expect(grid.editor.isEditing)
         #expect(grid.editor.cursor == grid.cell(line: 2, .amount))
-        #expect(!grid.probe.searchFocused)
-        #expect(grid.host.fieldEditor?.string == "abc")
+        #expect(grid.editor.text == "abc")
 
-        // esc puts the amount back, and nothing is left to save.
+        // Back on the cell, esc puts the amount back, and nothing is left
+        // to save.
+        grid.host.postClick(at: grid.point(line: 2, .amount))
+        await grid.host.settle { grid.host.fieldEditor?.string == "abc" && !grid.probe.searchFocused }
         grid.host.post(.escape)
         await grid.host.settle { !grid.editor.isEditing }
         #expect(grid.editor.cursor == grid.cell(line: 2, .amount))
@@ -369,6 +372,195 @@ struct LedgerGridKeyTests {
         await grid.settle()
         #expect(grid.store.rows.map(\.note) == ["pane", "caffè"])
     }
+
+    // MARK: - The caret
+
+    @Test("A key typed after ← lands at the caret, not at the end of the cell")
+    func caretMovedThenTyped() async throws {
+        let grid = try await GridUnderTest()
+        defer { grid.close() }
+
+        grid.host.postClick(at: grid.point(line: 1, .note))
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 1, .note) }
+        grid.host.post(.enter)
+        await grid.host.settle {
+            grid.host.fieldEditor?.string == "latte" && grid.host.fieldSelection == NSRange(location: 5, length: 0)
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        grid.host.post(.left)
+        await grid.host.settle { grid.host.fieldSelection == NSRange(location: 4, length: 0) }
+        #expect(grid.host.fieldSelection == NSRange(location: 4, length: 0))
+        try await Task.sleep(for: .milliseconds(200))
+        grid.host.post(typing: "x")
+        await grid.host.settle { grid.editor.text == "lattxe" }
+        #expect(grid.editor.text == "lattxe")
+        #expect(grid.host.fieldEditor?.string == "lattxe")
+    }
+
+    @Test("A click inside the cell being typed into puts the caret there, and the next key lands at it")
+    func clickInFieldThenTyped() async throws {
+        let grid = try await GridUnderTest()
+        defer { grid.close() }
+
+        grid.host.postDoubleClick(at: grid.point(line: 1, .note))
+        await grid.host.settle { grid.host.fieldEditor?.string == "latte" }
+        try await Task.sleep(for: .milliseconds(200))
+        // Near the left edge of DESCRIZIONE: before "latte".
+        var point = grid.point(line: 1, .note)
+        point.x = grid.left(of: .note) + GridColumn.padding + 1
+        grid.host.postClick(at: point)
+        await grid.host.settle { grid.host.fieldSelection == NSRange(location: 0, length: 0) }
+        #expect(grid.host.fieldSelection == NSRange(location: 0, length: 0))
+        grid.host.post(typing: "x")
+        await grid.host.settle { grid.editor.text == "xlatte" }
+        #expect(grid.editor.text == "xlatte")
+    }
+
+    @Test("Cas and ⇥ typed fast on a selected CATEGORY cell pick Casa", arguments: [0, 20, 40])
+    func fastCategoryTab(delay: Int) async throws {
+        let grid = try await GridUnderTest()
+        defer { grid.close() }
+        await grid.store.loadCategoryCompletion()
+
+        grid.host.postClick(at: grid.point(line: 0, .category))
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 0, .category) }
+        grid.host.post(typing: "Cas")
+        try await Task.sleep(for: .milliseconds(delay))
+        grid.host.post(.tab)
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 0, .note) }
+        await grid.settle()
+        #expect(grid.store.rows[0].category == "Casa")
+    }
+
+    // MARK: - Following the cursor
+
+    @Test("The sheet scrolls to keep the cursor in sight as ↓ takes it down the rows")
+    func cursorScrolledIntoView() async throws {
+        let grid = try await GridUnderTest()
+        defer { grid.close() }
+        try await grid.addRows(40)
+
+        grid.host.postClick(at: grid.point(line: 0, .note))
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 0, .note) }
+        for _ in 0..<30 { grid.host.post(.down) }
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 30, .note) }
+        await grid.host.settle { grid.scrollOffset > 200 }
+        #expect(grid.editor.cursor == grid.cell(line: 30, .note))
+        // Line 30 is 720 points down a viewport shorter than 450.
+        #expect(grid.scrollOffset > 200)
+    }
+
+    @Test("Keys typed on a cell the cursor took far down the sheet type into it")
+    func typingOffScreen() async throws {
+        let grid = try await GridUnderTest()
+        defer { grid.close() }
+        try await grid.addRows(40)
+
+        grid.host.postClick(at: grid.point(line: 0, .note))
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 0, .note) }
+        for _ in 0..<30 { grid.host.post(.down) }
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 30, .note) }
+        let target = grid.cell(line: 30, .note)
+        let before = grid.store.rows.first { $0.id == target.row }?.note
+        grid.host.post(typing: "x")
+        await grid.host.settle(for: .milliseconds(300))
+        grid.host.post(typing: "yz")
+        await grid.host.settle { grid.editor.text == "xyz" }
+        await grid.settle()
+        #expect(grid.editor.cursor == target)
+        #expect(grid.editor.isEditing)
+        #expect(grid.editor.text == "xyz")
+        #expect(grid.host.fieldEditor?.string == "xyz")
+        #expect(grid.store.rows.first { $0.id == target.row }?.note == before)
+    }
+
+    @Test("Scrolling the cell being typed into out of sight keeps it typed into, and the keys still reach it")
+    func scrollWhileEditing() async throws {
+        let grid = try await GridUnderTest()
+        defer { grid.close() }
+        try await grid.addRows(40)
+
+        grid.host.postClick(at: grid.point(line: 0, .note))
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: 0, .note) }
+        grid.host.post(typing: "abc")
+        await grid.host.settle { grid.host.fieldEditor?.string == "abc" }
+        let scroll = try #require(grid.scrollView)
+        let height = scroll.documentView?.bounds.height ?? 0
+        scroll.contentView.scroll(to: CGPoint(x: 0, y: max(0, height - scroll.contentView.bounds.height)))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        await grid.host.settle(for: .milliseconds(500))
+        await grid.settle()
+        #expect(grid.scrollOffset > 200)
+        #expect(grid.editor.isEditing)
+        #expect(grid.editor.cursor == grid.cell(line: 0, .note))
+        #expect(grid.store.rows[0].note == "pane")
+
+        // A key brings the row back, and the field with it.
+        grid.host.post(typing: "d")
+        await grid.host.settle { grid.editor.text == "abcd" && grid.host.fieldEditor?.string == "abcd" }
+        #expect(grid.editor.text == "abcd")
+        #expect(grid.host.fieldEditor?.string == "abcd")
+        #expect(grid.scrollOffset < 24)
+        grid.host.post(.enter)
+        await grid.host.settle { !grid.editor.isEditing }
+        await grid.settle()
+        #expect(grid.store.rows[0].note == "abcd")
+    }
+
+    // MARK: - A cell that refuses
+
+    @Test("A new line refused as the cursor leaves it hands the caret to IMPORTO with what IMPORTO says")
+    func refusedRegistrationText() async throws {
+        let grid = try await GridUnderTest()
+        defer { grid.close() }
+        let newLine = grid.store.rows.count
+
+        grid.host.postClick(at: grid.point(line: newLine, .amount))
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: newLine, .amount) }
+        grid.host.post(typing: "abc")
+        await grid.host.settle { grid.editor.text == "abc" }
+        grid.host.post(.backTab)
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: newLine, .person) }
+        #expect(grid.editor.newLine.amount == "abc")
+        grid.host.postClick(at: grid.point(line: newLine, .note))
+        await grid.host.settle { grid.editor.cursor == grid.cell(line: newLine, .note) }
+        grid.host.post(typing: "pizza")
+        await grid.host.settle { grid.host.fieldEditor?.string == "pizza" }
+        try await Task.sleep(for: .milliseconds(200))
+        grid.host.post(.up)
+        await grid.host.settle { grid.host.fieldEditor?.string == "abc" }
+        #expect(grid.store.presentedError != nil)
+        #expect(grid.editor.cursor == grid.cell(line: newLine, .amount))
+        #expect(grid.editor.isEditing)
+        #expect(grid.editor.text == "abc")
+        #expect(grid.host.fieldEditor?.string == "abc")
+        #expect(grid.editor.newLine.note == "pizza")
+    }
+
+    @Test("A field that takes the keyboard from a cell that refuses to be saved keeps it; the cell stays as typed until it is come back to")
+    func refusedCellLetsTheKeyboardGo() async throws {
+        let grid = try await GridUnderTest()
+        defer { grid.close() }
+
+        grid.host.postClick(at: grid.point(line: 2, .amount))
+        await grid.host.settle { grid.editor.cursor != nil }
+        grid.host.post(typing: "abc")
+        await grid.host.settle { grid.host.fieldEditor?.string == "abc" }
+        grid.probe.focusSearch = true
+        await grid.host.settle { grid.store.presentedError != nil && grid.probe.searchFocused }
+        await grid.host.settle(for: .milliseconds(300))
+        #expect(grid.store.presentedError != nil)
+        #expect(grid.probe.searchFocused)
+        #expect(grid.editor.isEditing)
+        #expect(grid.editor.text == "abc")
+
+        // Back on the cell, esc puts it back.
+        grid.host.postClick(at: grid.point(line: 2, .amount))
+        await grid.host.settle { grid.host.fieldEditor?.string == "abc" && !grid.probe.searchFocused }
+        grid.host.post(.escape)
+        await grid.host.settle { !grid.editor.isEditing }
+        #expect(grid.store.rows[2].absoluteAmount == 1_000)
+    }
 }
 
 // MARK: - The grid in a window
@@ -469,6 +661,43 @@ private final class GridUnderTest {
         let y = Self.searchHeight + Metrics.headerHeight + CGFloat(line) * Metrics.rowHeight + Metrics.rowHeight / 2
         return CGPoint(x: x, y: y)
     }
+
+    /// The left edge of a column, as `point` lays the columns out.
+    func left(of field: RowField) -> CGFloat {
+        let columns = store.ledgerColumns
+        let start = GridColumn.ordinal + 2 * GridColumn.padding
+        return switch field {
+        case .date: start
+        case .flow: start + columns.outer(.date)
+        case .category: start + columns.outer(.date) + columns.outer(.flow)
+        case .note: start + columns.outer(.date) + columns.outer(.flow) + columns.outer(.category)
+        default: point(line: 0, field).x
+        }
+    }
+
+    /// `count` more expenses on the 20th, after the three of the fixture:
+    /// a sheet longer than the window.
+    func addRows(_ count: Int) async throws {
+        let date = try #require(
+            Calendar.current.date(from: DateComponents(year: store.month.year, month: store.month.month, day: 20))
+        )
+        for index in 0..<count {
+            await store.addRow(day: date, flowId: nil, category: "Spesa", note: "riga \(index)", amount: 100)
+        }
+        await settle()
+        #expect(store.rows.count == 3 + count)
+    }
+
+    /// The grid's scroll view, and how far down it is scrolled.
+    var scrollView: NSScrollView? {
+        func find(in view: NSView) -> NSScrollView? {
+            if let scroll = view as? NSScrollView { return scroll }
+            return view.subviews.lazy.compactMap(find).first
+        }
+        return host.window.contentView.flatMap(find)
+    }
+
+    var scrollOffset: CGFloat { scrollView?.contentView.bounds.origin.y ?? 0 }
 
     // MARK: The lists
 

@@ -512,11 +512,18 @@ private struct TabProbeView: View {
     @State private var caret: TextSelection?
 
     var body: some View {
-        let edited = EditedCell(editor: store.ledgerEditor, focus: $focus, selection: $caret, typed: false) { press in
-            guard let move = GridKey.move(for: press), move == .tab || move == .backTab else { return .ignored }
-            probe.moves.append(move == .tab ? "tab" : "backTab")
-            return .handled
-        }
+        let edited = EditedCell(
+            editor: store.ledgerEditor,
+            focus: $focus,
+            selection: $caret,
+            typed: false,
+            keys: { press in
+                guard let move = GridKey.move(for: press), move == .tab || move == .backTab else { return .ignored }
+                probe.moves.append(move == .tab ? "tab" : "backTab")
+                return .handled
+            },
+            appeared: { _ in }
+        )
         HStack(spacing: 0) {
             if probe.focus?.field == .category {
                 CategoryCell(
