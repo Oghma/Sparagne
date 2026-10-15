@@ -384,12 +384,15 @@ final class AppStore {
         }
     }
     /// The PERSONA filter: `nil` is everybody. The Mastro's cell is saved
-    /// first and the new line starts over, as with the month.
+    /// first and the new line starts over, as with the month, when the user
+    /// changes it. A filter the reload clears, because a sync took the
+    /// person's last row away, leaves the cell being typed into alone: the
+    /// rows that went are `LedgerEditor.rowsChanged`'s to deal with.
     var person: String? {
-        willSet { if newValue != person { ledgerEditor.finish() } }
+        willSet { if newValue != person, !clearingStalePerson { ledgerEditor.finish() } }
         didSet {
             if person != oldValue {
-                ledgerEditor.reset()
+                if !clearingStalePerson { ledgerEditor.reset() }
                 filtersChanged()
             }
         }
@@ -477,6 +480,9 @@ final class AppStore {
     /// Which reload may write the state: a slower one that started earlier
     /// must not overwrite a newer month with what it found.
     @ObservationIgnored private var loadGeneration = 0
+    /// A PERSONA filter the reload found stale is being cleared: the store's
+    /// doing, not the user's, so the Mastro's cell is left as it is.
+    @ObservationIgnored private var clearingStalePerson = false
     /// The filter the rows on screen were loaded with. The next page has to
     /// continue that query, not whatever the search field says now.
     @ObservationIgnored private var loadedFilter: TransactionFilter?
@@ -762,7 +768,11 @@ final class AppStore {
             // A person who has left the vault's history must not stay
             // selected, or the ledger shows an empty month with no way back.
             // Clearing it queues the reload that fetches the whole month.
-            if let person, !peopleInRows.contains(person) { self.person = nil }
+            if let person, !peopleInRows.contains(person) {
+                clearingStalePerson = true
+                self.person = nil
+                clearingStalePerson = false
+            }
         }
     }
 

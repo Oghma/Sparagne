@@ -727,6 +727,33 @@ struct LedgerEditorTests {
         #expect(store.presentedError == nil)
     }
 
+    @Test("A PERSONA filter a sync leaves without rows is cleared without ending the cell being typed into")
+    func staleFilterLeavesTheCellAlone() async throws {
+        let (store, editor) = try await Self.household()
+        let vault = try #require(store.currentVault)
+        await store.addRow(day: Date(), flowId: nil, category: "Spesa", note: "verdura", amount: 2_000, person: "elisa")
+        store.person = "elisa"
+        await store.settle()
+        let verdura = try Self.row("verdura", in: store)
+        #expect(store.rows.count == 1)
+
+        editor.select(Self.newLine(.note))
+        editor.type("pane")
+        editor.select(Self.newLine(.amount))
+        editor.type("2")
+
+        // elisa's last row goes, deleted on another device.
+        try await store.core.execute(vaultId: vault.id, .voidTransaction(transactionId: verdura.id))
+        await store.reload()
+        await store.settle()
+        #expect(store.person == nil)
+        #expect(editor.cursor == Self.newLine(.amount))
+        #expect(editor.isEditing)
+        #expect(editor.text == "2")
+        #expect(editor.newLine.note == "pane")
+        #expect(!store.rows.contains { $0.note == "pane" })
+    }
+
     // MARK: - Undo
 
     @Test("Each cell saved is one Edit ▸ Undo step, and ⌘Z takes back the last one")
