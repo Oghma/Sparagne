@@ -219,6 +219,71 @@ struct LedgerEditorTests {
         #expect(store.rows.first { $0.id == coop.id }?.flowId == unallocated.id)
     }
 
+    // MARK: - A cell saved again before it landed
+
+    @Test("A cell put back to what it said before its last save landed is written back")
+    func cellPutBackBeforeItsSaveLands() async throws {
+        let (store, editor) = try await Self.household()
+        let coop = try Self.row("coop", in: store)
+        editor.select(Self.cell(coop, .note))
+        editor.type("conad")
+        #expect(editor.move(.tab))
+        #expect(editor.move(.backTab))
+        // The row loaded still says coop: the write has not landed.
+        #expect(store.rows.first { $0.id == coop.id }?.note == "coop")
+        #expect(editor.edit())
+        #expect(editor.text == "conad")
+        editor.text = "coop"
+        #expect(editor.move(.tab))
+        await store.settle()
+        #expect(store.presentedError == nil)
+        #expect(store.rows.first { $0.id == coop.id }?.note == "coop")
+    }
+
+    @Test("The row shows a saved cell at once, and as the core has it once a reload gave it back, someone else's change included")
+    func shownRowCarriesTheSavedCells() async throws {
+        let (store, editor) = try await Self.household()
+        let vault = try #require(store.currentVault)
+        let coop = try Self.row("coop", in: store)
+        let unallocated = try #require(store.flows.first { $0.isUnallocated })
+        #expect(editor.shown(coop) == coop)
+
+        editor.select(Self.cell(coop, .note))
+        editor.type("conad")
+        editor.move(.left)
+        editor.type("")
+        editor.move(.left)
+        editor.edit()
+        editor.flowId = unallocated.id
+        editor.select(Self.cell(coop, .amount))
+        editor.type("75")
+        editor.finish()
+        let loaded = try #require(store.rows.first { $0.id == coop.id })
+        #expect(loaded.note == "coop")
+        let shown = editor.shown(loaded)
+        #expect(shown.note == "conad")
+        #expect(shown.category == String(localized: "Uncategorized"))
+        #expect(shown.flowId == unallocated.id)
+        #expect(shown.envelopeColumn == String(localized: "Unallocated"))
+        #expect(shown.absoluteAmount == 7_500)
+        #expect(shown.occurredAt == coop.occurredAt)
+
+        await store.settle()
+        #expect(store.presentedError == nil)
+        let landed = try #require(store.rows.first { $0.id == coop.id })
+        #expect(landed.note == "conad")
+        #expect(landed.absoluteAmount == 7_500)
+        #expect(editor.shown(landed) == landed)
+
+        // Another member renames it: the sync's reload shows their note.
+        var patch = TransactionPatch()
+        patch.note = "esselunga"
+        try await store.core.execute(vaultId: vault.id, .updateTransaction(transactionId: coop.id, patch: patch))
+        await store.reload()
+        let synced = try #require(store.rows.first { $0.id == coop.id })
+        #expect(editor.shown(synced).note == "esselunga")
+    }
+
     // MARK: - esc
 
     @Test("esc while editing takes back that cell only, still selected; again, the cursor goes")
@@ -894,6 +959,29 @@ struct LedgerEditorTests {
     }
 
     // MARK: - Undo
+
+    @Test("Undo of a cell saved again before its first save landed puts back the first, one step at a time")
+    func secondSaveUndoesToTheFirst() async throws {
+        let (store, editor) = try await Self.household()
+        let manager = try LedgerHistoryTests.attachManager(to: store)
+        let coop = try Self.row("coop", in: store)
+        editor.select(Self.cell(coop, .note))
+        editor.type("conad")
+        editor.move(.tab)
+        editor.move(.backTab)
+        editor.type("esselunga")
+        editor.move(.tab)
+        await store.settle()
+        #expect(store.rows.first { $0.id == coop.id }?.note == "esselunga")
+
+        manager.undo()
+        await store.settle()
+        #expect(store.rows.first { $0.id == coop.id }?.note == "conad")
+        manager.undo()
+        await store.settle()
+        #expect(store.rows.first { $0.id == coop.id }?.note == "coop")
+        #expect(store.presentedError == nil)
+    }
 
     @Test("Each cell saved is one Edit ▸ Undo step, and ⌘Z takes back the last one")
     func undoTakesBackTheLastCell() async throws {

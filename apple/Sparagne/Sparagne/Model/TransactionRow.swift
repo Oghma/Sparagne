@@ -32,32 +32,32 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
 
     let id: Uuid
     let kind: TransactionKind
-    let occurredAt: Date
+    private(set) var occurredAt: Date
     /// What the core stores: absolute minor units.
-    let absoluteAmount: Int64
+    private(set) var absoluteAmount: Int64
     let categoryId: Uuid
     /// Localized for the two system categories, verbatim otherwise.
-    let category: String
-    let note: String
+    private(set) var category: String
+    private(set) var note: String
     /// Who the row is for, the PERSONA column of the ledger: the author, unless
     /// the row was recorded on someone else's behalf.
-    let person: String
+    private(set) var person: String
     /// `created_by`: the member of the vault who entered the row. Shown only
     /// where it differs from `person`, as "recorded by".
     let recordedBy: String
     let voided: Bool
 
     /// Entries: the wallet leg. Transfers between wallets: the source.
-    let walletId: Uuid?
+    private(set) var walletId: Uuid?
     /// Entries: the envelope leg. Transfers between envelopes: the source.
-    let flowId: Uuid?
+    private(set) var flowId: Uuid?
 
-    let walletDisplay: String
-    let envelopeDisplay: String
+    private(set) var walletDisplay: String
+    private(set) var envelopeDisplay: String
     /// What the ENVELOPE column writes: an entry's envelope, a transfer
     /// between envelopes' source. The column has no room for two names, so
     /// the whole route goes after the description (`transferRoute`).
-    let envelopeColumn: String
+    private(set) var envelopeColumn: String
 
     var isTransfer: Bool { kind == .transferWallet || kind == .transferFlow }
 
@@ -113,6 +113,37 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
             envelopeDisplay = names.flow(view.flowId) ?? Self.placeholder
             envelopeColumn = envelopeDisplay
         }
+    }
+
+    /// The row as `patch` leaves it once the core has it: what the ledger
+    /// shows of a cell saved before a reload gives the row back
+    /// (`LedgerEditor.shown`), and what the next cell of the row is worked
+    /// out against meanwhile.
+    ///
+    /// The category is the name as typed, Uncategorized for a blank one, and
+    /// its id the old one until then: the name may be a new category, or an
+    /// alias the core files under another. A transfer's two ends are not
+    /// patched here, as the grid never patches them.
+    func applying(_ patch: TransactionPatch, names: NameBook) -> TransactionRow {
+        var row = self
+        if let amount = patch.amount { row.absoluteAmount = amount }
+        if let stamp = patch.occurredAt, let date = CoreDate.date(stamp) { row.occurredAt = date }
+        if let category = patch.category {
+            row.category = category.isEmpty ? String(localized: "Uncategorized") : category
+        }
+        if let note = patch.note { row.note = note }
+        // Blank is the patch's word for whoever recorded the row.
+        if let person = patch.person { row.person = person.isEmpty ? recordedBy : person }
+        if !isTransfer, let walletId = patch.walletId {
+            row.walletId = walletId
+            row.walletDisplay = names.wallet(walletId) ?? Self.placeholder
+        }
+        if !isTransfer, let flowId = patch.flowId {
+            row.flowId = flowId
+            row.envelopeDisplay = names.flow(flowId) ?? Self.placeholder
+            row.envelopeColumn = row.envelopeDisplay
+        }
+        return row
     }
 
     /// System categories are named in English by the core (`Opening`,

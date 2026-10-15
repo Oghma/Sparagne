@@ -478,8 +478,13 @@ final class AppStore {
     @ObservationIgnored private var queuedLoad: Task<Void, Never>?
     @ObservationIgnored private var queuedGeneration = 0
     /// Which reload may write the state: a slower one that started earlier
-    /// must not overwrite a newer month with what it found.
-    @ObservationIgnored private var loadGeneration = 0
+    /// must not overwrite a newer month with what it found. Readable, with
+    /// the one whose rows are on screen, so the Mastro's editor can tell a
+    /// load that started after one of its writes landed from one that did
+    /// not (`LedgerEditor.shown`).
+    @ObservationIgnored private(set) var loadGeneration = 0
+    /// The reload whose rows are on screen, by its `loadGeneration`.
+    @ObservationIgnored private(set) var deliveredGeneration = 0
     /// A PERSONA filter the reload found stale is being cleared: the store's
     /// doing, not the user's, so the Mastro's cell is left as it is.
     @ObservationIgnored private var clearingStalePerson = false
@@ -733,6 +738,7 @@ final class AppStore {
             // A newer month asked for its own load while this one was in the
             // air: the answer on the table is the stale one, so drop it.
             guard generation == loadGeneration else { return }
+            deliveredGeneration = generation
             snapshot = loaded.snapshot
             categories = loaded.categories
             transactions = loaded.page.items

@@ -17,6 +17,12 @@ import SparagneCore
 /// stored at that moment, so a sync that changed another cell of the row
 /// meanwhile is never written back over.
 ///
+/// A saved cell reaches `store.rows` only once its write has landed and a
+/// reload has brought the row back. Until then the editor keeps what it
+/// saved (`shown`), and the row is that to everything the editor works out
+/// of it, the next cell's patch and its undo step included, and to the grid
+/// that draws it.
+///
 /// The new line keeps its cells in `newLine` until it is registered, which
 /// happens when the cursor leaves it with an amount in it.
 @MainActor
@@ -45,6 +51,9 @@ final class LedgerEditor {
     /// The new line's cells, as they stand while the line is not registered:
     /// what it shows, and what it registers.
     var newLine = RowDraft()
+    /// The cells saved and not yet given back by a reload, by row and field.
+    /// Observed: the grid draws them (`shown`).
+    private var saved: [Uuid: [RowField: SavedCell]] = [:]
 
     nonisolated init() {}
 
@@ -72,6 +81,15 @@ final class LedgerEditor {
     /// Writes sent that have not landed yet: quitting waits for them
     /// (`AppDelegate`).
     var hasPendingWrites: Bool { inFlight > 0 }
+
+    /// `row` with the cells saved into it that no reload has given back yet:
+    /// what the grid draws, so a cell just left shows what it was saved as at
+    /// once. The row itself when nothing of it is waiting.
+    func shown(_ row: TransactionRow) -> TransactionRow {
+        guard let cells = saved[row.id], !cells.isEmpty, let store else { return row }
+        let names = NameBook(snapshot: store.snapshot)
+        return cells.values.reduce(row) { $0.applying($1.patch, names: names) }
+    }
 
     // MARK: - The keys and the clicks
 
@@ -181,7 +199,7 @@ final class LedgerEditor {
     /// of it says something else it is the user's line, and leaving
     /// registers it as it would any other; ↩ registers it either way.
     func duplicate(_ row: TransactionRow) {
-        guard let store, store.canWrite, let copy = RowDraft.duplicate(of: row, store: store) else { return }
+        guard let store, store.canWrite, let copy = RowDraft.duplicate(of: shown(row), store: store) else { return }
         // A stored cell being typed into is saved, as any move away from it
         // is. The new line is replaced by the copy, cell being typed into and
         // all, as ⌘D always replaced it.
@@ -214,9 +232,17 @@ final class LedgerEditor {
     /// out) has nothing left to point at and goes, with whatever was typed
     /// into it; one on a row that can no longer be typed into (voided while
     /// the deleted rows are shown) stops editing; one on the new line goes
-    /// when the line does.
+    /// when the line does. A month longer than a page loses it too on a row
+    /// past the first page, which a reload asks for again only as the grid
+    /// scrolls to it.
+    ///
+    /// A reload that started after a saved cell's write landed has the row as
+    /// the core keeps it now: the editor lets go of what it saved, so a later
+    /// change by someone else shows as it is.
     func rowsChanged() {
-        guard let store, let at = cursor else { return }
+        guard let store else { return }
+        forgetSavedCells(deliveredBy: store.deliveredGeneration)
+        guard let at = cursor else { return }
         let gone = if let id = at.row { !store.rows.contains { $0.id == id } } else { !store.canWrite }
         if gone {
             place(at: nil)
@@ -257,21 +283,27 @@ final class LedgerEditor {
         }
         // Voided or carried off by a sync between a reload and
         // `rowsChanged`: there is nothing left to write to.
-        guard let row = store.rows.first(where: { $0.id == id }) else {
+        guard let stored = store.rows.first(where: { $0.id == id }) else {
             stopEditing()
             return true
         }
-        // The cell alone, against the row as it is stored now: a sync that
-        // changed another cell since the edit began is not undone.
+        // The cell alone, against the row as it is stored now, or as it will
+        // be once the cells saved before have landed: a sync that changed
+        // another cell since the edit began is not undone, and a value put
+        // back before the last one landed is still a change.
+        let row = shown(stored)
         var draft = RowDraft(row: row, store: store)
         draft.set(at.field, text: text, flowId: flowId, in: store.month)
         do {
             let patch = try draft.patch(at.field, against: row, store: store)
             if !patch.isEmpty {
                 // Read now, not when the write gets its turn: by then the
-                // rows of another month may have replaced this one.
-                let inverse = store.storedInverse(of: patch, for: id)
-                write { store in
+                // rows of another month may have replaced this one. A value
+                // saved and not landed yet is what undo puts back, not the
+                // one stored before it.
+                let inverse = saved[id]?[at.field]?.patch ?? store.storedInverse(of: patch, for: id)
+                saved[id, default: [:]][at.field, default: SavedCell(patch: patch)].keep(patch)
+                write(cell: (row: id, field: at.field)) { store in
                     await store.update(transactionId: id, patch: patch, inverse: inverse)
                 }
             }
@@ -393,11 +425,12 @@ final class LedgerEditor {
     }
 
     /// The cells of a line as they stand: a stored row's as the row is
-    /// stored now, the new line's as typed.
+    /// stored now, with what was saved into it and has not landed yet; the
+    /// new line's as typed.
     private func draft(for row: Uuid?) -> RowDraft? {
         guard let id = row else { return newLine }
         guard let store, let stored = store.rows.first(where: { $0.id == id }) else { return nil }
-        return RowDraft(row: stored, store: store)
+        return RowDraft(row: shown(stored), store: store)
     }
 
     // MARK: - The writes
@@ -406,8 +439,12 @@ final class LedgerEditor {
     /// the cells were left. It is for the vault on screen now: if another
     /// vault is on screen by its turn (the one it was for deleted, by a sync
     /// or by its owner, with no chance to wait for it), it is dropped without
-    /// a word rather than sent to the wrong vault.
-    private func write(_ work: @escaping @MainActor (AppStore) async -> Void) {
+    /// a word rather than sent to the wrong vault. `cell` is the saved cell
+    /// it writes, if it writes one.
+    private func write(
+        cell: (row: Uuid, field: RowField)? = nil,
+        _ work: @escaping @MainActor (AppStore) async -> Void
+    ) {
         guard let store, let vaultId = store.currentVault?.id else { return }
         queued += 1
         inFlight += 1
@@ -416,6 +453,50 @@ final class LedgerEditor {
             await previous?.value
             if store.currentVault?.id == vaultId { await work(store) }
             self?.inFlight -= 1
+            if let cell { self?.landed(cell) }
         }
+    }
+
+    /// A saved cell's write is over, gone through or refused: the cell is
+    /// let go of once a reload that started after it has delivered its rows,
+    /// which may be the one the write itself asked for.
+    private func landed(_ cell: (row: Uuid, field: RowField)) {
+        guard let store, var entry = saved[cell.row]?[cell.field] else { return }
+        entry.waiting -= 1
+        entry.landedAt = store.loadGeneration
+        saved[cell.row]?[cell.field] = entry
+        forgetSavedCells(deliveredBy: store.deliveredGeneration)
+    }
+
+    /// Lets go of the saved cells whose writes have all landed before the
+    /// reload `generation` started.
+    private func forgetSavedCells(deliveredBy generation: Int) {
+        for (row, cells) in saved {
+            let waiting = cells.filter { !$0.value.isGivenBack(by: generation) }
+            if waiting.count != cells.count { saved[row] = waiting.isEmpty ? nil : waiting }
+        }
+    }
+}
+
+/// A cell saved into a stored row and not yet given back by a reload.
+private struct SavedCell {
+    /// The patch sent for it, the last one when it was saved more than once.
+    var patch: TransactionPatch
+    /// Its writes still queued or on their way.
+    var waiting = 0
+    /// `AppStore.loadGeneration` when the last of them landed.
+    var landedAt: Int?
+
+    mutating func keep(_ patch: TransactionPatch) {
+        self.patch = patch
+        waiting += 1
+        landedAt = nil
+    }
+
+    /// Whether the reload `generation` brought the row back with this cell
+    /// as the core has it: it started after the last write landed.
+    func isGivenBack(by generation: Int) -> Bool {
+        guard waiting == 0, let landedAt else { return false }
+        return generation >= landedAt
     }
 }
