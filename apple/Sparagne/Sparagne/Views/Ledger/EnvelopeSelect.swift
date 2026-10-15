@@ -140,41 +140,39 @@ struct EnvelopeChoiceAnchor: PreferenceKey {
     }
 }
 
-/// An ENVELOPE cell: it shows the envelope and opens the list as it takes the
-/// caret. ↑↓ move in the list, ↩ and ⇥ pick, esc closes it; typing narrows it.
-/// With the list closed every key does what it does in the other cells: ↩
-/// saves the row, ⇥ moves on, esc throws the draft away, and ↓ or a letter
-/// opens the list again.
+/// The ENVELOPE cell while it is typed into: it opens the list as it becomes
+/// a field. ↑↓ move in the list, ↩ and ⇥ pick, esc closes it; typing narrows
+/// it. With the list closed every key does what it does in the other cells
+/// (`cellKeys`): ↩ saves the cell, ⇥ and the arrows move the cursor, esc puts
+/// the cell back as it was, and a letter opens the list again.
 ///
 /// The text field holds only what is typed to narrow the list, never the
-/// envelope: whatever is left in it when the caret goes is dropped, so the
-/// row keeps the last envelope picked. The envelope itself is the field's
-/// prompt, dimmed while the caret is in the cell.
+/// envelope (`LedgerEditor.text`, while `flowId` is the pick): whatever is
+/// left in it when the cell is saved is dropped, so the row keeps the last
+/// envelope picked. The envelope itself is the field's prompt, dimmed, since
+/// the caret is in the cell.
 struct EnvelopeSelectCell: View {
-    @Binding var flowId: Uuid?
     /// What the cell says while it holds no envelope: the empty line before
     /// the vault has loaded, which then lands on the sticky default.
     let placeholder: String
     let store: AppStore
     let choices: EnvelopeChoiceModel
-    @FocusState.Binding var focus: CellFocus?
     let key: CellFocus
-    let onSubmit: () -> Void
+    let edited: EditedCell
 
-    @State private var query = ""
+    private var query: Binding<String> { edited.text }
 
     var body: some View {
         HStack(spacing: 4) {
-            TextField("", text: $query, prompt: Text(name ?? placeholder).foregroundStyle(promptTint))
+            TextField("", text: query, selection: edited.selection, prompt: Text(name ?? placeholder).foregroundStyle(Ink.text3))
                 .textFieldStyle(.plain)
                 .font(Face.row)
                 .foregroundStyle(Ink.text)
                 .accessibilityLabel(RowField.flow.label)
-                .accessibilityValue(query.isEmpty ? (name ?? placeholder) : query)
-                .focused($focus, equals: key)
-                .onSubmit(onSubmit)
-            // The mark of a select. A click on it opens the list whether or
-            // not the cell already has the caret, and closes it when open.
+                .accessibilityValue(query.wrappedValue.isEmpty ? (name ?? placeholder) : query.wrappedValue)
+                .focused(edited.focus, equals: key)
+            // The mark of a select. A click on it opens the list, and closes
+            // it when open.
             Image(systemName: "chevron.up.chevron.down")
                 .font(.system(size: 8, weight: .semibold))
                 .foregroundStyle(Ink.text3)
@@ -182,23 +180,22 @@ struct EnvelopeSelectCell: View {
                 .onTapGesture {
                     if isOwner {
                         choices.close()
-                        query = ""
+                        query.wrappedValue = ""
                     } else {
-                        focus = key
                         open()
                     }
                 }
                 .accessibilityHidden(true)
         }
-        .cellFocusRing(focus == key)
+        .cellFocusRing(true)
         .onKeyPress(.upArrow) { arrow(-1) }
         .onKeyPress(.downArrow) { arrow(1) }
         .onKeyPress(.return) {
             guard isOwner else { return .ignored }
             guard choices.picksOnReturn else {
-                // Nothing to change: the key saves the row.
+                // Nothing to change: the key saves the cell.
                 choices.close()
-                query = ""
+                query.wrappedValue = ""
                 return .ignored
             }
             choices.pick()
@@ -206,32 +203,27 @@ struct EnvelopeSelectCell: View {
         }
         .onKeyPress(.tab) {
             guard isOwner, choices.pick() else { return .ignored }
-            // On to CATEGORIA, as ⇥ would have gone. After the pick has
-            // reached the draft, or leaving the row would save the old one.
-            Task { focus = CellFocus(row: key.row, field: .category) }
+            // On to the next cell, as ⇥ would have gone: the pick is already
+            // in the editor, which the move saves.
+            edited.editor.move(.tab)
             return .handled
         }
         .onKeyPress(.escape) {
             guard isOwner else { return .ignored }
             choices.close()
-            query = ""
+            query.wrappedValue = ""
             return .handled
         }
-        // A click on the ENVELOPE cell of a closed row focuses it in the
-        // update that builds this view, where `onChange` does not fire.
+        .cellKeys(edited)
+        // A cell typed into from a letter opens the list narrowed to it.
         .onAppear {
-            if focus == key { open() }
+            open()
+            choices.filter(query.wrappedValue)
         }
-        .onChange(of: focus) { old, new in
-            if new == key {
-                open()
-            } else if old == key {
-                query = ""
-                if isOwner { choices.close() }
-            }
+        .onDisappear {
+            if isOwner { choices.close() }
         }
-        .onChange(of: query) { _, new in
-            guard focus == key else { return }
+        .onChange(of: query.wrappedValue) { _, new in
             // A letter typed after esc or a pick opens the list again; the
             // text emptied by a pick does not.
             if !isOwner {
@@ -250,32 +242,24 @@ struct EnvelopeSelectCell: View {
 
     /// The envelope's name; an archived one still has it.
     private var name: String? {
-        flowId.map { store.envelopeName($0) }
-    }
-
-    /// Dimmed under the caret, where it says what typing would replace.
-    private var promptTint: Color {
-        flowId == nil || focus == key ? Ink.text3 : Ink.text
+        edited.flowId.wrappedValue.map { store.envelopeName($0) }
     }
 
     private func open() {
         choices.open(
             owner: key,
             envelopes: EnvelopeChoiceModel.envelopes(in: store),
-            current: flowId
+            current: edited.flowId.wrappedValue
         ) { picked in
-            flowId = picked
-            query = ""
+            edited.flowId.wrappedValue = picked
+            query.wrappedValue = ""
         }
     }
 
+    /// ↑ ↓ belong to the list while it is open; closed, they move the cursor.
     private func arrow(_ delta: Int) -> KeyPress.Result {
-        guard focus == key else { return .ignored }
-        if isOwner {
-            choices.move(by: delta)
-        } else {
-            open()
-        }
+        guard isOwner else { return .ignored }
+        choices.move(by: delta)
         return .handled
     }
 }

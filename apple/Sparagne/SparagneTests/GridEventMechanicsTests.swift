@@ -98,10 +98,13 @@ struct GridEventMechanicsTests {
         #expect(sheet.editing)
         #expect(sheet.outsideClicks == 0)
 
-        // On another cell: that cell's own click selects it.
+        // On another cell: that cell's own click selects it. The click does
+        // not take the caret from the field on its way: a cell is no view
+        // the keyboard can go to.
         host.postClick(at: ProtoSheetView.center(of: 1))
         await host.settle { sheet.cursor == 1 }
         #expect(sheet.outsideClicks == 0)
+        #expect(sheet.focusLosses == 0)
         #expect(!sheet.editing)
         #expect(sheet.taps.last?.cell == 1)
 
@@ -112,6 +115,7 @@ struct GridEventMechanicsTests {
         host.postClick(at: ProtoSheetView.search)
         await host.settle { !sheet.editing }
         #expect(sheet.outsideClicks == 1)
+        #expect(sheet.focusLosses == 0)
         #expect(sheet.cursor == nil)
         #expect(sheet.cells[1] == "y")
         #expect(sheet.searchFocused)
@@ -201,6 +205,7 @@ struct GridEventMechanicsTests {
 
         probe.focus = CellFocus(row: nil, field: .category)
         await host.settle { host.fieldEditor != nil }
+        #expect(host.fieldEditor != nil)
         host.post(.tab)
         await host.settle { probe.moves.count == 1 }
         host.post(.backTab)
@@ -208,8 +213,8 @@ struct GridEventMechanicsTests {
         #expect(probe.moves == ["tab", "backTab"])
         #expect(probe.focus == CellFocus(row: nil, field: .category))
 
-        // The ENVELOPE cell opens its list with the caret, where ⇥ picks;
-        // esc closes it, and then ⇥ is the grid's again.
+        // The ENVELOPE cell opens its list as it becomes a field, and there
+        // ⇥ picks; esc closes it, and then ⇥ is the grid's again.
         probe.focus = CellFocus(row: nil, field: .flow)
         await host.settle { probe.envelopes.isOpen }
         #expect(probe.envelopes.isOpen)
@@ -237,6 +242,9 @@ private final class ProtoSheet {
     var outsideClicks = 0
     var taps: [(cell: Int, count: Int, command: Bool)] = []
     var searchFocused = false
+    /// The field lost the caret while it was still being typed into: what
+    /// the grid treats as the keyboard going elsewhere, and saves.
+    var focusLosses = 0
 
     func select(_ cell: Int) {
         cursor = cell
@@ -341,6 +349,9 @@ private struct ProtoSheetView: View {
             if new != nil, !sheet.editing { keysFocused = true }
         }
         .onChange(of: searchFocused) { _, now in sheet.searchFocused = now }
+        .onChange(of: fieldFocused) { was, now in
+            if was, !now, sheet.editing { sheet.focusLosses += 1 }
+        }
         // The field selects all it holds as it takes the caret: the caret
         // goes back after the keys typed so far.
         .onChange(of: fieldFocused) { _, now in
@@ -433,61 +444,55 @@ private struct ProtoSheetView: View {
 
 @Observable
 private final class TabProbe {
+    /// The cell being typed into: the only one drawn as a field.
     var focus: CellFocus?
     var moves: [String] = []
     let completion = CategoryCompletionModel()
     let envelopes = EnvelopeChoiceModel()
 }
 
-/// The CATEGORY and ENVELOPE cells as the grid holds them, with the grid's
-/// ⇥ and ⇧⇥ around them.
+/// The grid's CATEGORY and ENVELOPE cells as the grid holds them while they
+/// are typed into, with the keys they leave going to the probe as they go to
+/// the grid (`EditedCell.keys`).
 private struct TabProbeView: View {
     let store: AppStore
     let probe: TabProbe
 
     @FocusState private var focus: CellFocus?
-    @State private var category = ""
-    @State private var flowId: Uuid?
+    @State private var caret: TextSelection?
 
     var body: some View {
+        let edited = EditedCell(editor: store.ledgerEditor, focus: $focus, selection: $caret, typed: false) { press in
+            guard let move = GridKey.move(for: press), move == .tab || move == .backTab else { return .ignored }
+            probe.moves.append(move == .tab ? "tab" : "backTab")
+            return .handled
+        }
         HStack(spacing: 0) {
-            CategoryCell(
-                text: $category,
-                placeholder: "",
-                store: store,
-                completion: probe.completion,
-                focus: $focus,
-                key: CellFocus(row: nil, field: .category),
-                onSubmit: {}
-            )
-            .frame(width: 160)
-            .gridTabs(probe)
-            EnvelopeSelectCell(
-                flowId: $flowId,
-                placeholder: "",
-                store: store,
-                choices: probe.envelopes,
-                focus: $focus,
-                key: CellFocus(row: nil, field: .flow),
-                onSubmit: {}
-            )
-            .frame(width: 160)
-            .gridTabs(probe)
+            if probe.focus?.field == .category {
+                CategoryCell(
+                    placeholder: "",
+                    store: store,
+                    completion: probe.completion,
+                    key: CellFocus(row: nil, field: .category),
+                    edited: edited
+                )
+                .frame(width: 160)
+            }
+            if probe.focus?.field == .flow {
+                EnvelopeSelectCell(
+                    placeholder: "",
+                    store: store,
+                    choices: probe.envelopes,
+                    key: CellFocus(row: nil, field: .flow),
+                    edited: edited
+                )
+                .frame(width: 160)
+            }
             TextField("Next", text: .constant(""))
                 .frame(width: 160)
         }
         .frame(width: 900, height: 420, alignment: .topLeading)
         .onChange(of: probe.focus) { _, new in focus = new }
-        .onChange(of: focus) { _, new in if new != nil { probe.focus = new } }
-    }
-}
-
-private extension View {
-    func gridTabs(_ probe: TabProbe) -> some View {
-        onKeyPress(keys: [.tab, KeyEquivalent("\u{19}")]) { press in
-            probe.moves.append(press.key == .tab && !press.modifiers.contains(.shift) ? "tab" : "backTab")
-            return .handled
-        }
     }
 }
 

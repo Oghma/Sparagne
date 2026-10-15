@@ -288,15 +288,27 @@ struct RowDeleteButton: View {
 }
 
 extension View {
-    /// The focused cell (`.fbox`): a 20-point box on the raised ground with
-    /// a 1.5-point accent ring inside, reaching 5 points into the cell's
-    /// padding so the text does not move when the ring appears.
+    /// The cell being typed into (`.fbox`): a 20-point box on the raised
+    /// ground with a 1.5-point accent ring inside, reaching 5 points into the
+    /// cell's padding so the text does not move when the ring appears.
     func cellFocusRing(_ active: Bool) -> some View {
         padding(.horizontal, 5)
             .frame(height: 20)
             .background {
                 if active { RoundedRectangle(cornerRadius: 4).fill(Ink.raised) }
             }
+            .overlay {
+                if active { RoundedRectangle(cornerRadius: 4).strokeBorder(Ink.accent, lineWidth: 1.5) }
+            }
+            .padding(.horizontal, -5)
+    }
+
+    /// The selected cell, the cursor, while it is not being typed into: the
+    /// same ring in the same box, on the line's own ground, so the raised
+    /// fill is what says the caret is in it.
+    func cellSelectionRing(_ active: Bool) -> some View {
+        padding(.horizontal, 5)
+            .frame(height: 20)
             .overlay {
                 if active { RoundedRectangle(cornerRadius: 4).strokeBorder(Ink.accent, lineWidth: 1.5) }
             }
@@ -336,30 +348,63 @@ struct EmptyRowLines: View {
     }
 }
 
+// MARK: - The cursor on a line
+
+/// Where the grid's cursor is on a line, for the line it is on: the cell
+/// selected, and whether it is being typed into. Every other line gets `nil`
+/// and draws no ring.
+struct LineCursor: Equatable {
+    let field: RowField
+    let editing: Bool
+}
+
+/// A cell as the sheet draws it while it is not being typed into, which is
+/// every cell but one: its text, the whole column wide, with the cursor's
+/// ring when it is the selected cell (`cellSelectionRing`). A click selects
+/// it and a second one types into it (`LedgerGrid.click`).
+struct SheetCell<Content: View>: View {
+    var width: CGFloat?
+    var alignment: Alignment = .leading
+    let selected: Bool
+    let onClick: () -> Void
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GridCell(width: width, alignment: alignment) {
+            content
+                .frame(maxWidth: .infinity, alignment: alignment)
+                .cellSelectionRing(selected)
+        }
+        .onTapGesture(perform: onClick)
+    }
+}
+
 // MARK: - An existing row
 
+/// A stored row, drawn as text: every cell of it, including the rest of the
+/// row whose cell is being typed into, which alone is a field. A click on a
+/// cell selects it, two type into it (`LedgerGrid.click`); the keys that
+/// move the cursor and start typing are the grid's.
 struct LedgerRowView: View {
     let ordinal: Int
     let row: TransactionRow
     @Bindable var store: AppStore
     /// Draws the WALLET column when the View menu is showing it.
     var showsWallet = false
-    /// Non-nil while this row is the one being edited.
-    let draft: Binding<RowDraft>?
-    @FocusState.Binding var focus: CellFocus?
+    /// The cursor, while it is on this row.
+    let cursor: LineCursor?
+    /// What the cell being typed into needs; only that cell reads it.
+    let edited: EditedCell
     /// The grid's one completion list, for the CATEGORY cell.
     let completion: CategoryCompletionModel
     /// The grid's one envelope list, for the ENVELOPE cell.
     let envelopes: EnvelopeChoiceModel
-    let onOpen: (RowField) -> Void
-    let onCommit: () -> Void
-    let onCancel: () -> Void
+    /// A click on a cell of the row.
+    let onClick: (RowField) -> Void
     /// Deletes the row from its trash icon. Non-nil only while the icon
     /// shows: the row is under the pointer and may be deleted alone
     /// (`LedgerGrid.trashAction`).
     var onDelete: (() -> Void)?
-
-    private var editing: Bool { draft != nil }
 
     private var columns: LedgerColumnWidths { store.ledgerColumns }
 
@@ -371,87 +416,156 @@ struct LedgerRowView: View {
                     .foregroundStyle(Ink.text3)
             }
             // # holds no field of its own, but a click anywhere on a line
-            // should open it; DESCRIZIONE is the widest cell and the one most
-            // often retyped, so it takes the caret.
-            .onTapGesture { onOpen(.note) }
-
-            if let draft {
-                DayCell(day: draft.day, month: store.month, width: columns[.date], focus: $focus, key: key(.date))
-                envelopeCell(draft.flowId)
-                GridCell(width: columns[.category]) {
-                    CategoryCell(
-                        text: draft.category,
-                        placeholder: "",
-                        store: store,
-                        completion: completion,
-                        focus: $focus,
-                        key: key(.category),
-                        onSubmit: onCommit
-                    )
-                }
-                textCell(.note, width: nil)
-                if showsWallet { walletCell }
-                personCell
-                amountCell
-            } else {
-                display
-            }
+            // should land on it; DESCRIZIONE is the widest cell and the one
+            // most often retyped, so it takes the cursor.
+            .onTapGesture { onClick(.note) }
+            dateCell
+            envelopeCell
+            categoryCell
+            noteCell
+            if showsWallet { walletCell }
+            personCell
+            amountCell
             RowActionTrack {
                 if let onDelete { RowDeleteButton(action: onDelete) }
             }
         }
         .frame(height: Metrics.rowHeight)
         .contentShape(Rectangle())
-        .onKeyPress(.escape) {
-            guard editing else { return .ignored }
-            onCancel()
-            return .handled
-        }
     }
 
     private func key(_ field: RowField) -> CellFocus { CellFocus(row: row.id, field: field) }
 
-    // MARK: Read-only cells
+    /// The editor only ever types into a cell that can be typed into
+    /// (`LedgerCursor.isEditable`), so a field here is always one.
+    private func isEdited(_ field: RowField) -> Bool { cursor == LineCursor(field: field, editing: true) }
+
+    private func isSelected(_ field: RowField) -> Bool { cursor == LineCursor(field: field, editing: false) }
+
+    // MARK: The cells
 
     @ViewBuilder
-    private var display: some View {
-        GridCell(width: columns[.date]) {
-            DayLabel(date: row.occurredAt, tint: ink(Ink.text), struck: row.voided)
+    private var dateCell: some View {
+        if isEdited(.date) {
+            GridCell(width: columns[.date]) { DayCell(key: key(.date), edited: edited) }
+        } else {
+            SheetCell(width: columns[.date], selected: isSelected(.date), onClick: { onClick(.date) }) {
+                DayLabel(date: row.occurredAt, tint: ink(Ink.text), struck: row.voided)
+            }
         }
-        .onTapGesture { onOpen(.date) }
-        GridCell(width: columns[.flow]) { text(row.envelopeColumn, Ink.text2) }
-            .onTapGesture { onOpen(row.isTransfer ? .note : .flow) }
-        GridCell(width: columns[.category]) { text(row.category, categoryTint) }
-            .onTapGesture { onOpen(.category) }
-        GridCell {
-            HStack(spacing: 6) {
-                if row.note.isEmpty {
-                    text(TransactionRow.placeholder, Ink.text3)
-                } else {
-                    text(row.note, Ink.text)
-                }
-                if row.kind == .refund {
-                    RowTag(text: String(localized: "refund"), tint: Ink.positive)
-                }
-                if let route = row.transferRoute {
-                    RowTag(text: route, tint: ink(Ink.text2))
+    }
+
+    /// A transfer's envelopes are its two ends, as its wallets are
+    /// (`walletCell`): the cell can be selected, never typed into.
+    @ViewBuilder
+    private var envelopeCell: some View {
+        if isEdited(.flow), !row.isTransfer {
+            GridCell(width: columns[.flow]) {
+                EnvelopeSelectCell(
+                    placeholder: row.envelopeDisplay,
+                    store: store,
+                    choices: envelopes,
+                    key: key(.flow),
+                    edited: edited
+                )
+            }
+        } else {
+            SheetCell(width: columns[.flow], selected: isSelected(.flow), onClick: { onClick(.flow) }) {
+                text(row.envelopeColumn, Ink.text2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var categoryCell: some View {
+        if isEdited(.category) {
+            GridCell(width: columns[.category]) {
+                CategoryCell(placeholder: "", store: store, completion: completion, key: key(.category), edited: edited)
+            }
+        } else {
+            SheetCell(width: columns[.category], selected: isSelected(.category), onClick: { onClick(.category) }) {
+                text(row.category, categoryTint)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var noteCell: some View {
+        if isEdited(.note) {
+            GridCell { CellField(field: .note, key: key(.note), edited: edited) }
+        } else {
+            SheetCell(selected: isSelected(.note), onClick: { onClick(.note) }) {
+                HStack(spacing: 6) {
+                    if row.note.isEmpty {
+                        text(TransactionRow.placeholder, Ink.text3)
+                    } else {
+                        text(row.note, Ink.text)
+                    }
+                    if row.kind == .refund {
+                        RowTag(text: String(localized: "refund"), tint: Ink.positive)
+                    }
+                    if let route = row.transferRoute {
+                        RowTag(text: route, tint: ink(Ink.text2))
+                    }
                 }
             }
         }
-        .onTapGesture { onOpen(.note) }
-        if showsWallet {
-            GridCell(width: columns[.wallet]) { text(row.walletDisplay, Ink.text2) }
-                .onTapGesture { onOpen(row.isTransfer ? .note : .wallet) }
+    }
+
+    /// A transfer's wallets are its two ends, not a field: `UpdateTransaction`
+    /// moves them with `from_id`/`to_id`, which the grid does not edit, so the
+    /// cell can be selected, never typed into.
+    @ViewBuilder
+    private var walletCell: some View {
+        if isEdited(.wallet), !row.isTransfer {
+            GridCell(width: columns[.wallet]) { CellField(field: .wallet, key: key(.wallet), edited: edited) }
+        } else {
+            SheetCell(width: columns[.wallet], selected: isSelected(.wallet), onClick: { onClick(.wallet) }) {
+                text(row.walletDisplay, Ink.text2)
+            }
         }
-        // Who typed a row recorded for someone else is on hover only: the
-        // column stays one short name wide.
-        GridCell(width: columns[.person]) { text(row.person, Ink.text2) }
-            .help(ifAny: row.isOnBehalf ? Self.recordedByHelp(row.recordedBy) : nil)
-            .onTapGesture { onOpen(row.isPersonEditable ? .person : .note) }
-        GridCell(width: columns[.amount], alignment: .trailing) {
-            text(Self.amountText(row), amountTint)
+    }
+
+    /// Who typed a row recorded for someone else is on hover only: the
+    /// column stays one short name wide. A transfer is always its author's,
+    /// so its cell is never typed into.
+    @ViewBuilder
+    private var personCell: some View {
+        Group {
+            if isEdited(.person), row.isPersonEditable {
+                GridCell(width: columns[.person]) {
+                    CellField(
+                        field: .person,
+                        key: key(.person),
+                        edited: edited,
+                        hint: row.isOnBehalf ? LedgerAccessibility.recordedBy(row.recordedBy) : ""
+                    )
+                }
+            } else {
+                SheetCell(width: columns[.person], selected: isSelected(.person), onClick: { onClick(.person) }) {
+                    text(row.person, Ink.text2)
+                }
+            }
         }
-        .onTapGesture { onOpen(.amount) }
+        .help(ifAny: row.isOnBehalf ? Self.recordedByHelp(row.recordedBy) : nil)
+    }
+
+    @ViewBuilder
+    private var amountCell: some View {
+        if isEdited(.amount) {
+            GridCell(width: columns[.amount], alignment: .trailing) {
+                CellField(field: .amount, key: key(.amount), edited: edited, alignment: .trailing)
+            }
+        } else {
+            SheetCell(
+                width: columns[.amount],
+                alignment: .trailing,
+                selected: isSelected(.amount),
+                onClick: { onClick(.amount) }
+            ) {
+                text(Self.amountText(row), amountTint)
+            }
+        }
     }
 
     private func text(_ value: String, _ tint: Color) -> some View {
@@ -488,113 +602,83 @@ struct LedgerRowView: View {
         }
     }
 
-    // MARK: Editing cells
-
-    /// `hint` is what VoiceOver adds after the field's name and value.
-    private func textCell(_ field: RowField, width: CGFloat?, hint: String = "") -> some View {
-        GridCell(width: width) {
-            TextField("", text: binding(field))
-                .textFieldStyle(.plain)
-                .font(Face.row)
-                .foregroundStyle(Ink.text)
-                .accessibilityLabel(field.label)
-                .accessibilityHint(hint)
-                .focused($focus, equals: key(field))
-                .onSubmit(onCommit)
-                .cellFocusRing(focus == key(field))
-        }
-    }
-
-    private var amountCell: some View {
-        GridCell(width: columns[.amount], alignment: .trailing) {
-            TextField("", text: binding(.amount))
-                .textFieldStyle(.plain)
-                .font(Face.row)
-                .multilineTextAlignment(.trailing)
-                .foregroundStyle(Ink.text)
-                .accessibilityLabel(RowField.amount.label)
-                .focused($focus, equals: key(.amount))
-                .onSubmit(onCommit)
-                .cellFocusRing(focus == key(.amount))
-        }
-    }
-
-    /// A transfer's envelopes are its two ends, as its wallets are
-    /// (`walletCell`): the cell stays read-only for those rows.
-    @ViewBuilder
-    private func envelopeCell(_ flowId: Binding<Uuid?>) -> some View {
-        GridCell(width: columns[.flow]) {
-            if row.isTransfer {
-                // The route's tag is not drawn while the note is a field:
-                // the source stays here, the whole route on hover.
-                Text(row.envelopeColumn)
-                    .font(Face.row)
-                    .foregroundStyle(Ink.text3)
-                    .help(ifAny: row.transferRoute)
-            } else {
-                EnvelopeSelectCell(
-                    flowId: flowId,
-                    placeholder: row.envelopeDisplay,
-                    store: store,
-                    choices: envelopes,
-                    focus: $focus,
-                    key: key(.flow),
-                    onSubmit: onCommit
-                )
-            }
-        }
-    }
-
-    /// A transfer's wallets are its two ends, not a field: `UpdateTransaction`
-    /// moves them with `from_id`/`to_id`, which the grid does not edit, so the
-    /// cell stays read-only for those rows.
-    @ViewBuilder
-    private var walletCell: some View {
-        if row.isTransfer {
-            GridCell(width: columns[.wallet]) {
-                Text(row.walletDisplay)
-                    .font(Face.row)
-                    .foregroundStyle(Ink.text3)
-            }
-        } else {
-            textCell(.wallet, width: columns[.wallet])
-        }
-    }
-
-    /// A transfer is always its author's, so its cell stays read-only and
-    /// dim, as its wallets do (`walletCell`).
-    @ViewBuilder
-    private var personCell: some View {
-        if row.isPersonEditable {
-            textCell(
-                .person,
-                width: columns[.person],
-                hint: row.isOnBehalf ? LedgerAccessibility.recordedBy(row.recordedBy) : ""
-            )
-            .help(ifAny: row.isOnBehalf ? Self.recordedByHelp(row.recordedBy) : nil)
-        } else {
-            GridCell(width: columns[.person]) {
-                Text(row.person)
-                    .font(Face.row)
-                    .foregroundStyle(Ink.text3)
-            }
-        }
-    }
-
     /// "Registrata da Matteo", the tooltip of a row recorded for someone else.
     static func recordedByHelp(_ name: String) -> String {
         String(localized: "Recorded by \(name)")
     }
+}
 
-    private func binding(_ field: RowField) -> Binding<String> {
-        guard let draft else { return .constant("") }
-        switch field {
-        case .category: return draft.category
-        case .note: return draft.note
-        case .wallet: return draft.wallet
-        case .person: return draft.person
-        case .amount: return draft.amount
-        case .date, .flow: return .constant("")
+// MARK: - The cell being typed into
+
+/// What the one cell being typed into needs from the grid: the editor its
+/// text lives in (`LedgerEditor.text`, and `flowId` for ENVELOPE), the
+/// grid's focus and the caret, and the grid's handler for the keys the cell
+/// does not take for itself: ⇥ ⇧⇥ ↑ ↓ esc, and the keys typed while the
+/// caret was still on its way into the field (`LedgerGrid.fieldKey`).
+///
+/// One value for the whole grid, handed to every line: only the line the
+/// cursor is on reads it, in the one cell that is a field.
+struct EditedCell {
+    let editor: LedgerEditor
+    let focus: FocusState<CellFocus?>.Binding
+    let selection: Binding<TextSelection?>
+    /// Typing started from a key pressed on the selected cell, rather than
+    /// from ↩, F2 or a double click: the CATEGORY cell opens its list on
+    /// what was typed.
+    let typed: Bool
+    let keys: (KeyPress) -> KeyPress.Result
+
+    var text: Binding<String> { Bindable(editor).text }
+    var flowId: Binding<Uuid?> { Bindable(editor).flowId }
+}
+
+extension View {
+    /// The keys every cell being typed into shares, outside the keys of its
+    /// own: ↩ saves it and keeps it selected, and what the cell leaves goes
+    /// to the grid (`EditedCell.keys`). Outside, so the CATEGORY and ENVELOPE
+    /// lists, while open, take ↑ ↓ ↩ ⇥ and esc first.
+    func cellKeys(_ edited: EditedCell) -> some View {
+        onSubmit { edited.editor.confirm() }
+            .onKeyPress(phases: [.down, .repeat], action: edited.keys)
+    }
+}
+
+/// The cell being typed into, for the columns that are plain text:
+/// DESCRIZIONE, WALLET, PERSONA, IMPORTO, and DATA's day (`DayCell`).
+///
+/// `prompt` is what an empty cell says: the empty line's placeholders.
+struct CellField: View {
+    let field: RowField
+    let key: CellFocus
+    let edited: EditedCell
+    var prompt = ""
+    var alignment: TextAlignment = .leading
+    var tint: Color = Ink.text
+    /// What VoiceOver adds after the field's name and value.
+    var hint = ""
+
+    var body: some View {
+        textField
+            .textFieldStyle(.plain)
+            .font(Face.row)
+            .multilineTextAlignment(alignment)
+            .foregroundStyle(tint)
+            .accessibilityLabel(field.label)
+            .accessibilityHint(hint)
+            .focused(edited.focus, equals: key)
+            .cellFocusRing(true)
+            .cellKeys(edited)
+    }
+
+    @ViewBuilder
+    private var textField: some View {
+        if alignment == .trailing {
+            // A title, not a prompt: a prompt ignores the trailing alignment
+            // and would sit at the cell's left edge. Passed as a string so it
+            // is shown as is and not looked up in the catalog.
+            TextField(prompt, text: edited.text, selection: edited.selection)
+        } else {
+            TextField("", text: edited.text, selection: edited.selection, prompt: Text(prompt).foregroundStyle(Ink.text3))
         }
     }
 }
@@ -724,25 +808,34 @@ struct PendingRowView: View {
 
 // MARK: - The empty line
 
-/// Always the last line of the grid: fill it left to right and press ↩. An
-/// accent `+` in the # column says what it is for.
+/// Always the last line of the grid, filled cell by cell as any other line
+/// and registered as the cursor leaves it with an amount in it
+/// (`LedgerEditor.newLine`). An accent `+` in the # column says what it is
+/// for.
+///
+/// Its cells are drawn as text like a stored row's, what was typed into them
+/// or, while empty, what saving them would write: the sticky envelope and
+/// wallet, the author, the category the history suggests for the note (in
+/// `text2`, brighter than a plain placeholder, since it is what will be
+/// written) and a zero.
 struct NewRowView: View {
     @Bindable var store: AppStore
-    @Binding var draft: RowDraft
-    @FocusState.Binding var focus: CellFocus?
+    /// The cursor, while it is on this line.
+    let cursor: LineCursor?
+    let edited: EditedCell
     /// The grid's one completion list, for the CATEGORY cell.
     let completion: CategoryCompletionModel
     /// The grid's one envelope list, for the ENVELOPE cell.
     let envelopes: EnvelopeChoiceModel
-    let onCommit: () -> Void
-    /// esc threw the line away: the grid takes the keyboard back, so ⌘A and
-    /// ⌫ over a row have somewhere to land, as after esc on an open row.
-    var onCancel: () -> Void = {}
     /// With the column hidden the new row still lands on the sticky default
     /// wallet; showing it lets the wallet be picked per row.
     var showsWallet = false
+    /// A click on a cell of the line.
+    let onClick: (RowField) -> Void
 
     private var columns: LedgerColumnWidths { store.ledgerColumns }
+
+    private var line: RowDraft { edited.editor.newLine }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -752,171 +845,170 @@ struct NewRowView: View {
                     .foregroundStyle(Ink.accent)
                     .accessibilityHidden(true)
             }
-            DayCell(day: $draft.day, month: store.month, width: columns[.date], focus: $focus, key: CellFocus(row: nil, field: .date))
-            GridCell(width: columns[.flow]) {
-                EnvelopeSelectCell(
-                    flowId: $draft.flowId,
-                    placeholder: String(localized: "Envelope"),
-                    store: store,
-                    choices: envelopes,
-                    focus: $focus,
-                    key: CellFocus(row: nil, field: .flow),
-                    onSubmit: onCommit
+            .onTapGesture { onClick(.note) }
+            if isEdited(.date) {
+                GridCell(width: columns[.date]) { DayCell(key: key(.date), edited: edited) }
+            } else {
+                cell(.date, width: columns[.date], spoken: LedgerDate.day(line.day)) {
+                    DayLabel(date: line.day)
+                }
+            }
+            if isEdited(.flow) {
+                GridCell(width: columns[.flow]) {
+                    EnvelopeSelectCell(
+                        placeholder: String(localized: "Envelope"),
+                        store: store,
+                        choices: envelopes,
+                        key: key(.flow),
+                        edited: edited
+                    )
+                }
+            } else {
+                value(.flow, line.flowId.map { store.envelopeName($0) } ?? "", placeholder: envelopePlaceholder, width: columns[.flow])
+            }
+            if isEdited(.category) {
+                GridCell(width: columns[.category]) {
+                    CategoryCell(
+                        placeholder: line.suggestedCategory ?? String(localized: "Category"),
+                        placeholderTint: line.suggestedCategory == nil ? Ink.text3 : Ink.text2,
+                        store: store,
+                        completion: completion,
+                        key: key(.category),
+                        edited: edited
+                    )
+                }
+            } else {
+                value(
+                    .category,
+                    line.category,
+                    placeholder: line.suggestedCategory ?? String(localized: "Category"),
+                    placeholderTint: line.suggestedCategory == nil ? Ink.text3 : Ink.text2,
+                    width: columns[.category]
                 )
             }
-            GridCell(width: columns[.category]) {
-                CategoryCell(
-                    text: $draft.category,
-                    // The history's guess for the note, saved if the cell is
-                    // left empty (`RowDraft.suggestedCategory`); brighter than
-                    // a plain placeholder, since it is what will be written.
-                    placeholder: draft.suggestedCategory ?? String(localized: "Category"),
-                    placeholderTint: draft.suggestedCategory == nil ? Ink.text3 : Ink.text2,
-                    store: store,
-                    completion: completion,
-                    focus: $focus,
-                    key: CellFocus(row: nil, field: .category),
-                    onSubmit: onCommit
-                )
-            }
-            field($draft.note, .note, String(localized: "Description"), width: nil)
+            field(.note, line.note, placeholder: String(localized: "Description"), width: nil)
             if showsWallet {
                 field(
-                    $draft.wallet,
                     .wallet,
-                    store.defaultWalletName ?? String(localized: "Wallet"),
+                    line.wallet,
+                    placeholder: store.defaultWalletName ?? String(localized: "Wallet"),
                     width: columns[.wallet]
                 )
             }
             // The author until another name is typed; emptied, it still
             // means the author, and says so.
-            field($draft.person, .person, store.currentAuthor, width: columns[.person])
-            GridCell(width: columns[.amount], alignment: .trailing) {
-                let key = CellFocus(row: nil, field: .amount)
-                // A title, not a prompt: a prompt ignores the trailing
-                // alignment and would sit at the cell's left edge. A zero
-                // written as the column writes amounts, passed as a string so
-                // it is shown as is and not looked up in the catalog.
-                TextField(LedgerMoney.bare(0), text: $draft.amount)
-                    .textFieldStyle(.plain)
-                    .font(Face.row)
-                    .multilineTextAlignment(.trailing)
-                    .accessibilityLabel(RowField.amount.label)
-                    // A duplicated refund is saved as one, and says so in the
-                    // green the saved row will have.
-                    .foregroundStyle(draft.kind == .refund ? Ink.positive : Ink.text)
-                    .focused($focus, equals: key)
-                    .onSubmit(onCommit)
-                    .cellFocusRing(focus == key)
-            }
+            field(.person, line.person, placeholder: store.currentAuthor, width: columns[.person])
+            // A duplicated refund is saved as one, and says so in the green
+            // the saved row will have.
+            field(
+                .amount,
+                line.amount,
+                placeholder: LedgerMoney.bare(0),
+                width: columns[.amount],
+                alignment: .trailing,
+                tint: line.kind == .refund ? Ink.positive : Ink.text
+            )
             RowActionTrack()
         }
         .frame(height: Metrics.rowHeight)
         // One group VoiceOver can name, with the cells inside it.
         .accessibilityElement(children: .contain)
         .accessibilityLabel(String(localized: "New row"))
-        .onKeyPress(.escape) {
-            draft = RowDraft.blank(in: store)
-            focus = nil
-            onCancel()
-            return .handled
-        }
     }
 
-    private func prompt(_ text: String) -> Text {
-        Text(text).foregroundStyle(Ink.text3)
+    private func key(_ field: RowField) -> CellFocus { CellFocus(row: nil, field: field) }
+
+    private func isEdited(_ field: RowField) -> Bool { cursor == LineCursor(field: field, editing: true) }
+
+    /// No envelope picked yet: the line lands on the sticky one, which it
+    /// names while the vault has one.
+    private var envelopePlaceholder: String {
+        store.defaultFlowId.map { store.envelopeName($0) } ?? String(localized: "Envelope")
     }
 
+    /// A plain text cell: the field while it is typed into, its text or its
+    /// placeholder otherwise.
+    @ViewBuilder
     private func field(
-        _ text: Binding<String>,
         _ field: RowField,
-        _ placeholder: String,
-        width: CGFloat?
+        _ text: String,
+        placeholder: String,
+        width: CGFloat?,
+        alignment: Alignment = .leading,
+        tint: Color = Ink.text
     ) -> some View {
-        let key = CellFocus(row: nil, field: field)
-        return GridCell(width: width) {
-            TextField("", text: text, prompt: prompt(placeholder))
-                .textFieldStyle(.plain)
-                .font(Face.row)
-                .foregroundStyle(Ink.text)
-                .accessibilityLabel(field.label)
-                .focused($focus, equals: key)
-                .onSubmit(onCommit)
-                .cellFocusRing(focus == key)
+        if isEdited(field) {
+            GridCell(width: width, alignment: alignment) {
+                CellField(
+                    field: field,
+                    key: key(field),
+                    edited: edited,
+                    prompt: placeholder,
+                    alignment: alignment == .trailing ? .trailing : .leading,
+                    tint: tint
+                )
+            }
+        } else {
+            value(field, text, placeholder: placeholder, width: width, alignment: alignment, tint: tint)
         }
+    }
+
+    private func value(
+        _ field: RowField,
+        _ text: String,
+        placeholder: String,
+        placeholderTint: Color = Ink.text3,
+        width: CGFloat?,
+        alignment: Alignment = .leading,
+        tint: Color = Ink.text
+    ) -> some View {
+        let empty = text.isEmpty
+        return cell(field, width: width, alignment: alignment, spoken: empty ? placeholder : text) {
+            Text(empty ? placeholder : text)
+                .font(Face.row)
+                .foregroundStyle(empty ? placeholderTint : tint)
+        }
+    }
+
+    /// A cell not being typed into. VoiceOver reads it by its column with
+    /// what it says, and pressing it types into it, as a double click does.
+    private func cell<Content: View>(
+        _ field: RowField,
+        width: CGFloat?,
+        alignment: Alignment = .leading,
+        spoken: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        SheetCell(
+            width: width,
+            alignment: alignment,
+            selected: cursor == LineCursor(field: field, editing: false),
+            onClick: { onClick(field) }
+        ) {
+            content()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(field.label)
+        .accessibilityValue(spoken)
+        .accessibilityAction { edited.editor.edit(key(field)) }
     }
 }
 
 // MARK: - The date cell
 
-/// Shows `01 gio` and accepts `29`, `29/8` or `29/8/2026` while editing: a
-/// day alone stays inside the month on screen, which is how a ledger is filled
-/// in. Text that means no date leaves the day alone and the cell snaps back to
-/// it.
+/// DATA while it is typed into: the bare day number, which is what editing
+/// starts from, and `29`, `29/8` or `29/8/2026` accepted. A day alone stays
+/// inside the month on screen, which is how a ledger is filled in; text that
+/// means no date leaves the day alone (`LedgerDate.parseDay`, read as the
+/// cell is saved).
 ///
-/// The field is empty while it does not have the caret and `DayLabel` is drawn
-/// over it: a text field cannot set the weekday smaller and fainter than the
-/// day. The label lets clicks through, so a click still lands on the field.
+/// While not typed into the cell is `DayLabel`, the day and the weekday
+/// smaller and fainter, which a text field cannot draw.
 struct DayCell: View {
-    @Binding var day: Date
-    let month: MonthKey
-    /// The DATA column's, as dragged in the header.
-    let width: CGFloat
-    @FocusState.Binding var focus: CellFocus?
     let key: CellFocus
-
-    @State private var text = ""
-
-    init(day: Binding<Date>, month: MonthKey, width: CGFloat, focus: FocusState<CellFocus?>.Binding, key: CellFocus) {
-        _day = day
-        self.month = month
-        self.width = width
-        _focus = focus
-        self.key = key
-    }
+    let edited: EditedCell
 
     var body: some View {
-        GridCell(width: width) {
-            TextField("", text: $text)
-                .textFieldStyle(.plain)
-                .font(Face.row)
-                .foregroundStyle(Ink.text)
-                .accessibilityLabel(RowField.date.label)
-                .accessibilityValue(focus == key ? text : LedgerDate.day(day))
-                .focused($focus, equals: key)
-                .overlay(alignment: .leading) {
-                    if focus != key {
-                        DayLabel(date: day).allowsHitTesting(false)
-                    }
-                }
-                .cellFocusRing(focus == key)
-                // Clicking the DATA cell of a closed row focuses it in the
-                // same update that builds this view, so `onChange(of: focus)`
-                // never fires: without this the cell would open empty, and
-                // typing a day would not start from the one it had.
-                .onAppear { text = focus == key ? Self.number(day) : "" }
-                .onChange(of: focus) { old, new in
-                    if new == key {
-                        // Editing starts from the bare day number.
-                        text = Self.number(day)
-                    } else if old == key {
-                        // Only when the focus leaves this cell: `focus` is the
-                        // whole grid's, and every other cell changes it too.
-                        text = ""
-                    }
-                }
-                .onChange(of: text) { _, new in
-                    // The day is read back as it is typed, not on blur, so a
-                    // row committed from somewhere else (⇥ off the line, a
-                    // click on another row) still carries what this cell says.
-                    guard focus == key, let parsed = LedgerDate.parseDay(new, in: month) else { return }
-                    day = parsed
-                }
-        }
-    }
-
-    /// The bare day number, which is what editing starts from.
-    private static func number(_ date: Date, calendar: Calendar = .current) -> String {
-        "\(calendar.component(.day, from: date))"
+        CellField(field: .date, key: key, edited: edited)
     }
 }
