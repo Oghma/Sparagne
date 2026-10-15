@@ -25,7 +25,7 @@ struct SummaryTodoStrip: View {
     private func chip(_ item: SummaryTodoItem) -> some View {
         let label = SummaryText.todo(item.kind)
         return Button {
-            store.tab = item.tab
+            Task { await store.open(item) }
         } label: {
             HStack(spacing: 6) {
                 Circle()
@@ -53,6 +53,6 @@ struct SummaryTodoStrip: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction { store.tab = item.tab }
+        .accessibilityAction { Task { await store.open(item) } }
     }
 }

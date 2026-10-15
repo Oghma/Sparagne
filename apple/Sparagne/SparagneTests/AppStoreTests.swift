@@ -545,6 +545,80 @@ struct AppStoreTests {
         #expect(store.dueRecurringCount > 0)
         #expect(store.summaryTodo.first?.kind == .dueRecurring(count: store.dueRecurringCount))
         #expect(store.summaryTodo.first?.tab == .recurring)
+
+        // A click on that chip opens the Ricorrenze tab, nothing else moves.
+        let month = store.month
+        await store.open(try #require(store.summaryTodo.first))
+        #expect(store.tab == .recurring)
+        #expect(store.month == month)
+    }
+
+    @Test("The strip's rows without a category open the oldest of them in its own month and list, then the next")
+    func stripOpensRowsWithoutCategory() async throws {
+        let store = try await Self.onboarded()
+        let calendar = Calendar.current
+        let year = calendar.component(.year, from: Date())
+        // Early in the year the strip counts: another month than the one on
+        // screen, except in January, which still tells the lists apart.
+        let enelDay = try #require(calendar.date(from: DateComponents(year: year, month: 1, day: 2, hour: 12)))
+        let bookDay = try #require(calendar.date(from: DateComponents(year: year, month: 1, day: 3, hour: 12)))
+        store.month = MonthKey(enelDay)
+        store.direction = .income
+        await store.settle()
+        await store.addRow(day: enelDay, flowId: nil, category: nil, note: "Enel", amount: 12_201)
+        let enel = try #require(store.transactions.first { $0.note == "Enel" })
+        store.direction = .expenses
+        await store.settle()
+        await store.addRow(day: bookDay, flowId: nil, category: nil, note: "libro", amount: 1_800)
+        await store.addRow(day: bookDay, flowId: nil, category: "food", note: "pizza", amount: 1_250)
+        let book = try #require(store.transactions.first { $0.note == "libro" })
+        #expect(store.presentedError == nil)
+
+        // Where the user stood: this month, USCITE, a search, the summary.
+        store.month = MonthKey(Date())
+        store.searchText = "pizza"
+        store.tab = .summary
+        await store.settle()
+        let chip = try #require(store.summaryTodo.first { $0.id == "uncategorized" })
+        #expect(chip.kind == .uncategorized(count: 2))
+
+        // The oldest is an income: ENTRATE, on its month, selected.
+        await store.open(chip)
+        await store.settle()
+        #expect(store.tab == .ledger)
+        #expect(store.month == MonthKey(enelDay))
+        #expect(store.direction == .income)
+        #expect(store.searchText.isEmpty)
+        #expect(store.rows.contains { $0.id == enel.id })
+        #expect(store.selection.ids == [enel.id])
+
+        // Filed, the chip counts one less and opens the expense in USCITE.
+        await store.setSelectionCategory("Fotovoltaico")
+        store.tab = .summary
+        await store.settle()
+        let next = try #require(store.summaryTodo.first { $0.id == "uncategorized" })
+        #expect(next.kind == .uncategorized(count: 1))
+        await store.open(next)
+        await store.settle()
+        #expect(store.tab == .ledger)
+        #expect(store.direction == .expenses)
+        #expect(store.selection.ids == [book.id])
+    }
+
+    @Test("With no row left without a category, the chip opens the Mastro as it is")
+    func stripWithNothingLeftToFile() async throws {
+        let store = try await Self.onboarded()
+        let month = store.month
+        store.direction = .income
+        await store.settle()
+
+        await store.open(SummaryTodoItem(kind: .uncategorized(count: 1), tab: .ledger))
+
+        #expect(store.tab == .ledger)
+        #expect(store.month == month)
+        #expect(store.direction == .income)
+        #expect(store.revealedRow == nil)
+        #expect(store.presentedError == nil)
     }
 
     @Test("Revealing a top expense opens the Mastro on its month, the row selected for the grid to scroll to")

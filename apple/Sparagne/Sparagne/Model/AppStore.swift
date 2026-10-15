@@ -796,7 +796,7 @@ final class AppStore {
     /// The strip from what is loaded: only what this account can act on, so
     /// a vault it only reads has no periods to decide, recurring or of the
     /// allocation plan. The rows without a category follow PERSONA, like the
-    /// ledger the chip opens.
+    /// lookup their chip opens (`revealFirstUncategorized`).
     private func rebuildSummaryTodo() {
         summaryTodo = SummaryTodo.items(
             dueRecurring: actionableDueCount,

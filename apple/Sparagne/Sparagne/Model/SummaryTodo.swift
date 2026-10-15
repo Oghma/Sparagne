@@ -35,8 +35,10 @@ enum SummaryTodo {
     /// totals, whose system row Uncategorized counts the rows without one.
     ///
     /// Those totals are read with the PERSONA filter, so under it the count
-    /// is that person's rows without a category: the ledger the chip opens
-    /// keeps the filter, and shows the same rows.
+    /// is that person's rows without a category. The chip opens the oldest
+    /// of them, looked up in the same year under the same filter
+    /// (`AppStore.revealFirstUncategorized`): the Mastro alone shows one
+    /// month and one direction, which rarely hold them.
     static func items(
         dueRecurring: Int,
         pendingAllocation: PendingAllocation?,
