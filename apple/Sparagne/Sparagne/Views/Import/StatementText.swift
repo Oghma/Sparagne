@@ -62,6 +62,60 @@ enum StatementText {
         }
     }
 
+    /// The review's KIND cell: what the row is taken for, in the kind
+    /// column's lowercase words, a `BySign` as the kind it resolved to and a
+    /// transfer with its direction, the other wallet being written beside it.
+    static func rowKind(_ action: StatementAction, resolved: TransactionKind?) -> String {
+        switch action {
+        case .bySign: kind(resolved)
+        case .expense: kind(.expense)
+        case .income: kind(.income)
+        case .refund: kind(.refund)
+        case .transferIn: String(localized: "transfer from")
+        case .transferOut: String(localized: "transfer to")
+        case .skip: String(localized: "skip")
+        }
+    }
+
+    /// What becomes of a row that matched a transaction already in the
+    /// vault, as the review's menu offers it. `skip` keeps the transaction
+    /// there as the bank's row, claimed so that no later statement takes it
+    /// for one of its own.
+    static func matchChoice(_ choice: StatementMatchChoice) -> String {
+        switch choice {
+        case .skip: String(localized: "Keep the one already there")
+        case .moveExisting: String(localized: "Move it here")
+        case .importAnyway: String(localized: "Import anyway")
+        }
+    }
+
+    /// What each choice does, for the menu's tooltip and VoiceOver's hint.
+    static func matchChoiceDetail(_ choice: StatementMatchChoice) -> String {
+        switch choice {
+        case .skip: String(localized: "The transaction already in the vault stands for this row from now on, and this row is not imported.")
+        case .moveExisting: String(localized: "The transaction entered by hand moves into this statement’s wallet, and this row is not imported.")
+        case .importAnyway: String(localized: "This row is imported as well, beside the transaction already in the vault.")
+        }
+    }
+
+    /// The transaction a flagged row matched, on the dim line under it:
+    /// `2026-09-14 · Bar Centrale · Bar · in Cash`, or for a transfer
+    /// `2026-09-14 · Ricarica · from ING to Revolut`.
+    static func existing(_ view: TransactionView, names: NameBook) -> String {
+        let row = TransactionRow(view: view, names: names)
+        var parts = [CoreDate.day(row.occurredAt)]
+        if !row.note.isEmpty { parts.append(row.note) }
+        if row.isTransfer {
+            let from = names.wallet(view.fromId) ?? names.flow(view.fromId) ?? TransactionRow.placeholder
+            let to = names.wallet(view.toId) ?? names.flow(view.toId) ?? TransactionRow.placeholder
+            parts.append(String(localized: "from \(from) to \(to)"))
+        } else {
+            parts.append(row.category)
+            parts.append(String(localized: "in \(row.walletDisplay)"))
+        }
+        return parts.joined(separator: " \u{00B7} ")
+    }
+
     static func action(_ choice: StatementActionChoice) -> String {
         switch choice {
         case .expense: String(localized: "As expense")

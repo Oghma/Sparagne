@@ -15,9 +15,10 @@ struct StatementImportSheet: View {
     let store: AppStore
     @State private var model: StatementImportModel
     @State private var choosingFile = false
-    /// The list under the review's CATEGORY field being typed into
-    /// (`StatementReview`). Held here because the footer's ↩ and esc are
-    /// the list's while it is open.
+    /// The list under the CATEGORY field being typed into, the review's
+    /// (`StatementReview`) or a description rule's (`StatementMappingEditor`).
+    /// Held here because the footer's ↩ and esc are the list's while it is
+    /// open.
     @State private var completion = CategoryCompletionModel()
     @Environment(\.dismiss) private var dismiss
 
@@ -25,8 +26,10 @@ struct StatementImportSheet: View {
     /// banks call their exports.
     private static let fileTypes: [UTType] = [.commaSeparatedText, .tabSeparatedText, .plainText, .text]
 
-    /// Wider and taller than the other sheets: the review has eight columns.
-    private static let size = CGSize(width: 880, height: 640)
+    /// Wider and taller than the other sheets: the review has nine columns,
+    /// an editable note among them. Still narrower than the window's
+    /// narrowest (`ContentView`).
+    private static let size = CGSize(width: 1080, height: 640)
 
     /// `model` is for previews, which open the sheet on a file already read.
     init(store: AppStore, model: StatementImportModel? = nil) {
@@ -76,8 +79,9 @@ struct StatementImportSheet: View {
         case .file:
             filePage
         case .mapping:
-            ScrollView { StatementMappingEditor(model: model) }
+            ScrollView { StatementMappingEditor(model: model, completion: completion) }
                 .scrollBounceBehavior(.basedOnSize)
+                .hangingCategoryList(completion)
         case .review:
             StatementReview(model: model, completion: completion)
         case .report:
@@ -171,8 +175,12 @@ struct StatementImportSheet: View {
     /// Cancel (esc), the way back, and the page's next move (↩). On the
     /// review, esc goes back to the columns rather than closing the sheet,
     /// so a stray esc never throws the mapping away; and while a CATEGORY
-    /// field's list is open both keys are the list's (`completing`), or ↩
-    /// would pick and import at once.
+    /// field's list is open, on the review or in a description rule, both
+    /// keys are the list's (`completing`), or ↩ would pick and move on at
+    /// once.
+    ///
+    /// An import with nothing new to add still runs when it moves rows
+    /// entered by hand into the statement's wallet.
     @ViewBuilder
     private var buttons: some View {
         if store.isReadOnly {
@@ -183,22 +191,34 @@ struct StatementImportSheet: View {
                 FormCancelButton { dismiss() }
                 FormPrimaryButton(title: String(localized: "Choose File…")) { choosingFile = true }
             case .mapping:
-                FormCancelButton { dismiss() }
+                FormCancelButton(shortcut: !completion.isOpen) { dismiss() }
                 Button(String(localized: "Choose Another File…")) { choosingFile = true }
                     .buttonStyle(.chrome(.bordered))
-                FormPrimaryButton(title: String(localized: "Preview")) { model.step = .review }
+                FormPrimaryButton(title: String(localized: "Preview"), shortcut: !completion.isOpen) { model.step = .review }
                     .disabled(model.preview == nil || model.previewProblem != nil)
             case .review:
                 FormCancelButton(title: String(localized: "Back"), shortcut: !completion.isOpen) { model.step = .mapping }
                     .disabled(model.isImporting)
-                FormPrimaryButton(title: String(localized: "Import \(model.counts.new) rows"), shortcut: !completion.isOpen) {
+                FormPrimaryButton(title: importTitle, shortcut: !completion.isOpen) {
                     Task { await model.runImport() }
                 }
-                .disabled(model.counts.new == 0 || model.isImporting || model.isPreviewing || model.preview == nil)
+                .disabled(
+                    model.counts.new + model.counts.moves == 0
+                        || model.isImporting || model.isPreviewing || model.preview == nil
+                )
             case .report:
                 FormPrimaryButton(title: String(localized: "Done")) { dismiss() }
             }
         }
+    }
+
+    /// What the review's ↩ does: import the new rows, or, with none, move
+    /// the rows entered by hand that the statement found elsewhere.
+    private var importTitle: String {
+        let counts = model.counts
+        return counts.new == 0 && counts.moves > 0
+            ? String(localized: "Move \(counts.moves) rows")
+            : String(localized: "Import \(counts.new) rows")
     }
 }
 
@@ -308,18 +328,30 @@ private struct ProblemNote: View {
 /// `To import 4 · Already imported 0 · Skipped 4 · Invalid 0 · Rounded 0`:
 /// the preview's counts as the import will make them, drawn like the
 /// window's status line (`StatusLine`), with the invalid rows in the
-/// negative ink and the zeros dimmed.
+/// negative ink and the zeros dimmed. The rows matched to a transaction
+/// already in the vault, and the ones of those to be moved, follow only
+/// when there are any.
 private struct StatementCountsLine: View {
     let counts: StatementImportModel.Counts
 
     private var items: [(label: String, value: Int, tint: Color)] {
-        [
+        var items: [(label: String, value: Int, tint: Color)] = [
             (String(localized: "To import"), counts.new, Ink.text),
             (String(localized: "Already imported"), counts.alreadyImported, Ink.text),
             (String(localized: "Skipped"), counts.skipped, Ink.text),
             (String(localized: "Invalid"), counts.invalid, Ink.negative),
             (String(localized: "Rounded"), counts.rounded, Ink.text),
         ]
+        if counts.possibleDuplicates > 0 {
+            items.append((String(localized: "Possible duplicates"), counts.possibleDuplicates, Ink.text))
+        }
+        if counts.matchedTransfers > 0 {
+            items.append((String(localized: "Transfers already there"), counts.matchedTransfers, Ink.text))
+        }
+        if counts.moves > 0 {
+            items.append((String(localized: "To move"), counts.moves, Ink.text))
+        }
+        return items
     }
 
     var body: some View {

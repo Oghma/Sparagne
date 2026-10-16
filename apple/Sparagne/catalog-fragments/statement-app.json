@@ -1,0 +1,184 @@
+{
+  "%lld rows": {
+    "en": {"one": "%lld row", "other": "%lld rows"},
+    "it": {"one": "%lld riga", "other": "%lld righe"}
+  },
+  "%lld rows looked like a transaction already in the vault and were not imported.": {
+    "en": {
+      "one": "%lld row looked like a transaction already in the vault and was not imported.",
+      "other": "%lld rows looked like a transaction already in the vault and were not imported."
+    },
+    "it": {
+      "one": "%lld riga somigliava a una transazione già nel vault e non è stata importata.",
+      "other": "%lld righe somigliavano a transazioni già nel vault e non sono state importate."
+    }
+  },
+  "%lld transactions entered by hand were moved into the statement’s wallet.": {
+    "en": {
+      "one": "%lld transaction entered by hand was moved into the statement’s wallet.",
+      "other": "%lld transactions entered by hand were moved into the statement’s wallet."
+    },
+    "it": {
+      "one": "%lld transazione inserita a mano è stata spostata nel wallet dell’estratto conto.",
+      "other": "%lld transazioni inserite a mano sono state spostate nel wallet dell’estratto conto."
+    }
+  },
+  "%lld transfers were already there from the other wallet’s side and were not imported again.": {
+    "en": {
+      "one": "%lld transfer was already there from the other wallet’s side and was not imported again.",
+      "other": "%lld transfers were already there from the other wallet’s side and were not imported again."
+    },
+    "it": {
+      "one": "%lld trasferimento era già presente dal lato dell’altro wallet e non è stato importato di nuovo.",
+      "other": "%lld trasferimenti erano già presenti dal lato dell’altro wallet e non sono stati importati di nuovo."
+    }
+  },
+  "A row entered by hand in one of these wallets that looks like a statement row is moved into the statement’s wallet instead of being imported twice. Chosen anew for every file.": {
+    "en": "A row entered by hand in one of these wallets that looks like a statement row is moved into the statement’s wallet instead of being imported twice. Chosen anew for every file.",
+    "it": "Una riga inserita a mano in uno di questi wallet che somiglia a una riga dell’estratto conto viene spostata nel wallet dell’estratto conto invece di essere importata due volte. Si sceglie di nuovo per ogni file."
+  },
+  "A rule finds the rows whose description holds its text, case aside, and says what they are, their category and a cleaner note, before the types do. The first rule that matches decides.": {
+    "en": "A rule finds the rows whose description holds its text, case aside, and says what they are, their category and a cleaner note, before the types do. The first rule that matches decides.",
+    "it": "Una regola trova le righe la cui descrizione contiene il suo testo, maiuscole o minuscole che siano, e ne decide il tipo, la categoria e una nota più pulita, prima dei tipi. Decide la prima regola che corrisponde."
+  },
+  "Already in the vault: %@": {
+    "en": "Already in the vault: %@",
+    "it": "Già nel vault: %@"
+  },
+  "Also look for duplicates in": {
+    "en": "Also look for duplicates in",
+    "it": "Cerca doppioni anche in"
+  },
+  "Contains": {
+    "en": "Contains",
+    "it": "Contiene"
+  },
+  "Description rules": {
+    "en": "Description rules",
+    "it": "Regole sulla descrizione"
+  },
+  "Duplicates also in": {
+    "en": "Duplicates also in",
+    "it": "Doppioni anche in"
+  },
+  "Found anywhere in the bank’s description, case aside": {
+    "en": "Found anywhere in the bank’s description, case aside",
+    "it": "Cercato ovunque nella descrizione della banca, maiuscole o minuscole che siano"
+  },
+  "Import anyway": {
+    "en": "Import anyway",
+    "it": "Importa comunque"
+  },
+  "Keep the one already there": {
+    "en": "Keep the one already there",
+    "it": "Tieni quella già presente"
+  },
+  "Keep the type": {
+    "en": "Keep the type",
+    "it": "Mantieni il tipo"
+  },
+  "Make a Rule from This Row…": {
+    "en": "Make a Rule from This Row…",
+    "it": "Crea una regola da questa riga…"
+  },
+  "Matching transaction": {
+    "en": "Matching transaction",
+    "it": "Transazione corrispondente"
+  },
+  "Move %lld rows": {
+    "en": {"one": "Move %lld row", "other": "Move %lld rows"},
+    "it": {"one": "Sposta %lld riga", "other": "Sposta %lld righe"}
+  },
+  "Move it here": {
+    "en": "Move it here",
+    "it": "Spostala qui"
+  },
+  "Moved": {
+    "en": "Moved",
+    "it": "Spostate"
+  },
+  "No other wallet": {
+    "en": "No other wallet",
+    "it": "Nessun altro wallet"
+  },
+  "Possible duplicates": {
+    "en": "Possible duplicates",
+    "it": "Possibili doppioni"
+  },
+  "Remove Rule": {
+    "en": "Remove Rule",
+    "it": "Rimuovi regola"
+  },
+  "Replaces the bank’s text as the note; empty keeps it": {
+    "en": "Replaces the bank’s text as the note; empty keeps it",
+    "it": "Sostituisce come nota il testo della banca; vuota lo lascia"
+  },
+  "Rows dated before this day are not imported.": {
+    "en": "Rows dated before this day are not imported.",
+    "it": "Le righe con data precedente a questo giorno non vengono importate."
+  },
+  "Rows of this file the rule decides": {
+    "en": "Rows of this file the rule decides",
+    "it": "Righe di questo file decise dalla regola"
+  },
+  "Rule for rows like this one": {
+    "en": "Rule for rows like this one",
+    "it": "Regola per le righe come questa"
+  },
+  "Start day": {
+    "en": "Start day",
+    "it": "Giorno di partenza"
+  },
+  "The transaction already in the vault stands for this row from now on, and this row is not imported.": {
+    "en": "The transaction already in the vault stands for this row from now on, and this row is not imported.",
+    "it": "La transazione già nel vault vale d’ora in poi per questa riga, che non viene importata."
+  },
+  "The transaction entered by hand moves into this statement’s wallet, and this row is not imported.": {
+    "en": "The transaction entered by hand moves into this statement’s wallet, and this row is not imported.",
+    "it": "La transazione inserita a mano passa nel wallet di questo estratto conto, e questa riga non viene importata."
+  },
+  "This row is imported as well, beside the transaction already in the vault.": {
+    "en": "This row is imported as well, beside the transaction already in the vault.",
+    "it": "Anche questa riga viene importata, accanto alla transazione già nel vault."
+  },
+  "To move": {
+    "en": "To move",
+    "it": "Da spostare"
+  },
+  "Transfers already there": {
+    "en": "Transfers already there",
+    "it": "Trasferimenti già presenti"
+  },
+  "Whole file": {
+    "en": "Whole file",
+    "it": "Tutto il file"
+  },
+  "contains…": {
+    "en": "contains…",
+    "it": "contiene…"
+  },
+  "from %@ to %@": {
+    "en": "from %@ to %@",
+    "it": "da %@ a %@"
+  },
+  "in %@": {
+    "en": "in %@",
+    "it": "in %@"
+  },
+  "note…": {
+    "en": "note…",
+    "it": "nota…"
+  },
+  "skip": {
+    "en": "skip",
+    "it": "salta"
+  },
+  "transfer from": {
+    "en": "transfer from",
+    "it": "trasferimento da"
+  },
+  "transfer to": {
+    "en": "transfer to",
+    "it": "trasferimento verso"
+  }
+}

@@ -6,10 +6,13 @@ import SparagneCore
 /// re-runs the preview, whose counts sit under the page.
 ///
 /// Drawn with the pieces every form of the app shares (`FormKit`), flat on
-/// the sheet: two columns of groups, with the sample and the type rules
-/// across both, since they need the width.
+/// the sheet: two columns of groups, with the sample, the type rules and the
+/// description rules across both, since they need the width.
 struct StatementMappingEditor: View {
     @Bindable var model: StatementImportModel
+    /// The list under a description rule's category field, hung by the
+    /// sheet outside the page's scroll view (`hangingCategoryList`).
+    let completion: CategoryCompletionModel
 
     @Environment(\.formMetrics) private var metrics
 
@@ -33,6 +36,7 @@ struct StatementMappingEditor: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             types
+            descriptionRules
         }
         .padding(.bottom, 4)
     }
@@ -72,8 +76,63 @@ struct StatementMappingEditor: View {
             FormRow(String(localized: "Envelope")) {
                 FormPicker(label: String(localized: "Envelope"), selection: $model.flowId, options: flows, title: flowName)
             }
+            FormRow(String(localized: "Duplicates also in")) { alsoCheck }
+            FormRow(String(localized: "Start day")) { startDay }
             FormValueRow(String(localized: "Time zone"), value: model.timezone)
         }
+    }
+
+    /// The other active wallets, any of them ticked: a row entered there by
+    /// hand that looks like a statement row is moved into the statement's
+    /// wallet rather than imported twice. The statement's own wallet is
+    /// always searched, so it is not offered. Never remembered: every file
+    /// starts with none ticked.
+    private var alsoCheck: some View {
+        let others = model.counterWallets
+        let checked = others.filter { model.isAlsoChecked($0.id) }.map(\.name)
+        return FormMenu(
+            label: String(localized: "Also look for duplicates in"),
+            value: checked.isEmpty ? String(localized: "No other wallet") : checked.joined(separator: ", ")
+        ) {
+            ForEach(others, id: \.id) { wallet in
+                Toggle(wallet.name, isOn: Binding(
+                    get: { model.isAlsoChecked(wallet.id) },
+                    set: { model.setAlsoChecked($0, wallet: wallet.id) }
+                ))
+            }
+        }
+        .disabled(others.isEmpty)
+        .help(String(localized: "A row entered by hand in one of these wallets that looks like a statement row is moved into the statement’s wallet instead of being imported twice. Chosen anew for every file."))
+    }
+
+    /// Off, the whole file is read; on, the rows dated before the day are
+    /// skipped, so a bank's history from before the vault took it over
+    /// stays out.
+    private var startDay: some View {
+        HStack(spacing: 10) {
+            FormSwitch(label: String(localized: "Start day"), isOn: model.since != nil) { on in
+                model.since = on ? Self.firstOfThisMonth : nil
+            }
+            if let since = model.since {
+                DayField(
+                    label: String(localized: "Start day"),
+                    day: Binding(get: { model.since ?? since }, set: { model.since = $0 })
+                )
+                .frame(width: 150)
+            } else {
+                Text(String(localized: "Whole file"))
+                    .font(Face.ui(metrics.fontSize))
+                    .foregroundStyle(Ink.text3)
+            }
+        }
+        .help(String(localized: "Rows dated before this day are not imported."))
+    }
+
+    /// Where a start day switched on begins: the first of today's month.
+    private static var firstOfThisMonth: NaiveDate {
+        let calendar = Calendar.current
+        let start = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+        return CoreDate.day(start)
     }
 
     /// A wallet by id, or the prompt to choose one.
@@ -402,6 +461,261 @@ struct StatementMappingEditor: View {
                 }
             }
         }
+    }
+
+    // MARK: - Description rules
+
+    /// Rules on the bank's text, tried in order before the types: the first
+    /// whose text the description holds decides the row's kind, category
+    /// and note. A line per rule, its fields under the type rules' columns.
+    private var descriptionRules: some View {
+        VStack(alignment: .leading, spacing: metrics.rowSpacing) {
+            HStack(spacing: 8) {
+                FormGroupLabel(String(localized: "Description rules"))
+                Spacer(minLength: 8)
+                Button {
+                    model.addDescriptionRule()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(String(localized: "Add Rule"))
+                    }
+                    .font(Face.ui(11, .medium))
+                    .foregroundStyle(Ink.text2)
+                    .padding(.horizontal, 8)
+                    .frame(height: 22)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+            }
+            if model.mapping.descriptionRules.isEmpty {
+                FormNote(
+                    String(localized: "A rule finds the rows whose description holds its text, case aside, and says what they are, their category and a cleaner note, before the types do. The first rule that matches decides."),
+                    indented: false
+                )
+            } else {
+                ForEach(model.mapping.descriptionRules.indices, id: \.self) { index in
+                    DescriptionRuleEditor(model: model, index: index, layout: .line, completion: completion)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - A description rule
+
+/// One description rule, edited in place: the text to look for, what the
+/// rows it finds are ("Keep the type" leaves that to the type rules), the
+/// other wallet of a transfer or the category of an entry, the note that
+/// replaces the bank's text, and a way to remove it.
+///
+/// A line under the type rules on the mapping page, with the rows of the
+/// file it decides; a small form in the review's popover
+/// (`StatementReview`), opened on a rule made from a row.
+struct DescriptionRuleEditor: View {
+    enum Layout { case line, form }
+
+    @Bindable var model: StatementImportModel
+    let index: Int
+    let layout: Layout
+    /// The list under the category field: hung by the page around a line,
+    /// drawn under the field in the form.
+    let completion: CategoryCompletionModel
+
+    @Environment(\.formMetrics) private var metrics
+
+    /// The remove button's track, as the type rules have it.
+    private static let removeWidth: CGFloat = 20
+    /// "12 righe" with room to spare.
+    private static let countWidth: CGFloat = 60
+
+    var body: some View {
+        if model.mapping.descriptionRules.indices.contains(index) {
+            switch layout {
+            case .line: line
+            case .form: form
+            }
+        }
+    }
+
+    private var line: some View {
+        HStack(spacing: 8) {
+            containsField.frame(width: metrics.labelWidth)
+            actionPicker
+            detail
+            noteField
+            Text(String(localized: "\(model.matchCount(ofRule: index)) rows"))
+                .font(Face.ui(metrics.fontSize - 1))
+                .foregroundStyle(Ink.text3)
+                .lineLimit(1)
+                .frame(width: Self.countWidth, alignment: .trailing)
+                .help(String(localized: "Rows of this file the rule decides"))
+            SetupIconButton(symbol: "xmark", help: String(localized: "Remove"), label: String(localized: "Remove")) {
+                model.removeDescriptionRule(at: index)
+            }
+            .frame(width: Self.removeWidth)
+        }
+        .frame(minHeight: metrics.controlHeight + 2)
+    }
+
+    private var form: some View {
+        VStack(alignment: .leading, spacing: metrics.rowSpacing) {
+            FormRow(String(localized: "Contains")) { containsField }
+            FormRow(String(localized: "Kind")) { actionPicker }
+            if isTransfer {
+                FormRow(String(localized: "Wallet")) { walletPicker }
+            } else if takesCategory {
+                FormRow(String(localized: "Category")) { categoryField }
+                if completion.isOpen {
+                    CategoryCompletionList(completion: completion)
+                        .padding(.leading, metrics.labelWidth + 8)
+                }
+            }
+            FormRow(String(localized: "Note")) { noteField }
+            FormNote(String(localized: "\(model.matchCount(ofRule: index)) rows"))
+        }
+    }
+
+    // MARK: Fields
+
+    private var containsField: some View {
+        FormTextField(
+            label: String(localized: "Contains"),
+            text: Binding(
+                get: { rule?.contains ?? "" },
+                set: { new in update { $0.contains = new } }
+            ),
+            prompt: String(localized: "contains…")
+        )
+        .help(String(localized: "Found anywhere in the bank’s description, case aside"))
+    }
+
+    /// "Keep the type" first: the rule then only cleans the note or picks
+    /// the category, and the type rules still say what the row is.
+    private var actionPicker: some View {
+        FormPicker(
+            label: String(localized: "Kind"),
+            selection: Binding(
+                get: { rule?.action.map(StatementActionChoice.init) },
+                set: { choice in
+                    let kept = currentAction
+                    update { rule in rule.action = choice.map { picked in picked.action(keeping: kept) } }
+                }
+            ),
+            options: [nil] + StatementActionChoice.allCases.map { Optional($0) },
+            title: { $0.map(StatementText.action) ?? String(localized: "Keep the type") }
+        )
+    }
+
+    /// Beside the kind: the other wallet of a transfer, the category of an
+    /// entry, nothing for a skip; an empty slot keeps the columns.
+    @ViewBuilder
+    private var detail: some View {
+        if isTransfer {
+            walletPicker
+        } else if takesCategory {
+            categoryField
+        } else {
+            Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+        }
+    }
+
+    private var walletPicker: some View {
+        FormPicker(
+            label: String(localized: "Wallet"),
+            selection: Binding(
+                get: { rule?.action?.counterWalletId },
+                set: { wallet in update { $0.action = $0.action?.withCounterWallet(wallet) } }
+            ),
+            options: [nil] + model.counterWallets.map { Optional($0.id) },
+            title: walletName
+        )
+    }
+
+    private var categoryField: some View {
+        RuleCategoryField(
+            text: Binding(
+                get: { rule?.category ?? "" },
+                set: { new in update { $0.category = new.trimmingCharacters(in: .whitespaces).isEmpty ? nil : new } }
+            ),
+            owner: "rule-\(index)",
+            store: model.store,
+            completion: completion
+        )
+    }
+
+    private var noteField: some View {
+        FormTextField(
+            label: String(localized: "Note"),
+            text: Binding(
+                get: { rule?.note ?? "" },
+                set: { new in update { $0.note = new.trimmingCharacters(in: .whitespaces).isEmpty ? nil : new } }
+            ),
+            prompt: String(localized: "note…")
+        )
+        .help(String(localized: "Replaces the bank’s text as the note; empty keeps it"))
+    }
+
+    // MARK: The rule
+
+    /// The rule by position, `nil` once it is gone: a field still focused
+    /// while its rule is removed reads and writes nothing instead of
+    /// trapping.
+    private var rule: StatementDescriptionRule? {
+        model.mapping.descriptionRules.indices.contains(index) ? model.mapping.descriptionRules[index] : nil
+    }
+
+    private func update(_ change: (inout StatementDescriptionRule) -> Void) {
+        guard model.mapping.descriptionRules.indices.contains(index) else { return }
+        change(&model.mapping.descriptionRules[index])
+    }
+
+    private var currentAction: StatementAction { rule?.action ?? .skip }
+
+    private var isTransfer: Bool {
+        rule?.action.map { StatementActionChoice($0).isTransfer } ?? false
+    }
+
+    /// "Keep the type" may well leave an entry, so it keeps the field.
+    private var takesCategory: Bool {
+        rule?.action.map(StatementImportModel.takesCategory) ?? true
+    }
+
+    private func walletName(_ id: Uuid?) -> String {
+        guard let id else { return String(localized: "Choose…") }
+        return model.store.wallets.first { $0.id == id }?.name ?? TransactionRow.placeholder
+    }
+}
+
+/// A category field of a description rule: the box of a `FormTextField`,
+/// completing as the review's CATEGORY field does (`completing`), with its
+/// own owner so that several rules can each open the list under their own
+/// field.
+private struct RuleCategoryField: View {
+    @Binding var text: String
+    let owner: String
+    let store: AppStore
+    let completion: CategoryCompletionModel
+
+    @FocusState private var focused: Bool
+    @Environment(\.formMetrics) private var metrics
+
+    var body: some View {
+        FormBox(focused: metrics.showsFocus && focused) {
+            TextField(
+                String(localized: "Category"),
+                text: $text,
+                prompt: Text(String(localized: "category…")).foregroundStyle(Ink.text3)
+            )
+            .textFieldStyle(.plain)
+            .labelsHidden()
+            .focused($focused)
+            .accessibilityLabel(String(localized: "Category"))
+            .completing(text: $text, owner: owner, isFocused: focused, store: store, completion: completion)
+        }
+        .categoryListAnchor(owner: owner, isFocused: focused, store: store, completion: completion)
     }
 }
 
