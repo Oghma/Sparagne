@@ -1137,6 +1137,46 @@
         }
       }
     },
+    "%lld transactions were deleted and replaced by the transfers they stood for.": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transaction was deleted and replaced by the transfer it stood for."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transactions were deleted and replaced by the transfers they stood for."
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transazione è stata eliminata e sostituita dal trasferimento che rappresentava."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld transazioni sono state eliminate e sostituite dai trasferimenti che rappresentavano."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld transfers": {
       "localizations": {
         "en": {
@@ -2613,6 +2653,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Palette comandi…"
+          }
+        }
+      }
+    },
+    "Confirm %lld matches": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Confirm %lld match"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Confirm %lld matches"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Conferma %lld corrispondenza"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Conferma %lld corrispondenze"
+                }
+              }
+            }
           }
         }
       }
@@ -5185,6 +5265,22 @@
         }
       }
     },
+    "Likely another row’s: imported by default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Likely another row’s: imported by default"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forse è di un’altra riga: verrà importata"
+          }
+        }
+      }
+    },
     "Limit": {
       "localizations": {
         "en": {
@@ -7737,6 +7833,38 @@
         }
       }
     },
+    "Replace it with the transfer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace it with the transfer"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sostituiscila con il trasferimento"
+          }
+        }
+      }
+    },
+    "Replaced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replaced"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sostituite"
+          }
+        }
+      }
+    },
     "Replaces the bank’s text as the note; empty keeps it": {
       "localizations": {
         "en": {
@@ -9785,6 +9913,22 @@
         }
       }
     },
+    "This row is imported as the transfer it is, and the income or expense that stood for it is deleted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This row is imported as the transfer it is, and the income or expense that stood for it is deleted."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questa riga viene importata come il trasferimento che è, e l’entrata o l’uscita che lo rappresentava viene eliminata."
+          }
+        }
+      }
+    },
     "This row is imported as well, beside the transaction already in the vault.": {
       "localizations": {
         "en": {
@@ -9989,6 +10133,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Da spostare"
+          }
+        }
+      }
+    },
+    "To replace": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To replace"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Da sostituire"
           }
         }
       }
