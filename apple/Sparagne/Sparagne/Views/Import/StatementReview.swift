@@ -626,13 +626,16 @@ struct StatementReportView: View {
     private static let lineColumn: CGFloat = 70
 
     /// A figure of the report, as the summary's cards show one: the label
-    /// over the number, the number dimmed at zero.
+    /// over the number, the number dimmed at zero. With all eight figures
+    /// out, a long label ("Trasferimenti già presenti") shrinks a little
+    /// rather than wrap and push its number below the others.
     private func figure(_ label: String, _ value: UInt32, _ tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .font(Face.label)
                 .foregroundStyle(Ink.text3)
                 .lineLimit(1)
+                .minimumScaleFactor(0.75)
             Text(verbatim: String(value))
                 .font(Face.display)
                 .foregroundStyle(value == 0 ? Ink.text3 : tint)
