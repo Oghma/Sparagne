@@ -2180,7 +2180,7 @@
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Prima del giorno di partenza"
+            "value": "Prima della data di inizio"
           }
         }
       }
@@ -5265,22 +5265,6 @@
         }
       }
     },
-    "Likely another row’s: imported by default": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Likely another row’s: imported by default"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Forse è di un’altra riga: verrà importata"
-          }
-        }
-      }
-    },
     "Limit": {
       "localizations": {
         "en": {
@@ -5505,18 +5489,34 @@
         }
       }
     },
-    "Maybe its other side: choose Replace if so": {
+    "Maybe another row’s; imported unless you choose Keep": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Maybe its other side: choose Replace if so"
+            "value": "Maybe another row’s; imported unless you choose Keep"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Forse è l’altra metà: scegli Sostituisci se lo è"
+            "value": "Forse è di un’altra riga: si importa, salvo «Tieni»"
+          }
+        }
+      }
+    },
+    "Maybe its other side: if so, choose Replace": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maybe its other side: if so, choose Replace"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forse è l’altro lato del trasferimento: in tal caso scegli «Sostituiscila»"
           }
         }
       }
@@ -8937,6 +8937,22 @@
         }
       }
     },
+    "Something changed after syncing: check the rows marked and import again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something changed after syncing: check the rows marked and import again."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualcosa è cambiato dopo la sincronizzazione: controlla le righe segnate e importa di nuovo."
+          }
+        }
+      }
+    },
     "Something went wrong": {
       "localizations": {
         "en": {
@@ -9092,7 +9108,7 @@
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Giorno di partenza"
+            "value": "Data di inizio"
           }
         }
       }
