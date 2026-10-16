@@ -134,8 +134,9 @@ aside, decides the row's kind, category and a cleaner note, so
 The preview shows what happens to every row. Each row can be given another
 kind (a transfer names the other wallet), note, category (prefilled from the
 vault's history) and envelope, or be left out; its context menu makes a
-description rule from it. A row with the same kind and amount as a transaction
-already in the vault, at most 3 days apart, in the statement's wallet or in
+description rule from it. A row with the same amount going the same way as a
+transaction already in the vault (an expense for money out, an income or a
+refund for money in), at most 3 days apart, in the statement's wallet or in
 one ticked under "Duplicates also in" (chosen anew for every file), is a
 possible duplicate and is not imported: the transaction found stands for it,
 and one found in another wallet, such as a spend typed by hand into Cash, is
