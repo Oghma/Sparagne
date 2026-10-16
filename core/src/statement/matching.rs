@@ -14,11 +14,12 @@
 //! The vault is read once per preview, around the rows' dates: the live
 //! incomes, expenses, refunds and transfers between wallets with a leg on
 //! the statement's wallet, on one of [`StatementOptions::also_check_wallets`]
-//! or on a wallet a transfer row names, opening balances and whatever is
-//! dated before [`StatementOptions::since`] left out, and the claims and
-//! moves of the log. The transactions that stand for the rows already
-//! imported (their own, or the one their claim, move or replacement names)
-//! match nothing.
+//! or on a wallet a transfer row names, opening balances left out, as are,
+//! dated before [`StatementOptions::since`], the entries of the wallets also
+//! checked and the transfers with them; and the claims and moves of the log.
+//! The transactions that stand for the rows already imported (their own,
+//! the one their claim, move or replacement names, and the transfer that
+//! took the place of an entry they named) match nothing.
 //!
 //! A row and a transaction are as many days apart as their calendar dates,
 //! each in its own offset. Each amount is paired on its own, in one pass for

@@ -89,8 +89,12 @@
 //! Every preview matches the rows against the vault again; what earlier
 //! imports decided is read back from their claims, moves and replacements in
 //! the log (see "The import"). Days apart are counted between calendar
-//! dates, each in its own offset. Nothing dated before
-//! [`StatementOptions::since`] is ever a match.
+//! dates, each in its own offset. Dated before [`StatementOptions::since`],
+//! an entry of a wallet also checked, or a transfer between the imported
+//! wallet and one also checked (the bank funded from Cash the day before the
+//! start), is never a match; the imported wallet's own rows and the other
+//! banks' sides of a transfer are, as a bank's start day is not the
+//! others'.
 //!
 //! - The other side of a transfer: a row that would be new or waits for its
 //!   wallet (6 and 7), taken for a transfer or by its sign, matches a live
@@ -132,7 +136,8 @@
 //! - in a wallet also checked, an entry a claim or a move names stands for a
 //!   row of another statement and never matches; one an import wrote does
 //!   (the user's own sheet, imported there once);
-//! - in the wallet a transfer row names, any live entry may.
+//! - in the wallet a transfer row names, any live entry may (see below for
+//!   when it is replaced by default).
 //!
 //! Opening balances, voided rows and the transactions that stand for the rows
 //! of this statement already imported (their own, or the one their claim,
@@ -150,30 +155,41 @@
 //! user's [`StatementRowOverride::on_match`] (`Skip` when the user's `skip`
 //! leaves the row out), else the default: `ImportAnyway` for a match near
 //! the file's edges that stands for another export's row (see above),
-//! `MoveExisting` for a duplicate found in a wallet also checked,
-//! `ReplaceExisting` for an entry standing for the transfer, `Skip` for any
-//! other. `Skip` says the transaction already there stands for the row, and
-//! the import records it. `MoveExisting` reads as `Skip` but for a duplicate
-//! found in a wallet also checked; `ReplaceExisting` reads as the default but
-//! for an entry standing for the transfer. `ImportAnyway` gives the row back
-//! what it was (new with its command, or waiting for its wallet), with its
-//! match still in `existing`; the transaction stays taken in this preview,
-//! so no other row of it gets it, and nothing records it. A row replacing
-//! its match stays `PossibleDuplicate`, and is written.
+//! `MoveExisting` for a duplicate found in a wallet also checked, `Skip` for
+//! any other duplicate or transfer. `Skip` says the transaction already
+//! there stands for the row, and the import records it. `MoveExisting` reads
+//! as `Skip` but for a duplicate found in a wallet also checked;
+//! `ReplaceExisting` reads as the default but for an entry standing for the
+//! transfer. `ImportAnyway` gives the row back what it was (new with its
+//! command, or waiting for its wallet), with its match still in `existing`;
+//! the transaction stays taken in this preview, so no other row of it gets
+//! it, and nothing records it.
+//!
+//! An entry standing for the transfer is replaced by default only when it
+//! very likely is its other side: the named wallet's statement row (its
+//! import wrote it, or its claim or move names it), or an entry dated the
+//! row's day or a day off. Otherwise, and near the file's edges, the row is
+//! imported beside it by default, its match still shown, for the user to
+//! replace it. Keeping the entry in the transfer's place makes no sense, so
+//! `Skip` and `MoveExisting` read as `ImportAnyway` there; the user's `skip`
+//! leaves the row out (`skipped_by_you`) and the entry as it is, claimed for
+//! nothing, `match_choice` still saying what including the row would do. A
+//! row replacing its match stays `PossibleDuplicate`, and is written.
 //!
 //! # The import
 //!
 //! [`Core::import_statement`] runs one command per new row, oldest first,
 //! with the row's id. A new transfer between wallets is claimed on the
 //! imported wallet's side right after it. A row replacing its match is
-//! written in the same place, as its transfer under its own id, followed by
-//! the `VoidTransaction` of the entry (`replace`; after the transfer, so a
-//! refused transfer leaves the entry as it was), the claim of its own side,
-//! and, when the entry was the other wallet's statement row (an import wrote
-//! it under its own command's id, that row's), the claim of the other side
-//! under that row's claim id: the transfer stands for both rows now. Then,
-//! oldest first, every flagged row left out is recorded. Each of these
-//! commands has an id derived from the row's, so writing it twice is a
+//! written in the same place, in one batch, all of it or nothing on this
+//! device: its transfer under its own id, the `VoidTransaction` of the entry
+//! (`replace`), the claim of its own side, and, when the entry stood for the
+//! named wallet's statement row, the claim of that wallet's side under the
+//! entry's own claim id (the other row's id when its import wrote the
+//! entry): the transfer stands for both rows now, and a preview of the other
+//! statement follows the entry its row names to the transfer. Then, oldest
+//! first, every flagged row left out is recorded. Each of these commands has
+//! an id derived from the row's (or the entry's), so writing it twice is a
 //! no-op and the row reads as imported from then on:
 //!
 //! - a duplicate whose choice is `MoveExisting` is moved into the imported
@@ -195,13 +211,15 @@
 //! of the transfer on the wallet it names. Once both banks of a transfer are
 //! imported, both its sides are claimed.
 //!
-//! Refused rows, voids, claims and moves land in the report on their line (a
-//! claim is refused, like any update, on an entry whose envelope or wallet is
-//! archived, or a transfer touching an archived wallet); a storage error
-//! stops the import (every command before it stays, and a new run
-//! deduplicates them). A replacing row counts among the possible duplicates,
-//! and its transfer among the rows executed; claims are counted nowhere
-//! else, moves in [`StatementReport::moved`].
+//! Refused rows, replacements, claims and moves land in the report on their
+//! line (a claim is refused, like any update, on an entry whose envelope or
+//! wallet is archived, or a transfer touching an archived wallet; a refused
+//! replacement writes nothing at all); a storage error stops the import
+//! (every command before it stays, and a new run deduplicates them). A
+//! replacing row counts among the possible duplicates, and its transfer
+//! among the rows executed and, rounded, among the rows rounded, in the
+//! preview as in the report; claims are counted nowhere else, moves in
+//! [`StatementReport::moved`].
 //!
 //! # Known limits
 //!
@@ -229,6 +247,20 @@
 //!   or `to_id` alone.
 //! - A `Skip` is not undone by importing again: the row reads as imported
 //!   from then on. What to do: type the row by hand.
+//! - The server applies a replacement one command at a time, as it does
+//!   every batch: if another device archives either wallet first, it may
+//!   refuse the transfer and accept the void. What to do: type the movement
+//!   again.
+//! - Replacing an income that was already shared out into envelopes takes
+//!   it out of Unallocated, which can go below zero. What to do: move the
+//!   money back, or decide the allocation again.
+//! - A transfer row replaces one entry only: a bonifico typed by hand into
+//!   one bank and imported as an income into the other leaves one of the
+//!   two. What to do: void it by hand.
+//! - A short file read again with another mapping has most of its rows near
+//!   its edges, and these are imported again by default, their match shown.
+//!   What to do: choose `Skip` on them, or keep the mapping of a file
+//!   already imported.
 //!
 //! # Ids
 //!
@@ -392,12 +424,16 @@ pub struct StatementOptions {
     /// IANA name used for rows without an offset, e.g. `Europe/Rome`.
     pub timezone: String,
     /// Wallets other than `wallet_id` where a hand-entered row may be the
-    /// duplicate of a statement row: a row found there is moved into
-    /// `wallet_id` by default ([`StatementMatchChoice::MoveExisting`]).
+    /// duplicate of a statement row: a duplicate found there is moved into
+    /// `wallet_id` by default ([`StatementMatchChoice::MoveExisting`]), and an
+    /// entry there standing for a transfer row may be replaced by it
+    /// ([`StatementMatchChoice::ReplaceExisting`]). Never a wallet that is
+    /// itself a statement's.
     #[uniffi(default = [])]
     pub also_check_wallets: Vec<Uuid>,
     /// Rows dated before this day (in their own offset) are skipped with
-    /// `before_start`.
+    /// `before_start`; entries of the wallets also checked, and transfers
+    /// with them, dated before it match no row.
     #[uniffi(default = None)]
     pub since: Option<NaiveDate>,
 }
@@ -406,21 +442,25 @@ pub struct StatementOptions {
 /// or [`StatementRowStatus::MatchedTransfer`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum StatementMatchChoice {
-    /// Leave the row out: the transaction already there stands for it.
+    /// Leave the row out: the transaction already there stands for it, and
+    /// the import records it. On an entry standing for the row's transfer it
+    /// reads as `ImportAnyway`.
     Skip,
     /// Import the row as if nothing matched it.
     ImportAnyway,
     /// Leave the row out and move the transaction it matched into the
     /// statement's wallet (`UpdateTransaction` with its `wallet_id`). Only for
     /// a possible duplicate found in one of
-    /// [`StatementOptions::also_check_wallets`]; anywhere else it reads as
-    /// `Skip`.
+    /// [`StatementOptions::also_check_wallets`]; on an entry standing for the
+    /// row's transfer it reads as `ImportAnyway`, anywhere else as `Skip`.
     MoveExisting,
     /// Void the entry the row matched and import the row as the transfer
-    /// between wallets it is: for a transfer row whose other side is already
-    /// in the vault as an income, expense or refund (the other bank's row
-    /// imported without a rule, or typed by hand). Only for such a match;
-    /// anywhere else it reads as the default.
+    /// between wallets it is, all at once: for a transfer row whose other
+    /// side is already in the vault as an income, expense or refund (the
+    /// other bank's row imported without a rule, or typed by hand). The
+    /// default only when the entry very likely is that side (the other
+    /// bank's statement row, or dated the row's day or a day off). Only for
+    /// such a match; anywhere else it reads as the default.
     ReplaceExisting,
 }
 
@@ -442,8 +482,10 @@ pub struct StatementRowOverride {
     /// unknown envelope is ignored.
     #[uniffi(default = None)]
     pub flow_id: Option<Uuid>,
-    /// What becomes of a flagged row, over the default (move a duplicate
-    /// found in another wallet, skip any other).
+    /// What becomes of a flagged row, over the default (import it anyway
+    /// near the file's edges, move a duplicate found in another wallet,
+    /// replace an entry very likely standing for the row's transfer, import
+    /// beside one less likely, skip any other).
     #[uniffi(default = None)]
     pub on_match: Option<StatementMatchChoice>,
 }
@@ -453,12 +495,15 @@ pub struct StatementRowOverride {
 pub enum StatementRowStatus {
     New,
     AlreadyImported,
-    /// A transaction already in the vault looks like this row: the money
-    /// moving the same way (an expense, or an income or a refund), the same
-    /// amount, at most 3 days apart, in the statement's wallet or in one
-    /// of [`StatementOptions::also_check_wallets`]. It is in
+    /// An entry already in the vault looks like this row: the money moving
+    /// the same way (an expense, or an income or a refund), the same amount,
+    /// at most 3 days apart, in the statement's wallet or in one of
+    /// [`StatementOptions::also_check_wallets`]; or, for a transfer row, an
+    /// entry standing for its transfer, at most 4 days apart (in the wallet
+    /// it names, the money moving the other way). It is in
     /// [`StatementRow::existing`], and [`StatementRow::match_choice`] says
-    /// what the import does.
+    /// what the import does; a row replacing its entry stays flagged and is
+    /// written.
     PossibleDuplicate,
     /// The other side of a transfer between wallets already in the vault:
     /// same amount, the right direction, at most 4 days apart. It is in
@@ -545,8 +590,10 @@ pub struct StatementPreview {
     pub already_imported: u32,
     pub skipped: u32,
     pub invalid: u32,
+    /// New rows rounded, and rows replacing their match rounded.
     pub rounded: u32,
-    /// Rows flagged [`StatementRowStatus::PossibleDuplicate`].
+    /// Rows flagged [`StatementRowStatus::PossibleDuplicate`], those
+    /// replacing their match included.
     pub possible_duplicates: u32,
     /// Rows flagged [`StatementRowStatus::MatchedTransfer`].
     pub matched_transfers: u32,
@@ -557,12 +604,14 @@ pub struct StatementPreview {
 /// Outcome of [`Core::import_statement`].
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
 pub struct StatementReport {
+    /// Rows written, the transfer of a row replacing its match included.
     pub executed: u32,
     pub deduplicated: u32,
     pub skipped: u32,
     pub rounded: u32,
     pub rejected: Vec<StatementRejection>,
-    /// Possible duplicates left out, moved ones included.
+    /// Possible duplicates: left out (moved ones included), or replacing
+    /// their match.
     pub possible_duplicates: u32,
     /// Matched transfers left out.
     pub matched_transfers: u32,
