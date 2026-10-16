@@ -185,6 +185,17 @@ struct StatementReviewTests {
 
         model.setAction(.bySign, for: pos)
         #expect(model.overrides == [StatementRowOverride(line: 3, category: nil, note: nil, skip: false, action: .refund)])
+
+        // Planned again with the user's kind, the row says what it was
+        // before it (`baseAction`): put back to the kind By sign gives, the
+        // edit goes.
+        model.setAction(.income, for: pos)
+        await model.refreshPreview()
+        let edited = try Self.row(model, line: 2)
+        #expect(edited.action == .income)
+        #expect(edited.baseAction == .bySign)
+        model.setAction(.expense, for: edited)
+        #expect(model.editedActions == [3: .refund])
     }
 
     // MARK: - What re-runs the preview
@@ -589,6 +600,7 @@ struct StatementReviewTests {
         topup.status = .possibleDuplicate
         topup.existing = income
         topup.matchChoice = .replaceExisting
+        topup.defaultChoice = .replaceExisting
         #expect(StatementImportModel.isReplace(topup))
         #expect(StatementImportModel.replaces(topup))
         #expect(StatementImportModel.isFlagged(topup))
@@ -620,6 +632,7 @@ struct StatementReviewTests {
         var beside = topup
         beside.status = .new
         beside.matchChoice = .importAnyway
+        beside.defaultChoice = .importAnyway
         #expect(StatementImportModel.isReplace(beside))
         #expect(!StatementImportModel.replaces(beside))
         #expect(StatementImportModel.isFlagged(beside))
