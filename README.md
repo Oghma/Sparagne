@@ -148,19 +148,20 @@ into the statement's wallet or the row imported anyway; one in the statement's
 wallet is kept or the row imported anyway. A wallet forgotten under
 "Duplicates also in" cannot be made up for by importing the file again: its
 rows are in by then. The review and the mapping page name the wallets whose
-entries look like new rows of the file, with a button that ticks them. The
-other side of a transfer between two of your
+entries look like new rows of the file, never one a statement goes to, with a
+button that ticks them. The other side of a transfer between two of your
 wallets, already recorded from the other bank's statement or by hand, is
 recognised at most 4 days apart and not imported twice; recorded as an income
 or expense instead, it can be deleted and replaced by the transfer, the
-default only when the entry is at most a day apart and not in a wallet kept
-by hand. Any matched row can be left out with its box, which writes and
-records nothing. Near a file's first or last days, a match that another
-export's row already stands for is more likely that row's neighbour: the row
-is imported by default, and the review says so. A synced vault is synced
-before the preview and again before the import; if the plan changed
-meanwhile, nothing is written and the rows that changed are marked. Importing
-the same file again adds nothing.
+default only when the entry is at most a day apart and not in a wallet
+searched under "Duplicates also in". Any matched row can be left out with its
+box, which writes and records nothing. Near a file's first or last days, a
+match that another export's row already stands for is more likely that row's
+neighbour: the row is imported by default, and the review says so. A synced
+vault is synced before the preview and again before the import; if the plan
+changed meanwhile, or the preview had not caught up with the last change,
+nothing is written and the review says so. Importing the same file again adds
+nothing.
 
 File › Export All Transactions… writes every transaction of the vault as CSV,
 voided rows and transfers included. File › Back Up Database… saves a
