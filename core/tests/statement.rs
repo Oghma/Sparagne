@@ -82,6 +82,7 @@ fn options(wallet: Uuid) -> StatementOptions {
         timezone: "Europe/Rome".to_string(),
         also_check_wallets: Vec::new(),
         since: None,
+        statement_wallets: Vec::new(),
     }
 }
 
@@ -4130,6 +4131,124 @@ fn rows_that_look_like_entries_of_a_wallet_not_checked_are_counted() {
     );
     assert!(preview.lookalikes.is_empty());
     assert_eq!(preview.possible_duplicates, 2);
+}
+
+#[test]
+fn a_statements_wallet_is_never_advised() {
+    let mut fx = setup();
+    let (bank, revolut) = two_banks(&mut fx);
+    // Revolut's statement wrote two new rows and nothing else.
+    let revolut_text = bank_csv(&[
+        bank_row("14/09/2026", "STREAMING", "-9,99"),
+        bank_row("14/09/2026", "CAFFE", "-2,00"),
+    ]);
+    import_with(
+        &mut fx,
+        &revolut_text,
+        &bank_mapping(),
+        &options(revolut),
+        &no_overrides(),
+    );
+    let text = bank_csv(&[
+        bank_row("16/09/2026", "STREAMING", "-9,99"),
+        bank_row("16/09/2026", "BAR", "-2,00"),
+    ]);
+    let unknown = preview_with(&fx, &text, &bank_mapping(), &options(bank), &no_overrides());
+    assert_eq!(
+        unknown.lookalikes,
+        [statement::StatementLookalike {
+            wallet_id: revolut,
+            rows: 2
+        }]
+    );
+    let known = StatementOptions {
+        statement_wallets: vec![revolut],
+        ..options(bank)
+    };
+    let preview = preview_with(&fx, &text, &bank_mapping(), &known, &no_overrides());
+    assert!(preview.lookalikes.is_empty());
+}
+
+#[test]
+fn the_other_banks_row_a_weekend_away_is_replaced_when_its_wallet_is_a_statements() {
+    for (arrived, known, expected) in [
+        (3, true, StatementMatchChoice::ReplaceExisting),
+        (5, true, StatementMatchChoice::ReplaceExisting),
+        (3, false, StatementMatchChoice::ImportAnyway),
+        (5, false, StatementMatchChoice::ImportAnyway),
+    ] {
+        let mut fx = setup();
+        let (ing, revolut) = two_banks(&mut fx);
+        // Revolut imported the bonifico as an income, days after ING sent it.
+        let incoming = bank_csv(&[bank_row(
+            &format!("0{arrived}/10/2026"),
+            "BONIFICO DA ING",
+            "200,00",
+        )]);
+        import_with(
+            &mut fx,
+            &incoming,
+            &bank_mapping(),
+            &options(revolut),
+            &no_overrides(),
+        );
+        let options = StatementOptions {
+            statement_wallets: if known { vec![revolut] } else { Vec::new() },
+            ..options(ing)
+        };
+        let preview = preview_with(
+            &fx,
+            &bonifico_out(),
+            &to_revolut(revolut),
+            &options,
+            &no_overrides(),
+        );
+        let bonifico = row(&preview, 2);
+        assert!(bonifico.existing.is_some(), "{arrived} {known}");
+        assert_eq!(bonifico.match_choice, Some(expected), "{arrived} {known}");
+        if known {
+            let report = import_with(
+                &mut fx,
+                &bonifico_out(),
+                &to_revolut(revolut),
+                &options,
+                &no_overrides(),
+            );
+            assert_eq!(report.executed, 1);
+            assert_eq!(wallet_balance(&fx.core, fx.vault, ing), -20_000);
+            assert_eq!(wallet_balance(&fx.core, fx.vault, revolut), 20_000);
+        }
+    }
+}
+
+#[test]
+fn an_entry_before_the_start_day_is_never_replaced_by_default() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let bank = new_wallet(&mut fx, "Bank");
+    // Typed into the bank on the 31st; its own statement row is before the
+    // start and skipped.
+    typed_on(&mut fx, TransactionKind::Expense, bank, 5_000, (8, 31));
+    let text = bank_csv(&[
+        bank_row("31/08/2026", "PRELIEVO BANCOMAT", "-50,00"),
+        bank_row("01/09/2026", "PRELIEVO BANCOMAT", "-50,00"),
+    ]);
+    // Without a start day, the 1st's row alone replaces it, a day off.
+    let alone = bank_csv(&[bank_row("01/09/2026", "PRELIEVO BANCOMAT", "-50,00")]);
+    let plain = preview_with(&fx, &alone, &atm_to(cash), &options(bank), &no_overrides());
+    assert_eq!(
+        row(&plain, 2).match_choice,
+        Some(StatementMatchChoice::ReplaceExisting)
+    );
+    let options = StatementOptions {
+        since: Some(day(2026, 9, 1)),
+        ..options(bank)
+    };
+    let preview = preview_with(&fx, &text, &atm_to(cash), &options, &no_overrides());
+    assert_eq!(skip_code(row(&preview, 2)), "before_start");
+    let atm = row(&preview, 3);
+    assert!(atm.existing.is_some());
+    assert_eq!(atm.match_choice, Some(StatementMatchChoice::ImportAnyway));
 }
 
 // ---------------------------------------------------------------------------

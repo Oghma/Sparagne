@@ -462,6 +462,14 @@ pub struct StatementOptions {
     /// match no row.
     #[uniffi(default = None)]
     pub since: Option<NaiveDate>,
+    /// The other wallets the app knows receive bank statements (from the
+    /// imports it remembers). With the wallets a claim or a move names, they
+    /// are the statements' wallets: never advised as
+    /// [`StatementPreview::lookalikes`], and their imported rows standing for
+    /// a transfer row's other side are replaced by default up to 4 days
+    /// away. A wallet not in the vault is no statement's.
+    #[uniffi(default = [])]
+    pub statement_wallets: Vec<Uuid>,
 }
 
 /// What becomes of a row flagged [`StatementRowStatus::PossibleDuplicate`]

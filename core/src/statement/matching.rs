@@ -140,10 +140,16 @@ pub(super) fn claim(
         .filter_map(|item| item.row.occurred_at)
         .map(|at| at.date_naive())
         .filter(|day| since.is_none_or(|since| since <= *day));
+    // The statements' wallets: those a claim or a move names, and those the
+    // app says receive statements.
+    let mut statements = claims.targets.clone();
+    statements.extend(&options.statement_wallets);
     let fit = Fit {
         wallet,
         also: &also,
         span: dates.clone().min().zip(dates.max()),
+        statements: &statements,
+        since,
     };
 
     let mut by_amount: HashMap<i64, Vec<usize>> = HashMap::new();
@@ -181,7 +187,7 @@ pub(super) fn claim(
     let unchecked = Unchecked {
         wallet,
         also: &also,
-        targets: &claims.targets,
+        statements: &statements,
         since,
     };
     Ok(unchecked.lookalikes(planned, &pool, overrides))
@@ -197,8 +203,8 @@ struct Pool<'a> {
 struct Unchecked<'a> {
     wallet: Uuid,
     also: &'a [Uuid],
-    /// Wallets a claim or a move names: some statement's.
-    targets: &'a HashSet<Uuid>,
+    /// The statements' wallets: never advised.
+    statements: &'a HashSet<Uuid>,
     since: Option<NaiveDate>,
 }
 
@@ -232,7 +238,7 @@ impl Unchecked<'_> {
                 };
                 let day = candidate.view.occurred_at.date_naive();
                 let unchecked =
-                    id != self.wallet && !self.also.contains(&id) && !self.targets.contains(&id);
+                    id != self.wallet && !self.also.contains(&id) && !self.statements.contains(&id);
                 if unchecked
                     && !candidate.claimed
                     && moves_out(candidate.view.kind) == Some(out)
@@ -290,6 +296,31 @@ struct Edge {
     /// For [`Found::Replace`]: the entry sits in a wallet also checked, where
     /// the user's own sheet is, never replaced by default.
     in_also: bool,
+    /// For [`Found::Replace`]: the entry is a statement's row of the wallet
+    /// the row names (a statement's wallet, not one also checked, the entry
+    /// imported or claimed there), replaced by default up to 4 days away.
+    statement_row: bool,
+    /// The transaction is dated before [`StatementOptions::since`]: never
+    /// replaced by default.
+    before_start: bool,
+}
+
+/// What a fitting transaction says about the default, beside the days.
+#[derive(Clone, Copy, Default)]
+struct Hints {
+    near_edge: bool,
+    other_row: bool,
+    in_also: bool,
+    statement_row: bool,
+}
+
+impl Hints {
+    fn near(near_edge: bool) -> Self {
+        Self {
+            near_edge,
+            ..Self::default()
+        }
+    }
 }
 
 /// Which transactions may stand for a row of the statement.
@@ -301,6 +332,10 @@ struct Fit<'a> {
     /// The first and last day of the file's readable rows from the start
     /// day on.
     span: Option<(NaiveDate, NaiveDate)>,
+    /// The statements' wallets: those a claim or a move names, and
+    /// [`StatementOptions::statement_wallets`].
+    statements: &'a HashSet<Uuid>,
+    since: Option<NaiveDate>,
 }
 
 impl Fit<'_> {
@@ -321,28 +356,30 @@ impl Fit<'_> {
                 (seeks_transfer(item) && days <= TRANSFER_DAYS)
                     .then(|| self.fits_transfer(item, candidate))
                     .flatten()
-                    .map(|near_edge| (Found::Transfer, (near_edge, false, false)))
+                    .map(|near_edge| (Found::Transfer, Hints::near(near_edge)))
             } else if seeks_duplicate(item) {
                 (days <= DUPLICATE_DAYS)
                     .then(|| self.fits_duplicate(item, candidate))
                     .flatten()
-                    .map(|near_edge| (Found::Duplicate, (near_edge, false, false)))
+                    .map(|near_edge| (Found::Duplicate, Hints::near(near_edge)))
             } else {
                 (seeks_replace(item) && days <= TRANSFER_DAYS)
                     .then(|| self.fits_replace(item, candidate))
                     .flatten()
                     .map(|hints| (Found::Replace, hints))
             };
-            if let Some((found, (near_edge, other_row, in_also))) = fit {
+            if let Some((found, hints)) = fit {
                 let seconds = (at.timestamp() - then.timestamp()).abs();
                 let edge = Edge {
                     tx: local,
                     cost: days * DAY_COST + seconds * 3 + found.rank(),
                     found,
                     days,
-                    near_edge,
-                    other_row,
-                    in_also,
+                    near_edge: hints.near_edge,
+                    other_row: hints.other_row,
+                    in_also: hints.in_also,
+                    statement_row: hints.statement_row,
+                    before_start: self.since.is_some_and(|since| then.date_naive() < since),
                 };
                 edges.push((edge, then.timestamp(), candidate.view.id));
             }
@@ -400,22 +437,31 @@ impl Fit<'_> {
     /// it); or, the money moving the row's way, in the statement's wallet,
     /// held to [`Self::own`], or in one also checked where no claim or move
     /// names it. Gives whether it sits near the edges, whether it is the
-    /// named wallet's statement row (one its import wrote, or its claim or
-    /// move names), and whether it sits in a wallet also checked.
-    fn fits_replace(&self, item: &Planned, tx: &Candidate) -> Option<(bool, bool, bool)> {
+    /// named wallet's row of a statement (one an import wrote, or a claim or
+    /// a move names), whether it sits in a wallet also checked, and whether
+    /// it is such a row in a statement's wallet not also checked.
+    fn fits_replace(&self, item: &Planned, tx: &Candidate) -> Option<Hints> {
         let other = item.row.counter_wallet_id?;
         let out = matches!(item.row.action, StatementAction::TransferOut { .. });
         let way = moves_out(tx.view.kind)?;
         match tx.view.wallet_id {
-            Some(id) if id == other => {
-                (way != out).then_some((false, tx.claimed || tx.imported, self.also.contains(&id)))
-            }
+            Some(id) if id == other => (way != out).then(|| {
+                let other_row = tx.claimed || tx.imported;
+                let in_also = self.also.contains(&id);
+                Hints {
+                    near_edge: false,
+                    other_row,
+                    in_also,
+                    statement_row: other_row && !in_also && self.statements.contains(&id),
+                }
+            }),
             Some(id) if id == self.wallet && way == out => self
                 .own(&tx.view, tx.claimed || tx.imported, TRANSFER_DAYS)
-                .map(|near_edge| (near_edge, false, false)),
-            Some(id) if self.also.contains(&id) && way == out => {
-                (!tx.claimed).then_some((false, false, true))
-            }
+                .map(Hints::near),
+            Some(id) if self.also.contains(&id) && way == out => (!tx.claimed).then_some(Hints {
+                in_also: true,
+                ..Hints::default()
+            }),
             _ => None,
         }
     }
@@ -669,15 +715,20 @@ fn settle(
 /// Keeping the entry instead of the row makes no sense here (the transfer
 /// would be missing), so `Skip` and `MoveExisting` read as `ImportAnyway`.
 /// By default the entry is replaced only when it very likely is the
-/// transfer's other side: dated the row's day or a day off, and in no
+/// transfer's other side: the other bank's statement row (an import wrote
+/// it, or a claim or a move names it, in a statement's wallet not also
+/// checked), within the match's 4 days, as a SEPA transfer may take a
+/// weekend to arrive; else an entry dated the row's day or a day off in no
 /// wallet also checked, where the user's own sheet holds entries of every
 /// kind (an ATM withdrawal is not the dinner a friend paid back two days
-/// on). Otherwise, and near the file's edges, the row is imported beside it.
+/// on). Never one dated before the start day, nor near the file's edges:
+/// the row is imported beside it.
 fn replace_choice(edge: Edge, asked: Option<StatementMatchChoice>) -> StatementMatchChoice {
+    let likely = edge.statement_row || (edge.days <= 1 && !edge.in_also);
     match asked {
         Some(StatementMatchChoice::ReplaceExisting) => StatementMatchChoice::ReplaceExisting,
         Some(_) => StatementMatchChoice::ImportAnyway,
-        None if !edge.near_edge && !edge.in_also && edge.days <= 1 => {
+        None if likely && !edge.near_edge && !edge.before_start => {
             StatementMatchChoice::ReplaceExisting
         }
         None => StatementMatchChoice::ImportAnyway,
@@ -848,6 +899,8 @@ mod tests {
             near_edge: false,
             other_row: false,
             in_also: false,
+            statement_row: false,
+            before_start: false,
         }
     }
 
