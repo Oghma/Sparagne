@@ -35,6 +35,8 @@ struct StatementReview: View {
                         StatementReviewRow(model: model, row: row, names: names, completion: completion)
                     }
                 }
+                // What the rows show is about to be planned again or written.
+                .disabled(model.isLocked)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
@@ -125,7 +127,9 @@ private struct StatementReviewRow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SetupRow(separator: match == nil) { cells }
+            // The bar at the left marks a row the last import found planned
+            // otherwise after syncing.
+            SetupRow(editing: model.changedLines.contains(row.line), separator: match == nil) { cells }
             if let match { matchLine(match) }
         }
         .font(Face.row)
@@ -180,10 +184,17 @@ private struct StatementReviewRow: View {
     }
 
     /// Expenses and transfers out minus, everything else plus, as the
-    /// ledger's totals sign them.
+    /// ledger's totals sign them. A transfer goes the way its kind says, or,
+    /// a `BySign` row its match made a transfer, the way the file signs it.
     private var signedAmount: Int64 {
         if row.kind == .expense { return -row.amount }
-        if row.kind == .transferWallet, case .transferOut = row.action { return -row.amount }
+        if row.kind == .transferWallet {
+            switch row.action {
+            case .transferOut: return -row.amount
+            case .transferIn: return row.amount
+            default: return row.outflow ? -row.amount : row.amount
+            }
+        }
         return row.amount
     }
 
@@ -203,9 +214,11 @@ private struct StatementReviewRow: View {
         return StatementText.status(row.status)
     }
 
+    /// A replacing row is written, and deletes the entry it matched: its tag
+    /// takes the caution ink rather than the accent of an ordinary write.
     private var tone: OutcomeTag.Tone {
         if tickable && !included { return .quiet }
-        if replacing { return .new }
+        if replacing { return .warning }
         return switch row.status {
         case .new: included ? .new : .quiet
         case .alreadyImported, .possibleDuplicate, .matchedTransfer, .skipped: .quiet
@@ -273,9 +286,13 @@ private struct StatementReviewRow: View {
         }
     }
 
-    /// The menu's ticked item: a `BySign` as the kind it resolved to.
+    /// The menu's ticked item: a `BySign` as the kind it resolved to, an
+    /// income or an expense. One its match made a transfer ticks nothing:
+    /// the cell says transfer, and either entry is a real change.
     private var choice: StatementActionChoice {
-        if action == .bySign { return row.outflow ? .expense : .income }
+        if action == .bySign {
+            return row.kind == .income || row.kind == .expense ? (row.outflow ? .expense : .income) : .bySign
+        }
         return StatementActionChoice(action)
     }
 
@@ -388,45 +405,62 @@ private struct StatementReviewRow: View {
         let hint = model.importsByDefault(row)
             ? StatementText.importedByDefault
             : model.mayReplace(row) ? StatementText.mayBeOtherSide : nil
-        return HStack(spacing: 0) {
-            Color.clear.frame(width: ReviewColumn.lead, height: 1)
-            GridCell {
-                HStack(spacing: 5) {
-                    Image(systemName: "arrow.turn.down.right")
-                        .font(.system(size: 9))
-                        .accessibilityHidden(true)
-                    Text(verbatim: text)
-                    if let hint {
-                        // Its whole length before the match's text gets any.
-                        Text(verbatim: "\u{00B7} \(hint)")
-                            .italic()
-                            .layoutPriority(1)
+        return VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: ReviewColumn.lead, height: 1)
+                GridCell {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.system(size: 9))
+                            .accessibilityHidden(true)
+                        Text(verbatim: text)
                     }
+                    .foregroundStyle(Ink.text3)
+                    .help(text)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(String(localized: "Already in the vault: \(text)"))
+                    .accessibilityHint(hint ?? "")
                 }
-                .foregroundStyle(Ink.text3)
-                .help(hint.map { "\(text)\n\($0)" } ?? text)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(String(localized: "Already in the vault: \(text)"))
-                .accessibilityHint(hint ?? "")
+                GridCell(width: ReviewColumn.choice) {
+                    CellPicker(
+                        label: String(localized: "Matching transaction"),
+                        selection: Binding(
+                            get: { chosen },
+                            set: { model.setMatchChoice($0, for: row) }
+                        ),
+                        options: model.availableChoices(for: row),
+                        title: StatementText.matchChoice,
+                        tint: chosen == .importAnyway && included ? Ink.accent : Ink.text2
+                    )
+                    // A row ticked off writes and records nothing, whatever
+                    // the choice.
+                    .disabled(!included)
+                    .help(StatementText.matchChoiceDetail(chosen))
+                    .accessibilityHint(StatementText.matchChoiceDetail(chosen))
+                }
+                Color.clear.frame(width: ReviewColumn.trail, height: 1)
             }
-            GridCell(width: ReviewColumn.choice) {
-                CellPicker(
-                    label: String(localized: "Matching transaction"),
-                    selection: Binding(
-                        get: { chosen },
-                        set: { model.setMatchChoice($0, for: row) }
-                    ),
-                    options: model.availableChoices(for: row),
-                    title: StatementText.matchChoice,
-                    tint: chosen == .importAnyway ? Ink.accent : Ink.text2
-                )
-                .help(StatementText.matchChoiceDetail(chosen))
-                .accessibilityHint(StatementText.matchChoiceDetail(chosen))
+            .frame(height: 20)
+            // Why the row is imported by default, on a line of its own so
+            // the match above it is never cut for it.
+            if let hint, included {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: ReviewColumn.lead, height: 1)
+                    GridCell {
+                        Text(verbatim: hint)
+                            .italic()
+                            .foregroundStyle(Ink.text3)
+                            .padding(.leading, 14)
+                            .help(hint)
+                            .accessibilityHidden(true)
+                    }
+                    Color.clear.frame(width: ReviewColumn.choice + ReviewColumn.trail + 2 * GridColumn.padding, height: 1)
+                }
+                .frame(height: 16)
+                .padding(.bottom, 2)
             }
-            Color.clear.frame(width: ReviewColumn.trail, height: 1)
         }
         .font(Face.ui(11))
-        .frame(height: 20)
         .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
     }
 }
@@ -510,13 +544,14 @@ private struct DescriptionRulePopover: View {
 }
 
 /// What the core will do with a row, as a small rounded tag: soft accent on
-/// a row that will be imported, `raised` and dim on one that will not
-/// (already in the vault, matched to a transaction there, skipped by a rule,
-/// its status or the user), soft negative on one the core cannot read. The
-/// ledger's and setup's tags, so the three tables speak the same way; the
-/// dim one is cut rather than spilling out of its column.
+/// a row that will be imported, soft caution on one whose transfer will
+/// delete the entry it replaces, `raised` and dim on one that will not be
+/// written (already in the vault, matched to a transaction there, skipped
+/// by a rule, its status or the user), soft negative on one the core cannot
+/// read. The ledger's and setup's tags, so the three tables speak the same
+/// way; the dim one is cut rather than spilling out of its column.
 private struct OutcomeTag: View {
-    enum Tone { case new, quiet, invalid }
+    enum Tone { case new, warning, quiet, invalid }
 
     let text: String
     let tone: Tone
@@ -524,6 +559,16 @@ private struct OutcomeTag: View {
     var body: some View {
         switch tone {
         case .new: RowTag(text: text, tint: Ink.accent)
+        case .warning:
+            // Outlined rather than filled, so it never reads as the
+            // accent's "New" beside it.
+            Text(text)
+                .font(Face.ui(10, .semibold))
+                .foregroundStyle(Ink.warning)
+                .lineLimit(1)
+                .padding(.horizontal, 5)
+                .frame(height: 16)
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Ink.warning.opacity(0.7), lineWidth: 1))
         case .quiet:
             Text(text)
                 .font(Face.ui(10, .semibold))

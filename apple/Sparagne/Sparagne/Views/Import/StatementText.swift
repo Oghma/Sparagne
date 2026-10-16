@@ -94,14 +94,14 @@ enum StatementText {
     /// likely stands for another export's row, near the file's first or
     /// last days.
     static var importedByDefault: String {
-        String(localized: "Likely another row’s: imported by default")
+        String(localized: "Maybe another row’s; imported unless you choose Keep")
     }
 
-    /// Beside the entry a transfer row is imported next to, by default,
+    /// Under the entry a transfer row is imported next to, by default,
     /// since it is not very likely its other side (days apart, typed by
     /// hand).
     static var mayBeOtherSide: String {
-        String(localized: "Maybe its other side: choose Replace if so")
+        String(localized: "Maybe its other side: if so, choose Replace")
     }
 
     /// What each choice does, for the menu's tooltip and VoiceOver's hint.

@@ -162,6 +162,13 @@ struct StatementImportSheet: View {
             }
             .font(Face.ui(11.5))
             .foregroundStyle(Ink.text3)
+        } else if !model.changedLines.isEmpty, model.step == .review {
+            // The import synced, found the plan changed and wrote nothing.
+            FormNote(
+                String(localized: "Something changed after syncing: check the rows marked and import again."),
+                tone: .warning,
+                indented: false
+            )
         } else if model.syncFailed, model.step != .file {
             FormNote(
                 String(localized: "Not synced first: rows imported on another device may not show as imported yet."),

@@ -1,0 +1,22 @@
+{
+  "Before the start day": {
+    "en": "Before the start day",
+    "it": "Prima della data di inizio"
+  },
+  "Maybe another row’s; imported unless you choose Keep": {
+    "en": "Maybe another row’s; imported unless you choose Keep",
+    "it": "Forse è di un’altra riga: si importa, salvo «Tieni»"
+  },
+  "Maybe its other side: if so, choose Replace": {
+    "en": "Maybe its other side: if so, choose Replace",
+    "it": "Forse è l’altro lato del trasferimento: in tal caso scegli «Sostituiscila»"
+  },
+  "Something changed after syncing: check the rows marked and import again.": {
+    "en": "Something changed after syncing: check the rows marked and import again.",
+    "it": "Qualcosa è cambiato dopo la sincronizzazione: controlla le righe segnate e importa di nuovo."
+  },
+  "Start day": {
+    "en": "Start day",
+    "it": "Data di inizio"
+  }
+}
