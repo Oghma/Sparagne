@@ -143,8 +143,12 @@ and one found in another wallet, such as a spend typed by hand into Cash, is
 moved into the statement's wallet by default. The review can keep it where it
 is instead, or import the row anyway. The other side of a transfer between two
 of your wallets, already recorded from the other bank's statement or by hand,
-is recognised at most 4 days apart and not imported twice. Importing the same
-file again adds nothing.
+is recognised at most 4 days apart and not imported twice; recorded as an
+income or expense instead (the other bank's export imported without a rule),
+it is deleted and replaced by the transfer by default. Near a file's first or
+last days, a match that another export's row already stands for is more
+likely that row's neighbour: the row is imported by default, and the review
+says so. Importing the same file again adds nothing.
 
 File › Export All Transactions… writes every transaction of the vault as CSV,
 voided rows and transfers included. File › Back Up Database… saves a
