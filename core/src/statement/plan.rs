@@ -414,9 +414,12 @@ impl<'a> Context<'a> {
             row.amount = amount.minor.abs();
             row.rounded = amount.rounded;
         }
-        row.kind = self
+        // The kind the type rules and the default action give: the one the
+        // key holds, whatever a description rule or the user make of the row.
+        let base_kind = self
             .outflow(&cells)
             .and_then(|outflow| kind_of(action, outflow));
+        row.kind = base_kind;
         row.counter_wallet_id = counter_wallet(action);
         row.original = self.original(
             optional(self.columns.original_amount),
@@ -425,9 +428,13 @@ impl<'a> Context<'a> {
             cells.amount.as_ref().ok(),
         );
         let key = match (&cells.date, &cells.amount) {
-            (Ok(date), Ok(amount)) => {
-                Some(self.key(&row, &date.stamp, cells.type_value, amount.minor))
-            }
+            (Ok(date), Ok(amount)) => Some(self.key(
+                &date.stamp,
+                cells.type_value,
+                base_kind,
+                &row.payee,
+                amount.minor,
+            )),
             _ => None,
         };
         let outcome = self.outcome(&row, action, cells);
@@ -550,25 +557,31 @@ impl<'a> Context<'a> {
     /// `v1|vault|wallet|date|type|signed minor units|payee`: what the row
     /// is, never what the mapping does with it. The date is the
     /// [`StatementDate::stamp`] (the UTC instant for a timestamp); the type
-    /// is the type column's value, or the kind when there is none; the amount
-    /// is signed as the file wrote it; the payee is lowercased. The status is
-    /// left out on purpose.
+    /// is the type column's value, or else `base_kind`, the kind the type
+    /// rules and the default action give the row (`skip` for none), never a
+    /// description rule's nor the user's; the amount is signed as the file
+    /// wrote it; the payee is lowercased. The status is left out on purpose.
     fn key(
         &self,
-        row: &StatementRow,
         stamp: &str,
         type_value: Option<&str>,
+        base_kind: Option<TransactionKind>,
+        payee: &str,
         signed: i64,
     ) -> String {
         let what = type_value.map_or_else(
-            || row.kind.map_or("skip", TransactionKind::as_str).to_string(),
+            || {
+                base_kind
+                    .map_or("skip", TransactionKind::as_str)
+                    .to_string()
+            },
             str::to_lowercase,
         );
         format!(
             "{KEY_VERSION}|{}|{}|{stamp}|{what}|{signed}|{}",
             self.vault_id,
             self.wallet_id,
-            row.payee.to_lowercase()
+            payee.to_lowercase()
         )
     }
 

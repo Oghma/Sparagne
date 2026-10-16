@@ -49,8 +49,11 @@
 //! The key of a row is `v1|vault|wallet|date|type|amount|payee|n`: the UTC
 //! instant (`2026-09-16T08:54:40Z`) when the date column fixes one, else the
 //! wall-clock time or the day as written, so importing from another timezone
-//! finds the same rows; the type column's value (or the kind, without a type
-//! column); the amount in minor units signed as the file wrote it; the payee
+//! finds the same rows; the type column's value, or without a type column the
+//! kind the type rules and the default action give the row, never the one a
+//! description rule or the user give it (ids handed out before either existed
+//! stay what they were, and changing what a row is never makes it new again);
+//! the amount in minor units signed as the file wrote it; the payee
 //! lowercased; and `n` the number of rows with the same key earlier in the
 //! file, so two identical rows in the same second both import. Line numbers
 //! are those of the file, header included; a row with a newline inside quotes
