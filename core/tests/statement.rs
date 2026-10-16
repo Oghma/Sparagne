@@ -2533,13 +2533,16 @@ fn an_overlapping_export_pairs_a_moved_row_with_no_other() {
     let bank = new_wallet(&mut fx, "Bank");
     let typed = typed_on(&mut fx, TransactionKind::Expense, cash, 350, (9, 14));
     let options = checking(bank, cash);
-    let first = bank_csv(&[bank_row("15/09/2026", "BAR", "-3,50")]);
-    import_with(&mut fx, &first, &bank_mapping(), &options, &no_overrides());
-    // The next export holds the row again, and another coffee closer to
-    // the one typed than the 17th is to anything.
-    let overlapping = bank_csv(&[
-        bank_row("13/09/2026", "BAR", "-3,50"),
+    let first = bank_csv(&[
         bank_row("15/09/2026", "BAR", "-3,50"),
+        bank_row("20/09/2026", "CINEMA", "-9,00"),
+    ]);
+    import_with(&mut fx, &first, &bank_mapping(), &options, &no_overrides());
+    // The next export starts the day after the moved coffee's row, and
+    // opens with another coffee two days from the one typed.
+    let overlapping = bank_csv(&[
+        bank_row("16/09/2026", "BAR", "-3,50"),
+        bank_row("20/09/2026", "CINEMA", "-9,00"),
     ]);
     let preview = preview_with(
         &fx,
@@ -2551,6 +2554,16 @@ fn an_overlapping_export_pairs_a_moved_row_with_no_other() {
     assert_eq!(row(&preview, 3).status, StatementRowStatus::AlreadyImported);
     assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
     assert_eq!(row(&preview, 2).existing, None);
+    // One that holds the coffee's row again pairs the moved one with it.
+    let again = bank_csv(&[
+        bank_row("13/09/2026", "BAR", "-3,50"),
+        bank_row("15/09/2026", "BAR", "-3,50"),
+    ]);
+    let preview = preview_with(&fx, &again, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(row(&preview, 3).status, StatementRowStatus::AlreadyImported);
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 2).existing, None);
+
     let report = import_with(
         &mut fx,
         &overlapping,
@@ -2563,7 +2576,7 @@ fn an_overlapping_export_pairs_a_moved_row_with_no_other() {
         fx.core.transaction(fx.vault, typed).unwrap().wallet_id,
         Some(bank)
     );
-    assert_eq!(wallet_balance(&fx.core, fx.vault, bank), -700);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, bank), -700 - 900);
 }
 
 #[test]
