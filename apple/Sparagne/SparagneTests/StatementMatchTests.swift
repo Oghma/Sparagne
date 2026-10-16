@@ -182,10 +182,19 @@ struct StatementMatchTests {
         #expect(grocer.matchChoice == .moveExisting)
         #expect(model.canMove(grocer))
         #expect(model.matchChoice(for: grocer) == .moveExisting)
-        #expect(model.availableChoices(for: grocer) == [.skip, .moveExisting, .importAnyway])
+        #expect(model.availableChoices(for: grocer) == [.moveExisting, .importAnyway])
         #expect(model.counts.moves == 1)
         #expect(model.counts.possibleDuplicates == 1)
         #expect(model.counts.new == 2)
+
+        // Ticked off, it is neither moved nor kept: skipped, sent as a skip.
+        #expect(StatementImportModel.takesTick(grocer))
+        model.setIncluded(false, line: 5)
+        #expect(model.counts.moves == 0)
+        #expect(model.counts.possibleDuplicates == 0)
+        #expect(model.counts.skipped == 3)
+        #expect(model.overrides.first { $0.line == 5 } == StatementRowOverride(line: 5, category: nil, note: nil, skip: true))
+        model.setIncluded(true, line: 5)
 
         await model.runImport()
 
@@ -317,7 +326,13 @@ struct StatementMatchTests {
     /// Revolut's export imported first, with no rule, so the 200.00 from ING
     /// is an income there. Then ING's, previewed, whose rule knows the money
     /// went to Revolut.
-    private static func revolutThenIng() async throws -> (
+    /// `rules` default to the one knowing the money went to Revolut;
+    /// `before` runs once Revolut's file is in, before ING's is read.
+    private static func revolutThenIng(
+        rules: [StatementDescriptionRule]? = nil,
+        ingRow: String = "01/10/2026;-200,00;BONIFICO A REVOLUT",
+        before: (AppStore) async -> Void = { _ in }
+    ) async throws -> (
         store: AppStore, revolut: Uuid, ing: Uuid, model: StatementImportModel
     ) {
         let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: try Self.defaults())
@@ -335,10 +350,11 @@ struct StatementMatchTests {
         await first.runImport()
         #expect(first.report?.executed == 1)
         #expect(Self.balance(store, revolut) == 20_000)
+        await before(store)
 
         let rule = StatementDescriptionRule(contains: "revolut", action: .transferOut(toWalletId: revolut))
         let model = try await Self.bankModel(
-            store, Self.bankFile("01/10/2026;-200,00;BONIFICO A REVOLUT"), into: ing, rules: [rule], mappings: mappings
+            store, Self.bankFile(ingRow), into: ing, rules: rules ?? [rule], mappings: mappings
         )
         return (store, revolut, ing, model)
     }
@@ -452,6 +468,61 @@ struct StatementMatchTests {
         #expect(all.filter { $0.kind == .transferWallet && !$0.voided }.count == 1)
         #expect(Self.balance(store, cash) == 10_000) // the gift and the withdrawal
         #expect(Self.balance(store, bank) == 95_000)
+    }
+
+    @Test("A choice made over one match is not carried to the next: a row imported anyway beside a typed spend, then made a transfer to Revolut, replaces Revolut's income by default instead of landing beside it")
+    func choiceForgottenWithTheKind() async throws {
+        let (store, revolut, ing, model) = try await Self.revolutThenIng(
+            rules: [], ingRow: "01/10/2026;-200,00;BONIFICO"
+        ) { store in
+            await Self.type("-200.00 affitto @ing 2026-09-29", into: store)
+        }
+        let spend = try Self.row(model, line: 2)
+        #expect(spend.status == .possibleDuplicate)
+        #expect(spend.existing?.note == "affitto")
+        model.setMatchChoice(.importAnyway, for: spend)
+        await model.refreshPreview()
+        #expect(try Self.row(model, line: 2).matchChoice == .importAnyway)
+
+        model.setAction(.transferOut(toWalletId: revolut), for: try Self.row(model, line: 2))
+        #expect(model.matchChoices.isEmpty)
+        await model.refreshPreview()
+
+        let transfer = try Self.row(model, line: 2)
+        #expect(transfer.existing?.walletId == revolut)
+        #expect(transfer.matchChoice == .replaceExisting)
+        #expect(model.matchChoice(for: transfer) == .replaceExisting)
+        #expect(model.overrides == [
+            StatementRowOverride(line: 2, category: nil, note: nil, skip: false, action: .transferOut(toWalletId: revolut)),
+        ])
+
+        await model.runImport()
+
+        let all = try await Self.transactions(store)
+        #expect(all.first { $0.kind == .income && $0.amount == 20_000 }?.voided == true)
+        #expect(all.filter { $0.kind == .transferWallet && !$0.voided }.count == 1)
+        // Counted once in Revolut; the rent typed in ING stays.
+        #expect(Self.balance(store, revolut) == 20_000)
+        #expect(Self.balance(store, ing) == 60_000)
+    }
+
+    @Test("A By sign row matched to a transfer typed between the two wallets takes an expense of the user's")
+    func bySignMatchedTransfer() async throws {
+        let (store, card, bank) = try await Self.vault()
+        await Self.type("tw> 150.00 @bank @card ricarica 2026-09-13", into: store)
+        let model = try await Self.bankModel(
+            store, Self.bankFile("13/09/2026;-150,00;RICARICA CARTA"), into: bank,
+            mappings: StatementMappingStore(defaults: try Self.defaults())
+        )
+        let row = try Self.row(model, line: 2)
+        #expect(row.status == .matchedTransfer)
+        #expect(row.kind == .transferWallet)
+        #expect(row.action == .bySign)
+        #expect(row.counterWalletId == card)
+
+        // The cell says transfer: an expense is the user's own choice, kept.
+        model.setAction(.expense, for: row)
+        #expect(model.editedActions[2] == .expense)
     }
 
     // MARK: - Near the file's edges

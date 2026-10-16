@@ -102,11 +102,13 @@ struct StatementReviewTests {
         model.setAction(.transferIn(fromWalletId: bank), for: topup)
         model.setFlow(casa, for: grocer)
         model.setCategory("Spesa", for: 5)
+        // A row that matched nothing takes no choice over a match.
         model.setMatchChoice(.importAnyway, for: forno)
+        #expect(model.matchChoices.isEmpty)
 
         #expect(Self.sorted(model.overrides) == [
-            // The history's suggestion travels with the choice over a match.
-            StatementRowOverride(line: 2, category: "Bakery", note: nil, skip: false, onMatch: .importAnyway),
+            // The history's suggestion travels as the row's category.
+            StatementRowOverride(line: 2, category: "Bakery", note: nil, skip: false),
             StatementRowOverride(line: 3, category: nil, note: "Metro", skip: false, action: .income),
             // The top-up waits for its wallet, so it is not new: only its kind goes.
             StatementRowOverride(line: 4, category: nil, note: nil, skip: false, action: .transferIn(fromWalletId: bank)),
@@ -120,7 +122,6 @@ struct StatementReviewTests {
         model.setAction(.transferIn(fromWalletId: nil), for: topup)
         model.setFlow(unallocated, for: grocer)
         model.setCategory("", for: 5)
-        model.setMatchChoice(.skip, for: forno)
 
         #expect(model.overrides == [StatementRowOverride(line: 2, category: "Bakery", note: nil, skip: false)])
         #expect(model.editedActions.isEmpty)
@@ -188,11 +189,10 @@ struct StatementReviewTests {
 
     // MARK: - What re-runs the preview
 
-    @Test("The preview runs again on a kind, an envelope or a choice over a match, not on a tick, a note or a category")
+    @Test("The preview runs again on a kind or an envelope, not on a tick, a note or a category")
     func previewInputChanges() async throws {
         let (store, card, bank, casa) = try await Self.vault()
         let model = try await Self.cardModel(store, wallet: card)
-        let forno = try Self.row(model, line: 2)
         let metro = try Self.row(model, line: 3)
         let grocer = try Self.row(model, line: 5)
 
@@ -207,13 +207,8 @@ struct StatementReviewTests {
         #expect(kind != start)
         #expect(kind.rowChoices == [StatementRowOverride(line: 3, category: nil, note: nil, skip: false, action: .income)])
 
-        model.setMatchChoice(.importAnyway, for: forno)
-        let choice = try #require(model.previewInput)
-        #expect(choice != kind)
-        #expect(choice.rowChoices.first == StatementRowOverride(line: 2, category: nil, note: nil, skip: false, onMatch: .importAnyway))
-
         model.setFlow(casa, for: grocer)
-        #expect(model.previewInput != choice)
+        #expect(model.previewInput != kind)
 
         // The wallets also searched and the start day are options of the file.
         model.setAlsoChecked(true, wallet: bank)
@@ -447,8 +442,12 @@ struct StatementReviewTests {
         duplicate.matchChoice = .moveExisting
         #expect(model.canMove(duplicate))
         #expect(model.defaultChoice(for: duplicate) == .moveExisting)
-        #expect(model.availableChoices(for: duplicate) == [.skip, .moveExisting, .importAnyway])
+        // Kept where it is, it would go on standing for another wallet's
+        // spend: only moved here or imported beside.
+        #expect(model.availableChoices(for: duplicate) == [.moveExisting, .importAnyway])
         #expect(model.matchChoice(for: duplicate) == .moveExisting)
+        model.setMatchChoice(.skip, for: duplicate)
+        #expect(model.matchChoices.isEmpty)
 
         model.setMatchChoice(.moveExisting, for: duplicate)
         #expect(model.matchChoices.isEmpty)
@@ -470,6 +469,93 @@ struct StatementReviewTests {
         transfer.existing?.toId = bank
         #expect(!model.canMove(transfer))
         #expect(model.availableChoices(for: transfer) == [.skip, .importAnyway])
+    }
+
+    @Test("A choice over a match goes with a change of the row's kind or of anything that plans every row again, and a preview forgets one about no match")
+    func staleMatchChoices() async throws {
+        let (store, card, bank, _) = try await Self.vault()
+        let model = try await Self.cardModel(store, wallet: card)
+        let all = try await Self.transactions(store)
+        let existing = try #require(all.first { $0.note == "forno bianco" })
+        var duplicate = try Self.row(model, line: 2)
+        duplicate.status = .possibleDuplicate
+        duplicate.existing = existing
+        duplicate.matchChoice = .skip
+
+        func choose() {
+            model.setMatchChoice(.importAnyway, for: duplicate)
+            #expect(model.matchChoices == [2: .importAnyway])
+        }
+
+        // The row made a transfer matches anew: the choice is about nothing.
+        choose()
+        model.setAction(.transferOut(toWalletId: bank), for: duplicate)
+        #expect(model.matchChoices.isEmpty)
+        model.setAction(.expense, for: duplicate)
+
+        // A kind set to what it already is changes nothing.
+        choose()
+        model.setAction(.expense, for: duplicate)
+        #expect(model.matchChoices == [2: .importAnyway])
+
+        model.mapping.skipStatuses = []
+        #expect(model.matchChoices.isEmpty)
+        choose()
+        model.since = "2026-09-12"
+        #expect(model.matchChoices.isEmpty)
+        choose()
+        model.setAlsoChecked(true, wallet: bank)
+        #expect(model.matchChoices.isEmpty)
+        choose()
+        model.walletId = bank
+        #expect(model.matchChoices.isEmpty)
+        model.walletId = card
+        choose()
+        model.makeRule(from: duplicate)
+        #expect(model.matchChoices.isEmpty)
+
+        // The preview finds line 2 matching nothing: the choice goes.
+        model.removeDescriptionRule(at: 0)
+        choose()
+        await model.refreshPreview()
+        #expect(model.matchChoices.isEmpty)
+    }
+
+    @Test("Another file whose header has nothing remembered starts with no wallet, envelope or start day of the last one")
+    func anotherFileStartsOver() async throws {
+        let (store, card, _, casa) = try await Self.vault()
+        let model = try await Self.cardModel(store, wallet: card)
+        model.flowId = casa
+        model.since = "2026-09-01"
+
+        await model.load(data: Data(Self.bank.utf8), fileName: "banca.csv")
+
+        // Two wallets: the user chooses again.
+        #expect(model.walletId == nil)
+        #expect(model.flowId == nil)
+        #expect(model.since == nil)
+    }
+
+    @Test("Every matched row takes the box, and one ticked off counts as skipped and goes as a skip alone")
+    func matchedRowsTicked() async throws {
+        let (store, card, bank, _) = try await Self.vault()
+        let model = try await Self.cardModel(store, wallet: card)
+        let all = try await Self.transactions(store)
+        let existing = try #require(all.first { $0.note == "forno bianco" })
+        var duplicate = try Self.row(model, line: 2)
+        duplicate.status = .possibleDuplicate
+        duplicate.existing = existing
+        duplicate.matchChoice = .skip
+        #expect(StatementImportModel.takesTick(duplicate))
+        var transfer = duplicate
+        transfer.status = .matchedTransfer
+        transfer.existing?.kind = .transferWallet
+        transfer.existing?.walletId = nil
+        transfer.existing?.fromId = bank
+        transfer.existing?.toId = card
+        #expect(StatementImportModel.takesTick(transfer))
+        // A row with no match and not new takes none.
+        #expect(!StatementImportModel.takesTick(try Self.row(model, line: 6)))
     }
 
     @Test("Only a row the rules decided offers another kind")
@@ -521,9 +607,12 @@ struct StatementReviewTests {
         #expect(!model.overrides.contains { $0.line == 4 })
 
         model.setMatchChoice(.importAnyway, for: topup)
-        #expect(model.previewInput?.rowChoices == [
-            StatementRowOverride(line: 4, category: nil, note: nil, skip: false, onMatch: .importAnyway),
-        ])
+        #expect(model.matchChoices == [4: .importAnyway])
+        #expect(model.matchChoice(for: topup) == .importAnyway)
+        // The previewed line 4 matched nothing: a choice over a match it
+        // does not have is not sent.
+        #expect(model.previewInput?.rowChoices == [])
+        #expect(!model.overrides.contains { $0.onMatch != nil })
         model.setMatchChoice(.replaceExisting, for: topup)
 
         // An entry not very likely its other side: imported beside it by

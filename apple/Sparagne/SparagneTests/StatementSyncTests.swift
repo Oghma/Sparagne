@@ -69,7 +69,7 @@ struct StatementSyncTests {
         try #require(model.preview?.rows.first { $0.line == line })
     }
 
-    @Test("A file's first preview waits for a sync and the next ones do not; the import syncs again and imports what the fresh plan says")
+    @Test("A file's first preview waits for a sync and the next ones do not; the import syncs again, and a plan that changed is shown, marked, before the next import writes it")
     @MainActor
     func syncsBeforePreviewAndImport() async throws {
         let (store, card) = try await Self.vault()
@@ -94,22 +94,56 @@ struct StatementSyncTests {
 
         #expect(hook.rounds == 2)
         #expect(!model.syncFailed)
-        // Planned again after the round: the grocer typed elsewhere stands
-        // for the bank's row, which is not written a second time.
+        // Planned again after the round: the grocer typed elsewhere now
+        // stands for the bank's row. That is not what the user saw, so
+        // nothing is written yet and the row is marked.
         #expect(try Self.row(model, line: 4).status == .possibleDuplicate)
+        #expect(model.report == nil)
+        #expect(model.step == .mapping)
+        #expect(model.changedLines == [4])
+        #expect(!model.isLocked)
+        let vaultId = try #require(store.currentVault?.id)
+        let filter = TransactionFilter(includeVoided: false, includeTransfers: true, ascending: true)
+        func grocers() async throws -> Int {
+            try await store.core.transactions(vaultId: vaultId, filter: filter, limit: 50, cursor: nil)
+                .items.filter { $0.amount == 1475 }.count
+        }
+        #expect(try await grocers() == 1)
+
+        // Seen, it goes: the next round changes nothing, and the import writes.
+        await model.runImport()
+
+        #expect(hook.rounds == 3)
+        #expect(model.changedLines.isEmpty)
         let report = try #require(model.report)
         #expect(report.executed == 2)
         #expect(report.possibleDuplicates == 1)
-        let vaultId = try #require(store.currentVault?.id)
-        let filter = TransactionFilter(includeVoided: false, includeTransfers: true, ascending: true)
-        let grocers = try await store.core.transactions(vaultId: vaultId, filter: filter, limit: 50, cursor: nil)
-            .items.filter { $0.amount == 1475 }
-        #expect(grocers.count == 1)
+        #expect(try await grocers() == 1)
 
         // Another file: its first preview syncs again.
         await model.load(data: Data(Self.card.utf8), fileName: "card.csv")
         await model.refreshPreview()
-        #expect(hook.rounds == 3)
+        #expect(hook.rounds == 4)
+    }
+
+    @Test("The lines planned otherwise after a sync are what the user decides on: status, match, choice, kind, other wallet")
+    func changedLines() async throws {
+        let (store, _) = try await Self.vault()
+        let model = try Self.model(store, hook: Hook())
+        await model.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        await model.refreshPreview()
+        let seen = try #require(model.preview)
+        #expect(StatementImportModel.changedLines(from: seen, to: seen).isEmpty)
+
+        var fresh = seen
+        fresh.rows[0].status = .alreadyImported
+        fresh.rows[1].kind = .income
+        fresh.rows[2].note = "a note says nothing of the plan"
+        #expect(StatementImportModel.changedLines(from: seen, to: fresh) == [2, 3])
+
+        fresh = seen
+        fresh.rows.removeLast()
+        #expect(StatementImportModel.changedLines(from: seen, to: fresh) == [4])
     }
 
     @Test("A round that does not get through stops neither the preview nor the import, and only leaves a quiet note until one does")
