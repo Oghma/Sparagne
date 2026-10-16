@@ -339,7 +339,7 @@ struct StatementImportTests {
 
     @Test("Every status code the core sends has its own translation")
     func statusCodesAreTranslated() {
-        let skipped = ["skipped_by_rule", "skipped_status", "needs_wallet", "zero_amount", "skipped_by_you"]
+        let skipped = ["skipped_by_rule", "skipped_status", "needs_wallet", "zero_amount", "skipped_by_you", "before_start"]
             .map(StatementText.skipped)
         let invalid = ["invalid_row", "invalid_date", "invalid_amount", "currency_mismatch"]
             .map(StatementText.invalid)
