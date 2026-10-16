@@ -130,8 +130,10 @@ statuses to skip, and the target wallet and envelope. Description rules come
 before the types: the first one whose text the bank's description holds, case
 aside, decides the row's kind, category and a cleaner note, so
 `PAGAMENTO POS; BAR CENTRALE MILANO` can become an expense under Bar noted
-`Bar Centrale`. A start day leaves the older rows out; entries typed in the
-last 3 days before it can still stand for the file's first rows.
+`Bar Centrale`. A start day leaves the older rows out; an entry typed into a
+wallet also searched up to 3 days before it can still stand for one of the
+file's first rows, while that wallet's older entries and its transfers from
+before the start day never do.
 
 The preview shows what happens to every row. Each row can be given another
 kind (a transfer names the other wallet), note, category (prefilled from the
@@ -145,7 +147,9 @@ One found in another wallet, such as a spend typed by hand into Cash, is moved
 into the statement's wallet or the row imported anyway; one in the statement's
 wallet is kept or the row imported anyway. A wallet forgotten under
 "Duplicates also in" cannot be made up for by importing the file again: its
-rows are in by then. The other side of a transfer between two of your
+rows are in by then. The review and the mapping page name the wallets whose
+entries look like new rows of the file, with a button that ticks them. The
+other side of a transfer between two of your
 wallets, already recorded from the other bank's statement or by hand, is
 recognised at most 4 days apart and not imported twice; recorded as an income
 or expense instead, it can be deleted and replaced by the transfer, the
