@@ -2,10 +2,13 @@
 //! is, the id its command gets and, when it is new, the command itself.
 //!
 //! Every row is read on its own first ([`Context::read`]); a second pass over
-//! the file numbers the rows with the same key, turns keys into ids and looks
-//! the ids up in the log.
+//! the file numbers the rows with the same key, turns keys into ids, looks
+//! the ids up in the log and decides each row with the user's override
+//! ([`Context::decide`]). The rows are then matched against what the vault
+//! already holds ([`matching::claim`]), and last the user's `skip` leaves out
+//! the rows still new.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono_tz::Tz;
 use rusqlite::params;
@@ -34,17 +37,23 @@ pub(super) struct Planned {
     pub command: Option<Command>,
 }
 
-/// Reads every row of `text` and decides what becomes of it. Writes nothing.
+/// The user's overrides by line; the last one of a line wins.
+pub(super) type Overrides<'o> = HashMap<u32, &'o StatementRowOverride>;
+
+/// Reads every row of `text` and decides what becomes of it, with the user's
+/// `overrides`. Writes nothing.
 pub(super) fn plan(
     core: &Core,
     vault_id: Uuid,
     text: &str,
     mapping: &StatementMapping,
     options: &StatementOptions,
+    overrides: &[StatementRowOverride],
 ) -> Result<Vec<Planned>> {
     let delimiter = delimiter(&mapping.delimiter)?;
     let mut records = csv::records(text, delimiter);
     let context = Context::new(core, vault_id, &mut records, mapping, options)?;
+    let overrides: Overrides<'_> = overrides.iter().map(|o| (o.line, o)).collect();
 
     let mut known = core
         .conn
@@ -52,90 +61,52 @@ pub(super) fn plan(
     let mut occurrences: HashMap<String, u32> = HashMap::new();
     let mut planned = Vec::new();
     for record in records {
-        let Draft {
-            mut row,
-            outcome,
-            key,
-        } = context.read(&record);
+        let draft = context.read(&record);
+        let mut id = Uuid::nil();
         let mut imported = false;
-        if let Some(key) = key {
+        if let Some(key) = &draft.key {
             let seen = occurrences.entry(key.clone()).or_insert(0);
-            row.command_id = command_id(&format!("{key}|{seen}"));
+            id = row_id(&format!("{key}|{seen}"));
             *seen += 1;
-            imported = known.query_row(params![row.command_id], |r| r.get(0))?;
+            imported = known.query_row(params![id], |r| r.get(0))?;
         }
-        let mut command = None;
-        row.status = if imported {
-            StatementRowStatus::AlreadyImported
+        // A row in the log stays imported whatever the rules or the user now
+        // say, so its override changes nothing.
+        let user = if imported {
+            None
         } else {
-            match outcome {
-                Outcome::Import(planned_command) => {
-                    command = Some(planned_command);
-                    StatementRowStatus::New
-                }
-                Outcome::Skip(code, reason) => StatementRowStatus::Skipped {
-                    code: code.to_string(),
-                    reason,
-                },
-                Outcome::Invalid(code, message) => StatementRowStatus::Invalid {
-                    code: code.to_string(),
-                    message,
-                },
-            }
+            overrides.get(&record.line).copied()
         };
-        planned.push(Planned { row, command });
+        let mut item = context.decide(draft, user);
+        item.row.command_id = id;
+        if imported {
+            item.row.status = StatementRowStatus::AlreadyImported;
+            item.command = None;
+        }
+        planned.push(item);
     }
     matching::claim(core, vault_id, options, &mut planned)?;
+    leave_out(&mut planned, &overrides);
     Ok(planned)
 }
 
-/// Applies the user's changes to the new rows: skip them, or change their
-/// category or note. Overrides of rows that are not new change nothing; the
-/// last override of a line wins.
-pub(super) fn apply_overrides(planned: &mut [Planned], overrides: &[StatementRowOverride]) {
-    let by_line: HashMap<u32, &StatementRowOverride> =
-        overrides.iter().map(|o| (o.line, o)).collect();
+/// The user's `skip` on the rows still new.
+fn leave_out(planned: &mut [Planned], overrides: &Overrides<'_>) {
     for item in planned {
-        let Some(user) = by_line.get(&item.row.line) else {
-            continue;
-        };
-        if item.row.status != StatementRowStatus::New {
-            continue;
-        }
-        if user.skip {
+        if item.row.status == StatementRowStatus::New
+            && overrides.get(&item.row.line).is_some_and(|user| user.skip)
+        {
             item.row.status = StatementRowStatus::Skipped {
                 code: "skipped_by_you".to_string(),
                 reason: "skipped by you".to_string(),
             };
             item.command = None;
-            continue;
-        }
-        let note = user
-            .note
-            .as_deref()
-            .map(|note| compose_note(note, item.row.original.as_deref()));
-        match item.command.as_mut() {
-            Some(Command::Income(entry) | Command::Expense(entry) | Command::Refund(entry)) => {
-                if let Some(category) = &user.category {
-                    let category = category.trim();
-                    entry.category = (!category.is_empty()).then(|| category.to_string());
-                }
-                if let Some(note) = note {
-                    entry.note = note;
-                }
-            }
-            Some(Command::TransferWallet { note: current, .. }) => {
-                if let Some(note) = note {
-                    *current = note;
-                }
-            }
-            _ => {}
         }
     }
 }
 
 /// The id of the row whose full key (occurrence index included) is `key`.
-fn command_id(key: &str) -> Uuid {
+fn row_id(key: &str) -> Uuid {
     Uuid::new_v5(&STATEMENT_NAMESPACE, key.as_bytes())
 }
 
@@ -164,22 +135,26 @@ fn delimiter(value: &str) -> Result<char> {
 // Reading one row
 // ---------------------------------------------------------------------------
 
-/// A row read on its own, before the file-wide pass gives it an id.
-struct Draft {
+/// A row read on its own, before the file-wide pass gives it an id and
+/// [`Context::decide`] says what becomes of it.
+struct Draft<'a> {
     row: StatementRow,
-    outcome: Outcome,
     /// The key without the occurrence index; `None` when the date or the
     /// amount could not be read, and the row then keeps the nil id.
     key: Option<String>,
-}
-
-/// The cells of a row the outcome depends on, read once.
-struct Cells<'r> {
-    type_value: Option<&'r str>,
-    status: Option<&'r str>,
-    currency: Option<&'r str>,
-    date: std::result::Result<StatementDate, String>,
-    amount: std::result::Result<Amount, String>,
+    /// Why the record is no row at all (`invalid_row`).
+    broken: Option<String>,
+    /// What the type rules and the default action make of the row.
+    base: &'a StatementAction,
+    /// The type column's value, for the reason of a skip.
+    type_value: Option<String>,
+    /// Whether the money goes out; `None` when the amount is unreadable.
+    outflow: Option<bool>,
+    /// The row's status, when `skip_statuses` holds it.
+    skipped_status: Option<String>,
+    /// The first reason the row cannot be imported, whatever it is taken
+    /// for. Never [`Outcome::Import`].
+    problem: Option<Outcome>,
 }
 
 /// What a row becomes when its id is not in the log yet. `Skip` and
@@ -188,6 +163,22 @@ enum Outcome {
     Import(Command),
     Skip(&'static str, String),
     Invalid(&'static str, String),
+}
+
+/// Who said what a row is, for the reason of a skip.
+enum By<'r> {
+    User,
+    /// The type rules or the default action, with the type column's value.
+    Mapping(Option<&'r str>),
+}
+
+impl By<'_> {
+    fn skip(&self) -> Outcome {
+        match self {
+            Self::User => Outcome::Skip("skipped_by_you", "skipped by you".to_string()),
+            Self::Mapping(type_value) => Outcome::Skip("skipped_by_rule", skip_reason(*type_value)),
+        }
+    }
 }
 
 /// The indices of the mapped columns in the header.
@@ -264,6 +255,11 @@ struct Context<'a> {
     tz: Tz,
     /// Normalized name or alias -> name of an active, non-system category.
     categories: HashMap<String, String>,
+    /// Every wallet of the vault, whether it is archived.
+    wallets: HashMap<Uuid, bool>,
+    /// The envelopes an entry can go to, Unallocated included.
+    active_flows: HashSet<Uuid>,
+    unallocated: Uuid,
 }
 
 impl<'a> Context<'a> {
@@ -277,8 +273,12 @@ impl<'a> Context<'a> {
         options: &StatementOptions,
     ) -> Result<Self> {
         let snapshot = core.snapshot(vault_id)?;
-        let wallet_exists = |id: Uuid| snapshot.wallets.iter().any(|w| w.id == id);
-        if !wallet_exists(options.wallet_id) {
+        let wallets: HashMap<Uuid, bool> = snapshot
+            .wallets
+            .iter()
+            .map(|w| (w.id, w.archived))
+            .collect();
+        if !wallets.contains_key(&options.wallet_id) {
             return Err(DomainError::NotFound(format!(
                 "wallet {}",
                 options.wallet_id
@@ -294,7 +294,7 @@ impl<'a> Context<'a> {
             .chain([&mapping.default_action])
             .filter_map(counter_wallet)
         {
-            if !wallet_exists(other) {
+            if !wallets.contains_key(&other) {
                 return Err(DomainError::NotFound(format!("wallet {other}")));
             }
             if other == options.wallet_id {
@@ -332,11 +332,20 @@ impl<'a> Context<'a> {
             currency: snapshot.currency,
             tz,
             categories: category_names(core, vault_id)?,
+            active_flows: snapshot
+                .flows
+                .iter()
+                .filter(|f| !f.archived)
+                .map(|f| f.id)
+                .collect(),
+            unallocated: snapshot.unallocated_flow_id,
+            wallets,
         })
     }
 
-    /// Everything about one record, but its id and whether it is in the log.
-    fn read(&self, record: &Record) -> Draft {
+    /// Everything about one record that holds whatever the user says, but
+    /// its id and whether it is in the log.
+    fn read(&self, record: &Record) -> Draft<'a> {
         let mut row = StatementRow {
             line: record.line,
             command_id: Uuid::nil(),
@@ -350,7 +359,7 @@ impl<'a> Context<'a> {
             matched_category: None,
             counter_wallet_id: None,
             original: None,
-            action: StatementAction::BySign,
+            action: self.mapping.default_action.clone(),
             outflow: false,
             note: String::new(),
             category: None,
@@ -358,13 +367,18 @@ impl<'a> Context<'a> {
             existing: None,
             match_choice: None,
         };
-        let invalid = |row, message: String| Draft {
+        let broken = |row, message: String| Draft {
             row,
-            outcome: Outcome::Invalid("invalid_row", message),
             key: None,
+            broken: Some(message),
+            base: &self.mapping.default_action,
+            type_value: None,
+            outflow: None,
+            skipped_status: None,
+            problem: None,
         };
         if record.unclosed_quote {
-            return invalid(
+            return broken(
                 row,
                 "a quoted field is never closed, so the rest of the file is in this row"
                     .to_string(),
@@ -373,7 +387,7 @@ impl<'a> Context<'a> {
         // Empty cells past the header are the trailing delimiter some banks
         // end every row with, not a ragged row.
         if !csv::agrees(record, self.columns.count) {
-            return invalid(
+            return broken(
                 row,
                 format!(
                     "the row has {} columns, the header {}",
@@ -394,103 +408,178 @@ impl<'a> Context<'a> {
         row.note.clone_from(&row.payee);
         row.category.clone_from(&row.matched_category);
 
-        let cells = Cells {
-            type_value: optional(self.columns.kind),
-            status: optional(self.columns.status),
-            currency: optional(self.columns.currency),
-            date: parse_date(field(self.columns.date), &self.mapping.date_format, self.tz),
-            amount: parse_amount(
-                field(self.columns.amount),
-                self.mapping.decimal_comma,
-                self.currency.minor_units(),
-            ),
-        };
-        let action = self.action(cells.type_value);
-        row.action = action.clone();
-        row.outflow = self.outflow(&cells) == Some(true);
+        let type_value = optional(self.columns.kind);
+        let status = optional(self.columns.status);
+        let currency = optional(self.columns.currency);
+        let date = parse_date(field(self.columns.date), &self.mapping.date_format, self.tz);
+        let amount = parse_amount(
+            field(self.columns.amount),
+            self.mapping.decimal_comma,
+            self.currency.minor_units(),
+        );
+        let base = self.action(type_value);
+        let outflow = amount.as_ref().ok().map(|amount| self.outflow(amount));
 
-        row.occurred_at = cells.date.as_ref().ok().map(|date| date.at);
-        if let Ok(amount) = &cells.amount {
+        row.occurred_at = date.as_ref().ok().map(|date| date.at);
+        if let Ok(amount) = &amount {
             row.amount = amount.minor.abs();
             row.rounded = amount.rounded;
         }
-        // The kind the type rules and the default action give: the one the
-        // key holds, whatever a description rule or the user make of the row.
-        let base_kind = self
-            .outflow(&cells)
-            .and_then(|outflow| kind_of(action, outflow));
-        row.kind = base_kind;
-        row.counter_wallet_id = counter_wallet(action);
+        row.outflow = outflow == Some(true);
         row.original = self.original(
             optional(self.columns.original_amount),
             optional(self.columns.original_currency),
-            cells.currency,
-            cells.amount.as_ref().ok(),
+            currency,
+            amount.as_ref().ok(),
         );
-        let key = match (&cells.date, &cells.amount) {
-            (Ok(date), Ok(amount)) => Some(self.key(
-                &date.stamp,
-                cells.type_value,
-                base_kind,
-                &row.payee,
-                amount.minor,
-            )),
+        // The kind the type rules and the default action give: the one the
+        // key holds, whatever a description rule or the user make of the row.
+        let base_kind = outflow.and_then(|outflow| kind_of(base, outflow));
+        let key = match (&date, &amount) {
+            (Ok(date), Ok(amount)) => {
+                Some(self.key(&date.stamp, type_value, base_kind, &row.payee, amount.minor))
+            }
             _ => None,
         };
-        let outcome = self.outcome(&row, action, cells);
-        Draft { row, outcome, key }
+        let skipped_status = status
+            .filter(|status| {
+                self.mapping
+                    .skip_statuses
+                    .iter()
+                    .any(|skipped| same_text(skipped, status))
+            })
+            .map(str::to_string);
+        Draft {
+            row,
+            key,
+            broken: None,
+            base,
+            type_value: type_value.map(str::to_string),
+            outflow,
+            skipped_status,
+            problem: self.problem(currency, date, amount),
+        }
     }
 
-    /// Whether the row's money goes out; `None` when the amount is unreadable.
-    fn outflow(&self, cells: &Cells<'_>) -> Option<bool> {
-        let minor = cells.amount.as_ref().ok()?.minor;
-        Some(match self.mapping.amount_sign {
-            AmountSign::OutflowPositive => minor > 0,
-            AmountSign::OutflowNegative => minor < 0,
-        })
+    /// Whether the money of `amount` goes out.
+    fn outflow(&self, amount: &Amount) -> bool {
+        match self.mapping.amount_sign {
+            AmountSign::OutflowPositive => amount.minor > 0,
+            AmountSign::OutflowNegative => amount.minor < 0,
+        }
     }
 
-    /// Why the row is not imported, in the order a user expects to read it:
-    /// what the mapping skips, then what cannot be read, then what is missing.
-    fn outcome(&self, row: &StatementRow, action: &StatementAction, cells: Cells<'_>) -> Outcome {
-        let outflow = self.outflow(&cells);
-        let type_value = cells.type_value;
-        if *action == StatementAction::Skip {
-            return Outcome::Skip("skipped_by_rule", skip_reason(type_value));
-        }
-        if let Some(status) = cells.status
-            && self
-                .mapping
-                .skip_statuses
-                .iter()
-                .any(|skipped| same_text(skipped, status))
-        {
-            return Outcome::Skip("skipped_status", format!("status {status} is skipped"));
-        }
-        if let Some(currency) = cells.currency
+    /// The first reason a row cannot be imported, whatever it is taken for:
+    /// another currency, an unreadable date or amount, a zero amount.
+    fn problem(
+        &self,
+        currency: Option<&str>,
+        date: std::result::Result<StatementDate, String>,
+        amount: std::result::Result<Amount, String>,
+    ) -> Option<Outcome> {
+        if let Some(currency) = currency
             && !currency.eq_ignore_ascii_case(self.currency.code())
         {
-            return Outcome::Invalid(
+            return Some(Outcome::Invalid(
                 "currency_mismatch",
                 format!(
                     "the row is in {currency}, the vault in {}",
                     self.currency.code()
                 ),
-            );
+            ));
         }
-        let occurred_at = match cells.date {
-            Ok(date) => date.at,
-            Err(message) => return Outcome::Invalid("invalid_date", message),
-        };
-        let minor = match cells.amount {
-            Ok(amount) => amount.minor,
-            Err(message) => return Outcome::Invalid("invalid_amount", message),
-        };
-        if minor == 0 {
-            return Outcome::Skip("zero_amount", "the amount is zero".to_string());
+        if let Err(message) = date {
+            return Some(Outcome::Invalid("invalid_date", message));
         }
+        match amount {
+            Err(message) => Some(Outcome::Invalid("invalid_amount", message)),
+            Ok(amount) if amount.minor == 0 => Some(Outcome::Skip(
+                "zero_amount",
+                "the amount is zero".to_string(),
+            )),
+            Ok(_) => None,
+        }
+    }
 
-        let note = compose_note(&row.payee, row.original.as_deref());
+    /// What becomes of a row not in the log yet, with the user's override.
+    /// A row the mapping reads as invalid stays as it reads it: the override
+    /// changes nothing.
+    fn decide(&self, draft: Draft<'a>, user: Option<&StatementRowOverride>) -> Planned {
+        let Draft {
+            mut row,
+            broken,
+            base,
+            type_value,
+            outflow,
+            skipped_status,
+            problem,
+            ..
+        } = draft;
+        if let Some(message) = broken {
+            row.status = StatementRowStatus::Invalid {
+                code: "invalid_row".to_string(),
+                message,
+            };
+            return Planned { row, command: None };
+        }
+        let invalid = *base != StatementAction::Skip
+            && skipped_status.is_none()
+            && matches!(problem, Some(Outcome::Invalid(..)));
+        let user = user.filter(|_| !invalid);
+        let (action, by) = match user.and_then(|user| user.action.as_ref()) {
+            Some(action) => (action, By::User),
+            None => (base, By::Mapping(type_value.as_deref())),
+        };
+        row.action = action.clone();
+        row.kind = outflow.and_then(|outflow| kind_of(action, outflow));
+        row.counter_wallet_id = counter_wallet(action);
+
+        // In the order a user expects to read it: what the mapping or the
+        // user skip, then what cannot be read, then what is missing.
+        let outcome = if *action == StatementAction::Skip {
+            by.skip()
+        } else if let Some(status) = skipped_status {
+            Outcome::Skip("skipped_status", format!("status {status} is skipped"))
+        } else if let Some(problem) = problem {
+            problem
+        } else {
+            self.import(&row, action, &by, outflow, user)
+        };
+        let mut command = None;
+        row.status = match outcome {
+            Outcome::Import(planned) => {
+                command = Some(planned);
+                StatementRowStatus::New
+            }
+            Outcome::Skip(code, reason) => StatementRowStatus::Skipped {
+                code: code.to_string(),
+                reason,
+            },
+            Outcome::Invalid(code, message) => StatementRowStatus::Invalid {
+                code: code.to_string(),
+                message,
+            },
+        };
+        Planned { row, command }
+    }
+
+    /// The command of a row whose date and amount were read, taken for the
+    /// action `by` whoever said it, or why it waits for a wallet.
+    fn import(
+        &self,
+        row: &StatementRow,
+        action: &StatementAction,
+        by: &By<'_>,
+        outflow: Option<bool>,
+        user: Option<&StatementRowOverride>,
+    ) -> Outcome {
+        let Some(occurred_at) = row.occurred_at else {
+            return Outcome::Invalid("invalid_date", "the date cannot be read".to_string());
+        };
+        let text = user
+            .and_then(|user| user.note.as_deref())
+            .unwrap_or(&row.note);
+        let note = compose_note(text, row.original.as_deref());
         let transfer = |from_wallet_id, to_wallet_id| {
             Outcome::Import(Command::TransferWallet {
                 amount: row.amount,
@@ -503,8 +592,14 @@ impl<'a> Context<'a> {
         let entry = || Entry {
             amount: row.amount,
             wallet_id: Some(self.wallet_id),
-            flow_id: self.flow_id,
-            category: row.matched_category.clone(),
+            flow_id: self.flow(user),
+            category: match user.and_then(|user| user.category.as_deref()) {
+                Some(typed) => {
+                    let typed = typed.trim();
+                    (!typed.is_empty()).then(|| typed.to_string())
+                }
+                None => row.category.clone(),
+            },
             note: note.clone(),
             occurred_at,
             // A statement is the importer's own account.
@@ -514,23 +609,19 @@ impl<'a> Context<'a> {
         // keeps the action: the rule names what the row is, the amount is
         // taken as absolute.
         match action {
-            StatementAction::TransferIn {
-                from_wallet_id: Some(from),
-            } => transfer(*from, self.wallet_id),
-            StatementAction::TransferIn {
-                from_wallet_id: None,
-            } => Outcome::Skip(
-                "needs_wallet",
-                "choose the wallet the money came from".to_string(),
-            ),
-            StatementAction::TransferOut {
-                to_wallet_id: Some(to),
-            } => transfer(self.wallet_id, *to),
-            StatementAction::TransferOut { to_wallet_id: None } => Outcome::Skip(
-                "needs_wallet",
-                "choose the wallet the money went to".to_string(),
-            ),
-            StatementAction::Skip => Outcome::Skip("skipped_by_rule", skip_reason(type_value)),
+            StatementAction::TransferIn { from_wallet_id } => {
+                match self.other_wallet(*from_wallet_id, "came from") {
+                    Ok(from) => transfer(from, self.wallet_id),
+                    Err(reason) => Outcome::Skip("needs_wallet", reason),
+                }
+            }
+            StatementAction::TransferOut { to_wallet_id } => {
+                match self.other_wallet(*to_wallet_id, "went to") {
+                    Ok(to) => transfer(self.wallet_id, to),
+                    Err(reason) => Outcome::Skip("needs_wallet", reason),
+                }
+            }
+            StatementAction::Skip => by.skip(),
             StatementAction::BySign if outflow == Some(true) => {
                 Outcome::Import(Command::Expense(entry()))
             }
@@ -539,6 +630,44 @@ impl<'a> Context<'a> {
             }
             StatementAction::Expense => Outcome::Import(Command::Expense(entry())),
             StatementAction::Refund => Outcome::Import(Command::Refund(entry())),
+        }
+    }
+
+    /// The other wallet of a transfer, or why the row waits for one: none
+    /// named, or one the money cannot move to or from (the imported wallet
+    /// itself, one not in the vault, an archived one). `way` is `came from`
+    /// or `went to`.
+    fn other_wallet(&self, named: Option<Uuid>, way: &str) -> std::result::Result<Uuid, String> {
+        let Some(id) = named else {
+            return Err(format!("choose the wallet the money {way}"));
+        };
+        if id == self.wallet_id {
+            return Err(format!(
+                "the money cannot move between the imported wallet and itself: choose the wallet it {way}"
+            ));
+        }
+        match self.wallets.get(&id) {
+            None => Err(format!(
+                "wallet {id} is not in the vault: choose the wallet the money {way}"
+            )),
+            Some(true) => Err(format!(
+                "the wallet the money {way} is archived: choose another"
+            )),
+            Some(false) => Ok(id),
+        }
+    }
+
+    /// The envelope of an entry: the user's when it is an active envelope of
+    /// the vault (an archived or unknown one is ignored), else the options'.
+    /// The user's Unallocated is `None`, as the options name it.
+    fn flow(&self, user: Option<&StatementRowOverride>) -> Option<Uuid> {
+        match user
+            .and_then(|user| user.flow_id)
+            .filter(|id| self.active_flows.contains(id))
+        {
+            Some(id) if id == self.unallocated => None,
+            Some(id) => Some(id),
+            None => self.flow_id,
         }
     }
 
@@ -751,14 +880,12 @@ mod tests {
     #[test]
     fn an_override_skip_carries_its_own_code() {
         let mut rows = [planned(2), planned(3)];
-        apply_overrides(
-            &mut rows,
-            &[StatementRowOverride {
-                line: 3,
-                skip: true,
-                ..Default::default()
-            }],
-        );
+        let skip = StatementRowOverride {
+            line: 3,
+            skip: true,
+            ..Default::default()
+        };
+        leave_out(&mut rows, &HashMap::from([(3, &skip)]));
         assert_eq!(rows[0].row.status, StatementRowStatus::New);
         assert_eq!(
             rows[1].row.status,

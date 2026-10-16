@@ -10,8 +10,8 @@ use common::*;
 use sparagne_core::statement::{self, STATEMENT_NAMESPACE};
 use sparagne_core::{
     AmountSign, Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, StatementAction,
-    StatementDateFormat, StatementMapping, StatementOptions, StatementPreview, StatementRow,
-    StatementRowOverride, StatementRowStatus, StatementTypeRule, TransactionKind,
+    StatementDateFormat, StatementMapping, StatementOptions, StatementPreview, StatementReport,
+    StatementRow, StatementRowOverride, StatementRowStatus, StatementTypeRule, TransactionKind,
 };
 use uuid::Uuid;
 
@@ -146,6 +146,74 @@ fn bank_wallet(fx: &mut Fx) -> Uuid {
     run(&mut fx.core, fx.vault, wallet_cmd("Bank", 100_000))
         .result_id
         .unwrap()
+}
+
+const BANK_HEADER: &str = "Data operazione;Data valuta;Descrizione;Importo;Divisa";
+
+/// A bank statement made of `rows`, header first, for [`bank_mapping`].
+fn bank_csv(rows: &[String]) -> String {
+    format!("{BANK_HEADER}\n{}\n", rows.join("\n"))
+}
+
+/// A bank row on `day` (`16/09/2026`), the amount as the bank writes it
+/// (`-3,50` for money out).
+fn bank_row(day: &str, description: &str, amount: &str) -> String {
+    format!("{day};{day};{description};{amount};EUR")
+}
+
+/// An override of `line` that changes nothing yet.
+fn user(line: u32) -> StatementRowOverride {
+    StatementRowOverride {
+        line,
+        ..Default::default()
+    }
+}
+
+fn preview_with(
+    fx: &Fx,
+    text: &str,
+    mapping: &StatementMapping,
+    options: &StatementOptions,
+    overrides: &[StatementRowOverride],
+) -> StatementPreview {
+    fx.core
+        .preview_statement(fx.vault, text, mapping, options, overrides)
+        .unwrap()
+}
+
+fn import_with(
+    fx: &mut Fx,
+    text: &str,
+    mapping: &StatementMapping,
+    options: &StatementOptions,
+    overrides: &[StatementRowOverride],
+) -> StatementReport {
+    fx.core
+        .import_statement(fx.vault, "alice", text, mapping, options, overrides)
+        .unwrap()
+}
+
+/// A wallet without money, archived.
+fn archived_wallet(fx: &mut Fx, name: &str) -> Uuid {
+    let id = run(&mut fx.core, fx.vault, wallet_cmd(name, 0))
+        .result_id
+        .unwrap();
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::ArchiveWallet { wallet_id: id },
+    );
+    id
+}
+
+fn new_flow(fx: &mut Fx, name: &str) -> Uuid {
+    run(
+        &mut fx.core,
+        fx.vault,
+        flow_cmd(name, FlowMode::Unlimited, true, 0),
+    )
+    .result_id
+    .unwrap()
 }
 
 // ---------------------------------------------------------------------------
@@ -993,6 +1061,283 @@ fn a_refused_row_is_reported_and_the_others_import() {
     assert_eq!(report.rejected.len(), 1);
     assert_eq!(report.rejected[0].line, 10);
     assert_eq!(report.rejected[0].code, "invalid_name");
+}
+
+// ---------------------------------------------------------------------------
+// What the user says a row is
+// ---------------------------------------------------------------------------
+
+#[test]
+fn an_action_override_changes_what_the_row_is_in_the_preview_and_the_import() {
+    let mut fx = setup();
+    let savings = run(&mut fx.core, fx.vault, wallet_cmd("Savings", 0))
+        .result_id
+        .unwrap();
+    let overrides = [
+        StatementRowOverride {
+            action: Some(StatementAction::Refund),
+            ..user(2)
+        },
+        StatementRowOverride {
+            action: Some(StatementAction::Skip),
+            ..user(3)
+        },
+        StatementRowOverride {
+            action: Some(StatementAction::TransferOut {
+                to_wallet_id: Some(savings),
+            }),
+            ..user(4)
+        },
+    ];
+    let options = options(fx.wallet);
+    let plain = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &overrides);
+
+    let pos = row(&preview, 2);
+    assert_eq!(pos.action, StatementAction::Refund);
+    assert_eq!(pos.kind, Some(TransactionKind::Refund));
+    assert_eq!(pos.status, StatementRowStatus::New);
+    let salary = row(&preview, 3);
+    assert_eq!(salary.action, StatementAction::Skip);
+    assert_eq!(salary.kind, None);
+    assert_eq!(skip_code(salary), "skipped_by_you");
+    assert_eq!(skip_reason(salary), "skipped by you");
+    let transfer = row(&preview, 4);
+    assert_eq!(transfer.kind, Some(TransactionKind::TransferWallet));
+    assert_eq!(transfer.counter_wallet_id, Some(savings));
+    assert_eq!((preview.new_rows, preview.skipped), (2, 2));
+    // What the row is never changes its id.
+    for line in 2..=5 {
+        assert_eq!(row(&preview, line).command_id, row(&plain, line).command_id);
+    }
+
+    let report = import_with(&mut fx, BANK, &bank_mapping(), &options, &overrides);
+    assert_eq!((report.executed, report.skipped), (2, 2));
+    let refund = fx.core.transaction(fx.vault, pos.command_id).unwrap();
+    assert_eq!(refund.kind, TransactionKind::Refund);
+    assert_eq!(refund.amount, 350);
+    let moved = fx.core.transaction(fx.vault, transfer.command_id).unwrap();
+    assert_eq!(
+        (moved.kind, moved.from_id, moved.to_id),
+        (
+            TransactionKind::TransferWallet,
+            Some(fx.wallet),
+            Some(savings)
+        )
+    );
+    assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 350 - 12_000);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, savings), 12_000);
+}
+
+#[test]
+fn a_transfer_override_without_a_usable_wallet_waits_for_one() {
+    let mut fx = setup();
+    let old = archived_wallet(&mut fx, "Old");
+    let stranger = Uuid::now_v7();
+    let text = bank_csv(&[
+        bank_row("16/09/2026", "GIROCONTO", "-10,00"),
+        bank_row("15/09/2026", "GIROCONTO", "-11,00"),
+        bank_row("14/09/2026", "GIROCONTO", "12,00"),
+        bank_row("13/09/2026", "GIROCONTO", "-13,00"),
+    ]);
+    let overrides = [
+        StatementRowOverride {
+            action: Some(StatementAction::TransferOut { to_wallet_id: None }),
+            ..user(2)
+        },
+        StatementRowOverride {
+            action: Some(StatementAction::TransferOut {
+                to_wallet_id: Some(fx.wallet),
+            }),
+            ..user(3)
+        },
+        StatementRowOverride {
+            action: Some(StatementAction::TransferIn {
+                from_wallet_id: Some(old),
+            }),
+            ..user(4)
+        },
+        StatementRowOverride {
+            action: Some(StatementAction::TransferOut {
+                to_wallet_id: Some(stranger),
+            }),
+            ..user(5)
+        },
+    ];
+    let options = options(fx.wallet);
+    let preview = preview_with(&fx, &text, &bank_mapping(), &options, &overrides);
+    for line in 2..=5 {
+        assert_eq!(
+            skip_code(row(&preview, line)),
+            "needs_wallet",
+            "line {line}"
+        );
+        assert_eq!(
+            row(&preview, line).kind,
+            Some(TransactionKind::TransferWallet)
+        );
+    }
+    assert_eq!(
+        skip_reason(row(&preview, 2)),
+        "choose the wallet the money went to"
+    );
+    assert_eq!(
+        skip_reason(row(&preview, 4)),
+        "the wallet the money came from is archived: choose another"
+    );
+    let report = import_with(&mut fx, &text, &bank_mapping(), &options, &overrides);
+    assert_eq!((report.executed, report.skipped), (0, 4));
+}
+
+#[test]
+fn an_override_can_import_a_row_a_type_rule_skips() {
+    let mut fx = setup();
+    let text = card_csv(&[card_row(
+        "2026-09-11 09:30:00 UTC",
+        "liquid_deposit",
+        "Liquid deposit",
+        "",
+        "50.00",
+        "EUR",
+    )]);
+    let options = options(fx.wallet);
+    let overrides = [StatementRowOverride {
+        action: Some(StatementAction::Income),
+        ..user(2)
+    }];
+    let plain = preview_with(&fx, &text, &card_mapping(), &options, &no_overrides());
+    assert_eq!(skip_code(row(&plain, 2)), "skipped_by_rule");
+    let preview = preview_with(&fx, &text, &card_mapping(), &options, &overrides);
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 2).kind, Some(TransactionKind::Income));
+    let report = import_with(&mut fx, &text, &card_mapping(), &options, &overrides);
+    assert_eq!(report.executed, 1);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 5_000);
+}
+
+#[test]
+fn a_flow_override_picks_the_envelope_and_an_unusable_one_is_ignored() {
+    let mut fx = setup();
+    let casa = new_flow(&mut fx, "Casa");
+    let viaggi = new_flow(&mut fx, "Viaggi");
+    let gone = new_flow(&mut fx, "Gone");
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::ArchiveFlow { flow_id: gone },
+    );
+    let text = bank_csv(&[
+        bank_row("16/09/2026", "BAR", "-3,50"),
+        bank_row("15/09/2026", "STIPENDIO", "1850,00"),
+        bank_row("14/09/2026", "EDICOLA", "-2,00"),
+        bank_row("13/09/2026", "CINEMA", "-9,00"),
+    ]);
+    let overrides = [
+        StatementRowOverride {
+            flow_id: Some(viaggi),
+            ..user(2)
+        },
+        StatementRowOverride {
+            flow_id: Some(fx.unallocated),
+            ..user(3)
+        },
+        StatementRowOverride {
+            flow_id: Some(Uuid::now_v7()),
+            ..user(4)
+        },
+        StatementRowOverride {
+            flow_id: Some(gone),
+            ..user(5)
+        },
+    ];
+    let options = StatementOptions {
+        flow_id: Some(casa),
+        ..options(fx.wallet)
+    };
+    let preview = preview_with(&fx, &text, &bank_mapping(), &options, &overrides);
+    assert_eq!(preview.new_rows, 4);
+    let report = import_with(&mut fx, &text, &bank_mapping(), &options, &overrides);
+    assert_eq!(report.executed, 4);
+    let flow = |line| {
+        fx.core
+            .transaction(fx.vault, row(&preview, line).command_id)
+            .unwrap()
+            .flow_id
+    };
+    assert_eq!(flow(2), Some(viaggi));
+    assert_eq!(flow(3), Some(fx.unallocated));
+    assert_eq!(flow(4), Some(casa), "an unknown envelope is ignored");
+    assert_eq!(flow(5), Some(casa), "an archived envelope is ignored");
+}
+
+#[test]
+fn overrides_change_nothing_on_rows_already_imported_or_invalid() {
+    let mut fx = setup();
+    let savings = run(&mut fx.core, fx.vault, wallet_cmd("Savings", 0))
+        .result_id
+        .unwrap();
+    let text = card_csv(&[
+        spend("2026-09-16 08:00:00 UTC", "BAR", "CLEARED", "1.20"),
+        spend("16/09/2026 08:00", "BAR", "CLEARED", "1.30"),
+        spend("2026-09-16 06:00:00 UTC", "BAR", "CLEARED", "1.2.0"),
+        "2026-09-15 08:00:00 UTC,card_spend,TOO SHORT,CLEARED,2.00".to_string(),
+    ]);
+    let options = options(fx.wallet);
+    let first = import_with(&mut fx, &text, &card_mapping(), &options, &no_overrides());
+    assert_eq!(first.executed, 1);
+
+    let everything = |line| StatementRowOverride {
+        line,
+        category: Some("Libri".to_string()),
+        note: Some("mine".to_string()),
+        skip: true,
+        action: Some(StatementAction::TransferOut {
+            to_wallet_id: Some(savings),
+        }),
+        flow_id: Some(fx.unallocated),
+        on_match: None,
+    };
+    let overrides: Vec<_> = (2..=5).map(everything).collect();
+    let plain = preview_with(&fx, &text, &card_mapping(), &options, &no_overrides());
+    let preview = preview_with(&fx, &text, &card_mapping(), &options, &overrides);
+    assert_eq!(preview, plain);
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::AlreadyImported);
+    assert_eq!(invalid_code(row(&preview, 3)), "invalid_date");
+    assert_eq!(invalid_code(row(&preview, 4)), "invalid_amount");
+    assert_eq!(invalid_code(row(&preview, 5)), "invalid_row");
+
+    let commands = command_count(&fx.core, fx.vault);
+    let again = import_with(&mut fx, &text, &card_mapping(), &options, &overrides);
+    assert_eq!((again.executed, again.deduplicated), (0, 1));
+    assert_eq!(command_count(&fx.core, fx.vault), commands);
+}
+
+#[test]
+fn a_row_imported_before_stays_imported_whatever_the_user_now_says() {
+    let mut fx = setup();
+    let savings = run(&mut fx.core, fx.vault, wallet_cmd("Savings", 0))
+        .result_id
+        .unwrap();
+    let options = options(fx.wallet);
+    let first = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(first.executed, 3);
+    let commands = command_count(&fx.core, fx.vault);
+    let overrides = [
+        StatementRowOverride {
+            action: Some(StatementAction::TransferOut {
+                to_wallet_id: Some(savings),
+            }),
+            ..user(4)
+        },
+        StatementRowOverride {
+            category: Some("Bar".to_string()),
+            note: Some("coffee".to_string()),
+            ..user(2)
+        },
+    ];
+    let again = import_with(&mut fx, BANK, &bank_mapping(), &options, &overrides);
+    assert_eq!((again.executed, again.deduplicated), (0, 3));
+    assert_eq!(command_count(&fx.core, fx.vault), commands);
 }
 
 // ---------------------------------------------------------------------------

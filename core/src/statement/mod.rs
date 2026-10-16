@@ -456,7 +456,9 @@ pub fn decode_mapping(json: &str) -> Result<StatementMapping> {
 }
 
 impl Core {
-    /// What importing `text` would do, row by row. Writes nothing.
+    /// What importing `text` with the user's `overrides` would do, row by
+    /// row: fed the same overrides, [`Core::import_statement`] does exactly
+    /// this. Writes nothing.
     pub fn preview_statement(
         &self,
         vault_id: Uuid,
@@ -465,8 +467,7 @@ impl Core {
         options: &StatementOptions,
         overrides: &[StatementRowOverride],
     ) -> Result<StatementPreview> {
-        let mut planned = plan::plan(self, vault_id, text, mapping, options)?;
-        plan::apply_overrides(&mut planned, overrides);
+        let planned = plan::plan(self, vault_id, text, mapping, options, overrides)?;
         let mut preview = StatementPreview {
             rows: Vec::with_capacity(planned.len()),
             new_rows: 0,
@@ -510,8 +511,7 @@ impl Core {
         options: &StatementOptions,
         overrides: &[StatementRowOverride],
     ) -> Result<StatementReport> {
-        let mut planned = plan::plan(self, vault_id, text, mapping, options)?;
-        plan::apply_overrides(&mut planned, overrides);
+        let planned = plan::plan(self, vault_id, text, mapping, options, overrides)?;
         let mut report = StatementReport {
             executed: 0,
             deduplicated: 0,
