@@ -580,6 +580,24 @@ pub struct StatementRow {
     /// What becomes of a row that matched: the user's choice, else the
     /// default. `None` when nothing matched.
     pub match_choice: Option<StatementMatchChoice>,
+    /// What [`Self::match_choice`] would be without the user's `on_match`.
+    /// `None` when nothing matched.
+    #[uniffi(default = None)]
+    pub default_choice: Option<StatementMatchChoice>,
+    /// What the row is taken for before the user's own action: the
+    /// description rule's, else the type rule's, else the default action.
+    /// `None` for a row that could not be read as one (`invalid_row`).
+    #[uniffi(default = None)]
+    pub base_action: Option<StatementAction>,
+}
+
+/// A wallet the statement does not check for rows typed by hand where some
+/// of its new rows look like entries already there: advice to check it.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct StatementLookalike {
+    pub wallet_id: Uuid,
+    /// New rows that matched nothing and would match an entry there.
+    pub rows: u32,
 }
 
 /// Every row of a statement with what would happen to it, plus counts.
@@ -599,6 +617,11 @@ pub struct StatementPreview {
     pub matched_transfers: u32,
     /// Possible duplicates whose match the import would move.
     pub moves: u32,
+    /// Wallets not checked for rows typed by hand, nor any statement's,
+    /// where new rows that matched nothing look like entries already there,
+    /// the most such rows first. Advice only: matching does not use them.
+    #[uniffi(default = [])]
+    pub lookalikes: Vec<StatementLookalike>,
 }
 
 /// Outcome of [`Core::import_statement`].
@@ -711,7 +734,10 @@ impl Core {
         options: &StatementOptions,
         overrides: &[StatementRowOverride],
     ) -> Result<StatementPreview> {
-        let planned = plan::plan(self, vault_id, text, mapping, options, overrides)?;
+        let plan::Plan {
+            rows: planned,
+            lookalikes,
+        } = plan::plan(self, vault_id, text, mapping, options, overrides)?;
         let mut preview = StatementPreview {
             rows: Vec::with_capacity(planned.len()),
             new_rows: 0,
@@ -722,6 +748,7 @@ impl Core {
             possible_duplicates: 0,
             matched_transfers: 0,
             moves: 0,
+            lookalikes,
         };
         for plan::Planned { row, .. } in planned {
             match row.status {
@@ -759,7 +786,7 @@ impl Core {
         options: &StatementOptions,
         overrides: &[StatementRowOverride],
     ) -> Result<StatementReport> {
-        let planned = plan::plan(self, vault_id, text, mapping, options, overrides)?;
+        let planned = plan::plan(self, vault_id, text, mapping, options, overrides)?.rows;
         let mut report = StatementReport {
             executed: 0,
             deduplicated: 0,

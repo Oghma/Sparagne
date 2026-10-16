@@ -21,8 +21,8 @@ use super::dates::{StatementDate, parse_date};
 use super::matching;
 use super::{
     AmountSign, STATEMENT_NAMESPACE, StatementAction, StatementDateFormat,
-    StatementDescriptionRule, StatementMapping, StatementMatchChoice, StatementOptions,
-    StatementRow, StatementRowOverride, StatementRowStatus,
+    StatementDescriptionRule, StatementLookalike, StatementMapping, StatementMatchChoice,
+    StatementOptions, StatementRow, StatementRowOverride, StatementRowStatus,
 };
 use crate::{
     Command, Core, Currency, DomainError, Entry, Result, TransactionKind, TransactionPatch,
@@ -58,6 +58,13 @@ impl Planned {
 /// The user's overrides by line; the last one of a line wins.
 pub(super) type Overrides<'o> = HashMap<u32, &'o StatementRowOverride>;
 
+/// Every row of a statement with what happens to it, and the wallets worth
+/// checking for rows typed by hand.
+pub(super) struct Plan {
+    pub rows: Vec<Planned>,
+    pub lookalikes: Vec<StatementLookalike>,
+}
+
 /// Reads every row of `text` and decides what becomes of it, with the user's
 /// `overrides`. Writes nothing.
 pub(super) fn plan(
@@ -67,7 +74,7 @@ pub(super) fn plan(
     mapping: &StatementMapping,
     options: &StatementOptions,
     overrides: &[StatementRowOverride],
-) -> Result<Vec<Planned>> {
+) -> Result<Plan> {
     let delimiter = delimiter(&mapping.delimiter)?;
     let mut records = csv::records(text, delimiter);
     let context = Context::new(core, vault_id, &mut records, mapping, options)?;
@@ -136,9 +143,12 @@ pub(super) fn plan(
         }
         planned.push(item);
     }
-    matching::claim(core, vault_id, options, &overrides, &standing, &mut planned)?;
+    let lookalikes = matching::claim(core, vault_id, options, &overrides, &standing, &mut planned)?;
     leave_out(&mut planned, &overrides);
-    Ok(planned)
+    Ok(Plan {
+        rows: planned,
+        lookalikes,
+    })
 }
 
 /// The id of the command that moves the row typed by hand for the
@@ -300,12 +310,17 @@ fn leave_out(planned: &mut [Planned], overrides: &Overrides<'_>) {
         if item.row.status == StatementRowStatus::New
             && overrides.get(&item.row.line).is_some_and(|user| user.skip)
         {
-            item.row.status = StatementRowStatus::Skipped {
-                code: "skipped_by_you".to_string(),
-                reason: "skipped by you".to_string(),
-            };
+            item.row.status = skipped_by_you();
             item.command = None;
         }
+    }
+}
+
+/// A row the user's `skip` leaves out.
+pub(super) fn skipped_by_you() -> StatementRowStatus {
+    StatementRowStatus::Skipped {
+        code: "skipped_by_you".to_string(),
+        reason: "skipped by you".to_string(),
     }
 }
 
@@ -646,6 +661,8 @@ impl<'a> Context<'a> {
             description_rule: None,
             existing: None,
             match_choice: None,
+            default_choice: None,
+            base_action: None,
         };
         let broken = |row, message: String| Draft {
             row,
@@ -846,6 +863,7 @@ impl<'a> Context<'a> {
             (None, Some(ruled)) => ruled,
             (None, None) => (base, By::Mapping(type_value.as_deref())),
         };
+        row.base_action = Some(mapped.clone());
         row.action = action.clone();
         row.kind = outflow.and_then(|outflow| kind_of(action, outflow));
         row.counter_wallet_id = counter_wallet(action);
@@ -1188,6 +1206,8 @@ mod tests {
                 description_rule: None,
                 existing: None,
                 match_choice: None,
+                default_choice: None,
+                base_action: Some(StatementAction::Expense),
             },
             None,
         )
