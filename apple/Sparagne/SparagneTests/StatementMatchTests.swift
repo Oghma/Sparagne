@@ -1,0 +1,319 @@
+import Foundation
+import SparagneCore
+import Testing
+
+@testable import Sparagne
+
+/// The statement import against what the vault already holds, end to end
+/// over an in-memory core: rows typed by hand that a statement row stands
+/// for, kept, moved in from another wallet or imported anyway; the other
+/// side of a transfer already recorded; description rules and the start day
+/// as the core applies them. Every assertion is about what the review shows
+/// or what the vault holds afterwards. No real statement is used.
+struct StatementMatchTests {
+    // MARK: - Fixtures
+
+    private static let cardHeader = "timestamp,type,description,status,amount,currency,card,"
+        + "card holder name,original amount,original currency,cashback earned,cashback currency,"
+        + "category,spending mode"
+
+    private static func cardRow(_ at: String, _ type: String, _ description: String, _ status: String, _ amount: String) -> String {
+        "\(at),\(type),\(description),\(status),\(amount),EUR,1234,SAM TESTER,\(amount),EUR,,,,standard"
+    }
+
+    /// Lines count the header, so the first row is line 2.
+    private static let card = ([cardHeader] + [
+        cardRow("2026-09-17 08:15:33 UTC", "card_spend", "FORNO BIANCO", "CLEARED", "3.20"), // 2
+        cardRow("2026-09-16 12:03:10 UTC", "card_spend", "METRO TICKET", "CLEARED", "2.10"), // 3
+        cardRow("2026-09-13 10:00:00 UTC", "topup", "Top-up from bank", "", "150.00"), // 4
+        cardRow("2026-09-11 18:22:41 UTC", "card_spend", "GREEN GROCER", "CLEARED", "14.75"), // 5
+        cardRow("2026-09-10 19:42:07 UTC", "card_spend", "OSTERIA DEL PONTE", "PENDING", "42.50"), // 6
+    ]).joined(separator: "\n") + "\n"
+
+    /// A bank export with no type column: the top-up of the card going out,
+    /// and a coffee.
+    private static let bank = "Data;Importo;Descrizione\n"
+        + "13/09/2026;-150,00;RICARICA CARTA 1234\n" // 2
+        + "16/09/2026;-3,20;PAGAMENTO POS BAR CENTRALE\n" // 3
+
+    private static func defaults() throws -> UserDefaults {
+        try #require(UserDefaults(suiteName: "sparagne.tests.\(UUID().uuidString)"))
+    }
+
+    /// Vault `Main` with the card wallet `Card`, empty, and `Bank` holding
+    /// 1000.00. Nothing typed yet.
+    private static func vault() async throws -> (store: AppStore, card: Uuid, bank: Uuid) {
+        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: try defaults())
+        await store.bootstrap()
+        await store.createVault(name: "Main", walletName: "Card", openingBalance: 0)
+        await store.createWallet(name: "Bank", openingBalance: 100_000)
+        #expect(store.presentedError == nil)
+        let card = try #require(store.wallets.first { $0.name == "Card" }).id
+        let bank = try #require(store.wallets.first { $0.name == "Bank" }).id
+        return (store, card, bank)
+    }
+
+    /// A line typed into the quick-add, which must be taken.
+    private static func type(_ line: String, into store: AppStore) async {
+        await store.submit(quickAdd: line)
+        #expect(store.presentedError == nil, "the quick-add refused \(line)")
+    }
+
+    /// The card file read with its preset, aimed at the card and previewed.
+    private static func cardModel(
+        _ store: AppStore,
+        card: Uuid,
+        mappings: StatementMappingStore
+    ) async throws -> StatementImportModel {
+        let model = StatementImportModel(store: store, mappings: mappings)
+        await model.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        model.walletId = card
+        await model.refreshPreview()
+        #expect(model.previewProblem == nil)
+        return model
+    }
+
+    private static func row(_ model: StatementImportModel, line: UInt32) throws -> StatementRow {
+        try #require(model.preview?.rows.first { $0.line == line })
+    }
+
+    /// Every transaction of the vault, voided and transfers included.
+    private static func transactions(_ store: AppStore) async throws -> [TransactionView] {
+        let vaultId = try #require(store.currentVault?.id)
+        let filter = TransactionFilter(includeVoided: true, includeTransfers: true, ascending: true)
+        return try await store.core.transactions(vaultId: vaultId, filter: filter, limit: 500, cursor: nil).items
+    }
+
+    private static func balance(_ store: AppStore, _ wallet: Uuid) -> Int64? {
+        store.wallets.first { $0.id == wallet }?.balance
+    }
+
+    // MARK: - A row typed by hand
+
+    @Test("A spend typed by hand makes the statement's row a possible duplicate, kept as the one there, and the next import of the file reads it as imported before")
+    func handRowKept() async throws {
+        let (store, card, _) = try await Self.vault()
+        await Self.type("-14.75 green grocer #Spesa @card 2026-09-11", into: store)
+        let mappings = StatementMappingStore(defaults: try Self.defaults())
+        let model = try await Self.cardModel(store, card: card, mappings: mappings)
+
+        let grocer = try Self.row(model, line: 5)
+        #expect(grocer.status == .possibleDuplicate)
+        #expect(grocer.existing?.note == "green grocer")
+        #expect(grocer.existing?.walletId == card)
+        #expect(StatementImportModel.isFlagged(grocer))
+        // In the statement's own wallet there is nothing to move.
+        #expect(model.matchChoice(for: grocer) == .skip)
+        #expect(model.availableChoices(for: grocer) == [.skip, .importAnyway])
+        #expect(model.counts == .init(new: 2, alreadyImported: 0, skipped: 2, invalid: 0, rounded: 0, possibleDuplicates: 1))
+        // A possible duplicate is no new entry: no category to give it.
+        #expect(!StatementImportModel.takesCategory(grocer))
+
+        await model.runImport()
+
+        let report = try #require(model.report)
+        #expect(report.executed == 2)
+        #expect(report.possibleDuplicates == 1)
+        #expect(report.moved == 0)
+        #expect(report.rejected.isEmpty)
+        let grocers = try await Self.transactions(store).filter { $0.amount == 1475 && !$0.voided }
+        #expect(grocers.count == 1)
+        #expect(grocers.first?.note == "green grocer")
+
+        // The same file again: the row stands for the one typed, for good.
+        let again = StatementImportModel(store: store, mappings: mappings)
+        await again.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        #expect(again.walletId == card)
+        await again.refreshPreview()
+        let before = try Self.row(again, line: 5)
+        #expect(before.status == .alreadyImported)
+        #expect(before.existing == nil)
+        #expect(before.matchChoice == nil)
+        #expect(!StatementImportModel.isFlagged(before))
+        #expect(again.counts.new == 0)
+        #expect(again.counts.possibleDuplicates == 0)
+    }
+
+    @Test("Import anyway brings the possible duplicate back among the new rows, and the import writes it beside the one typed")
+    func handRowImportedAnyway() async throws {
+        let (store, card, _) = try await Self.vault()
+        await Self.type("-14.75 green grocer #Spesa @card 2026-09-11", into: store)
+        let model = try await Self.cardModel(store, card: card, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        let flagged = try Self.row(model, line: 5)
+
+        model.setMatchChoice(.importAnyway, for: flagged)
+        await model.refreshPreview()
+
+        let anyway = try Self.row(model, line: 5)
+        #expect(anyway.status == .new)
+        #expect(anyway.matchChoice == .importAnyway)
+        // The match stays beside it, so the review still shows it.
+        #expect(anyway.existing?.note == "green grocer")
+        #expect(StatementImportModel.isFlagged(anyway))
+        #expect(model.matchChoice(for: anyway) == .importAnyway)
+        #expect(model.counts.new == 3)
+        #expect(model.counts.possibleDuplicates == 0)
+
+        await model.runImport()
+
+        #expect(model.report?.executed == 3)
+        #expect(model.report?.possibleDuplicates == 0)
+        let grocers = try await Self.transactions(store).filter { $0.amount == 1475 && $0.kind == .expense && !$0.voided }
+        #expect(grocers.count == 2)
+        #expect(Set(grocers.compactMap(\.note)) == ["green grocer", "GREEN GROCER"])
+    }
+
+    @Test("A spend typed into a wallet ticked under Duplicates also in is moved into the statement's wallet with its note and category")
+    func handRowMovedIn() async throws {
+        let (store, card, bank) = try await Self.vault()
+        await Self.type("-14.75 green grocer #Spesa @bank 2026-09-11", into: store)
+        #expect(Self.balance(store, bank) == 98_525)
+        let model = try await Self.cardModel(store, card: card, mappings: StatementMappingStore(defaults: try Self.defaults()))
+
+        // Not searched yet: the bank's spend is no business of the card's file.
+        #expect(try Self.row(model, line: 5).status == .new)
+
+        model.setAlsoChecked(true, wallet: bank)
+        await model.refreshPreview()
+
+        let grocer = try Self.row(model, line: 5)
+        #expect(grocer.status == .possibleDuplicate)
+        #expect(grocer.existing?.walletId == bank)
+        #expect(grocer.matchChoice == .moveExisting)
+        #expect(model.canMove(grocer))
+        #expect(model.matchChoice(for: grocer) == .moveExisting)
+        #expect(model.availableChoices(for: grocer) == [.skip, .moveExisting, .importAnyway])
+        #expect(model.counts.moves == 1)
+        #expect(model.counts.possibleDuplicates == 1)
+        #expect(model.counts.new == 2)
+
+        await model.runImport()
+
+        let report = try #require(model.report)
+        #expect(report.moved == 1)
+        #expect(report.executed == 2)
+        #expect(report.rejected.isEmpty)
+        let after = try await Self.transactions(store)
+        let moved = try #require(after.first { $0.note == "green grocer" })
+        #expect(moved.walletId == card)
+        #expect(moved.category == "Spesa")
+        #expect(moved.amount == 1475)
+        // Out of the bank, into the card's own spending: counted once.
+        #expect(Self.balance(store, bank) == 100_000)
+        #expect(Self.balance(store, card) == -2_005) // 3.20 + 2.10 + 14.75 spent
+    }
+
+    // MARK: - The other side of a transfer
+
+    @Test("A transfer typed between the two wallets makes the card's top-up a transfer already there, not imported, and the money moves once")
+    func typedTransferMatched() async throws {
+        let (store, card, bank) = try await Self.vault()
+        await Self.type("tw> 150.00 @bank @card ricarica 2026-09-13", into: store)
+        let model = try await Self.cardModel(store, card: card, mappings: StatementMappingStore(defaults: try Self.defaults()))
+
+        let topup = try Self.row(model, line: 4)
+        #expect(topup.status == .matchedTransfer)
+        #expect(topup.existing?.kind == .transferWallet)
+        #expect(topup.existing?.fromId == bank)
+        #expect(topup.existing?.toId == card)
+        #expect(topup.matchChoice == .skip)
+        // A transfer has no wallet of its own to move from.
+        #expect(!model.canMove(topup))
+        #expect(model.counts.matchedTransfers == 1)
+        #expect(model.counts.new == 3)
+
+        await model.runImport()
+
+        #expect(model.report?.matchedTransfers == 1)
+        #expect(model.report?.executed == 3)
+        let transfers = try await Self.transactions(store).filter { $0.kind == .transferWallet && !$0.voided }
+        #expect(transfers.count == 1)
+        #expect(Self.balance(store, bank) == 85_000)
+        #expect(Self.balance(store, card) == 12_995) // 150.00 in, 20.05 spent
+    }
+
+    @Test("A description rule makes the bank's top-up of the card a transfer with a clean note, and the card's file then finds it instead of writing it twice")
+    func ruleTransferThenMatched() async throws {
+        let (store, card, bank) = try await Self.vault()
+        let mappings = StatementMappingStore(defaults: try Self.defaults())
+
+        let bankModel = StatementImportModel(store: store, mappings: mappings)
+        await bankModel.load(data: Data(Self.bank.utf8), fileName: "banca.csv")
+        bankModel.mapping.dateColumn = "Data"
+        bankModel.mapping.amountColumn = "Importo"
+        bankModel.mapping.descriptionColumns = ["Descrizione"]
+        bankModel.walletId = bank
+        bankModel.addDescriptionRule()
+        bankModel.mapping.descriptionRules[0].contains = "ricarica carta"
+        bankModel.mapping.descriptionRules[0].action = .transferOut(toWalletId: card)
+        bankModel.mapping.descriptionRules[0].note = "Ricarica carta"
+        await bankModel.refreshPreview()
+
+        let recharge = try Self.row(bankModel, line: 2)
+        #expect(recharge.status == .new)
+        #expect(recharge.kind == .transferWallet)
+        #expect(recharge.action == .transferOut(toWalletId: card))
+        #expect(recharge.counterWalletId == card)
+        #expect(recharge.descriptionRule == 0)
+        #expect(recharge.note == "Ricarica carta")
+        #expect(bankModel.matchCount(ofRule: 0) == 1)
+        // The coffee keeps its sign's kind and its own text.
+        let coffee = try Self.row(bankModel, line: 3)
+        #expect(coffee.kind == .expense)
+        #expect(coffee.descriptionRule == nil)
+        #expect(coffee.note == "PAGAMENTO POS BAR CENTRALE")
+
+        await bankModel.runImport()
+
+        #expect(bankModel.report?.executed == 2)
+        let written = try await Self.transactions(store)
+        let transfer = try #require(written.first { $0.kind == .transferWallet })
+        #expect(transfer.fromId == bank)
+        #expect(transfer.toId == card)
+        #expect(transfer.note == "Ricarica carta")
+
+        // The card's file: its top-up is that transfer's other side.
+        let cardModel = try await Self.cardModel(store, card: card, mappings: mappings)
+        #expect(try Self.row(cardModel, line: 4).status == .matchedTransfer)
+
+        await cardModel.runImport()
+
+        #expect(cardModel.report?.matchedTransfers == 1)
+        let transfers = try await Self.transactions(store).filter { $0.kind == .transferWallet && !$0.voided }
+        #expect(transfers.count == 1)
+        #expect(Self.balance(store, bank) == 84_680) // 1000.00 less 150.00 and 3.20
+        #expect(Self.balance(store, card) == 12_995) // 150.00 in, 20.05 spent
+    }
+
+    // MARK: - The start day
+
+    @Test("A start day skips the rows dated before it, which the review says in words and offers no kind for")
+    func startDay() async throws {
+        let (store, card, _) = try await Self.vault()
+        let model = try await Self.cardModel(store, card: card, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        #expect(try Self.row(model, line: 5).status == .new)
+
+        model.since = "2026-09-12"
+        await model.refreshPreview()
+
+        let grocer = try Self.row(model, line: 5)
+        guard case .skipped(let code, _) = grocer.status else {
+            Issue.record("the grocer, a day before the start, should be skipped, not \(grocer.status)")
+            return
+        }
+        #expect(code == "before_start")
+        #expect(StatementText.status(grocer.status) == StatementText.skipped("before_start"))
+        #expect(!StatementImportModel.takesAction(grocer))
+        // The rows from the start day on are untouched.
+        #expect(try Self.row(model, line: 2).status == .new)
+        #expect(try Self.row(model, line: 3).status == .new)
+        #expect(model.counts.new == 2)
+
+        await model.runImport()
+
+        #expect(model.report?.executed == 2)
+        let imported = try await Self.transactions(store)
+        #expect(!imported.contains { $0.note == "GREEN GROCER" })
+        #expect(imported.contains { $0.note == "METRO TICKET" })
+    }
+}
