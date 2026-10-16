@@ -313,8 +313,13 @@ struct StatementMatchTests {
         return model
     }
 
-    @Test("A bank's transfer whose other side another bank's file imported as an income replaces that income by default, and the money moves once")
-    func transferReplacesIncome() async throws {
+    /// Vault `Main` with `Revolut`, empty, and `ING` holding 1000.00;
+    /// Revolut's export imported first, with no rule, so the 200.00 from ING
+    /// is an income there. Then ING's, previewed, whose rule knows the money
+    /// went to Revolut.
+    private static func revolutThenIng() async throws -> (
+        store: AppStore, revolut: Uuid, ing: Uuid, model: StatementImportModel
+    ) {
         let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: try Self.defaults())
         await store.bootstrap()
         await store.createVault(name: "Main", walletName: "Revolut", openingBalance: 0)
@@ -323,7 +328,6 @@ struct StatementMatchTests {
         let ing = try #require(store.wallets.first { $0.name == "ING" }).id
         let mappings = StatementMappingStore(defaults: try Self.defaults())
 
-        // Revolut's export first, with no rule: the money from ING is an income.
         let first = try await Self.bankModel(
             store, Self.bankFile("01/10/2026;200,00;BONIFICO DA ING"), into: revolut, mappings: mappings
         )
@@ -332,11 +336,16 @@ struct StatementMatchTests {
         #expect(first.report?.executed == 1)
         #expect(Self.balance(store, revolut) == 20_000)
 
-        // ING's, whose rule knows the money went to Revolut.
         let rule = StatementDescriptionRule(contains: "revolut", action: .transferOut(toWalletId: revolut))
         let model = try await Self.bankModel(
             store, Self.bankFile("01/10/2026;-200,00;BONIFICO A REVOLUT"), into: ing, rules: [rule], mappings: mappings
         )
+        return (store, revolut, ing, model)
+    }
+
+    @Test("A bank's transfer whose other side another bank's file imported as an income replaces that income by default, and the money moves once")
+    func transferReplacesIncome() async throws {
+        let (store, revolut, ing, model) = try await Self.revolutThenIng()
         let row = try Self.row(model, line: 2)
         #expect(row.status == .possibleDuplicate)
         #expect(row.kind == .transferWallet)
@@ -345,7 +354,7 @@ struct StatementMatchTests {
         #expect(row.existing?.walletId == revolut)
         #expect(row.matchChoice == .replaceExisting)
         #expect(StatementImportModel.replaces(row))
-        #expect(model.availableChoices(for: row) == [.replaceExisting, .skip, .importAnyway])
+        #expect(model.availableChoices(for: row) == [.replaceExisting, .importAnyway])
         #expect(model.defaultChoice(for: row) == .replaceExisting)
         #expect(model.overrides.isEmpty)
         // Written, though not new: the import counts it among its rows.
@@ -372,6 +381,77 @@ struct StatementMatchTests {
         #expect(transfers.first?.toId == revolut)
         #expect(Self.balance(store, revolut) == 20_000)
         #expect(Self.balance(store, ing) == 80_000)
+    }
+
+    @Test("A transfer row standing for an entry, ticked off, writes nothing: no transfer, the entry left as it is")
+    func replaceRowLeftOut() async throws {
+        let (store, revolut, ing, model) = try await Self.revolutThenIng()
+        let row = try Self.row(model, line: 2)
+        #expect(StatementImportModel.replaces(row))
+        #expect(StatementImportModel.takesTick(row))
+
+        model.setIncluded(false, line: 2)
+
+        #expect(model.counts.replaces == 0)
+        #expect(model.counts.skipped == 1)
+        #expect(model.counts.written == 0)
+        #expect(model.overrides == [StatementRowOverride(line: 2, category: nil, note: nil, skip: true)])
+
+        await model.runImport()
+
+        let report = try #require(model.report)
+        #expect(report.executed == 0)
+        #expect(report.rejected.isEmpty)
+        #expect(model.replaced == 0)
+        let all = try await Self.transactions(store)
+        #expect(all.first { $0.kind == .income && $0.amount == 20_000 }?.voided == false)
+        #expect(!all.contains { $0.kind == .transferWallet })
+        #expect(Self.balance(store, revolut) == 20_000)
+        #expect(Self.balance(store, ing) == 100_000)
+    }
+
+    @Test("A cash withdrawal to Cash and an unrelated cash income typed two days later: the income may be its other side, so the transfer comes in beside it by default and both stay")
+    func withdrawalBesideTypedIncome() async throws {
+        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: try Self.defaults())
+        await store.bootstrap()
+        await store.createVault(name: "Main", walletName: "Bank", openingBalance: 100_000)
+        await store.createWallet(name: "Cash", openingBalance: 0)
+        let bank = try #require(store.wallets.first { $0.name == "Bank" }).id
+        let cash = try #require(store.wallets.first { $0.name == "Cash" }).id
+        await Self.type("+50.00 regalo @cash 2026-10-03", into: store)
+
+        let rule = StatementDescriptionRule(contains: "prelievo", action: .transferOut(toWalletId: cash))
+        let model = try await Self.bankModel(
+            store, Self.bankFile("01/10/2026;-50,00;PRELIEVO ATM"), into: bank, rules: [rule],
+            mappings: StatementMappingStore(defaults: try Self.defaults())
+        )
+
+        let row = try Self.row(model, line: 2)
+        #expect(row.status == .new)
+        #expect(row.kind == .transferWallet)
+        #expect(row.existing?.note == "regalo")
+        #expect(row.existing?.walletId == cash)
+        #expect(row.matchChoice == .importAnyway)
+        #expect(StatementImportModel.isReplace(row))
+        #expect(StatementImportModel.isFlagged(row))
+        #expect(model.defaultChoice(for: row) == .importAnyway)
+        #expect(model.availableChoices(for: row) == [.replaceExisting, .importAnyway])
+        // The review says the income may be the withdrawal's other side.
+        #expect(model.mayReplace(row))
+        #expect(!model.importsByDefault(row))
+        #expect(model.counts.new == 1)
+        #expect(model.counts.replaces == 0)
+        #expect(model.overrides.isEmpty)
+
+        await model.runImport()
+
+        #expect(model.report?.executed == 1)
+        #expect(model.replaced == 0)
+        let all = try await Self.transactions(store)
+        #expect(all.first { $0.note == "regalo" }?.voided == false)
+        #expect(all.filter { $0.kind == .transferWallet && !$0.voided }.count == 1)
+        #expect(Self.balance(store, cash) == 10_000) // the gift and the withdrawal
+        #expect(Self.balance(store, bank) == 95_000)
     }
 
     // MARK: - Near the file's edges

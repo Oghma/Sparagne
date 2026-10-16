@@ -488,7 +488,7 @@ struct StatementReviewTests {
         #expect(!StatementImportModel.takesAction(imported))
     }
 
-    @Test("A transfer row standing for an entry offers to replace it, keep it or import beside it, replacing by default and sending nothing until changed")
+    @Test("A transfer row standing for an entry offers only to replace it or import beside it, sends nothing until changed, and can be left out with its box")
     func replaceChoices() async throws {
         let (store, card, bank, _) = try await Self.vault()
         let model = try await Self.cardModel(store, wallet: card)
@@ -506,20 +506,38 @@ struct StatementReviewTests {
         #expect(StatementImportModel.isReplace(topup))
         #expect(StatementImportModel.replaces(topup))
         #expect(StatementImportModel.isFlagged(topup))
-        // In another wallet, yet replaced, never moved.
+        // In another wallet, yet replaced, never moved; nor kept in the
+        // transfer's place: the box leaves it out instead.
         #expect(!model.canMove(topup))
-        #expect(model.availableChoices(for: topup) == [.replaceExisting, .skip, .importAnyway])
+        #expect(model.availableChoices(for: topup) == [.replaceExisting, .importAnyway])
+        #expect(StatementImportModel.takesTick(topup))
         #expect(model.defaultChoice(for: topup) == .replaceExisting)
         #expect(model.matchChoice(for: topup) == .replaceExisting)
+        #expect(!model.mayReplace(topup))
+        #expect(!model.importsByDefault(topup))
 
         model.setMatchChoice(.replaceExisting, for: topup)
         #expect(model.matchChoices.isEmpty)
         #expect(!model.overrides.contains { $0.line == 4 })
 
-        model.setMatchChoice(.skip, for: topup)
+        model.setMatchChoice(.importAnyway, for: topup)
         #expect(model.previewInput?.rowChoices == [
-            StatementRowOverride(line: 4, category: nil, note: nil, skip: false, onMatch: .skip),
+            StatementRowOverride(line: 4, category: nil, note: nil, skip: false, onMatch: .importAnyway),
         ])
+        model.setMatchChoice(.replaceExisting, for: topup)
+
+        // An entry not very likely its other side: imported beside it by
+        // default, which the review says may be wrong.
+        var beside = topup
+        beside.status = .new
+        beside.matchChoice = .importAnyway
+        #expect(StatementImportModel.isReplace(beside))
+        #expect(!StatementImportModel.replaces(beside))
+        #expect(StatementImportModel.isFlagged(beside))
+        #expect(model.defaultChoice(for: beside) == .importAnyway)
+        #expect(model.availableChoices(for: beside) == [.replaceExisting, .importAnyway])
+        #expect(model.mayReplace(beside))
+        #expect(!model.importsByDefault(beside))
         // A plain duplicate of the same entry is no replacement.
         var spend = try Self.row(model, line: 2)
         spend.status = .possibleDuplicate
