@@ -2,12 +2,56 @@
 //!
 //! The app reads the file, [`detect`] guesses the delimiter and a built-in
 //! preset from the header, the user adjusts a [`StatementMapping`], and
-//! [`Core::preview_statement`] shows what would happen to each row before
-//! [`Core::import_statement`] runs one command per row.
+//! [`Core::preview_statement`] shows what would happen to each row with the
+//! user's [`StatementRowOverride`]s; [`Core::import_statement`], fed the same
+//! overrides, does exactly that.
 //!
 //! Re-importing the same statement is a no-op: every row's command id is a
 //! UUID v5 over a frozen namespace and the row's content (status left out, so
-//! a row that went from pending to cleared is still the same row).
+//! a row that went from pending to cleared is still the same row), and the
+//! rows the vault already held match again.
+//!
+//! # What a row is taken for
+//!
+//! The action is the first of: the user's ([`StatementRowOverride::action`]);
+//! the first description rule whose `contains` the description holds
+//! ([`StatementMapping::description_rules`]: case-insensitive, inner runs of
+//! spaces collapsed on both sides, a blank `contains` is no rule, and a rule
+//! without an action leaves the action to what follows); the type rule whose
+//! value equals the type column (case-insensitive); the default action.
+//! [`StatementRow::action`] is the one that won, [`StatementRow::kind`] and
+//! [`StatementRow::counter_wallet_id`] follow it. `BySign` is an expense when
+//! the money goes out and an income when it comes in. A sign that contradicts
+//! the action (a refund written as money out) keeps the action with the
+//! absolute amount: the action says what the row is, and card exports write
+//! top-ups with the sign of a spend.
+//!
+//! The note is the user's, else the matching rule's, else the payee; the
+//! category is the user's (a blank one is Uncategorized), else the rule's,
+//! else the bank's matched one. [`StatementRow::note`] and
+//! [`StatementRow::category`] are what the row gets before the user's own.
+//! The envelope of an entry is the user's ([`StatementRowOverride::flow_id`],
+//! the vault's Unallocated id for Unallocated) when it is an active envelope
+//! of the vault, else [`StatementOptions::flow_id`]: an archived or unknown
+//! one is ignored, the file's envelope stays.
+//!
+//! A transfer whose other wallet is not named, is not the vault's, is
+//! archived or is the imported wallet itself waits for one. A type or
+//! description rule naming a wallet not in the vault, or the imported one, is
+//! refused for the whole statement, as is a rule's category that cannot be a
+//! category's name.
+//!
+//! Amounts are read exactly from the text. More decimals than the currency
+//! keeps are rounded half away from zero; [`StatementRow::rounded`] is set
+//! only when that changed the value (`12.500` is not rounded). The original
+//! amount, when the row has one in another currency or with another value,
+//! is appended to the note in parentheses, after the payee, the rule's or the
+//! user's note.
+//!
+//! A bank category never creates one: it only selects an active category
+//! whose name or alias it equals, with or without a `5462 - ` merchant code in
+//! front. A category typed in a description rule or a [`StatementRowOverride`]
+//! goes through the normal resolution, so it may create one.
 //!
 //! # What becomes of a row
 //!
@@ -17,32 +61,76 @@
 //!    or that swallowed the rest of the file in an unclosed quote: `Invalid`
 //!    (`invalid_row`);
 //! 2. its id already in the vault's log: `AlreadyImported`, whatever the
-//!    mapping now says about it;
-//! 3. a `Skip` action, then a status in `skip_statuses`: `Skipped`;
-//! 4. a currency other than the vault's: `Invalid` (`currency_mismatch`),
-//!    then an unreadable date (`invalid_date`) or amount (`invalid_amount`);
-//! 5. a zero amount, or a transfer whose other wallet is not chosen yet:
-//!    `Skipped`;
-//! 6. otherwise `New`.
+//!    rules or the user now say about it;
+//! 3. a `Skip` action: `Skipped`, `skipped_by_you` when it is the user's,
+//!    `skipped_by_rule` when it is a rule's or the default action; then a
+//!    status in `skip_statuses` (`skipped_status`);
+//! 4. an unreadable date: `Invalid` (`invalid_date`); then a day before
+//!    [`StatementOptions::since`], in the row's own offset: `Skipped`
+//!    (`before_start`), whatever else is wrong with the row; then a currency
+//!    other than the vault's (`currency_mismatch`) or an unreadable amount
+//!    (`invalid_amount`): `Invalid`;
+//! 5. a zero amount: `Skipped` (`zero_amount`);
+//! 6. the other side of a transfer already in the vault: `MatchedTransfer`;
+//! 7. a transfer without a usable other wallet: `Skipped` (`needs_wallet`);
+//! 8. a row of the vault that looks like it, typed by hand:
+//!    `PossibleDuplicate`;
+//! 9. otherwise `New`, unless the user's `skip` leaves it out
+//!    (`skipped_by_you`).
 //!
-//! The action is the type rule whose value equals the type column
-//! (case-insensitive), else the default action. `BySign` is an expense when
-//! the money goes out and an income when it comes in. A sign that contradicts
-//! the action (a refund written as money out) keeps the action with the
-//! absolute amount: the rule says what the row is, and card exports write
-//! top-ups with the sign of a spend.
+//! The user's override changes nothing on a row of 1 or 2, nor on a row the
+//! mapping alone reads as invalid: only a row the mapping could import is the
+//! user's to change.
 //!
-//! Amounts are read exactly from the text. More decimals than the currency
-//! keeps are rounded half away from zero; [`StatementRow::rounded`] is set
-//! only when that changed the value (`12.500` is not rounded). The original
-//! amount, when the row has one in another currency or with another value,
-//! is appended to the note in parentheses, after the payee or the user's
-//! note.
+//! # Rows already in the vault
 //!
-//! A bank category never creates one: it only selects an active category
-//! whose name or alias it equals, with or without a `5462 - ` merchant code in
-//! front. A category typed in a [`StatementRowOverride`] goes through the
-//! normal resolution, so it may create one.
+//! Every preview matches the rows against the vault again, so nothing about a
+//! match is stored. Days apart are counted between calendar dates, each in
+//! its own offset.
+//!
+//! - The other side of a transfer: a row that would be new or waits for its
+//!   wallet (6 and 7), taken for a transfer or by its sign, matches a live
+//!   transfer between wallets of the same amount at most 4 days away that
+//!   goes the row's way: out of the imported wallet for money going out, into
+//!   it for money coming in, and to or from the wallet the row names, if it
+//!   names one. Only the imported wallet's transfers count, and an expense,
+//!   income or refund action never matches one. The matched row reads as the
+//!   transfer it is: kind `TransferWallet`, the other wallet in
+//!   [`StatementRow::counter_wallet_id`].
+//! - A row typed by hand: a new income, expense or refund that matched no
+//!   transfer matches a live entry of the same kind and amount at most 3 days
+//!   away, in the imported wallet or in one of
+//!   [`StatementOptions::also_check_wallets`].
+//!
+//! Opening balances, voided rows and the rows of this statement already
+//! imported never match: a row is never its own duplicate, nor are the rows
+//! next to it in an overlapping export. Matches are one to one, closest
+//! first: fewer days, then fewer seconds between the two instants, then the
+//! earlier line, the earlier transaction, the lower id; transfers first, then
+//! duplicates among the rows and transactions still free. The match is in
+//! [`StatementRow::existing`].
+//!
+//! What becomes of a flagged row is [`StatementRow::match_choice`]: the
+//! user's [`StatementRowOverride::on_match`] (`Skip` when the user's `skip`
+//! leaves the row out), else `MoveExisting` for a duplicate found in another
+//! wallet and `Skip` for any other. `MoveExisting` reads as `Skip` but for a
+//! duplicate found in another wallet. `ImportAnyway` gives the row back what
+//! it was (new with its command, or waiting for its wallet), with its match
+//! still in `existing`; the transaction stays claimed, so no other row takes
+//! it.
+//!
+//! # The import
+//!
+//! [`Core::import_statement`] runs one command per new row, oldest first,
+//! with the row's id. Then, oldest first, it moves the match of every
+//! duplicate whose choice is `MoveExisting` into the imported wallet: an
+//! `UpdateTransaction` of its `wallet_id` alone, so its note, category,
+//! envelope, date and person stay, under an id derived from the row's
+//! (`move-existing`), so moving it twice is a no-op. Imported again, the
+//! statement finds it in its own wallet, a duplicate there, and skips it.
+//! Refused rows and refused moves land in the report on their line; a storage
+//! error stops the import (every command before it stays, and a new run
+//! deduplicates them).
 //!
 //! # Ids
 //!
@@ -55,14 +143,10 @@
 //! stay what they were, and changing what a row is never makes it new again);
 //! the amount in minor units signed as the file wrote it; the payee
 //! lowercased; and `n` the number of rows with the same key earlier in the
-//! file, so two identical rows in the same second both import. Line numbers
-//! are those of the file, header included; a row with a newline inside quotes
+//! file, so two identical rows in the same second both import. Nor does the
+//! start day, the envelope or a match ever change an id. Line numbers are
+//! those of the file, header included; a row with a newline inside quotes
 //! starts on its first.
-//!
-//! [`Core::import_statement`] runs one command per new row, oldest first,
-//! with the row's id: refused rows land in the report, a storage error stops
-//! the import (every command before it stays, and a new run deduplicates
-//! them).
 
 use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde::{Deserialize, Serialize};
@@ -251,7 +335,8 @@ pub struct StatementRowOverride {
     #[uniffi(default = None)]
     pub action: Option<StatementAction>,
     /// The envelope of an entry, over [`StatementOptions::flow_id`]; the
-    /// vault's Unallocated flow id names Unallocated.
+    /// vault's Unallocated flow id names Unallocated, and an archived or
+    /// unknown envelope is ignored.
     #[uniffi(default = None)]
     pub flow_id: Option<Uuid>,
     /// What becomes of a flagged row, over the default (move a duplicate
@@ -279,10 +364,13 @@ pub enum StatementRowStatus {
     /// Not imported on purpose. `code` is stable and meant for the app to
     /// translate; `reason` is the English detail:
     ///
-    /// - `skipped_by_rule`: a type rule or the default action says `Skip`;
+    /// - `skipped_by_rule`: a description rule, a type rule or the default
+    ///   action says `Skip` (the reason names the rule);
     /// - `skipped_status`: the status is in `skip_statuses` (the reason
     ///   names it);
-    /// - `needs_wallet`: a transfer whose other wallet is not chosen yet;
+    /// - `needs_wallet`: a transfer whose other wallet is not chosen yet, or
+    ///   is one the money cannot move to or from: the imported wallet, one
+    ///   not in the vault, an archived one;
     /// - `zero_amount`: the amount is zero;
     /// - `skipped_by_you`: a [`StatementRowOverride`] with `skip`, or a
     ///   `Skip` action of the user's;
