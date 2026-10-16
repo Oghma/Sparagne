@@ -1,27 +1,31 @@
 //! Statement rows against what the vault already holds: the other side of a
 //! transfer between wallets that another statement (or the user) already
-//! recorded, and the rows the user entered by hand.
+//! recorded, as a transfer or as an entry, and the rows the user entered by
+//! hand.
 //!
 //! Every preview matches again; what a match decided is kept in the log, by
-//! the claims and moves an import writes (see [`super::plan::claim_id`] and
-//! [`super::plan::move_id`]), so re-importing a statement finds the same
-//! transactions and writes nothing new, and a transaction that stands for a
-//! row of one export is not taken again by a row of the next.
+//! the claims, moves and replacements an import writes (see
+//! [`super::plan::claim_id`], [`super::plan::move_id`] and
+//! [`super::plan::replace_id`]), so re-importing a statement finds the same
+//! transactions and writes nothing new. A transaction that stands for a row
+//! of one export is a candidate for a row of another only within that file's
+//! own days, and near their first or last the row is imported by default.
 //!
 //! The vault is read once per preview, around the rows' dates: the live
 //! incomes, expenses, refunds and transfers between wallets with a leg on
-//! the statement's wallet or on one of
-//! [`StatementOptions::also_check_wallets`], opening balances left out, and
-//! the claims and moves of the log. The transactions that stand for the rows
-//! already imported (their own, or the one their claim or move names) match
-//! nothing.
+//! the statement's wallet, on one of [`StatementOptions::also_check_wallets`]
+//! or on a wallet a transfer row names, opening balances and whatever is
+//! dated before [`StatementOptions::since`] left out, and the claims and
+//! moves of the log. The transactions that stand for the rows already
+//! imported (their own, or the one their claim, move or replacement names)
+//! match nothing.
 //!
 //! A row and a transaction are as many days apart as their calendar dates,
 //! each in its own offset. Each amount is paired on its own, in one pass for
-//! transfers and duplicates alike: as many rows as can be get a transaction,
-//! and among the ways to pair that many, the one closest in all (fewest days
-//! apart summed, then fewest seconds, a transfer before a duplicate on a
-//! tie).
+//! every kind of match: as many rows as can be get a transaction, and among
+//! the ways to pair that many, the one closest in all (fewest days apart
+//! summed, then fewest seconds; on a tie a transfer, then an entry of the
+//! row's kind, then an entry standing for a transfer).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -50,13 +54,28 @@ const WINDOW_SECONDS: i64 = 7 * 86_400;
 /// One day apart weighs more than any number of seconds within a match.
 const DAY_COST: i64 = 10_000_000;
 
-/// What a row is matched as. A transfer comes first on a tie.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+/// What a row is matched as.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Found {
     /// The other side of a transfer: [`StatementRowStatus::MatchedTransfer`].
     Transfer,
-    /// [`StatementRowStatus::PossibleDuplicate`].
+    /// An entry of the row's kind: [`StatementRowStatus::PossibleDuplicate`].
     Duplicate,
+    /// An entry standing for the transfer the row is: the other wallet's
+    /// side of it, or this one's recorded as an expense or an income;
+    /// [`StatementRowStatus::PossibleDuplicate`], replaced by default.
+    Replace,
+}
+
+impl Found {
+    /// The order on a tie.
+    fn rank(self) -> i64 {
+        match self {
+            Self::Transfer => 0,
+            Self::Duplicate => 1,
+            Self::Replace => 2,
+        }
+    }
 }
 
 /// Flags the planned rows that a live transaction already stands for, one
@@ -73,7 +92,10 @@ pub(super) fn claim(
 ) -> Result<()> {
     let wallet = options.wallet_id;
     let seekers: Vec<usize> = (0..planned.len())
-        .filter(|&at| seeks_transfer(&planned[at]) || seeks_duplicate(&planned[at]))
+        .filter(|&at| {
+            let item = &planned[at];
+            seeks_transfer(item) || seeks_duplicate(item) || seeks_replace(item)
+        })
         .collect();
     let instants: Vec<i64> = seekers
         .iter()
@@ -89,18 +111,32 @@ pub(super) fn claim(
             also.push(id);
         }
     }
-    let mut checked = vec![wallet];
-    checked.extend(&also);
+    // The wallets read: this one, those also checked, and those the
+    // transfer rows name, where their other side may sit as an entry.
+    let mut read = vec![wallet];
+    read.extend(&also);
+    for &at in &seekers {
+        if seeks_replace(&planned[at])
+            && let Some(other) = planned[at].row.counter_wallet_id
+            && !read.contains(&other)
+        {
+            read.push(other);
+        }
+    }
+    let since = options.since;
     let claims = read_claims(core, vault_id)?;
     let candidates: Vec<Candidate> = read_pool(
         core,
         vault_id,
-        &checked,
+        &read,
         earliest - WINDOW_SECONDS,
         latest + WINDOW_SECONDS,
     )?
     .into_iter()
-    .filter(|(view, _)| !standing.contains(&view.id))
+    .filter(|(view, _)| {
+        !standing.contains(&view.id)
+            && since.is_none_or(|since| since <= view.occurred_at.date_naive())
+    })
     .map(|(view, imported)| Candidate {
         claimed: claims.entries.contains(&view.id),
         sides: claims.sides.get(&view.id).cloned().unwrap_or_default(),
@@ -108,15 +144,16 @@ pub(super) fn claim(
         view,
     })
     .collect();
+    // The file's own days: its readable rows from the start day on.
     let dates = planned
         .iter()
         .filter_map(|item| item.row.occurred_at)
-        .map(|at| at.date_naive());
+        .map(|at| at.date_naive())
+        .filter(|day| since.is_none_or(|since| since <= *day));
     let fit = Fit {
         wallet,
         also: &also,
         span: dates.clone().min().zip(dates.max()),
-        since: options.since,
     };
 
     let mut by_amount: HashMap<i64, Vec<usize>> = HashMap::new();
@@ -139,13 +176,13 @@ pub(super) fn claim(
             .collect();
         for (local, tx) in pair(&edges, txs.len()).into_iter().enumerate() {
             if let Some(edge) = tx {
-                pairs.push((rows[local], txs[edge.tx], edge.found));
+                pairs.push((rows[local], txs[edge.tx], edge));
             }
         }
     }
-    for (row, tx, found) in pairs {
+    for (row, tx, edge) in pairs {
         let user = overrides.get(&planned[row].row.line).copied();
-        settle(&mut planned[row], &candidates[tx].view, found, wallet, user);
+        settle(&mut planned[row], &candidates[tx].view, edge, wallet, user);
     }
     Ok(())
 }
@@ -170,9 +207,12 @@ struct Candidate {
 struct Edge {
     /// Position among the transactions of the row's amount.
     tx: usize,
-    /// Days apart, then seconds, then a transfer before a duplicate.
+    /// Days apart, then seconds, then [`Found::rank`].
     cost: i64,
     found: Found,
+    /// The transaction stands for a row of another export and sits near the
+    /// first or last day of the file: the row is imported by default.
+    near_edge: bool,
 }
 
 /// Which transactions may stand for a row of the statement.
@@ -181,9 +221,9 @@ struct Fit<'a> {
     wallet: Uuid,
     /// The other wallets checked for rows typed by hand.
     also: &'a [Uuid],
-    /// The first and last day of the file's readable rows.
+    /// The first and last day of the file's readable rows from the start
+    /// day on.
     span: Option<(NaiveDate, NaiveDate)>,
-    since: Option<NaiveDate>,
 }
 
 impl Fit<'_> {
@@ -198,24 +238,29 @@ impl Fit<'_> {
             let candidate = &candidates[tx];
             let then = candidate.view.occurred_at;
             let days = (at.date_naive() - then.date_naive()).num_days().abs();
-            let found = if candidate.view.kind == TransactionKind::TransferWallet {
-                let fits = seeks_transfer(item)
-                    && days <= TRANSFER_DAYS
-                    && self.fits_transfer(item, candidate);
-                fits.then_some(Found::Transfer)
+            let fit = if candidate.view.kind == TransactionKind::TransferWallet {
+                (seeks_transfer(item) && days <= TRANSFER_DAYS)
+                    .then(|| self.fits_transfer(item, candidate))
+                    .flatten()
+                    .map(|near_edge| (Found::Transfer, near_edge))
+            } else if seeks_duplicate(item) {
+                (days <= DUPLICATE_DAYS)
+                    .then(|| self.fits_duplicate(item, candidate))
+                    .flatten()
+                    .map(|near_edge| (Found::Duplicate, near_edge))
             } else {
-                let fits = seeks_duplicate(item)
-                    && days <= DUPLICATE_DAYS
-                    && self.fits_duplicate(item, candidate);
-                fits.then_some(Found::Duplicate)
+                (seeks_replace(item) && days <= TRANSFER_DAYS)
+                    .then(|| self.fits_replace(item, candidate))
+                    .flatten()
+                    .map(|near_edge| (Found::Replace, near_edge))
             };
-            if let Some(found) = found {
+            if let Some((found, near_edge)) = fit {
                 let seconds = (at.timestamp() - then.timestamp()).abs();
-                let cost = days * DAY_COST + seconds * 2 + i64::from(found == Found::Duplicate);
                 let edge = Edge {
                     tx: local,
-                    cost,
+                    cost: days * DAY_COST + seconds * 3 + found.rank(),
                     found,
+                    near_edge,
                 };
                 edges.push((edge, then.timestamp(), candidate.view.id));
             }
@@ -226,16 +271,12 @@ impl Fit<'_> {
 
     /// A transfer between wallets touching the statement's wallet the way
     /// the row says the money went, to or from the wallet it names if it
-    /// names one. One whose side on the statement's wallet a claim names
-    /// stands for a row of an export already in, and fits only when it is
-    /// dated within the file's own days, as an imported entry does.
-    fn fits_transfer(&self, item: &Planned, tx: &Candidate) -> bool {
+    /// names one; held to [`Self::own`] when a claim names its side on the
+    /// statement's wallet.
+    fn fits_transfer(&self, item: &Planned, tx: &Candidate) -> Option<bool> {
         let wallet = self.wallet;
-        if tx.sides.contains(&wallet) && !self.within_file(&tx.view) {
-            return false;
-        }
         let (from, to) = (tx.view.from_id, tx.view.to_id);
-        match &item.row.action {
+        let way = match &item.row.action {
             StatementAction::TransferOut { to_wallet_id } => {
                 from == Some(wallet) && to_wallet_id.is_none_or(|other| to == Some(other))
             }
@@ -245,49 +286,79 @@ impl Fit<'_> {
             StatementAction::BySign if item.row.outflow => from == Some(wallet),
             StatementAction::BySign => to == Some(wallet),
             _ => false,
+        };
+        if !way {
+            return None;
         }
+        self.own(&tx.view, tx.sides.contains(&wallet), TRANSFER_DAYS)
     }
 
     /// An entry moving the money the row's way (an expense for money going
     /// out, an income or a refund for money coming in), on the statement's
-    /// wallet or on one also checked.
-    ///
-    /// On the statement's wallet a row typed by hand that nothing claimed is
-    /// always a candidate (a row typed on the 30th may be booked on the 1st);
-    /// one a claim or a move names, or one an import wrote, only when it is
-    /// dated within the file's own days: it stands for a row of another
-    /// export, unless this file holds that row again with other ids. On a
-    /// wallet also checked, an entry a claim or a move names stands for a
-    /// row of another statement already; an imported one is the user's own
-    /// sheet, and is a candidate from [`StatementOptions::since`] on.
-    fn fits_duplicate(&self, item: &Planned, tx: &Candidate) -> bool {
-        let same_way = match item.row.kind {
-            Some(TransactionKind::Expense) => tx.view.kind == TransactionKind::Expense,
-            Some(TransactionKind::Income | TransactionKind::Refund) => matches!(
-                tx.view.kind,
-                TransactionKind::Income | TransactionKind::Refund
-            ),
-            _ => false,
-        };
-        same_way
-            && match tx.view.wallet_id {
-                Some(id) if id == self.wallet => {
-                    !(tx.claimed || tx.imported) || self.within_file(&tx.view)
-                }
-                Some(id) if self.also.contains(&id) => {
-                    let day = tx.view.occurred_at.date_naive();
-                    !tx.claimed && self.since.is_none_or(|since| since <= day)
-                }
-                _ => false,
+    /// wallet, held to [`Self::own`], or on one also checked where no claim
+    /// or move names it: one that does stands for a row of another
+    /// statement, while an imported one is the user's own sheet.
+    fn fits_duplicate(&self, item: &Planned, tx: &Candidate) -> Option<bool> {
+        let out = item.row.kind.and_then(moves_out)?;
+        if moves_out(tx.view.kind) != Some(out) {
+            return None;
+        }
+        match tx.view.wallet_id {
+            Some(id) if id == self.wallet => {
+                self.own(&tx.view, tx.claimed || tx.imported, DUPLICATE_DAYS)
             }
+            Some(id) if self.also.contains(&id) => (!tx.claimed).then_some(false),
+            _ => None,
+        }
     }
 
-    /// Dated, in its own offset, from the file's first readable day to its
-    /// last.
-    fn within_file(&self, tx: &TransactionView) -> bool {
+    /// An entry standing for the transfer the row is: in the wallet the row
+    /// names, the money moving the other way (an income or a refund there
+    /// for money going out to it, an expense there for money coming in from
+    /// it); or, the money moving the row's way, in the statement's wallet,
+    /// held to [`Self::own`], or in one also checked where no claim or move
+    /// names it.
+    fn fits_replace(&self, item: &Planned, tx: &Candidate) -> Option<bool> {
+        let other = item.row.counter_wallet_id?;
+        let out = matches!(item.row.action, StatementAction::TransferOut { .. });
+        let way = moves_out(tx.view.kind)?;
+        match tx.view.wallet_id {
+            Some(id) if id == other => (way != out).then_some(false),
+            Some(id) if id == self.wallet && way == out => {
+                self.own(&tx.view, tx.claimed || tx.imported, TRANSFER_DAYS)
+            }
+            Some(id) if self.also.contains(&id) && way == out => (!tx.claimed).then_some(false),
+            _ => None,
+        }
+    }
+
+    /// Whether a transaction of the statement's wallet may stand for a row,
+    /// and whether it sits near the file's edges. One typed by hand that
+    /// nothing `held` (a claim, a move, an import's own id) always may: one
+    /// typed on the 30th may be booked on the 1st. One held stands for a row
+    /// of an export already in, and may only when it is dated within the
+    /// file's own days, as it is when the same file is read with another
+    /// mapping; within `margin` days of the first or the last of them, it is
+    /// more likely another export's neighbour, and the row is imported by
+    /// default.
+    fn own(&self, tx: &TransactionView, held: bool, margin: i64) -> Option<bool> {
+        if !held {
+            return Some(false);
+        }
+        let (first, last) = self.span?;
         let day = tx.occurred_at.date_naive();
-        self.span
-            .is_some_and(|(first, last)| first <= day && day <= last)
+        (first <= day && day <= last)
+            .then(|| (day - first).num_days() <= margin || (last - day).num_days() <= margin)
+    }
+}
+
+/// Whether an entry of `kind` takes money out of its wallet (an expense)
+/// or brings it in (an income, a refund); `None` for a transfer.
+fn moves_out(kind: TransactionKind) -> Option<bool> {
+    match kind {
+        TransactionKind::Expense => Some(true),
+        TransactionKind::Income | TransactionKind::Refund => Some(false),
+        TransactionKind::TransferWallet | TransactionKind::TransferFlow => None,
     }
 }
 
@@ -389,35 +460,60 @@ fn seeks_duplicate(item: &Planned) -> bool {
         )
 }
 
+/// A row an entry may stand for as the transfer it is: a new transfer
+/// between the statement's wallet and the one it names.
+fn seeks_replace(item: &Planned) -> bool {
+    item.row.status == StatementRowStatus::New
+        && matches!(item.command, Some(Command::TransferWallet { .. }))
+}
+
 /// What becomes of a row `tx` matched: the user's `on_match` (`Skip` when
-/// the user left the row out), else move a duplicate found in another wallet
-/// and skip any other. `MoveExisting` reads as `Skip` but for a duplicate in
-/// another wallet. Imported anyway, the row stays what it was, with the
-/// match beside it.
+/// the user left the row out), else the default: import the row anyway when
+/// the match sits near the file's edges and stands for another export's
+/// row, move a duplicate found in another wallet, replace an entry standing
+/// for the transfer, skip any other. `MoveExisting` reads as `Skip` but for
+/// a duplicate in another wallet, `ReplaceExisting` as the default but for
+/// an entry standing for the transfer. Imported anyway, the row stays what
+/// it was, with the match beside it; replacing, it keeps its transfer to
+/// write, flagged.
 fn settle(
     item: &mut Planned,
     tx: &TransactionView,
-    found: Found,
+    edge: Edge,
     wallet: Uuid,
     user: Option<&StatementRowOverride>,
 ) {
+    let found = edge.found;
     let movable = found == Found::Duplicate && tx.wallet_id != Some(wallet);
+    let default = if edge.near_edge {
+        StatementMatchChoice::ImportAnyway
+    } else if movable {
+        StatementMatchChoice::MoveExisting
+    } else if found == Found::Replace {
+        StatementMatchChoice::ReplaceExisting
+    } else {
+        StatementMatchChoice::Skip
+    };
     let asked = match user {
         Some(user) if user.skip => Some(StatementMatchChoice::Skip),
         Some(user) => user.on_match,
         None => None,
     };
     let choice = match asked {
-        Some(StatementMatchChoice::MoveExisting) | None if movable => {
-            StatementMatchChoice::MoveExisting
-        }
-        Some(StatementMatchChoice::ImportAnyway) => StatementMatchChoice::ImportAnyway,
-        _ => StatementMatchChoice::Skip,
+        None => default,
+        Some(StatementMatchChoice::MoveExisting) if !movable => StatementMatchChoice::Skip,
+        Some(StatementMatchChoice::ReplaceExisting) if found != Found::Replace => default,
+        Some(choice) => choice,
     };
     item.row.existing = Some(tx.clone());
     item.row.match_choice = Some(choice);
-    if choice == StatementMatchChoice::ImportAnyway {
-        return;
+    match choice {
+        StatementMatchChoice::ImportAnyway => return,
+        StatementMatchChoice::ReplaceExisting => {
+            item.row.status = StatementRowStatus::PossibleDuplicate;
+            return;
+        }
+        StatementMatchChoice::Skip | StatementMatchChoice::MoveExisting => {}
     }
     item.command = None;
     item.row.status = match found {
@@ -430,7 +526,7 @@ fn settle(
             };
             StatementRowStatus::MatchedTransfer
         }
-        Found::Duplicate => StatementRowStatus::PossibleDuplicate,
+        Found::Duplicate | Found::Replace => StatementRowStatus::PossibleDuplicate,
     };
 }
 
@@ -603,6 +699,7 @@ mod tests {
             tx,
             cost: days * DAY_COST,
             found: Found::Duplicate,
+            near_edge: false,
         }
     }
 

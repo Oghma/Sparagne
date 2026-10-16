@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::NaiveDate;
 use chrono_tz::Tz;
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use uuid::Uuid;
 
 use super::amount::{Amount, parse_amount};
@@ -58,12 +58,13 @@ pub(super) fn plan(
     let context = Context::new(core, vault_id, &mut records, mapping, options)?;
     let overrides: Overrides<'_> = overrides.iter().map(|o| (o.line, o)).collect();
 
-    // The row's own command, or the move or the claim an earlier import
-    // made for it, whatever became of it: a command refused by the server
-    // stays in the log, and executing it again would be a no-op.
+    // The row's own command, or the move, the claim or the replacement an
+    // earlier import made for it, whatever became of it: a command refused
+    // by the server stays in the log, and executing it again would be a
+    // no-op.
     let mut known = core
         .conn
-        .prepare_cached("SELECT id, payload FROM commands WHERE id IN (?1, ?2, ?3)")?;
+        .prepare_cached("SELECT id, payload FROM commands WHERE id IN (?1, ?2, ?3, ?4)")?;
     let mut occurrences: HashMap<String, u32> = HashMap::new();
     let mut planned = Vec::new();
     // The transactions that stand for the rows already imported: never a
@@ -77,9 +78,9 @@ pub(super) fn plan(
             let seen = occurrences.entry(key.clone()).or_insert(0);
             id = row_id(&format!("{key}|{seen}"));
             *seen += 1;
-            let found = known.query_map(params![id, move_id(id), claim_id(id)], |r| {
-                Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?))
-            })?;
+            let ids = params![id, move_id(id), claim_id(id), replace_id(id)];
+            let found =
+                known.query_map(ids, |r| Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?)))?;
             for command in found {
                 let (command_id, payload) = command?;
                 imported = true;
@@ -181,6 +182,75 @@ pub(super) fn own_side(row_id: Uuid, command: &Command, wallet: Uuid) -> Option<
     ))
 }
 
+/// The id of the command that voids, for the statement row `row_id`, the
+/// entry that stood for the transfer the row is. Derived from the row's,
+/// like [`move_id`].
+pub(super) fn replace_id(row_id: Uuid) -> Uuid {
+    Uuid::new_v5(&row_id, b"replace")
+}
+
+/// For a row whose choice is `ReplaceExisting`: the void of the entry it
+/// matched, with its id, written once the row's transfer is in.
+pub(super) fn replacement(row: &StatementRow) -> Option<(Uuid, Command)> {
+    let existing = row.existing.as_ref()?;
+    (row.status == StatementRowStatus::PossibleDuplicate
+        && row.match_choice == Some(StatementMatchChoice::ReplaceExisting))
+    .then(|| {
+        (
+            replace_id(row.command_id),
+            Command::VoidTransaction {
+                transaction_id: existing.id,
+            },
+        )
+    })
+}
+
+/// When the entry a row replaced was the other wallet's statement row (an
+/// import wrote it under its own command's id, which is that row's id), the
+/// claim of that wallet's side of the row's new transfer, under that row's
+/// claim id: the transfer stands for it now.
+pub(super) fn other_side(
+    core: &Core,
+    row: &StatementRow,
+    command: &Command,
+    wallet: Uuid,
+) -> Result<Option<(Uuid, Command)>> {
+    let (
+        Some(existing),
+        Command::TransferWallet {
+            from_wallet_id,
+            to_wallet_id,
+            ..
+        },
+    ) = (row.existing.as_ref(), command)
+    else {
+        return Ok(None);
+    };
+    let other = if *from_wallet_id == wallet {
+        *to_wallet_id
+    } else {
+        *from_wallet_id
+    };
+    if existing.wallet_id != Some(other) || existing.id.get_version_num() != 5 {
+        return Ok(None);
+    }
+    let own: bool = core
+        .conn
+        .query_row(
+            "SELECT command_id = id FROM transactions WHERE id = ?1",
+            params![existing.id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .unwrap_or(false);
+    Ok(own.then(|| {
+        (
+            claim_id(existing.id),
+            update(row.command_id, side(*from_wallet_id == other, other)),
+        )
+    }))
+}
+
 /// A patch naming `wallet` as the source (`from`) or the destination of a
 /// transfer.
 fn side(from: bool, wallet: Uuid) -> TransactionPatch {
@@ -204,10 +274,12 @@ fn update(transaction_id: Uuid, patch: TransactionPatch) -> Command {
     }
 }
 
-/// The transaction a move or a claim (as the log stores it) names.
+/// The transaction a move, a claim or a replacement (as the log stores it)
+/// names.
 fn named_transaction(payload: &str) -> Option<Uuid> {
     match serde_json::from_str(payload).ok()? {
-        Command::UpdateTransaction { transaction_id, .. } => Some(transaction_id),
+        Command::UpdateTransaction { transaction_id, .. }
+        | Command::VoidTransaction { transaction_id } => Some(transaction_id),
         _ => None,
     }
 }

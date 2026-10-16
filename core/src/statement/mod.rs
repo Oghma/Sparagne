@@ -367,6 +367,12 @@ pub enum StatementMatchChoice {
     /// [`StatementOptions::also_check_wallets`]; anywhere else it reads as
     /// `Skip`.
     MoveExisting,
+    /// Void the entry the row matched and import the row as the transfer
+    /// between wallets it is: for a transfer row whose other side is already
+    /// in the vault as an income, expense or refund (the other bank's row
+    /// imported without a rule, or typed by hand). Only for such a match;
+    /// anywhere else it reads as the default.
+    ReplaceExisting,
 }
 
 /// A user's change to one previewed row.
@@ -668,6 +674,11 @@ impl Core {
         for plan::Planned { row, command } in planned {
             match (&row.status, command) {
                 (StatementRowStatus::New, Some(command)) => new.push((row, command)),
+                // Its transfer replaces the entry it matched.
+                (StatementRowStatus::PossibleDuplicate, Some(command)) => {
+                    report.possible_duplicates += 1;
+                    new.push((row, command));
+                }
                 (StatementRowStatus::AlreadyImported, _) => report.deduplicated += 1,
                 (
                     StatementRowStatus::PossibleDuplicate | StatementRowStatus::MatchedTransfer,
@@ -691,7 +702,16 @@ impl Core {
         new.sort_by_key(|(row, _)| (row.occurred_at, row.line));
         later.sort_by_key(|(row, _)| (row.occurred_at, row.line));
         for (row, command) in new {
-            let own_side = plan::own_side(row.command_id, &command, wallet);
+            // Once the row's transfer is in: the void of the entry it
+            // replaces (after, so a refused transfer leaves the entry be),
+            // the claim of this wallet's side, and of the other's when the
+            // entry was the other wallet's statement row.
+            let mut then = Vec::new();
+            then.extend(plan::replacement(&row));
+            then.extend(plan::own_side(row.command_id, &command, wallet));
+            if row.status == StatementRowStatus::PossibleDuplicate {
+                then.extend(plan::other_side(self, &row, &command, wallet)?);
+            }
             match self.execute(self::envelope(row.command_id, vault_id, author, command)) {
                 Ok(receipt) if receipt.deduplicated => report.deduplicated += 1,
                 Ok(_) => {
@@ -704,9 +724,8 @@ impl Core {
                     continue;
                 }
             }
-            // A transfer is claimed on this wallet's side as soon as it is in.
-            if let Some((id, claim)) = own_side {
-                match self.execute(self::envelope(id, vault_id, author, claim)) {
+            for (id, command) in then {
+                match self.execute(self::envelope(id, vault_id, author, command)) {
                     Ok(_) => {}
                     Err(DomainError::Storage(message)) => {
                         return Err(DomainError::Storage(message));
