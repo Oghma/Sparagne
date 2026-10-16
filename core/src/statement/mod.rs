@@ -177,23 +177,36 @@
 //! would do, and nothing is written or claimed, so a later import finds the
 //! same match again.
 //!
+//! The statements' wallets are those a claim or a move of the log names,
+//! and those the app says receive statements
+//! ([`StatementOptions::statement_wallets`]): a statement that only wrote
+//! new rows leaves no claim, so the app's word is needed for it.
+//!
 //! An entry standing for the transfer is replaced by default only when it
-//! very likely is its other side: dated the row's day or a day off, and in
-//! no wallet also checked, nor in a named wallet that is one (Cash holds the
-//! user's own sheet, where an ATM withdrawal is not the dinner a friend paid
-//! back two days on). Otherwise, and near the file's edges, the row is
-//! imported beside it by default, its match still shown, for the user to
-//! replace it. Keeping the entry in the transfer's place makes no sense, so
-//! `Skip` and `MoveExisting` read as `ImportAnyway` there. A row replacing
-//! its match stays `PossibleDuplicate`, and is written.
+//! very likely is its other side:
+//!
+//! - the other bank's statement row: in a statement's wallet not also
+//!   checked, an entry an import wrote or a claim or a move names, at most 4
+//!   days away (a SEPA transfer sent on a Friday arrives on the Monday);
+//! - else an entry dated the row's day or a day off, in no wallet also
+//!   checked, nor in a named wallet that is one (Cash holds the user's own
+//!   sheet, where an ATM withdrawal is not the dinner a friend paid back two
+//!   days on).
+//!
+//! Never one dated before the start day (the user typed it, and its own row
+//! was left out as before the start), nor one near the file's edges: the
+//! row is then imported beside it by default, its match still shown, for
+//! the user to replace it. Keeping the entry in the transfer's place makes
+//! no sense, so `Skip` and `MoveExisting` read as `ImportAnyway` there. A
+//! row replacing its match stays `PossibleDuplicate`, and is written.
 //!
 //! [`StatementPreview::lookalikes`] is advice, and matching never reads it:
-//! for every wallet neither imported into, nor checked, nor any statement's
-//! (no claim or move names it), the new rows that matched nothing and would
-//! match one of its entries as a duplicate in a wallet checked would. Twelve
-//! rows looking like entries of Cash say Cash should be checked: forgotten,
-//! it makes every one of them a second movement, which importing again does
-//! not undo.
+//! for every wallet neither imported into, nor checked, nor a statement's,
+//! the new rows that matched nothing and would match one of its entries as
+//! a duplicate in a wallet checked would. Twelve rows looking like entries
+//! of Cash say Cash should be checked: forgotten, it makes every one of them
+//! a second movement, which importing again does not undo. A statement's
+//! wallet is never advised: checked, its own rows would be moved out of it.
 //!
 //! # The import
 //!
@@ -266,6 +279,13 @@
 //! - The app remembers a mapping and its options by the file's header, so
 //!   two banks whose exports share a header share them too. What to do:
 //!   check the wallet and the wallets also checked before each import.
+//! - The statements' wallets the app sends
+//!   ([`StatementOptions::statement_wallets`]) are those its own device
+//!   remembers importing into: on another device, a bank imported only there
+//!   and whose statement wrote nothing but new rows is no statement's. It
+//!   may then be advised as a wallet to check, and its rows standing for a
+//!   transfer are replaced by default only a day or less away. What to do:
+//!   import each bank from one device, or leave such a wallet unchecked.
 //! - The shape of a claim is the import's alone: a bulk script writing
 //!   `UpdateTransaction` under v5 ids must not patch `wallet_id`, `from_id`
 //!   or `to_id` alone.
@@ -493,9 +513,11 @@ pub enum StatementMatchChoice {
     /// between wallets it is, all at once: for a transfer row whose other
     /// side is already in the vault as an income, expense or refund (the
     /// other bank's row imported without a rule, or typed by hand). The
-    /// default only when the entry very likely is that side: dated the row's
-    /// day or a day off, and in no wallet also checked. Only for such a
-    /// match; anywhere else it reads as the default.
+    /// default only when the entry very likely is that side: the other
+    /// bank's statement row up to 4 days away, or an entry dated the row's
+    /// day or a day off in no wallet also checked; never one dated before
+    /// the start day. Only for such a match; anywhere else it reads as the
+    /// default.
     ReplaceExisting,
 }
 
@@ -652,8 +674,10 @@ pub struct StatementPreview {
     pub matched_transfers: u32,
     /// Possible duplicates whose match the import would move.
     pub moves: u32,
-    /// Wallets not checked for rows typed by hand, nor any statement's,
-    /// where new rows that matched nothing look like entries already there,
+    /// Wallets not checked for rows typed by hand, nor any statement's (a
+    /// claim or a move names it, or [`StatementOptions::statement_wallets`]
+    /// holds it), where new rows that matched nothing look like entries
+    /// already there,
     /// the most such rows first. Advice only: matching does not use them.
     #[uniffi(default = [])]
     pub lookalikes: Vec<StatementLookalike>,
