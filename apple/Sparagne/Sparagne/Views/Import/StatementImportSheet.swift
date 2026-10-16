@@ -169,6 +169,13 @@ struct StatementImportSheet: View {
                 tone: .warning,
                 indented: false
             )
+        } else if model.previewWasStale, model.step == .review {
+            // ↩ came before the preview of the last change: nothing written.
+            FormNote(
+                String(localized: "The preview was not up to date: nothing was written. Check it and import again."),
+                tone: .warning,
+                indented: false
+            )
         } else if model.syncFailed, model.step != .file {
             FormNote(
                 String(localized: "Not synced first: rows imported on another device may not show as imported yet."),

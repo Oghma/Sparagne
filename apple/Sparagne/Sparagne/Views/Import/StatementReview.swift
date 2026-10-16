@@ -402,9 +402,14 @@ private struct StatementReviewRow: View {
     private func matchLine(_ existing: TransactionView) -> some View {
         let text = StatementText.existing(existing, names: names, replacing: StatementImportModel.isReplace(row))
         let chosen = model.matchChoice(for: row) ?? model.defaultChoice(for: row)
-        let hint = model.importsByDefault(row)
-            ? StatementText.importedByDefault
-            : model.mayReplace(row) ? StatementText.mayBeOtherSide : nil
+        // Why the row is imported by default, and whether its match was
+        // typed before the start day, on the line under the match.
+        let reasons = [
+            model.matchPredatesStart(row) ? StatementText.typedBeforeStart : nil,
+            model.importsByDefault(row) ? StatementText.importedByDefault : nil,
+            model.mayReplace(row) ? StatementText.mayBeOtherSide : nil,
+        ].compactMap(\.self)
+        let hint = reasons.isEmpty ? nil : reasons.joined(separator: " \u{00B7} ")
         return VStack(spacing: 0) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: ReviewColumn.lead, height: 1)

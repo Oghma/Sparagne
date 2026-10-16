@@ -544,6 +544,9 @@ struct LookalikeNotes: View {
                         }
                         .buttonStyle(.chrome(.ghost, small: true))
                         .fixedSize()
+                        // Not while a sync round or the import runs: the
+                        // plan on screen is about to be compared or written.
+                        .disabled(model.isLocked)
                     }
                 }
             }

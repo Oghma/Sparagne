@@ -107,7 +107,7 @@ final class StatementImportModel {
     /// Any change re-plans every row, so what the user chose over a match
     /// may no longer be about the same match: those choices are forgotten.
     var mapping = StatementImportModel.blankMapping(delimiter: ",") {
-        didSet { if mapping != oldValue { forgetMatchChoices() } }
+        didSet { if mapping != oldValue { forgetMatchChoices(); noteEdit() } }
     }
     /// The wallet the statement belongs to. Required; preselected when the
     /// vault has a single wallet, or when the last file with this header
@@ -119,21 +119,24 @@ final class StatementImportModel {
             releaseTransfers(into: walletId)
             if let walletId { alsoCheckWallets.remove(walletId) }
             forgetMatchChoices()
+            noteEdit()
         }
     }
     /// `nil` is Unallocated, the core's default.
-    var flowId: Uuid?
+    var flowId: Uuid? {
+        didSet { if flowId != oldValue { noteEdit() } }
+    }
     /// Other wallets where a row entered by hand may be the duplicate of a
     /// statement row: one found there is moved into `walletId` by default.
     /// Never holds `walletId`, which is always searched. Empty for every
     /// file and never remembered (`StatementImportTarget`).
     private(set) var alsoCheckWallets: Set<Uuid> = [] {
-        didSet { if alsoCheckWallets != oldValue { forgetMatchChoices() } }
+        didSet { if alsoCheckWallets != oldValue { forgetMatchChoices(); noteEdit() } }
     }
     /// Rows dated before this day are skipped (`before_start`); `nil`
     /// imports the whole file.
     var since: NaiveDate? {
-        didSet { if since != oldValue { forgetMatchChoices() } }
+        didSet { if since != oldValue { forgetMatchChoices(); noteEdit() } }
     }
 
     private(set) var preview: StatementPreview?
@@ -144,19 +147,44 @@ final class StatementImportModel {
     /// Categories typed in the review, by line. A line not here shows the
     /// row's category (a description rule's or the bank's match) or the
     /// history's suggestion.
-    private(set) var editedCategories: [UInt32: String] = [:]
+    private(set) var editedCategories: [UInt32: String] = [:] {
+        didSet { if editedCategories != oldValue { noteEdit() } }
+    }
     /// Notes typed in the review, by line. A line not here shows the row's
     /// note: a description rule's, else the bank's text.
-    private(set) var editedNotes: [UInt32: String] = [:]
+    private(set) var editedNotes: [UInt32: String] = [:] {
+        didSet { if editedNotes != oldValue { noteEdit() } }
+    }
     /// Kinds picked in the review, by line, over the rules.
-    private(set) var editedActions: [UInt32: StatementAction] = [:]
+    private(set) var editedActions: [UInt32: StatementAction] = [:] {
+        didSet { if editedActions != oldValue { noteEdit() } }
+    }
     /// Envelopes picked in the review, by line, as real flow ids
     /// (Unallocated's included). A line not here goes to `flowId`.
-    private(set) var editedFlows: [UInt32: Uuid] = [:]
-    /// What becomes of a flagged row, by line, over the core's default.
-    private(set) var matchChoices: [UInt32: StatementMatchChoice] = [:]
+    private(set) var editedFlows: [UInt32: Uuid] = [:] {
+        didSet { if editedFlows != oldValue { noteEdit() } }
+    }
+    /// What becomes of a flagged row, by line, over the core's default, with
+    /// the transaction the choice was made about: rows of one amount pair
+    /// with transactions as a whole, so a change elsewhere may give the line
+    /// another match, which the choice is not about.
+    private(set) var matchDecisions: [UInt32: MatchDecision] = [:] {
+        didSet { if matchDecisions != oldValue { noteEdit() } }
+    }
+
+    /// The choices of `matchDecisions`, by line.
+    var matchChoices: [UInt32: StatementMatchChoice] { matchDecisions.mapValues(\.choice) }
+
+    /// A choice over a row's match and the transaction it was made about.
+    struct MatchDecision: Equatable {
+        let choice: StatementMatchChoice
+        /// The row's `existing` when the choice was made.
+        let existing: Uuid?
+    }
     /// New rows ticked off in the review: they go to the core as `skip`.
-    private(set) var excludedLines: Set<UInt32> = []
+    private(set) var excludedLines: Set<UInt32> = [] {
+        didSet { if excludedLines != oldValue { noteEdit() } }
+    }
     /// Note -> the category past notes like it were filed under.
     private(set) var suggestions: [String: String] = [:]
 
@@ -177,12 +205,25 @@ final class StatementImportModel {
     private(set) var isSyncing = false
     /// The lines the import found planned otherwise once it had synced than
     /// in the preview the user had seen: it wrote nothing, and the review
-    /// marks them until the next import.
+    /// marks them until the user changes anything or imports again.
     private(set) var changedLines: Set<UInt32> = []
+    /// The import found the preview on screen planned from other choices
+    /// than the ones made since (a wallet ticked and ↩ pressed before the
+    /// preview came back): it wrote nothing and planned again.
+    private(set) var previewWasStale = false
+    /// What the preview on screen was planned from.
+    @ObservationIgnored private var plannedInput: PreviewInput?
 
     /// The review's rows take no edit while a sync round runs or the import
     /// does: what they show is about to be planned again or written.
     var isLocked: Bool { isSyncing || isImporting }
+
+    /// The user changed something: what the last import said about the plan
+    /// it found is past.
+    private func noteEdit() {
+        if !changedLines.isEmpty { changedLines = [] }
+        if previewWasStale { previewWasStale = false }
+    }
 
     /// Which preview may write the state: a slower one started before the
     /// last change must not overwrite what the newer one found.
@@ -267,7 +308,7 @@ final class StatementImportModel {
             editedNotes = [:]
             editedActions = [:]
             editedFlows = [:]
-            matchChoices = [:]
+            matchDecisions = [:]
             excludedLines = []
             changedLines = []
             replaced = 0
@@ -562,14 +603,26 @@ final class StatementImportModel {
     /// new rows of the file look like entries already there, which a
     /// wallet kept by hand while moving to statements would hold. Most rows
     /// first, active wallets only, and gone the moment one is ticked rather
-    /// than when the next preview comes back.
+    /// than when the next preview comes back. Never a wallet a statement
+    /// goes to (`statementWallets`): searched for duplicates, its own
+    /// imported rows would be taken for typed ones.
     var lookalikes: [(wallet: WalletView, rows: Int)] {
         let wallets = Dictionary(store.wallets.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+        let statements = statementWallets
         return (preview?.lookalikes ?? []).compactMap { lookalike in
             guard lookalike.walletId != walletId, !alsoCheckWallets.contains(lookalike.walletId),
+                  !statements.contains(lookalike.walletId),
                   let wallet = wallets[lookalike.walletId] else { return nil }
             return (wallet, Int(lookalike.rows))
         }
+    }
+
+    /// The wallets statements of this vault go to, as the imports
+    /// remembered say, and the one on screen.
+    var statementWallets: Set<Uuid> {
+        var wallets = vaultId.map { mappings.targetWallets(vaultId: $0) } ?? []
+        if let walletId { wallets.insert(walletId) }
+        return wallets
     }
 
     /// `alsoCheckWallets` as the core takes them: active ones only, in a
@@ -606,14 +659,13 @@ final class StatementImportModel {
         // no longer offers, or the core's default for it now, is not sent;
         // one about a row not previewed yet is.
         let shown = Dictionary((preview?.rows ?? []).map { ($0.line, $0) }, uniquingKeysWith: { $1 })
-        let lines = Set(editedActions.keys).union(editedFlows.keys).union(matchChoices.keys).sorted()
+        let lines = Set(editedActions.keys).union(editedFlows.keys).union(matchDecisions.keys).sorted()
         return lines.compactMap { line in
             let action = editedActions[line]
             let flow = editedFlows[line].flatMap { $0 == fileFlow ? nil : $0 }
-            let onMatch = matchChoices[line].flatMap { choice -> StatementMatchChoice? in
-                guard let row = shown[line] else { return choice }
-                return Self.isFlagged(row) && availableChoices(for: row).contains(choice)
-                    && choice != defaultChoice(for: row) ? choice : nil
+            let onMatch = matchDecisions[line].flatMap { decision -> StatementMatchChoice? in
+                guard let row = shown[line] else { return decision.choice }
+                return holds(decision, for: row) ? decision.choice : nil
             }
             guard action != nil || flow != nil || onMatch != nil else { return nil }
             return StatementRowOverride(
@@ -669,6 +721,7 @@ final class StatementImportModel {
             )
             guard generation == previewGeneration else { return }
             preview = result
+            plannedInput = input
             previewProblem = nil
             pruneMatchChoices(against: result)
             await suggestCategories(for: result)
@@ -825,7 +878,7 @@ final class StatementImportModel {
         let resolved = base == .bySign && (row.kind == .income || row.kind == .expense)
             && action == (row.outflow ? .expense : .income)
         if action == base || resolved { editedActions[row.line] = nil } else { editedActions[row.line] = action }
-        if self.action(for: row) != before { matchChoices[row.line] = nil }
+        if self.action(for: row) != before { matchDecisions[row.line] = nil }
     }
 
     /// The envelope of an entry: the user's, else the file's.
@@ -904,15 +957,21 @@ final class StatementImportModel {
         return defaultChoice(for: row)
     }
 
-    /// The user's choice over the row's match, while the row still has a
-    /// match, its menu offers that choice, and the choice is not what the
-    /// core does anyway: one made about another match, before a re-plan,
+    /// The user's choice over the row's match, while it holds
+    /// (`holds(_:for:)`): one made about another match, before a re-plan,
     /// or one the default has come to equal, is neither shown nor sent.
     private func userChoice(for row: StatementRow) -> StatementMatchChoice? {
-        guard Self.isFlagged(row), let choice = matchChoices[row.line],
-              availableChoices(for: row).contains(choice),
-              choice != defaultChoice(for: row) else { return nil }
-        return choice
+        guard let decision = matchDecisions[row.line], holds(decision, for: row) else { return nil }
+        return decision.choice
+    }
+
+    /// A choice still means what it meant when it was made: the row still
+    /// has a match, the same transaction, its menu offers the choice, and
+    /// it is not what the core does anyway.
+    private func holds(_ decision: MatchDecision, for row: StatementRow) -> Bool {
+        Self.isFlagged(row) && row.existing?.id == decision.existing
+            && availableChoices(for: row).contains(decision.choice)
+            && decision.choice != defaultChoice(for: row)
     }
 
     /// The choices that mean something for a flagged row, in the menu's
@@ -931,24 +990,33 @@ final class StatementImportModel {
     /// row's menu does not offer is not taken.
     func setMatchChoice(_ choice: StatementMatchChoice, for row: StatementRow) {
         guard Self.isFlagged(row), availableChoices(for: row).contains(choice) else { return }
-        if choice == defaultChoice(for: row) { matchChoices[row.line] = nil } else { matchChoices[row.line] = choice }
+        if choice == defaultChoice(for: row) {
+            matchDecisions[row.line] = nil
+        } else {
+            matchDecisions[row.line] = MatchDecision(choice: choice, existing: row.existing?.id)
+        }
     }
 
     /// Every choice over a match, gone with a change that re-plans every
     /// row: the match it was about may be another now, or none.
     private func forgetMatchChoices() {
-        if !matchChoices.isEmpty { matchChoices = [:] }
+        if !matchDecisions.isEmpty { matchDecisions = [:] }
     }
 
-    /// The choices a new preview shows to be about no match, or one the
-    /// row's menu does not offer: forgotten, so they are not sent again.
+    /// The choices a new preview shows no longer hold (about no match,
+    /// another one, one the menu does not offer, or the default now):
+    /// forgotten, so they are not sent again. Not the user's edit, so the
+    /// rows marked after a sync stay marked.
     private func pruneMatchChoices(against preview: StatementPreview) {
         let rows = Dictionary(preview.rows.map { ($0.line, $0) }, uniquingKeysWith: { $1 })
-        let stale = matchChoices.filter { line, choice in
-            guard let row = rows[line], Self.isFlagged(row) else { return true }
-            return !availableChoices(for: row).contains(choice) || choice == defaultChoice(for: row)
+        let stale = matchDecisions.filter { line, decision in
+            guard let row = rows[line] else { return true }
+            return !holds(decision, for: row)
         }
-        for line in stale.keys { matchChoices[line] = nil }
+        guard !stale.isEmpty else { return }
+        let marked = changedLines
+        for line in stale.keys { matchDecisions[line] = nil }
+        changedLines = marked
     }
 
     /// A flagged row, not a transfer standing for an entry, imported
@@ -958,6 +1026,14 @@ final class StatementImportModel {
     func importsByDefault(_ row: StatementRow) -> Bool {
         !Self.isReplace(row) && Self.isFlagged(row)
             && defaultChoice(for: row) == .importAnyway && matchChoice(for: row) == .importAnyway
+    }
+
+    /// The transaction a flagged row matched is dated before the start day,
+    /// in its own offset: the core lets an entry typed up to 3 days before
+    /// it stand for one of the first rows, which the review points out.
+    func matchPredatesStart(_ row: StatementRow) -> Bool {
+        guard let since, Self.isFlagged(row), let existing = row.existing else { return false }
+        return String(existing.occurredAt.prefix(10)) < since
     }
 
     /// A transfer row imported beside the entry it matched because that
@@ -1010,10 +1086,16 @@ final class StatementImportModel {
     /// plan with those rows marked (`changedLines`), and the next import,
     /// finding nothing new, writes it. A round that does not get through
     /// stops nothing.
+    ///
+    /// The preview on screen must be the plan of what is chosen now: a
+    /// change its preview has not come back for yet (a wallet ticked and ↩
+    /// pressed within the pause before the preview runs) writes nothing, the
+    /// file is planned again and the sheet says so (`previewWasStale`).
     func runImport() async {
         guard previewInput != nil, !isImporting else { return }
         isImporting = true
         defer { isImporting = false }
+        guard await planIsCurrent() else { return }
         if sync != nil {
             let seen = preview
             await syncVault()
@@ -1021,6 +1103,7 @@ final class StatementImportModel {
             guard let fresh = preview, previewProblem == nil else { return }
             changedLines = seen.map { Self.changedLines(from: $0, to: fresh) } ?? []
             guard changedLines.isEmpty else { return }
+            guard await planIsCurrent() else { return }
         }
         guard let input = previewInput, let text, let vaultId, let detection else { return }
         let replacing = Set(
@@ -1045,6 +1128,18 @@ final class StatementImportModel {
             problem = StatementImportProblem(error)
         }
     }
+
+    /// Whether the preview on screen was planned from what is chosen now;
+    /// if not, it is planned again and the sheet says nothing was written.
+    private func planIsCurrent() async -> Bool {
+        if isPlanCurrent { return true }
+        await refreshPreview()
+        previewWasStale = true
+        return false
+    }
+
+    /// The preview on screen is the plan of what is chosen now.
+    var isPlanCurrent: Bool { preview != nil && plannedInput == previewInput }
 
     /// The lines planned otherwise in `fresh` than in `seen`, in what the
     /// user decides on: what becomes of the row, what it matched and what

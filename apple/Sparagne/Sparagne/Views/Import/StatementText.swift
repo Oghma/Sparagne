@@ -97,6 +97,12 @@ enum StatementText {
         String(localized: "Maybe another row’s; imported unless you choose Keep")
     }
 
+    /// Under a match dated before the start day: an entry typed up to three
+    /// days before it may still stand for one of the file's first rows.
+    static var typedBeforeStart: String {
+        String(localized: "Typed before the start date")
+    }
+
     /// Under the entry a transfer row is imported next to, by default,
     /// since it is not very likely its other side (days apart, typed by
     /// hand).

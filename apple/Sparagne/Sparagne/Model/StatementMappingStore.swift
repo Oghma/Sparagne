@@ -55,6 +55,16 @@ struct StatementMappingStore {
         return try? JSONDecoder().decode(StatementImportTarget.self, from: Data(json.utf8))
     }
 
+    /// Every wallet an import into `vaultId` was remembered going to,
+    /// whatever its header: the wallets statements go to.
+    func targetWallets(vaultId: Uuid) -> Set<Uuid> {
+        let prefix = "\(vaultId)|"
+        return Set(stored(Self.targetsKey).compactMap { key, json -> Uuid? in
+            guard key.hasPrefix(prefix) else { return nil }
+            return (try? JSONDecoder().decode(StatementImportTarget.self, from: Data(json.utf8)))?.walletId
+        })
+    }
+
     /// Replaces the target remembered for `vaultId` and `headers`.
     func remember(_ target: StatementImportTarget, vaultId: Uuid, headers: [String]) {
         guard let data = try? JSONEncoder().encode(target), let json = String(data: data, encoding: .utf8) else {
