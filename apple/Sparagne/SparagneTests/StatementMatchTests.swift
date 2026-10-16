@@ -134,6 +134,88 @@ struct StatementMatchTests {
         #expect(again.counts.possibleDuplicates == 0)
     }
 
+    @Test("A matched row ticked off writes and records nothing, and the next import of the file finds its match again")
+    func matchedRowLeftOut() async throws {
+        let (store, card, _) = try await Self.vault()
+        await Self.type("-14.75 green grocer #Spesa @card 2026-09-11", into: store)
+        let mappings = StatementMappingStore(defaults: try Self.defaults())
+        let model = try await Self.cardModel(store, card: card, mappings: mappings)
+        #expect(try Self.row(model, line: 5).status == .possibleDuplicate)
+
+        model.setIncluded(false, line: 5)
+        #expect(model.counts.possibleDuplicates == 0)
+        #expect(model.counts.skipped == 3)
+        #expect(model.overrides == [StatementRowOverride(line: 5, category: nil, note: nil, skip: true)])
+
+        await model.runImport()
+
+        let report = try #require(model.report)
+        #expect(report.executed == 2)
+        #expect(report.possibleDuplicates == 0)
+        #expect(report.skipped == 3)
+        #expect(report.rejected.isEmpty)
+
+        // Nothing claimed the typed grocer for the row: it matches again.
+        let again = StatementImportModel(store: store, mappings: mappings)
+        await again.load(data: Data(Self.card.utf8), fileName: "card.csv")
+        await again.refreshPreview()
+        let grocer = try Self.row(again, line: 5)
+        #expect(grocer.status == .possibleDuplicate)
+        #expect(grocer.existing?.note == "green grocer")
+        #expect(grocer.defaultChoice == .skip)
+    }
+
+    @Test("What becomes of a match by default is the core's: a choice equal to it sends nothing, also once ticking a wallet changed it")
+    func defaultsFromTheCore() async throws {
+        let (store, card, bank) = try await Self.vault()
+        // The grocer typed twice: into the card a day off, into the bank on its day.
+        await Self.type("-14.75 verdura @card 2026-09-12", into: store)
+        await Self.type("-14.75 green grocer #Spesa @bank 2026-09-11", into: store)
+        let model = try await Self.cardModel(store, card: card, mappings: StatementMappingStore(defaults: try Self.defaults()))
+
+        let kept = try Self.row(model, line: 5)
+        #expect(kept.existing?.note == "verdura")
+        #expect(kept.defaultChoice == .skip)
+        #expect(model.defaultChoice(for: kept) == .skip)
+        model.setMatchChoice(.skip, for: kept)
+        #expect(model.matchChoices.isEmpty)
+        model.setMatchChoice(.importAnyway, for: kept)
+        #expect(model.overrides.first { $0.line == 5 }?.onMatch == .importAnyway)
+
+        // The bank ticked: the bank's grocer, on the row's own day, is the
+        // closer match, which by default moves here.
+        model.setAlsoChecked(true, wallet: bank)
+        #expect(model.matchChoices.isEmpty)
+        await model.refreshPreview()
+        let moved = try Self.row(model, line: 5)
+        #expect(moved.existing?.note == "green grocer")
+        #expect(moved.defaultChoice == .moveExisting)
+        #expect(model.matchChoice(for: moved) == .moveExisting)
+        #expect(!model.overrides.contains { $0.onMatch != nil })
+        model.setMatchChoice(.moveExisting, for: moved)
+        #expect(model.matchChoices.isEmpty)
+        model.setMatchChoice(.importAnyway, for: moved)
+        #expect(model.overrides.first { $0.line == 5 }?.onMatch == .importAnyway)
+    }
+
+    @Test("The preview names a wallet whose entries look like the file's new rows until it is ticked")
+    func lookalikeAdvisory() async throws {
+        let (store, card, bank) = try await Self.vault()
+        await Self.type("-14.75 green grocer #Spesa @bank 2026-09-11", into: store)
+        let model = try await Self.cardModel(store, card: card, mappings: StatementMappingStore(defaults: try Self.defaults()))
+
+        #expect(model.preview?.lookalikes == [StatementLookalike(walletId: bank, rows: 1)])
+        #expect(model.lookalikes.map(\.wallet.id) == [bank])
+        #expect(model.lookalikes.map(\.rows) == [1])
+
+        // Ticked, the advice goes at once, and the core gives none either.
+        model.setAlsoChecked(true, wallet: bank)
+        #expect(model.lookalikes.isEmpty)
+        await model.refreshPreview()
+        #expect(model.preview?.lookalikes.isEmpty == true)
+        #expect(try Self.row(model, line: 5).status == .possibleDuplicate)
+    }
+
     @Test("Import anyway brings the possible duplicate back among the new rows, and the import writes it beside the one typed")
     func handRowImportedAnyway() async throws {
         let (store, card, _) = try await Self.vault()
