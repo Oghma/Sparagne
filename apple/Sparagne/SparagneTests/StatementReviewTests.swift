@@ -488,10 +488,51 @@ struct StatementReviewTests {
         #expect(!StatementImportModel.takesAction(imported))
     }
 
+    @Test("A transfer row standing for an entry offers to replace it, keep it or import beside it, replacing by default and sending nothing until changed")
+    func replaceChoices() async throws {
+        let (store, card, bank, _) = try await Self.vault()
+        let model = try await Self.cardModel(store, wallet: card)
+        let all = try await Self.transactions(store)
+        // An income in the bank stands for the top-up the card's row is.
+        var income = try #require(all.first { $0.note == "forno bianco" })
+        income.kind = .income
+        income.walletId = bank
+
+        var topup = try Self.row(model, line: 4)
+        #expect(topup.kind == .transferWallet)
+        topup.status = .possibleDuplicate
+        topup.existing = income
+        topup.matchChoice = .replaceExisting
+        #expect(StatementImportModel.isReplace(topup))
+        #expect(StatementImportModel.replaces(topup))
+        #expect(StatementImportModel.isFlagged(topup))
+        // In another wallet, yet replaced, never moved.
+        #expect(!model.canMove(topup))
+        #expect(model.availableChoices(for: topup) == [.replaceExisting, .skip, .importAnyway])
+        #expect(model.defaultChoice(for: topup) == .replaceExisting)
+        #expect(model.matchChoice(for: topup) == .replaceExisting)
+
+        model.setMatchChoice(.replaceExisting, for: topup)
+        #expect(model.matchChoices.isEmpty)
+        #expect(!model.overrides.contains { $0.line == 4 })
+
+        model.setMatchChoice(.skip, for: topup)
+        #expect(model.previewInput?.rowChoices == [
+            StatementRowOverride(line: 4, category: nil, note: nil, skip: false, onMatch: .skip),
+        ])
+        // A plain duplicate of the same entry is no replacement.
+        var spend = try Self.row(model, line: 2)
+        spend.status = .possibleDuplicate
+        spend.existing = income
+        #expect(!StatementImportModel.isReplace(spend))
+        #expect(!model.availableChoices(for: spend).contains(.replaceExisting))
+    }
+
     // MARK: - Words
 
     @Test("Every choice over a match, every new status and every kind of a row has words of its own")
     func words() {
+        #expect(!StatementText.importedByDefault.isEmpty)
         let choices = StatementMatchChoice.allCases.map(StatementText.matchChoice)
         #expect(Set(choices).count == StatementMatchChoice.allCases.count)
         let details = StatementMatchChoice.allCases.map(StatementText.matchChoiceDetail)

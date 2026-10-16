@@ -285,6 +285,141 @@ struct StatementMatchTests {
         #expect(Self.balance(store, card) == 12_995) // 150.00 in, 20.05 spent
     }
 
+    // MARK: - An entry standing for a transfer
+
+    /// A bank export of one row, by its sign.
+    private static func bankFile(_ row: String) -> String {
+        "Data;Importo;Descrizione\n\(row)\n"
+    }
+
+    /// `text` read as a continental bank export into `wallet`, with
+    /// `rules`, and previewed.
+    private static func bankModel(
+        _ store: AppStore,
+        _ text: String,
+        into wallet: Uuid,
+        rules: [StatementDescriptionRule] = [],
+        mappings: StatementMappingStore
+    ) async throws -> StatementImportModel {
+        let model = StatementImportModel(store: store, mappings: mappings)
+        await model.load(data: Data(text.utf8), fileName: "banca.csv")
+        model.mapping.dateColumn = "Data"
+        model.mapping.amountColumn = "Importo"
+        model.mapping.descriptionColumns = ["Descrizione"]
+        model.mapping.descriptionRules = rules
+        model.walletId = wallet
+        await model.refreshPreview()
+        #expect(model.previewProblem == nil)
+        return model
+    }
+
+    @Test("A bank's transfer whose other side another bank's file imported as an income replaces that income by default, and the money moves once")
+    func transferReplacesIncome() async throws {
+        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: try Self.defaults())
+        await store.bootstrap()
+        await store.createVault(name: "Main", walletName: "Revolut", openingBalance: 0)
+        await store.createWallet(name: "ING", openingBalance: 100_000)
+        let revolut = try #require(store.wallets.first { $0.name == "Revolut" }).id
+        let ing = try #require(store.wallets.first { $0.name == "ING" }).id
+        let mappings = StatementMappingStore(defaults: try Self.defaults())
+
+        // Revolut's export first, with no rule: the money from ING is an income.
+        let first = try await Self.bankModel(
+            store, Self.bankFile("01/10/2026;200,00;BONIFICO DA ING"), into: revolut, mappings: mappings
+        )
+        #expect(try Self.row(first, line: 2).kind == .income)
+        await first.runImport()
+        #expect(first.report?.executed == 1)
+        #expect(Self.balance(store, revolut) == 20_000)
+
+        // ING's, whose rule knows the money went to Revolut.
+        let rule = StatementDescriptionRule(contains: "revolut", action: .transferOut(toWalletId: revolut))
+        let model = try await Self.bankModel(
+            store, Self.bankFile("01/10/2026;-200,00;BONIFICO A REVOLUT"), into: ing, rules: [rule], mappings: mappings
+        )
+        let row = try Self.row(model, line: 2)
+        #expect(row.status == .possibleDuplicate)
+        #expect(row.kind == .transferWallet)
+        #expect(row.counterWalletId == revolut)
+        #expect(row.existing?.kind == .income)
+        #expect(row.existing?.walletId == revolut)
+        #expect(row.matchChoice == .replaceExisting)
+        #expect(StatementImportModel.replaces(row))
+        #expect(model.availableChoices(for: row) == [.replaceExisting, .skip, .importAnyway])
+        #expect(model.defaultChoice(for: row) == .replaceExisting)
+        #expect(model.overrides.isEmpty)
+        // Written, though not new: the import counts it among its rows.
+        #expect(model.counts == .init(new: 0, alreadyImported: 0, skipped: 0, invalid: 0, rounded: 0, replaces: 1))
+        #expect(model.counts.written == 1)
+        // The line under it names what goes: an income in Revolut.
+        let line = StatementText.existing(try #require(row.existing), names: NameBook(snapshot: store.snapshot), replacing: true)
+        #expect(line.contains("BONIFICO DA ING"))
+        #expect(line.contains(StatementText.kind(.income)))
+        #expect(line.contains("Revolut"))
+
+        await model.runImport()
+
+        let report = try #require(model.report)
+        #expect(report.executed == 1)
+        #expect(report.rejected.isEmpty)
+        #expect(model.replaced == 1)
+        let all = try await Self.transactions(store)
+        let income = try #require(all.first { $0.kind == .income && $0.amount == 20_000 })
+        #expect(income.voided)
+        let transfers = all.filter { $0.kind == .transferWallet && !$0.voided }
+        #expect(transfers.count == 1)
+        #expect(transfers.first?.fromId == ing)
+        #expect(transfers.first?.toId == revolut)
+        #expect(Self.balance(store, revolut) == 20_000)
+        #expect(Self.balance(store, ing) == 80_000)
+    }
+
+    // MARK: - Near the file's edges
+
+    @Test("A row whose match another export's row stands for, near the file's first day, is imported by default, and the review says why")
+    func nearEdgeImportedByDefault() async throws {
+        let (store, card, _) = try await Self.vault()
+        let mappings = StatementMappingStore(defaults: try Self.defaults())
+        let first = try await Self.cardModel(store, card: card, mappings: mappings)
+        await first.runImport()
+        #expect(first.report?.executed == 3)
+
+        // The next export starts on the last day of the first: its own
+        // 3.20 a day later may be the same bread, or the next one.
+        let next = ([Self.cardHeader] + [
+            Self.cardRow("2026-09-18 09:00:00 UTC", "card_spend", "FORNO B.", "CLEARED", "3.20"), // 2
+            Self.cardRow("2026-09-17 07:00:00 UTC", "card_spend", "EDICOLA", "CLEARED", "1.50"), // 3
+        ]).joined(separator: "\n") + "\n"
+        let model = StatementImportModel(store: store, mappings: mappings)
+        await model.load(data: Data(next.utf8), fileName: "card-2.csv")
+        #expect(model.walletId == card)
+        await model.refreshPreview()
+
+        let bread = try Self.row(model, line: 2)
+        #expect(bread.status == .new)
+        #expect(bread.existing?.note == "FORNO BIANCO")
+        #expect(bread.matchChoice == .importAnyway)
+        #expect(StatementImportModel.isFlagged(bread))
+        #expect(model.defaultChoice(for: bread) == .importAnyway)
+        #expect(model.importsByDefault(bread))
+        #expect(model.availableChoices(for: bread) == [.skip, .importAnyway])
+        #expect(model.counts.new == 2)
+        #expect(model.overrides.isEmpty)
+
+        // Kept instead: the bread already there stands for it.
+        model.setMatchChoice(.skip, for: bread)
+        await model.refreshPreview()
+        let kept = try Self.row(model, line: 2)
+        #expect(kept.status == .possibleDuplicate)
+        #expect(!model.importsByDefault(kept))
+        #expect(model.defaultChoice(for: kept) == .importAnyway)
+        #expect(model.counts.new == 1)
+
+        // Back to the default: nothing sent.
+        model.setMatchChoice(.importAnyway, for: kept)
+        #expect(model.matchChoices.isEmpty)
+    }
+
     // MARK: - The start day
 
     @Test("A start day skips the rows dated before it, which the review says in words and offers no kind for")
