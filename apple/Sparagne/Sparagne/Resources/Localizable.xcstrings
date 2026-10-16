@@ -5505,6 +5505,22 @@
         }
       }
     },
+    "Maybe its other side: choose Replace if so": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maybe its other side: choose Replace if so"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forse è l’altra metà: scegli Sostituisci se lo è"
+          }
+        }
+      }
+    },
     "Members": {
       "localizations": {
         "en": {
