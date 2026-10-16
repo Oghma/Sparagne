@@ -8,8 +8,9 @@
 //!
 //! Re-importing the same statement is a no-op: every row's command id is a
 //! UUID v5 over a frozen namespace and the row's content (status left out, so
-//! a row that went from pending to cleared is still the same row), and the
-//! rows the vault already held match again.
+//! a row that went from pending to cleared is still the same row), and what
+//! the import decided about a row it left out, which transaction stands for
+//! it, is in the log too (see "The import").
 //!
 //! # What a row is taken for
 //!
@@ -60,9 +61,9 @@
 //! 1. a row with fewer columns than the header, or more that are not empty,
 //!    or that swallowed the rest of the file in an unclosed quote: `Invalid`
 //!    (`invalid_row`);
-//! 2. its id, or the id of the move an earlier import made for it, already in
-//!    the vault's log: `AlreadyImported`, whatever the rules or the user now
-//!    say about it;
+//! 2. its id, or the id of the move or the claim an earlier import wrote for
+//!    it, already in the vault's log: `AlreadyImported`, whatever the rules or
+//!    the user now say about it;
 //! 3. a `Skip` action: `Skipped`, `skipped_by_you` when it is the user's,
 //!    `skipped_by_rule` when it is a rule's or the default action; then a
 //!    status in `skip_statuses` (`skipped_status`);
@@ -85,63 +86,98 @@
 //!
 //! # Rows already in the vault
 //!
-//! Every preview matches the rows against the vault again, so nothing about a
-//! match is stored. Days apart are counted between calendar dates, each in
-//! its own offset.
+//! Every preview matches the rows against the vault again; what earlier
+//! imports decided is read back from their claims and moves in the log (see
+//! "The import"). Days apart are counted between calendar dates, each in its
+//! own offset.
 //!
 //! - The other side of a transfer: a row that would be new or waits for its
 //!   wallet (6 and 7), taken for a transfer or by its sign, matches a live
 //!   transfer between wallets of the same amount at most 4 days away that
 //!   goes the row's way: out of the imported wallet for money going out, into
 //!   it for money coming in, and to or from the wallet the row names, if it
-//!   names one. Only the imported wallet's transfers count, and an expense,
-//!   income or refund action never matches one. The matched row reads as the
-//!   transfer it is: kind `TransferWallet`, the other wallet in
-//!   [`StatementRow::counter_wallet_id`].
-//! - A row typed by hand: a new income, expense or refund that matched no
-//!   transfer matches a live entry of the same kind and amount at most 3 days
-//!   away, in the imported wallet or in one of
-//!   [`StatementOptions::also_check_wallets`]. In the imported wallet, an
-//!   entry an import wrote under its own command's id, a UUID v5 (a row of an
-//!   earlier statement, or of a script), is none: it stands for a row of an
-//!   earlier export, and the same coffee on the last day of September and on
-//!   the first of October is two coffees. A row typed by hand or recorded
-//!   from a recurring template has an id the app minted (v7) and still
-//!   matches; in a wallet also checked, an imported row matches too, since
-//!   the user may have imported their own sheet there.
+//!   names one. Only the imported wallet's transfers count, and only when no
+//!   claim names their side on it: the other side of a transfer imported from
+//!   one bank's file is found in the other's, never in the same bank's next
+//!   export. An expense, income or refund action never matches a transfer.
+//!   The matched row reads as the transfer it is: kind `TransferWallet`, the
+//!   other wallet in [`StatementRow::counter_wallet_id`].
+//! - A row typed by hand: a new income, expense or refund matches a live
+//!   entry of the same amount moving the money the same way (an expense for
+//!   money going out, an income or a refund for money coming in) at most 3
+//!   days away. In the imported wallet, an entry typed by hand or recorded
+//!   from a recurring template that no claim or move names always may: one
+//!   typed on the 30th may be booked on the 1st. One a claim or a move names,
+//!   or one an import wrote under its own command's id (a UUID v5: a row of a
+//!   statement, or of a script), stands for a row of an export already in,
+//!   and may only when it is dated within the file's own days, first to last
+//!   readable row: the same file read with another mapping then finds its
+//!   rows again, and the coffee on the 30th of September never stands for
+//!   October's on the 1st. In one of [`StatementOptions::also_check_wallets`],
+//!   an entry a claim or a move names stands for a row of another statement
+//!   and never matches; one an import wrote does (the user's own sheet,
+//!   imported there once), from [`StatementOptions::since`] on.
 //!
-//! Opening balances, voided rows, the rows of this statement already
-//! imported and the entries an earlier import moved for them never match: a
-//! row is never its own duplicate, nor are the rows next to it in an
-//! overlapping export. Transfers match whoever wrote them, so the other side
-//! of a transfer imported from one bank's file is found in the other's.
-//! Matches are one to one, closest
-//! first: fewer days, then fewer seconds between the two instants, then the
-//! earlier line, the earlier transaction, the lower id; transfers first, then
-//! duplicates among the rows and transactions still free. The match is in
+//! Opening balances, voided rows and the transactions that stand for the rows
+//! of this statement already imported (their own, or the one their claim or
+//! move names) never match: a row is never its own duplicate, nor are the
+//! rows next to it in an overlapping export. Each amount is paired in one
+//! pass for transfers and duplicates alike, one to one: as many rows as can
+//! be get a transaction, and among the ways to pair that many, the one
+//! closest in all, fewest days apart summed, then fewest seconds, a transfer
+//! before a duplicate on a tie. So a row typed on the same day wins over a
+//! transfer three days away, and rows on the 10th and the 13th both pair with
+//! rows typed on the 8th and the 11th. The match is in
 //! [`StatementRow::existing`].
 //!
 //! What becomes of a flagged row is [`StatementRow::match_choice`]: the
 //! user's [`StatementRowOverride::on_match`] (`Skip` when the user's `skip`
 //! leaves the row out), else `MoveExisting` for a duplicate found in another
-//! wallet and `Skip` for any other. `MoveExisting` reads as `Skip` but for a
-//! duplicate found in another wallet. `ImportAnyway` gives the row back what
-//! it was (new with its command, or waiting for its wallet), with its match
-//! still in `existing`; the transaction stays claimed, so no other row takes
-//! it.
+//! wallet and `Skip` for any other. `Skip` says the transaction already there
+//! stands for the row, and the import records it. `MoveExisting` reads as
+//! `Skip` but for a duplicate found in another wallet. `ImportAnyway` gives
+//! the row back what it was (new with its command, or waiting for its
+//! wallet), with its match still in `existing`; the transaction stays taken
+//! in this preview, so no other row of it gets it, and nothing records it.
 //!
 //! # The import
 //!
 //! [`Core::import_statement`] runs one command per new row, oldest first,
-//! with the row's id. Then, oldest first, it moves the match of every
-//! duplicate whose choice is `MoveExisting` into the imported wallet: an
-//! `UpdateTransaction` of its `wallet_id` alone, so its note, category,
-//! envelope, date and person stay, under an id derived from the row's
-//! (`move-existing`), so moving it twice is a no-op. Imported again, the row
-//! reads `AlreadyImported` through its move, and the entry it moved matches
-//! no other row. Refused rows and refused moves land in the report on their line; a storage
-//! error stops the import (every command before it stays, and a new run
-//! deduplicates them).
+//! with the row's id. A new transfer between wallets is claimed on the
+//! imported wallet's side right after it. Then, oldest first, every flagged
+//! row left out is recorded, under an id derived from the row's, so writing
+//! it twice is a no-op and the row reads as imported from then on:
+//!
+//! - a duplicate whose choice is `MoveExisting` is moved into the imported
+//!   wallet (`move-existing`): an `UpdateTransaction` of its `wallet_id`
+//!   alone, so its kind, note, category, envelope, date and person stay;
+//! - a duplicate whose choice is `Skip` is claimed (`claim`): an
+//!   `UpdateTransaction` naming the `wallet_id` it already has;
+//! - the other side of a transfer whose choice is `Skip` is claimed
+//!   (`claim`): an `UpdateTransaction` naming the imported wallet as the
+//!   `from_id` or the `to_id` it already is.
+//!
+//! A claim changes nothing in the vault; it says, in the log, that the
+//! transaction stands for a row of a statement. A claim or a move is told
+//! from any other command by its shape: an `UpdateTransaction` under a UUID
+//! v5 whose patch carries one of `wallet_id`, `from_id` and `to_id` and
+//! nothing else (the app mints v7 ids, and a script relabelling rows under
+//! v5 ids patches their category). It names the whole entry, or the side of
+//! the transfer on the wallet it names. Once both banks of a transfer are
+//! imported, both its sides are claimed.
+//!
+//! Refused rows, claims and moves land in the report on their line (a claim
+//! is refused, like any update, on an entry whose envelope or wallet is
+//! archived, or a transfer touching an archived wallet); a storage error
+//! stops the import (every command before it stays, and a new run
+//! deduplicates them). Claims are counted nowhere else; moves in
+//! [`StatementReport::moved`].
+//!
+//! Known limits: a row, claim or move the server refused stays in the log as
+//! refused, and still counts (the row reads as imported, the transaction as
+//! claimed), as executing it again would be a no-op. And the import plans
+//! the rows again rather than trusting the preview: if the vault changed in
+//! between, it may pair, move or claim otherwise than the preview showed.
 //!
 //! # Ids
 //!
@@ -360,8 +396,9 @@ pub struct StatementRowOverride {
 pub enum StatementRowStatus {
     New,
     AlreadyImported,
-    /// A transaction already in the vault looks like this row: same kind,
-    /// same amount, at most 3 days apart, in the statement's wallet or in one
+    /// A transaction already in the vault looks like this row: the money
+    /// moving the same way (an expense, or an income or a refund), the same
+    /// amount, at most 3 days apart, in the statement's wallet or in one
     /// of [`StatementOptions::also_check_wallets`]. It is in
     /// [`StatementRow::existing`], and [`StatementRow::match_choice`] says
     /// what the import does.
