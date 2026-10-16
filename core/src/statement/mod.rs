@@ -68,7 +68,10 @@ use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{CommandEnvelope, Core, DomainError, Result, TransactionKind, TransactionView};
+use crate::{
+    Command, CommandEnvelope, Core, DomainError, Result, TransactionKind, TransactionPatch,
+    TransactionView,
+};
 
 mod amount;
 mod csv;
@@ -523,17 +526,34 @@ impl Core {
             moved: 0,
         };
         let mut new = Vec::new();
+        let mut moves = Vec::new();
         for plan::Planned { row, command } in planned {
             match (&row.status, command) {
                 (StatementRowStatus::New, Some(command)) => new.push((row, command)),
                 (StatementRowStatus::AlreadyImported, _) => report.deduplicated += 1,
-                (StatementRowStatus::PossibleDuplicate, _) => report.possible_duplicates += 1,
+                (StatementRowStatus::PossibleDuplicate, _) => {
+                    report.possible_duplicates += 1;
+                    if row.match_choice == Some(StatementMatchChoice::MoveExisting)
+                        && let Some(existing) = &row.existing
+                    {
+                        let command = Command::UpdateTransaction {
+                            transaction_id: existing.id,
+                            patch: TransactionPatch {
+                                wallet_id: Some(options.wallet_id),
+                                ..TransactionPatch::default()
+                            },
+                        };
+                        moves.push((row, command));
+                    }
+                }
                 (StatementRowStatus::MatchedTransfer, _) => report.matched_transfers += 1,
                 _ => report.skipped += 1,
             }
         }
-        // Oldest first, so the log reads in the order things happened.
+        // Oldest first, so the log reads in the order things happened; the
+        // rows typed by hand move once the new rows are in.
         new.sort_by_key(|(row, _)| (row.occurred_at, row.line));
+        moves.sort_by_key(|(row, _)| (row.occurred_at, row.line));
         for (row, command) in new {
             let envelope = CommandEnvelope {
                 id: row.command_id,
@@ -555,6 +575,31 @@ impl Core {
                 }),
             }
         }
+        for (row, command) in moves {
+            let envelope = CommandEnvelope {
+                id: move_id(row.command_id),
+                vault_id,
+                author: author.to_string(),
+                command,
+            };
+            match self.execute(envelope) {
+                Ok(receipt) if receipt.deduplicated => report.deduplicated += 1,
+                Ok(_) => report.moved += 1,
+                Err(DomainError::Storage(message)) => return Err(DomainError::Storage(message)),
+                Err(err) => report.rejected.push(StatementRejection {
+                    line: row.line,
+                    code: err.code().to_string(),
+                    message: err.to_string(),
+                }),
+            }
+        }
         Ok(report)
     }
+}
+
+/// The id of the command that moves the row typed by hand for the
+/// statement row `row_id` into the statement's wallet: derived from the
+/// row's, so a second import moving it again is a no-op.
+fn move_id(row_id: Uuid) -> Uuid {
+    Uuid::new_v5(&row_id, b"move-existing")
 }

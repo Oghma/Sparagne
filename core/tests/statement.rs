@@ -2035,6 +2035,219 @@ fn a_flagged_row_the_user_leaves_out_stays_flagged() {
 }
 
 // ---------------------------------------------------------------------------
+// Rows typed into another wallet, moved into the statement's
+// ---------------------------------------------------------------------------
+
+/// The coffee of 3,50 the user typed into `wallet` on the 15th, in `flow`,
+/// filed under Bar: the bank's line 2, a day later.
+fn coffee_typed_into(fx: &mut Fx, wallet: Uuid, flow: Option<Uuid>) -> Uuid {
+    let entry = Entry {
+        amount: 350,
+        wallet_id: Some(wallet),
+        flow_id: flow,
+        category: Some("Bar".to_string()),
+        note: Some("caffè al bar".to_string()),
+        occurred_at: september(15),
+        person: None,
+    };
+    run(&mut fx.core, fx.vault, Command::Expense(entry))
+        .result_id
+        .unwrap()
+}
+
+/// The bank's options, also checking `cash`.
+fn checking(bank: Uuid, cash: Uuid) -> StatementOptions {
+    StatementOptions {
+        also_check_wallets: vec![cash],
+        ..options(bank)
+    }
+}
+
+#[test]
+fn a_row_typed_into_cash_is_moved_into_the_bank_as_it_is() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
+        .result_id
+        .unwrap();
+    let casa = new_flow(&mut fx, "Casa");
+    let typed = coffee_typed_into(&mut fx, cash, Some(casa));
+    let options = checking(bank, cash);
+
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
+    let pos = row(&preview, 2);
+    assert_eq!(pos.status, StatementRowStatus::PossibleDuplicate);
+    assert_eq!(pos.existing.as_ref().map(|tx| tx.id), Some(typed));
+    assert_eq!(pos.existing.as_ref().unwrap().wallet_id, Some(cash));
+    assert_eq!(pos.match_choice, Some(StatementMatchChoice::MoveExisting));
+    assert_eq!(
+        (preview.new_rows, preview.possible_duplicates, preview.moves),
+        (2, 1, 1)
+    );
+
+    let report = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(
+        (report.executed, report.possible_duplicates, report.moved),
+        (2, 1, 1)
+    );
+    assert!(report.rejected.is_empty());
+    let moved = fx.core.transaction(fx.vault, typed).unwrap();
+    assert_eq!(moved.wallet_id, Some(bank));
+    assert_eq!(moved.flow_id, Some(casa));
+    assert_eq!(moved.category, "Bar");
+    assert_eq!(moved.note.as_deref(), Some("caffè al bar"));
+    assert_eq!(moved.occurred_at, september(15));
+    assert_eq!(wallet_balance(&fx.core, fx.vault, cash), 0);
+    assert_eq!(
+        wallet_balance(&fx.core, fx.vault, bank),
+        -350 + 185_000 - 12_000
+    );
+    assert_eq!(flow_balance(&fx.core, fx.vault, casa), -350);
+
+    // Now in the bank, it is a duplicate there: nothing moves again.
+    let commands = command_count(&fx.core, fx.vault);
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(
+        row(&preview, 2).match_choice,
+        Some(StatementMatchChoice::Skip)
+    );
+    assert_eq!(preview.moves, 0);
+    let again = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(
+        (
+            again.executed,
+            again.moved,
+            again.deduplicated,
+            again.possible_duplicates
+        ),
+        (0, 0, 2, 1)
+    );
+    assert_eq!(command_count(&fx.core, fx.vault), commands);
+}
+
+#[test]
+fn a_row_typed_into_cash_stays_there_when_the_user_says_skip() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
+        .result_id
+        .unwrap();
+    let typed = coffee_typed_into(&mut fx, cash, None);
+    let options = checking(bank, cash);
+    let skip = [on_match(2, StatementMatchChoice::Skip)];
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &skip);
+    assert_eq!(
+        row(&preview, 2).match_choice,
+        Some(StatementMatchChoice::Skip)
+    );
+    assert_eq!((preview.possible_duplicates, preview.moves), (1, 0));
+    let report = import_with(&mut fx, BANK, &bank_mapping(), &options, &skip);
+    assert_eq!((report.possible_duplicates, report.moved), (1, 0));
+    let tx = fx.core.transaction(fx.vault, typed).unwrap();
+    assert_eq!(tx.wallet_id, Some(cash));
+}
+
+#[test]
+fn moving_reads_as_skipping_but_for_a_duplicate_in_another_wallet() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let (first, second) = two_banks(&mut fx);
+    // A duplicate in the statement's own wallet, and a transfer.
+    coffee_typed_into(&mut fx, first, None);
+    transfer_by_hand(&mut fx, first, second, 30_000, 10);
+    let text = bank_csv(&[
+        bank_row("16/09/2026", "BAR", "-3,50"),
+        bank_row("10/09/2026", "GIROCONTO", "-300,00"),
+    ]);
+    let moving = [
+        on_match(2, StatementMatchChoice::MoveExisting),
+        on_match(3, StatementMatchChoice::MoveExisting),
+    ];
+    let options = checking(first, cash);
+    let preview = preview_with(&fx, &text, &bank_mapping(), &options, &moving);
+    assert_eq!(
+        row(&preview, 2).status,
+        StatementRowStatus::PossibleDuplicate
+    );
+    assert_eq!(row(&preview, 3).status, StatementRowStatus::MatchedTransfer);
+    for line in [2, 3] {
+        assert_eq!(
+            row(&preview, line).match_choice,
+            Some(StatementMatchChoice::Skip)
+        );
+    }
+    assert_eq!(preview.moves, 0);
+    let report = import_with(&mut fx, &text, &bank_mapping(), &options, &moving);
+    assert_eq!((report.executed, report.moved), (0, 0));
+}
+
+#[test]
+fn a_refused_move_is_reported_on_its_line() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
+        .result_id
+        .unwrap();
+    let gone = new_flow(&mut fx, "Gone");
+    coffee_typed_into(&mut fx, cash, Some(gone));
+    // Back to zero, so the envelope can be archived.
+    let refund = Entry {
+        amount: 350,
+        wallet_id: Some(cash),
+        flow_id: Some(gone),
+        category: None,
+        note: None,
+        occurred_at: september(1),
+        person: None,
+    };
+    run(&mut fx.core, fx.vault, Command::Refund(refund));
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::ArchiveFlow { flow_id: gone },
+    );
+    let report = import_with(
+        &mut fx,
+        BANK,
+        &bank_mapping(),
+        &checking(bank, cash),
+        &no_overrides(),
+    );
+    assert_eq!((report.executed, report.moved), (2, 0));
+    assert_eq!(report.rejected.len(), 1);
+    assert_eq!(report.rejected[0].line, 2);
+    assert_eq!(report.rejected[0].code, "invalid_command");
+}
+
+#[test]
+fn a_row_typed_into_an_archived_wallet_still_moves() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
+        .result_id
+        .unwrap();
+    let typed = coffee_typed_into(&mut fx, cash, None);
+    by_hand(&mut fx, TransactionKind::Income, cash, 350, 1);
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::ArchiveWallet { wallet_id: cash },
+    );
+    let report = import_with(
+        &mut fx,
+        BANK,
+        &bank_mapping(),
+        &checking(bank, cash),
+        &no_overrides(),
+    );
+    assert_eq!(report.moved, 1);
+    assert_eq!(
+        fx.core.transaction(fx.vault, typed).unwrap().wallet_id,
+        Some(bank)
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Transfers between the user's banks
 // ---------------------------------------------------------------------------
 
@@ -2578,6 +2791,113 @@ fn preview_writes_nothing() {
         )
         .unwrap();
     assert_eq!(command_count(&fx.core, fx.vault), before);
+}
+
+/// The second bank's export with every kind of row: the other side of a
+/// transfer, a duplicate typed into Cash and one typed into the bank, a row
+/// the user skips, one imported anyway, a new one, a zero and an unreadable
+/// amount.
+struct Busy {
+    fx: Fx,
+    text: String,
+    options: StatementOptions,
+    overrides: Vec<StatementRowOverride>,
+}
+
+fn busy() -> Busy {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let (first, second) = two_banks(&mut fx);
+    import_with(
+        &mut fx,
+        GIROCONTO_OUT,
+        &giroconto_to(second),
+        &options(first),
+        &no_overrides(),
+    );
+    coffee_typed_into(&mut fx, cash, None);
+    by_hand(&mut fx, TransactionKind::Expense, second, 5_000, 14);
+    by_hand(&mut fx, TransactionKind::Expense, second, 1_500, 19);
+    let text = bank_csv(&[
+        bank_row("14/09/2026", "PRELIEVO BANCOMAT", "-50,00"),
+        bank_row("12/09/2026", "BONIFICO IN ENTRATA GIROCONTO", "300,00"),
+        bank_row("16/09/2026", "BAR", "-3,50"),
+        bank_row("17/09/2026", "EDICOLA", "-2,00"),
+        bank_row("18/09/2026", "CINEMA", "-9,00"),
+        bank_row("19/09/2026", "PIZZA", "-15,00"),
+        bank_row("20/09/2026", "COMMISSIONI", "0,00"),
+        bank_row("21/09/2026", "STORNO", "abc"),
+    ]);
+    let overrides = vec![
+        StatementRowOverride {
+            category: Some("Giornali".to_string()),
+            ..user(5)
+        },
+        StatementRowOverride {
+            skip: true,
+            ..user(6)
+        },
+        on_match(7, StatementMatchChoice::ImportAnyway),
+    ];
+    Busy {
+        fx,
+        text,
+        options: checking(second, cash),
+        overrides,
+    }
+}
+
+#[test]
+fn the_preview_counts_what_the_import_then_does() {
+    let Busy {
+        mut fx,
+        text,
+        options,
+        overrides,
+    } = busy();
+    let preview = preview_with(&fx, &text, &bank_mapping(), &options, &overrides);
+    assert_eq!(
+        (
+            preview.new_rows,
+            preview.possible_duplicates,
+            preview.matched_transfers,
+            preview.moves,
+            preview.skipped,
+            preview.invalid
+        ),
+        (2, 2, 1, 1, 2, 1)
+    );
+    let report = import_with(&mut fx, &text, &bank_mapping(), &options, &overrides);
+    assert!(report.rejected.is_empty(), "{:?}", report.rejected);
+    assert_eq!(report.executed, preview.new_rows);
+    assert_eq!(report.deduplicated, preview.already_imported);
+    assert_eq!(report.possible_duplicates, preview.possible_duplicates);
+    assert_eq!(report.matched_transfers, preview.matched_transfers);
+    assert_eq!(report.moved, preview.moves);
+    assert_eq!(report.skipped, preview.skipped + preview.invalid);
+    assert_eq!(report.rounded, preview.rounded);
+    // Every row the import wrote is the one the preview showed.
+    for line in [5, 7] {
+        let shown = row(&preview, line);
+        let tx = fx.core.transaction(fx.vault, shown.command_id).unwrap();
+        assert_eq!((tx.kind, tx.amount), (shown.kind.unwrap(), shown.amount));
+    }
+}
+
+#[test]
+fn a_preview_with_overrides_writes_nothing_either() {
+    let Busy {
+        fx,
+        text,
+        options,
+        overrides,
+    } = busy();
+    let commands = command_count(&fx.core, fx.vault);
+    let before = balances(&fx.core, fx.vault);
+    let preview = preview_with(&fx, &text, &bank_mapping(), &options, &overrides);
+    assert_eq!((preview.new_rows, preview.moves), (2, 1));
+    assert_eq!(command_count(&fx.core, fx.vault), commands);
+    assert_eq!(balances(&fx.core, fx.vault), before);
 }
 
 #[test]
