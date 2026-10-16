@@ -5,19 +5,23 @@
 
 mod common;
 
-use chrono::{Datelike, Timelike};
+use chrono::{DateTime, Datelike, FixedOffset, TimeZone, Timelike};
 use common::*;
 use sparagne_core::statement::{self, STATEMENT_NAMESPACE};
 use sparagne_core::{
-    AmountSign, Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, StatementAction,
-    StatementDateFormat, StatementDescriptionRule, StatementMapping, StatementOptions,
-    StatementPreview, StatementReport, StatementRow, StatementRowOverride, StatementRowStatus,
-    StatementTypeRule, TransactionKind,
+    AmountSign, Command, CommandEnvelope, Core, Currency, DomainError, Entry, FlowMode,
+    StatementAction, StatementDateFormat, StatementDescriptionRule, StatementMapping,
+    StatementMatchChoice, StatementOptions, StatementPreview, StatementReport, StatementRow,
+    StatementRowOverride, StatementRowStatus, StatementTypeRule, TransactionKind,
 };
 use uuid::Uuid;
 
 const CARD: &str = include_str!("fixtures/statement/card.csv");
 const BANK: &str = include_str!("fixtures/statement/bank.csv");
+/// A bank's export holding a transfer out to another bank of the user's.
+const GIROCONTO_OUT: &str = include_str!("fixtures/statement/giroconto_out.csv");
+/// The other bank's export, holding the same money coming in two days later.
+const GIROCONTO_IN: &str = include_str!("fixtures/statement/giroconto_in.csv");
 const CARD_HEADER: &str = "timestamp,type,description,status,amount,currency,card,\
     card holder name,original amount,original currency,cashback earned,cashback currency,\
     category,spending mode";
@@ -205,6 +209,93 @@ fn archived_wallet(fx: &mut Fx, name: &str) -> Uuid {
         Command::ArchiveWallet { wallet_id: id },
     );
     id
+}
+
+/// Noon in Rome on `day` September 2026, where the bank rows sit.
+fn september(day: u32) -> DateTime<FixedOffset> {
+    FixedOffset::east_opt(2 * 3600)
+        .unwrap()
+        .with_ymd_and_hms(2026, 9, day, 12, 0, 0)
+        .unwrap()
+}
+
+/// An entry typed by hand into `wallet` on `day` September.
+fn by_hand(fx: &mut Fx, kind: TransactionKind, wallet: Uuid, amount: i64, day: u32) -> Uuid {
+    let entry = Entry {
+        amount,
+        wallet_id: Some(wallet),
+        flow_id: None,
+        category: None,
+        note: Some(format!("typed on the {day}")),
+        occurred_at: september(day),
+        person: None,
+    };
+    let command = match kind {
+        TransactionKind::Income => Command::Income(entry),
+        TransactionKind::Refund => Command::Refund(entry),
+        _ => Command::Expense(entry),
+    };
+    run(&mut fx.core, fx.vault, command).result_id.unwrap()
+}
+
+/// A transfer typed by hand on `day` September.
+fn transfer_by_hand(fx: &mut Fx, from: Uuid, to: Uuid, amount: i64, day: u32) -> Uuid {
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::TransferWallet {
+            amount,
+            from_wallet_id: from,
+            to_wallet_id: to,
+            note: None,
+            occurred_at: september(day),
+        },
+    )
+    .result_id
+    .unwrap()
+}
+
+/// Two bank wallets without money.
+fn two_banks(fx: &mut Fx) -> (Uuid, Uuid) {
+    let mut open = |name| {
+        run(&mut fx.core, fx.vault, wallet_cmd(name, 0))
+            .result_id
+            .unwrap()
+    };
+    (open("First Bank"), open("Second Bank"))
+}
+
+/// [`bank_mapping`] with its `giroconto` rows moving money out to `to`.
+fn giroconto_to(to: Uuid) -> StatementMapping {
+    StatementMapping {
+        description_rules: vec![StatementDescriptionRule {
+            action: Some(StatementAction::TransferOut {
+                to_wallet_id: Some(to),
+            }),
+            ..rule("giroconto")
+        }],
+        ..bank_mapping()
+    }
+}
+
+/// [`bank_mapping`] with its `giroconto` rows bringing money in from `from`.
+fn giroconto_from(from: Uuid) -> StatementMapping {
+    StatementMapping {
+        description_rules: vec![StatementDescriptionRule {
+            action: Some(StatementAction::TransferIn {
+                from_wallet_id: Some(from),
+            }),
+            ..rule("giroconto")
+        }],
+        ..bank_mapping()
+    }
+}
+
+fn on_match(line: u32, choice: StatementMatchChoice) -> StatementRowOverride {
+    StatementRowOverride {
+        on_match: Some(choice),
+        ..user(line)
+    }
 }
 
 /// A description rule that only matches.
@@ -1736,6 +1827,478 @@ fn a_mapping_saved_before_description_rules_reads_back_and_is_written_as_it_was(
     let json = statement::encode_mapping(&ruled);
     assert!(json.contains(r#"{"contains":"bar"}"#), "{json}");
     assert_eq!(statement::decode_mapping(&json).unwrap(), ruled);
+}
+
+// ---------------------------------------------------------------------------
+// Rows typed by hand
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_row_typed_by_hand_two_days_away_flags_the_statement_row() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let typed = by_hand(&mut fx, TransactionKind::Expense, cash, 350, 14);
+    let options = options(fx.wallet);
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
+    let pos = row(&preview, 2);
+    assert_eq!(pos.status, StatementRowStatus::PossibleDuplicate);
+    let existing = pos.existing.as_ref().unwrap();
+    assert_eq!(existing.id, typed);
+    assert_eq!(existing.note.as_deref(), Some("typed on the 14"));
+    assert_eq!(existing.wallet_id, Some(fx.wallet));
+    assert_eq!(pos.match_choice, Some(StatementMatchChoice::Skip));
+    assert_eq!(pos.kind, Some(TransactionKind::Expense));
+    assert_eq!(
+        (
+            preview.new_rows,
+            preview.possible_duplicates,
+            preview.moves,
+            preview.skipped
+        ),
+        (2, 1, 0, 1)
+    );
+    assert_eq!(row(&preview, 3).existing, None);
+    assert_eq!(row(&preview, 3).match_choice, None);
+
+    let report = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(
+        (report.executed, report.possible_duplicates, report.skipped),
+        (2, 1, 1)
+    );
+    assert!(fx.core.transaction(fx.vault, pos.command_id).is_err());
+    assert_eq!(
+        wallet_balance(&fx.core, fx.vault, fx.wallet),
+        -350 + 185_000 - 12_000
+    );
+
+    // Imported anyway, the row is new with its match beside it.
+    let anyway = [on_match(2, StatementMatchChoice::ImportAnyway)];
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &anyway);
+    let pos = row(&preview, 2);
+    assert_eq!(pos.status, StatementRowStatus::New);
+    assert_eq!(pos.existing.as_ref().map(|tx| tx.id), Some(typed));
+    assert_eq!(pos.match_choice, Some(StatementMatchChoice::ImportAnyway));
+    assert_eq!((preview.new_rows, preview.possible_duplicates), (1, 0));
+    let report = import_with(&mut fx, BANK, &bank_mapping(), &options, &anyway);
+    assert_eq!((report.executed, report.deduplicated), (1, 2));
+    assert_eq!(
+        wallet_balance(&fx.core, fx.vault, fx.wallet),
+        -700 + 185_000 - 12_000
+    );
+}
+
+#[test]
+fn only_an_entry_of_the_same_kind_amount_and_wallet_within_three_days_is_a_duplicate() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let other = run(&mut fx.core, fx.vault, wallet_cmd("Other", 0))
+        .result_id
+        .unwrap();
+    // Line 2, an expense of 3,50 on the 16th: none of these.
+    by_hand(&mut fx, TransactionKind::Expense, other, 350, 16);
+    by_hand(&mut fx, TransactionKind::Refund, cash, 350, 16);
+    by_hand(&mut fx, TransactionKind::Expense, cash, 351, 16);
+    // Line 4, an expense of 120,00 on the 12th: four days.
+    by_hand(&mut fx, TransactionKind::Expense, cash, 12_000, 8);
+    // Line 3, an income of 1850,00 on the 15th: three days.
+    let salary = by_hand(&mut fx, TransactionKind::Income, cash, 185_000, 18);
+    let preview = preview_with(
+        &fx,
+        BANK,
+        &bank_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 4).status, StatementRowStatus::New);
+    assert_eq!(
+        row(&preview, 3).status,
+        StatementRowStatus::PossibleDuplicate
+    );
+    assert_eq!(
+        row(&preview, 3).existing.as_ref().map(|tx| tx.id),
+        Some(salary)
+    );
+}
+
+#[test]
+fn rows_and_typed_entries_pair_one_to_one_closest_first() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let eleventh = by_hand(&mut fx, TransactionKind::Expense, cash, 500, 11);
+    let twelfth = by_hand(&mut fx, TransactionKind::Expense, cash, 500, 12);
+    let text = bank_csv(&[
+        bank_row("10/09/2026", "BAR", "-5,00"),
+        bank_row("11/09/2026", "BAR", "-5,00"),
+        bank_row("12/09/2026", "BAR", "-5,00"),
+    ]);
+    let options = options(fx.wallet);
+    let preview = preview_with(&fx, &text, &bank_mapping(), &options, &no_overrides());
+    let matched = |line| row(&preview, line).existing.as_ref().map(|tx| tx.id);
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
+    assert_eq!(matched(2), None);
+    assert_eq!(matched(3), Some(eleventh));
+    assert_eq!(matched(4), Some(twelfth));
+    assert_eq!(
+        preview,
+        preview_with(&fx, &text, &bank_mapping(), &options, &no_overrides())
+    );
+}
+
+#[test]
+fn voided_rows_and_opening_balances_never_match() {
+    let mut fx = setup();
+    let bank = run(
+        &mut fx.core,
+        fx.vault,
+        Command::CreateWallet {
+            name: "Bank".to_string(),
+            opening_balance: 185_000,
+            occurred_at: september(15),
+        },
+    )
+    .result_id
+    .unwrap();
+    let typed = by_hand(&mut fx, TransactionKind::Expense, bank, 350, 16);
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::VoidTransaction {
+            transaction_id: typed,
+        },
+    );
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options(bank), &no_overrides());
+    assert_eq!((preview.new_rows, preview.possible_duplicates), (3, 0));
+}
+
+#[test]
+fn a_row_imported_before_is_never_its_own_duplicate_nor_its_neighbours() {
+    let mut fx = setup();
+    let options = options(fx.wallet);
+    let first = card_csv(&[spend("2026-09-16 08:00:00 UTC", "CAFE", "CLEARED", "1.20")]);
+    import_with(&mut fx, &first, &card_mapping(), &options, &no_overrides());
+    let overlapping = card_csv(&[
+        spend("2026-09-17 08:00:00 UTC", "CAFE", "CLEARED", "1.20"),
+        spend("2026-09-16 08:00:00 UTC", "CAFE", "CLEARED", "1.20"),
+    ]);
+    let preview = preview_with(
+        &fx,
+        &overlapping,
+        &card_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 2).existing, None);
+    assert_eq!(row(&preview, 3).status, StatementRowStatus::AlreadyImported);
+    assert_eq!(row(&preview, 3).existing, None);
+}
+
+#[test]
+fn a_match_imported_anyway_stays_claimed() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let typed = by_hand(&mut fx, TransactionKind::Expense, cash, 500, 11);
+    let text = bank_csv(&[
+        bank_row("11/09/2026", "BAR", "-5,00"),
+        bank_row("12/09/2026", "BAR", "-5,00"),
+    ]);
+    let options = options(fx.wallet);
+    let plain = preview_with(&fx, &text, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(row(&plain, 2).status, StatementRowStatus::PossibleDuplicate);
+    assert_eq!(row(&plain, 3).status, StatementRowStatus::New);
+    let anyway = [on_match(2, StatementMatchChoice::ImportAnyway)];
+    let preview = preview_with(&fx, &text, &bank_mapping(), &options, &anyway);
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
+    assert_eq!(
+        row(&preview, 2).existing.as_ref().map(|tx| tx.id),
+        Some(typed)
+    );
+    assert_eq!(row(&preview, 3).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 3).existing, None);
+}
+
+#[test]
+fn a_flagged_row_the_user_leaves_out_stays_flagged() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    by_hand(&mut fx, TransactionKind::Expense, cash, 350, 16);
+    let skip = [StatementRowOverride {
+        skip: true,
+        on_match: Some(StatementMatchChoice::ImportAnyway),
+        ..user(2)
+    }];
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options(fx.wallet), &skip);
+    let pos = row(&preview, 2);
+    assert_eq!(pos.status, StatementRowStatus::PossibleDuplicate);
+    assert_eq!(pos.match_choice, Some(StatementMatchChoice::Skip));
+}
+
+// ---------------------------------------------------------------------------
+// Transfers between the user's banks
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_other_side_of_an_imported_transfer_is_matched_and_counted_once() {
+    let mut fx = setup();
+    let (first, second) = two_banks(&mut fx);
+    let out = import_with(
+        &mut fx,
+        GIROCONTO_OUT,
+        &giroconto_to(second),
+        &options(first),
+        &no_overrides(),
+    );
+    assert_eq!(out.executed, 3);
+    let sent = preview_with(
+        &fx,
+        GIROCONTO_OUT,
+        &giroconto_to(second),
+        &options(first),
+        &no_overrides(),
+    );
+    let transfer = row(&sent, 4).command_id;
+
+    let options = options(second);
+    let preview = preview_with(
+        &fx,
+        GIROCONTO_IN,
+        &bank_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    let incoming = row(&preview, 3);
+    assert_eq!(incoming.status, StatementRowStatus::MatchedTransfer);
+    assert_eq!(incoming.existing.as_ref().map(|tx| tx.id), Some(transfer));
+    assert_eq!(incoming.kind, Some(TransactionKind::TransferWallet));
+    assert_eq!(incoming.counter_wallet_id, Some(first));
+    assert_eq!(incoming.action, StatementAction::BySign);
+    assert_eq!(incoming.match_choice, Some(StatementMatchChoice::Skip));
+    assert_eq!((preview.new_rows, preview.matched_transfers), (1, 1));
+
+    let report = import_with(
+        &mut fx,
+        GIROCONTO_IN,
+        &bank_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    assert_eq!((report.executed, report.matched_transfers), (1, 1));
+    assert_eq!(
+        wallet_balance(&fx.core, fx.vault, first),
+        185_000 - 1_240 - 30_000
+    );
+    assert_eq!(wallet_balance(&fx.core, fx.vault, second), 30_000 - 5_000);
+
+    let again = import_with(
+        &mut fx,
+        GIROCONTO_IN,
+        &bank_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    assert_eq!(
+        (again.executed, again.deduplicated, again.matched_transfers),
+        (0, 1, 1)
+    );
+}
+
+#[test]
+fn the_transfer_imported_from_the_receiving_bank_first_matches_the_sending_one() {
+    let mut fx = setup();
+    let (first, second) = two_banks(&mut fx);
+    let incoming = import_with(
+        &mut fx,
+        GIROCONTO_IN,
+        &giroconto_from(first),
+        &options(second),
+        &no_overrides(),
+    );
+    assert_eq!(incoming.executed, 2);
+    let preview = preview_with(
+        &fx,
+        GIROCONTO_OUT,
+        &bank_mapping(),
+        &options(first),
+        &no_overrides(),
+    );
+    let outgoing = row(&preview, 4);
+    assert_eq!(outgoing.status, StatementRowStatus::MatchedTransfer);
+    assert_eq!(outgoing.counter_wallet_id, Some(second));
+    let report = import_with(
+        &mut fx,
+        GIROCONTO_OUT,
+        &bank_mapping(),
+        &options(first),
+        &no_overrides(),
+    );
+    assert_eq!((report.executed, report.matched_transfers), (2, 1));
+    assert_eq!(
+        wallet_balance(&fx.core, fx.vault, first),
+        185_000 - 1_240 - 30_000
+    );
+}
+
+#[test]
+fn a_transfer_matches_only_the_way_and_the_wallet_the_row_names() {
+    let mut fx = setup();
+    let (first, second) = two_banks(&mut fx);
+    let third = run(&mut fx.core, fx.vault, wallet_cmd("Third", 0))
+        .result_id
+        .unwrap();
+    let typed = transfer_by_hand(&mut fx, first, second, 30_000, 10);
+    let options = options(first);
+    let as_action = |action| StatementRowOverride {
+        action: Some(action),
+        ..user(4)
+    };
+    let status = |action| {
+        let preview = preview_with(
+            &fx,
+            GIROCONTO_OUT,
+            &bank_mapping(),
+            &options,
+            &[as_action(action)],
+        );
+        let row = row(&preview, 4).clone();
+        (
+            row.status,
+            row.existing.map(|tx| tx.id),
+            row.counter_wallet_id,
+        )
+    };
+    assert_eq!(
+        status(StatementAction::TransferOut {
+            to_wallet_id: Some(third)
+        }),
+        (StatementRowStatus::New, None, Some(third))
+    );
+    assert_eq!(
+        status(StatementAction::TransferOut {
+            to_wallet_id: Some(second)
+        }),
+        (
+            StatementRowStatus::MatchedTransfer,
+            Some(typed),
+            Some(second)
+        )
+    );
+    // Waiting for its wallet, it finds it in the transfer.
+    assert_eq!(
+        status(StatementAction::TransferOut { to_wallet_id: None }),
+        (
+            StatementRowStatus::MatchedTransfer,
+            Some(typed),
+            Some(second)
+        )
+    );
+    // Money coming in is not money going out.
+    assert_eq!(
+        status(StatementAction::TransferIn {
+            from_wallet_id: None
+        })
+        .0,
+        StatementRowStatus::Skipped {
+            code: "needs_wallet".to_string(),
+            reason: "choose the wallet the money came from".to_string(),
+        }
+    );
+    // An expense is an expense.
+    assert_eq!(
+        status(StatementAction::Expense),
+        (StatementRowStatus::New, None, None)
+    );
+    assert_eq!(
+        status(StatementAction::BySign),
+        (
+            StatementRowStatus::MatchedTransfer,
+            Some(typed),
+            Some(second)
+        )
+    );
+}
+
+#[test]
+fn a_topup_waiting_for_its_wallet_matches_the_transfer_instead() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let bank = bank_wallet(&mut fx);
+    let typed = transfer_by_hand(&mut fx, bank, cash, 12_602, 13);
+    let preview = preview_with(
+        &fx,
+        CARD,
+        &card_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
+    let topup = row(&preview, 8);
+    assert_eq!(topup.status, StatementRowStatus::MatchedTransfer);
+    assert_eq!(topup.existing.as_ref().map(|tx| tx.id), Some(typed));
+    assert_eq!(topup.counter_wallet_id, Some(bank));
+    assert_eq!(
+        topup.action,
+        StatementAction::TransferIn {
+            from_wallet_id: None
+        }
+    );
+}
+
+#[test]
+fn equal_transfers_pair_one_to_one_and_five_days_is_too_far() {
+    let mut fx = setup();
+    let (first, second) = two_banks(&mut fx);
+    // Both rows of 100 are within reach of both transfers of 100.
+    let tenth = transfer_by_hand(&mut fx, first, second, 10_000, 10);
+    let twelfth = transfer_by_hand(&mut fx, first, second, 10_000, 12);
+    transfer_by_hand(&mut fx, first, second, 20_000, 10);
+    transfer_by_hand(&mut fx, first, second, 30_000, 10);
+    let text = bank_csv(&[
+        bank_row("12/09/2026", "GIROCONTO", "-100,00"),
+        bank_row("11/09/2026", "GIROCONTO", "-100,00"),
+        bank_row("14/09/2026", "GIROCONTO", "-200,00"),
+        bank_row("15/09/2026", "GIROCONTO", "-300,00"),
+    ]);
+    let options = options(first);
+    let mapping = giroconto_to(second);
+    let preview = preview_with(&fx, &text, &mapping, &options, &no_overrides());
+    let matched = |line| row(&preview, line).existing.as_ref().map(|tx| tx.id);
+    assert_eq!(matched(2), Some(twelfth));
+    assert_eq!(matched(3), Some(tenth));
+    assert_eq!(
+        row(&preview, 4).status,
+        StatementRowStatus::MatchedTransfer,
+        "four days"
+    );
+    assert_eq!(
+        row(&preview, 5).status,
+        StatementRowStatus::New,
+        "five days"
+    );
+    let report = import_with(&mut fx, &text, &mapping, &options, &no_overrides());
+    assert_eq!((report.executed, report.matched_transfers), (1, 3));
+}
+
+#[test]
+fn a_matched_transfer_imported_anyway_is_what_its_action_says() {
+    let mut fx = setup();
+    let (first, second) = two_banks(&mut fx);
+    let typed = transfer_by_hand(&mut fx, first, second, 30_000, 10);
+    let options = options(first);
+    let anyway = [on_match(4, StatementMatchChoice::ImportAnyway)];
+    let preview = preview_with(&fx, GIROCONTO_OUT, &bank_mapping(), &options, &anyway);
+    let outgoing = row(&preview, 4);
+    assert_eq!(outgoing.status, StatementRowStatus::New);
+    assert_eq!(outgoing.kind, Some(TransactionKind::Expense));
+    assert_eq!(outgoing.counter_wallet_id, None);
+    assert_eq!(outgoing.existing.as_ref().map(|tx| tx.id), Some(typed));
+    assert_eq!(
+        outgoing.match_choice,
+        Some(StatementMatchChoice::ImportAnyway)
+    );
+    let report = import_with(&mut fx, GIROCONTO_OUT, &bank_mapping(), &options, &anyway);
+    assert_eq!(report.executed, 3);
+    let tx = fx.core.transaction(fx.vault, outgoing.command_id).unwrap();
+    assert_eq!(tx.kind, TransactionKind::Expense);
 }
 
 // ---------------------------------------------------------------------------

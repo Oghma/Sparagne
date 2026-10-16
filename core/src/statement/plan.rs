@@ -87,7 +87,7 @@ pub(super) fn plan(
         }
         planned.push(item);
     }
-    matching::claim(core, vault_id, options, &mut planned)?;
+    matching::claim(core, vault_id, options, &overrides, &mut planned)?;
     leave_out(&mut planned, &overrides);
     Ok(planned)
 }
