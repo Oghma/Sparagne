@@ -2,5 +2,9 @@
   "Not synced first: rows imported on another device may not show as imported yet.": {
     "en": "Not synced first: rows imported on another device may not show as imported yet.",
     "it": "Sincronizzazione non riuscita: le righe importate da un altro dispositivo potrebbero non risultare ancora importate."
+  },
+  "Only wallets kept by hand, such as Cash while you move to statements; never one you import a statement into.": {
+    "en": "Only wallets kept by hand, such as Cash while you move to statements; never one you import a statement into.",
+    "it": "Solo wallet tenuti a mano, come Cash mentre passi agli estratti; mai uno in cui importi un estratto."
   }
 }

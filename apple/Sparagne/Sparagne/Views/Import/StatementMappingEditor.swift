@@ -77,6 +77,7 @@ struct StatementMappingEditor: View {
                 FormPicker(label: String(localized: "Envelope"), selection: $model.flowId, options: flows, title: flowName)
             }
             FormRow(String(localized: "Duplicates also in")) { alsoCheck }
+            FormNote(String(localized: "Only wallets kept by hand, such as Cash while you move to statements; never one you import a statement into."))
             FormRow(String(localized: "Start day")) { startDay }
             FormValueRow(String(localized: "Time zone"), value: model.timezone)
         }
