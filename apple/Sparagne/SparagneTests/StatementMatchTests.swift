@@ -226,8 +226,11 @@ struct StatementMatchTests {
         mappings.remember(StatementImportTarget(walletId: bank, flowId: nil), vaultId: vaultId, headers: ["Data", "Importo"])
         let model = try await Self.cardModel(store, card: card, mappings: mappings)
 
-        #expect(model.preview?.lookalikes == [StatementLookalike(walletId: bank, rows: 1)])
+        // Told Bank is a statement's, the core does not advise it; the app
+        // would not show it either.
         #expect(model.statementWallets == [bank, card])
+        #expect(model.previewInput?.options.statementWallets == [bank])
+        #expect(model.preview?.lookalikes.isEmpty == true)
         #expect(model.lookalikes.isEmpty)
     }
 
@@ -589,6 +592,95 @@ struct StatementMatchTests {
         #expect(transfers.first?.toId == revolut)
         #expect(Self.balance(store, revolut) == 20_000)
         #expect(Self.balance(store, ing) == 80_000)
+    }
+
+    /// Vault `Main` with `Revolut`, empty, and `ING` holding 1000.00. The
+    /// 200.00 sent from ING on Thursday reaches Revolut on Saturday, which
+    /// Revolut's export (a header of its own), imported first with no rule,
+    /// books as an income. Then ING's export, previewed with the mapping
+    /// store Revolut's import was remembered in, or, `remembered` false,
+    /// with one that knows nothing of it; its rule knows the money went to
+    /// Revolut.
+    private static func weekendBonifico(remembered: Bool) async throws -> (
+        store: AppStore, revolut: Uuid, ing: Uuid, model: StatementImportModel
+    ) {
+        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: try Self.defaults())
+        await store.bootstrap()
+        await store.createVault(name: "Main", walletName: "Revolut", openingBalance: 0)
+        await store.createWallet(name: "ING", openingBalance: 100_000)
+        let revolut = try #require(store.wallets.first { $0.name == "Revolut" }).id
+        let ing = try #require(store.wallets.first { $0.name == "ING" }).id
+        let mappings = StatementMappingStore(defaults: try Self.defaults())
+
+        let first = try await Self.bankModel(
+            store, "Data;Importo;Descrizione;Saldo\n03/10/2026;200,00;BONIFICO DA ING;200,00\n",
+            into: revolut, mappings: mappings
+        )
+        #expect(try Self.row(first, line: 2).kind == .income)
+        await first.runImport()
+        #expect(first.report?.executed == 1)
+
+        let rule = StatementDescriptionRule(contains: "revolut", action: .transferOut(toWalletId: revolut))
+        let model = try await Self.bankModel(
+            store, Self.bankFile("01/10/2026;-200,00;BONIFICO A REVOLUT"), into: ing, rules: [rule],
+            mappings: remembered ? mappings : StatementMappingStore(defaults: try Self.defaults())
+        )
+        return (store, revolut, ing, model)
+    }
+
+    @Test("The weekend bonifico: once Revolut is a wallet statements go to, its income two days after ING's transfer is replaced by default")
+    func weekendBonificoReplaced() async throws {
+        let (store, revolut, ing, model) = try await Self.weekendBonifico(remembered: true)
+        #expect(model.previewInput?.options.statementWallets == [revolut])
+
+        let row = try Self.row(model, line: 2)
+        #expect(row.existing?.kind == .income)
+        #expect(row.existing?.walletId == revolut)
+        #expect(row.defaultChoice == .replaceExisting)
+        #expect(row.matchChoice == .replaceExisting)
+        #expect(StatementImportModel.replaces(row))
+        #expect(model.counts.replaces == 1)
+
+        await model.runImport()
+
+        #expect(model.report?.executed == 1)
+        #expect(model.replaced == 1)
+        let all = try await Self.transactions(store)
+        #expect(all.first { $0.kind == .income && $0.amount == 20_000 }?.voided == true)
+        #expect(all.filter { $0.kind == .transferWallet && !$0.voided }.count == 1)
+        #expect(Self.balance(store, ing) == 80_000)
+        #expect(Self.balance(store, revolut) == 20_000)
+    }
+
+    @Test("The weekend bonifico with nothing remembered of Revolut: two days apart, the transfer comes in beside the income by default")
+    func weekendBonificoUnknown() async throws {
+        let (_, revolut, _, model) = try await Self.weekendBonifico(remembered: false)
+        #expect(model.previewInput?.options.statementWallets == [])
+
+        let row = try Self.row(model, line: 2)
+        #expect(row.existing?.walletId == revolut)
+        #expect(row.defaultChoice == .importAnyway)
+        #expect(row.status == .new)
+        #expect(model.mayReplace(row))
+    }
+
+    @Test("The wallets statements go to are an option of the preview: one remembered meanwhile plans the file again")
+    func statementWalletsInTheInput() async throws {
+        let (store, card, bank) = try await Self.vault()
+        let mappings = StatementMappingStore(defaults: try Self.defaults())
+        let model = try await Self.cardModel(store, card: card, mappings: mappings)
+        let before = try #require(model.previewInput)
+        #expect(before.options.statementWallets == [])
+
+        let vaultId = try #require(store.currentVault?.id)
+        mappings.remember(StatementImportTarget(walletId: bank, flowId: nil), vaultId: vaultId, headers: ["Data", "Importo"])
+        // A target of the card's own header names the card: not sent.
+        mappings.remember(StatementImportTarget(walletId: card, flowId: nil), vaultId: vaultId, headers: ["Other"])
+
+        let after = try #require(model.previewInput)
+        #expect(after.options.statementWallets == [bank])
+        #expect(after != before)
+        #expect(!model.isPlanCurrent)
     }
 
     @Test("A transfer row standing for an entry, ticked off, writes nothing: no transfer, the entry left as it is")

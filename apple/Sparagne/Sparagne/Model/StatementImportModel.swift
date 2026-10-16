@@ -625,6 +625,16 @@ final class StatementImportModel {
         return wallets
     }
 
+    /// The other wallets statements go to, as the core takes them
+    /// (`StatementOptions.statementWallets`): active ones only, in a stable
+    /// order. The core never advises searching them, and takes an entry
+    /// another statement imported into one of them, up to four days from a
+    /// transfer row, for that transfer's other side, replaced by default.
+    private var otherStatementWallets: [Uuid] {
+        let active = Set(store.wallets.map(\.id))
+        return statementWallets.filter { active.contains($0) && $0 != walletId }.sorted()
+    }
+
     /// `alsoCheckWallets` as the core takes them: active ones only, in a
     /// stable order, so the same choice is the same preview input.
     private var checkedWallets: [Uuid] {
@@ -644,7 +654,8 @@ final class StatementImportModel {
                 flowId: flowId,
                 timezone: timezone,
                 alsoCheckWallets: checkedWallets,
-                since: since
+                since: since,
+                statementWallets: otherStatementWallets
             ),
             rowChoices: rowChoices
         )
