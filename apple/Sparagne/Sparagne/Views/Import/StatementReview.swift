@@ -275,14 +275,19 @@ private struct StatementReviewRow: View {
     /// category, completing as the ledger's CATEGORY cell does
     /// (`completing`): typing opens the list, ↑↓ move in it, ↩ and ⇥ pick,
     /// esc closes it; the row's category, dimmed, on a row that will not be
-    /// imported.
+    /// imported. A transfer already there names, dimmed, the other wallet of
+    /// the transfer it matched: there is nothing to choose while it stands
+    /// for the row.
     ///
     /// The placeholder of an empty field is drawn here in the dim ink, not
     /// left to the field: the field's own prompt takes the row's text ink
     /// and would read as a category.
     @ViewBuilder
     private var category: some View {
-        if StatementImportModel.takesAction(row), StatementActionChoice(action).isTransfer {
+        if row.status == .matchedTransfer, let existing = row.existing {
+            let other = existing.fromId == model.walletId ? existing.toId : existing.fromId
+            Text(verbatim: "\u{21C4} \(walletName(other))").foregroundStyle(Ink.text3)
+        } else if StatementImportModel.takesAction(row), StatementActionChoice(action).isTransfer {
             CellPicker(
                 label: String(localized: "Wallet"),
                 selection: Binding(
