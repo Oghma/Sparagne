@@ -21,7 +21,9 @@
 //! without an action leaves the action to what follows); the type rule whose
 //! value equals the type column (case-insensitive); the default action.
 //! [`StatementRow::action`] is the one that won, [`StatementRow::kind`] and
-//! [`StatementRow::counter_wallet_id`] follow it. `BySign` is an expense when
+//! [`StatementRow::counter_wallet_id`] follow it; [`StatementRow::base_action`]
+//! is the one before the user's, on every row read, imported before or not,
+//! so the app never has to work it out. `BySign` is an expense when
 //! the money goes out and an income when it comes in. A sign that contradicts
 //! the action (a refund written as money out) keeps the action with the
 //! absolute amount: the action says what the row is, and card exports write
@@ -77,8 +79,10 @@
 //! 7. a transfer without a usable other wallet: `Skipped` (`needs_wallet`);
 //! 8. an entry of the vault that looks like it, or that stands for the
 //!    transfer it is: `PossibleDuplicate`;
-//! 9. otherwise `New`, unless the user's `skip` leaves it out
-//!    (`skipped_by_you`).
+//! 9. otherwise `New`.
+//!
+//! The user's `skip` leaves any row of 3 to 9 out (`skipped_by_you`), a
+//! matched one too, and nothing is written or claimed for it.
 //!
 //! The user's override changes nothing on a row of 1 or 2, nor on a row the
 //! mapping alone reads as invalid: only a row the mapping could import is the
@@ -89,12 +93,13 @@
 //! Every preview matches the rows against the vault again; what earlier
 //! imports decided is read back from their claims, moves and replacements in
 //! the log (see "The import"). Days apart are counted between calendar
-//! dates, each in its own offset. Dated before [`StatementOptions::since`],
-//! an entry of a wallet also checked, or a transfer between the imported
-//! wallet and one also checked (the bank funded from Cash the day before the
-//! start), is never a match; the imported wallet's own rows and the other
-//! banks' sides of a transfer are, as a bank's start day is not the
-//! others'.
+//! dates, each in its own offset. A transfer between the imported wallet and
+//! one also checked dated before [`StatementOptions::since`] (the bank funded
+//! from Cash the day before the start) is never a match, nor an entry of a
+//! wallet also checked dated more than 3 days before it (a pizza typed on the
+//! 30th of August may be booked by the bank on the 1st of September); the
+//! imported wallet's own rows and the other banks' sides of a transfer are,
+//! as a bank's start day is not the others'.
 //!
 //! - The other side of a transfer: a row that would be new or waits for its
 //!   wallet (6 and 7), taken for a transfer or by its sign, matches a live
@@ -152,29 +157,43 @@
 //! 8th and the 11th. The match is in [`StatementRow::existing`].
 //!
 //! What becomes of a flagged row is [`StatementRow::match_choice`]: the
-//! user's [`StatementRowOverride::on_match`] (`Skip` when the user's `skip`
-//! leaves the row out), else the default: `ImportAnyway` for a match near
-//! the file's edges that stands for another export's row (see above),
-//! `MoveExisting` for a duplicate found in a wallet also checked, `Skip` for
-//! any other duplicate or transfer. `Skip` says the transaction already
-//! there stands for the row, and the import records it. `MoveExisting` reads
-//! as `Skip` but for a duplicate found in a wallet also checked;
-//! `ReplaceExisting` reads as the default but for an entry standing for the
-//! transfer. `ImportAnyway` gives the row back what it was (new with its
-//! command, or waiting for its wallet), with its match still in `existing`;
-//! the transaction stays taken in this preview, so no other row of it gets
-//! it, and nothing records it.
+//! user's [`StatementRowOverride::on_match`], else the default, which
+//! [`StatementRow::default_choice`] gives on every matched row whatever the
+//! user chose: `ImportAnyway` for a match near the file's edges that stands
+//! for another export's row (see above), `MoveExisting` for a duplicate
+//! found in a wallet also checked, `Skip` for any other duplicate or
+//! transfer. `Skip` says the transaction already there stands for the row,
+//! and the import records it. On a duplicate found in a wallet also checked
+//! it reads as `MoveExisting`: kept there, the entry would leave the bank
+//! short and be claimed for good, so only moving it or importing the row
+//! beside it make sense. `MoveExisting` reads as `Skip` on any other
+//! duplicate or transfer; `ReplaceExisting` reads as the default but for an
+//! entry standing for the transfer. `ImportAnyway` gives the row back what
+//! it was (new with its command, or waiting for its wallet), with its match
+//! still in `existing`; the transaction stays taken in this preview, so no
+//! other row of it gets it, and nothing records it. The user's `skip` is not
+//! a choice about the match: the row is left out (`skipped_by_you`), its
+//! match still shown and `match_choice` still saying what including it
+//! would do, and nothing is written or claimed, so a later import finds the
+//! same match again.
 //!
 //! An entry standing for the transfer is replaced by default only when it
-//! very likely is its other side: the named wallet's statement row (its
-//! import wrote it, or its claim or move names it), or an entry dated the
-//! row's day or a day off. Otherwise, and near the file's edges, the row is
+//! very likely is its other side: dated the row's day or a day off, and in
+//! no wallet also checked, nor in a named wallet that is one (Cash holds the
+//! user's own sheet, where an ATM withdrawal is not the dinner a friend paid
+//! back two days on). Otherwise, and near the file's edges, the row is
 //! imported beside it by default, its match still shown, for the user to
 //! replace it. Keeping the entry in the transfer's place makes no sense, so
-//! `Skip` and `MoveExisting` read as `ImportAnyway` there; the user's `skip`
-//! leaves the row out (`skipped_by_you`) and the entry as it is, claimed for
-//! nothing, `match_choice` still saying what including the row would do. A
-//! row replacing its match stays `PossibleDuplicate`, and is written.
+//! `Skip` and `MoveExisting` read as `ImportAnyway` there. A row replacing
+//! its match stays `PossibleDuplicate`, and is written.
+//!
+//! [`StatementPreview::lookalikes`] is advice, and matching never reads it:
+//! for every wallet neither imported into, nor checked, nor any statement's
+//! (no claim or move names it), the new rows that matched nothing and would
+//! match one of its entries as a duplicate in a wallet checked would. Twelve
+//! rows looking like entries of Cash say Cash should be checked: forgotten,
+//! it makes every one of them a second movement, which importing again does
+//! not undo.
 //!
 //! # The import
 //!
@@ -236,17 +255,23 @@
 //!   the vault changed in between, it may pair, move, replace or claim
 //!   otherwise than the preview showed. What to do: preview again after a
 //!   sync or an edit.
-//! - A duplicate kept (`Skip`) in a wallet also checked is claimed, so it is
-//!   not found again if the same file is read with another mapping. What to
-//!   do: keep the same mapping for a file already imported.
 //! - Never check a wallet that is itself a statement's for rows typed by
 //!   hand: the rows its own statement imported would be moved out of it.
 //!   What to do: check only wallets typed into by hand, Cash for one.
+//! - Forgetting to check a wallet typed into by hand is not undone by
+//!   importing again: its rows the statement also holds are in twice, and a
+//!   new import finds the statement's own rows imported. What to do: void
+//!   the hand-typed twins by hand. [`StatementPreview::lookalikes`] names
+//!   such a wallet before the import, to prevent exactly this.
+//! - The app remembers a mapping and its options by the file's header, so
+//!   two banks whose exports share a header share them too. What to do:
+//!   check the wallet and the wallets also checked before each import.
 //! - The shape of a claim is the import's alone: a bulk script writing
 //!   `UpdateTransaction` under v5 ids must not patch `wallet_id`, `from_id`
 //!   or `to_id` alone.
-//! - A `Skip` is not undone by importing again: the row reads as imported
-//!   from then on. What to do: type the row by hand.
+//! - Keeping a match (`Skip`) is not undone by importing again: the row
+//!   reads as imported from then on. What to do: type the row by hand. Leaving
+//!   a row out (`skip`) records nothing, and the next import shows it again.
 //! - The server applies a replacement one command at a time, as it does
 //!   every batch: if another device archives either wallet first, it may
 //!   refuse the transfer and accept the void. What to do: type the movement
@@ -432,8 +457,9 @@ pub struct StatementOptions {
     #[uniffi(default = [])]
     pub also_check_wallets: Vec<Uuid>,
     /// Rows dated before this day (in their own offset) are skipped with
-    /// `before_start`; entries of the wallets also checked, and transfers
-    /// with them, dated before it match no row.
+    /// `before_start`; transfers with the wallets also checked dated before
+    /// it, and entries of those wallets dated more than 3 days before it,
+    /// match no row.
     #[uniffi(default = None)]
     pub since: Option<NaiveDate>,
 }
@@ -443,8 +469,9 @@ pub struct StatementOptions {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum StatementMatchChoice {
     /// Leave the row out: the transaction already there stands for it, and
-    /// the import records it. On an entry standing for the row's transfer it
-    /// reads as `ImportAnyway`.
+    /// the import records it. On a duplicate found in one of
+    /// [`StatementOptions::also_check_wallets`] it reads as `MoveExisting`,
+    /// on an entry standing for the row's transfer as `ImportAnyway`.
     Skip,
     /// Import the row as if nothing matched it.
     ImportAnyway,
@@ -458,9 +485,9 @@ pub enum StatementMatchChoice {
     /// between wallets it is, all at once: for a transfer row whose other
     /// side is already in the vault as an income, expense or refund (the
     /// other bank's row imported without a rule, or typed by hand). The
-    /// default only when the entry very likely is that side (the other
-    /// bank's statement row, or dated the row's day or a day off). Only for
-    /// such a match; anywhere else it reads as the default.
+    /// default only when the entry very likely is that side: dated the row's
+    /// day or a day off, and in no wallet also checked. Only for such a
+    /// match; anywhere else it reads as the default.
     ReplaceExisting,
 }
 
@@ -472,6 +499,8 @@ pub struct StatementRowOverride {
     /// Typed by the user, so it may create a category.
     pub category: Option<String>,
     pub note: Option<String>,
+    /// Leaves the row out (`skipped_by_you`), matched or not: nothing is
+    /// written or claimed for it, so the next import shows it again.
     pub skip: bool,
     /// What the row is, over the description rules, the type rules and the
     /// default action. Never part of the row's id.
@@ -482,10 +511,8 @@ pub struct StatementRowOverride {
     /// unknown envelope is ignored.
     #[uniffi(default = None)]
     pub flow_id: Option<Uuid>,
-    /// What becomes of a flagged row, over the default (import it anyway
-    /// near the file's edges, move a duplicate found in another wallet,
-    /// replace an entry very likely standing for the row's transfer, import
-    /// beside one less likely, skip any other).
+    /// What becomes of a flagged row, over the default
+    /// ([`StatementRow::default_choice`]).
     #[uniffi(default = None)]
     pub on_match: Option<StatementMatchChoice>,
 }
