@@ -866,6 +866,100 @@ fn a_bad_date_or_amount_makes_the_row_invalid() {
     assert_eq!(invalid_code(row(&preview, 3)), "invalid_amount");
 }
 
+#[test]
+fn rows_before_the_start_day_are_skipped_and_keep_their_ids() {
+    let mut fx = setup();
+    let plain = preview_with(
+        &fx,
+        BANK,
+        &bank_mapping(),
+        &options(fx.wallet),
+        &no_overrides(),
+    );
+    let options = StatementOptions {
+        since: Some(day(2026, 9, 15)),
+        ..options(fx.wallet)
+    };
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 3).status, StatementRowStatus::New);
+    // The zero amount on line 5 is before the start too.
+    for line in [4, 5] {
+        assert_eq!(skip_code(row(&preview, line)), "before_start");
+    }
+    assert_eq!(
+        skip_reason(row(&preview, 4)),
+        "dated before 2026-09-15, the day the import starts"
+    );
+    for line in 2..=5 {
+        assert_eq!(row(&preview, line).command_id, row(&plain, line).command_id);
+    }
+    assert_eq!((preview.new_rows, preview.skipped), (2, 2));
+    let report = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!((report.executed, report.skipped), (2, 2));
+}
+
+#[test]
+fn the_start_day_is_read_in_the_rows_own_offset_before_its_currency() {
+    let fx = setup();
+    let text = card_csv(&[
+        spend("2026-08-31 23:30:00 UTC", "NIGHT BUS", "CLEARED", "2.00"),
+        spend("2026-08-31 21:30:00 UTC", "LATE BAR", "CLEARED", "4.00"),
+        spend("31/08/2026 08:00", "BAR", "CLEARED", "1.20"),
+        card_row(
+            "2026-08-30 10:00:00 UTC",
+            "card_spend",
+            "DINER",
+            "CLEARED",
+            "7.45",
+            "USD",
+        ),
+        card_row(
+            "2026-09-02 10:00:00 UTC",
+            "card_spend",
+            "DINER",
+            "CLEARED",
+            "7.45",
+            "USD",
+        ),
+    ]);
+    let options = StatementOptions {
+        since: Some(day(2026, 9, 1)),
+        ..options(fx.wallet)
+    };
+    let preview = preview_with(&fx, &text, &card_mapping(), &options, &no_overrides());
+    assert_eq!(
+        row(&preview, 2).status,
+        StatementRowStatus::New,
+        "1 September at 01:30 in Rome"
+    );
+    assert_eq!(skip_code(row(&preview, 3)), "before_start");
+    assert_eq!(invalid_code(row(&preview, 4)), "invalid_date");
+    assert_eq!(skip_code(row(&preview, 5)), "before_start");
+    assert_eq!(invalid_code(row(&preview, 6)), "currency_mismatch");
+}
+
+#[test]
+fn the_wallets_also_checked_must_be_the_vaults() {
+    let mut fx = setup();
+    let old = archived_wallet(&mut fx, "Old");
+    let checked = |wallets: Vec<Uuid>| StatementOptions {
+        also_check_wallets: wallets,
+        ..options(fx.wallet)
+    };
+    let preview = |options: &StatementOptions| {
+        fx.core
+            .preview_statement(fx.vault, BANK, &bank_mapping(), options, &no_overrides())
+    };
+    assert!(matches!(
+        preview(&checked(vec![old, Uuid::now_v7()])),
+        Err(DomainError::NotFound(_))
+    ));
+    // Archived is fine, the imported wallet itself is ignored.
+    let preview = preview(&checked(vec![old, fx.wallet])).unwrap();
+    assert_eq!(preview.new_rows, 3);
+}
+
 // ---------------------------------------------------------------------------
 // Categories and overrides
 // ---------------------------------------------------------------------------

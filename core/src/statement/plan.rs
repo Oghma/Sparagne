@@ -10,6 +10,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use chrono::NaiveDate;
 use chrono_tz::Tz;
 use rusqlite::params;
 use uuid::Uuid;
@@ -308,6 +309,8 @@ struct Context<'a> {
     flow_id: Option<Uuid>,
     currency: Currency,
     tz: Tz,
+    /// Rows dated before it, in their own offset, are skipped.
+    since: Option<NaiveDate>,
     /// Normalized name or alias -> name of an active, non-system category.
     categories: HashMap<String, String>,
     /// Every wallet of the vault, whether it is archived.
@@ -345,6 +348,14 @@ impl<'a> Context<'a> {
             && !snapshot.flows.iter().any(|f| f.id == flow)
         {
             return Err(DomainError::NotFound(format!("flow {flow}")));
+        }
+        // An archived one is fine: an entry can be moved out of it.
+        if let Some(other) = options
+            .also_check_wallets
+            .iter()
+            .find(|id| !wallets.contains_key(id))
+        {
+            return Err(DomainError::NotFound(format!("wallet {other}")));
         }
         let rules = Rule::all(&mapping.description_rules);
         for rule in &rules {
@@ -396,6 +407,7 @@ impl<'a> Context<'a> {
             flow_id: options.flow_id,
             currency: snapshot.currency,
             tz,
+            since: options.since,
             categories: category_names(core, vault_id)?,
             active_flows: snapshot
                 .flows
@@ -553,13 +565,27 @@ impl<'a> Context<'a> {
     }
 
     /// The first reason a row cannot be imported, whatever it is taken for:
-    /// another currency, an unreadable date or amount, a zero amount.
+    /// an unreadable date, a day before `since`, another currency, an
+    /// unreadable amount, a zero amount. A row before the start is left out
+    /// whatever else is wrong with it, so only its date has to be read.
     fn problem(
         &self,
         currency: Option<&str>,
         date: std::result::Result<StatementDate, String>,
         amount: std::result::Result<Amount, String>,
     ) -> Option<Outcome> {
+        let date = match date {
+            Ok(date) => date,
+            Err(message) => return Some(Outcome::Invalid("invalid_date", message)),
+        };
+        if let Some(since) = self.since
+            && date.at.date_naive() < since
+        {
+            return Some(Outcome::Skip(
+                "before_start",
+                format!("dated before {since}, the day the import starts"),
+            ));
+        }
         if let Some(currency) = currency
             && !currency.eq_ignore_ascii_case(self.currency.code())
         {
@@ -570,9 +596,6 @@ impl<'a> Context<'a> {
                     self.currency.code()
                 ),
             ));
-        }
-        if let Err(message) = date {
-            return Some(Outcome::Invalid("invalid_date", message));
         }
         match amount {
             Err(message) => Some(Outcome::Invalid("invalid_amount", message)),
