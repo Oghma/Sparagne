@@ -9729,6 +9729,22 @@
         }
       }
     },
+    "The preview was not up to date: nothing was written. Check it and import again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The preview was not up to date: nothing was written. Check it and import again."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’anteprima non era aggiornata: non è stato scritto nulla. Controllala e importa di nuovo."
+          }
+        }
+      }
+    },
     "The server answered something unexpected": {
       "localizations": {
         "en": {
@@ -10613,6 +10629,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scrivi qualcosa prima"
+          }
+        }
+      }
+    },
+    "Typed before the start date": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typed before the start date"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scritta prima della data di inizio"
           }
         }
       }
