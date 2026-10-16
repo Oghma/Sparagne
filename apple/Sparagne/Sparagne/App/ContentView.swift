@@ -262,7 +262,7 @@ struct MainWindow: View {
         case .manage:
             ManagementSheet(store: store, engine: engine, present: { sheet = $0 })
         case .importStatement:
-            StatementImportSheet(store: store)
+            StatementImportSheet(store: store, engine: engine)
         case .moveBetweenEnvelopes:
             EnvelopeMoveSheet(store: store)
         }

@@ -49,6 +49,19 @@ final class StatementImportModel {
         var moves = 0
     }
 
+    /// What a sync round asked for by the import came to.
+    enum SyncResult: Equatable, Sendable {
+        /// The vault is as the server holds it.
+        case synced
+        /// The vault is this Mac's alone (no account): nothing to bring in.
+        case notSynced
+        /// Offline, or the server refused: the plan reads this Mac's copy.
+        case failed
+    }
+
+    /// Runs one sync round and says how it went (`syncRound(on:)`).
+    typealias SyncRound = @MainActor @Sendable () async -> SyncResult
+
     /// Everything a preview depends on. The sheet re-runs the preview when
     /// it changes (`.task(id:)`).
     struct PreviewInput: Hashable {
@@ -70,6 +83,11 @@ final class StatementImportModel {
     @ObservationIgnored let vaultId: Uuid?
     /// IANA name for the rows whose date carries no offset.
     @ObservationIgnored let timezone: String
+    /// Brings the vault up to date with the server before a file is planned
+    /// against it, and again before the import: a Mac that has not pulled
+    /// would plan again the rows another device already imported, kept or
+    /// moved. `nil` when nothing syncs, as in most tests.
+    @ObservationIgnored private let sync: SyncRound?
 
     // MARK: State
 
@@ -130,6 +148,12 @@ final class StatementImportModel {
     private(set) var isImporting = false
     /// A file that could not be read, or an import the core refused whole.
     var problem: StatementImportProblem?
+    /// The last sync asked for did not get through. It stops nothing: the
+    /// sheet only says, quietly, that the plan reads this Mac's copy.
+    private(set) var syncFailed = false
+    /// A sync round asked for by the import is running: the sheet says so,
+    /// so a slow server never reads as a hang.
+    private(set) var isSyncing = false
 
     /// Which preview may write the state: a slower one started before the
     /// last change must not overwrite what the newer one found.
@@ -142,15 +166,21 @@ final class StatementImportModel {
     /// preview that did not carry one for the line, so an edit put back to
     /// it is forgotten instead of sent.
     @ObservationIgnored private var baseActions: [UInt32: StatementAction] = [:]
+    /// A file just read has not been planned against a synced vault yet.
+    @ObservationIgnored private var syncBeforePreview = false
+    /// The sync round on its way, which every preview waits for.
+    @ObservationIgnored private var syncing: Task<Void, Never>?
 
     init(
         store: AppStore,
         mappings: StatementMappingStore = StatementMappingStore(),
-        timezone: String = TimeZone.current.identifier
+        timezone: String = TimeZone.current.identifier,
+        sync: SyncRound? = nil
     ) {
         self.store = store
         self.mappings = mappings
         self.timezone = timezone
+        self.sync = sync
         vaultId = store.currentVault?.id
         walletId = store.wallets.count == 1 ? store.wallets.first?.id : nil
     }
@@ -210,6 +240,7 @@ final class StatementImportModel {
             matchChoices = [:]
             excludedLines = []
             baseActions = [:]
+            syncBeforePreview = true
             report = nil
             problem = nil
             step = .mapping
@@ -546,17 +577,35 @@ final class StatementImportModel {
     }
 
     /// Asks the core what importing would do now, then the categories the
-    /// history suggests for the notes it has not seen yet.
+    /// history suggests for the notes it has not seen yet. The first preview
+    /// of a file waits for a sync round, and any preview waits for a round
+    /// already on its way, so the file is planned against the vault as the
+    /// server holds it.
     func refreshPreview() async {
         previewGeneration += 1
         let generation = previewGeneration
-        guard let input = previewInput, let text, let vaultId else {
+        guard previewInput != nil else {
             preview = nil
             previewProblem = nil
             isPreviewing = false
             return
         }
         isPreviewing = true
+        if syncBeforePreview {
+            syncBeforePreview = false
+            await syncVault()
+        } else {
+            await syncing?.value
+        }
+        // Read after the sync: a change made while it ran started a newer
+        // preview, which plans instead.
+        guard generation == previewGeneration else { return }
+        guard let input = previewInput, let text, let vaultId else {
+            preview = nil
+            previewProblem = nil
+            isPreviewing = false
+            return
+        }
         do {
             let result = try await store.core.previewStatement(
                 vaultId: vaultId,
@@ -579,6 +628,25 @@ final class StatementImportModel {
             previewProblem = StatementImportProblem(error)
         }
         if generation == previewGeneration { isPreviewing = false }
+    }
+
+    /// Runs one sync round, or joins the one already asked for, and notes
+    /// whether it got through. Nothing to do when nothing syncs.
+    private func syncVault() async {
+        guard let sync else { return }
+        if let syncing {
+            await syncing.value
+            return
+        }
+        isSyncing = true
+        let round = Task { [weak self] in
+            let result = await sync()
+            self?.syncFailed = result == .failed
+            self?.isSyncing = false
+        }
+        syncing = round
+        await round.value
+        if syncing == round { syncing = nil }
     }
 
     /// One call for every note of a new row not asked about before, looking
@@ -775,13 +843,24 @@ final class StatementImportModel {
 
     // MARK: - Import
 
-    /// Imports the rows as previewed with the user's overrides, remembers the
-    /// mapping and the target for the next file with this header, and
-    /// reloads the window.
+    /// Imports the rows with the user's overrides, remembers the mapping and
+    /// the target for the next file with this header, and reloads the
+    /// window.
+    ///
+    /// When the vault syncs, a round runs first and the preview is planned
+    /// again on what it brought, so the import writes what that fresh plan
+    /// says: a row another device imported or kept meanwhile is not written
+    /// twice. A round that does not get through stops nothing.
     func runImport() async {
-        guard let input = previewInput, let text, let vaultId, let detection, !isImporting else { return }
+        guard previewInput != nil, !isImporting else { return }
         isImporting = true
         defer { isImporting = false }
+        if sync != nil {
+            await syncVault()
+            await refreshPreview()
+            guard preview != nil, previewProblem == nil else { return }
+        }
+        guard let input = previewInput, let text, let vaultId, let detection else { return }
         do {
             let result = try await store.core.importStatement(
                 vaultId: vaultId,
@@ -798,6 +877,38 @@ final class StatementImportModel {
             await store.reload()
         } catch {
             problem = StatementImportProblem(error)
+        }
+    }
+}
+
+// MARK: - Sync
+
+extension StatementImportModel {
+    /// The longest the import waits for the engine: a round of its own, or
+    /// one already running, then its own.
+    static let syncPatience: Duration = .seconds(30)
+
+    /// A sync round on `engine` for the import. Logged out, the vault is
+    /// this Mac's alone and nothing waits. `syncNow()` returns at once while
+    /// a round is already running, so that round is waited for and followed
+    /// by one of the import's own, which then holds what the other pulled;
+    /// past `syncPatience`, or offline, or refused, the round reads as
+    /// failed and the import goes on with what this Mac has.
+    static func syncRound(on engine: SyncEngine) -> SyncRound {
+        { [weak engine] in
+            guard let engine, engine.isLoggedIn else { return .notSynced }
+            let deadline = ContinuousClock.now + syncPatience
+            repeat {
+                while engine.status == .syncing, ContinuousClock.now < deadline {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                guard ContinuousClock.now < deadline else { return .failed }
+                await engine.syncNow()
+            } while engine.status == .syncing
+            switch engine.status {
+            case .idle: return .synced
+            case .syncing, .offline, .error: return .failed
+            }
         }
     }
 }

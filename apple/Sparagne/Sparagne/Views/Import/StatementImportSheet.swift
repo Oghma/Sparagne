@@ -31,10 +31,16 @@ struct StatementImportSheet: View {
     /// narrowest (`ContentView`).
     private static let size = CGSize(width: 1080, height: 640)
 
-    /// `model` is for previews, which open the sheet on a file already read.
-    init(store: AppStore, model: StatementImportModel? = nil) {
+    /// `engine` syncs the vault before a file is planned and before it is
+    /// imported (`StatementImportModel.syncRound`); `nil` for a database that
+    /// never syncs. `model` is for previews, which open the sheet on a file
+    /// already read.
+    init(store: AppStore, engine: SyncEngine? = nil, model: StatementImportModel? = nil) {
         self.store = store
-        _model = State(initialValue: model ?? StatementImportModel(store: store))
+        _model = State(initialValue: model ?? StatementImportModel(
+            store: store,
+            sync: engine.map { StatementImportModel.syncRound(on: $0) }
+        ))
     }
 
     var body: some View {
@@ -123,20 +129,44 @@ struct StatementImportSheet: View {
     // MARK: - Under the page
 
     /// What went wrong, what still stands between the user and the next
-    /// page, or the counts the import would make.
+    /// page, or the counts the import would make; under it, quietly, a sync
+    /// on its way or one that did not get through.
     @ViewBuilder
     private var status: some View {
-        if let problem = model.problem {
-            ProblemNote(problem: problem)
-        } else if !store.isReadOnly {
-            switch model.step {
-            case .file, .report:
-                EmptyView()
-            case .mapping:
-                mappingStatus
-            case .review:
-                reviewStatus
+        VStack(alignment: .leading, spacing: 6) {
+            if let problem = model.problem {
+                ProblemNote(problem: problem)
+            } else if !store.isReadOnly {
+                switch model.step {
+                case .file, .report:
+                    EmptyView()
+                case .mapping:
+                    mappingStatus
+                case .review:
+                    reviewStatus
+                }
             }
+            syncStatus
+        }
+    }
+
+    /// The sync the import asked for: a quiet line while it runs, so a slow
+    /// server never reads as a hang, and a quiet note when it did not get
+    /// through, which stops nothing.
+    @ViewBuilder
+    private var syncStatus: some View {
+        if model.isSyncing {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text(String(localized: "Syncing with the server…"))
+            }
+            .font(Face.ui(11.5))
+            .foregroundStyle(Ink.text3)
+        } else if model.syncFailed, model.step != .file {
+            FormNote(
+                String(localized: "Not synced first: rows imported on another device may not show as imported yet."),
+                indented: false
+            )
         }
     }
 
