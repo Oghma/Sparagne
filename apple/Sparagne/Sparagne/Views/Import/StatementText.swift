@@ -12,6 +12,8 @@ enum StatementText {
         switch status {
         case .new: String(localized: "New")
         case .alreadyImported: String(localized: "Imported before")
+        case .possibleDuplicate: String(localized: "Possible duplicate")
+        case .matchedTransfer: String(localized: "Transfer already there")
         case .skipped(let code, _): skipped(code)
         case .invalid(let code, _): invalid(code)
         }
@@ -20,7 +22,7 @@ enum StatementText {
     /// The core's English sentence behind a status, for the tooltip.
     static func detail(_ status: StatementRowStatus) -> String? {
         switch status {
-        case .new, .alreadyImported: nil
+        case .new, .alreadyImported, .possibleDuplicate, .matchedTransfer: nil
         case .skipped(_, let reason): reason
         case .invalid(_, let message): message
         }
@@ -33,6 +35,7 @@ enum StatementText {
         case "needs_wallet": String(localized: "Needs the other wallet")
         case "zero_amount": String(localized: "Zero amount")
         case "skipped_by_you": String(localized: "Skipped by you")
+        case "before_start": String(localized: "Before the start day")
         default: String(localized: "Not imported")
         }
     }

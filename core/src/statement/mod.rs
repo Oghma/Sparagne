@@ -61,15 +61,16 @@
 //! the import (every command before it stays, and a new run deduplicates
 //! them).
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{CommandEnvelope, Core, DomainError, Result, TransactionKind};
+use crate::{CommandEnvelope, Core, DomainError, Result, TransactionKind, TransactionView};
 
 mod amount;
 mod csv;
 mod dates;
+mod matching;
 mod plan;
 mod presets;
 
@@ -107,6 +108,35 @@ pub struct StatementMapping {
     pub category_column: Option<String>,
     pub original_amount_column: Option<String>,
     pub original_currency_column: Option<String>,
+    /// Tried in order before the type rules. Left out of the JSON when empty,
+    /// so a mapping saved before rules existed reads back, and one without
+    /// rules is written as it always was.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[uniffi(default = [])]
+    pub description_rules: Vec<StatementDescriptionRule>,
+}
+
+/// One entry of [`StatementMapping::description_rules`]: what a row whose
+/// description holds `contains` is. Matched case-insensitively against the
+/// joined description columns, inner runs of spaces collapsed on both sides;
+/// the first rule that matches decides on its own, and a blank `contains`
+/// matches nothing.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
+pub struct StatementDescriptionRule {
+    pub contains: String,
+    /// `None` keeps what the type rules or the default action say, so a rule
+    /// may only clean the note or pick the category.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[uniffi(default = None)]
+    pub action: Option<StatementAction>,
+    /// Typed by the user, so it may create a category.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[uniffi(default = None)]
+    pub category: Option<String>,
+    /// Replaces the payee as the note; an original amount is still appended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[uniffi(default = None)]
+    pub note: Option<String>,
 }
 
 /// One entry of [`StatementMapping::type_rules`].
@@ -174,10 +204,35 @@ pub struct StatementOptions {
     pub flow_id: Option<Uuid>,
     /// IANA name used for rows without an offset, e.g. `Europe/Rome`.
     pub timezone: String,
+    /// Wallets other than `wallet_id` where a hand-entered row may be the
+    /// duplicate of a statement row: a row found there is moved into
+    /// `wallet_id` by default ([`StatementMatchChoice::MoveExisting`]).
+    #[uniffi(default = [])]
+    pub also_check_wallets: Vec<Uuid>,
+    /// Rows dated before this day (in their own offset) are skipped with
+    /// `before_start`.
+    #[uniffi(default = None)]
+    pub since: Option<NaiveDate>,
+}
+
+/// What becomes of a row flagged [`StatementRowStatus::PossibleDuplicate`]
+/// or [`StatementRowStatus::MatchedTransfer`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum StatementMatchChoice {
+    /// Leave the row out: the transaction already there stands for it.
+    Skip,
+    /// Import the row as if nothing matched it.
+    ImportAnyway,
+    /// Leave the row out and move the transaction it matched into the
+    /// statement's wallet (`UpdateTransaction` with its `wallet_id`). Only for
+    /// a possible duplicate found in one of
+    /// [`StatementOptions::also_check_wallets`]; anywhere else it reads as
+    /// `Skip`.
+    MoveExisting,
 }
 
 /// A user's change to one previewed row.
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct StatementRowOverride {
     /// 1-based line of the row in the file, header included.
     pub line: u32,
@@ -185,6 +240,18 @@ pub struct StatementRowOverride {
     pub category: Option<String>,
     pub note: Option<String>,
     pub skip: bool,
+    /// What the row is, over the description rules, the type rules and the
+    /// default action. Never part of the row's id.
+    #[uniffi(default = None)]
+    pub action: Option<StatementAction>,
+    /// The envelope of an entry, over [`StatementOptions::flow_id`]; the
+    /// vault's Unallocated flow id names Unallocated.
+    #[uniffi(default = None)]
+    pub flow_id: Option<Uuid>,
+    /// What becomes of a flagged row, over the default (move a duplicate
+    /// found in another wallet, skip any other).
+    #[uniffi(default = None)]
+    pub on_match: Option<StatementMatchChoice>,
 }
 
 /// What would happen to a previewed row.
@@ -192,6 +259,17 @@ pub struct StatementRowOverride {
 pub enum StatementRowStatus {
     New,
     AlreadyImported,
+    /// A transaction already in the vault looks like this row: same kind,
+    /// same amount, at most 3 days apart, in the statement's wallet or in one
+    /// of [`StatementOptions::also_check_wallets`]. It is in
+    /// [`StatementRow::existing`], and [`StatementRow::match_choice`] says
+    /// what the import does.
+    PossibleDuplicate,
+    /// The other side of a transfer between wallets already in the vault:
+    /// same amount, the right direction, at most 4 days apart. It is in
+    /// [`StatementRow::existing`]; the row is left out unless the user
+    /// chooses [`StatementMatchChoice::ImportAnyway`].
+    MatchedTransfer,
     /// Not imported on purpose. `code` is stable and meant for the app to
     /// translate; `reason` is the English detail:
     ///
@@ -200,7 +278,9 @@ pub enum StatementRowStatus {
     ///   names it);
     /// - `needs_wallet`: a transfer whose other wallet is not chosen yet;
     /// - `zero_amount`: the amount is zero;
-    /// - `skipped_by_you`: a [`StatementRowOverride`] with `skip`.
+    /// - `skipped_by_you`: a [`StatementRowOverride`] with `skip`, or a
+    ///   `Skip` action of the user's;
+    /// - `before_start`: dated before [`StatementOptions::since`].
     Skipped {
         code: String,
         reason: String,
@@ -236,6 +316,27 @@ pub struct StatementRow {
     pub counter_wallet_id: Option<Uuid>,
     /// `12.34 USD` when the row carries an original amount and currency.
     pub original: Option<String>,
+    /// What the row is taken for: the user's action, else the description
+    /// rule's, else the type rule's, else the default action.
+    pub action: StatementAction,
+    /// The money goes out, as the file signs it; `false` when the amount is
+    /// unreadable.
+    pub outflow: bool,
+    /// The note before the user's own: the description rule's, else the
+    /// payee. The original amount is appended to it on import.
+    pub note: String,
+    /// The category before the user's own: the description rule's, else
+    /// [`Self::matched_category`].
+    pub category: Option<String>,
+    /// Index in [`StatementMapping::description_rules`] of the rule that
+    /// matched the row.
+    pub description_rule: Option<u32>,
+    /// The transaction a flagged row matched. It stays when the user imports
+    /// the row anyway, so the review can still show it.
+    pub existing: Option<TransactionView>,
+    /// What becomes of a row that matched: the user's choice, else the
+    /// default. `None` when nothing matched.
+    pub match_choice: Option<StatementMatchChoice>,
 }
 
 /// Every row of a statement with what would happen to it, plus counts.
@@ -247,6 +348,12 @@ pub struct StatementPreview {
     pub skipped: u32,
     pub invalid: u32,
     pub rounded: u32,
+    /// Rows flagged [`StatementRowStatus::PossibleDuplicate`].
+    pub possible_duplicates: u32,
+    /// Rows flagged [`StatementRowStatus::MatchedTransfer`].
+    pub matched_transfers: u32,
+    /// Possible duplicates whose match the import would move.
+    pub moves: u32,
 }
 
 /// Outcome of [`Core::import_statement`].
@@ -257,6 +364,12 @@ pub struct StatementReport {
     pub skipped: u32,
     pub rounded: u32,
     pub rejected: Vec<StatementRejection>,
+    /// Possible duplicates left out, moved ones included.
+    pub possible_duplicates: u32,
+    /// Matched transfers left out.
+    pub matched_transfers: u32,
+    /// Transactions moved into the statement's wallet.
+    pub moved: u32,
 }
 
 /// A row the core refused.
@@ -347,8 +460,10 @@ impl Core {
         text: &str,
         mapping: &StatementMapping,
         options: &StatementOptions,
+        overrides: &[StatementRowOverride],
     ) -> Result<StatementPreview> {
-        let planned = plan::plan(self, vault_id, text, mapping, options)?;
+        let mut planned = plan::plan(self, vault_id, text, mapping, options)?;
+        plan::apply_overrides(&mut planned, overrides);
         let mut preview = StatementPreview {
             rows: Vec::with_capacity(planned.len()),
             new_rows: 0,
@@ -356,6 +471,9 @@ impl Core {
             skipped: 0,
             invalid: 0,
             rounded: 0,
+            possible_duplicates: 0,
+            matched_transfers: 0,
+            moves: 0,
         };
         for plan::Planned { row, .. } in planned {
             match row.status {
@@ -364,6 +482,12 @@ impl Core {
                     preview.rounded += u32::from(row.rounded);
                 }
                 StatementRowStatus::AlreadyImported => preview.already_imported += 1,
+                StatementRowStatus::PossibleDuplicate => {
+                    preview.possible_duplicates += 1;
+                    preview.moves +=
+                        u32::from(row.match_choice == Some(StatementMatchChoice::MoveExisting));
+                }
+                StatementRowStatus::MatchedTransfer => preview.matched_transfers += 1,
                 StatementRowStatus::Skipped { .. } => preview.skipped += 1,
                 StatementRowStatus::Invalid { .. } => preview.invalid += 1,
             }
@@ -391,12 +515,17 @@ impl Core {
             skipped: 0,
             rounded: 0,
             rejected: Vec::new(),
+            possible_duplicates: 0,
+            matched_transfers: 0,
+            moved: 0,
         };
         let mut new = Vec::new();
         for plan::Planned { row, command } in planned {
             match (&row.status, command) {
                 (StatementRowStatus::New, Some(command)) => new.push((row, command)),
                 (StatementRowStatus::AlreadyImported, _) => report.deduplicated += 1,
+                (StatementRowStatus::PossibleDuplicate, _) => report.possible_duplicates += 1,
+                (StatementRowStatus::MatchedTransfer, _) => report.matched_transfers += 1,
                 _ => report.skipped += 1,
             }
         }

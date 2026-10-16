@@ -14,6 +14,7 @@ use uuid::Uuid;
 use super::amount::{Amount, parse_amount};
 use super::csv::{self, Record};
 use super::dates::{StatementDate, parse_date};
+use super::matching;
 use super::{
     AmountSign, STATEMENT_NAMESPACE, StatementAction, StatementDateFormat, StatementMapping,
     StatementOptions, StatementRow, StatementRowOverride, StatementRowStatus,
@@ -84,6 +85,7 @@ pub(super) fn plan(
         };
         planned.push(Planned { row, command });
     }
+    matching::claim(core, vault_id, options, &mut planned)?;
     Ok(planned)
 }
 
@@ -348,6 +350,13 @@ impl<'a> Context<'a> {
             matched_category: None,
             counter_wallet_id: None,
             original: None,
+            action: StatementAction::BySign,
+            outflow: false,
+            note: String::new(),
+            category: None,
+            description_rule: None,
+            existing: None,
+            match_choice: None,
         };
         let invalid = |row, message: String| Draft {
             row,
@@ -382,6 +391,8 @@ impl<'a> Context<'a> {
             .bank_category
             .as_deref()
             .and_then(|bank| self.match_category(bank));
+        row.note.clone_from(&row.payee);
+        row.category.clone_from(&row.matched_category);
 
         let cells = Cells {
             type_value: optional(self.columns.kind),
@@ -395,6 +406,8 @@ impl<'a> Context<'a> {
             ),
         };
         let action = self.action(cells.type_value);
+        row.action = action.clone();
+        row.outflow = self.outflow(&cells) == Some(true);
 
         row.occurred_at = cells.date.as_ref().ok().map(|date| date.at);
         if let Ok(amount) = &cells.amount {
@@ -710,6 +723,13 @@ mod tests {
                 matched_category: None,
                 counter_wallet_id: None,
                 original: None,
+                action: StatementAction::Expense,
+                outflow: true,
+                note: "BAR".to_string(),
+                category: None,
+                description_rule: None,
+                existing: None,
+                match_choice: None,
             },
             command: None,
         }
@@ -722,9 +742,8 @@ mod tests {
             &mut rows,
             &[StatementRowOverride {
                 line: 3,
-                category: None,
-                note: None,
                 skip: true,
+                ..Default::default()
             }],
         );
         assert_eq!(rows[0].row.status, StatementRowStatus::New);

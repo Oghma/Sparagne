@@ -65,9 +65,10 @@ pub use recurring::{
     Frequency, PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule,
 };
 pub use statement::{
-    AmountSign, StatementAction, StatementDateFormat, StatementDetection, StatementMapping,
-    StatementOptions, StatementPreset, StatementPreview, StatementRejection, StatementReport,
-    StatementRow, StatementRowOverride, StatementRowStatus, StatementTypeRule,
+    AmountSign, StatementAction, StatementDateFormat, StatementDescriptionRule, StatementDetection,
+    StatementMapping, StatementMatchChoice, StatementOptions, StatementPreset, StatementPreview,
+    StatementRejection, StatementReport, StatementRow, StatementRowOverride, StatementRowStatus,
+    StatementTypeRule,
 };
 pub use store::Core;
 pub use suggest::CategorySuggestion;

@@ -82,6 +82,7 @@ fn card_transactions() -> StatementMapping {
         category_column: Some("category".to_string()),
         original_amount_column: Some("original amount".to_string()),
         original_currency_column: Some("original currency".to_string()),
+        description_rules: Vec::new(),
     }
 }
 

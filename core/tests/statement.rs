@@ -66,6 +66,7 @@ fn bank_mapping() -> StatementMapping {
         category_column: None,
         original_amount_column: None,
         original_currency_column: None,
+        description_rules: Vec::new(),
     }
 }
 
@@ -74,6 +75,8 @@ fn options(wallet: Uuid) -> StatementOptions {
         wallet_id: wallet,
         flow_id: None,
         timezone: "Europe/Rome".to_string(),
+        also_check_wallets: Vec::new(),
+        since: None,
     }
 }
 
@@ -181,7 +184,13 @@ fn a_newline_inside_quotes_moves_the_next_row_down_a_line() {
     ]);
     let preview = fx
         .core
-        .preview_statement(fx.vault, &text, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &text,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(row(&preview, 2).payee, "CAFE CENTRALE");
     assert_eq!(row(&preview, 4).payee, "EDICOLA");
@@ -198,6 +207,7 @@ fn a_newline_inside_quotes_moves_the_next_row_down_a_line() {
                 category: None,
                 note: None,
                 skip: true,
+                ..Default::default()
             }],
         )
         .unwrap();
@@ -215,11 +225,23 @@ fn crlf_and_a_bom_read_like_lf() {
 
     let lf = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let crlf = fx
         .core
-        .preview_statement(fx.vault, &windows, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &windows,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(lf, crlf);
 }
@@ -246,7 +268,7 @@ fn a_semicolon_bank_export_with_decimal_commas_and_negative_spending() {
     };
     let preview = fx
         .core
-        .preview_statement(fx.vault, BANK, &bank_mapping(), &options)
+        .preview_statement(fx.vault, BANK, &bank_mapping(), &options, &no_overrides())
         .unwrap();
     let pos = row(&preview, 2);
     assert_eq!(pos.kind, Some(TransactionKind::Expense));
@@ -291,7 +313,13 @@ fn date_only_rows_sit_at_local_noon() {
     let fx = setup();
     let preview = fx
         .core
-        .preview_statement(fx.vault, BANK, &bank_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            BANK,
+            &bank_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let at = row(&preview, 2).occurred_at.unwrap();
     assert_eq!(at.to_rfc3339(), "2026-09-16T12:00:00+02:00");
@@ -316,7 +344,7 @@ fn a_bank_export_imported_from_another_timezone_is_already_imported() {
     };
     let preview = fx
         .core
-        .preview_statement(fx.vault, BANK, &bank_mapping(), &abroad)
+        .preview_statement(fx.vault, BANK, &bank_mapping(), &abroad, &no_overrides())
         .unwrap();
     assert_eq!((preview.new_rows, preview.already_imported), (0, 3));
     assert_eq!(
@@ -335,7 +363,13 @@ fn a_ragged_row_is_invalid_and_the_others_are_read() {
     ]);
     let preview = fx
         .core
-        .preview_statement(fx.vault, &text, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &text,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(invalid_code(row(&preview, 3)), "invalid_row");
     assert_eq!(row(&preview, 3).command_id, Uuid::nil());
@@ -351,7 +385,13 @@ fn a_trailing_delimiter_is_not_a_ragged_row_but_an_extra_value_is() {
                 14/09/2026;CINEMA;-9,00;EUR;extra\n";
     let preview = fx
         .core
-        .preview_statement(fx.vault, text, &bank_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            text,
+            &bank_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
     assert_eq!(row(&preview, 3).status, StatementRowStatus::New);
@@ -367,8 +407,13 @@ fn an_empty_statement_is_refused() {
             Err(DomainError::InvalidCommand(_))
         ));
         assert!(matches!(
-            fx.core
-                .preview_statement(fx.vault, text, &card_mapping(), &options(fx.wallet)),
+            fx.core.preview_statement(
+                fx.vault,
+                text,
+                &card_mapping(),
+                &options(fx.wallet),
+                &no_overrides()
+            ),
             Err(DomainError::InvalidCommand(_))
         ));
     }
@@ -398,7 +443,13 @@ fn padded_card_descriptions_are_trimmed() {
     let fx = setup();
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(row(&preview, 2).payee, "TRATTORIA DA MARIO");
     assert_eq!(row(&preview, 3).payee, "BOOKS, MAPS & MORE");
@@ -416,7 +467,13 @@ fn pending_and_cancelled_rows_are_skipped_and_cleared_ones_are_new() {
     ]);
     let preview = fx
         .core
-        .preview_statement(fx.vault, &text, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &text,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(skip_reason(row(&preview, 2)), "status PENDING is skipped");
     assert_eq!(skip_reason(row(&preview, 3)), "status CANCELLED is skipped");
@@ -434,7 +491,13 @@ fn the_card_fixture_previews_row_by_row() {
     let fx = setup();
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let kinds: Vec<(u32, Option<TransactionKind>, i64)> = preview
         .rows
@@ -470,7 +533,13 @@ fn a_topup_waits_for_its_source_wallet_then_becomes_a_transfer() {
     let bank = bank_wallet(&mut fx);
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let topup = row(&preview, 8);
     assert_eq!(skip_reason(topup), "choose the wallet the money came from");
@@ -481,7 +550,13 @@ fn a_topup_waits_for_its_source_wallet_then_becomes_a_transfer() {
     let mapping = card_mapping_with_topups_from(bank);
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &mapping, &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &mapping,
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let topup = row(&preview, 8);
     assert_eq!(topup.status, StatementRowStatus::New);
@@ -517,7 +592,13 @@ fn extra_decimals_are_rounded_and_flagged() {
     let fx = setup();
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let topup = row(&preview, 8);
     assert_eq!(topup.amount, 12_602);
@@ -530,7 +611,13 @@ fn liquid_deposits_are_skipped() {
     let fx = setup();
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let deposit = row(&preview, 9);
     assert_eq!(skip_reason(deposit), "type liquid_deposit is skipped");
@@ -551,7 +638,13 @@ fn a_row_in_another_currency_is_invalid() {
     )]);
     let preview = fx
         .core
-        .preview_statement(fx.vault, &text, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &text,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let diner = row(&preview, 2);
     assert_eq!(invalid_code(diner), "currency_mismatch");
@@ -563,7 +656,13 @@ fn the_original_amount_goes_into_the_note() {
     let mut fx = setup();
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let flight = row(&preview, 4);
     assert_eq!(flight.original.as_deref(), Some("12.34 USD"));
@@ -609,7 +708,13 @@ fn a_sign_that_contradicts_the_action_keeps_the_action() {
     )]);
     let preview = fx
         .core
-        .preview_statement(fx.vault, &text, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &text,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let refund = row(&preview, 2);
     assert_eq!(refund.kind, Some(TransactionKind::Refund));
@@ -632,7 +737,13 @@ fn a_utc_row_late_at_night_lands_on_the_next_local_day() {
     )]);
     let preview = fx
         .core
-        .preview_statement(fx.vault, &text, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &text,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let at = row(&preview, 2).occurred_at.unwrap();
     assert_eq!((at.month(), at.day(), at.hour()), (4, 1, 1));
@@ -664,7 +775,13 @@ fn a_bad_date_or_amount_makes_the_row_invalid() {
     ]);
     let preview = fx
         .core
-        .preview_statement(fx.vault, &text, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &text,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(invalid_code(row(&preview, 2)), "invalid_date");
     assert_eq!(invalid_code(row(&preview, 3)), "invalid_amount");
@@ -705,7 +822,13 @@ fn bank_categories_match_only_existing_categories() {
 
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let bakery = row(&preview, 5);
     assert_eq!(bakery.bank_category.as_deref(), Some("5462 - Bakeries"));
@@ -742,7 +865,13 @@ fn an_override_category_is_created_and_an_override_note_replaces_the_payee() {
     let mut fx = setup();
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let overrides = [
         StatementRowOverride {
@@ -750,12 +879,14 @@ fn an_override_category_is_created_and_an_override_note_replaces_the_payee() {
             category: Some("Libri".to_string()),
             note: None,
             skip: false,
+            ..Default::default()
         },
         StatementRowOverride {
             line: 4,
             category: None,
             note: Some("Flight to Lisbon".to_string()),
             skip: false,
+            ..Default::default()
         },
     ];
     fx.core
@@ -792,7 +923,13 @@ fn an_override_skip_leaves_the_row_out() {
     let mut fx = setup();
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let report = fx
         .core
@@ -807,6 +944,7 @@ fn an_override_skip_leaves_the_row_out() {
                 category: None,
                 note: None,
                 skip: true,
+                ..Default::default()
             }],
         )
         .unwrap();
@@ -819,7 +957,13 @@ fn an_override_skip_leaves_the_row_out() {
     // Skipped by the user, so still new the next time.
     let again = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(row(&again, 5).status, StatementRowStatus::New);
     assert_eq!(row(&again, 3).status, StatementRowStatus::AlreadyImported);
@@ -841,6 +985,7 @@ fn a_refused_row_is_reported_and_the_others_import() {
                 category: Some("!!!".to_string()),
                 note: None,
                 skip: false,
+                ..Default::default()
             }],
         )
         .unwrap();
@@ -885,7 +1030,13 @@ fn reimporting_a_statement_executes_nothing() {
 
     let preview = fx
         .core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!((preview.new_rows, preview.already_imported), (0, 5));
 }
@@ -920,7 +1071,13 @@ fn a_pending_row_that_cleared_is_already_imported() {
     ]);
     let preview = fx
         .core
-        .preview_statement(fx.vault, &second_export, &mapping, &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &second_export,
+            &mapping,
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
     assert_eq!(row(&preview, 3).status, StatementRowStatus::AlreadyImported);
@@ -933,7 +1090,13 @@ fn identical_rows_in_the_same_second_both_import() {
     let text = card_csv(&[coffee.clone(), coffee]);
     let preview = fx
         .core
-        .preview_statement(fx.vault, &text, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            &text,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(preview.new_rows, 2);
     assert_ne!(row(&preview, 2).command_id, row(&preview, 3).command_id);
@@ -1015,7 +1178,13 @@ fn the_namespace_and_the_key_format_are_frozen() {
         "3.20",
     )]);
     let preview = core
-        .preview_statement(vault, &text, &card_mapping(), &options(wallet))
+        .preview_statement(
+            vault,
+            &text,
+            &card_mapping(),
+            &options(wallet),
+            &no_overrides(),
+        )
         .unwrap();
     let key = format!("v1|{vault}|{wallet}|2026-09-16T08:54:40Z|card_spend|320|forno bianco|0");
     let id = row(&preview, 2).command_id;
@@ -1024,6 +1193,65 @@ fn the_namespace_and_the_key_format_are_frozen() {
         id,
         Uuid::parse_str("90cfcd60-e888-5137-8699-d8a3270bb2e1").unwrap()
     );
+}
+
+/// Without a type column the key holds the kind the type rules and the
+/// default action give the row (here `BySign`), never what a description rule
+/// or the user later makes of it: these ids were handed out before either
+/// existed.
+#[test]
+fn the_key_without_a_type_column_is_frozen() {
+    let mut core = Core::open_in_memory().unwrap();
+    let vault = Uuid::parse_str("0199a000-0000-7000-8000-000000000001").unwrap();
+    let wallet = Uuid::parse_str("0199a000-0000-7000-8000-000000000002").unwrap();
+    core.execute(CommandEnvelope {
+        id: vault,
+        vault_id: vault,
+        author: "alice".to_string(),
+        command: Command::CreateVault {
+            name: "Pinned".to_string(),
+            currency: Currency::Eur,
+        },
+    })
+    .unwrap();
+    core.execute(CommandEnvelope {
+        id: wallet,
+        vault_id: vault,
+        author: "alice".to_string(),
+        command: wallet_cmd("Bank", 0),
+    })
+    .unwrap();
+    let preview = core
+        .preview_statement(
+            vault,
+            BANK,
+            &bank_mapping(),
+            &options(wallet),
+            &no_overrides(),
+        )
+        .unwrap();
+    for (line, key, pinned) in [
+        (
+            2,
+            format!(
+                "v1|{vault}|{wallet}|2026-09-16|expense|-350|pagamento pos; bar centrale milano|0"
+            ),
+            "52b10083-f809-5eb2-9500-d7d80792fff5",
+        ),
+        (
+            3,
+            format!("v1|{vault}|{wallet}|2026-09-15|income|185000|accredito stipendio settembre|0"),
+            "d2f9394b-a006-5482-97dc-d232c63d83a7",
+        ),
+    ] {
+        let id = row(&preview, line).command_id;
+        assert_eq!(
+            id,
+            Uuid::new_v5(&STATEMENT_NAMESPACE, key.as_bytes()),
+            "line {line}"
+        );
+        assert_eq!(id, Uuid::parse_str(pinned).unwrap(), "line {line}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,7 +1263,13 @@ fn preview_writes_nothing() {
     let fx = setup();
     let before = command_count(&fx.core, fx.vault);
     fx.core
-        .preview_statement(fx.vault, CARD, &card_mapping(), &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &card_mapping(),
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap();
     assert_eq!(command_count(&fx.core, fx.vault), before);
 }
@@ -1045,7 +1279,7 @@ fn unknown_wallets_and_flows_are_not_found() {
     let mut fx = setup();
     let stranger = Uuid::now_v7();
     let preview = |core: &Core, mapping: &StatementMapping, options: &StatementOptions| {
-        core.preview_statement(fx.vault, CARD, mapping, options)
+        core.preview_statement(fx.vault, CARD, mapping, options, &no_overrides())
     };
     assert!(matches!(
         preview(&fx.core, &card_mapping(), &options(stranger)),
@@ -1103,7 +1337,13 @@ fn a_mapping_naming_a_missing_column_is_refused() {
     mapping.category_column = Some("merchant category".to_string());
     let err = fx
         .core
-        .preview_statement(fx.vault, CARD, &mapping, &options(fx.wallet))
+        .preview_statement(
+            fx.vault,
+            CARD,
+            &mapping,
+            &options(fx.wallet),
+            &no_overrides(),
+        )
         .unwrap_err();
     assert!(
         matches!(&err, DomainError::InvalidCommand(m) if m.contains("merchant category")),
@@ -1112,8 +1352,13 @@ fn a_mapping_naming_a_missing_column_is_refused() {
     let mut mapping = card_mapping();
     mapping.delimiter = ",;".to_string();
     assert!(matches!(
-        fx.core
-            .preview_statement(fx.vault, CARD, &mapping, &options(fx.wallet)),
+        fx.core.preview_statement(
+            fx.vault,
+            CARD,
+            &mapping,
+            &options(fx.wallet),
+            &no_overrides()
+        ),
         Err(DomainError::InvalidCommand(_))
     ));
 }

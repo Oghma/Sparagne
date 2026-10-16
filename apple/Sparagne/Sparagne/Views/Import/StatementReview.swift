@@ -152,7 +152,7 @@ private struct StatementReviewRow: View {
     private var tone: OutcomeTag.Tone {
         switch row.status {
         case .new: included ? .new : .quiet
-        case .alreadyImported, .skipped: .quiet
+        case .alreadyImported, .possibleDuplicate, .matchedTransfer, .skipped: .quiet
         case .invalid: .invalid
         }
     }

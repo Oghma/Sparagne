@@ -1905,6 +1905,22 @@
         }
       }
     },
+    "Before the start day": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before the start day"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prima del giorno di partenza"
+          }
+        }
+      }
+    },
     "By person": {
       "localizations": {
         "en": {
@@ -6673,6 +6689,22 @@
         }
       }
     },
+    "Possible duplicate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Possible duplicate"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Possibile doppione"
+          }
+        }
+      }
+    },
     "Preset: %@": {
       "localizations": {
         "en": {
@@ -9477,6 +9509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trasferimento"
+          }
+        }
+      }
+    },
+    "Transfer already there": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer already there"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento già presente"
           }
         }
       }

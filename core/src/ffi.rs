@@ -523,16 +523,19 @@ impl CoreHandle {
 
     // -- Statement import -------------------------------------------------
 
-    /// What importing a statement would do, row by row. Writes nothing.
+    /// What importing a statement would do, row by row, with the user's
+    /// overrides. Writes nothing.
+    #[uniffi::method(default(overrides = []))]
     pub fn preview_statement(
         &self,
         vault_id: Uuid,
         text: String,
         mapping: StatementMapping,
         options: StatementOptions,
+        overrides: Vec<StatementRowOverride>,
     ) -> Result<StatementPreview, DomainError> {
         self.lock()?
-            .preview_statement(vault_id, &text, &mapping, &options)
+            .preview_statement(vault_id, &text, &mapping, &options, &overrides)
     }
 
     /// Imports a statement, one command per row, with the user's overrides.

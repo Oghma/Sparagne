@@ -286,15 +286,19 @@ actor CoreActor {
         try await visit { try $0.suggestCategories(vaultId: vaultId, notes: notes, since: since) }
     }
 
-    /// What importing a statement would do, row by row. Writes nothing.
+    /// What importing a statement would do, row by row, with the user's
+    /// overrides. Writes nothing.
     func previewStatement(
         vaultId: Uuid,
         text: String,
         mapping: StatementMapping,
-        options: StatementOptions
+        options: StatementOptions,
+        overrides: [StatementRowOverride] = []
     ) async throws -> StatementPreview {
         try await visit {
-            try $0.previewStatement(vaultId: vaultId, text: text, mapping: mapping, options: options)
+            try $0.previewStatement(
+                vaultId: vaultId, text: text, mapping: mapping, options: options, overrides: overrides
+            )
         }
     }
 
