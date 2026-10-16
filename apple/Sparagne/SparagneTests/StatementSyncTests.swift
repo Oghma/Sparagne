@@ -110,6 +110,10 @@ struct StatementSyncTests {
         }
         #expect(try await grocers() == 1)
 
+        // Any change of the user's takes the marks away.
+        model.setNote("Bread", for: 2)
+        #expect(model.changedLines.isEmpty)
+
         // Seen, it goes: the next round changes nothing, and the import writes.
         await model.runImport()
 

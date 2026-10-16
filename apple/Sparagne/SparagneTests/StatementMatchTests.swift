@@ -216,6 +216,116 @@ struct StatementMatchTests {
         #expect(try Self.row(model, line: 5).status == .possibleDuplicate)
     }
 
+    @Test("The advice never names a wallet a statement goes to, as a remembered import says")
+    func lookalikeNeverAStatementWallet() async throws {
+        let (store, card, bank) = try await Self.vault()
+        await Self.type("-14.75 green grocer #Spesa @bank 2026-09-11", into: store)
+        let mappings = StatementMappingStore(defaults: try Self.defaults())
+        let vaultId = try #require(store.currentVault?.id)
+        // The bank's own export went to Bank once.
+        mappings.remember(StatementImportTarget(walletId: bank, flowId: nil), vaultId: vaultId, headers: ["Data", "Importo"])
+        let model = try await Self.cardModel(store, card: card, mappings: mappings)
+
+        #expect(model.preview?.lookalikes == [StatementLookalike(walletId: bank, rows: 1)])
+        #expect(model.statementWallets == [bank, card])
+        #expect(model.lookalikes.isEmpty)
+    }
+
+    @Test("A choice is about the transaction it was made over: another row's change that gives the line another match takes it away")
+    func choiceFollowsItsMatch() async throws {
+        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: try Self.defaults())
+        await store.bootstrap()
+        await store.createVault(name: "Main", walletName: "Bank", openingBalance: 100_000)
+        await store.createWallet(name: "Cash", openingBalance: 10_000)
+        let bank = try #require(store.wallets.first { $0.name == "Bank" }).id
+        let cash = try #require(store.wallets.first { $0.name == "Cash" }).id
+        await Self.type("-3.50 caffe bar @bank 2026-10-01", into: store)
+        await Self.type("-3.50 caffe cash @cash 2026-10-04", into: store)
+        // Line 3 skipped by a rule at first: line 2 alone takes the bank's
+        // coffee, a day off.
+        let model = try await Self.bankModel(
+            store,
+            "Data;Importo;Descrizione\n02/10/2026;-3,50;CAFFE A\n01/10/2026;-3,50;CAFFE B\n",
+            into: bank,
+            rules: [StatementDescriptionRule(contains: "caffe b", action: .skip)],
+            mappings: StatementMappingStore(defaults: try Self.defaults())
+        )
+        model.setAlsoChecked(true, wallet: cash)
+        await model.refreshPreview()
+        let first = try Self.row(model, line: 2)
+        #expect(first.existing?.note == "caffe bar")
+        model.setMatchChoice(.importAnyway, for: first)
+        await model.refreshPreview()
+        #expect(model.matchChoices == [2: .importAnyway])
+
+        // Line 3 an expense after all: it takes the bank's coffee, its own
+        // day, and line 2 the cash one, which the choice was not about.
+        model.setAction(.expense, for: try Self.row(model, line: 3))
+        await model.refreshPreview()
+        #expect(try Self.row(model, line: 2).existing?.note == "caffe cash")
+        // The choice went with the preview that found the other match; that
+        // preview, planned with it, is no plan to import from.
+        #expect(model.matchChoices.isEmpty)
+        #expect(!model.isPlanCurrent)
+        await model.refreshPreview()
+        let second = try Self.row(model, line: 2)
+        #expect(second.existing?.note == "caffe cash")
+        #expect(model.matchChoice(for: second) == .moveExisting)
+        #expect(!model.overrides.contains { $0.onMatch != nil })
+        #expect(model.isPlanCurrent)
+
+        await model.runImport()
+
+        let all = try await Self.transactions(store)
+        let coffees = all.filter { $0.amount == 350 && !$0.voided }
+        #expect(coffees.count == 2)
+        #expect(coffees.allSatisfy { $0.walletId == bank })
+        #expect(Self.balance(store, cash) == 10_000)
+    }
+
+    @Test("A match dated before the start day is pointed out on the row")
+    func matchBeforeStartDay() async throws {
+        let (store, card, bank) = try await Self.vault()
+        await Self.type("-2.10 metro @bank 2026-09-14", into: store)
+        let model = try await Self.cardModel(store, card: card, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        model.setAlsoChecked(true, wallet: bank)
+        model.since = "2026-09-16"
+        await model.refreshPreview()
+
+        let metro = try Self.row(model, line: 3)
+        #expect(metro.status == .possibleDuplicate)
+        #expect(metro.existing?.note == "metro")
+        #expect(model.matchPredatesStart(metro))
+        #expect(!model.matchPredatesStart(try Self.row(model, line: 2)))
+        #expect(!StatementText.typedBeforeStart.isEmpty)
+    }
+
+    @Test("An import pressed before the preview of the last change came back writes nothing and plans again; the next one writes")
+    func stalePreviewWritesNothing() async throws {
+        let (store, card, bank) = try await Self.vault()
+        await Self.type("-14.75 green grocer #Spesa @bank 2026-09-11", into: store)
+        let model = try await Self.cardModel(store, card: card, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        #expect(model.isPlanCurrent)
+
+        // Ticked, and imported before the preview runs.
+        model.setAlsoChecked(true, wallet: bank)
+        #expect(!model.isPlanCurrent)
+        await model.runImport()
+
+        #expect(model.report == nil)
+        #expect(model.previewWasStale)
+        #expect(model.isPlanCurrent)
+        #expect(try Self.row(model, line: 5).status == .possibleDuplicate)
+        #expect(try await Self.transactions(store).filter { $0.amount == 1475 }.count == 1)
+
+        // Any change takes the note away; the next import writes.
+        model.setNote("Fruit and veg", for: 2)
+        #expect(!model.previewWasStale)
+        await model.runImport()
+        #expect(model.report?.moved == 1)
+        #expect(model.report?.executed == 2)
+    }
+
     @Test("Import anyway brings the possible duplicate back among the new rows, and the import writes it beside the one typed")
     func handRowImportedAnyway() async throws {
         let (store, card, _) = try await Self.vault()
