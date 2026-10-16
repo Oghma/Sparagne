@@ -21,11 +21,12 @@ use super::dates::{StatementDate, parse_date};
 use super::matching;
 use super::{
     AmountSign, STATEMENT_NAMESPACE, StatementAction, StatementDateFormat,
-    StatementDescriptionRule, StatementMapping, StatementOptions, StatementRow,
-    StatementRowOverride, StatementRowStatus,
+    StatementDescriptionRule, StatementMapping, StatementMatchChoice, StatementOptions,
+    StatementRow, StatementRowOverride, StatementRowStatus,
 };
 use crate::{
-    Command, Core, Currency, DomainError, Entry, Result, TransactionKind, normalize_category_key,
+    Command, Core, Currency, DomainError, Entry, Result, TransactionKind, TransactionPatch,
+    normalize_category_key,
 };
 
 /// Version of the key format, first in every key: changing the format means
@@ -57,10 +58,12 @@ pub(super) fn plan(
     let context = Context::new(core, vault_id, &mut records, mapping, options)?;
     let overrides: Overrides<'_> = overrides.iter().map(|o| (o.line, o)).collect();
 
-    // The row's own command, or the move an earlier import made for it.
+    // The row's own command, or the move or the claim an earlier import
+    // made for it, whatever became of it: a command refused by the server
+    // stays in the log, and executing it again would be a no-op.
     let mut known = core
         .conn
-        .prepare_cached("SELECT id, payload FROM commands WHERE id IN (?1, ?2)")?;
+        .prepare_cached("SELECT id, payload FROM commands WHERE id IN (?1, ?2, ?3)")?;
     let mut occurrences: HashMap<String, u32> = HashMap::new();
     let mut planned = Vec::new();
     // The transactions that stand for the rows already imported: never a
@@ -74,7 +77,7 @@ pub(super) fn plan(
             let seen = occurrences.entry(key.clone()).or_insert(0);
             id = row_id(&format!("{key}|{seen}"));
             *seen += 1;
-            let found = known.query_map(params![id, move_id(id)], |r| {
+            let found = known.query_map(params![id, move_id(id), claim_id(id)], |r| {
                 Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?))
             })?;
             for command in found {
@@ -83,7 +86,7 @@ pub(super) fn plan(
                 standing.insert(if command_id == id {
                     id
                 } else {
-                    moved_transaction(&payload).unwrap_or(id)
+                    named_transaction(&payload).unwrap_or(id)
                 });
             }
         }
@@ -115,8 +118,94 @@ pub(super) fn move_id(row_id: Uuid) -> Uuid {
     Uuid::new_v5(&row_id, b"move-existing")
 }
 
-/// The transaction a move command (as the log stores it) moved.
-fn moved_transaction(payload: &str) -> Option<Uuid> {
+/// The id of the command that claims, for the statement row `row_id`, the
+/// transaction that stands for it: the match the user left in place, or
+/// the statement wallet's side of a transfer. Derived from the row's, like
+/// [`move_id`].
+pub(super) fn claim_id(row_id: Uuid) -> Uuid {
+    Uuid::new_v5(&row_id, b"claim")
+}
+
+/// What an import writes for a row once the new rows are in.
+pub(super) enum Afterwards {
+    /// Its match, typed into another wallet, moves into the statement's.
+    Move,
+    /// Its match stands for it.
+    Claim,
+}
+
+/// The move or the claim an import writes for a flagged row, with its id: a
+/// duplicate to move goes to `wallet`; one left in place, or the other side
+/// of a transfer, is claimed with an `UpdateTransaction` naming the wallet
+/// (or the transfer's side) it already has, which changes nothing but says,
+/// in the log, which row it stands for. Nothing for a row imported anyway.
+pub(super) fn afterwards(row: &StatementRow, wallet: Uuid) -> Option<(Afterwards, Uuid, Command)> {
+    let existing = row.existing.as_ref()?;
+    let patch = match (&row.status, row.match_choice?) {
+        (StatementRowStatus::PossibleDuplicate, StatementMatchChoice::MoveExisting) => {
+            let patch = TransactionPatch {
+                wallet_id: Some(wallet),
+                ..TransactionPatch::default()
+            };
+            return Some((
+                Afterwards::Move,
+                move_id(row.command_id),
+                update(existing.id, patch),
+            ));
+        }
+        (StatementRowStatus::PossibleDuplicate, StatementMatchChoice::Skip) => TransactionPatch {
+            wallet_id: Some(existing.wallet_id?),
+            ..TransactionPatch::default()
+        },
+        (StatementRowStatus::MatchedTransfer, StatementMatchChoice::Skip) => {
+            side(existing.from_id == Some(wallet), wallet)
+        }
+        _ => return None,
+    };
+    Some((
+        Afterwards::Claim,
+        claim_id(row.command_id),
+        update(existing.id, patch),
+    ))
+}
+
+/// The claim of the statement wallet's side of the transfer a new row
+/// creates (the transfer's id is the row's), with its id.
+pub(super) fn own_side(row_id: Uuid, command: &Command, wallet: Uuid) -> Option<(Uuid, Command)> {
+    let Command::TransferWallet { from_wallet_id, .. } = command else {
+        return None;
+    };
+    Some((
+        claim_id(row_id),
+        update(row_id, side(*from_wallet_id == wallet, wallet)),
+    ))
+}
+
+/// A patch naming `wallet` as the source (`from`) or the destination of a
+/// transfer.
+fn side(from: bool, wallet: Uuid) -> TransactionPatch {
+    if from {
+        TransactionPatch {
+            from_id: Some(wallet),
+            ..TransactionPatch::default()
+        }
+    } else {
+        TransactionPatch {
+            to_id: Some(wallet),
+            ..TransactionPatch::default()
+        }
+    }
+}
+
+fn update(transaction_id: Uuid, patch: TransactionPatch) -> Command {
+    Command::UpdateTransaction {
+        transaction_id,
+        patch,
+    }
+}
+
+/// The transaction a move or a claim (as the log stores it) names.
+fn named_transaction(payload: &str) -> Option<Uuid> {
     match serde_json::from_str(payload).ok()? {
         Command::UpdateTransaction { transaction_id, .. } => Some(transaction_id),
         _ => None,

@@ -164,8 +164,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    Command, CommandEnvelope, Core, DomainError, Result, TransactionKind, TransactionPatch,
-    TransactionView,
+    Command, CommandEnvelope, Core, DomainError, Result, TransactionKind, TransactionView,
 };
 
 mod amount;
@@ -624,74 +623,92 @@ impl Core {
             matched_transfers: 0,
             moved: 0,
         };
+        let wallet = options.wallet_id;
         let mut new = Vec::new();
-        let mut moves = Vec::new();
+        let mut later = Vec::new();
         for plan::Planned { row, command } in planned {
             match (&row.status, command) {
                 (StatementRowStatus::New, Some(command)) => new.push((row, command)),
                 (StatementRowStatus::AlreadyImported, _) => report.deduplicated += 1,
-                (StatementRowStatus::PossibleDuplicate, _) => {
-                    report.possible_duplicates += 1;
-                    if row.match_choice == Some(StatementMatchChoice::MoveExisting)
-                        && let Some(existing) = &row.existing
-                    {
-                        let command = Command::UpdateTransaction {
-                            transaction_id: existing.id,
-                            patch: TransactionPatch {
-                                wallet_id: Some(options.wallet_id),
-                                ..TransactionPatch::default()
-                            },
-                        };
-                        moves.push((row, command));
+                (
+                    StatementRowStatus::PossibleDuplicate | StatementRowStatus::MatchedTransfer,
+                    _,
+                ) => {
+                    if row.status == StatementRowStatus::PossibleDuplicate {
+                        report.possible_duplicates += 1;
+                    } else {
+                        report.matched_transfers += 1;
+                    }
+                    if let Some(afterwards) = plan::afterwards(&row, wallet) {
+                        later.push((row, afterwards));
                     }
                 }
-                (StatementRowStatus::MatchedTransfer, _) => report.matched_transfers += 1,
                 _ => report.skipped += 1,
             }
         }
         // Oldest first, so the log reads in the order things happened; the
-        // rows typed by hand move once the new rows are in.
+        // rows typed by hand move, and the matches are claimed, once the new
+        // rows are in.
         new.sort_by_key(|(row, _)| (row.occurred_at, row.line));
-        moves.sort_by_key(|(row, _)| (row.occurred_at, row.line));
+        later.sort_by_key(|(row, _)| (row.occurred_at, row.line));
         for (row, command) in new {
-            let envelope = CommandEnvelope {
-                id: row.command_id,
-                vault_id,
-                author: author.to_string(),
-                command,
-            };
-            match self.execute(envelope) {
+            let own_side = plan::own_side(row.command_id, &command, wallet);
+            match self.execute(self::envelope(row.command_id, vault_id, author, command)) {
                 Ok(receipt) if receipt.deduplicated => report.deduplicated += 1,
                 Ok(_) => {
                     report.executed += 1;
                     report.rounded += u32::from(row.rounded);
                 }
                 Err(DomainError::Storage(message)) => return Err(DomainError::Storage(message)),
-                Err(err) => report.rejected.push(StatementRejection {
-                    line: row.line,
-                    code: err.code().to_string(),
-                    message: err.to_string(),
-                }),
+                Err(err) => {
+                    report.rejected.push(rejection(&row, &err));
+                    continue;
+                }
+            }
+            // A transfer is claimed on this wallet's side as soon as it is in.
+            if let Some((id, claim)) = own_side {
+                match self.execute(self::envelope(id, vault_id, author, claim)) {
+                    Ok(_) => {}
+                    Err(DomainError::Storage(message)) => {
+                        return Err(DomainError::Storage(message));
+                    }
+                    Err(err) => report.rejected.push(rejection(&row, &err)),
+                }
             }
         }
-        for (row, command) in moves {
-            let envelope = CommandEnvelope {
-                id: plan::move_id(row.command_id),
-                vault_id,
-                author: author.to_string(),
-                command,
-            };
-            match self.execute(envelope) {
-                Ok(receipt) if receipt.deduplicated => report.deduplicated += 1,
-                Ok(_) => report.moved += 1,
+        for (row, (afterwards, id, command)) in later {
+            match self.execute(self::envelope(id, vault_id, author, command)) {
+                Ok(receipt) => {
+                    if let plan::Afterwards::Move = afterwards {
+                        if receipt.deduplicated {
+                            report.deduplicated += 1;
+                        } else {
+                            report.moved += 1;
+                        }
+                    }
+                }
                 Err(DomainError::Storage(message)) => return Err(DomainError::Storage(message)),
-                Err(err) => report.rejected.push(StatementRejection {
-                    line: row.line,
-                    code: err.code().to_string(),
-                    message: err.to_string(),
-                }),
+                Err(err) => report.rejected.push(rejection(&row, &err)),
             }
         }
         Ok(report)
+    }
+}
+
+fn envelope(id: Uuid, vault_id: Uuid, author: &str, command: Command) -> CommandEnvelope {
+    CommandEnvelope {
+        id,
+        vault_id,
+        author: author.to_string(),
+        command,
+    }
+}
+
+/// `err`, refusing a command written for `row`.
+fn rejection(row: &StatementRow, err: &DomainError) -> StatementRejection {
+    StatementRejection {
+        line: row.line,
+        code: err.code().to_string(),
+        message: err.to_string(),
     }
 }
