@@ -9091,8 +9091,9 @@ public enum StatementRowStatus: Equatable, Hashable, Codable {
     case new
     case alreadyImported
     /**
-     * A transaction already in the vault looks like this row: same kind,
-     * same amount, at most 3 days apart, in the statement's wallet or in one
+     * A transaction already in the vault looks like this row: the money
+     * moving the same way (an expense, or an income or a refund), the same
+     * amount, at most 3 days apart, in the statement's wallet or in one
      * of [`StatementOptions::also_check_wallets`]. It is in
      * [`StatementRow::existing`], and [`StatementRow::match_choice`] says
      * what the import does.
