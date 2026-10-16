@@ -19,8 +19,9 @@ use super::csv::{self, Record};
 use super::dates::{StatementDate, parse_date};
 use super::matching;
 use super::{
-    AmountSign, STATEMENT_NAMESPACE, StatementAction, StatementDateFormat, StatementMapping,
-    StatementOptions, StatementRow, StatementRowOverride, StatementRowStatus,
+    AmountSign, STATEMENT_NAMESPACE, StatementAction, StatementDateFormat,
+    StatementDescriptionRule, StatementMapping, StatementOptions, StatementRow,
+    StatementRowOverride, StatementRowStatus,
 };
 use crate::{
     Command, Core, Currency, DomainError, Entry, Result, TransactionKind, normalize_category_key,
@@ -146,6 +147,8 @@ struct Draft<'a> {
     broken: Option<String>,
     /// What the type rules and the default action make of the row.
     base: &'a StatementAction,
+    /// The description rule that matched, by position in [`Context::rules`].
+    rule: Option<usize>,
     /// The type column's value, for the reason of a skip.
     type_value: Option<String>,
     /// Whether the money goes out; `None` when the amount is unreadable.
@@ -168,6 +171,8 @@ enum Outcome {
 /// Who said what a row is, for the reason of a skip.
 enum By<'r> {
     User,
+    /// A description rule, with its text.
+    Rule(&'r str),
     /// The type rules or the default action, with the type column's value.
     Mapping(Option<&'r str>),
 }
@@ -176,8 +181,58 @@ impl By<'_> {
     fn skip(&self) -> Outcome {
         match self {
             Self::User => Outcome::Skip("skipped_by_you", "skipped by you".to_string()),
+            Self::Rule(text) => Outcome::Skip(
+                "skipped_by_rule",
+                format!("description contains \"{text}\" is skipped"),
+            ),
             Self::Mapping(type_value) => Outcome::Skip("skipped_by_rule", skip_reason(*type_value)),
         }
+    }
+}
+
+/// A [`StatementDescriptionRule`] ready to be matched. A rule whose
+/// `contains` is blank is none, so a rule still being typed never fails a
+/// preview.
+struct Rule<'a> {
+    /// Position in [`StatementMapping::description_rules`].
+    index: u32,
+    /// `contains` lowercased, inner runs of spaces collapsed: what the
+    /// lowercased payee must hold.
+    needle: String,
+    /// `contains` trimmed, inner runs of spaces collapsed, for the reason of
+    /// a skip.
+    text: String,
+    action: Option<&'a StatementAction>,
+    /// Non-blank, trimmed.
+    category: Option<String>,
+    /// Non-blank, trimmed.
+    note: Option<String>,
+}
+
+impl<'a> Rule<'a> {
+    fn all(rules: &'a [StatementDescriptionRule]) -> Vec<Self> {
+        let filled = |value: &Option<String>| {
+            value
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        };
+        rules
+            .iter()
+            .enumerate()
+            .filter_map(|(index, rule)| {
+                let text = collapse(std::iter::once(rule.contains.as_str()));
+                (!text.is_empty()).then(|| Rule {
+                    index: u32::try_from(index).unwrap_or(u32::MAX),
+                    needle: text.to_lowercase(),
+                    text,
+                    action: rule.action.as_ref(),
+                    category: filled(&rule.category),
+                    note: filled(&rule.note),
+                })
+            })
+            .collect()
     }
 }
 
@@ -260,11 +315,13 @@ struct Context<'a> {
     /// The envelopes an entry can go to, Unallocated included.
     active_flows: HashSet<Uuid>,
     unallocated: Uuid,
+    /// The description rules that are rules, in order.
+    rules: Vec<Rule<'a>>,
 }
 
 impl<'a> Context<'a> {
-    /// Checks the vault, the wallets, the flow, the timezone and the mapping
-    /// against the header, which it takes from `records`.
+    /// Checks the vault, the wallets, the flow, the timezone, the rules and
+    /// the mapping against the header, which it takes from `records`.
     fn new(
         core: &Core,
         vault_id: Uuid,
@@ -289,11 +346,19 @@ impl<'a> Context<'a> {
         {
             return Err(DomainError::NotFound(format!("flow {flow}")));
         }
-        let actions = mapping.type_rules.iter().map(|rule| &rule.action);
-        for other in actions
-            .chain([&mapping.default_action])
-            .filter_map(counter_wallet)
-        {
+        let rules = Rule::all(&mapping.description_rules);
+        for rule in &rules {
+            if let Some(category) = &rule.category {
+                normalize_category_key(category)?;
+            }
+        }
+        let actions = mapping
+            .type_rules
+            .iter()
+            .map(|rule| &rule.action)
+            .chain(rules.iter().filter_map(|rule| rule.action))
+            .chain([&mapping.default_action]);
+        for other in actions.filter_map(counter_wallet) {
             if !wallets.contains_key(&other) {
                 return Err(DomainError::NotFound(format!("wallet {other}")));
             }
@@ -340,6 +405,7 @@ impl<'a> Context<'a> {
                 .collect(),
             unallocated: snapshot.unallocated_flow_id,
             wallets,
+            rules,
         })
     }
 
@@ -372,6 +438,7 @@ impl<'a> Context<'a> {
             key: None,
             broken: Some(message),
             base: &self.mapping.default_action,
+            rule: None,
             type_value: None,
             outflow: None,
             skipped_status: None,
@@ -407,6 +474,21 @@ impl<'a> Context<'a> {
             .and_then(|bank| self.match_category(bank));
         row.note.clone_from(&row.payee);
         row.category.clone_from(&row.matched_category);
+        // The first rule the description holds decides on its own.
+        let payee = row.payee.to_lowercase();
+        let rule = self
+            .rules
+            .iter()
+            .position(|rule| payee.contains(&rule.needle));
+        if let Some(found) = rule.map(|at| &self.rules[at]) {
+            row.description_rule = Some(found.index);
+            if let Some(note) = &found.note {
+                row.note.clone_from(note);
+            }
+            if let Some(category) = &found.category {
+                row.category = Some(category.clone());
+            }
+        }
 
         let type_value = optional(self.columns.kind);
         let status = optional(self.columns.status);
@@ -454,6 +536,7 @@ impl<'a> Context<'a> {
             key,
             broken: None,
             base,
+            rule,
             type_value: type_value.map(str::to_string),
             outflow,
             skipped_status,
@@ -509,6 +592,7 @@ impl<'a> Context<'a> {
             mut row,
             broken,
             base,
+            rule,
             type_value,
             outflow,
             skipped_status,
@@ -522,13 +606,20 @@ impl<'a> Context<'a> {
             };
             return Planned { row, command: None };
         }
-        let invalid = *base != StatementAction::Skip
+        // The user's action, else the description rule's, else the type
+        // rule's or the default action.
+        let ruled = rule
+            .map(|at| &self.rules[at])
+            .and_then(|rule| rule.action.map(|action| (action, By::Rule(&rule.text))));
+        let mapped = ruled.as_ref().map_or(base, |(action, _)| *action);
+        let invalid = *mapped != StatementAction::Skip
             && skipped_status.is_none()
             && matches!(problem, Some(Outcome::Invalid(..)));
         let user = user.filter(|_| !invalid);
-        let (action, by) = match user.and_then(|user| user.action.as_ref()) {
-            Some(action) => (action, By::User),
-            None => (base, By::Mapping(type_value.as_deref())),
+        let (action, by) = match (user.and_then(|user| user.action.as_ref()), ruled) {
+            (Some(action), _) => (action, By::User),
+            (None, Some(ruled)) => ruled,
+            (None, None) => (base, By::Mapping(type_value.as_deref())),
         };
         row.action = action.clone();
         row.kind = outflow.and_then(|outflow| kind_of(action, outflow));

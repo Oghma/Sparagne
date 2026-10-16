@@ -10,8 +10,9 @@ use common::*;
 use sparagne_core::statement::{self, STATEMENT_NAMESPACE};
 use sparagne_core::{
     AmountSign, Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, StatementAction,
-    StatementDateFormat, StatementMapping, StatementOptions, StatementPreview, StatementReport,
-    StatementRow, StatementRowOverride, StatementRowStatus, StatementTypeRule, TransactionKind,
+    StatementDateFormat, StatementDescriptionRule, StatementMapping, StatementOptions,
+    StatementPreview, StatementReport, StatementRow, StatementRowOverride, StatementRowStatus,
+    StatementTypeRule, TransactionKind,
 };
 use uuid::Uuid;
 
@@ -204,6 +205,16 @@ fn archived_wallet(fx: &mut Fx, name: &str) -> Uuid {
         Command::ArchiveWallet { wallet_id: id },
     );
     id
+}
+
+/// A description rule that only matches.
+fn rule(contains: &str) -> StatementDescriptionRule {
+    StatementDescriptionRule {
+        contains: contains.to_string(),
+        action: None,
+        category: None,
+        note: None,
+    }
 }
 
 fn new_flow(fx: &mut Fx, name: &str) -> Uuid {
@@ -1338,6 +1349,299 @@ fn a_row_imported_before_stays_imported_whatever_the_user_now_says() {
     let again = import_with(&mut fx, BANK, &bank_mapping(), &options, &overrides);
     assert_eq!((again.executed, again.deduplicated), (0, 3));
     assert_eq!(command_count(&fx.core, fx.vault), commands);
+}
+
+// ---------------------------------------------------------------------------
+// Description rules
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_description_rule_matches_whatever_the_case_and_the_spaces() {
+    let fx = setup();
+    let mapping = StatementMapping {
+        description_rules: vec![StatementDescriptionRule {
+            category: Some(" Bar ".to_string()),
+            ..rule("  bar   CENTRALE  milano ")
+        }],
+        ..bank_mapping()
+    };
+    let preview = preview_with(&fx, BANK, &mapping, &options(fx.wallet), &no_overrides());
+    let pos = row(&preview, 2);
+    assert_eq!(pos.description_rule, Some(0));
+    assert_eq!(pos.category.as_deref(), Some("Bar"));
+    assert_eq!(pos.matched_category, None);
+    assert_eq!(pos.note, pos.payee, "a rule without a note keeps the payee");
+    assert_eq!(pos.kind, Some(TransactionKind::Expense));
+    assert_eq!(row(&preview, 3).description_rule, None);
+    assert_eq!(row(&preview, 3).category, None);
+}
+
+#[test]
+fn the_first_rule_that_matches_decides_on_its_own_and_a_blank_one_is_none() {
+    let fx = setup();
+    let mapping = StatementMapping {
+        description_rules: vec![
+            // Being typed: neither its wallet nor its category fail the
+            // preview, and it matches nothing.
+            StatementDescriptionRule {
+                action: Some(StatementAction::TransferOut {
+                    to_wallet_id: Some(fx.wallet),
+                }),
+                category: Some("!!!".to_string()),
+                ..rule("   ")
+            },
+            StatementDescriptionRule {
+                note: Some("Salary".to_string()),
+                ..rule("stipendio")
+            },
+            StatementDescriptionRule {
+                action: Some(StatementAction::Expense),
+                category: Some("Altro".to_string()),
+                note: Some("Something else".to_string()),
+                ..rule("accredito")
+            },
+        ],
+        ..bank_mapping()
+    };
+    let preview = preview_with(&fx, BANK, &mapping, &options(fx.wallet), &no_overrides());
+    let salary = row(&preview, 3);
+    assert_eq!(salary.description_rule, Some(1));
+    assert_eq!(salary.note, "Salary");
+    assert_eq!(salary.category, None, "the second rule adds nothing");
+    assert_eq!(salary.kind, Some(TransactionKind::Income));
+    assert_eq!(salary.action, StatementAction::BySign);
+    assert!(
+        preview
+            .rows
+            .iter()
+            .all(|row| row.description_rule != Some(0))
+    );
+}
+
+#[test]
+fn a_rule_without_an_action_keeps_the_type_rule_and_cleans_the_note() {
+    let mut fx = setup();
+    let mut mapping = card_mapping();
+    mapping.description_rules = vec![StatementDescriptionRule {
+        note: Some("Flight to Lisbon".to_string()),
+        ..rule("skyline")
+    }];
+    let options = options(fx.wallet);
+    let preview = preview_with(&fx, CARD, &mapping, &options, &no_overrides());
+    let flight = row(&preview, 4);
+    assert_eq!(flight.action, StatementAction::Expense);
+    assert_eq!(flight.kind, Some(TransactionKind::Expense));
+    assert_eq!(flight.note, "Flight to Lisbon");
+    assert_eq!(flight.payee, "SKYLINE AIR");
+    import_with(&mut fx, CARD, &mapping, &options, &no_overrides());
+    let tx = fx.core.transaction(fx.vault, flight.command_id).unwrap();
+    assert_eq!(tx.note.as_deref(), Some("Flight to Lisbon (12.34 USD)"));
+}
+
+#[test]
+fn a_rule_category_is_created_and_the_user_has_the_last_word() {
+    let mut fx = setup();
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::CreateCategory {
+            name: "Bakeries".to_string(),
+        },
+    );
+    let mut mapping = card_mapping();
+    mapping.description_rules = vec![
+        StatementDescriptionRule {
+            category: Some("Libri".to_string()),
+            note: Some("Books".to_string()),
+            ..rule("books")
+        },
+        StatementDescriptionRule {
+            category: Some("Pane".to_string()),
+            ..rule("forno")
+        },
+        StatementDescriptionRule {
+            category: Some("Frutta".to_string()),
+            note: Some("Fruit".to_string()),
+            ..rule("grocer")
+        },
+    ];
+    let options = options(fx.wallet);
+    let overrides = [StatementRowOverride {
+        category: Some("Spesa".to_string()),
+        note: Some("Vegetables".to_string()),
+        ..user(10)
+    }];
+    let preview = preview_with(&fx, CARD, &mapping, &options, &overrides);
+    let bakery = row(&preview, 5);
+    assert_eq!(bakery.matched_category.as_deref(), Some("Bakeries"));
+    assert_eq!(bakery.category.as_deref(), Some("Pane"));
+    // What the row gets before the user's own.
+    assert_eq!(row(&preview, 10).category.as_deref(), Some("Frutta"));
+    assert_eq!(row(&preview, 10).note, "Fruit");
+
+    import_with(&mut fx, CARD, &mapping, &options, &overrides);
+    let names: Vec<String> = fx
+        .core
+        .categories(fx.vault, false)
+        .unwrap()
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+    assert!(names.contains(&"Libri".to_string()), "{names:?}");
+    assert!(!names.contains(&"Frutta".to_string()), "{names:?}");
+    let tx = |line| {
+        fx.core
+            .transaction(fx.vault, row(&preview, line).command_id)
+            .unwrap()
+    };
+    assert_eq!(
+        (tx(3).category, tx(3).note),
+        ("Libri".to_string(), Some("Books".to_string()))
+    );
+    assert_eq!(tx(5).category, "Pane");
+    assert_eq!(
+        (tx(10).category, tx(10).note),
+        ("Spesa".to_string(), Some("Vegetables".to_string()))
+    );
+}
+
+#[test]
+fn a_skip_rule_names_its_text_and_the_user_can_still_import_the_row() {
+    let mut fx = setup();
+    let mapping = StatementMapping {
+        description_rules: vec![StatementDescriptionRule {
+            action: Some(StatementAction::Skip),
+            ..rule(" Bonifico   a ")
+        }],
+        ..bank_mapping()
+    };
+    let options = options(fx.wallet);
+    let preview = preview_with(&fx, BANK, &mapping, &options, &no_overrides());
+    let wire = row(&preview, 4);
+    assert_eq!(skip_code(wire), "skipped_by_rule");
+    assert_eq!(
+        skip_reason(wire),
+        "description contains \"Bonifico a\" is skipped"
+    );
+    assert_eq!(wire.action, StatementAction::Skip);
+    assert_eq!(wire.kind, None);
+
+    let overrides = [StatementRowOverride {
+        action: Some(StatementAction::Expense),
+        ..user(4)
+    }];
+    let preview = preview_with(&fx, BANK, &mapping, &options, &overrides);
+    assert_eq!(row(&preview, 4).status, StatementRowStatus::New);
+    let report = import_with(&mut fx, BANK, &mapping, &options, &overrides);
+    assert_eq!(report.executed, 3);
+}
+
+#[test]
+fn a_rule_naming_the_imported_wallet_an_unknown_one_or_a_bad_category_is_refused() {
+    let fx = setup();
+    let with = |rule: StatementDescriptionRule| StatementMapping {
+        description_rules: vec![rule],
+        ..bank_mapping()
+    };
+    let preview = |mapping: &StatementMapping| {
+        fx.core.preview_statement(
+            fx.vault,
+            BANK,
+            mapping,
+            &options(fx.wallet),
+            &no_overrides(),
+        )
+    };
+    let to = |wallet| StatementDescriptionRule {
+        action: Some(StatementAction::TransferOut {
+            to_wallet_id: Some(wallet),
+        }),
+        ..rule("giroconto")
+    };
+    assert!(matches!(
+        preview(&with(to(Uuid::now_v7()))),
+        Err(DomainError::NotFound(_))
+    ));
+    assert!(matches!(
+        preview(&with(to(fx.wallet))),
+        Err(DomainError::InvalidCommand(_))
+    ));
+    assert!(matches!(
+        preview(&with(StatementDescriptionRule {
+            category: Some("!!!".to_string()),
+            ..rule("giroconto")
+        })),
+        Err(DomainError::InvalidName(_))
+    ));
+}
+
+#[test]
+fn a_row_imported_before_a_rule_existed_stays_imported_after_it() {
+    let mut fx = setup();
+    let savings = run(&mut fx.core, fx.vault, wallet_cmd("Savings", 0))
+        .result_id
+        .unwrap();
+    let options = options(fx.wallet);
+    let before = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
+    import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
+    let commands = command_count(&fx.core, fx.vault);
+
+    let mapping = StatementMapping {
+        description_rules: vec![
+            StatementDescriptionRule {
+                action: Some(StatementAction::TransferOut {
+                    to_wallet_id: Some(savings),
+                }),
+                note: Some("To savings".to_string()),
+                ..rule("bonifico")
+            },
+            StatementDescriptionRule {
+                action: Some(StatementAction::Refund),
+                ..rule("bar")
+            },
+        ],
+        ..bank_mapping()
+    };
+    let after = preview_with(&fx, BANK, &mapping, &options, &no_overrides());
+    for line in 2..=5 {
+        assert_eq!(
+            row(&after, line).command_id,
+            row(&before, line).command_id,
+            "line {line}"
+        );
+    }
+    assert_eq!(row(&after, 4).status, StatementRowStatus::AlreadyImported);
+    assert_eq!(row(&after, 4).kind, Some(TransactionKind::TransferWallet));
+    assert_eq!((after.new_rows, after.already_imported), (0, 3));
+    let report = import_with(&mut fx, BANK, &mapping, &options, &no_overrides());
+    assert_eq!((report.executed, report.deduplicated), (0, 3));
+    assert_eq!(command_count(&fx.core, fx.vault), commands);
+}
+
+#[test]
+fn a_mapping_saved_before_description_rules_reads_back_and_is_written_as_it_was() {
+    let saved = r#"{"delimiter":";","date_column":"Data operazione","date_format":{"kind":"day_month_year"},"amount_column":"Importo","amount_sign":"outflow_negative","decimal_comma":true,"description_columns":["Descrizione"],"type_column":null,"type_rules":[],"default_action":{"kind":"by_sign"},"status_column":null,"skip_statuses":[],"currency_column":"Divisa","category_column":null,"original_amount_column":null,"original_currency_column":null}"#;
+    assert_eq!(statement::decode_mapping(saved).unwrap(), bank_mapping());
+    assert_eq!(statement::encode_mapping(&bank_mapping()), saved);
+    assert!(!statement::encode_mapping(&card_mapping()).contains("description_rules"));
+
+    let ruled = StatementMapping {
+        description_rules: vec![
+            StatementDescriptionRule {
+                action: Some(StatementAction::TransferIn {
+                    from_wallet_id: Some(Uuid::now_v7()),
+                }),
+                category: Some("Giroconti".to_string()),
+                note: Some("From the bank".to_string()),
+                ..rule("giroconto")
+            },
+            rule("bar"),
+        ],
+        ..bank_mapping()
+    };
+    let json = statement::encode_mapping(&ruled);
+    assert!(json.contains(r#"{"contains":"bar"}"#), "{json}");
+    assert_eq!(statement::decode_mapping(&json).unwrap(), ruled);
 }
 
 // ---------------------------------------------------------------------------
