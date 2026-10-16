@@ -122,12 +122,28 @@ the plan as it is. Each transfer is an ordinary ledger row, the same as
 File › Import Statement… (⇧⌘I) reads a bank or card CSV (UTF-8, falling back
 to Windows-1252/Latin-1). It recognises the built-in `card-transactions`
 preset from the header, or reopens the mapping last used for the same vault
-and header. Pick the columns, the date and amount format, what each row type
-becomes (expense, income, refund, transfer from or to another wallet, skip, by
-sign), the statuses to skip, and the target wallet and envelope. The preview
-shows what happens to every row; new rows can be left out or given a category,
-prefilled from the vault's history. Importing the same file again adds
-nothing.
+and header, with that import's wallet, envelope and start day. Pick the
+columns, the date and amount format, what each row type becomes (expense,
+income, refund, transfer from or to another wallet, skip, by sign), the
+statuses to skip, and the target wallet and envelope. Description rules come
+before the types: the first one whose text the bank's description holds, case
+aside, decides the row's kind, category and a cleaner note, so
+`PAGAMENTO POS; BAR CENTRALE MILANO` can become an expense under Bar noted
+`Bar Centrale`. A start day leaves the older rows out.
+
+The preview shows what happens to every row. Each row can be given another
+kind (a transfer names the other wallet), note, category (prefilled from the
+vault's history) and envelope, or be left out; its context menu makes a
+description rule from it. A row with the same kind and amount as a transaction
+already in the vault, at most 3 days apart, in the statement's wallet or in
+one ticked under "Duplicates also in" (chosen anew for every file), is a
+possible duplicate and is not imported: the transaction found stands for it,
+and one found in another wallet, such as a spend typed by hand into Cash, is
+moved into the statement's wallet by default. The review can keep it where it
+is instead, or import the row anyway. The other side of a transfer between two
+of your wallets, already recorded from the other bank's statement or by hand,
+is recognised at most 4 days apart and not imported twice. Importing the same
+file again adds nothing.
 
 File › Export All Transactions… writes every transaction of the vault as CSV,
 voided rows and transfers included. File › Back Up Database… saves a
