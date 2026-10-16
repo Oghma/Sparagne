@@ -36,8 +36,23 @@ const KEY_VERSION: &str = "v1";
 /// A row of the statement with what happens to it.
 pub(super) struct Planned {
     pub row: StatementRow,
-    /// The command of a [`StatementRowStatus::New`] row.
+    /// The command of a [`StatementRowStatus::New`] row, or of one replacing
+    /// its match.
     pub command: Option<Command>,
+    /// The entry the row would replace is the statement row of the wallet
+    /// the row names (its import wrote it, or its claim or move names it):
+    /// replacing it claims that wallet's side of the transfer for that row.
+    pub replaces_other_row: bool,
+}
+
+impl Planned {
+    fn new(row: StatementRow, command: Option<Command>) -> Self {
+        Self {
+            row,
+            command,
+            replaces_other_row: false,
+        }
+    }
 }
 
 /// The user's overrides by line; the last one of a line wins.
@@ -65,6 +80,11 @@ pub(super) fn plan(
     let mut known = core
         .conn
         .prepare_cached("SELECT id, payload FROM commands WHERE id IN (?1, ?2, ?3, ?4)")?;
+    // The claim made under a transaction's own id: a transfer that took the
+    // place of an entry, claimed on the side of the row the entry stood for.
+    let mut taken_over = core
+        .conn
+        .prepare_cached("SELECT payload FROM commands WHERE id = ?1")?;
     let mut occurrences: HashMap<String, u32> = HashMap::new();
     let mut planned = Vec::new();
     // The transactions that stand for the rows already imported: never a
@@ -81,14 +101,24 @@ pub(super) fn plan(
             let ids = params![id, move_id(id), claim_id(id), replace_id(id)];
             let found =
                 known.query_map(ids, |r| Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?)))?;
+            let mut named = Vec::new();
             for command in found {
                 let (command_id, payload) = command?;
                 imported = true;
-                standing.insert(if command_id == id {
+                named.push(if command_id == id {
                     id
                 } else {
                     named_transaction(&payload).unwrap_or(id)
                 });
+            }
+            for transaction in named {
+                standing.insert(transaction);
+                let successor = taken_over
+                    .query_row(params![claim_id(transaction)], |r| r.get::<_, String>(0))
+                    .optional()?;
+                if let Some(successor) = successor.as_deref().and_then(named_transaction) {
+                    standing.insert(successor);
+                }
             }
         }
         // A row in the log stays imported whatever the rules or the user now
@@ -189,66 +219,46 @@ pub(super) fn replace_id(row_id: Uuid) -> Uuid {
     Uuid::new_v5(&row_id, b"replace")
 }
 
-/// For a row whose choice is `ReplaceExisting`: the void of the entry it
-/// matched, with its id, written once the row's transfer is in.
-pub(super) fn replacement(row: &StatementRow) -> Option<(Uuid, Command)> {
-    let existing = row.existing.as_ref()?;
-    (row.status == StatementRowStatus::PossibleDuplicate
-        && row.match_choice == Some(StatementMatchChoice::ReplaceExisting))
-    .then(|| {
-        (
-            replace_id(row.command_id),
-            Command::VoidTransaction {
-                transaction_id: existing.id,
-            },
-        )
-    })
-}
-
-/// When the entry a row replaced was the other wallet's statement row (an
-/// import wrote it under its own command's id, which is that row's id), the
-/// claim of that wallet's side of the row's new transfer, under that row's
-/// claim id: the transfer stands for it now.
-pub(super) fn other_side(
-    core: &Core,
+/// What an import writes, all at once, for a row replacing its match: the
+/// row's transfer under the row's id, the void of the entry, the claim of
+/// the statement wallet's side and, when the entry stood for the named
+/// wallet's statement row (`other_row`), the claim of that wallet's side
+/// under the entry's own claim id, which a later preview of that statement
+/// follows from the row to the transfer. With their ids, in that order.
+pub(super) fn replacing(
     row: &StatementRow,
-    command: &Command,
+    command: Command,
     wallet: Uuid,
-) -> Result<Option<(Uuid, Command)>> {
-    let (
-        Some(existing),
-        Command::TransferWallet {
+    other_row: bool,
+) -> Vec<(Uuid, Command)> {
+    let Some(existing) = row.existing.as_ref() else {
+        return vec![(row.command_id, command)];
+    };
+    let mut batch = Vec::new();
+    batch.extend(own_side(row.command_id, &command, wallet));
+    if other_row
+        && let Command::TransferWallet {
             from_wallet_id,
             to_wallet_id,
             ..
-        },
-    ) = (row.existing.as_ref(), command)
-    else {
-        return Ok(None);
-    };
-    let other = if *from_wallet_id == wallet {
-        *to_wallet_id
-    } else {
-        *from_wallet_id
-    };
-    if existing.wallet_id != Some(other) || existing.id.get_version_num() != 5 {
-        return Ok(None);
-    }
-    let own: bool = core
-        .conn
-        .query_row(
-            "SELECT command_id = id FROM transactions WHERE id = ?1",
-            params![existing.id],
-            |r| r.get(0),
-        )
-        .optional()?
-        .unwrap_or(false);
-    Ok(own.then(|| {
-        (
+        } = &command
+    {
+        let other = if *from_wallet_id == wallet {
+            *to_wallet_id
+        } else {
+            *from_wallet_id
+        };
+        batch.push((
             claim_id(existing.id),
             update(row.command_id, side(*from_wallet_id == other, other)),
-        )
-    }))
+        ));
+    }
+    let void = Command::VoidTransaction {
+        transaction_id: existing.id,
+    };
+    batch.insert(0, (replace_id(row.command_id), void));
+    batch.insert(0, (row.command_id, command));
+    batch
 }
 
 /// A patch naming `wallet` as the source (`from`) or the destination of a
@@ -819,7 +829,7 @@ impl<'a> Context<'a> {
                 code: "invalid_row".to_string(),
                 message,
             };
-            return Planned { row, command: None };
+            return Planned::new(row, None);
         }
         // The user's action, else the description rule's, else the type
         // rule's or the default action.
@@ -866,7 +876,7 @@ impl<'a> Context<'a> {
                 message,
             },
         };
-        Planned { row, command }
+        Planned::new(row, command)
     }
 
     /// The command of a row whose date and amount were read, taken for the
@@ -1157,8 +1167,8 @@ mod tests {
     use super::*;
 
     fn planned(line: u32) -> Planned {
-        Planned {
-            row: StatementRow {
+        Planned::new(
+            StatementRow {
                 line,
                 command_id: Uuid::nil(),
                 status: StatementRowStatus::New,
@@ -1179,8 +1189,8 @@ mod tests {
                 existing: None,
                 match_choice: None,
             },
-            command: None,
-        }
+            None,
+        )
     }
 
     #[test]

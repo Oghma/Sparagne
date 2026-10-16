@@ -685,6 +685,10 @@ impl Core {
                     preview.possible_duplicates += 1;
                     preview.moves +=
                         u32::from(row.match_choice == Some(StatementMatchChoice::MoveExisting));
+                    // A row replacing its match is written, rounded as it is.
+                    if row.match_choice == Some(StatementMatchChoice::ReplaceExisting) {
+                        preview.rounded += u32::from(row.rounded);
+                    }
                 }
                 StatementRowStatus::MatchedTransfer => preview.matched_transfers += 1,
                 StatementRowStatus::Skipped { .. } => preview.skipped += 1,
@@ -720,13 +724,18 @@ impl Core {
         let wallet = options.wallet_id;
         let mut new = Vec::new();
         let mut later = Vec::new();
-        for plan::Planned { row, command } in planned {
+        for plan::Planned {
+            row,
+            command,
+            replaces_other_row,
+        } in planned
+        {
             match (&row.status, command) {
-                (StatementRowStatus::New, Some(command)) => new.push((row, command)),
+                (StatementRowStatus::New, Some(command)) => new.push((row, command, false)),
                 // Its transfer replaces the entry it matched.
                 (StatementRowStatus::PossibleDuplicate, Some(command)) => {
                     report.possible_duplicates += 1;
-                    new.push((row, command));
+                    new.push((row, command, replaces_other_row));
                 }
                 (StatementRowStatus::AlreadyImported, _) => report.deduplicated += 1,
                 (
@@ -748,19 +757,32 @@ impl Core {
         // Oldest first, so the log reads in the order things happened; the
         // rows typed by hand move, and the matches are claimed, once the new
         // rows are in.
-        new.sort_by_key(|(row, _)| (row.occurred_at, row.line));
+        new.sort_by_key(|(row, ..)| (row.occurred_at, row.line));
         later.sort_by_key(|(row, _)| (row.occurred_at, row.line));
-        for (row, command) in new {
-            // Once the row's transfer is in: the void of the entry it
-            // replaces (after, so a refused transfer leaves the entry be),
-            // the claim of this wallet's side, and of the other's when the
-            // entry was the other wallet's statement row.
-            let mut then = Vec::new();
-            then.extend(plan::replacement(&row));
-            then.extend(plan::own_side(row.command_id, &command, wallet));
+        for (row, command, other_row) in new {
             if row.status == StatementRowStatus::PossibleDuplicate {
-                then.extend(plan::other_side(self, &row, &command, wallet)?);
+                // A replacement is written whole or not at all: the
+                // transfer, the void of the entry and their claims.
+                let batch = plan::replacing(&row, command, wallet, other_row)
+                    .into_iter()
+                    .map(|(id, command)| self::envelope(id, vault_id, author, command))
+                    .collect();
+                match self.execute_batch(batch) {
+                    Ok(receipts) if receipts.first().is_some_and(|r| r.deduplicated) => {
+                        report.deduplicated += 1;
+                    }
+                    Ok(_) => {
+                        report.executed += 1;
+                        report.rounded += u32::from(row.rounded);
+                    }
+                    Err(DomainError::Storage(message)) => {
+                        return Err(DomainError::Storage(message));
+                    }
+                    Err(err) => report.rejected.push(rejection(&row, &err)),
+                }
+                continue;
             }
+            let then = plan::own_side(row.command_id, &command, wallet);
             match self.execute(self::envelope(row.command_id, vault_id, author, command)) {
                 Ok(receipt) if receipt.deduplicated => report.deduplicated += 1,
                 Ok(_) => {
@@ -773,7 +795,8 @@ impl Core {
                     continue;
                 }
             }
-            for (id, command) in then {
+            // A transfer is claimed on this wallet's side as soon as it is in.
+            if let Some((id, command)) = then {
                 match self.execute(self::envelope(id, vault_id, author, command)) {
                     Ok(_) => {}
                     Err(DomainError::Storage(message)) => {

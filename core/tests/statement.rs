@@ -3184,22 +3184,56 @@ fn a_payment_next_to_a_transfer_claimed_for_september_is_imported() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_transfer_before_the_start_day_matches_nothing() {
+fn a_transfer_from_cash_before_the_start_day_matches_nothing() {
     let mut fx = setup();
     let cash = fx.wallet;
     let bank = new_wallet(&mut fx, "Bank");
     // The bank funded from Cash the day before the user starts importing.
     transfer_on(&mut fx, (cash, bank), 50_000, (8, 31));
     let text = bank_csv(&[bank_row("02/09/2026", "VERSAMENTO", "500,00")]);
-    let plain = preview_with(&fx, &text, &bank_mapping(), &options(bank), &no_overrides());
+    let plain = preview_with(
+        &fx,
+        &text,
+        &bank_mapping(),
+        &checking(bank, cash),
+        &no_overrides(),
+    );
     assert_eq!(row(&plain, 2).status, StatementRowStatus::MatchedTransfer);
     let options = StatementOptions {
         since: Some(day(2026, 9, 1)),
-        ..options(bank)
+        ..checking(bank, cash)
     };
     let preview = preview_with(&fx, &text, &bank_mapping(), &options, &no_overrides());
     assert_eq!(row(&preview, 2).status, StatementRowStatus::New);
     assert_eq!(row(&preview, 2).existing, None);
+}
+
+#[test]
+fn the_other_banks_side_the_day_before_the_start_day_still_matches() {
+    let mut fx = setup();
+    let (ing, revolut) = two_banks(&mut fx);
+    // Revolut's statement started earlier and holds the transfer.
+    let revolut_text = bank_csv(&[bank_row("30/09/2026", "BONIFICO DA ING", "200,00")]);
+    import_with(
+        &mut fx,
+        &revolut_text,
+        &from_ing(ing),
+        &options(revolut),
+        &no_overrides(),
+    );
+    let transfer = live_transfers(&fx)[0].id;
+    let options = StatementOptions {
+        since: Some(day(2026, 10, 1)),
+        ..options(ing)
+    };
+    let text = bank_csv(&[bank_row("01/10/2026", "BONIFICO A REVOLUT", "-200,00")]);
+    let preview = preview_with(&fx, &text, &bank_mapping(), &options, &no_overrides());
+    let bonifico = row(&preview, 2);
+    assert_eq!(bonifico.status, StatementRowStatus::MatchedTransfer);
+    assert_eq!(bonifico.existing.as_ref().map(|tx| tx.id), Some(transfer));
+    let report = import_with(&mut fx, &text, &bank_mapping(), &options, &no_overrides());
+    assert_eq!((report.executed, report.matched_transfers), (0, 1));
+    assert_eq!(wallet_balance(&fx.core, fx.vault, ing), -20_000);
 }
 
 #[test]
@@ -3280,6 +3314,18 @@ fn live(fx: &Fx, kind: TransactionKind) -> Vec<sparagne_core::TransactionView> {
         fx.vault,
         &sparagne_core::TransactionFilter {
             kinds: Some(vec![kind]),
+            ..Default::default()
+        },
+    )
+}
+
+fn live_transfers(fx: &Fx) -> Vec<sparagne_core::TransactionView> {
+    list(
+        &fx.core,
+        fx.vault,
+        &sparagne_core::TransactionFilter {
+            kinds: Some(vec![TransactionKind::TransferWallet]),
+            include_transfers: true,
             ..Default::default()
         },
     )
@@ -3484,11 +3530,13 @@ fn a_bonifico_typed_into_cash_is_replaced_by_the_transfer() {
 }
 
 #[test]
-fn an_entry_standing_for_a_transfer_can_be_kept_or_imported_beside() {
-    for (choice, ing_balance, revolut_balance, executed) in [
-        (StatementMatchChoice::Skip, 0, 20_000, 0),
-        (StatementMatchChoice::MoveExisting, 0, 20_000, 0),
-        (StatementMatchChoice::ImportAnyway, -20_000, 40_000, 1),
+fn an_entry_standing_for_a_transfer_is_replaced_or_imported_beside_never_kept() {
+    // Keeping the entry would leave the transfer out: Skip and Move import
+    // the row beside it, as Import anyway does.
+    for choice in [
+        StatementMatchChoice::Skip,
+        StatementMatchChoice::MoveExisting,
+        StatementMatchChoice::ImportAnyway,
     ] {
         let mut fx = setup();
         let (ing, revolut) = two_banks(&mut fx);
@@ -3508,12 +3556,13 @@ fn an_entry_standing_for_a_transfer_can_be_kept_or_imported_beside() {
             &options(ing),
             &asked,
         );
-        let effective = if choice == StatementMatchChoice::ImportAnyway {
-            choice
-        } else {
-            StatementMatchChoice::Skip
-        };
-        assert_eq!(row(&preview, 2).match_choice, Some(effective), "{choice:?}");
+        let bonifico = row(&preview, 2);
+        assert_eq!(bonifico.status, StatementRowStatus::New, "{choice:?}");
+        assert_eq!(
+            bonifico.match_choice,
+            Some(StatementMatchChoice::ImportAnyway),
+            "{choice:?}"
+        );
         let report = import_with(
             &mut fx,
             &bonifico_out(),
@@ -3521,25 +3570,235 @@ fn an_entry_standing_for_a_transfer_can_be_kept_or_imported_beside() {
             &options(ing),
             &asked,
         );
-        assert_eq!(report.executed, executed, "{choice:?}");
+        assert_eq!(report.executed, 1, "{choice:?}");
         assert!(!fx.core.transaction(fx.vault, income).unwrap().voided);
-        assert_eq!(wallet_balance(&fx.core, fx.vault, ing), ing_balance);
-        assert_eq!(wallet_balance(&fx.core, fx.vault, revolut), revolut_balance);
-        if effective == StatementMatchChoice::Skip {
-            // Kept, and claimed for the row.
-            let claim = logged(&fx, claim_of(row(&preview, 2).command_id));
-            assert_eq!(
-                claim,
-                Some(claim_cmd(
-                    income,
-                    sparagne_core::TransactionPatch {
-                        wallet_id: Some(revolut),
-                        ..Default::default()
-                    }
-                ))
-            );
-        }
+        assert_eq!(wallet_balance(&fx.core, fx.vault, ing), -20_000);
+        assert_eq!(wallet_balance(&fx.core, fx.vault, revolut), 40_000);
+        assert_eq!(logged(&fx, claim_of(income)), None, "{choice:?}");
     }
+}
+
+#[test]
+fn an_unrelated_cash_income_two_days_from_a_withdrawal_is_imported_beside() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let bank = new_wallet(&mut fx, "Bank");
+    let income = typed_on(&mut fx, TransactionKind::Income, cash, 5_000, (10, 2));
+    let mapping = rule_for(
+        "prelievo",
+        StatementAction::TransferOut {
+            to_wallet_id: Some(cash),
+        },
+    );
+    let text = bank_csv(&[bank_row("30/09/2026", "PRELIEVO BANCOMAT", "-50,00")]);
+    let preview = preview_with(&fx, &text, &mapping, &options(bank), &no_overrides());
+    let atm = row(&preview, 2);
+    assert_eq!(atm.status, StatementRowStatus::New);
+    assert_eq!(atm.existing.as_ref().map(|tx| tx.id), Some(income));
+    assert_eq!(atm.match_choice, Some(StatementMatchChoice::ImportAnyway));
+    let report = import_with(&mut fx, &text, &mapping, &options(bank), &no_overrides());
+    assert_eq!(report.executed, 1);
+    assert!(!fx.core.transaction(fx.vault, income).unwrap().voided);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, cash), 10_000);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, bank), -5_000);
+}
+
+#[test]
+fn an_income_the_other_banks_row_claimed_is_replaced_and_its_next_export_still_imports() {
+    let mut fx = setup();
+    let (ing, revolut) = two_banks(&mut fx);
+    let typed = typed_on(&mut fx, TransactionKind::Income, revolut, 20_000, (10, 1));
+    // Revolut's statement finds the income typed and claims it for its row.
+    let first = import_with(
+        &mut fx,
+        &bonifico_in(),
+        &bank_mapping(),
+        &options(revolut),
+        &no_overrides(),
+    );
+    assert_eq!(first.possible_duplicates, 1);
+    // Two days on, ING's bonifico: the claim says it is Revolut's row.
+    let text = bank_csv(&[bank_row("03/10/2026", "BONIFICO A REVOLUT", "-200,00")]);
+    let preview = preview_with(
+        &fx,
+        &text,
+        &to_revolut(revolut),
+        &options(ing),
+        &no_overrides(),
+    );
+    let bonifico = row(&preview, 2);
+    assert_eq!(bonifico.existing.as_ref().map(|tx| tx.id), Some(typed));
+    assert_eq!(
+        bonifico.match_choice,
+        Some(StatementMatchChoice::ReplaceExisting)
+    );
+    let report = import_with(
+        &mut fx,
+        &text,
+        &to_revolut(revolut),
+        &options(ing),
+        &no_overrides(),
+    );
+    assert_eq!(report.executed, 1);
+    assert!(fx.core.transaction(fx.vault, typed).unwrap().voided);
+    assert_eq!(
+        logged(&fx, claim_of(typed)),
+        Some(claim_cmd(
+            bonifico.command_id,
+            sparagne_core::TransactionPatch {
+                to_id: Some(revolut),
+                ..Default::default()
+            }
+        ))
+    );
+
+    // Revolut's next export holds the bonifico again and a top-up of 200.
+    let next = bank_csv(&[
+        bank_row("01/10/2026", "BONIFICO DA ING", "200,00"),
+        bank_row("04/10/2026", "RICARICA", "200,00"),
+    ]);
+    let preview = preview_with(
+        &fx,
+        &next,
+        &bank_mapping(),
+        &options(revolut),
+        &no_overrides(),
+    );
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::AlreadyImported);
+    assert_eq!(row(&preview, 3).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 3).existing, None);
+    let report = import_with(
+        &mut fx,
+        &next,
+        &bank_mapping(),
+        &options(revolut),
+        &no_overrides(),
+    );
+    assert_eq!(report.executed, 1);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, ing), -20_000);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, revolut), 40_000);
+}
+
+#[test]
+fn a_refused_replacement_writes_nothing() {
+    let mut fx = setup();
+    let (ing, revolut) = two_banks(&mut fx);
+    import_with(
+        &mut fx,
+        &bonifico_in(),
+        &bank_mapping(),
+        &options(revolut),
+        &no_overrides(),
+    );
+    let income = live(&fx, TransactionKind::Income)[0].id;
+    // An archived statement wallet refuses the transfer.
+    run(
+        &mut fx.core,
+        fx.vault,
+        Command::ArchiveWallet { wallet_id: ing },
+    );
+    let preview = preview_with(
+        &fx,
+        &bonifico_out(),
+        &to_revolut(revolut),
+        &options(ing),
+        &no_overrides(),
+    );
+    assert_eq!(
+        row(&preview, 2).match_choice,
+        Some(StatementMatchChoice::ReplaceExisting)
+    );
+    let commands = command_count(&fx.core, fx.vault);
+    let report = import_with(
+        &mut fx,
+        &bonifico_out(),
+        &to_revolut(revolut),
+        &options(ing),
+        &no_overrides(),
+    );
+    assert_eq!(report.executed, 0);
+    assert_eq!(report.rejected.len(), 1);
+    assert_eq!(report.rejected[0].line, 2);
+    assert_eq!(command_count(&fx.core, fx.vault), commands);
+    assert!(!fx.core.transaction(fx.vault, income).unwrap().voided);
+    assert!(live_transfers(&fx).is_empty());
+    assert_eq!(wallet_balance(&fx.core, fx.vault, revolut), 20_000);
+}
+
+#[test]
+fn a_replacing_row_counts_its_rounding_in_the_preview_and_the_report() {
+    let mut fx = setup();
+    let (ing, revolut) = two_banks(&mut fx);
+    let incoming = bank_csv(&[bank_row("01/10/2026", "BONIFICO DA ING", "200,01")]);
+    import_with(
+        &mut fx,
+        &incoming,
+        &bank_mapping(),
+        &options(revolut),
+        &no_overrides(),
+    );
+    let outgoing = bank_csv(&[bank_row("01/10/2026", "BONIFICO A REVOLUT", "-200,005")]);
+    let preview = preview_with(
+        &fx,
+        &outgoing,
+        &to_revolut(revolut),
+        &options(ing),
+        &no_overrides(),
+    );
+    let bonifico = row(&preview, 2);
+    assert!(bonifico.rounded);
+    assert_eq!(bonifico.amount, 20_001);
+    assert_eq!(
+        bonifico.match_choice,
+        Some(StatementMatchChoice::ReplaceExisting)
+    );
+    assert_eq!(preview.rounded, 1);
+    let report = import_with(
+        &mut fx,
+        &outgoing,
+        &to_revolut(revolut),
+        &options(ing),
+        &no_overrides(),
+    );
+    assert_eq!((report.executed, report.rounded), (1, 1));
+}
+
+#[test]
+fn a_replacing_row_the_user_leaves_out_writes_nothing() {
+    let mut fx = setup();
+    let (ing, revolut) = two_banks(&mut fx);
+    import_with(
+        &mut fx,
+        &bonifico_in(),
+        &bank_mapping(),
+        &options(revolut),
+        &no_overrides(),
+    );
+    let skip = [StatementRowOverride {
+        skip: true,
+        ..user(2)
+    }];
+    let preview = preview_with(
+        &fx,
+        &bonifico_out(),
+        &to_revolut(revolut),
+        &options(ing),
+        &skip,
+    );
+    assert_eq!(skip_code(row(&preview, 2)), "skipped_by_you");
+    assert!(row(&preview, 2).existing.is_some());
+    let commands = command_count(&fx.core, fx.vault);
+    let report = import_with(
+        &mut fx,
+        &bonifico_out(),
+        &to_revolut(revolut),
+        &options(ing),
+        &skip,
+    );
+    assert_eq!((report.executed, report.skipped), (0, 1));
+    assert_eq!(command_count(&fx.core, fx.vault), commands);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, ing), 0);
+    assert_eq!(live(&fx, TransactionKind::Income).len(), 1);
 }
 
 #[test]

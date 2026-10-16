@@ -134,8 +134,8 @@ pub(super) fn claim(
     )?
     .into_iter()
     .filter(|(view, _)| {
-        !standing.contains(&view.id)
-            && since.is_none_or(|since| since <= view.occurred_at.date_naive())
+        let before = since.is_some_and(|since| view.occurred_at.date_naive() < since);
+        !standing.contains(&view.id) && !(before && typed_before_start(view, wallet, &also))
     })
     .map(|(view, imported)| Candidate {
         claimed: claims.entries.contains(&view.id),
@@ -210,9 +210,15 @@ struct Edge {
     /// Days apart, then seconds, then [`Found::rank`].
     cost: i64,
     found: Found,
+    /// Calendar days between the row and the transaction.
+    days: i64,
     /// The transaction stands for a row of another export and sits near the
     /// first or last day of the file: the row is imported by default.
     near_edge: bool,
+    /// For [`Found::Replace`]: the entry is in the wallet the row names and
+    /// stands for that wallet's statement row (its import wrote it, or its
+    /// claim or move names it).
+    other_row: bool,
 }
 
 /// Which transactions may stand for a row of the statement.
@@ -238,29 +244,33 @@ impl Fit<'_> {
             let candidate = &candidates[tx];
             let then = candidate.view.occurred_at;
             let days = (at.date_naive() - then.date_naive()).num_days().abs();
+            // What fits, near the edges or not, and whether it is the other
+            // wallet's statement row.
             let fit = if candidate.view.kind == TransactionKind::TransferWallet {
                 (seeks_transfer(item) && days <= TRANSFER_DAYS)
                     .then(|| self.fits_transfer(item, candidate))
                     .flatten()
-                    .map(|near_edge| (Found::Transfer, near_edge))
+                    .map(|near_edge| (Found::Transfer, near_edge, false))
             } else if seeks_duplicate(item) {
                 (days <= DUPLICATE_DAYS)
                     .then(|| self.fits_duplicate(item, candidate))
                     .flatten()
-                    .map(|near_edge| (Found::Duplicate, near_edge))
+                    .map(|near_edge| (Found::Duplicate, near_edge, false))
             } else {
                 (seeks_replace(item) && days <= TRANSFER_DAYS)
                     .then(|| self.fits_replace(item, candidate))
                     .flatten()
-                    .map(|near_edge| (Found::Replace, near_edge))
+                    .map(|(near_edge, other_row)| (Found::Replace, near_edge, other_row))
             };
-            if let Some((found, near_edge)) = fit {
+            if let Some((found, near_edge, other_row)) = fit {
                 let seconds = (at.timestamp() - then.timestamp()).abs();
                 let edge = Edge {
                     tx: local,
                     cost: days * DAY_COST + seconds * 3 + found.rank(),
                     found,
+                    days,
                     near_edge,
+                    other_row,
                 };
                 edges.push((edge, then.timestamp(), candidate.view.id));
             }
@@ -317,17 +327,21 @@ impl Fit<'_> {
     /// for money going out to it, an expense there for money coming in from
     /// it); or, the money moving the row's way, in the statement's wallet,
     /// held to [`Self::own`], or in one also checked where no claim or move
-    /// names it.
-    fn fits_replace(&self, item: &Planned, tx: &Candidate) -> Option<bool> {
+    /// names it. Gives whether it sits near the edges, and whether it is the
+    /// named wallet's statement row: one its import wrote, or its claim or
+    /// move names.
+    fn fits_replace(&self, item: &Planned, tx: &Candidate) -> Option<(bool, bool)> {
         let other = item.row.counter_wallet_id?;
         let out = matches!(item.row.action, StatementAction::TransferOut { .. });
         let way = moves_out(tx.view.kind)?;
         match tx.view.wallet_id {
-            Some(id) if id == other => (way != out).then_some(false),
-            Some(id) if id == self.wallet && way == out => {
-                self.own(&tx.view, tx.claimed || tx.imported, TRANSFER_DAYS)
+            Some(id) if id == other => (way != out).then_some((false, tx.claimed || tx.imported)),
+            Some(id) if id == self.wallet && way == out => self
+                .own(&tx.view, tx.claimed || tx.imported, TRANSFER_DAYS)
+                .map(|near_edge| (near_edge, false)),
+            Some(id) if self.also.contains(&id) && way == out => {
+                (!tx.claimed).then_some((false, false))
             }
-            Some(id) if self.also.contains(&id) && way == out => (!tx.claimed).then_some(false),
             _ => None,
         }
     }
@@ -349,6 +363,26 @@ impl Fit<'_> {
         let day = tx.occurred_at.date_naive();
         (first <= day && day <= last)
             .then(|| (day - first).num_days() <= margin || (last - day).num_days() <= margin)
+    }
+}
+
+/// What [`StatementOptions::since`] leaves out when it is dated before it:
+/// an entry of a wallet also checked, or a transfer between the statement's
+/// wallet and one also checked (the bank funded from Cash the day before
+/// the user starts). The statement's own rows and the other banks' sides of
+/// a transfer stay: a bank's start day is not the others'.
+fn typed_before_start(tx: &TransactionView, wallet: Uuid, also: &[Uuid]) -> bool {
+    if tx.kind == TransactionKind::TransferWallet {
+        let other = if tx.from_id == Some(wallet) {
+            tx.to_id
+        } else if tx.to_id == Some(wallet) {
+            tx.from_id
+        } else {
+            None
+        };
+        other.is_some_and(|other| also.contains(&other))
+    } else {
+        tx.wallet_id.is_some_and(|id| also.contains(&id))
     }
 }
 
@@ -471,11 +505,12 @@ fn seeks_replace(item: &Planned) -> bool {
 /// the user left the row out), else the default: import the row anyway when
 /// the match sits near the file's edges and stands for another export's
 /// row, move a duplicate found in another wallet, replace an entry standing
-/// for the transfer, skip any other. `MoveExisting` reads as `Skip` but for
-/// a duplicate in another wallet, `ReplaceExisting` as the default but for
-/// an entry standing for the transfer. Imported anyway, the row stays what
-/// it was, with the match beside it; replacing, it keeps its transfer to
-/// write, flagged.
+/// for the transfer when it very likely is its other side (see
+/// [`replace_choice`]), skip any other. `MoveExisting` reads as `Skip` but
+/// for a duplicate in another wallet, `ReplaceExisting` as the default but
+/// for an entry standing for the transfer. Imported anyway, the row stays
+/// what it was, with the match beside it; replacing, it keeps its transfer
+/// to write, flagged.
 fn settle(
     item: &mut Planned,
     tx: &TransactionView,
@@ -484,13 +519,23 @@ fn settle(
     user: Option<&StatementRowOverride>,
 ) {
     let found = edge.found;
+    item.row.existing = Some(tx.clone());
+    if found == Found::Replace {
+        let choice = replace_choice(edge, user.and_then(|user| user.on_match));
+        item.row.match_choice = Some(choice);
+        item.replaces_other_row = edge.other_row;
+        // Left out by the user, the row is skipped by them like a new one,
+        // and the entry is left as it is, claimed for nothing.
+        if choice == StatementMatchChoice::ReplaceExisting && !user.is_some_and(|user| user.skip) {
+            item.row.status = StatementRowStatus::PossibleDuplicate;
+        }
+        return;
+    }
     let movable = found == Found::Duplicate && tx.wallet_id != Some(wallet);
     let default = if edge.near_edge {
         StatementMatchChoice::ImportAnyway
     } else if movable {
         StatementMatchChoice::MoveExisting
-    } else if found == Found::Replace {
-        StatementMatchChoice::ReplaceExisting
     } else {
         StatementMatchChoice::Skip
     };
@@ -500,20 +545,16 @@ fn settle(
         None => None,
     };
     let choice = match asked {
-        None => default,
+        None | Some(StatementMatchChoice::ReplaceExisting) => default,
         Some(StatementMatchChoice::MoveExisting) if !movable => StatementMatchChoice::Skip,
-        Some(StatementMatchChoice::ReplaceExisting) if found != Found::Replace => default,
         Some(choice) => choice,
     };
-    item.row.existing = Some(tx.clone());
     item.row.match_choice = Some(choice);
     match choice {
         StatementMatchChoice::ImportAnyway => return,
-        StatementMatchChoice::ReplaceExisting => {
-            item.row.status = StatementRowStatus::PossibleDuplicate;
-            return;
-        }
-        StatementMatchChoice::Skip | StatementMatchChoice::MoveExisting => {}
+        StatementMatchChoice::ReplaceExisting
+        | StatementMatchChoice::Skip
+        | StatementMatchChoice::MoveExisting => {}
     }
     item.command = None;
     item.row.status = match found {
@@ -528,6 +569,24 @@ fn settle(
         }
         Found::Duplicate | Found::Replace => StatementRowStatus::PossibleDuplicate,
     };
+}
+
+/// What becomes of a row whose match is an entry standing for its transfer.
+/// Keeping the entry instead of the row makes no sense here (the transfer
+/// would be missing), so `Skip` and `MoveExisting` read as `ImportAnyway`.
+/// By default the entry is replaced only when it very likely is the
+/// transfer's other side: the named wallet's statement row, or an entry
+/// dated the row's day or a day off; otherwise, and near the file's edges,
+/// the row is imported beside it.
+fn replace_choice(edge: Edge, asked: Option<StatementMatchChoice>) -> StatementMatchChoice {
+    match asked {
+        Some(StatementMatchChoice::ReplaceExisting) => StatementMatchChoice::ReplaceExisting,
+        Some(_) => StatementMatchChoice::ImportAnyway,
+        None if !edge.near_edge && (edge.other_row || edge.days <= 1) => {
+            StatementMatchChoice::ReplaceExisting
+        }
+        None => StatementMatchChoice::ImportAnyway,
+    }
 }
 
 /// What the claims and moves of the log name.
@@ -699,7 +758,9 @@ mod tests {
             tx,
             cost: days * DAY_COST,
             found: Found::Duplicate,
+            days,
             near_edge: false,
+            other_row: false,
         }
     }
 
