@@ -122,14 +122,16 @@ the plan as it is. Each transfer is an ordinary ledger row, the same as
 File › Import Statement… (⇧⌘I) reads a bank or card CSV (UTF-8, falling back
 to Windows-1252/Latin-1). It recognises the built-in `card-transactions`
 preset from the header, or reopens the mapping last used for the same vault
-and header, with that import's wallet, envelope and start day. Pick the
+and header, with that import's wallet, envelope and start day (two banks
+exporting the same header share them, wallet included). Pick the
 columns, the date and amount format, what each row type becomes (expense,
 income, refund, transfer from or to another wallet, skip, by sign), the
 statuses to skip, and the target wallet and envelope. Description rules come
 before the types: the first one whose text the bank's description holds, case
 aside, decides the row's kind, category and a cleaner note, so
 `PAGAMENTO POS; BAR CENTRALE MILANO` can become an expense under Bar noted
-`Bar Centrale`. A start day leaves the older rows out.
+`Bar Centrale`. A start day leaves the older rows out; entries typed in the
+last 3 days before it can still stand for the file's first rows.
 
 The preview shows what happens to every row. Each row can be given another
 kind (a transfer names the other wallet), note, category (prefilled from the
@@ -138,19 +140,23 @@ description rule from it. A row with the same amount going the same way as a
 transaction already in the vault (an expense for money out, an income or a
 refund for money in), at most 3 days apart, in the statement's wallet or in
 one ticked under "Duplicates also in" (chosen anew for every file), is a
-possible duplicate and is not imported: the transaction found stands for it,
-and one found in another wallet, such as a spend typed by hand into Cash, is
-moved into the statement's wallet by default. The review can keep it where it
-is instead, or import the row anyway. The other side of a transfer between two
-of your wallets, already recorded from the other bank's statement or by hand,
-is recognised at most 4 days apart and not imported twice; recorded as an
-income or expense instead, it can be deleted and replaced by the transfer,
-which is the default when it very likely is the transfer's other side (the
-other bank's export imported without a rule, or a day apart at most). A
-transfer row is left out with its box, never kept in place of the transfer.
-Near a file's first or last days, a match that another export's row already
-stands for is more likely that row's neighbour: the row is imported by
-default, and the review says so. Importing the same file again adds nothing.
+possible duplicate and is not imported: the transaction found stands for it.
+One found in another wallet, such as a spend typed by hand into Cash, is moved
+into the statement's wallet or the row imported anyway; one in the statement's
+wallet is kept or the row imported anyway. A wallet forgotten under
+"Duplicates also in" cannot be made up for by importing the file again: its
+rows are in by then. The other side of a transfer between two of your
+wallets, already recorded from the other bank's statement or by hand, is
+recognised at most 4 days apart and not imported twice; recorded as an income
+or expense instead, it can be deleted and replaced by the transfer, the
+default only when the entry is at most a day apart and not in a wallet kept
+by hand. Any matched row can be left out with its box, which writes and
+records nothing. Near a file's first or last days, a match that another
+export's row already stands for is more likely that row's neighbour: the row
+is imported by default, and the review says so. A synced vault is synced
+before the preview and again before the import; if the plan changed
+meanwhile, nothing is written and the rows that changed are marked. Importing
+the same file again adds nothing.
 
 File › Export All Transactions… writes every transaction of the vault as CSV,
 voided rows and transfers included. File › Back Up Database… saves a
