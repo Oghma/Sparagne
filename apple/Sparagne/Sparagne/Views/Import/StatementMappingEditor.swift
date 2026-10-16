@@ -78,6 +78,7 @@ struct StatementMappingEditor: View {
             }
             FormRow(String(localized: "Duplicates also in")) { alsoCheck }
             FormNote(String(localized: "Only wallets kept by hand, such as Cash while you move to statements; never one you import a statement into."))
+            LookalikeNotes(model: model)
             FormRow(String(localized: "Start day")) { startDay }
             FormValueRow(String(localized: "Time zone"), value: model.timezone)
         }
@@ -501,6 +502,53 @@ struct StatementMappingEditor: View {
                     DescriptionRuleEditor(model: model, index: index, layout: .line, completion: completion)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Wallets worth searching
+
+/// The core's advice to search more wallets for duplicates
+/// (`StatementImportModel.lookalikes`): a line per wallet saying how many
+/// new rows look like entries there, with a button that ticks it under
+/// "Duplicates also in". Under that picker on the mapping page, and on the
+/// review page; gone once the wallet is ticked.
+struct LookalikeNotes: View {
+    let model: StatementImportModel
+    /// Under a form's control column, or across the page.
+    var indented = true
+
+    @Environment(\.formMetrics) private var metrics
+
+    var body: some View {
+        let lookalikes = model.lookalikes
+        if !lookalikes.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(lookalikes, id: \.wallet.id) { lookalike in
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: metrics.fontSize - 2))
+                            .foregroundStyle(Ink.text3)
+                            .accessibilityHidden(true)
+                        // The wallet's name sits after "in" in both
+                        // languages, so the sentence is built around it
+                        // rather than carry a plural with two arguments.
+                        Text(verbatim: String(localized: "\(lookalike.rows) rows also look like entries in")
+                            + " \(lookalike.wallet.name): "
+                            + String(localized: "tick it under Duplicates also in"))
+                            .font(Face.ui(metrics.fontSize - 1))
+                            .foregroundStyle(Ink.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(String(localized: "Tick \(lookalike.wallet.name)")) {
+                            model.setAlsoChecked(true, wallet: lookalike.wallet.id)
+                        }
+                        .buttonStyle(.chrome(.ghost, small: true))
+                        .fixedSize()
+                    }
+                }
+            }
+            .padding(.leading, indented ? metrics.labelWidth + 8 : 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

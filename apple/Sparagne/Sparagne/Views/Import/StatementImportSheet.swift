@@ -197,6 +197,8 @@ struct StatementImportSheet: View {
         if let problem = model.previewProblem {
             ProblemNote(problem: problem)
         } else {
+            // The core's advice to search one more wallet, ticked in a click.
+            LookalikeNotes(model: model, indented: false)
             HStack(spacing: 8) {
                 StatementCountsLine(counts: model.counts)
                 Spacer(minLength: 8)
