@@ -57,11 +57,15 @@ pub(super) fn plan(
     let context = Context::new(core, vault_id, &mut records, mapping, options)?;
     let overrides: Overrides<'_> = overrides.iter().map(|o| (o.line, o)).collect();
 
+    // The row's own command, or the move an earlier import made for it.
     let mut known = core
         .conn
-        .prepare_cached("SELECT EXISTS(SELECT 1 FROM commands WHERE id = ?1)")?;
+        .prepare_cached("SELECT id, payload FROM commands WHERE id IN (?1, ?2)")?;
     let mut occurrences: HashMap<String, u32> = HashMap::new();
     let mut planned = Vec::new();
+    // The transactions that stand for the rows already imported: never a
+    // match for another row.
+    let mut standing = HashSet::new();
     for record in records {
         let draft = context.read(&record);
         let mut id = Uuid::nil();
@@ -70,7 +74,18 @@ pub(super) fn plan(
             let seen = occurrences.entry(key.clone()).or_insert(0);
             id = row_id(&format!("{key}|{seen}"));
             *seen += 1;
-            imported = known.query_row(params![id], |r| r.get(0))?;
+            let found = known.query_map(params![id, move_id(id)], |r| {
+                Ok((r.get::<_, Uuid>(0)?, r.get::<_, String>(1)?))
+            })?;
+            for command in found {
+                let (command_id, payload) = command?;
+                imported = true;
+                standing.insert(if command_id == id {
+                    id
+                } else {
+                    moved_transaction(&payload).unwrap_or(id)
+                });
+            }
         }
         // A row in the log stays imported whatever the rules or the user now
         // say, so its override changes nothing.
@@ -87,9 +102,25 @@ pub(super) fn plan(
         }
         planned.push(item);
     }
-    matching::claim(core, vault_id, options, &overrides, &mut planned)?;
+    matching::claim(core, vault_id, options, &overrides, &standing, &mut planned)?;
     leave_out(&mut planned, &overrides);
     Ok(planned)
+}
+
+/// The id of the command that moves the row typed by hand for the
+/// statement row `row_id` into the statement's wallet: derived from the
+/// row's, so moving it again is a no-op and, once it is in the log, the row
+/// reads as imported.
+pub(super) fn move_id(row_id: Uuid) -> Uuid {
+    Uuid::new_v5(&row_id, b"move-existing")
+}
+
+/// The transaction a move command (as the log stores it) moved.
+fn moved_transaction(payload: &str) -> Option<Uuid> {
+    match serde_json::from_str(payload).ok()? {
+        Command::UpdateTransaction { transaction_id, .. } => Some(transaction_id),
+        _ => None,
+    }
 }
 
 /// The user's `skip` on the rows still new.

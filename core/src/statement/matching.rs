@@ -8,9 +8,15 @@
 //! The vault is read once per preview: the live incomes, expenses, refunds
 //! and transfers between wallets with a leg on the statement's wallet or on
 //! one of [`StatementOptions::also_check_wallets`], around the rows' dates,
-//! opening balances left out, and the transactions of the rows already
-//! imported left out too, so a row is never its own duplicate and the rows
-//! next to it in an overlapping export are not flagged against it.
+//! opening balances left out, and the transactions that stand for the rows
+//! already imported (their own, or the entry a move took in for them) left
+//! out too, so a row is never its own duplicate and the rows next to it in an
+//! overlapping export are not flagged against it.
+//!
+//! A duplicate in the statement's own wallet is never an entry an import
+//! wrote under its own command's id (a UUID v5): that one stands for a row of
+//! an earlier export, which the next export's row of the same price a day
+//! later is not. The wallets also checked and the transfers keep them.
 //!
 //! A row and a transaction are as many days apart as their calendar dates,
 //! each in its own offset. Transfers are matched first, then duplicates among
@@ -22,7 +28,7 @@
 use std::collections::{HashMap, HashSet};
 
 use rusqlite::{params_from_iter, types::Value};
-use uuid::Uuid;
+use uuid::{Uuid, Version};
 
 use super::plan::{Overrides, Planned};
 use super::{
@@ -54,12 +60,14 @@ enum Found {
 
 /// Flags the planned rows that a live transaction already stands for, one
 /// transaction per row at most, and settles what becomes of them with the
-/// user's `on_match` (or `skip`).
+/// user's `on_match` (or `skip`). `standing` holds the transactions that
+/// stand for the rows already imported, which match nothing.
 pub(super) fn claim(
     core: &Core,
     vault_id: Uuid,
     options: &StatementOptions,
     overrides: &Overrides<'_>,
+    standing: &HashSet<Uuid>,
     planned: &mut [Planned],
 ) -> Result<()> {
     let wallet = options.wallet_id;
@@ -86,23 +94,18 @@ pub(super) fn claim(
             .copied()
             .filter(|id| *id != wallet),
     );
-    let imported: HashSet<Uuid> = planned
-        .iter()
-        .filter(|item| item.row.status == StatementRowStatus::AlreadyImported)
-        .map(|item| item.row.command_id)
-        .collect();
-    let mut views = read_pool(
+    let mut candidates = read_pool(
         core,
         vault_id,
         &checked,
         earliest - WINDOW_SECONDS,
         latest + WINDOW_SECONDS,
     )?;
-    views.retain(|tx| !imported.contains(&tx.id));
-    let mut pool = Pool::new(views);
+    candidates.retain(|tx| !standing.contains(&tx.view.id));
+    let mut pool = Pool::new(candidates);
 
     let transfers = pool.pair(planned, &transfers, |item, tx| {
-        within(item, tx, TRANSFER_DAYS).filter(|_| fits_transfer(item, tx, wallet))
+        within(item, &tx.view, TRANSFER_DAYS).filter(|_| fits_transfer(item, &tx.view, wallet))
     });
     let paired: HashSet<usize> = transfers.iter().map(|&(row, _)| row).collect();
     let free: Vec<usize> = duplicates
@@ -110,34 +113,51 @@ pub(super) fn claim(
         .filter(|row| !paired.contains(row))
         .collect();
     let duplicates = pool.pair(planned, &free, |item, tx| {
-        within(item, tx, DUPLICATE_DAYS).filter(|_| fits_duplicate(item, tx, &checked))
+        within(item, &tx.view, DUPLICATE_DAYS)
+            .filter(|_| fits_duplicate(item, tx, wallet, &checked))
     });
 
     for (found, pairs) in [(Found::Transfer, transfers), (Found::Duplicate, duplicates)] {
         for (row, tx) in pairs {
             let user = overrides.get(&planned[row].row.line).copied();
-            settle(&mut planned[row], &pool.views[tx], found, wallet, user);
+            settle(
+                &mut planned[row],
+                &pool.candidates[tx].view,
+                found,
+                wallet,
+                user,
+            );
         }
     }
     Ok(())
 }
 
+/// A transaction a row may match.
+struct Candidate {
+    view: TransactionView,
+    /// Written by an import under its own command's id, a UUID v5: a row of
+    /// an earlier statement, or of any import that names its commands after
+    /// what it imports. A row typed by hand, or one a recurring template or
+    /// the allocation plan wrote, is not: the app mints those ids (v7).
+    imported: bool,
+}
+
 /// The transactions a preview may match, by amount, each claimed once.
 struct Pool {
-    views: Vec<TransactionView>,
+    candidates: Vec<Candidate>,
     by_amount: HashMap<i64, Vec<usize>>,
     taken: Vec<bool>,
 }
 
 impl Pool {
-    fn new(views: Vec<TransactionView>) -> Self {
+    fn new(candidates: Vec<Candidate>) -> Self {
         let mut by_amount: HashMap<i64, Vec<usize>> = HashMap::new();
-        for (at, tx) in views.iter().enumerate() {
-            by_amount.entry(tx.amount).or_default().push(at);
+        for (at, tx) in candidates.iter().enumerate() {
+            by_amount.entry(tx.view.amount).or_default().push(at);
         }
         Self {
-            taken: vec![false; views.len()],
-            views,
+            taken: vec![false; candidates.len()],
+            candidates,
             by_amount,
         }
     }
@@ -150,7 +170,7 @@ impl Pool {
         &mut self,
         planned: &[Planned],
         rows: &[usize],
-        fits: impl Fn(&Planned, &TransactionView) -> Option<i64>,
+        fits: impl Fn(&Planned, &Candidate) -> Option<i64>,
     ) -> Vec<(usize, usize)> {
         let mut pairs = Vec::new();
         for &row in rows {
@@ -158,17 +178,17 @@ impl Pool {
             let Some(at) = item.row.occurred_at else {
                 continue;
             };
-            let candidates = self.by_amount.get(&item.row.amount).into_iter().flatten();
-            for &tx in candidates.filter(|&&tx| !self.taken[tx]) {
-                let candidate = &self.views[tx];
+            let same_amount = self.by_amount.get(&item.row.amount).into_iter().flatten();
+            for &tx in same_amount.filter(|&&tx| !self.taken[tx]) {
+                let candidate = &self.candidates[tx];
                 if let Some(days) = fits(item, candidate) {
-                    let then = candidate.occurred_at.timestamp();
+                    let then = candidate.view.occurred_at.timestamp();
                     let order = (
                         days,
                         (at.timestamp() - then).abs(),
                         item.row.line,
                         then,
-                        candidate.id,
+                        candidate.view.id,
                     );
                     pairs.push((order, row, tx));
                 }
@@ -234,9 +254,18 @@ fn fits_transfer(item: &Planned, tx: &TransactionView, wallet: Uuid) -> bool {
     }
 }
 
-/// An entry of the row's kind on one of the `checked` wallets.
-fn fits_duplicate(item: &Planned, tx: &TransactionView, checked: &[Uuid]) -> bool {
-    Some(tx.kind) == item.row.kind && tx.wallet_id.is_some_and(|id| checked.contains(&id))
+/// An entry of the row's kind on one of the `checked` wallets; on the
+/// statement's own `wallet`, not one an import wrote, which stands for a row
+/// of an earlier export (a daily coffee of the same price across the end of
+/// a month is two coffees). On another wallet even an imported row is one
+/// the user may have entered from the bank's file before.
+fn fits_duplicate(item: &Planned, tx: &Candidate, wallet: Uuid, checked: &[Uuid]) -> bool {
+    Some(tx.view.kind) == item.row.kind
+        && match tx.view.wallet_id {
+            Some(id) if id == wallet => !tx.imported,
+            Some(id) => checked.contains(&id),
+            None => false,
+        }
 }
 
 /// The days between the row's calendar date and the transaction's, each in
@@ -306,13 +335,15 @@ fn read_pool(
     wallets: &[Uuid],
     from: i64,
     to: i64,
-) -> Result<Vec<TransactionView>> {
+) -> Result<Vec<Candidate>> {
     const FIRST_WALLET: usize = 9;
+    // Right after the view's own columns.
+    let own_id = TRANSACTION_VIEW_COLUMNS.split(',').count();
     let placeholders: Vec<String> = (0..wallets.len())
         .map(|at| format!("?{}", at + FIRST_WALLET))
         .collect();
     let sql = format!(
-        "SELECT {TRANSACTION_VIEW_COLUMNS}
+        "SELECT {TRANSACTION_VIEW_COLUMNS}, t.id = t.command_id
          FROM transactions t JOIN categories c ON c.id = t.category_id
          WHERE t.vault_id = ?1 AND t.voided_at IS NULL
            AND t.occurred_at BETWEEN ?2 AND ?3
@@ -339,9 +370,20 @@ fn read_pool(
     args.push(Value::Text(OPENING_KEY.to_string()));
     args.extend(wallets.iter().map(|&id| blob(id)));
     let mut stmt = core.conn.prepare(&sql)?;
-    let mut views: Vec<TransactionView> = stmt
-        .query_map(params_from_iter(args), transaction_view)?
-        .collect::<std::result::Result<_, _>>()?;
+    let (mut views, own): (Vec<TransactionView>, Vec<bool>) = stmt
+        .query_map(params_from_iter(args), |r| {
+            Ok((transaction_view(r)?, r.get::<_, bool>(own_id)?))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?
+        .into_iter()
+        .unzip();
     load_legs(&core.conn, &mut views)?;
-    Ok(views)
+    Ok(views
+        .into_iter()
+        .zip(own)
+        .map(|(view, own)| Candidate {
+            imported: own && view.id.get_version() == Some(Version::Sha1),
+            view,
+        })
+        .collect())
 }

@@ -213,9 +213,14 @@ fn archived_wallet(fx: &mut Fx, name: &str) -> Uuid {
 
 /// Noon in Rome on `day` September 2026, where the bank rows sit.
 fn september(day: u32) -> DateTime<FixedOffset> {
+    noon_in_rome(9, day)
+}
+
+/// Noon in Rome (summer time) on `day` of `month` 2026.
+fn noon_in_rome(month: u32, day: u32) -> DateTime<FixedOffset> {
     FixedOffset::east_opt(2 * 3600)
         .unwrap()
-        .with_ymd_and_hms(2026, 9, day, 12, 0, 0)
+        .with_ymd_and_hms(2026, month, day, 12, 0, 0)
         .unwrap()
 }
 
@@ -2104,14 +2109,19 @@ fn a_row_typed_into_cash_is_moved_into_the_bank_as_it_is() {
     );
     assert_eq!(flow_balance(&fx.core, fx.vault, casa), -350);
 
-    // Now in the bank, it is a duplicate there: nothing moves again.
+    // Its move in the log, the row was imported before: nothing moves again.
     let commands = command_count(&fx.core, fx.vault);
     let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::AlreadyImported);
+    assert_eq!(row(&preview, 2).existing, None);
     assert_eq!(
-        row(&preview, 2).match_choice,
-        Some(StatementMatchChoice::Skip)
+        (
+            preview.already_imported,
+            preview.possible_duplicates,
+            preview.moves
+        ),
+        (3, 0, 0)
     );
-    assert_eq!(preview.moves, 0);
     let again = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
     assert_eq!(
         (
@@ -2120,9 +2130,23 @@ fn a_row_typed_into_cash_is_moved_into_the_bank_as_it_is() {
             again.deduplicated,
             again.possible_duplicates
         ),
-        (0, 0, 2, 1)
+        (0, 0, 3, 0)
     );
     assert_eq!(command_count(&fx.core, fx.vault), commands);
+
+    // Nor does the coffee it moved stand for a new coffee in a later export.
+    let later = bank_csv(&[
+        bank_row(
+            "16/09/2026",
+            "\"PAGAMENTO POS; BAR CENTRALE  MILANO\"",
+            "-3,50",
+        ),
+        bank_row("17/09/2026", "BAR", "-3,50"),
+    ]);
+    let preview = preview_with(&fx, &later, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::AlreadyImported);
+    assert_eq!(row(&preview, 3).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 3).existing, None);
 }
 
 #[test]
@@ -2245,6 +2269,174 @@ fn a_row_typed_into_an_archived_wallet_still_moves() {
         fx.core.transaction(fx.vault, typed).unwrap().wallet_id,
         Some(bank)
     );
+}
+
+// ---------------------------------------------------------------------------
+// Rows an earlier import wrote
+// ---------------------------------------------------------------------------
+
+#[test]
+fn last_months_coffee_is_not_a_duplicate_of_this_months() {
+    let mut fx = setup();
+    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
+        .result_id
+        .unwrap();
+    let options = options(bank);
+    let september = bank_csv(&[
+        bank_row("30/09/2026", "BAR", "-1,20"),
+        bank_row("29/09/2026", "BAR", "-1,20"),
+    ]);
+    let first = import_with(
+        &mut fx,
+        &september,
+        &bank_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    assert_eq!(first.executed, 2);
+    let october = bank_csv(&[
+        bank_row("01/10/2026", "BAR", "-1,20"),
+        bank_row("02/10/2026", "BAR", "-1,20"),
+    ]);
+    let preview = preview_with(&fx, &october, &bank_mapping(), &options, &no_overrides());
+    for line in [2, 3] {
+        assert_eq!(row(&preview, line).status, StatementRowStatus::New);
+        assert_eq!(row(&preview, line).existing, None);
+    }
+    assert_eq!((preview.new_rows, preview.possible_duplicates), (2, 0));
+    let report = import_with(
+        &mut fx,
+        &october,
+        &bank_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    assert_eq!(report.executed, 2);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, bank), -480);
+}
+
+#[test]
+fn a_row_typed_into_the_bank_still_flags_next_to_an_imported_one() {
+    let mut fx = setup();
+    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
+        .result_id
+        .unwrap();
+    let options = options(bank);
+    let september = bank_csv(&[bank_row("30/09/2026", "BAR", "-1,20")]);
+    import_with(
+        &mut fx,
+        &september,
+        &bank_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    let entry = Entry {
+        amount: 120,
+        wallet_id: Some(bank),
+        flow_id: None,
+        category: None,
+        note: Some("caffè".to_string()),
+        occurred_at: noon_in_rome(10, 2),
+        person: None,
+    };
+    let typed = run(&mut fx.core, fx.vault, Command::Expense(entry))
+        .result_id
+        .unwrap();
+    assert_eq!(typed.get_version_num(), 7, "the app mints ids as v7");
+    // A day from the imported row on the 30th and from the typed one.
+    let october = bank_csv(&[bank_row("01/10/2026", "BAR", "-1,20")]);
+    let preview = preview_with(&fx, &october, &bank_mapping(), &options, &no_overrides());
+    let coffee = row(&preview, 2);
+    assert_eq!(coffee.status, StatementRowStatus::PossibleDuplicate);
+    assert_eq!(coffee.existing.as_ref().map(|tx| tx.id), Some(typed));
+}
+
+#[test]
+fn a_recurring_row_recorded_into_the_bank_still_flags_its_bank_row() {
+    let mut fx = setup();
+    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
+        .result_id
+        .unwrap();
+    let mortgage = run(
+        &mut fx.core,
+        fx.vault,
+        Command::CreateRecurring {
+            transaction_kind: TransactionKind::Expense,
+            amount: 85_000,
+            wallet_id: Some(bank),
+            flow_id: None,
+            category: Some("Mutuo".to_string()),
+            note: Some("rata mutuo".to_string()),
+            schedule: monthly_from(5, day(2026, 1, 5)),
+            owner: None,
+        },
+    )
+    .result_id
+    .unwrap();
+    let recorded = run(
+        &mut fx.core,
+        fx.vault,
+        Command::ExecuteRecurring {
+            recurring_id: mortgage,
+            period_date: day(2026, 9, 5),
+            occurred_at: september(5),
+            person: None,
+        },
+    )
+    .result_id
+    .unwrap();
+    let text = bank_csv(&[bank_row("07/09/2026", "ADDEBITO RATA MUTUO", "-850,00")]);
+    let preview = preview_with(&fx, &text, &bank_mapping(), &options(bank), &no_overrides());
+    let rata = row(&preview, 2);
+    assert_eq!(rata.status, StatementRowStatus::PossibleDuplicate);
+    assert_eq!(rata.existing.as_ref().map(|tx| tx.id), Some(recorded));
+    assert_eq!(rata.match_choice, Some(StatementMatchChoice::Skip));
+}
+
+#[test]
+fn a_row_once_imported_into_cash_is_still_found_moved_and_then_imported() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let bank = run(&mut fx.core, fx.vault, wallet_cmd("Bank", 0))
+        .result_id
+        .unwrap();
+    // The user's own sheet of cash spending, imported into Cash once.
+    let sheet = bank_csv(&[bank_row("15/09/2026", "CAFFE AL BAR", "-3,50")]);
+    let cash_options = options(cash);
+    let earlier = row(
+        &preview_with(&fx, &sheet, &bank_mapping(), &cash_options, &no_overrides()),
+        2,
+    )
+    .command_id;
+    import_with(
+        &mut fx,
+        &sheet,
+        &bank_mapping(),
+        &cash_options,
+        &no_overrides(),
+    );
+
+    let options = checking(bank, cash);
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
+    let pos = row(&preview, 2);
+    assert_eq!(pos.status, StatementRowStatus::PossibleDuplicate);
+    assert_eq!(pos.existing.as_ref().map(|tx| tx.id), Some(earlier));
+    assert_eq!(pos.match_choice, Some(StatementMatchChoice::MoveExisting));
+    let report = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!((report.executed, report.moved), (2, 1));
+    assert_eq!(
+        fx.core.transaction(fx.vault, earlier).unwrap().wallet_id,
+        Some(bank)
+    );
+
+    // In the bank now, an imported row there: the bank's row reads imported
+    // through its move.
+    let commands = command_count(&fx.core, fx.vault);
+    let preview = preview_with(&fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::AlreadyImported);
+    let again = import_with(&mut fx, BANK, &bank_mapping(), &options, &no_overrides());
+    assert_eq!((again.executed, again.moved, again.deduplicated), (0, 0, 3));
+    assert_eq!(command_count(&fx.core, fx.vault), commands);
 }
 
 // ---------------------------------------------------------------------------

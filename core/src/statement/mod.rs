@@ -60,8 +60,9 @@
 //! 1. a row with fewer columns than the header, or more that are not empty,
 //!    or that swallowed the rest of the file in an unclosed quote: `Invalid`
 //!    (`invalid_row`);
-//! 2. its id already in the vault's log: `AlreadyImported`, whatever the
-//!    rules or the user now say about it;
+//! 2. its id, or the id of the move an earlier import made for it, already in
+//!    the vault's log: `AlreadyImported`, whatever the rules or the user now
+//!    say about it;
 //! 3. a `Skip` action: `Skipped`, `skipped_by_you` when it is the user's,
 //!    `skipped_by_rule` when it is a rule's or the default action; then a
 //!    status in `skip_statuses` (`skipped_status`);
@@ -100,11 +101,21 @@
 //! - A row typed by hand: a new income, expense or refund that matched no
 //!   transfer matches a live entry of the same kind and amount at most 3 days
 //!   away, in the imported wallet or in one of
-//!   [`StatementOptions::also_check_wallets`].
+//!   [`StatementOptions::also_check_wallets`]. In the imported wallet, an
+//!   entry an import wrote under its own command's id, a UUID v5 (a row of an
+//!   earlier statement, or of a script), is none: it stands for a row of an
+//!   earlier export, and the same coffee on the last day of September and on
+//!   the first of October is two coffees. A row typed by hand or recorded
+//!   from a recurring template has an id the app minted (v7) and still
+//!   matches; in a wallet also checked, an imported row matches too, since
+//!   the user may have imported their own sheet there.
 //!
-//! Opening balances, voided rows and the rows of this statement already
-//! imported never match: a row is never its own duplicate, nor are the rows
-//! next to it in an overlapping export. Matches are one to one, closest
+//! Opening balances, voided rows, the rows of this statement already
+//! imported and the entries an earlier import moved for them never match: a
+//! row is never its own duplicate, nor are the rows next to it in an
+//! overlapping export. Transfers match whoever wrote them, so the other side
+//! of a transfer imported from one bank's file is found in the other's.
+//! Matches are one to one, closest
 //! first: fewer days, then fewer seconds between the two instants, then the
 //! earlier line, the earlier transaction, the lower id; transfers first, then
 //! duplicates among the rows and transactions still free. The match is in
@@ -126,9 +137,9 @@
 //! duplicate whose choice is `MoveExisting` into the imported wallet: an
 //! `UpdateTransaction` of its `wallet_id` alone, so its note, category,
 //! envelope, date and person stay, under an id derived from the row's
-//! (`move-existing`), so moving it twice is a no-op. Imported again, the
-//! statement finds it in its own wallet, a duplicate there, and skips it.
-//! Refused rows and refused moves land in the report on their line; a storage
+//! (`move-existing`), so moving it twice is a no-op. Imported again, the row
+//! reads `AlreadyImported` through its move, and the entry it moved matches
+//! no other row. Refused rows and refused moves land in the report on their line; a storage
 //! error stops the import (every command before it stays, and a new run
 //! deduplicates them).
 //!
@@ -665,7 +676,7 @@ impl Core {
         }
         for (row, command) in moves {
             let envelope = CommandEnvelope {
-                id: move_id(row.command_id),
+                id: plan::move_id(row.command_id),
                 vault_id,
                 author: author.to_string(),
                 command,
@@ -683,11 +694,4 @@ impl Core {
         }
         Ok(report)
     }
-}
-
-/// The id of the command that moves the row typed by hand for the
-/// statement row `row_id` into the statement's wallet: derived from the
-/// row's, so a second import moving it again is a no-op.
-fn move_id(row_id: Uuid) -> Uuid {
-    Uuid::new_v5(&row_id, b"move-existing")
 }
