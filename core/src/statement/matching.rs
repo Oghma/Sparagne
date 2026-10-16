@@ -226,10 +226,12 @@ impl Fit<'_> {
 
     /// A transfer between wallets touching the statement's wallet the way
     /// the row says the money went, to or from the wallet it names if it
-    /// names one, whose side on the statement's wallet no claim names.
+    /// names one. One whose side on the statement's wallet a claim names
+    /// stands for a row of an export already in, and fits only when it is
+    /// dated within the file's own days, as an imported entry does.
     fn fits_transfer(&self, item: &Planned, tx: &Candidate) -> bool {
         let wallet = self.wallet;
-        if tx.sides.contains(&wallet) {
+        if tx.sides.contains(&wallet) && !self.within_file(&tx.view) {
             return false;
         }
         let (from, to) = (tx.view.from_id, tx.view.to_id);
@@ -267,20 +269,25 @@ impl Fit<'_> {
             ),
             _ => false,
         };
-        let day = tx.view.occurred_at.date_naive();
         same_way
             && match tx.view.wallet_id {
                 Some(id) if id == self.wallet => {
-                    !(tx.claimed || tx.imported)
-                        || self
-                            .span
-                            .is_some_and(|(first, last)| first <= day && day <= last)
+                    !(tx.claimed || tx.imported) || self.within_file(&tx.view)
                 }
                 Some(id) if self.also.contains(&id) => {
+                    let day = tx.view.occurred_at.date_naive();
                     !tx.claimed && self.since.is_none_or(|since| since <= day)
                 }
                 _ => false,
             }
+    }
+
+    /// Dated, in its own offset, from the file's first readable day to its
+    /// last.
+    fn within_file(&self, tx: &TransactionView) -> bool {
+        let day = tx.occurred_at.date_naive();
+        self.span
+            .is_some_and(|(first, last)| first <= day && day <= last)
     }
 }
 

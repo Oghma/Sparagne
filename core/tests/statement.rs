@@ -2736,6 +2736,37 @@ fn the_same_file_read_with_another_mapping_flags_every_row() {
 }
 
 #[test]
+fn the_same_file_read_with_another_mapping_finds_its_transfers_again() {
+    let mut fx = setup();
+    let (first, second) = two_banks(&mut fx);
+    let options = options(first);
+    let mapping = giroconto_to(second);
+    let before = preview_with(&fx, GIROCONTO_OUT, &mapping, &options, &no_overrides());
+    import_with(&mut fx, GIROCONTO_OUT, &mapping, &options, &no_overrides());
+    let wider = StatementMapping {
+        description_columns: vec!["Descrizione".to_string(), "Data valuta".to_string()],
+        ..mapping
+    };
+    let preview = preview_with(&fx, GIROCONTO_OUT, &wider, &options, &no_overrides());
+    let giroconto = row(&preview, 4);
+    assert_eq!(giroconto.status, StatementRowStatus::MatchedTransfer);
+    assert_eq!(
+        giroconto.existing.as_ref().map(|tx| tx.id),
+        Some(row(&before, 4).command_id)
+    );
+    let report = import_with(&mut fx, GIROCONTO_OUT, &wider, &options, &no_overrides());
+    assert_eq!(
+        (
+            report.executed,
+            report.possible_duplicates,
+            report.matched_transfers
+        ),
+        (0, 2, 1)
+    );
+    assert_eq!(wallet_balance(&fx.core, fx.vault, second), 30_000);
+}
+
+#[test]
 fn as_many_rows_pair_as_can_be() {
     let mut fx = setup();
     let cash = fx.wallet;

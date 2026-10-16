@@ -96,10 +96,12 @@
 //!   transfer between wallets of the same amount at most 4 days away that
 //!   goes the row's way: out of the imported wallet for money going out, into
 //!   it for money coming in, and to or from the wallet the row names, if it
-//!   names one. Only the imported wallet's transfers count, and only when no
-//!   claim names their side on it: the other side of a transfer imported from
-//!   one bank's file is found in the other's, never in the same bank's next
-//!   export. An expense, income or refund action never matches a transfer.
+//!   names one. Only the imported wallet's transfers count. One whose side on
+//!   that wallet a claim names stands for a row of an export already in, and
+//!   matches only when it is dated within the file's own days (see below):
+//!   the other side of a transfer imported from one bank's file is found in
+//!   the other's, never in the same bank's next export. An expense, income or
+//!   refund action never matches a transfer.
 //!   The matched row reads as the transfer it is: kind `TransferWallet`, the
 //!   other wallet in [`StatementRow::counter_wallet_id`].
 //! - A row typed by hand: a new income, expense or refund matches a live
