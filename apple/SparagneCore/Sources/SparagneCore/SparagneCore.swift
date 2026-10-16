@@ -5708,7 +5708,8 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
     public var action: StatementAction?
     /**
      * The envelope of an entry, over [`StatementOptions::flow_id`]; the
-     * vault's Unallocated flow id names Unallocated.
+     * vault's Unallocated flow id names Unallocated, and an archived or
+     * unknown envelope is ignored.
      */
     public var flowId: Uuid?
     /**
@@ -5732,7 +5733,8 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
          */action: StatementAction? = nil, 
         /**
          * The envelope of an entry, over [`StatementOptions::flow_id`]; the
-         * vault's Unallocated flow id names Unallocated.
+         * vault's Unallocated flow id names Unallocated, and an archived or
+         * unknown envelope is ignored.
          */flowId: Uuid? = nil, 
         /**
          * What becomes of a flagged row, over the default (move a duplicate
@@ -9107,10 +9109,13 @@ public enum StatementRowStatus: Equatable, Hashable, Codable {
      * Not imported on purpose. `code` is stable and meant for the app to
      * translate; `reason` is the English detail:
      *
-     * - `skipped_by_rule`: a type rule or the default action says `Skip`;
+     * - `skipped_by_rule`: a description rule, a type rule or the default
+     * action says `Skip` (the reason names the rule);
      * - `skipped_status`: the status is in `skip_statuses` (the reason
      * names it);
-     * - `needs_wallet`: a transfer whose other wallet is not chosen yet;
+     * - `needs_wallet`: a transfer whose other wallet is not chosen yet, or
+     * is one the money cannot move to or from: the imported wallet, one
+     * not in the vault, an archived one;
      * - `zero_amount`: the amount is zero;
      * - `skipped_by_you`: a [`StatementRowOverride`] with `skip`, or a
      * `Skip` action of the user's;
