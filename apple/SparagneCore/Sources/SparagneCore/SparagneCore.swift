@@ -5128,6 +5128,15 @@ public struct StatementOptions: Equatable, Hashable, Codable {
      * match no row.
      */
     public var since: NaiveDate?
+    /**
+     * The other wallets the app knows receive bank statements (from the
+     * imports it remembers). With the wallets a claim or a move names, they
+     * are the statements' wallets: never advised as
+     * [`StatementPreview::lookalikes`], and their imported rows standing for
+     * a transfer row's other side are replaced by default up to 4 days
+     * away. A wallet not in the vault is no statement's.
+     */
+    public var statementWallets: [Uuid]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5151,12 +5160,21 @@ public struct StatementOptions: Equatable, Hashable, Codable {
          * `before_start`; transfers with the wallets also checked dated before
          * it, and entries of those wallets dated more than 3 days before it,
          * match no row.
-         */since: NaiveDate? = nil) {
+         */since: NaiveDate? = nil, 
+        /**
+         * The other wallets the app knows receive bank statements (from the
+         * imports it remembers). With the wallets a claim or a move names, they
+         * are the statements' wallets: never advised as
+         * [`StatementPreview::lookalikes`], and their imported rows standing for
+         * a transfer row's other side are replaced by default up to 4 days
+         * away. A wallet not in the vault is no statement's.
+         */statementWallets: [Uuid] = []) {
         self.walletId = walletId
         self.flowId = flowId
         self.timezone = timezone
         self.alsoCheckWallets = alsoCheckWallets
         self.since = since
+        self.statementWallets = statementWallets
     }
 
     
@@ -5179,7 +5197,8 @@ public struct FfiConverterTypeStatementOptions: FfiConverterRustBuffer {
                 flowId: FfiConverterOptionTypeUuid.read(from: &buf), 
                 timezone: FfiConverterString.read(from: &buf), 
                 alsoCheckWallets: FfiConverterSequenceTypeUuid.read(from: &buf), 
-                since: FfiConverterOptionTypeNaiveDate.read(from: &buf)
+                since: FfiConverterOptionTypeNaiveDate.read(from: &buf), 
+                statementWallets: FfiConverterSequenceTypeUuid.read(from: &buf)
         )
     }
 
@@ -5189,6 +5208,7 @@ public struct FfiConverterTypeStatementOptions: FfiConverterRustBuffer {
         FfiConverterString.write(value.timezone, into: &buf)
         FfiConverterSequenceTypeUuid.write(value.alsoCheckWallets, into: &buf)
         FfiConverterOptionTypeNaiveDate.write(value.since, into: &buf)
+        FfiConverterSequenceTypeUuid.write(value.statementWallets, into: &buf)
     }
 }
 
@@ -5296,8 +5316,10 @@ public struct StatementPreview: Equatable, Hashable, Codable {
      */
     public var moves: UInt32
     /**
-     * Wallets not checked for rows typed by hand, nor any statement's,
-     * where new rows that matched nothing look like entries already there,
+     * Wallets not checked for rows typed by hand, nor any statement's (a
+     * claim or a move names it, or [`StatementOptions::statement_wallets`]
+     * holds it), where new rows that matched nothing look like entries
+     * already there,
      * the most such rows first. Advice only: matching does not use them.
      */
     public var lookalikes: [StatementLookalike]
@@ -5319,8 +5341,10 @@ public struct StatementPreview: Equatable, Hashable, Codable {
          * Possible duplicates whose match the import would move.
          */moves: UInt32, 
         /**
-         * Wallets not checked for rows typed by hand, nor any statement's,
-         * where new rows that matched nothing look like entries already there,
+         * Wallets not checked for rows typed by hand, nor any statement's (a
+         * claim or a move names it, or [`StatementOptions::statement_wallets`]
+         * holds it), where new rows that matched nothing look like entries
+         * already there,
          * the most such rows first. Advice only: matching does not use them.
          */lookalikes: [StatementLookalike] = []) {
         self.rows = rows
@@ -9164,9 +9188,11 @@ public enum StatementMatchChoice: Equatable, Hashable, Codable, CaseIterable {
      * between wallets it is, all at once: for a transfer row whose other
      * side is already in the vault as an income, expense or refund (the
      * other bank's row imported without a rule, or typed by hand). The
-     * default only when the entry very likely is that side: dated the row's
-     * day or a day off, and in no wallet also checked. Only for such a
-     * match; anywhere else it reads as the default.
+     * default only when the entry very likely is that side: the other
+     * bank's statement row up to 4 days away, or an entry dated the row's
+     * day or a day off in no wallet also checked; never one dated before
+     * the start day. Only for such a match; anywhere else it reads as the
+     * default.
      */
     case replaceExisting
 
