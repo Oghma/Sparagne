@@ -109,8 +109,10 @@ private struct StatementReviewRow: View {
 
     private var isNew: Bool { row.status == .new }
     private var included: Bool { model.isIncluded(row.line) }
-    /// Imported if the user goes ahead.
-    private var live: Bool { isNew && included }
+    /// Written if the user goes ahead: a new row left ticked, or a transfer
+    /// replacing the entry it matched.
+    private var live: Bool { (isNew && included) || replacing }
+    private var replacing: Bool { StatementImportModel.replaces(row) }
     /// What the row is taken for, the user's kind before the preview has
     /// caught up with it.
     private var action: StatementAction { model.action(for: row) }
@@ -190,13 +192,16 @@ private struct StatementReviewRow: View {
         }
     }
 
-    /// A new row the user ticked off reads as the core will count it.
+    /// A new row the user ticked off reads as the core will count it, and a
+    /// row replacing the entry it matched as one that will be written.
     private var statusText: String {
-        isNew && !included ? StatementText.skipped("skipped_by_you") : StatementText.status(row.status)
+        if replacing { return String(localized: "To replace") }
+        return isNew && !included ? StatementText.skipped("skipped_by_you") : StatementText.status(row.status)
     }
 
     private var tone: OutcomeTag.Tone {
-        switch row.status {
+        if replacing { return .new }
+        return switch row.status {
         case .new: included ? .new : .quiet
         case .alreadyImported, .possibleDuplicate, .matchedTransfer, .skipped: .quiet
         case .invalid: .invalid
@@ -364,12 +369,17 @@ private struct StatementReviewRow: View {
     // MARK: The match
 
     /// `↳ 2026-09-14 · Bar Centrale · Bar · in Cash` under the description,
-    /// and under the status the menu of what becomes of the row: keep the
-    /// transaction already there for it, move that one here (only an entry
-    /// in another wallet), or import the row anyway.
+    /// and under the status the menu of what becomes of the row: replace
+    /// the entry with the transfer the row is (only an entry standing for
+    /// it, which the line then names by its kind: `income in Revolut`),
+    /// keep the transaction already there for it, move that one here (only
+    /// an entry typed into another wallet), or import the row anyway. A row
+    /// imported by default, its match more likely another export's row,
+    /// says so after the match.
     private func matchLine(_ existing: TransactionView) -> some View {
-        let text = StatementText.existing(existing, names: names)
+        let text = StatementText.existing(existing, names: names, replacing: StatementImportModel.isReplace(row))
         let chosen = model.matchChoice(for: row) ?? model.defaultChoice(for: row)
+        let hint = model.importsByDefault(row) ? StatementText.importedByDefault : nil
         return HStack(spacing: 0) {
             Color.clear.frame(width: ReviewColumn.lead, height: 1)
             GridCell {
@@ -378,11 +388,18 @@ private struct StatementReviewRow: View {
                         .font(.system(size: 9))
                         .accessibilityHidden(true)
                     Text(verbatim: text)
+                    if let hint {
+                        // Its whole length before the match's text gets any.
+                        Text(verbatim: "\u{00B7} \(hint)")
+                            .italic()
+                            .layoutPriority(1)
+                    }
                 }
                 .foregroundStyle(Ink.text3)
-                .help(text)
+                .help(hint.map { "\(text)\n\($0)" } ?? text)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(String(localized: "Already in the vault: \(text)"))
+                .accessibilityHint(hint ?? "")
             }
             GridCell(width: ReviewColumn.choice) {
                 CellPicker(
@@ -549,21 +566,31 @@ private struct IncludeBox: View {
 
 /// What the import did: the counts, then every row the core refused, with
 /// its line and the reason in the user's language. The rows matched to a
-/// transaction already in the vault, and the transactions moved, get a
-/// figure and a sentence only when there are any.
+/// transaction already in the vault, the transactions moved and the entries
+/// replaced by their transfers get a figure and a sentence only when there
+/// are any.
+///
+/// The core counts a transfer that replaced an entry as executed and its
+/// row as a possible duplicate; `replaced`, how many the model sent so and
+/// the core did not refuse, takes them out of both and shows them on their
+/// own.
 struct StatementReportView: View {
     let report: StatementReport
+    var replaced = 0
+
+    private var imported: UInt32 { report.executed - min(report.executed, UInt32(replaced)) }
+    private var duplicates: UInt32 { report.possibleDuplicates - min(report.possibleDuplicates, UInt32(replaced)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             FormGroup(String(localized: "Import finished")) {
                 Panel {
                     HStack(alignment: .top, spacing: 0) {
-                        figure(String(localized: "Imported"), report.executed, Ink.positive)
+                        figure(String(localized: "Imported"), imported, Ink.positive)
                         figure(String(localized: "Already imported"), report.deduplicated, Ink.text)
                         figure(String(localized: "Skipped"), report.skipped, Ink.text)
-                        if report.possibleDuplicates > 0 {
-                            figure(String(localized: "Possible duplicates"), report.possibleDuplicates, Ink.text)
+                        if duplicates > 0 {
+                            figure(String(localized: "Possible duplicates"), duplicates, Ink.text)
                         }
                         if report.matchedTransfers > 0 {
                             figure(String(localized: "Transfers already there"), report.matchedTransfers, Ink.text)
@@ -571,13 +598,22 @@ struct StatementReportView: View {
                         if report.moved > 0 {
                             figure(String(localized: "Moved"), report.moved, Ink.text)
                         }
+                        if replaced > 0 {
+                            figure(String(localized: "Replaced"), UInt32(replaced), Ink.positive)
+                        }
                         figure(String(localized: "Rounded"), report.rounded, Ink.text)
                         figure(String(localized: "Refused"), UInt32(report.rejected.count), Ink.negative)
                     }
                 }
-                if report.possibleDuplicates > 0 {
+                if duplicates > 0 {
                     FormNote(
-                        String(localized: "\(Int(report.possibleDuplicates)) rows looked like a transaction already in the vault and were not imported."),
+                        String(localized: "\(Int(duplicates)) rows looked like a transaction already in the vault and were not imported."),
+                        indented: false
+                    )
+                }
+                if replaced > 0 {
+                    FormNote(
+                        String(localized: "\(replaced) transactions were deleted and replaced by the transfers they stood for."),
                         indented: false
                     )
                 }

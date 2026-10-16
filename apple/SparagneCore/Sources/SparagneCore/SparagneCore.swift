@@ -6283,6 +6283,9 @@ public func FfiConverterTypeTransactionFilter_lower(_ value: TransactionFilter) 
  * transaction being patched: `wallet_id`, `flow_id`, `category` and `person`
  * belong to entries, `from_id` and `to_id` to transfers, and mixing the two
  * is refused.
+ *
+ * Reserved: under a UUID v5 id, a patch of `wallet_id`, `from_id` or
+ * `to_id` alone is a statement import's claim or move ([`crate::statement`]).
  */
 public struct TransactionPatch: Equatable, Hashable, Codable {
     /**
@@ -9015,6 +9018,14 @@ public enum StatementMatchChoice: Equatable, Hashable, Codable, CaseIterable {
      * `Skip`.
      */
     case moveExisting
+    /**
+     * Void the entry the row matched and import the row as the transfer
+     * between wallets it is: for a transfer row whose other side is already
+     * in the vault as an income, expense or refund (the other bank's row
+     * imported without a rule, or typed by hand). Only for such a match;
+     * anywhere else it reads as the default.
+     */
+    case replaceExisting
 
 
 
@@ -9042,6 +9053,8 @@ public struct FfiConverterTypeStatementMatchChoice: FfiConverterRustBuffer {
         
         case 3: return .moveExisting
         
+        case 4: return .replaceExisting
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -9060,6 +9073,10 @@ public struct FfiConverterTypeStatementMatchChoice: FfiConverterRustBuffer {
         
         case .moveExisting:
             writeInt(&buf, Int32(3))
+        
+        
+        case .replaceExisting:
+            writeInt(&buf, Int32(4))
         
         }
     }

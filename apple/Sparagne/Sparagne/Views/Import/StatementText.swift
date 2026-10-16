@@ -86,7 +86,15 @@ enum StatementText {
         case .skip: String(localized: "Keep the one already there")
         case .moveExisting: String(localized: "Move it here")
         case .importAnyway: String(localized: "Import anyway")
+        case .replaceExisting: String(localized: "Replace it with the transfer")
         }
+    }
+
+    /// Beside the match of a row imported by default: the match more
+    /// likely stands for another export's row, near the file's first or
+    /// last days.
+    static var importedByDefault: String {
+        String(localized: "Likely another row’s: imported by default")
     }
 
     /// What each choice does, for the menu's tooltip and VoiceOver's hint.
@@ -95,13 +103,16 @@ enum StatementText {
         case .skip: String(localized: "The transaction already in the vault stands for this row from now on, and this row is not imported.")
         case .moveExisting: String(localized: "The transaction entered by hand moves into this statement’s wallet, and this row is not imported.")
         case .importAnyway: String(localized: "This row is imported as well, beside the transaction already in the vault.")
+        case .replaceExisting: String(localized: "This row is imported as the transfer it is, and the income or expense that stood for it is deleted.")
         }
     }
 
     /// The transaction a flagged row matched, on the dim line under it:
     /// `2026-09-14 · Bar Centrale · Bar · in Cash`, or for a transfer
-    /// `2026-09-14 · Ricarica · from ING to Revolut`.
-    static func existing(_ view: TransactionView, names: NameBook) -> String {
+    /// `2026-09-14 · Ricarica · from ING to Revolut`. An entry a transfer
+    /// row would replace says what it is and where, the thing that would be
+    /// deleted: `2026-10-01 · BONIFICO DA ING · income in Revolut`.
+    static func existing(_ view: TransactionView, names: NameBook, replacing: Bool = false) -> String {
         let row = TransactionRow(view: view, names: names)
         var parts = [CoreDate.day(row.occurredAt)]
         if !row.note.isEmpty { parts.append(row.note) }
@@ -109,6 +120,10 @@ enum StatementText {
             let from = names.wallet(view.fromId) ?? names.flow(view.fromId) ?? TransactionRow.placeholder
             let to = names.wallet(view.toId) ?? names.flow(view.toId) ?? TransactionRow.placeholder
             parts.append(String(localized: "from \(from) to \(to)"))
+        } else if replacing {
+            // The kind, then the wallet as an entry's line names it: "entrata
+            // in Revolut" reads in Italian as "income in Revolut" does.
+            parts.append(kind(view.kind) + " " + String(localized: "in \(row.walletDisplay)"))
         } else {
             parts.append(row.category)
             parts.append(String(localized: "in \(row.walletDisplay)"))

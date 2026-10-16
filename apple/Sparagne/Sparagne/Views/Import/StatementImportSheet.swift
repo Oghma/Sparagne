@@ -92,7 +92,7 @@ struct StatementImportSheet: View {
             StatementReview(model: model, completion: completion)
         case .report:
             if let report = model.report {
-                ScrollView { StatementReportView(report: report) }
+                ScrollView { StatementReportView(report: report, replaced: model.replaced) }
                     .scrollBounceBehavior(.basedOnSize)
             }
         }
@@ -233,7 +233,7 @@ struct StatementImportSheet: View {
                     Task { await model.runImport() }
                 }
                 .disabled(
-                    model.counts.new + model.counts.moves == 0
+                    !Self.writes(model.counts)
                         || model.isImporting || model.isPreviewing || model.preview == nil
                 )
             case .report:
@@ -242,13 +242,27 @@ struct StatementImportSheet: View {
         }
     }
 
-    /// What the review's ↩ does: import the new rows, or, with none, move
-    /// the rows entered by hand that the statement found elsewhere.
+    /// Whether the import writes anything: a row, new or replacing an
+    /// entry, a move, or the record that a transaction already there stands
+    /// for a row, which keeps the next export from taking it again.
+    private static func writes(_ counts: StatementImportModel.Counts) -> Bool {
+        counts.written + counts.moves + counts.possibleDuplicates + counts.matchedTransfers > 0
+    }
+
+    /// What the review's ↩ does: import the rows it writes (new ones and
+    /// transfers replacing an entry), or, with none, move the rows typed by
+    /// hand that the statement found elsewhere, or else confirm the matches
+    /// kept as they are.
     private var importTitle: String {
         let counts = model.counts
-        return counts.new == 0 && counts.moves > 0
-            ? String(localized: "Move \(counts.moves) rows")
-            : String(localized: "Import \(counts.new) rows")
+        if counts.written == 0 && counts.moves > 0 {
+            return String(localized: "Move \(counts.moves) rows")
+        }
+        let matches = counts.possibleDuplicates + counts.matchedTransfers
+        if counts.written == 0 && matches > 0 {
+            return String(localized: "Confirm \(matches) matches")
+        }
+        return String(localized: "Import \(counts.written) rows")
     }
 }
 
@@ -380,6 +394,9 @@ private struct StatementCountsLine: View {
         }
         if counts.moves > 0 {
             items.append((String(localized: "To move"), counts.moves, Ink.text))
+        }
+        if counts.replaces > 0 {
+            items.append((String(localized: "To replace"), counts.replaces, Ink.text))
         }
         return items
     }
