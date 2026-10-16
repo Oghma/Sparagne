@@ -857,6 +857,46 @@
         }
       }
     },
+    "%lld rows also look like entries in": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld row also looks like an entry in"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld rows also look like entries in"
+                }
+              }
+            }
+          }
+        },
+        "it": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld riga somiglia anche a una voce in"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld righe somigliano anche a voci in"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld rows looked like a transaction already in the vault and were not imported.": {
       "localizations": {
         "en": {
@@ -10057,6 +10097,22 @@
         }
       }
     },
+    "Tick %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tick %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spunta %@"
+          }
+        }
+      }
+    },
     "Time zone": {
       "localizations": {
         "en": {
@@ -12805,6 +12861,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "l'ordine è la priorità: se il totale non basta, le ultime righe ricevono meno · ⌥↑ ⌥↓ spostano la riga"
+          }
+        }
+      }
+    },
+    "tick it under Duplicates also in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tick it under Duplicates also in"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "spuntalo in Doppioni anche in"
           }
         }
       }
