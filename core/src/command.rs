@@ -332,6 +332,9 @@ pub enum Command {
 /// transaction being patched: `wallet_id`, `flow_id`, `category` and `person`
 /// belong to entries, `from_id` and `to_id` to transfers, and mixing the two
 /// is refused.
+///
+/// Reserved: under a UUID v5 id, a patch of `wallet_id`, `from_id` or
+/// `to_id` alone is a statement import's claim or move ([`crate::statement`]).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, uniffi::Record)]
 #[serde(default)]
 pub struct TransactionPatch {
