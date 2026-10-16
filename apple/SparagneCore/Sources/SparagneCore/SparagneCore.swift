@@ -5050,13 +5050,17 @@ public struct StatementOptions: Equatable, Hashable, Codable {
     public var timezone: String
     /**
      * Wallets other than `wallet_id` where a hand-entered row may be the
-     * duplicate of a statement row: a row found there is moved into
-     * `wallet_id` by default ([`StatementMatchChoice::MoveExisting`]).
+     * duplicate of a statement row: a duplicate found there is moved into
+     * `wallet_id` by default ([`StatementMatchChoice::MoveExisting`]), and an
+     * entry there standing for a transfer row may be replaced by it
+     * ([`StatementMatchChoice::ReplaceExisting`]). Never a wallet that is
+     * itself a statement's.
      */
     public var alsoCheckWallets: [Uuid]
     /**
      * Rows dated before this day (in their own offset) are skipped with
-     * `before_start`.
+     * `before_start`; entries of the wallets also checked, and transfers
+     * with them, dated before it match no row.
      */
     public var since: NaiveDate?
 
@@ -5071,12 +5075,16 @@ public struct StatementOptions: Equatable, Hashable, Codable {
          */timezone: String, 
         /**
          * Wallets other than `wallet_id` where a hand-entered row may be the
-         * duplicate of a statement row: a row found there is moved into
-         * `wallet_id` by default ([`StatementMatchChoice::MoveExisting`]).
+         * duplicate of a statement row: a duplicate found there is moved into
+         * `wallet_id` by default ([`StatementMatchChoice::MoveExisting`]), and an
+         * entry there standing for a transfer row may be replaced by it
+         * ([`StatementMatchChoice::ReplaceExisting`]). Never a wallet that is
+         * itself a statement's.
          */alsoCheckWallets: [Uuid] = [], 
         /**
          * Rows dated before this day (in their own offset) are skipped with
-         * `before_start`.
+         * `before_start`; entries of the wallets also checked, and transfers
+         * with them, dated before it match no row.
          */since: NaiveDate? = nil) {
         self.walletId = walletId
         self.flowId = flowId
@@ -5204,9 +5212,13 @@ public struct StatementPreview: Equatable, Hashable, Codable {
     public var alreadyImported: UInt32
     public var skipped: UInt32
     public var invalid: UInt32
+    /**
+     * New rows rounded, and rows replacing their match rounded.
+     */
     public var rounded: UInt32
     /**
-     * Rows flagged [`StatementRowStatus::PossibleDuplicate`].
+     * Rows flagged [`StatementRowStatus::PossibleDuplicate`], those
+     * replacing their match included.
      */
     public var possibleDuplicates: UInt32
     /**
@@ -5220,9 +5232,13 @@ public struct StatementPreview: Equatable, Hashable, Codable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(rows: [StatementRow], newRows: UInt32, alreadyImported: UInt32, skipped: UInt32, invalid: UInt32, rounded: UInt32, 
+    public init(rows: [StatementRow], newRows: UInt32, alreadyImported: UInt32, skipped: UInt32, invalid: UInt32, 
         /**
-         * Rows flagged [`StatementRowStatus::PossibleDuplicate`].
+         * New rows rounded, and rows replacing their match rounded.
+         */rounded: UInt32, 
+        /**
+         * Rows flagged [`StatementRowStatus::PossibleDuplicate`], those
+         * replacing their match included.
          */possibleDuplicates: UInt32, 
         /**
          * Rows flagged [`StatementRowStatus::MatchedTransfer`].
@@ -5363,13 +5379,17 @@ public func FfiConverterTypeStatementRejection_lower(_ value: StatementRejection
  * Outcome of [`Core::import_statement`].
  */
 public struct StatementReport: Equatable, Hashable, Codable {
+    /**
+     * Rows written, the transfer of a row replacing its match included.
+     */
     public var executed: UInt32
     public var deduplicated: UInt32
     public var skipped: UInt32
     public var rounded: UInt32
     public var rejected: [StatementRejection]
     /**
-     * Possible duplicates left out, moved ones included.
+     * Possible duplicates: left out (moved ones included), or replacing
+     * their match.
      */
     public var possibleDuplicates: UInt32
     /**
@@ -5383,9 +5403,13 @@ public struct StatementReport: Equatable, Hashable, Codable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(executed: UInt32, deduplicated: UInt32, skipped: UInt32, rounded: UInt32, rejected: [StatementRejection], 
+    public init(
         /**
-         * Possible duplicates left out, moved ones included.
+         * Rows written, the transfer of a row replacing its match included.
+         */executed: UInt32, deduplicated: UInt32, skipped: UInt32, rounded: UInt32, rejected: [StatementRejection], 
+        /**
+         * Possible duplicates: left out (moved ones included), or replacing
+         * their match.
          */possibleDuplicates: UInt32, 
         /**
          * Matched transfers left out.
@@ -5713,8 +5737,10 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
      */
     public var flowId: Uuid?
     /**
-     * What becomes of a flagged row, over the default (move a duplicate
-     * found in another wallet, skip any other).
+     * What becomes of a flagged row, over the default (import it anyway
+     * near the file's edges, move a duplicate found in another wallet,
+     * replace an entry very likely standing for the row's transfer, import
+     * beside one less likely, skip any other).
      */
     public var onMatch: StatementMatchChoice?
 
@@ -5737,8 +5763,10 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
          * unknown envelope is ignored.
          */flowId: Uuid? = nil, 
         /**
-         * What becomes of a flagged row, over the default (move a duplicate
-         * found in another wallet, skip any other).
+         * What becomes of a flagged row, over the default (import it anyway
+         * near the file's edges, move a duplicate found in another wallet,
+         * replace an entry very likely standing for the row's transfer, import
+         * beside one less likely, skip any other).
          */onMatch: StatementMatchChoice? = nil) {
         self.line = line
         self.category = category
@@ -9003,7 +9031,9 @@ public func FfiConverterTypeStatementDateFormat_lower(_ value: StatementDateForm
 public enum StatementMatchChoice: Equatable, Hashable, Codable, CaseIterable {
     
     /**
-     * Leave the row out: the transaction already there stands for it.
+     * Leave the row out: the transaction already there stands for it, and
+     * the import records it. On an entry standing for the row's transfer it
+     * reads as `ImportAnyway`.
      */
     case skip
     /**
@@ -9014,16 +9044,18 @@ public enum StatementMatchChoice: Equatable, Hashable, Codable, CaseIterable {
      * Leave the row out and move the transaction it matched into the
      * statement's wallet (`UpdateTransaction` with its `wallet_id`). Only for
      * a possible duplicate found in one of
-     * [`StatementOptions::also_check_wallets`]; anywhere else it reads as
-     * `Skip`.
+     * [`StatementOptions::also_check_wallets`]; on an entry standing for the
+     * row's transfer it reads as `ImportAnyway`, anywhere else as `Skip`.
      */
     case moveExisting
     /**
      * Void the entry the row matched and import the row as the transfer
-     * between wallets it is: for a transfer row whose other side is already
-     * in the vault as an income, expense or refund (the other bank's row
-     * imported without a rule, or typed by hand). Only for such a match;
-     * anywhere else it reads as the default.
+     * between wallets it is, all at once: for a transfer row whose other
+     * side is already in the vault as an income, expense or refund (the
+     * other bank's row imported without a rule, or typed by hand). The
+     * default only when the entry very likely is that side (the other
+     * bank's statement row, or dated the row's day or a day off). Only for
+     * such a match; anywhere else it reads as the default.
      */
     case replaceExisting
 
@@ -9108,12 +9140,15 @@ public enum StatementRowStatus: Equatable, Hashable, Codable {
     case new
     case alreadyImported
     /**
-     * A transaction already in the vault looks like this row: the money
-     * moving the same way (an expense, or an income or a refund), the same
-     * amount, at most 3 days apart, in the statement's wallet or in one
-     * of [`StatementOptions::also_check_wallets`]. It is in
+     * An entry already in the vault looks like this row: the money moving
+     * the same way (an expense, or an income or a refund), the same amount,
+     * at most 3 days apart, in the statement's wallet or in one of
+     * [`StatementOptions::also_check_wallets`]; or, for a transfer row, an
+     * entry standing for its transfer, at most 4 days apart (in the wallet
+     * it names, the money moving the other way). It is in
      * [`StatementRow::existing`], and [`StatementRow::match_choice`] says
-     * what the import does.
+     * what the import does; a row replacing its entry stays flagged and is
+     * written.
      */
     case possibleDuplicate
     /**

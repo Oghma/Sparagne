@@ -696,24 +696,26 @@ final class StatementImportModel {
         }
     }
 
-    /// The preview's counts as the import will see them.
+    /// The preview's counts as the import will see them: the rows ticked
+    /// off, new or replacing, moved to skipped.
     var counts: Counts {
         guard let preview else { return Counts() }
-        let excluded = preview.rows.filter { $0.status == .new && excludedLines.contains($0.line) }
+        let excludedNew = preview.rows.filter { $0.status == .new && excludedLines.contains($0.line) }
         // The core counts a replacing row among the possible duplicates; it
-        // is written all the same.
+        // is written all the same, unless ticked off.
         let replacing = preview.rows.filter(Self.replaces)
+        let excludedReplacing = replacing.filter { excludedLines.contains($0.line) }
+        let excluded = excludedNew + excludedReplacing
         return Counts(
-            new: Int(preview.newRows) - excluded.count,
+            new: Int(preview.newRows) - excludedNew.count,
             alreadyImported: Int(preview.alreadyImported),
             skipped: Int(preview.skipped) + excluded.count,
             invalid: Int(preview.invalid),
-            rounded: Int(preview.rounded) - excluded.filter(\.rounded).count
-                + replacing.filter(\.rounded).count,
+            rounded: Int(preview.rounded) - excluded.filter(\.rounded).count,
             possibleDuplicates: Int(preview.possibleDuplicates) - replacing.count,
             matchedTransfers: Int(preview.matchedTransfers),
             moves: Int(preview.moves),
-            replaces: replacing.count
+            replaces: replacing.count - excludedReplacing.count
         )
     }
 
@@ -823,6 +825,14 @@ final class StatementImportModel {
         row.status == .possibleDuplicate && row.matchChoice == .replaceExisting
     }
 
+    /// A row the review's box can leave out: a new one, or a transfer row
+    /// whatever becomes of the entry it matched. A transfer row has no
+    /// "keep the one there" of its own (the transfer would be missing), so
+    /// the box is how it stays out, writing and claiming nothing.
+    nonisolated static func takesTick(_ row: StatementRow) -> Bool {
+        row.status == .new || isReplace(row)
+    }
+
     /// The match is an entry typed into another wallet than the
     /// statement's, standing for the same spend: it can be moved here
     /// rather than left where it is. An entry standing for a transfer is
@@ -836,7 +846,8 @@ final class StatementImportModel {
     /// preview without the user's choice said: import the row beside a
     /// match that more likely stands for another export's row (near the
     /// file's first or last days), move an entry found in another wallet
-    /// here, replace an entry standing for the transfer, leave the row out
+    /// here, replace an entry standing for the transfer when it very likely
+    /// is its other side (else import the row beside it), leave the row out
     /// otherwise. Worked out the same way for a row no preview has said it
     /// of.
     func defaultChoice(for row: StatementRow) -> StatementMatchChoice {
@@ -853,10 +864,12 @@ final class StatementImportModel {
     }
 
     /// The choices that mean something for a flagged row, in the menu's
-    /// order: replacing only an entry standing for the transfer, moving
-    /// only an entry typed into another wallet.
+    /// order. A transfer row standing for an entry either replaces it or is
+    /// imported beside it: keeping the entry in its place would leave the
+    /// transfer missing, so it is left out with its box instead. Moving is
+    /// only for an entry typed into another wallet.
     func availableChoices(for row: StatementRow) -> [StatementMatchChoice] {
-        if Self.isReplace(row) { return [.replaceExisting, .skip, .importAnyway] }
+        if Self.isReplace(row) { return [.replaceExisting, .importAnyway] }
         return canMove(row) ? [.skip, .moveExisting, .importAnyway] : [.skip, .importAnyway]
     }
 
@@ -865,36 +878,44 @@ final class StatementImportModel {
         if choice == defaultChoice(for: row) { matchChoices[row.line] = nil } else { matchChoices[row.line] = choice }
     }
 
-    /// A flagged row imported because its match more likely stands for
-    /// another export's row: the core's default near the file's first or
-    /// last days, which the review explains beside the match.
+    /// A flagged row, not a transfer standing for an entry, imported
+    /// because its match more likely stands for another export's row: the
+    /// core's default near the file's first or last days, which the review
+    /// explains beside the match.
     func importsByDefault(_ row: StatementRow) -> Bool {
-        Self.isFlagged(row) && defaultChoice(for: row) == .importAnyway && matchChoice(for: row) == .importAnyway
+        !Self.isReplace(row) && Self.isFlagged(row)
+            && defaultChoice(for: row) == .importAnyway && matchChoice(for: row) == .importAnyway
+    }
+
+    /// A transfer row imported beside the entry it matched because that
+    /// entry is not very likely its other side (days apart, typed by hand):
+    /// the review says it may be, and that replacing it is one choice away.
+    func mayReplace(_ row: StatementRow) -> Bool {
+        Self.isReplace(row) && defaultChoice(for: row) == .importAnyway && matchChoice(for: row) == .importAnyway
     }
 
     /// One override per row the user changed, each carrying only what
     /// changed: its kind, an envelope other than the file's, what becomes of
-    /// its match, on a new row its note, its category or that it is ticked
-    /// off, and on a row replacing an entry its note. An edit equal to what
-    /// the row would be anyway sends nothing. A suggestion counts as a
-    /// change, since only the app knows it; the row's own category does not,
-    /// since the core applies it anyway. Emptying a field leaves the row's
-    /// own note or category.
+    /// its match, that it is ticked off (a new row, or a transfer row
+    /// standing for an entry), and on a row written its note and, an entry,
+    /// its category. An edit equal to what the row would be anyway sends
+    /// nothing. A suggestion counts as a change, since only the app knows
+    /// it; the row's own category does not, since the core applies it
+    /// anyway. Emptying a field leaves the row's own note or category.
     var overrides: [StatementRowOverride] {
         guard let preview else { return [] }
         let choices = Dictionary(rowChoices.map { ($0.line, $0) }, uniquingKeysWith: { $1 })
         return preview.rows.compactMap { row -> StatementRowOverride? in
             let untouched = StatementRowOverride(line: row.line, category: nil, note: nil, skip: false)
             var override = choices[row.line] ?? untouched
-            let written = row.status == .new && !excludedLines.contains(row.line)
-            if row.status == .new, excludedLines.contains(row.line) {
-                override.skip = true
-            }
+            let tickedOff = Self.takesTick(row) && excludedLines.contains(row.line)
+            if tickedOff { override.skip = true }
+            let written = !tickedOff && (row.status == .new || Self.replaces(row))
             if written, Self.takesCategory(row) {
                 let text = categoryText(for: row).trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty, text != row.category { override.category = text }
             }
-            if written || Self.replaces(row), let typed = editedNotes[row.line] {
+            if written, let typed = editedNotes[row.line] {
                 let note = typed.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !note.isEmpty, note != row.note { override.note = note }
             }
@@ -922,7 +943,9 @@ final class StatementImportModel {
             guard preview != nil, previewProblem == nil else { return }
         }
         guard let input = previewInput, let text, let vaultId, let detection else { return }
-        let replacing = Set(preview?.rows.filter(Self.replaces).map(\.line) ?? [])
+        let replacing = Set(
+            preview?.rows.filter { Self.replaces($0) && !excludedLines.contains($0.line) }.map(\.line) ?? []
+        )
         do {
             let result = try await store.core.importStatement(
                 vaultId: vaultId,

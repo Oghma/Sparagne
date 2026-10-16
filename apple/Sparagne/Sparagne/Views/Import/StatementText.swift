@@ -97,6 +97,13 @@ enum StatementText {
         String(localized: "Likely another row’s: imported by default")
     }
 
+    /// Beside the entry a transfer row is imported next to, by default,
+    /// since it is not very likely its other side (days apart, typed by
+    /// hand).
+    static var mayBeOtherSide: String {
+        String(localized: "Maybe its other side: choose Replace if so")
+    }
+
     /// What each choice does, for the menu's tooltip and VoiceOver's hint.
     static func matchChoiceDetail(_ choice: StatementMatchChoice) -> String {
         switch choice {
@@ -110,20 +117,24 @@ enum StatementText {
     /// The transaction a flagged row matched, on the dim line under it:
     /// `2026-09-14 · Bar Centrale · Bar · in Cash`, or for a transfer
     /// `2026-09-14 · Ricarica · from ING to Revolut`. An entry a transfer
-    /// row would replace says what it is and where, the thing that would be
-    /// deleted: `2026-10-01 · BONIFICO DA ING · income in Revolut`.
+    /// row may replace says first what it is and where, the thing that
+    /// would be deleted, and its note last, which a hint after it may cut:
+    /// `2026-10-01 · income in Revolut · BONIFICO DA ING`.
     static func existing(_ view: TransactionView, names: NameBook, replacing: Bool = false) -> String {
         let row = TransactionRow(view: view, names: names)
         var parts = [CoreDate.day(row.occurredAt)]
+        if replacing && !row.isTransfer {
+            // The kind, then the wallet as an entry's line names it: "entrata
+            // in Revolut" reads in Italian as "income in Revolut" does.
+            parts.append(kind(view.kind) + " " + String(localized: "in \(row.walletDisplay)"))
+            if !row.note.isEmpty { parts.append(row.note) }
+            return parts.joined(separator: " \u{00B7} ")
+        }
         if !row.note.isEmpty { parts.append(row.note) }
         if row.isTransfer {
             let from = names.wallet(view.fromId) ?? names.flow(view.fromId) ?? TransactionRow.placeholder
             let to = names.wallet(view.toId) ?? names.flow(view.toId) ?? TransactionRow.placeholder
             parts.append(String(localized: "from \(from) to \(to)"))
-        } else if replacing {
-            // The kind, then the wallet as an entry's line names it: "entrata
-            // in Revolut" reads in Italian as "income in Revolut" does.
-            parts.append(kind(view.kind) + " " + String(localized: "in \(row.walletDisplay)"))
         } else {
             parts.append(row.category)
             parts.append(String(localized: "in \(row.walletDisplay)"))

@@ -109,9 +109,12 @@ private struct StatementReviewRow: View {
 
     private var isNew: Bool { row.status == .new }
     private var included: Bool { model.isIncluded(row.line) }
-    /// Written if the user goes ahead: a new row left ticked, or a transfer
-    /// replacing the entry it matched.
-    private var live: Bool { (isNew && included) || replacing }
+    /// The box shows on a new row and on a transfer row standing for an
+    /// entry, which it is the only way to leave out.
+    private var tickable: Bool { StatementImportModel.takesTick(row) }
+    /// Written if the user goes ahead: a new row, or a transfer replacing the
+    /// entry it matched, left ticked.
+    private var live: Bool { included && (isNew || replacing) }
     private var replacing: Bool { StatementImportModel.replaces(row) }
     /// What the row is taken for, the user's kind before the preview has
     /// caught up with it.
@@ -145,7 +148,7 @@ private struct StatementReviewRow: View {
     @ViewBuilder
     private var cells: some View {
         GridCell(width: ReviewColumn.check) {
-            if isNew {
+            if tickable {
                 IncludeBox(isOn: included) { model.setIncluded($0, line: row.line) }
             } else {
                 // An empty cell still holds its width.
@@ -192,14 +195,16 @@ private struct StatementReviewRow: View {
         }
     }
 
-    /// A new row the user ticked off reads as the core will count it, and a
-    /// row replacing the entry it matched as one that will be written.
+    /// A row the user ticked off reads as the core will count it, and a row
+    /// replacing the entry it matched as one that will be written.
     private var statusText: String {
+        if tickable && !included { return StatementText.skipped("skipped_by_you") }
         if replacing { return String(localized: "To replace") }
-        return isNew && !included ? StatementText.skipped("skipped_by_you") : StatementText.status(row.status)
+        return StatementText.status(row.status)
     }
 
     private var tone: OutcomeTag.Tone {
+        if tickable && !included { return .quiet }
         if replacing { return .new }
         return switch row.status {
         case .new: included ? .new : .quiet
@@ -369,17 +374,20 @@ private struct StatementReviewRow: View {
     // MARK: The match
 
     /// `↳ 2026-09-14 · Bar Centrale · Bar · in Cash` under the description,
-    /// and under the status the menu of what becomes of the row: replace
-    /// the entry with the transfer the row is (only an entry standing for
-    /// it, which the line then names by its kind: `income in Revolut`),
-    /// keep the transaction already there for it, move that one here (only
-    /// an entry typed into another wallet), or import the row anyway. A row
-    /// imported by default, its match more likely another export's row,
-    /// says so after the match.
+    /// and under the status the menu of what becomes of the row. A transfer
+    /// row standing for an entry, which the line then names by its kind
+    /// (`income in Revolut`), replaces it or is imported beside it; any
+    /// other keeps the transaction already there for it, moves that one
+    /// here (only an entry typed into another wallet), or is imported
+    /// anyway. A row imported by default says why after the match: its
+    /// match is more likely another export's row, or, for a transfer, the
+    /// entry may still be its other side, one choice away from replaced.
     private func matchLine(_ existing: TransactionView) -> some View {
         let text = StatementText.existing(existing, names: names, replacing: StatementImportModel.isReplace(row))
         let chosen = model.matchChoice(for: row) ?? model.defaultChoice(for: row)
-        let hint = model.importsByDefault(row) ? StatementText.importedByDefault : nil
+        let hint = model.importsByDefault(row)
+            ? StatementText.importedByDefault
+            : model.mayReplace(row) ? StatementText.mayBeOtherSide : nil
         return HStack(spacing: 0) {
             Color.clear.frame(width: ReviewColumn.lead, height: 1)
             GridCell {
