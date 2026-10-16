@@ -4867,6 +4867,70 @@ public func FfiConverterTypeStatementDetection_lower(_ value: StatementDetection
 
 
 /**
+ * A wallet the statement does not check for rows typed by hand where some
+ * of its new rows look like entries already there: advice to check it.
+ */
+public struct StatementLookalike: Equatable, Hashable, Codable {
+    public var walletId: Uuid
+    /**
+     * New rows that matched nothing and would match an entry there.
+     */
+    public var rows: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(walletId: Uuid, 
+        /**
+         * New rows that matched nothing and would match an entry there.
+         */rows: UInt32) {
+        self.walletId = walletId
+        self.rows = rows
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StatementLookalike: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementLookalike: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementLookalike {
+        return
+            try StatementLookalike(
+                walletId: FfiConverterTypeUuid.read(from: &buf), 
+                rows: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatementLookalike, into buf: inout [UInt8]) {
+        FfiConverterTypeUuid.write(value.walletId, into: &buf)
+        FfiConverterUInt32.write(value.rows, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementLookalike_lift(_ buf: RustBuffer) throws -> StatementLookalike {
+    return try FfiConverterTypeStatementLookalike.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementLookalike_lower(_ value: StatementLookalike) -> RustBuffer {
+    return FfiConverterTypeStatementLookalike.lower(value)
+}
+
+
+/**
  * How the columns of a statement map to a transaction.
  */
 public struct StatementMapping: Equatable, Hashable, Codable {
@@ -5059,8 +5123,9 @@ public struct StatementOptions: Equatable, Hashable, Codable {
     public var alsoCheckWallets: [Uuid]
     /**
      * Rows dated before this day (in their own offset) are skipped with
-     * `before_start`; entries of the wallets also checked, and transfers
-     * with them, dated before it match no row.
+     * `before_start`; transfers with the wallets also checked dated before
+     * it, and entries of those wallets dated more than 3 days before it,
+     * match no row.
      */
     public var since: NaiveDate?
 
@@ -5083,8 +5148,9 @@ public struct StatementOptions: Equatable, Hashable, Codable {
          */alsoCheckWallets: [Uuid] = [], 
         /**
          * Rows dated before this day (in their own offset) are skipped with
-         * `before_start`; entries of the wallets also checked, and transfers
-         * with them, dated before it match no row.
+         * `before_start`; transfers with the wallets also checked dated before
+         * it, and entries of those wallets dated more than 3 days before it,
+         * match no row.
          */since: NaiveDate? = nil) {
         self.walletId = walletId
         self.flowId = flowId
@@ -5229,6 +5295,12 @@ public struct StatementPreview: Equatable, Hashable, Codable {
      * Possible duplicates whose match the import would move.
      */
     public var moves: UInt32
+    /**
+     * Wallets not checked for rows typed by hand, nor any statement's,
+     * where new rows that matched nothing look like entries already there,
+     * the most such rows first. Advice only: matching does not use them.
+     */
+    public var lookalikes: [StatementLookalike]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5245,7 +5317,12 @@ public struct StatementPreview: Equatable, Hashable, Codable {
          */matchedTransfers: UInt32, 
         /**
          * Possible duplicates whose match the import would move.
-         */moves: UInt32) {
+         */moves: UInt32, 
+        /**
+         * Wallets not checked for rows typed by hand, nor any statement's,
+         * where new rows that matched nothing look like entries already there,
+         * the most such rows first. Advice only: matching does not use them.
+         */lookalikes: [StatementLookalike] = []) {
         self.rows = rows
         self.newRows = newRows
         self.alreadyImported = alreadyImported
@@ -5255,6 +5332,7 @@ public struct StatementPreview: Equatable, Hashable, Codable {
         self.possibleDuplicates = possibleDuplicates
         self.matchedTransfers = matchedTransfers
         self.moves = moves
+        self.lookalikes = lookalikes
     }
 
     
@@ -5281,7 +5359,8 @@ public struct FfiConverterTypeStatementPreview: FfiConverterRustBuffer {
                 rounded: FfiConverterUInt32.read(from: &buf), 
                 possibleDuplicates: FfiConverterUInt32.read(from: &buf), 
                 matchedTransfers: FfiConverterUInt32.read(from: &buf), 
-                moves: FfiConverterUInt32.read(from: &buf)
+                moves: FfiConverterUInt32.read(from: &buf), 
+                lookalikes: FfiConverterSequenceTypeStatementLookalike.read(from: &buf)
         )
     }
 
@@ -5295,6 +5374,7 @@ public struct FfiConverterTypeStatementPreview: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.possibleDuplicates, into: &buf)
         FfiConverterUInt32.write(value.matchedTransfers, into: &buf)
         FfiConverterUInt32.write(value.moves, into: &buf)
+        FfiConverterSequenceTypeStatementLookalike.write(value.lookalikes, into: &buf)
     }
 }
 
@@ -5557,6 +5637,17 @@ public struct StatementRow: Equatable, Hashable, Codable {
      * default. `None` when nothing matched.
      */
     public var matchChoice: StatementMatchChoice?
+    /**
+     * What [`Self::match_choice`] would be without the user's `on_match`.
+     * `None` when nothing matched.
+     */
+    public var defaultChoice: StatementMatchChoice?
+    /**
+     * What the row is taken for before the user's own action: the
+     * description rule's, else the type rule's, else the default action.
+     * `None` for a row that could not be read as one (`invalid_row`).
+     */
+    public var baseAction: StatementAction?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5612,7 +5703,16 @@ public struct StatementRow: Equatable, Hashable, Codable {
         /**
          * What becomes of a row that matched: the user's choice, else the
          * default. `None` when nothing matched.
-         */matchChoice: StatementMatchChoice?) {
+         */matchChoice: StatementMatchChoice?, 
+        /**
+         * What [`Self::match_choice`] would be without the user's `on_match`.
+         * `None` when nothing matched.
+         */defaultChoice: StatementMatchChoice? = nil, 
+        /**
+         * What the row is taken for before the user's own action: the
+         * description rule's, else the type rule's, else the default action.
+         * `None` for a row that could not be read as one (`invalid_row`).
+         */baseAction: StatementAction? = nil) {
         self.line = line
         self.commandId = commandId
         self.status = status
@@ -5632,6 +5732,8 @@ public struct StatementRow: Equatable, Hashable, Codable {
         self.descriptionRule = descriptionRule
         self.existing = existing
         self.matchChoice = matchChoice
+        self.defaultChoice = defaultChoice
+        self.baseAction = baseAction
     }
 
     
@@ -5668,7 +5770,9 @@ public struct FfiConverterTypeStatementRow: FfiConverterRustBuffer {
                 category: FfiConverterOptionString.read(from: &buf), 
                 descriptionRule: FfiConverterOptionUInt32.read(from: &buf), 
                 existing: FfiConverterOptionTypeTransactionView.read(from: &buf), 
-                matchChoice: FfiConverterOptionTypeStatementMatchChoice.read(from: &buf)
+                matchChoice: FfiConverterOptionTypeStatementMatchChoice.read(from: &buf), 
+                defaultChoice: FfiConverterOptionTypeStatementMatchChoice.read(from: &buf), 
+                baseAction: FfiConverterOptionTypeStatementAction.read(from: &buf)
         )
     }
 
@@ -5692,6 +5796,8 @@ public struct FfiConverterTypeStatementRow: FfiConverterRustBuffer {
         FfiConverterOptionUInt32.write(value.descriptionRule, into: &buf)
         FfiConverterOptionTypeTransactionView.write(value.existing, into: &buf)
         FfiConverterOptionTypeStatementMatchChoice.write(value.matchChoice, into: &buf)
+        FfiConverterOptionTypeStatementMatchChoice.write(value.defaultChoice, into: &buf)
+        FfiConverterOptionTypeStatementAction.write(value.baseAction, into: &buf)
     }
 }
 
@@ -5724,6 +5830,10 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
      */
     public var category: String?
     public var note: String?
+    /**
+     * Leaves the row out (`skipped_by_you`), matched or not: nothing is
+     * written or claimed for it, so the next import shows it again.
+     */
     public var skip: Bool
     /**
      * What the row is, over the description rules, the type rules and the
@@ -5737,10 +5847,8 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
      */
     public var flowId: Uuid?
     /**
-     * What becomes of a flagged row, over the default (import it anyway
-     * near the file's edges, move a duplicate found in another wallet,
-     * replace an entry very likely standing for the row's transfer, import
-     * beside one less likely, skip any other).
+     * What becomes of a flagged row, over the default
+     * ([`StatementRow::default_choice`]).
      */
     public var onMatch: StatementMatchChoice?
 
@@ -5752,7 +5860,11 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
          */line: UInt32, 
         /**
          * Typed by the user, so it may create a category.
-         */category: String?, note: String?, skip: Bool, 
+         */category: String?, note: String?, 
+        /**
+         * Leaves the row out (`skipped_by_you`), matched or not: nothing is
+         * written or claimed for it, so the next import shows it again.
+         */skip: Bool, 
         /**
          * What the row is, over the description rules, the type rules and the
          * default action. Never part of the row's id.
@@ -5763,10 +5875,8 @@ public struct StatementRowOverride: Equatable, Hashable, Codable {
          * unknown envelope is ignored.
          */flowId: Uuid? = nil, 
         /**
-         * What becomes of a flagged row, over the default (import it anyway
-         * near the file's edges, move a duplicate found in another wallet,
-         * replace an entry very likely standing for the row's transfer, import
-         * beside one less likely, skip any other).
+         * What becomes of a flagged row, over the default
+         * ([`StatementRow::default_choice`]).
          */onMatch: StatementMatchChoice? = nil) {
         self.line = line
         self.category = category
@@ -9032,8 +9142,9 @@ public enum StatementMatchChoice: Equatable, Hashable, Codable, CaseIterable {
     
     /**
      * Leave the row out: the transaction already there stands for it, and
-     * the import records it. On an entry standing for the row's transfer it
-     * reads as `ImportAnyway`.
+     * the import records it. On a duplicate found in one of
+     * [`StatementOptions::also_check_wallets`] it reads as `MoveExisting`,
+     * on an entry standing for the row's transfer as `ImportAnyway`.
      */
     case skip
     /**
@@ -9053,9 +9164,9 @@ public enum StatementMatchChoice: Equatable, Hashable, Codable, CaseIterable {
      * between wallets it is, all at once: for a transfer row whose other
      * side is already in the vault as an income, expense or refund (the
      * other bank's row imported without a rule, or typed by hand). The
-     * default only when the entry very likely is that side (the other
-     * bank's statement row, or dated the row's day or a day off). Only for
-     * such a match; anywhere else it reads as the default.
+     * default only when the entry very likely is that side: dated the row's
+     * day or a day off, and in no wallet also checked. Only for such a
+     * match; anywhere else it reads as the default.
      */
     case replaceExisting
 
@@ -10580,6 +10691,31 @@ fileprivate struct FfiConverterSequenceTypeStatementDescriptionRule: FfiConverte
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeStatementDescriptionRule.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStatementLookalike: FfiConverterRustBuffer {
+    typealias SwiftType = [StatementLookalike]
+
+    public static func write(_ value: [StatementLookalike], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStatementLookalike.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StatementLookalike] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StatementLookalike]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStatementLookalike.read(from: &buf))
         }
         return seq
     }

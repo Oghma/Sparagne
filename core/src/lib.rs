@@ -66,9 +66,9 @@ pub use recurring::{
 };
 pub use statement::{
     AmountSign, StatementAction, StatementDateFormat, StatementDescriptionRule, StatementDetection,
-    StatementMapping, StatementMatchChoice, StatementOptions, StatementPreset, StatementPreview,
-    StatementRejection, StatementReport, StatementRow, StatementRowOverride, StatementRowStatus,
-    StatementTypeRule,
+    StatementLookalike, StatementMapping, StatementMatchChoice, StatementOptions, StatementPreset,
+    StatementPreview, StatementRejection, StatementReport, StatementRow, StatementRowOverride,
+    StatementRowStatus, StatementTypeRule,
 };
 pub use store::Core;
 pub use suggest::CategorySuggestion;
