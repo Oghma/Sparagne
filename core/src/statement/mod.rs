@@ -66,7 +66,8 @@
 //! 2. its id, or the id of the move, the claim or the replacement an earlier
 //!    import wrote for it, already in the vault's log: `AlreadyImported`,
 //!    whatever the rules or the user now say about it;
-//! 3. a `Skip` action: `Skipped`, `skipped_by_you` when it is the user's,
+//! 3. an account going to no wallet: `Skipped` (`skipped_account`); then a
+//!    `Skip` action: `Skipped`, `skipped_by_you` when it is the user's,
 //!    `skipped_by_rule` when it is a rule's or the default action; then a
 //!    status in `skip_statuses` (`skipped_status`);
 //! 4. an unreadable date: `Invalid` (`invalid_date`); then a day before
@@ -75,18 +76,64 @@
 //!    other than the vault's (`currency_mismatch`) or an unreadable amount
 //!    (`invalid_amount`): `Invalid`;
 //! 5. a zero amount: `Skipped` (`zero_amount`);
-//! 6. the other side of a transfer already in the vault: `MatchedTransfer`;
-//! 7. a transfer without a usable other wallet: `Skipped` (`needs_wallet`);
-//! 8. an entry of the vault that looks like it, or that stands for the
+//! 6. one half of a move between two accounts of the file (see "Accounts"):
+//!    both `Skipped` (`internal_transfer`) when the two go to one wallet,
+//!    else the money-out half `New` as the transfer and the other `Skipped`
+//!    (`transfer_pair`);
+//! 7. the other side of a transfer already in the vault: `MatchedTransfer`;
+//! 8. a transfer without a usable other wallet: `Skipped` (`needs_wallet`);
+//! 9. an entry of the vault that looks like it, or that stands for the
 //!    transfer it is: `PossibleDuplicate`;
-//! 9. otherwise `New`.
+//! 10. otherwise `New`.
 //!
-//! The user's `skip` leaves any row of 3 to 9 out (`skipped_by_you`), a
+//! The user's `skip` leaves any row of 3 to 10 out (`skipped_by_you`), a
 //! matched one too, and nothing is written or claimed for it.
 //!
 //! The user's override changes nothing on a row of 1 or 2, nor on a row the
 //! mapping alone reads as invalid: only a row the mapping could import is the
 //! user's to change.
+//!
+//! # Accounts
+//!
+//! An export may hold every account of the user's, as the BudgetBakers
+//! Wallet app's does: [`StatementMapping::account_column`] names the column
+//! saying whose a row is, and [`StatementOptions::account_wallets`] the
+//! wallet each account goes to (compared trimmed, whatever the case); an
+//! account not listed goes to [`StatementOptions::wallet_id`], one listed
+//! with no wallet is left out (`skipped_account`). Each row then goes to its
+//! own wallet, in [`StatementRow::wallet_id`], and everything said here of
+//! "the imported wallet" is said of that row's: its commands, the rows it
+//! matches, what its import claims or moves. The wallets a file's rows go to
+//! are all statements' wallets. Without an account column, every row goes
+//! to [`StatementOptions::wallet_id`].
+//!
+//! [`StatementMapping::transfer_column`] marks the rows that are one half of
+//! a move between two of the user's accounts (`true`, `1`, `yes`, `y`, `si`,
+//! `sì` or `x`, whatever the case; [`StatementRow::transfer_leg`]). Before
+//! anything is matched against the vault, the halves the file holds are
+//! paired: a money-out half (an expense, by the row's action and sign) and a
+//! money-in half (an income or a refund) of the same amount, from two
+//! accounts, at most a day apart, one to one, as many as can be and then the
+//! closest in all. Each says the other's line ([`StatementRow::paired_line`]),
+//! and neither matches anything in the vault. When both go to one wallet the
+//! move changes nothing there: both are skipped (`internal_transfer`) and
+//! nothing is written. When they go to two, the money-out half becomes the
+//! transfer from its wallet to the other's, under its own id, and the
+//! money-in half is skipped (`transfer_pair`); the import writes the
+//! transfer with the claims of both its sides in one batch, the money-in
+//! half's under that half's claim id, so both read as imported from then
+//! on. A half the user changed (its action, or left out) is no half, and a
+//! half whose account is left out leaves the other unpaired. An unpaired
+//! half, its other half in no account of the file, is imported as what its
+//! type says, matched against the vault as any row is; the user may make it
+//! a transfer with an action of their own.
+//!
+//! The preset `budgetbakers-wallet` reads that app's export: `;`, a UTC
+//! instant per row, every amount positive with the type column saying the
+//! way (`Expense` and `Income`, anything else skipped), the note as the
+//! description, its category, currency, account and transfer columns.
+//! [`column_values`] lists a column's values with their rows, for the app to
+//! show a file's accounts.
 //!
 //! # Rows already in the vault
 //!
@@ -102,7 +149,7 @@
 //! as a bank's start day is not the others'.
 //!
 //! - The other side of a transfer: a row that would be new or waits for its
-//!   wallet (6 and 7), taken for a transfer or by its sign, matches a live
+//!   wallet (7 and 8), taken for a transfer or by its sign, matches a live
 //!   transfer between wallets of the same amount at most 4 days away that
 //!   goes the row's way: out of the imported wallet for money going out, into
 //!   it for money coming in, and to or from the wallet the row names, if it
@@ -212,7 +259,9 @@
 //!
 //! [`Core::import_statement`] runs one command per new row, oldest first,
 //! with the row's id. A new transfer between wallets is claimed on the
-//! imported wallet's side right after it. A row replacing its match is
+//! imported wallet's side right after it; one made of the two halves of a
+//! move between accounts is written with the claims of both its sides in
+//! one batch, all of it or nothing on this device. A row replacing its match is
 //! written in the same place, in one batch, all of it or nothing on this
 //! device: its transfer under its own id, the `VoidTransaction` of the entry
 //! (`replace`), the claim of its own side, and, when the entry stood for the
@@ -306,6 +355,22 @@
 //!   its edges, and these are imported again by default, their match shown.
 //!   What to do: choose `Skip` on them, or keep the mapping of a file
 //!   already imported.
+//! - Giving the accounts their own wallets later leaves the rows already
+//!   imported where they are (in Cash, say), as their ids hold the account
+//!   and not the wallet. But a move between two accounts that both went to
+//!   Cash wrote nothing then, and read again it is a transfer between the
+//!   two new wallets, dated in the past their other rows stayed behind in.
+//!   What to do: set the start day ([`StatementOptions::since`]) to the day
+//!   the accounts get their wallets.
+//! - The two halves of a move are paired only when both are new: one half
+//!   imported on its own from an earlier export (its other half then in no
+//!   account of the file) stays as it was imported, and the other half is
+//!   imported as what its type says. The money is right in each wallet, as
+//!   an expense and an income rather than one transfer. What to do: void the
+//!   two and type the transfer, if it matters.
+//! - The transfer column is the export's word: a half it does not mark, or
+//!   one it marks whose other half is not a day away, is imported as what
+//!   its type says.
 //!
 //! # Ids
 //!
@@ -319,9 +384,12 @@
 //! the amount in minor units signed as the file wrote it; the payee
 //! lowercased; and `n` the number of rows with the same key earlier in the
 //! file, so two identical rows in the same second both import. Nor does the
-//! start day, the envelope or a match ever change an id. Line numbers are
-//! those of the file, header included; a row with a newline inside quotes
-//! starts on its first.
+//! start day, the envelope or a match ever change an id. With an account
+//! column, the wallet part is `acct:` and the row's account, trimmed and
+//! lowercased (`acct:revolut`), never the wallet the account goes to: rows
+//! imported into Cash while every account went there read as imported once
+//! each account has its own wallet. Line numbers are those of the file,
+//! header included; a row with a newline inside quotes starts on its first.
 
 use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde::{Deserialize, Serialize};
@@ -607,7 +675,14 @@ pub enum StatementRowStatus {
     /// - `zero_amount`: the amount is zero;
     /// - `skipped_by_you`: a [`StatementRowOverride`] with `skip`, or a
     ///   `Skip` action of the user's;
-    /// - `before_start`: dated before [`StatementOptions::since`].
+    /// - `before_start`: dated before [`StatementOptions::since`];
+    /// - `skipped_account`: its account goes to no wallet
+    ///   ([`StatementAccountWallet::wallet_id`] is `None`);
+    /// - `internal_transfer`: one half of a move between two accounts of the
+    ///   file that go to one wallet, where it moves nothing;
+    /// - `transfer_pair`: the money-in half of a move between two accounts
+    ///   of the file, written as the transfer of the other half
+    ///   ([`StatementRow::paired_line`]).
     Skipped {
         code: String,
         reason: String,
