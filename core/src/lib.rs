@@ -52,8 +52,8 @@ pub use engine::entities::{AliasView, MergeConflict, MergeConflictKind, MergePre
 pub use error::DomainError;
 pub use ffi::{
     CoreHandle, create_vault_envelope, decode_statement_mapping, detect_statement,
-    encode_statement_mapping, format_money, new_envelope, parse_money, parse_quick_add,
-    resolve_date_spec, statement_presets,
+    encode_statement_mapping, format_money, guess_statement_formats, new_envelope, parse_money,
+    parse_quick_add, resolve_date_spec, statement_presets,
 };
 pub use flow::{Flow, FlowMode, UNALLOCATED_NAME, headroom};
 pub use money::Money;
@@ -66,9 +66,9 @@ pub use recurring::{
 };
 pub use statement::{
     AmountSign, StatementAction, StatementDateFormat, StatementDescriptionRule, StatementDetection,
-    StatementLookalike, StatementMapping, StatementMatchChoice, StatementOptions, StatementPreset,
-    StatementPreview, StatementRejection, StatementReport, StatementRow, StatementRowOverride,
-    StatementRowStatus, StatementTypeRule,
+    StatementFormatGuess, StatementLookalike, StatementMapping, StatementMatchChoice,
+    StatementOptions, StatementPreset, StatementPreview, StatementRejection, StatementReport,
+    StatementRow, StatementRowOverride, StatementRowStatus, StatementTypeRule,
 };
 pub use store::Core;
 pub use suggest::CategorySuggestion;

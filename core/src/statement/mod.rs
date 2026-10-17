@@ -334,6 +334,7 @@ use crate::{
 mod amount;
 mod csv;
 mod dates;
+mod guess;
 mod matching;
 mod plan;
 mod presets;
@@ -730,6 +731,18 @@ pub struct StatementDetection {
     pub sample: Vec<Vec<String>>,
 }
 
+/// How a statement's date and amount columns are written, as far as their
+/// values tell ([`guess_formats`]).
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct StatementFormatGuess {
+    /// The first of UTC (only when every value says so), ISO date-time, ISO
+    /// date, day-first and month-first that reads every value.
+    pub date_format: Option<StatementDateFormat>,
+    /// `true` when only a decimal comma reads every amount, `false` when
+    /// only a decimal point does.
+    pub decimal_comma: Option<bool>,
+}
+
 /// The built-in presets.
 #[must_use]
 pub fn presets() -> Vec<StatementPreset> {
@@ -767,6 +780,21 @@ pub fn detect(text: &str) -> Result<StatementDetection> {
         rows,
         sample,
     })
+}
+
+/// The date format and the decimal mark that read every non-empty value of
+/// the first 50 data rows of `date_column` and `amount_column`, for a
+/// mapping that starts blank. Each is `None` when its column is not named,
+/// not in the header or empty, or when no format reads all its values; a
+/// delimiter that is not one character guesses nothing.
+#[must_use]
+pub fn guess_formats(
+    text: &str,
+    delimiter: &str,
+    date_column: Option<&str>,
+    amount_column: Option<&str>,
+) -> StatementFormatGuess {
+    guess::guess(text, delimiter, date_column, amount_column)
 }
 
 /// A mapping as JSON, for the app to remember.

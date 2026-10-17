@@ -4867,6 +4867,80 @@ public func FfiConverterTypeStatementDetection_lower(_ value: StatementDetection
 
 
 /**
+ * How a statement's date and amount columns are written, as far as their
+ * values tell ([`guess_formats`]).
+ */
+public struct StatementFormatGuess: Equatable, Hashable, Codable {
+    /**
+     * The first of UTC (only when every value says so), ISO date-time, ISO
+     * date, day-first and month-first that reads every value.
+     */
+    public var dateFormat: StatementDateFormat?
+    /**
+     * `true` when only a decimal comma reads every amount, `false` when
+     * only a decimal point does.
+     */
+    public var decimalComma: Bool?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The first of UTC (only when every value says so), ISO date-time, ISO
+         * date, day-first and month-first that reads every value.
+         */dateFormat: StatementDateFormat?, 
+        /**
+         * `true` when only a decimal comma reads every amount, `false` when
+         * only a decimal point does.
+         */decimalComma: Bool?) {
+        self.dateFormat = dateFormat
+        self.decimalComma = decimalComma
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StatementFormatGuess: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementFormatGuess: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementFormatGuess {
+        return
+            try StatementFormatGuess(
+                dateFormat: FfiConverterOptionTypeStatementDateFormat.read(from: &buf), 
+                decimalComma: FfiConverterOptionBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatementFormatGuess, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeStatementDateFormat.write(value.dateFormat, into: &buf)
+        FfiConverterOptionBool.write(value.decimalComma, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementFormatGuess_lift(_ buf: RustBuffer) throws -> StatementFormatGuess {
+    return try FfiConverterTypeStatementFormatGuess.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementFormatGuess_lower(_ value: StatementFormatGuess) -> RustBuffer {
+    return FfiConverterTypeStatementFormatGuess.lower(value)
+}
+
+
+/**
  * A wallet the statement does not check for rows typed by hand where some
  * of its new rows look like entries already there: advice to check it.
  */
@@ -9883,6 +9957,30 @@ fileprivate struct FfiConverterOptionTypeStatementAction: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeStatementDateFormat: FfiConverterRustBuffer {
+    typealias SwiftType = StatementDateFormat?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeStatementDateFormat.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeStatementDateFormat.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeStatementMatchChoice: FfiConverterRustBuffer {
     typealias SwiftType = StatementMatchChoice?
 
@@ -11341,6 +11439,21 @@ public func formatMoney(minor: Int64, currency: Currency) -> String  {
 })
 }
 /**
+ * The date format and decimal mark the values of a statement's date and
+ * amount columns are written in, for a mapping that starts blank.
+ */
+public func guessStatementFormats(text: String, delimiter: String, dateColumn: String?, amountColumn: String?) -> StatementFormatGuess  {
+    return try!  FfiConverterTypeStatementFormatGuess_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_func_guess_statement_formats(
+        FfiConverterString.lower(text),
+        FfiConverterString.lower(delimiter),
+        FfiConverterOptionString.lower(dateColumn),
+        FfiConverterOptionString.lower(amountColumn),uniffiCallStatus
+    )
+})
+}
+/**
  * A command addressed to a vault, with a fresh UUID v7.
  *
  * Ids are minted here and nowhere else: the id is the idempotency key and the
@@ -11449,6 +11562,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_format_money() != 19538) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_func_guess_statement_formats() != 62778) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_new_envelope() != 36132) {

@@ -331,7 +331,7 @@ fn row_id(key: &str) -> Uuid {
 
 /// The one-character delimiter of a mapping. `\t` and `tab` spelled out are
 /// read as a tab.
-fn delimiter(value: &str) -> Result<char> {
+pub(super) fn delimiter(value: &str) -> Result<char> {
     let bad = || {
         DomainError::InvalidCommand(format!(
             "the delimiter must be one character, not '{value}'"

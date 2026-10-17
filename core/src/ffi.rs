@@ -25,10 +25,10 @@ use crate::{
     CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, CommandRecord,
     Core, Currency, DomainError, FlowBalanceRange, FlowPersonTotals, MergePreview, Money, Page,
     PendingAllocation, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
-    RecurringView, RejectedCommand, Schedule, StatementDetection, StatementMapping,
-    StatementOptions, StatementPreset, StatementPreview, StatementReport, StatementRowOverride,
-    SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter, TransactionView,
-    VaultSnapshot, VaultView,
+    RecurringView, RejectedCommand, Schedule, StatementDetection, StatementFormatGuess,
+    StatementMapping, StatementOptions, StatementPreset, StatementPreview, StatementReport,
+    StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter,
+    TransactionView, VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -629,6 +629,24 @@ pub fn statement_presets() -> Vec<StatementPreset> {
 #[uniffi::export]
 pub fn detect_statement(text: String) -> Result<StatementDetection, DomainError> {
     statement::detect(&text)
+}
+
+/// The date format and decimal mark the values of a statement's date and
+/// amount columns are written in, for a mapping that starts blank.
+#[must_use]
+#[uniffi::export]
+pub fn guess_statement_formats(
+    text: String,
+    delimiter: String,
+    date_column: Option<String>,
+    amount_column: Option<String>,
+) -> StatementFormatGuess {
+    statement::guess_formats(
+        &text,
+        &delimiter,
+        date_column.as_deref(),
+        amount_column.as_deref(),
+    )
 }
 
 /// A statement mapping as JSON, for the app to remember.

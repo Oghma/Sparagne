@@ -10,9 +10,9 @@ use common::*;
 use sparagne_core::statement::{self, STATEMENT_NAMESPACE};
 use sparagne_core::{
     AmountSign, Command, CommandEnvelope, Core, Currency, DomainError, Entry, FlowMode,
-    StatementAction, StatementDateFormat, StatementDescriptionRule, StatementMapping,
-    StatementMatchChoice, StatementOptions, StatementPreview, StatementReport, StatementRow,
-    StatementRowOverride, StatementRowStatus, StatementTypeRule, TransactionKind,
+    StatementAction, StatementDateFormat, StatementDescriptionRule, StatementFormatGuess,
+    StatementMapping, StatementMatchChoice, StatementOptions, StatementPreview, StatementReport,
+    StatementRow, StatementRowOverride, StatementRowStatus, StatementTypeRule, TransactionKind,
 };
 use uuid::Uuid;
 
@@ -1076,6 +1076,214 @@ fn the_wallets_also_checked_must_be_the_vaults() {
     // Archived is fine, the imported wallet itself is ignored.
     let preview = preview(&checked(vec![old, fx.wallet])).unwrap();
     assert_eq!(preview.new_rows, 3);
+}
+
+// ---------------------------------------------------------------------------
+// Guessing the formats of a blank mapping
+// ---------------------------------------------------------------------------
+
+/// The header of a current-account export in Italian, completion time and
+/// all.
+const CURRENT_HEADER: &str = "Tipo,Prodotto,Data di inizio,Data di completamento,Descrizione,\
+    Importo,Costo,Valuta,State,Saldo";
+const CURRENT_ROW: &str = "Pagamento,Attuale,2026-10-16 13:34:44,2026-10-16 13:34:45,\
+    To Tobia Tesan,-100.79,0.00,EUR,COMPLETATO,507.26";
+
+/// The guess for `rows` under `header`, split on `delimiter`.
+fn guess(
+    delimiter: &str,
+    header: &str,
+    rows: &[&str],
+    date: Option<&str>,
+    amount: Option<&str>,
+) -> StatementFormatGuess {
+    let text = std::iter::once(header)
+        .chain(rows.iter().copied())
+        .collect::<Vec<_>>()
+        .join("\n");
+    statement::guess_formats(&text, delimiter, date, amount)
+}
+
+/// The guessed date format of a one-column file holding `dates`.
+fn guessed_date(dates: &[&str]) -> Option<StatementDateFormat> {
+    guess(";", "Data", dates, Some("Data"), None).date_format
+}
+
+/// The guessed decimal mark of a one-column file holding `amounts`.
+fn guessed_comma(amounts: &[&str]) -> Option<bool> {
+    guess(";", "Importo", amounts, None, Some("Importo")).decimal_comma
+}
+
+#[test]
+fn a_current_account_export_reads_as_date_times_with_a_decimal_point() {
+    let expected = StatementFormatGuess {
+        date_format: Some(StatementDateFormat::IsoDateTime),
+        decimal_comma: Some(false),
+    };
+    for delimiter in [",", ";"] {
+        let header = CURRENT_HEADER.replace(',', delimiter);
+        let row = CURRENT_ROW.replace(',', delimiter);
+        let found = guess(
+            delimiter,
+            &header,
+            &[&row],
+            Some("Data di inizio"),
+            Some("importo "),
+        );
+        assert_eq!(found, expected, "{delimiter:?}");
+    }
+
+    // A blank `;` mapping guesses day-first dates and a decimal comma; with
+    // the guess, the row reads.
+    let fx = setup();
+    let text = format!(
+        "{}\n{}\n",
+        CURRENT_HEADER.replace(',', ";"),
+        CURRENT_ROW.replace(',', ";")
+    );
+    let found = statement::guess_formats(&text, ";", Some("Data di inizio"), Some("Importo"));
+    let mapping = StatementMapping {
+        date_column: "Data di inizio".to_string(),
+        date_format: found.date_format.unwrap(),
+        amount_column: "Importo".to_string(),
+        decimal_comma: found.decimal_comma.unwrap(),
+        currency_column: Some("Valuta".to_string()),
+        ..bank_mapping()
+    };
+    let preview = fx
+        .core
+        .preview_statement(
+            fx.vault,
+            &text,
+            &mapping,
+            &options(fx.wallet),
+            &no_overrides(),
+        )
+        .unwrap();
+    let paid = row(&preview, 2);
+    assert_eq!(paid.status, StatementRowStatus::New);
+    assert_eq!(paid.amount, 10_079);
+    assert_eq!(paid.kind, Some(TransactionKind::Expense));
+    assert_eq!(
+        paid.occurred_at.unwrap().to_rfc3339(),
+        "2026-10-16T13:34:44+02:00"
+    );
+}
+
+#[test]
+fn an_italian_bank_export_reads_day_first_with_a_decimal_comma() {
+    let found = guess(
+        ";",
+        "Data operazione;Importo;Descrizione",
+        &[
+            "16/09/2026;-3,50;Bar della stazione",
+            "17/09/2026;1500;Stipendio",
+            "18/09/2026;-12,5;Farmacia",
+        ],
+        Some("Data operazione"),
+        Some("Importo"),
+    );
+    assert_eq!(
+        found,
+        StatementFormatGuess {
+            date_format: Some(StatementDateFormat::DayMonthYear),
+            decimal_comma: Some(true),
+        }
+    );
+}
+
+#[test]
+fn day_first_unless_a_second_number_over_twelve_says_otherwise() {
+    assert_eq!(
+        guessed_date(&["01/02/2026"]),
+        Some(StatementDateFormat::DayMonthYear)
+    );
+    assert_eq!(
+        guessed_date(&["01/02/2026", "13/02/2026"]),
+        Some(StatementDateFormat::DayMonthYear)
+    );
+    assert_eq!(
+        guessed_date(&["01/02/2026", "02/13/2026"]),
+        Some(StatementDateFormat::MonthDayYear)
+    );
+    // Day-first and month-first in the same column: neither reads both.
+    assert_eq!(guessed_date(&["13/02/2026", "02/13/2026"]), None);
+}
+
+#[test]
+fn a_time_or_a_utc_mark_picks_the_formats_with_a_time() {
+    assert_eq!(
+        guessed_date(&["2026-09-16T08:54:40", "2026-09-17 10:00"]),
+        Some(StatementDateFormat::IsoDateTime)
+    );
+    assert_eq!(
+        guessed_date(&["2026-09-16T08:54:40+02:00"]),
+        Some(StatementDateFormat::IsoDateTime)
+    );
+    assert_eq!(
+        guessed_date(&["2026-09-16 08:54:40 UTC", "2026-09-17T08:00:00Z"]),
+        Some(StatementDateFormat::DateTimeUtc)
+    );
+    assert_eq!(
+        guessed_date(&["2026-09-16"]),
+        Some(StatementDateFormat::IsoDate)
+    );
+    // A day without its time next to date-times: no format reads both.
+    assert_eq!(guessed_date(&["2026-09-16 08:54:40", "2026-09-17"]), None);
+    assert_eq!(guessed_date(&["16 settembre 2026"]), None);
+}
+
+#[test]
+fn the_decimal_mark_is_the_one_that_reads_every_amount() {
+    assert_eq!(guessed_comma(&["-100.79", "12", "0.5"]), Some(false));
+    assert_eq!(guessed_comma(&["-3,50", "+12"]), Some(true));
+    // Whole numbers read either way, and thousands separators neither.
+    assert_eq!(guessed_comma(&["12", "-300"]), None);
+    assert_eq!(guessed_comma(&["1.850,00"]), None);
+    assert_eq!(guessed_comma(&["-3,50", "12.40"]), None);
+    assert_eq!(guessed_comma(&["12 EUR"]), None);
+}
+
+#[test]
+fn a_column_empty_missing_or_not_named_guesses_nothing() {
+    let nothing = StatementFormatGuess {
+        date_format: None,
+        decimal_comma: None,
+    };
+    let header = "Data;Importo;Note";
+    let rows = ["16/09/2026;;bar", ";;", "17/09/2026;  ;pane"];
+    // Empty values are skipped, so the dates still guess.
+    assert_eq!(
+        guess(";", header, &rows, Some("Data"), Some("Importo")),
+        StatementFormatGuess {
+            date_format: Some(StatementDateFormat::DayMonthYear),
+            decimal_comma: None,
+        }
+    );
+    assert_eq!(
+        guess(";", header, &rows, Some("Valuta"), Some("Note")),
+        nothing
+    );
+    assert_eq!(guess(";", header, &rows, None, Some(" ")), nothing);
+    assert_eq!(
+        guess(";", header, &[], Some("Data"), Some("Importo")),
+        nothing
+    );
+    assert_eq!(
+        statement::guess_formats("", ";", Some("Data"), Some("Importo")),
+        nothing
+    );
+    assert_eq!(
+        guess(";;", header, &rows, Some("Data"), Some("Importo")),
+        nothing
+    );
+}
+
+#[test]
+fn only_the_first_fifty_rows_are_read() {
+    let mut rows = vec!["01/02/2026"; 50];
+    rows.push("02/13/2026");
+    assert_eq!(guessed_date(&rows), Some(StatementDateFormat::DayMonthYear));
 }
 
 // ---------------------------------------------------------------------------
