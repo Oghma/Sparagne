@@ -216,7 +216,7 @@ enum StatementDateChoice: String, CaseIterable, Identifiable {
         switch self {
         case .dateTimeUtc: "2026-09-16 08:54:40 UTC"
         case .isoDate: "2026-09-16"
-        case .isoDateTime: "2026-09-16T08:54:40"
+        case .isoDateTime: "2026-09-16 08:54:40"
         case .dayMonthYear: "16/09/2026"
         case .monthDayYear: "09/16/2026"
         case .custom: String(localized: "Custom pattern")
