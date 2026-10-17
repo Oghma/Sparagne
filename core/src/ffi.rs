@@ -25,10 +25,10 @@ use crate::{
     CategorySuggestion, CategoryTotals, CategoryView, Command, CommandEnvelope, CommandRecord,
     Core, Currency, DomainError, FlowBalanceRange, FlowPersonTotals, MergePreview, Money, Page,
     PendingAllocation, PendingRecurring, PeriodTotals, Receipt, RecentUsage, RecurringRunView,
-    RecurringView, RejectedCommand, Schedule, StatementDetection, StatementFormatGuess,
-    StatementMapping, StatementOptions, StatementPreset, StatementPreview, StatementReport,
-    StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense, TransactionFilter,
-    TransactionView, VaultSnapshot, VaultView,
+    RecurringView, RejectedCommand, Schedule, StatementColumnValue, StatementDetection,
+    StatementFormatGuess, StatementMapping, StatementOptions, StatementPreset, StatementPreview,
+    StatementReport, StatementRowOverride, SyncReport, SyncState, TargetKind, TopExpense,
+    TransactionFilter, TransactionView, VaultSnapshot, VaultView,
     quick_add::{self, QuickAdd, QuickAddDefaults, QuickAddError, ResolvedQuickAdd},
     statement,
 };
@@ -629,6 +629,18 @@ pub fn statement_presets() -> Vec<StatementPreset> {
 #[uniffi::export]
 pub fn detect_statement(text: String) -> Result<StatementDetection, DomainError> {
     statement::detect(&text)
+}
+
+/// The distinct values of a statement column with how many rows hold each,
+/// most rows first: the accounts or the types of a file, for the mapping.
+#[must_use]
+#[uniffi::export]
+pub fn statement_column_values(
+    text: String,
+    delimiter: String,
+    column: String,
+) -> Vec<StatementColumnValue> {
+    statement::column_values(&text, &delimiter, &column)
 }
 
 /// The date format and decimal mark the values of a statement's date and

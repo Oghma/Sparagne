@@ -4691,6 +4691,139 @@ public func FfiConverterTypeSchedule_lower(_ value: Schedule) -> RustBuffer {
 
 
 /**
+ * Where the rows of one account of the file go.
+ */
+public struct StatementAccountWallet: Equatable, Hashable, Codable {
+    /**
+     * As the account column writes it; compared trimmed, whatever the case.
+     */
+    public var account: String
+    /**
+     * `None` leaves the account's rows out (`skipped_account`).
+     */
+    public var walletId: Uuid?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * As the account column writes it; compared trimmed, whatever the case.
+         */account: String, 
+        /**
+         * `None` leaves the account's rows out (`skipped_account`).
+         */walletId: Uuid?) {
+        self.account = account
+        self.walletId = walletId
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StatementAccountWallet: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementAccountWallet: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementAccountWallet {
+        return
+            try StatementAccountWallet(
+                account: FfiConverterString.read(from: &buf), 
+                walletId: FfiConverterOptionTypeUuid.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatementAccountWallet, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.account, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementAccountWallet_lift(_ buf: RustBuffer) throws -> StatementAccountWallet {
+    return try FfiConverterTypeStatementAccountWallet.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementAccountWallet_lower(_ value: StatementAccountWallet) -> RustBuffer {
+    return FfiConverterTypeStatementAccountWallet.lower(value)
+}
+
+
+/**
+ * One value of a statement's column, and how many rows hold it
+ * ([`column_values`]).
+ */
+public struct StatementColumnValue: Equatable, Hashable, Codable {
+    /**
+     * As the first row holding it writes it, trimmed.
+     */
+    public var value: String
+    public var rows: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * As the first row holding it writes it, trimmed.
+         */value: String, rows: UInt32) {
+        self.value = value
+        self.rows = rows
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StatementColumnValue: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStatementColumnValue: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StatementColumnValue {
+        return
+            try StatementColumnValue(
+                value: FfiConverterString.read(from: &buf), 
+                rows: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StatementColumnValue, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.value, into: &buf)
+        FfiConverterUInt32.write(value.rows, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementColumnValue_lift(_ buf: RustBuffer) throws -> StatementColumnValue {
+    return try FfiConverterTypeStatementColumnValue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStatementColumnValue_lower(_ value: StatementColumnValue) -> RustBuffer {
+    return FfiConverterTypeStatementColumnValue.lower(value)
+}
+
+
+/**
  * One entry of [`StatementMapping::description_rules`]: what a row whose
  * description holds `contains` is. Matched case-insensitively against the
  * joined description columns, inner runs of spaces collapsed on both sides;
@@ -5051,6 +5184,19 @@ public struct StatementMapping: Equatable, Hashable, Codable {
      * rules is written as it always was.
      */
     public var descriptionRules: [StatementDescriptionRule]
+    /**
+     * The column naming the account a row belongs to, in an export holding
+     * several (the BudgetBakers Wallet app's): each account goes to the
+     * wallet [`StatementOptions::account_wallets`] gives it. Left out of the
+     * JSON when `None`, like the next one.
+     */
+    public var accountColumn: String?
+    /**
+     * The column saying a row is one half of a move between two of the
+     * user's accounts (`true`, `1`, `yes`, `y`, `si`, `sì` or `x`, whatever
+     * the case).
+     */
+    public var transferColumn: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5080,7 +5226,18 @@ public struct StatementMapping: Equatable, Hashable, Codable {
          * Tried in order before the type rules. Left out of the JSON when empty,
          * so a mapping saved before rules existed reads back, and one without
          * rules is written as it always was.
-         */descriptionRules: [StatementDescriptionRule] = []) {
+         */descriptionRules: [StatementDescriptionRule] = [], 
+        /**
+         * The column naming the account a row belongs to, in an export holding
+         * several (the BudgetBakers Wallet app's): each account goes to the
+         * wallet [`StatementOptions::account_wallets`] gives it. Left out of the
+         * JSON when `None`, like the next one.
+         */accountColumn: String? = nil, 
+        /**
+         * The column saying a row is one half of a move between two of the
+         * user's accounts (`true`, `1`, `yes`, `y`, `si`, `sì` or `x`, whatever
+         * the case).
+         */transferColumn: String? = nil) {
         self.delimiter = delimiter
         self.dateColumn = dateColumn
         self.dateFormat = dateFormat
@@ -5098,6 +5255,8 @@ public struct StatementMapping: Equatable, Hashable, Codable {
         self.originalAmountColumn = originalAmountColumn
         self.originalCurrencyColumn = originalCurrencyColumn
         self.descriptionRules = descriptionRules
+        self.accountColumn = accountColumn
+        self.transferColumn = transferColumn
     }
 
     
@@ -5132,7 +5291,9 @@ public struct FfiConverterTypeStatementMapping: FfiConverterRustBuffer {
                 categoryColumn: FfiConverterOptionString.read(from: &buf), 
                 originalAmountColumn: FfiConverterOptionString.read(from: &buf), 
                 originalCurrencyColumn: FfiConverterOptionString.read(from: &buf), 
-                descriptionRules: FfiConverterSequenceTypeStatementDescriptionRule.read(from: &buf)
+                descriptionRules: FfiConverterSequenceTypeStatementDescriptionRule.read(from: &buf), 
+                accountColumn: FfiConverterOptionString.read(from: &buf), 
+                transferColumn: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -5154,6 +5315,8 @@ public struct FfiConverterTypeStatementMapping: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.originalAmountColumn, into: &buf)
         FfiConverterOptionString.write(value.originalCurrencyColumn, into: &buf)
         FfiConverterSequenceTypeStatementDescriptionRule.write(value.descriptionRules, into: &buf)
+        FfiConverterOptionString.write(value.accountColumn, into: &buf)
+        FfiConverterOptionString.write(value.transferColumn, into: &buf)
     }
 }
 
@@ -5211,6 +5374,11 @@ public struct StatementOptions: Equatable, Hashable, Codable {
      * away. A wallet not in the vault is no statement's.
      */
     public var statementWallets: [Uuid]
+    /**
+     * Where each account of [`StatementMapping::account_column`] goes; an
+     * account not listed goes to `wallet_id`.
+     */
+    public var accountWallets: [StatementAccountWallet]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5242,13 +5410,18 @@ public struct StatementOptions: Equatable, Hashable, Codable {
          * [`StatementPreview::lookalikes`], and their imported rows standing for
          * a transfer row's other side are replaced by default up to 4 days
          * away. A wallet not in the vault is no statement's.
-         */statementWallets: [Uuid] = []) {
+         */statementWallets: [Uuid] = [], 
+        /**
+         * Where each account of [`StatementMapping::account_column`] goes; an
+         * account not listed goes to `wallet_id`.
+         */accountWallets: [StatementAccountWallet] = []) {
         self.walletId = walletId
         self.flowId = flowId
         self.timezone = timezone
         self.alsoCheckWallets = alsoCheckWallets
         self.since = since
         self.statementWallets = statementWallets
+        self.accountWallets = accountWallets
     }
 
     
@@ -5272,7 +5445,8 @@ public struct FfiConverterTypeStatementOptions: FfiConverterRustBuffer {
                 timezone: FfiConverterString.read(from: &buf), 
                 alsoCheckWallets: FfiConverterSequenceTypeUuid.read(from: &buf), 
                 since: FfiConverterOptionTypeNaiveDate.read(from: &buf), 
-                statementWallets: FfiConverterSequenceTypeUuid.read(from: &buf)
+                statementWallets: FfiConverterSequenceTypeUuid.read(from: &buf), 
+                accountWallets: FfiConverterSequenceTypeStatementAccountWallet.read(from: &buf)
         )
     }
 
@@ -5283,6 +5457,7 @@ public struct FfiConverterTypeStatementOptions: FfiConverterRustBuffer {
         FfiConverterSequenceTypeUuid.write(value.alsoCheckWallets, into: &buf)
         FfiConverterOptionTypeNaiveDate.write(value.since, into: &buf)
         FfiConverterSequenceTypeUuid.write(value.statementWallets, into: &buf)
+        FfiConverterSequenceTypeStatementAccountWallet.write(value.accountWallets, into: &buf)
     }
 }
 
@@ -5746,6 +5921,26 @@ public struct StatementRow: Equatable, Hashable, Codable {
      * `None` for a row that could not be read as one (`invalid_row`).
      */
     public var baseAction: StatementAction?
+    /**
+     * The wallet the row goes to: its account's, else
+     * [`StatementOptions::wallet_id`]. `None` for a row of an account left
+     * out, or one that could not be read as a row (`invalid_row`).
+     */
+    public var walletId: Uuid?
+    /**
+     * The account column's value, trimmed.
+     */
+    public var account: String?
+    /**
+     * The transfer column says the row is one half of a move between two
+     * of the user's accounts. Set on a half with no other side in the file
+     * too, which is then imported as what its type says.
+     */
+    public var transferLeg: Bool
+    /**
+     * The line of the other half the row was paired with in the file.
+     */
+    public var pairedLine: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -5810,7 +6005,23 @@ public struct StatementRow: Equatable, Hashable, Codable {
          * What the row is taken for before the user's own action: the
          * description rule's, else the type rule's, else the default action.
          * `None` for a row that could not be read as one (`invalid_row`).
-         */baseAction: StatementAction? = nil) {
+         */baseAction: StatementAction? = nil, 
+        /**
+         * The wallet the row goes to: its account's, else
+         * [`StatementOptions::wallet_id`]. `None` for a row of an account left
+         * out, or one that could not be read as a row (`invalid_row`).
+         */walletId: Uuid? = nil, 
+        /**
+         * The account column's value, trimmed.
+         */account: String? = nil, 
+        /**
+         * The transfer column says the row is one half of a move between two
+         * of the user's accounts. Set on a half with no other side in the file
+         * too, which is then imported as what its type says.
+         */transferLeg: Bool = false, 
+        /**
+         * The line of the other half the row was paired with in the file.
+         */pairedLine: UInt32? = nil) {
         self.line = line
         self.commandId = commandId
         self.status = status
@@ -5832,6 +6043,10 @@ public struct StatementRow: Equatable, Hashable, Codable {
         self.matchChoice = matchChoice
         self.defaultChoice = defaultChoice
         self.baseAction = baseAction
+        self.walletId = walletId
+        self.account = account
+        self.transferLeg = transferLeg
+        self.pairedLine = pairedLine
     }
 
     
@@ -5870,7 +6085,11 @@ public struct FfiConverterTypeStatementRow: FfiConverterRustBuffer {
                 existing: FfiConverterOptionTypeTransactionView.read(from: &buf), 
                 matchChoice: FfiConverterOptionTypeStatementMatchChoice.read(from: &buf), 
                 defaultChoice: FfiConverterOptionTypeStatementMatchChoice.read(from: &buf), 
-                baseAction: FfiConverterOptionTypeStatementAction.read(from: &buf)
+                baseAction: FfiConverterOptionTypeStatementAction.read(from: &buf), 
+                walletId: FfiConverterOptionTypeUuid.read(from: &buf), 
+                account: FfiConverterOptionString.read(from: &buf), 
+                transferLeg: FfiConverterBool.read(from: &buf), 
+                pairedLine: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
 
@@ -5896,6 +6115,10 @@ public struct FfiConverterTypeStatementRow: FfiConverterRustBuffer {
         FfiConverterOptionTypeStatementMatchChoice.write(value.matchChoice, into: &buf)
         FfiConverterOptionTypeStatementMatchChoice.write(value.defaultChoice, into: &buf)
         FfiConverterOptionTypeStatementAction.write(value.baseAction, into: &buf)
+        FfiConverterOptionTypeUuid.write(value.walletId, into: &buf)
+        FfiConverterOptionString.write(value.account, into: &buf)
+        FfiConverterBool.write(value.transferLeg, into: &buf)
+        FfiConverterOptionUInt32.write(value.pairedLine, into: &buf)
     }
 }
 
@@ -9383,7 +9606,14 @@ public enum StatementRowStatus: Equatable, Hashable, Codable {
      * - `zero_amount`: the amount is zero;
      * - `skipped_by_you`: a [`StatementRowOverride`] with `skip`, or a
      * `Skip` action of the user's;
-     * - `before_start`: dated before [`StatementOptions::since`].
+     * - `before_start`: dated before [`StatementOptions::since`];
+     * - `skipped_account`: its account goes to no wallet
+     * ([`StatementAccountWallet::wallet_id`] is `None`);
+     * - `internal_transfer`: one half of a move between two accounts of the
+     * file that go to one wallet, where it moves nothing;
+     * - `transfer_pair`: the money-in half of a move between two accounts
+     * of the file, written as the transfer of the other half
+     * ([`StatementRow::paired_line`]).
      */
     case skipped(code: String, reason: String
     )
@@ -10798,6 +11028,56 @@ fileprivate struct FfiConverterSequenceTypeRunMove: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeStatementAccountWallet: FfiConverterRustBuffer {
+    typealias SwiftType = [StatementAccountWallet]
+
+    public static func write(_ value: [StatementAccountWallet], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStatementAccountWallet.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StatementAccountWallet] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StatementAccountWallet]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStatementAccountWallet.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStatementColumnValue: FfiConverterRustBuffer {
+    typealias SwiftType = [StatementColumnValue]
+
+    public static func write(_ value: [StatementColumnValue], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStatementColumnValue.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StatementColumnValue] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StatementColumnValue]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStatementColumnValue.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeStatementDescriptionRule: FfiConverterRustBuffer {
     typealias SwiftType = [StatementDescriptionRule]
 
@@ -11524,6 +11804,20 @@ public func scheduleOccurrences(schedule: Schedule, from: NaiveDate, limit: UInt
 })
 }
 /**
+ * The distinct values of a statement column with how many rows hold each,
+ * most rows first: the accounts or the types of a file, for the mapping.
+ */
+public func statementColumnValues(text: String, delimiter: String, column: String) -> [StatementColumnValue]  {
+    return try!  FfiConverterSequenceTypeStatementColumnValue.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_sparagne_core_fn_func_statement_column_values(
+        FfiConverterString.lower(text),
+        FfiConverterString.lower(delimiter),
+        FfiConverterString.lower(column),uniffiCallStatus
+    )
+})
+}
+/**
  * The built-in statement presets.
  */
 public func statementPresets() -> [StatementPreset]  {
@@ -11580,6 +11874,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_schedule_occurrences() != 12050) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sparagne_core_checksum_func_statement_column_values() != 29973) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sparagne_core_checksum_func_statement_presets() != 59997) {
