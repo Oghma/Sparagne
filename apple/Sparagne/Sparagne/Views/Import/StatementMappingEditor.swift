@@ -267,7 +267,7 @@ struct StatementMappingEditor: View {
                     label: String(localized: "Date format"),
                     selection: Binding(
                         get: { StatementDateChoice(model.mapping.dateFormat) },
-                        set: { model.mapping.dateFormat = $0.format(keeping: model.mapping.dateFormat) }
+                        set: { model.chooseDateFormat($0.format(keeping: model.mapping.dateFormat)) }
                     ),
                     options: StatementDateChoice.allCases,
                     title: { $0.label }
@@ -279,7 +279,7 @@ struct StatementMappingEditor: View {
                         label: String(localized: "Pattern"),
                         text: Binding(
                             get: { StatementDateChoice.pattern(of: model.mapping.dateFormat) ?? "" },
-                            set: { model.mapping.dateFormat = .custom(pattern: $0) }
+                            set: { model.chooseDateFormat(.custom(pattern: $0)) }
                         )
                     )
                     .help(String(localized: "A strftime pattern, for example:") + " %d.%m.%Y %H:%M")
@@ -295,7 +295,7 @@ struct StatementMappingEditor: View {
             }
             FormRow(String(localized: "Decimal comma")) {
                 FormSwitch(label: String(localized: "Decimal comma"), isOn: model.mapping.decimalComma) {
-                    model.mapping.decimalComma = $0
+                    model.chooseDecimalComma($0)
                 }
             }
         }

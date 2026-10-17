@@ -106,8 +106,17 @@ final class StatementImportModel {
 
     /// Any change re-plans every row, so what the user chose over a match
     /// may no longer be about the same match: those choices are forgotten.
+    /// Picking the date or the amount column of a mapping started blank
+    /// guesses the formats from its values (`guessFormats()`).
     var mapping = StatementImportModel.blankMapping(delimiter: ",") {
-        didSet { if mapping != oldValue { forgetMatchChoices(); noteEdit() } }
+        didSet {
+            guard mapping != oldValue else { return }
+            forgetMatchChoices()
+            noteEdit()
+            if mapping.dateColumn != oldValue.dateColumn || mapping.amountColumn != oldValue.amountColumn {
+                guessFormats()
+            }
+        }
     }
     /// The wallet the statement belongs to. Required; preselected when the
     /// vault has a single wallet, or when the last file with this header
@@ -235,6 +244,15 @@ final class StatementImportModel {
     @ObservationIgnored private var syncBeforePreview = false
     /// The sync round on its way, which every preview waits for.
     @ObservationIgnored private var syncing: Task<Void, Never>?
+    /// The format pickers the user set by hand for this file: no guess
+    /// changes them.
+    @ObservationIgnored private var dateFormatIsChosen = false
+    @ObservationIgnored private var decimalMarkIsChosen = false
+    /// Which guess may set the formats: one asked for before the columns
+    /// last changed, or for another file, must not.
+    @ObservationIgnored private var guessGeneration = 0
+    /// The guess of the formats on its way, which every preview waits for.
+    @ObservationIgnored private var guessing: Task<Void, Never>?
 
     init(
         store: AppStore,
@@ -302,6 +320,9 @@ final class StatementImportModel {
             let initial = initialMapping(for: read.detection)
             mapping = adopt(initial.mapping, headers: read.detection.headers, delimiter: read.detection.delimiter)
             source = initial.source
+            // Nothing to guess yet: a blank mapping has no column, and a
+            // remembered one or a preset says already.
+            forgetGuess()
             preview = nil
             previewProblem = nil
             editedCategories = [:]
@@ -413,7 +434,8 @@ final class StatementImportModel {
     }
 
     /// Nothing mapped yet. A `;` file is guessed to come from a continental
-    /// bank: day-first dates and a decimal comma.
+    /// bank: day-first dates and a decimal comma, until the values of the
+    /// columns picked say otherwise (`guessFormats()`).
     nonisolated static func blankMapping(delimiter: String) -> StatementMapping {
         let continental = delimiter == ";"
         return StatementMapping(
@@ -504,6 +526,62 @@ final class StatementImportModel {
 
     func removeSkipStatus(_ status: String) {
         mapping.skipStatuses.removeAll { $0 == status }
+    }
+
+    // MARK: - Guessing the formats
+
+    /// The date format picked by hand, which no guess changes afterwards.
+    func chooseDateFormat(_ format: StatementDateFormat) {
+        dateFormatIsChosen = true
+        mapping.dateFormat = format
+    }
+
+    /// The decimal mark set by hand, which no guess changes afterwards.
+    func chooseDecimalComma(_ decimalComma: Bool) {
+        decimalMarkIsChosen = true
+        mapping.decimalComma = decimalComma
+    }
+
+    /// Asks the core how the values of the date and amount columns are
+    /// written (`guess_statement_formats`), whenever either column of a
+    /// mapping started blank is picked or changed, and sets the format
+    /// pickers the user has not set by hand to what it finds. A remembered
+    /// mapping or a preset already says, so they never guess. A format the
+    /// core cannot tell, or one no format reads every value of, stays as it
+    /// is.
+    private func guessFormats() {
+        guessGeneration += 1
+        let generation = guessGeneration
+        guessing = nil
+        let dateColumn = mapping.dateColumn.isEmpty ? nil : mapping.dateColumn
+        let amountColumn = mapping.amountColumn.isEmpty ? nil : mapping.amountColumn
+        guard source == .blank, let text, dateColumn != nil || amountColumn != nil else { return }
+        let delimiter = mapping.delimiter
+        let core = store.core
+        guessing = Task { [weak self] in
+            let guess = await core.guessStatementFormats(
+                text: text, delimiter: delimiter, dateColumn: dateColumn, amountColumn: amountColumn
+            )
+            guard let self, generation == self.guessGeneration else { return }
+            self.apply(guess)
+        }
+    }
+
+    /// The guess on the pickers the user has not set by hand.
+    private func apply(_ guess: StatementFormatGuess) {
+        var guessed = mapping
+        if !dateFormatIsChosen, let format = guess.dateFormat { guessed.dateFormat = format }
+        if !decimalMarkIsChosen, let decimalComma = guess.decimalComma { guessed.decimalComma = decimalComma }
+        if guessed != mapping { mapping = guessed }
+    }
+
+    /// A new file: a guess on its way is about the last one, and its format
+    /// pickers are nobody's yet.
+    private func forgetGuess() {
+        guessGeneration += 1
+        guessing = nil
+        dateFormatIsChosen = false
+        decimalMarkIsChosen = false
     }
 
     /// Wallets a transfer can name: every active one but the target, since
@@ -713,8 +791,11 @@ final class StatementImportModel {
         } else {
             await syncing?.value
         }
-        // Read after the sync: a change made while it ran started a newer
-        // preview, which plans instead.
+        // The formats a column just picked is written in, before the rows
+        // are read with the ones it replaces.
+        await guessing?.value
+        // Read after the sync and the guess: a change made while they ran
+        // started a newer preview, which plans instead.
         guard generation == previewGeneration else { return }
         guard let input = previewInput, let text, let vaultId else {
             preview = nil

@@ -302,6 +302,23 @@ actor CoreActor {
         }
     }
 
+    /// The date format and decimal mark a statement's date and amount
+    /// columns are written in, as far as their values tell. A free function
+    /// with no database behind it, run here all the same: it reads up to 50
+    /// rows of the whole text, which the main actor need not wait for.
+    func guessStatementFormats(
+        text: String,
+        delimiter: String,
+        dateColumn: String?,
+        amountColumn: String?
+    ) async -> StatementFormatGuess {
+        await visit { _ in
+            SparagneCore.guessStatementFormats(
+                text: text, delimiter: delimiter, dateColumn: dateColumn, amountColumn: amountColumn
+            )
+        }
+    }
+
     /// What `MergeCategory` would refuse, without changing anything.
     func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid) async throws -> MergePreview {
         try await visit { try $0.previewMerge(vaultId: vaultId, sourceId: sourceId, targetId: targetId) }
