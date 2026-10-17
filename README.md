@@ -166,6 +166,22 @@ before the preview and again before the import; if the plan changed
 meanwhile, or the preview had not caught up with the last change, nothing is
 written and the review says so. Importing the same file again adds nothing.
 
+An export holding every account of yours, as the BudgetBakers Wallet app
+writes it (`;`, one row per movement with its `account`, its `type` saying
+the way and a `transfer` flag), opens on the `Wallet (BudgetBakers)` preset.
+The mapping page lists the accounts of the account column with their rows;
+each goes to the file's wallet, to another wallet, or is left out, and the
+choice is remembered with the import, those wallets then counting as wallets
+statements go to. The two halves of a move between two accounts are paired,
+at most a day apart: when both go to one wallet nothing is written, since the
+money stays there; when they go to two, one transfer is written and the other
+half reads as its pair. A half whose other half is not in the file is imported
+as its type says, and the review notes it. Giving an account its own wallet
+later leaves its rows already imported where they are, but a move between two
+accounts that both went to Cash wrote nothing then, and read again it would
+become a transfer between the new wallets, dated back among rows that stayed
+in Cash: set the start day to the day the accounts get their own wallets.
+
 File › Export All Transactions… writes every transaction of the vault as CSV,
 voided rows and transfers included. File › Back Up Database… saves a
 consistent copy, `Sparagne <date>.sqlite`. To restore it, quit Sparagne,
