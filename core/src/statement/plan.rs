@@ -43,14 +43,19 @@ pub(super) struct Planned {
     /// the row names (its import wrote it, or its claim or move names it):
     /// replacing it claims that wallet's side of the transfer for that row.
     pub replaces_other_row: bool,
+    /// The money-out half of a move between two accounts of the file, which
+    /// writes the transfer: the id of the money-in half, whose side the
+    /// import claims for it.
+    pub paired_in: Option<Uuid>,
 }
 
 impl Planned {
-    fn new(row: StatementRow, command: Option<Command>) -> Self {
+    pub(super) fn new(row: StatementRow, command: Option<Command>) -> Self {
         Self {
             row,
             command,
             replaces_other_row: false,
+            paired_in: None,
         }
     }
 }
@@ -143,6 +148,9 @@ pub(super) fn plan(
         }
         planned.push(item);
     }
+    // The file's own moves between accounts first: their halves match
+    // nothing in the vault.
+    matching::pair_legs(&mut planned, &overrides);
     let lookalikes = matching::claim(core, vault_id, options, &overrides, &standing, &mut planned)?;
     leave_out(&mut planned, &overrides);
     Ok(Plan {
@@ -220,6 +228,27 @@ pub(super) fn own_side(row_id: Uuid, command: &Command, wallet: Uuid) -> Option<
         claim_id(row_id),
         update(row_id, side(*from_wallet_id == wallet, wallet)),
     ))
+}
+
+/// What an import writes, all at once, for the money-out half of a move
+/// between two accounts of the file (`row_id`, its transfer `command`): the
+/// transfer under the half's id, and the claims of both its sides, the
+/// money-in half's (`in_row`) under that half's claim id, so it reads as
+/// imported from then on too.
+pub(super) fn paired(row_id: Uuid, command: Command, in_row: Uuid) -> Vec<(Uuid, Command)> {
+    let Command::TransferWallet {
+        from_wallet_id,
+        to_wallet_id,
+        ..
+    } = command
+    else {
+        return vec![(row_id, command)];
+    };
+    vec![
+        (row_id, command),
+        (claim_id(row_id), update(row_id, side(true, from_wallet_id))),
+        (claim_id(in_row), update(row_id, side(false, to_wallet_id))),
+    ]
 }
 
 /// The id of the command that voids, for the statement row `row_id`, the
@@ -468,6 +497,8 @@ struct Columns {
     category: Option<usize>,
     original_amount: Option<usize>,
     original_currency: Option<usize>,
+    account: Option<usize>,
+    transfer: Option<usize>,
 }
 
 impl Columns {
@@ -513,6 +544,8 @@ impl Columns {
             category: optional(&mapping.category_column)?,
             original_amount: optional(&mapping.original_amount_column)?,
             original_currency: optional(&mapping.original_currency_column)?,
+            account: optional(&mapping.account_column)?,
+            transfer: optional(&mapping.transfer_column)?,
         })
     }
 }
@@ -537,6 +570,8 @@ struct Context<'a> {
     unallocated: Uuid,
     /// The description rules that are rules, in order.
     rules: Vec<Rule<'a>>,
+    /// Account trimmed and lowercased -> its wallet, `None` to leave it out.
+    accounts: HashMap<String, Option<Uuid>>,
 }
 
 impl<'a> Context<'a> {
@@ -570,10 +605,22 @@ impl<'a> Context<'a> {
         if let Some(other) = options
             .also_check_wallets
             .iter()
+            .chain(
+                options
+                    .account_wallets
+                    .iter()
+                    .filter_map(|a| a.wallet_id.as_ref()),
+            )
             .find(|id| !wallets.contains_key(id))
         {
             return Err(DomainError::NotFound(format!("wallet {other}")));
         }
+        // The last of an account listed twice wins, as an override's does.
+        let accounts = options
+            .account_wallets
+            .iter()
+            .map(|account| (account_key(&account.account), account.wallet_id))
+            .collect();
         let rules = Rule::all(&mapping.description_rules);
         for rule in &rules {
             if let Some(category) = &rule.category {
@@ -635,7 +682,18 @@ impl<'a> Context<'a> {
             unallocated: snapshot.unallocated_flow_id,
             wallets,
             rules,
+            accounts,
         })
+    }
+
+    /// The wallet the rows of `account` go to: the one the options give it
+    /// (`None` leaves them out), else the options' wallet, as for every row
+    /// of a file without an account column.
+    fn wallet_of(&self, account: Option<&str>) -> Option<Uuid> {
+        match account.and_then(|account| self.accounts.get(&account_key(account))) {
+            Some(listed) => *listed,
+            None => Some(self.wallet_id),
+        }
     }
 
     /// Everything about one record that holds whatever the user says, but
@@ -663,6 +721,10 @@ impl<'a> Context<'a> {
             match_choice: None,
             default_choice: None,
             base_action: None,
+            wallet_id: None,
+            account: None,
+            transfer_leg: false,
+            paired_line: None,
         };
         let broken = |row, message: String| Draft {
             row,
@@ -698,6 +760,9 @@ impl<'a> Context<'a> {
         let optional = |index: Option<usize>| index.map(field).filter(|v| !v.is_empty());
 
         row.payee = collapse(self.columns.description.iter().map(|&i| field(i)));
+        row.account = optional(self.columns.account).map(|account| account.trim().to_string());
+        row.wallet_id = self.wallet_of(row.account.as_deref());
+        row.transfer_leg = optional(self.columns.transfer).is_some_and(truthy);
         row.bank_category = optional(self.columns.category).map(str::to_string);
         row.matched_category = row
             .bank_category
@@ -749,9 +814,13 @@ impl<'a> Context<'a> {
         // key holds, whatever a description rule or the user make of the row.
         let base_kind = outflow.and_then(|outflow| kind_of(base, outflow));
         let key = match (&date, &amount) {
-            (Ok(date), Ok(amount)) => {
-                Some(self.key(&date.stamp, type_value, base_kind, &row.payee, amount.minor))
-            }
+            (Ok(date), Ok(amount)) => Some(self.key(
+                &date.stamp,
+                type_value,
+                base_kind,
+                (&row.payee, row.account.as_deref()),
+                amount.minor,
+            )),
             _ => None,
         };
         let skipped_status = status
@@ -870,7 +939,15 @@ impl<'a> Context<'a> {
 
         // In the order a user expects to read it: what the mapping or the
         // user skip, then what cannot be read, then what is missing.
-        let outcome = if *action == StatementAction::Skip {
+        let outcome = if row.wallet_id.is_none() {
+            Outcome::Skip(
+                "skipped_account",
+                format!(
+                    "account {} is left out",
+                    row.account.as_deref().unwrap_or_default()
+                ),
+            )
+        } else if *action == StatementAction::Skip {
             by.skip()
         } else if let Some(status) = skipped_status {
             Outcome::Skip("skipped_status", format!("status {status} is skipped"))
@@ -910,6 +987,10 @@ impl<'a> Context<'a> {
         let Some(occurred_at) = row.occurred_at else {
             return Outcome::Invalid("invalid_date", "the date cannot be read".to_string());
         };
+        // The row's own wallet: its account's, else the options'.
+        let Some(wallet) = row.wallet_id else {
+            return Outcome::Skip("skipped_account", "the account is left out".to_string());
+        };
         let text = user
             .and_then(|user| user.note.as_deref())
             .unwrap_or(&row.note);
@@ -925,7 +1006,7 @@ impl<'a> Context<'a> {
         };
         let entry = || Entry {
             amount: row.amount,
-            wallet_id: Some(self.wallet_id),
+            wallet_id: Some(wallet),
             flow_id: self.flow(user),
             category: match user.and_then(|user| user.category.as_deref()) {
                 Some(typed) => {
@@ -944,14 +1025,14 @@ impl<'a> Context<'a> {
         // taken as absolute.
         match action {
             StatementAction::TransferIn { from_wallet_id } => {
-                match self.other_wallet(*from_wallet_id, "came from") {
-                    Ok(from) => transfer(from, self.wallet_id),
+                match self.other_wallet(*from_wallet_id, wallet, "came from") {
+                    Ok(from) => transfer(from, wallet),
                     Err(reason) => Outcome::Skip("needs_wallet", reason),
                 }
             }
             StatementAction::TransferOut { to_wallet_id } => {
-                match self.other_wallet(*to_wallet_id, "went to") {
-                    Ok(to) => transfer(self.wallet_id, to),
+                match self.other_wallet(*to_wallet_id, wallet, "went to") {
+                    Ok(to) => transfer(wallet, to),
                     Err(reason) => Outcome::Skip("needs_wallet", reason),
                 }
             }
@@ -968,14 +1049,19 @@ impl<'a> Context<'a> {
     }
 
     /// The other wallet of a transfer, or why the row waits for one: none
-    /// named, or one the money cannot move to or from (the imported wallet
-    /// itself, one not in the vault, an archived one). `way` is `came from`
+    /// named, or one the money cannot move to or from (the row's `own`
+    /// wallet, one not in the vault, an archived one). `way` is `came from`
     /// or `went to`.
-    fn other_wallet(&self, named: Option<Uuid>, way: &str) -> std::result::Result<Uuid, String> {
+    fn other_wallet(
+        &self,
+        named: Option<Uuid>,
+        own: Uuid,
+        way: &str,
+    ) -> std::result::Result<Uuid, String> {
         let Some(id) = named else {
             return Err(format!("choose the wallet the money {way}"));
         };
-        if id == self.wallet_id {
+        if id == own {
             return Err(format!(
                 "the money cannot move between the imported wallet and itself: choose the wallet it {way}"
             ));
@@ -1024,12 +1110,15 @@ impl<'a> Context<'a> {
     /// rules and the default action give the row (`skip` for none), never a
     /// description rule's nor the user's; the amount is signed as the file
     /// wrote it; the payee is lowercased. The status is left out on purpose.
+    /// With an account column, the wallet is `acct:` and the row's account
+    /// trimmed and lowercased instead, never the wallet the account goes to:
+    /// an account mapped to another wallet later finds its rows imported.
     fn key(
         &self,
         stamp: &str,
         type_value: Option<&str>,
         base_kind: Option<TransactionKind>,
-        payee: &str,
+        (payee, account): (&str, Option<&str>),
         signed: i64,
     ) -> String {
         let what = type_value.map_or_else(
@@ -1040,10 +1129,14 @@ impl<'a> Context<'a> {
             },
             str::to_lowercase,
         );
+        let wallet = if self.columns.account.is_some() {
+            format!("acct:{}", account_key(account.unwrap_or_default()))
+        } else {
+            self.wallet_id.to_string()
+        };
         format!(
-            "{KEY_VERSION}|{}|{}|{stamp}|{what}|{signed}|{}",
+            "{KEY_VERSION}|{}|{wallet}|{stamp}|{what}|{signed}|{}",
             self.vault_id,
-            self.wallet_id,
             payee.to_lowercase()
         )
     }
@@ -1180,6 +1273,20 @@ fn same_text(left: &str, right: &str) -> bool {
     left.trim().to_lowercase() == right.trim().to_lowercase()
 }
 
+/// An account as the options and the ids compare it: trimmed, lowercased.
+pub(super) fn account_key(account: &str) -> String {
+    account.trim().to_lowercase()
+}
+
+/// A transfer column's cell that says the row is one half of a move:
+/// `true`, `1`, `yes`, `y`, `si`, `sì` or `x`, whatever the case.
+fn truthy(cell: &str) -> bool {
+    matches!(
+        cell.trim().to_lowercase().as_str(),
+        "true" | "1" | "yes" | "y" | "si" | "sì" | "x"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1208,9 +1315,23 @@ mod tests {
                 match_choice: None,
                 default_choice: None,
                 base_action: Some(StatementAction::Expense),
+                wallet_id: Some(Uuid::nil()),
+                account: None,
+                transfer_leg: false,
+                paired_line: None,
             },
             None,
         )
+    }
+
+    #[test]
+    fn a_transfer_cell_says_yes_in_many_ways() {
+        for yes in ["true", " TRUE ", "1", "yes", "Y", "si", "Sì", "x"] {
+            assert!(truthy(yes), "{yes}");
+        }
+        for no in ["false", "0", "no", "", "transfer"] {
+            assert!(!truthy(no), "{no}");
+        }
     }
 
     #[test]

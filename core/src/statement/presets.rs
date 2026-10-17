@@ -26,13 +26,39 @@ const CARD_HEADERS: [&str; 14] = [
     "spending mode",
 ];
 
+/// Id of the BudgetBakers Wallet export preset.
+pub(super) const BUDGETBAKERS_WALLET: &str = "budgetbakers-wallet";
+
+/// Header of the BudgetBakers Wallet export, in file order.
+const WALLET_HEADERS: [&str; 12] = [
+    "account",
+    "category",
+    "currency",
+    "amount",
+    "ref_currency_amount",
+    "type",
+    "payment_type",
+    "note",
+    "date",
+    "transfer",
+    "payee",
+    "labels",
+];
+
 /// Every built-in preset.
 pub(super) fn all() -> Vec<StatementPreset> {
-    vec![StatementPreset {
-        id: CARD_TRANSACTIONS.to_string(),
-        name: "Card transactions".to_string(),
-        mapping: card_transactions(),
-    }]
+    vec![
+        StatementPreset {
+            id: CARD_TRANSACTIONS.to_string(),
+            name: "Card transactions".to_string(),
+            mapping: card_transactions(),
+        },
+        StatementPreset {
+            id: BUDGETBAKERS_WALLET.to_string(),
+            name: "Wallet (BudgetBakers)".to_string(),
+            mapping: budgetbakers_wallet(),
+        },
+    ]
 }
 
 /// The preset whose columns are all in `headers` (case-insensitive, trimmed;
@@ -40,10 +66,56 @@ pub(super) fn all() -> Vec<StatementPreset> {
 /// recognised).
 pub(super) fn matching(headers: &[String]) -> Option<&'static str> {
     let present: Vec<String> = headers.iter().map(|h| h.trim().to_lowercase()).collect();
-    let card = CARD_HEADERS
-        .iter()
-        .all(|wanted| present.iter().any(|h| h == wanted));
-    card.then_some(CARD_TRANSACTIONS)
+    let holds = |wanted: &[&str]| {
+        wanted
+            .iter()
+            .all(|wanted| present.iter().any(|h| h == wanted))
+    };
+    [
+        (CARD_TRANSACTIONS, &CARD_HEADERS[..]),
+        (BUDGETBAKERS_WALLET, &WALLET_HEADERS[..]),
+    ]
+    .into_iter()
+    .find_map(|(id, headers)| holds(headers).then_some(id))
+}
+
+/// BudgetBakers Wallet export: every account the app syncs in one file,
+/// `;`-separated, a UTC instant per row, every amount positive with the
+/// type saying the way. Only `Expense` and `Income` rows are taken, anything
+/// else is skipped, so a type the app adds later never slips in. The sign
+/// setting reads no row: the rules decide every action and `BySign` never
+/// applies; outflow-positive matches how the file writes amounts (all of
+/// them positive), and the sign as written is what a row's id holds either
+/// way.
+fn budgetbakers_wallet() -> StatementMapping {
+    let rule = |value: &str, action: StatementAction| StatementTypeRule {
+        value: value.to_string(),
+        action,
+    };
+    StatementMapping {
+        delimiter: ";".to_string(),
+        date_column: "date".to_string(),
+        date_format: StatementDateFormat::DateTimeUtc,
+        amount_column: "amount".to_string(),
+        amount_sign: AmountSign::OutflowPositive,
+        decimal_comma: false,
+        description_columns: vec!["note".to_string()],
+        type_column: Some("type".to_string()),
+        type_rules: vec![
+            rule("Expense", StatementAction::Expense),
+            rule("Income", StatementAction::Income),
+        ],
+        default_action: StatementAction::Skip,
+        status_column: None,
+        skip_statuses: Vec::new(),
+        currency_column: Some("currency".to_string()),
+        category_column: Some("category".to_string()),
+        original_amount_column: None,
+        original_currency_column: None,
+        description_rules: Vec::new(),
+        account_column: Some("account".to_string()),
+        transfer_column: Some("transfer".to_string()),
+    }
 }
 
 /// Card export: newest first, spends positive and refunds negative, a status
@@ -83,6 +155,8 @@ fn card_transactions() -> StatementMapping {
         original_amount_column: Some("original amount".to_string()),
         original_currency_column: Some("original currency".to_string()),
         description_rules: Vec::new(),
+        account_column: None,
+        transfer_column: None,
     }
 }
 
@@ -113,25 +187,40 @@ mod tests {
     }
 
     #[test]
-    fn the_card_mapping_names_only_card_columns() {
-        let mapping = card_transactions();
-        let mut named = vec![mapping.date_column.clone(), mapping.amount_column.clone()];
-        named.extend(mapping.description_columns.iter().cloned());
-        named.extend(
-            [
-                &mapping.type_column,
-                &mapping.status_column,
-                &mapping.currency_column,
-                &mapping.category_column,
-                &mapping.original_amount_column,
-                &mapping.original_currency_column,
-            ]
-            .into_iter()
-            .flatten()
-            .cloned(),
-        );
-        for column in named {
-            assert!(CARD_HEADERS.contains(&column.as_str()), "{column}");
+    fn each_mapping_names_only_its_own_columns() {
+        for (mapping, header) in [
+            (card_transactions(), &CARD_HEADERS[..]),
+            (budgetbakers_wallet(), &WALLET_HEADERS[..]),
+        ] {
+            let mut named = vec![mapping.date_column.clone(), mapping.amount_column.clone()];
+            named.extend(mapping.description_columns.iter().cloned());
+            named.extend(
+                [
+                    &mapping.type_column,
+                    &mapping.status_column,
+                    &mapping.currency_column,
+                    &mapping.category_column,
+                    &mapping.original_amount_column,
+                    &mapping.original_currency_column,
+                    &mapping.account_column,
+                    &mapping.transfer_column,
+                ]
+                .into_iter()
+                .flatten()
+                .cloned(),
+            );
+            for column in named {
+                assert!(header.contains(&column.as_str()), "{column}");
+            }
         }
+    }
+
+    #[test]
+    fn the_wallet_header_is_its_preset_and_not_the_cards() {
+        assert_eq!(
+            matching(&headers(&WALLET_HEADERS)),
+            Some(BUDGETBAKERS_WALLET)
+        );
+        assert_eq!(matching(&headers(&WALLET_HEADERS[1..])), None);
     }
 }

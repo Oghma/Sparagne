@@ -25,6 +25,13 @@ const GIROCONTO_IN: &str = include_str!("fixtures/statement/giroconto_in.csv");
 const CARD_HEADER: &str = "timestamp,type,description,status,amount,currency,card,\
     card holder name,original amount,original currency,cashback earned,cashback currency,\
     category,spending mode";
+/// The BudgetBakers Wallet export of three accounts: Revolut, BBVA and Conto
+/// Arancio. Lines 3 and 4 are one move (Revolut to BBVA, the same day), lines
+/// 7 and 8 another (Conto Arancio to Revolut, a day apart); line 9 is the
+/// half of a move whose other half is in no account of the file.
+const WALLET: &str = include_str!("fixtures/statement/wallet.csv");
+const WALLET_HEADER: &str = "account;category;currency;amount;ref_currency_amount;type;\
+    payment_type;note;date;transfer;payee;labels";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -72,6 +79,8 @@ fn bank_mapping() -> StatementMapping {
         original_amount_column: None,
         original_currency_column: None,
         description_rules: Vec::new(),
+        account_column: None,
+        transfer_column: None,
     }
 }
 
@@ -83,6 +92,7 @@ fn options(wallet: Uuid) -> StatementOptions {
         also_check_wallets: Vec::new(),
         since: None,
         statement_wallets: Vec::new(),
+        account_wallets: Vec::new(),
     }
 }
 
@@ -630,9 +640,8 @@ fn the_card_header_is_recognised_as_the_preset() {
     assert_eq!(detection.sample.len(), 5);
     assert_eq!(detection.sample[0][2], "TRATTORIA DA MARIO");
 
-    let presets = statement::presets();
-    assert_eq!(presets.len(), 1);
-    assert_eq!(presets[0].id, "card-transactions");
+    let presets: Vec<String> = statement::presets().into_iter().map(|p| p.id).collect();
+    assert_eq!(presets, ["card-transactions", "budgetbakers-wallet"]);
 }
 
 #[test]
@@ -4457,6 +4466,428 @@ fn an_entry_before_the_start_day_is_never_replaced_by_default() {
     let atm = row(&preview, 3);
     assert!(atm.existing.is_some());
     assert_eq!(atm.match_choice, Some(StatementMatchChoice::ImportAnyway));
+}
+
+// ---------------------------------------------------------------------------
+// One export, every account: the BudgetBakers Wallet app's
+// ---------------------------------------------------------------------------
+
+fn wallet_mapping() -> StatementMapping {
+    statement::presets()
+        .into_iter()
+        .find(|preset| preset.id == "budgetbakers-wallet")
+        .unwrap()
+        .mapping
+}
+
+/// A Wallet export made of `rows`, header first.
+fn wallet_csv(rows: &[String]) -> String {
+    format!("{WALLET_HEADER}\n{}\n", rows.join("\n"))
+}
+
+/// A Wallet row; `kind` is `Expense` or `Income`, the amount positive.
+fn wallet_row(account: &str, kind: &str, amount: &str, note: &str, at: &str) -> String {
+    format!("{account};Other;EUR;{amount};{amount};{kind};Transfer;{note};{at};false;;")
+}
+
+fn mapped(accounts: &[(&str, Option<Uuid>)]) -> Vec<statement::StatementAccountWallet> {
+    accounts
+        .iter()
+        .map(|&(account, wallet_id)| statement::StatementAccountWallet {
+            account: account.to_string(),
+            wallet_id,
+        })
+        .collect()
+}
+
+/// Three wallets for the three accounts of [`WALLET`], and the options that
+/// map them, everything else going to Cash.
+fn three_accounts(fx: &mut Fx) -> ((Uuid, Uuid, Uuid), StatementOptions) {
+    let revolut = new_wallet(fx, "Revolut");
+    let bbva = new_wallet(fx, "BBVA");
+    let arancio = new_wallet(fx, "Conto Arancio");
+    let options = StatementOptions {
+        account_wallets: mapped(&[
+            ("Revolut", Some(revolut)),
+            ("bbva", Some(bbva)),
+            (" conto arancio ", Some(arancio)),
+        ]),
+        ..options(fx.wallet)
+    };
+    ((revolut, bbva, arancio), options)
+}
+
+#[test]
+fn the_wallet_export_is_recognised_and_its_accounts_listed() {
+    let detection = statement::detect(WALLET).unwrap();
+    assert_eq!(detection.delimiter, ";");
+    assert_eq!(detection.preset_id.as_deref(), Some("budgetbakers-wallet"));
+    let values = |column: &str| -> Vec<(String, u32)> {
+        statement::column_values(WALLET, ";", column)
+            .into_iter()
+            .map(|value| (value.value, value.rows))
+            .collect()
+    };
+    assert_eq!(
+        values("account"),
+        [
+            ("Revolut".to_string(), 5),
+            ("BBVA".to_string(), 2),
+            ("Conto Arancio".to_string(), 2),
+        ]
+    );
+    assert_eq!(
+        values(" TYPE "),
+        [("Expense".to_string(), 5), ("Income".to_string(), 4)]
+    );
+    assert!(values("labels").is_empty());
+    assert!(values("nope").is_empty());
+    assert!(statement::column_values(WALLET, ",;", "account").is_empty());
+    // Values are counted whatever their case and spaces, written as first met.
+    let text = wallet_csv(&[
+        wallet_row(" BBVA ", "Expense", "1.00", "a", "2026-10-01T08:00:00.000Z"),
+        wallet_row("bbva", "Expense", "2.00", "b", "2026-10-01T09:00:00.000Z"),
+    ]);
+    let accounts = statement::column_values(&text, ";", "account");
+    assert_eq!(
+        (accounts[0].value.as_str(), accounts[0].rows, accounts.len()),
+        ("BBVA", 2, 1)
+    );
+}
+
+#[test]
+fn every_account_into_cash_moves_nothing_between_them() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let pizza = typed_on(&mut fx, TransactionKind::Expense, cash, 3_500, (10, 10));
+    let options = options(cash);
+    let preview = preview_with(&fx, WALLET, &wallet_mapping(), &options, &no_overrides());
+    for (line, other) in [(3, 4), (4, 3), (7, 8), (8, 7)] {
+        let half = row(&preview, line);
+        assert_eq!(skip_code(half), "internal_transfer", "line {line}");
+        assert_eq!(half.paired_line, Some(other));
+        assert!(half.transfer_leg);
+    }
+    let friend = row(&preview, 9);
+    assert_eq!(friend.status, StatementRowStatus::New);
+    assert_eq!(friend.kind, Some(TransactionKind::Income));
+    assert!(friend.transfer_leg);
+    assert_eq!(friend.paired_line, None);
+    assert_eq!(friend.wallet_id, Some(cash));
+    assert_eq!(friend.account.as_deref(), Some("Revolut"));
+    let pizzeria = row(&preview, 5);
+    assert_eq!(pizzeria.status, StatementRowStatus::PossibleDuplicate);
+    assert_eq!(pizzeria.existing.as_ref().map(|tx| tx.id), Some(pizza));
+    assert_eq!(pizzeria.account.as_deref(), Some("BBVA"));
+
+    let report = import_with(
+        &mut fx,
+        WALLET,
+        &wallet_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    assert_eq!(
+        (report.executed, report.skipped, report.possible_duplicates),
+        (4, 4, 1)
+    );
+    assert_eq!(
+        wallet_balance(&fx.core, fx.vault, cash),
+        -3_500 - 2_340 + 185_000 + 7_500 - 10_079
+    );
+    assert!(live_transfers(&fx).is_empty());
+}
+
+#[test]
+fn accounts_into_their_own_wallets_write_one_transfer_per_move() {
+    let mut fx = setup();
+    let ((revolut, bbva, arancio), options) = three_accounts(&mut fx);
+    let preview = preview_with(&fx, WALLET, &wallet_mapping(), &options, &no_overrides());
+    let sent = row(&preview, 3);
+    assert_eq!(sent.status, StatementRowStatus::New);
+    assert_eq!(sent.kind, Some(TransactionKind::TransferWallet));
+    assert_eq!(
+        (sent.wallet_id, sent.counter_wallet_id, sent.paired_line),
+        (Some(revolut), Some(bbva), Some(4))
+    );
+    let received = row(&preview, 4);
+    assert_eq!(skip_code(received), "transfer_pair");
+    assert_eq!(
+        (received.wallet_id, received.paired_line),
+        (Some(bbva), Some(3))
+    );
+    assert_eq!(row(&preview, 7).counter_wallet_id, Some(revolut));
+    assert_eq!(skip_code(row(&preview, 8)), "transfer_pair");
+    assert_eq!(row(&preview, 9).status, StatementRowStatus::New);
+
+    let report = import_with(
+        &mut fx,
+        WALLET,
+        &wallet_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    assert!(report.rejected.is_empty(), "{:?}", report.rejected);
+    assert_eq!((report.executed, report.skipped), (7, 2));
+    let transfer = fx.core.transaction(fx.vault, sent.command_id).unwrap();
+    assert_eq!(
+        (
+            transfer.kind,
+            transfer.from_id,
+            transfer.to_id,
+            transfer.amount
+        ),
+        (
+            TransactionKind::TransferWallet,
+            Some(revolut),
+            Some(bbva),
+            50_000
+        )
+    );
+    assert_eq!(
+        wallet_balance(&fx.core, fx.vault, revolut),
+        -2_340 - 50_000 + 20_000 + 7_500 - 10_079
+    );
+    assert_eq!(wallet_balance(&fx.core, fx.vault, bbva), 50_000 - 3_500);
+    assert_eq!(
+        wallet_balance(&fx.core, fx.vault, arancio),
+        185_000 - 20_000
+    );
+    assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 0);
+    // Both sides claimed, the money-in half's under its own claim id.
+    let side = |patch| Some(claim_cmd(sent.command_id, patch));
+    assert_eq!(
+        logged(&fx, claim_of(sent.command_id)),
+        side(sparagne_core::TransactionPatch {
+            from_id: Some(revolut),
+            ..Default::default()
+        })
+    );
+    assert_eq!(
+        logged(&fx, claim_of(received.command_id)),
+        side(sparagne_core::TransactionPatch {
+            to_id: Some(bbva),
+            ..Default::default()
+        })
+    );
+
+    let commands = command_count(&fx.core, fx.vault);
+    let again = preview_with(&fx, WALLET, &wallet_mapping(), &options, &no_overrides());
+    assert_eq!(again.already_imported, 9);
+    let report = import_with(
+        &mut fx,
+        WALLET,
+        &wallet_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    assert_eq!((report.executed, report.deduplicated), (0, 9));
+    assert_eq!(command_count(&fx.core, fx.vault), commands);
+}
+
+#[test]
+fn an_account_left_out_leaves_its_moves_other_half_unpaired() {
+    let mut fx = setup();
+    let ((revolut, bbva, _), mut options) = three_accounts(&mut fx);
+    options.account_wallets = mapped(&[
+        ("Revolut", Some(revolut)),
+        ("BBVA", Some(bbva)),
+        ("Conto Arancio", None),
+    ]);
+    let preview = preview_with(&fx, WALLET, &wallet_mapping(), &options, &no_overrides());
+    for line in [6, 7] {
+        assert_eq!(skip_code(row(&preview, line)), "skipped_account");
+        assert_eq!(row(&preview, line).wallet_id, None);
+    }
+    let from_arancio = row(&preview, 8);
+    assert_eq!(from_arancio.status, StatementRowStatus::New);
+    assert_eq!(from_arancio.kind, Some(TransactionKind::Income));
+    assert_eq!(from_arancio.paired_line, None);
+    assert!(from_arancio.transfer_leg);
+    assert_eq!(row(&preview, 3).paired_line, Some(4));
+}
+
+#[test]
+fn an_account_mapped_to_a_wallet_not_in_the_vault_is_refused() {
+    let fx = setup();
+    let options = StatementOptions {
+        account_wallets: mapped(&[("Revolut", Some(Uuid::now_v7()))]),
+        ..options(fx.wallet)
+    };
+    assert!(matches!(
+        fx.core.preview_statement(
+            fx.vault,
+            WALLET,
+            &wallet_mapping(),
+            &options,
+            &no_overrides()
+        ),
+        Err(DomainError::NotFound(_))
+    ));
+}
+
+#[test]
+fn a_half_the_user_changes_is_no_half() {
+    let mut fx = setup();
+    let ((_, bbva, arancio), options) = three_accounts(&mut fx);
+    let overrides = [
+        StatementRowOverride {
+            skip: true,
+            ..user(3)
+        },
+        StatementRowOverride {
+            action: Some(StatementAction::Refund),
+            ..user(8)
+        },
+    ];
+    let preview = preview_with(&fx, WALLET, &wallet_mapping(), &options, &overrides);
+    assert_eq!(skip_code(row(&preview, 3)), "skipped_by_you");
+    let received = row(&preview, 4);
+    assert_eq!(received.status, StatementRowStatus::New);
+    assert_eq!(received.kind, Some(TransactionKind::Income));
+    assert_eq!(
+        (received.wallet_id, received.paired_line),
+        (Some(bbva), None)
+    );
+    assert_eq!(row(&preview, 8).kind, Some(TransactionKind::Refund));
+    let sent = row(&preview, 7);
+    assert_eq!(sent.kind, Some(TransactionKind::Expense));
+    assert_eq!((sent.wallet_id, sent.paired_line), (Some(arancio), None));
+}
+
+#[test]
+fn accounts_mapped_to_wallets_later_find_the_rows_imported_into_cash() {
+    let mut fx = setup();
+    let cash = fx.wallet;
+    let first = wallet_csv(&[
+        wallet_row(
+            "Revolut",
+            "Expense",
+            "23.40",
+            "Esselunga",
+            "2026-10-14T17:20:00.000Z",
+        ),
+        wallet_row(
+            "BBVA",
+            "Expense",
+            "35.00",
+            "Pizzeria",
+            "2026-10-10T18:15:00.000Z",
+        ),
+    ]);
+    import_with(
+        &mut fx,
+        &first,
+        &wallet_mapping(),
+        &options(cash),
+        &no_overrides(),
+    );
+    // The user then gives each account its wallet, and exports again.
+    let ((revolut, bbva, _), options) = three_accounts(&mut fx);
+    let second = wallet_csv(&[
+        wallet_row(
+            "Revolut",
+            "Expense",
+            "23.40",
+            "Esselunga",
+            "2026-10-14T17:20:00.000Z",
+        ),
+        wallet_row(
+            "BBVA",
+            "Expense",
+            "35.00",
+            "Pizzeria",
+            "2026-10-10T18:15:00.000Z",
+        ),
+        wallet_row(
+            "Revolut",
+            "Expense",
+            "1.20",
+            "Caffe",
+            "2026-10-15T07:00:00.000Z",
+        ),
+    ]);
+    let preview = preview_with(&fx, &second, &wallet_mapping(), &options, &no_overrides());
+    assert_eq!(row(&preview, 2).status, StatementRowStatus::AlreadyImported);
+    assert_eq!(row(&preview, 3).status, StatementRowStatus::AlreadyImported);
+    assert_eq!(row(&preview, 4).status, StatementRowStatus::New);
+    assert_eq!(row(&preview, 4).wallet_id, Some(revolut));
+    let report = import_with(
+        &mut fx,
+        &second,
+        &wallet_mapping(),
+        &options,
+        &no_overrides(),
+    );
+    assert_eq!((report.executed, report.deduplicated), (1, 2));
+    assert_eq!(wallet_balance(&fx.core, fx.vault, cash), -2_340 - 3_500);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, revolut), -120);
+    assert_eq!(wallet_balance(&fx.core, fx.vault, bbva), 0);
+}
+
+#[test]
+fn the_key_with_an_account_column_is_frozen() {
+    let mut core = Core::open_in_memory().unwrap();
+    let vault = Uuid::parse_str("0199a000-0000-7000-8000-000000000001").unwrap();
+    let wallet = Uuid::parse_str("0199a000-0000-7000-8000-000000000002").unwrap();
+    let other = Uuid::parse_str("0199a000-0000-7000-8000-000000000003").unwrap();
+    core.execute(CommandEnvelope {
+        id: vault,
+        vault_id: vault,
+        author: "alice".to_string(),
+        command: Command::CreateVault {
+            name: "Pinned".to_string(),
+            currency: Currency::Eur,
+        },
+    })
+    .unwrap();
+    for (id, name) in [(wallet, "Cash"), (other, "Revolut")] {
+        core.execute(CommandEnvelope {
+            id,
+            vault_id: vault,
+            author: "alice".to_string(),
+            command: wallet_cmd(name, 0),
+        })
+        .unwrap();
+    }
+    let text = wallet_csv(&[wallet_row(
+        " Revolut ",
+        "Expense",
+        "100.79",
+        "Biglietto rush  To Tobia Tesan",
+        "2026-10-16T09:34:44.000Z",
+    )]);
+    let key = format!(
+        "v1|{vault}|acct:revolut|2026-10-16T09:34:44Z|expense|10079|biglietto rush to tobia tesan|0"
+    );
+    // The account's wallet is no part of the key.
+    for account_wallets in [Vec::new(), mapped(&[("revolut", Some(other))])] {
+        let options = StatementOptions {
+            account_wallets,
+            ..options(wallet)
+        };
+        let preview = core
+            .preview_statement(vault, &text, &wallet_mapping(), &options, &no_overrides())
+            .unwrap();
+        let id = row(&preview, 2).command_id;
+        assert_eq!(id, Uuid::new_v5(&STATEMENT_NAMESPACE, key.as_bytes()));
+        assert_eq!(
+            id,
+            Uuid::parse_str("230f0fb6-2eb6-544f-950e-7bb867c6e553").unwrap()
+        );
+    }
+}
+
+#[test]
+fn a_mapping_with_accounts_round_trips_and_one_without_is_written_as_it_was() {
+    let mapping = wallet_mapping();
+    let json = statement::encode_mapping(&mapping);
+    assert!(json.contains(r#""account_column":"account""#), "{json}");
+    assert!(json.contains(r#""transfer_column":"transfer""#), "{json}");
+    assert_eq!(statement::decode_mapping(&json).unwrap(), mapping);
+    let plain = statement::encode_mapping(&bank_mapping());
+    assert!(!plain.contains("account_column"), "{plain}");
+    assert!(!plain.contains("transfer_column"), "{plain}");
 }
 
 // ---------------------------------------------------------------------------

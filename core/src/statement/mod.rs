@@ -379,6 +379,28 @@ pub struct StatementMapping {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[uniffi(default = [])]
     pub description_rules: Vec<StatementDescriptionRule>,
+    /// The column naming the account a row belongs to, in an export holding
+    /// several (the BudgetBakers Wallet app's): each account goes to the
+    /// wallet [`StatementOptions::account_wallets`] gives it. Left out of the
+    /// JSON when `None`, like the next one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[uniffi(default = None)]
+    pub account_column: Option<String>,
+    /// The column saying a row is one half of a move between two of the
+    /// user's accounts (`true`, `1`, `yes`, `y`, `si`, `sì` or `x`, whatever
+    /// the case).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[uniffi(default = None)]
+    pub transfer_column: Option<String>,
+}
+
+/// Where the rows of one account of the file go.
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct StatementAccountWallet {
+    /// As the account column writes it; compared trimmed, whatever the case.
+    pub account: String,
+    /// `None` leaves the account's rows out (`skipped_account`).
+    pub wallet_id: Option<Uuid>,
 }
 
 /// One entry of [`StatementMapping::description_rules`]: what a row whose
@@ -491,6 +513,10 @@ pub struct StatementOptions {
     /// away. A wallet not in the vault is no statement's.
     #[uniffi(default = [])]
     pub statement_wallets: Vec<Uuid>,
+    /// Where each account of [`StatementMapping::account_column`] goes; an
+    /// account not listed goes to `wallet_id`.
+    #[uniffi(default = [])]
+    pub account_wallets: Vec<StatementAccountWallet>,
 }
 
 /// What becomes of a row flagged [`StatementRowStatus::PossibleDuplicate`]
@@ -647,6 +673,31 @@ pub struct StatementRow {
     /// `None` for a row that could not be read as one (`invalid_row`).
     #[uniffi(default = None)]
     pub base_action: Option<StatementAction>,
+    /// The wallet the row goes to: its account's, else
+    /// [`StatementOptions::wallet_id`]. `None` for a row of an account left
+    /// out, or one that could not be read as a row (`invalid_row`).
+    #[uniffi(default = None)]
+    pub wallet_id: Option<Uuid>,
+    /// The account column's value, trimmed.
+    #[uniffi(default = None)]
+    pub account: Option<String>,
+    /// The transfer column says the row is one half of a move between two
+    /// of the user's accounts. Set on a half with no other side in the file
+    /// too, which is then imported as what its type says.
+    #[uniffi(default = false)]
+    pub transfer_leg: bool,
+    /// The line of the other half the row was paired with in the file.
+    #[uniffi(default = None)]
+    pub paired_line: Option<u32>,
+}
+
+/// One value of a statement's column, and how many rows hold it
+/// ([`column_values`]).
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct StatementColumnValue {
+    /// As the first row holding it writes it, trimmed.
+    pub value: String,
+    pub rows: u32,
 }
 
 /// A wallet the statement does not check for rows typed by hand where some
@@ -797,6 +848,56 @@ pub fn guess_formats(
     guess::guess(text, delimiter, date_column, amount_column)
 }
 
+/// The distinct non-empty values of `column` (named as a mapping names it,
+/// trimmed, whatever the case) with how many data rows hold each, the most
+/// rows first, then by value: for the app to list a file's accounts or type
+/// values. Values compare trimmed, whatever the case, and a row that never
+/// closes a quote is not read. Empty when the delimiter is not one
+/// character or the column is not in the header.
+#[must_use]
+pub fn column_values(text: &str, delimiter: &str, column: &str) -> Vec<StatementColumnValue> {
+    let Ok(delimiter) = plan::delimiter(delimiter) else {
+        return Vec::new();
+    };
+    let mut records = csv::records(text, delimiter);
+    let wanted = column.trim().to_lowercase();
+    let Some(index) = records.next().and_then(|header| {
+        header
+            .fields
+            .iter()
+            .position(|name| !wanted.is_empty() && name.trim().to_lowercase() == wanted)
+    }) else {
+        return Vec::new();
+    };
+    let mut values: Vec<(String, StatementColumnValue)> = Vec::new();
+    let mut known: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for record in records.filter(|record| !record.unclosed_quote) {
+        let Some(value) = record
+            .fields
+            .get(index)
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        let key = value.to_lowercase();
+        if let Some(&at) = known.get(&key) {
+            values[at].1.rows += 1;
+        } else {
+            known.insert(key.clone(), values.len());
+            values.push((
+                key,
+                StatementColumnValue {
+                    value: value.to_string(),
+                    rows: 1,
+                },
+            ));
+        }
+    }
+    values.sort_by(|(a_key, a), (b_key, b)| b.rows.cmp(&a.rows).then_with(|| a_key.cmp(b_key)));
+    values.into_iter().map(|(_, value)| value).collect()
+}
+
 /// A mapping as JSON, for the app to remember.
 #[must_use]
 pub fn encode_mapping(mapping: &StatementMapping) -> String {
@@ -884,21 +985,26 @@ impl Core {
             matched_transfers: 0,
             moved: 0,
         };
-        let wallet = options.wallet_id;
+        // Each row goes to its own wallet: its account's, else the options'.
+        let wallet_of = |row: &StatementRow| row.wallet_id.unwrap_or(options.wallet_id);
         let mut new = Vec::new();
         let mut later = Vec::new();
         for plan::Planned {
             row,
             command,
             replaces_other_row,
+            paired_in,
         } in planned
         {
             match (&row.status, command) {
-                (StatementRowStatus::New, Some(command)) => new.push((row, command, false)),
+                (StatementRowStatus::New, Some(command)) => {
+                    let written = paired_in.map_or(Written::Row, Written::Paired);
+                    new.push((row, command, written));
+                }
                 // Its transfer replaces the entry it matched.
                 (StatementRowStatus::PossibleDuplicate, Some(command)) => {
                     report.possible_duplicates += 1;
-                    new.push((row, command, replaces_other_row));
+                    new.push((row, command, Written::Replacing(replaces_other_row)));
                 }
                 (StatementRowStatus::AlreadyImported, _) => report.deduplicated += 1,
                 (
@@ -910,7 +1016,7 @@ impl Core {
                     } else {
                         report.matched_transfers += 1;
                     }
-                    if let Some(afterwards) = plan::afterwards(&row, wallet) {
+                    if let Some(afterwards) = plan::afterwards(&row, wallet_of(&row)) {
                         later.push((row, afterwards));
                     }
                 }
@@ -922,29 +1028,42 @@ impl Core {
         // rows are in.
         new.sort_by_key(|(row, ..)| (row.occurred_at, row.line));
         later.sort_by_key(|(row, _)| (row.occurred_at, row.line));
-        for (row, command, other_row) in new {
-            if row.status == StatementRowStatus::PossibleDuplicate {
+        for (row, command, written) in new {
+            let wallet = wallet_of(&row);
+            let batch = match written {
+                Written::Row => Err(command),
                 // A replacement is written whole or not at all: the
                 // transfer, the void of the entry and their claims.
-                let batch = plan::replacing(&row, command, wallet, other_row)
-                    .into_iter()
-                    .map(|(id, command)| self::envelope(id, vault_id, author, command))
-                    .collect();
-                match self.execute_batch(batch) {
-                    Ok(receipts) if receipts.first().is_some_and(|r| r.deduplicated) => {
-                        report.deduplicated += 1;
-                    }
-                    Ok(_) => {
-                        report.executed += 1;
-                        report.rounded += u32::from(row.rounded);
-                    }
-                    Err(DomainError::Storage(message)) => {
-                        return Err(DomainError::Storage(message));
-                    }
-                    Err(err) => report.rejected.push(rejection(&row, &err)),
+                Written::Replacing(other_row) => {
+                    Ok(plan::replacing(&row, command, wallet, other_row))
                 }
-                continue;
-            }
+                // So is a move between two accounts: the transfer and the
+                // claims of both its halves.
+                Written::Paired(in_row) => Ok(plan::paired(row.command_id, command, in_row)),
+            };
+            let command = match batch {
+                Err(command) => command,
+                Ok(batch) => {
+                    let batch = batch
+                        .into_iter()
+                        .map(|(id, command)| self::envelope(id, vault_id, author, command))
+                        .collect();
+                    match self.execute_batch(batch) {
+                        Ok(receipts) if receipts.first().is_some_and(|r| r.deduplicated) => {
+                            report.deduplicated += 1;
+                        }
+                        Ok(_) => {
+                            report.executed += 1;
+                            report.rounded += u32::from(row.rounded);
+                        }
+                        Err(DomainError::Storage(message)) => {
+                            return Err(DomainError::Storage(message));
+                        }
+                        Err(err) => report.rejected.push(rejection(&row, &err)),
+                    }
+                    continue;
+                }
+            };
             let then = plan::own_side(row.command_id, &command, wallet);
             match self.execute(self::envelope(row.command_id, vault_id, author, command)) {
                 Ok(receipt) if receipt.deduplicated => report.deduplicated += 1,
@@ -986,6 +1105,18 @@ impl Core {
         }
         Ok(report)
     }
+}
+
+/// How an import writes a row's command.
+enum Written {
+    /// On its own, a new transfer's own side claimed after it.
+    Row,
+    /// With the void of the entry it replaces and the claims, in one batch;
+    /// `true` when the entry stood for the other wallet's statement row.
+    Replacing(bool),
+    /// As the transfer of a move between two accounts of the file, with the
+    /// claims of both halves (the money-in half's id), in one batch.
+    Paired(Uuid),
 }
 
 fn envelope(id: Uuid, vault_id: Uuid, author: &str, command: Command) -> CommandEnvelope {
