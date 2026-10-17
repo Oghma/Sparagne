@@ -145,6 +145,83 @@ struct StatementImportTests {
         #expect(row.payee == "Caffè della stazione")
     }
 
+    // MARK: - Guessing the formats
+
+    /// A current-account export in Italian, split on `;`: date-times with a
+    /// space, amounts with a decimal point, which the blank `;` mapping
+    /// takes for day-first dates and decimal commas.
+    private static let current = [
+        "Tipo;Prodotto;Data di inizio;Data di completamento;Descrizione;Importo;Costo;Valuta;State;Saldo",
+        "Pagamento;Attuale;2026-10-16 13:34:44;2026-10-16 13:34:45;To Tobia Tesan;-100.79;0.00;EUR;COMPLETATO;507.26",
+    ].joined(separator: "\n") + "\n"
+
+    /// `model` with the current-account export's date and amount columns
+    /// picked into `wallet`, and previewed.
+    private static func pickColumns(_ model: StatementImportModel, into wallet: Uuid) async {
+        model.mapping.dateColumn = "Data di inizio"
+        model.mapping.amountColumn = "Importo"
+        model.mapping.descriptionColumns = ["Descrizione"]
+        model.walletId = wallet
+        await model.refreshPreview()
+    }
+
+    @Test("A blank mapping guesses date-times and a decimal point from the columns picked, and the row reads")
+    func blankMappingGuessesFormats() async throws {
+        let (store, card, _) = try await Self.vault()
+        let model = StatementImportModel(store: store, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        await model.load(data: Data(Self.current.utf8), fileName: "account-statement.csv")
+        #expect(model.source == .blank)
+        #expect(model.mapping.dateFormat == .dayMonthYear)
+        #expect(model.mapping.decimalComma)
+
+        await Self.pickColumns(model, into: card)
+
+        #expect(model.mapping.dateFormat == .isoDateTime)
+        #expect(!model.mapping.decimalComma)
+        // The picker shows the format as the file writes it.
+        #expect(StatementDateChoice(model.mapping.dateFormat).label == "2026-09-16 08:54:40")
+        let row = try Self.row(model, line: 2)
+        #expect(row.status == .new)
+        #expect(row.kind == .expense)
+        #expect(row.amount == 10_079)
+        #expect(row.payee == "To Tobia Tesan")
+    }
+
+    @Test("A format set by hand is never guessed over, until another file is read")
+    func handSetFormatStays() async throws {
+        let (store, card, _) = try await Self.vault()
+        let model = StatementImportModel(store: store, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        await model.load(data: Data(Self.current.utf8), fileName: "account-statement.csv")
+
+        // The switch set by hand, to what the blank mapping already says.
+        model.chooseDecimalComma(true)
+        await Self.pickColumns(model, into: card)
+
+        #expect(model.mapping.dateFormat == .isoDateTime)
+        #expect(model.mapping.decimalComma)
+        let row = try Self.row(model, line: 2)
+        guard case .invalid(let code, _) = row.status else {
+            Issue.record("the amount should not read with a decimal comma, got \(row.status)")
+            return
+        }
+        #expect(code == "invalid_amount")
+
+        // A date format picked by hand stays whatever column is picked next,
+        // and so does the switch.
+        model.chooseDateFormat(.dateTimeUtc)
+        model.mapping.dateColumn = "Data di completamento"
+        model.mapping.amountColumn = "Saldo"
+        await model.refreshPreview()
+        #expect(model.mapping.dateFormat == .dateTimeUtc)
+        #expect(model.mapping.decimalComma)
+
+        // The same file read again starts over.
+        await model.load(data: Data(Self.current.utf8), fileName: "account-statement.csv")
+        await Self.pickColumns(model, into: card)
+        #expect(model.mapping.dateFormat == .isoDateTime)
+        #expect(!model.mapping.decimalComma)
+    }
+
     // MARK: - Preview and import
 
     @Test("The card header opens on the preset, and the preview counts every row")
