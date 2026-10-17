@@ -1521,6 +1521,22 @@
         }
       }
     },
+    "Account left out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account left out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conto escluso"
+          }
+        }
+      }
+    },
     "Active": {
       "localizations": {
         "en": {
@@ -4305,6 +4321,22 @@
         }
       }
     },
+    "File’s wallet (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File’s wallet (%@)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet del file (%@)"
+          }
+        }
+      }
+    },
     "Find…": {
       "localizations": {
         "en": {
@@ -4841,6 +4873,22 @@
         }
       }
     },
+    "In an export holding several accounts, the column saying whose each row is.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In an export holding several accounts, the column saying whose each row is."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In un export con più conti, la colonna che dice di quale conto è ogni riga."
+          }
+        }
+      }
+    },
     "In archive": {
       "localizations": {
         "en": {
@@ -5221,6 +5269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esci dal vault…"
+          }
+        }
+      }
+    },
+    "Leave out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave out"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escludi"
           }
         }
       }
@@ -6289,6 +6353,22 @@
         }
       }
     },
+    "No account in this column.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No account in this column."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun conto in questa colonna."
+          }
+        }
+      }
+    },
     "No activity this month": {
       "localizations": {
         "en": {
@@ -7133,6 +7213,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Altro valore"
+          }
+        }
+      }
+    },
+    "Other half of a transfer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other half of a transfer"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altra metà di un trasferimento"
+          }
+        }
+      }
+    },
+    "Other half of line %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other half of line %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altra metà della riga %lld"
           }
         }
       }
@@ -9185,6 +9297,38 @@
         }
       }
     },
+    "Statement account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conto"
+          }
+        }
+      }
+    },
+    "Statement accounts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accounts"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conti"
+          }
+        }
+      }
+    },
     "Status": {
       "localizations": {
         "en": {
@@ -9549,6 +9693,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La categoria della banca sceglie solo una delle tue con lo stesso nome o alias; non ne crea mai una."
+          }
+        }
+      }
+    },
+    "The column marking the two halves of a move between two of your accounts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The column marking the two halves of a move between two of your accounts."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La colonna che segna le due metà di un movimento tra due tuoi conti."
           }
         }
       }
@@ -10521,6 +10681,38 @@
         }
       }
     },
+    "Transfer with no other half in this file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer with no other half in this file"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento senza l’altra metà nel file"
+          }
+        }
+      }
+    },
+    "Transfer within one wallet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer within one wallet"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trasferimento nello stesso wallet"
+          }
+        }
+      }
+    },
     "Transfers": {
       "localizations": {
         "en": {
@@ -10997,6 +11189,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wallet"
+          }
+        }
+      }
+    },
+    "Wallet (BudgetBakers)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet (BudgetBakers)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App Wallet (BudgetBakers)"
           }
         }
       }
