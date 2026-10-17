@@ -26,6 +26,7 @@ struct StatementMappingEditor: View {
                 statement.frame(maxWidth: .infinity, alignment: .leading)
                 target.frame(maxWidth: .infinity, alignment: .leading)
             }
+            if model.mapping.accountColumn != nil { accounts }
             sample
             HStack(alignment: .top, spacing: 28) {
                 columns.frame(maxWidth: .infinity, alignment: .leading)
@@ -130,6 +131,84 @@ struct StatementMappingEditor: View {
         .help(String(localized: "Rows dated before this day are not imported."))
     }
 
+    // MARK: - Accounts
+
+    /// Each account of an export holding several, with its rows, and where
+    /// they go: the file's wallet, another active wallet, or nowhere.
+    private var accounts: some View {
+        FormGroup(String(localized: "Statement accounts")) {
+            if model.accounts.isEmpty {
+                FormNote(String(localized: "No account in this column."), indented: false)
+            }
+            ForEach(model.accounts, id: \.value) { account in
+                HStack(spacing: 8) {
+                    Text(verbatim: account.value)
+                        .font(Face.ui(metrics.fontSize))
+                        .foregroundStyle(Ink.text2)
+                        .lineLimit(1)
+                        .help(account.value)
+                        .frame(width: Self.accountColumn, alignment: .leading)
+                    Text(String(localized: "\(Int(account.rows)) rows"))
+                        .font(Face.ui(metrics.fontSize - 1))
+                        .foregroundStyle(Ink.text3)
+                        .frame(width: Self.rowsColumn, alignment: .leading)
+                    FormPicker(
+                        label: account.value,
+                        selection: Binding(
+                            get: { AccountPick(model.destination(ofAccount: account.value)) },
+                            set: { model.setDestination($0.destination, ofAccount: account.value) }
+                        ),
+                        options: [.file] + model.store.wallets.map { AccountPick.wallet($0.id) } + [.leftOut],
+                        title: accountPickTitle
+                    )
+                    .frame(width: Self.pickerWidth)
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: metrics.controlHeight + 2)
+            }
+        }
+    }
+
+    /// An account's name, its rows and its picker: "Conto Corrente Arancio"
+    /// whole, "12 righe", and the wallet names.
+    private static let accountColumn: CGFloat = 200
+    private static let rowsColumn: CGFloat = 80
+    private static let pickerWidth: CGFloat = 300
+
+    /// What an account's picker offers: the file's wallet, any active
+    /// wallet, or leaving its rows out.
+    private enum AccountPick: Hashable {
+        case file
+        case wallet(Uuid)
+        case leftOut
+
+        init(_ destination: StatementImportModel.AccountDestination?) {
+            switch destination {
+            case nil: self = .file
+            case .wallet(let wallet): self = .wallet(wallet)
+            case .leftOut: self = .leftOut
+            }
+        }
+
+        var destination: StatementImportModel.AccountDestination? {
+            switch self {
+            case .file: nil
+            case .wallet(let wallet): .wallet(wallet)
+            case .leftOut: .leftOut
+            }
+        }
+    }
+
+    private func accountPickTitle(_ pick: AccountPick) -> String {
+        switch pick {
+        case .file:
+            let name = model.walletId.map { walletName($0) } ?? TransactionRow.placeholder
+            return String(localized: "File’s wallet (\(name))")
+        case .wallet(let wallet): return walletName(wallet)
+        case .leftOut: return String(localized: "Leave out")
+        }
+    }
+
     /// Where a start day switched on begins: the first of today's month.
     private static var firstOfThisMonth: NaiveDate {
         let calendar = Calendar.current
@@ -215,6 +294,14 @@ struct StatementMappingEditor: View {
             }
             FormRow(String(localized: "Original currency")) {
                 optionalColumn(String(localized: "Original currency"), $model.mapping.originalCurrencyColumn)
+            }
+            FormRow(String(localized: "Statement account")) {
+                optionalColumn(String(localized: "Statement account"), $model.mapping.accountColumn)
+                    .help(String(localized: "In an export holding several accounts, the column saying whose each row is."))
+            }
+            FormRow(String(localized: "Transfer")) {
+                optionalColumn(String(localized: "Transfer"), $model.mapping.transferColumn)
+                    .help(String(localized: "The column marking the two halves of a move between two of your accounts."))
             }
         }
     }

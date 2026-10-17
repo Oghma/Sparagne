@@ -36,6 +36,9 @@ enum StatementText {
         case "zero_amount": String(localized: "Zero amount")
         case "skipped_by_you": String(localized: "Skipped by you")
         case "before_start": String(localized: "Before the start day")
+        case "skipped_account": String(localized: "Account left out")
+        case "internal_transfer": String(localized: "Transfer within one wallet")
+        case "transfer_pair": String(localized: "Other half of a transfer")
         default: String(localized: "Not imported")
         }
     }
@@ -95,6 +98,18 @@ enum StatementText {
     /// last days.
     static var importedByDefault: String {
         String(localized: "Maybe another row’s; imported unless you choose Keep")
+    }
+
+    /// The status of the money-in half of a move between two accounts, the
+    /// transfer being written from the other half's line.
+    static func otherHalf(of line: UInt32) -> String {
+        String(localized: "Other half of line \(Int(line))")
+    }
+
+    /// Under half of a move between two accounts whose other half the file
+    /// does not hold: it is imported as what its type says.
+    static var unpairedLeg: String {
+        String(localized: "Transfer with no other half in this file")
     }
 
     /// Under a match dated before the start day: an entry typed up to three

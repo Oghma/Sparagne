@@ -27,9 +27,10 @@ struct StatementImportSheet: View {
     private static let fileTypes: [UTType] = [.commaSeparatedText, .tabSeparatedText, .plainText, .text]
 
     /// Wider and taller than the other sheets: the review has nine columns,
-    /// an editable note among them. Still narrower than the window's
-    /// narrowest (`ContentView`).
-    private static let size = CGSize(width: 1080, height: 640)
+    /// ten for an export holding several accounts, an editable note among
+    /// them. Still narrower than the window's narrowest (`ContentView`,
+    /// 1176).
+    private static let size = CGSize(width: 1140, height: 640)
 
     /// `engine` syncs the vault before a file is planned and before it is
     /// imported (`StatementImportModel.syncRound`); `nil` for a database that

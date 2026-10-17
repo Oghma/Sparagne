@@ -52,6 +52,9 @@ struct StatementReview: View {
                 heading("#", spoken: String(localized: "Number"))
             }
             GridCell(width: ReviewColumn.date) { heading(String(localized: "Date")) }
+            if model.mapping.accountColumn != nil {
+                GridCell(width: ReviewColumn.account) { heading(String(localized: "Statement account")) }
+            }
             GridCell { heading(String(localized: "Description")) }
             GridCell(width: ReviewColumn.amount, alignment: .trailing) { heading(String(localized: "Amount")) }
             GridCell(width: ReviewColumn.kind) { heading(String(localized: "Kind")) }
@@ -70,14 +73,18 @@ struct StatementReview: View {
 }
 
 /// Column widths of the review, as a cell's content gets them (`GridCell`
-/// pads each side); the description takes what is left, about 225 points
-/// of the sheet. Date fits a whole `2026-09-16`, kind its menu's longest
-/// word ("trasferimento verso") and status the tag's ("Needs the other
-/// wallet" in its 10 pt); a longer tag is cut, its whole text on hover.
+/// pads each side); the description takes what is left, about 285 points
+/// of the sheet, 170 beside an account column. Date fits a whole
+/// `2026-09-16`, kind its menu's longest word ("trasferimento verso") and
+/// status the tag's ("Needs the other wallet" in its 10 pt); a longer tag
+/// or account is cut, its whole text on hover.
 private enum ReviewColumn {
     static let check: CGFloat = 14
     static let line: CGFloat = 28
     static let date: CGFloat = 76
+    /// An export holding several accounts: the row's account, and the
+    /// wallet it goes to when that is not the file's.
+    static let account: CGFloat = 100
     static let amount: CGFloat = 76
     static let kind: CGFloat = 118
     static let status: CGFloat = 140
@@ -86,7 +93,9 @@ private enum ReviewColumn {
 
     /// The columns before the description, padding included: where the
     /// second line of a flagged row starts.
-    static let lead = check + line + date + 6 * GridColumn.padding
+    static func lead(accounts: Bool) -> CGFloat {
+        check + line + date + 6 * GridColumn.padding + (accounts ? account + 2 * GridColumn.padding : 0)
+    }
     /// The second line's menu spans the status and category columns, room
     /// for "Tieni quella già presente".
     static let choice = status + category + 2 * GridColumn.padding
@@ -124,13 +133,24 @@ private struct StatementReviewRow: View {
     /// The transaction already in the vault the row matched, if it is to be
     /// shown: a flagged row's, or one imported anyway.
     private var match: TransactionView? { StatementImportModel.isFlagged(row) ? row.existing : nil }
+    /// The file has an account column: the review shows each row's account.
+    private var hasAccounts: Bool { model.mapping.accountColumn != nil }
+    /// Half of a move between two accounts whose other half the file does
+    /// not hold, imported as what its type says.
+    private var unpaired: Bool {
+        row.transferLeg && row.pairedLine == nil && (isNew || StatementImportModel.isFlagged(row))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             // The bar at the left marks a row the last import found planned
             // otherwise after syncing.
-            SetupRow(editing: model.changedLines.contains(row.line), separator: match == nil) { cells }
-            if let match { matchLine(match) }
+            SetupRow(editing: model.changedLines.contains(row.line), separator: match == nil && !unpaired) { cells }
+            if let match {
+                matchLine(match)
+            } else if unpaired {
+                hintLine(StatementText.unpairedLeg)
+            }
         }
         .font(Face.row)
         .contextMenu {
@@ -163,6 +183,11 @@ private struct StatementReviewRow: View {
             Text(verbatim: String(row.line)).foregroundStyle(Ink.text3)
         }
         GridCell(width: ReviewColumn.date) { Text(verbatim: date).foregroundStyle(ink) }
+        if hasAccounts {
+            GridCell(width: ReviewColumn.account) {
+                Text(verbatim: accountText).foregroundStyle(ink).help(accountText)
+            }
+        }
         GridCell { description }
         GridCell(width: ReviewColumn.amount, alignment: .trailing) {
             Text(verbatim: LedgerMoney.bare(signedAmount)).foregroundStyle(live ? amountTint : Ink.text3)
@@ -184,17 +209,13 @@ private struct StatementReviewRow: View {
     }
 
     /// Expenses and transfers out minus, everything else plus, as the
-    /// ledger's totals sign them. A transfer goes the way its kind says, or,
-    /// a `BySign` row its match made a transfer, the way the file signs it.
+    /// ledger's totals sign them. A transfer goes the way what the row is
+    /// taken for says (`movesOut`): a transfer out, the money-out half of a
+    /// move between two accounts, or a `BySign` row its match made a
+    /// transfer, the way the file signs it.
     private var signedAmount: Int64 {
         if row.kind == .expense { return -row.amount }
-        if row.kind == .transferWallet {
-            switch row.action {
-            case .transferOut: return -row.amount
-            case .transferIn: return row.amount
-            default: return row.outflow ? -row.amount : row.amount
-            }
-        }
+        if row.kind == .transferWallet { return Self.movesOut(row) ? -row.amount : row.amount }
         return row.amount
     }
 
@@ -211,7 +232,54 @@ private struct StatementReviewRow: View {
     private var statusText: String {
         if tickable && !included { return StatementText.skipped("skipped_by_you") }
         if replacing { return String(localized: "To replace") }
+        if case .skipped("transfer_pair", _) = row.status, let other = row.pairedLine {
+            return StatementText.otherHalf(of: other)
+        }
         return StatementText.status(row.status)
+    }
+
+    /// The row's account, and the wallet it goes to when that is not the
+    /// file's: `BBVA` into the file's wallet, `Conto Arancio → Arancio`
+    /// into another, `→ Revolut` into a wallet named as the account.
+    private var accountText: String {
+        let account = row.account ?? TransactionRow.placeholder
+        guard let wallet = row.walletId, wallet != model.walletId, let name = names.wallet(wallet) else {
+            return account
+        }
+        if StatementImportModel.accountKey(name) == StatementImportModel.accountKey(account) {
+            return "\u{2192} \(name)"
+        }
+        return "\(account) \u{2192} \(name)"
+    }
+
+    /// Whether a row takes money out: by what it is taken for, as an export
+    /// writing every amount positive says through its type, else by its
+    /// sign.
+    private static func movesOut(_ row: StatementRow) -> Bool {
+        switch row.action {
+        case .expense, .transferOut: true
+        case .income, .refund, .transferIn: false
+        case .bySign, .skip: row.outflow
+        }
+    }
+
+    /// One half of a move between two accounts of the file, paired with
+    /// the other: the money-out half is the transfer, the other its pair.
+    private var pairedHalf: Bool { row.pairedLine != nil && row.transferLeg }
+
+    /// The two wallets of a paired move, from the money-out half's to the
+    /// other's (`from Revolut to BBVA`); its two accounts when both go to
+    /// one wallet, where the move changes nothing.
+    private var pairedRoute: String? {
+        guard pairedHalf, let other = row.pairedLine,
+              let otherRow = model.preview?.rows.first(where: { $0.line == other }) else { return nil }
+        let out = Self.movesOut(row) ? row : otherRow
+        let into = Self.movesOut(row) ? otherRow : row
+        func end(_ half: StatementRow) -> String {
+            let wallet = out.walletId == into.walletId ? nil : names.wallet(half.walletId)
+            return wallet ?? half.account ?? TransactionRow.placeholder
+        }
+        return String(localized: "from \(end(out)) to \(end(into))")
     }
 
     /// A replacing row is written, and deletes the entry it matched: its tag
@@ -278,11 +346,13 @@ private struct StatementReviewRow: View {
                 ),
                 options: StatementActionChoice.rowChoices,
                 title: StatementText.action,
-                value: StatementText.rowKind(action, resolved: row.kind),
+                // Half of a move between two accounts reads as the transfer
+                // it makes; another kind of the user's takes it apart.
+                value: pairedHalf ? StatementText.kind(.transferWallet) : StatementText.rowKind(action, resolved: row.kind),
                 tint: ink
             )
         } else {
-            Text(verbatim: StatementText.kind(row.kind)).foregroundStyle(ink)
+            Text(verbatim: StatementText.kind(pairedHalf ? .transferWallet : row.kind)).foregroundStyle(ink)
         }
     }
 
@@ -311,7 +381,10 @@ private struct StatementReviewRow: View {
     /// and would read as a category.
     @ViewBuilder
     private var category: some View {
-        if row.status == .matchedTransfer, let existing = row.existing {
+        if let route = pairedRoute {
+            // Both halves of a move between two accounts say where it went.
+            Text(verbatim: route).foregroundStyle(Ink.text3).help(route)
+        } else if row.status == .matchedTransfer, let existing = row.existing {
             let other = existing.fromId == model.walletId ? existing.toId : existing.fromId
             Text(verbatim: "\u{21C4} \(walletName(other))").foregroundStyle(Ink.text3)
         } else if StatementImportModel.takesAction(row), StatementActionChoice(action).isTransfer {
@@ -408,11 +481,12 @@ private struct StatementReviewRow: View {
             model.matchPredatesStart(row) ? StatementText.typedBeforeStart : nil,
             model.importsByDefault(row) ? StatementText.importedByDefault : nil,
             model.mayReplace(row) ? StatementText.mayBeOtherSide : nil,
+            unpaired ? StatementText.unpairedLeg : nil,
         ].compactMap(\.self)
         let hint = reasons.isEmpty ? nil : reasons.joined(separator: " \u{00B7} ")
         return VStack(spacing: 0) {
             HStack(spacing: 0) {
-                Color.clear.frame(width: ReviewColumn.lead, height: 1)
+                Color.clear.frame(width: ReviewColumn.lead(accounts: hasAccounts), height: 1)
                 GridCell {
                     HStack(spacing: 5) {
                         Image(systemName: "arrow.turn.down.right")
@@ -450,7 +524,7 @@ private struct StatementReviewRow: View {
             // the match above it is never cut for it.
             if let hint, included {
                 HStack(spacing: 0) {
-                    Color.clear.frame(width: ReviewColumn.lead, height: 1)
+                    Color.clear.frame(width: ReviewColumn.lead(accounts: hasAccounts), height: 1)
                     GridCell {
                         Text(verbatim: hint)
                             .italic()
@@ -466,6 +540,25 @@ private struct StatementReviewRow: View {
             }
         }
         .font(Face.ui(11))
+        .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
+    }
+
+    /// A quiet line under a row that matched nothing, as the match line's
+    /// hint is drawn: half of a move whose other half the file lacks.
+    private func hintLine(_ hint: String) -> some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: ReviewColumn.lead(accounts: hasAccounts), height: 1)
+            GridCell {
+                Text(verbatim: hint)
+                    .italic()
+                    .foregroundStyle(Ink.text3)
+                    .padding(.leading, 14)
+                    .help(hint)
+            }
+            Color.clear.frame(width: ReviewColumn.choice + ReviewColumn.trail + 2 * GridColumn.padding, height: 1)
+        }
+        .font(Face.ui(11))
+        .frame(height: 18)
         .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
     }
 }

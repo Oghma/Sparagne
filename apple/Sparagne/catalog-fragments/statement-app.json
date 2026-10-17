@@ -1,0 +1,54 @@
+{
+  "Account left out": {
+    "en": "Account left out",
+    "it": "Conto escluso"
+  },
+  "File’s wallet (%@)": {
+    "en": "File’s wallet (%@)",
+    "it": "Wallet del file (%@)"
+  },
+  "In an export holding several accounts, the column saying whose each row is.": {
+    "en": "In an export holding several accounts, the column saying whose each row is.",
+    "it": "In un export con più conti, la colonna che dice di quale conto è ogni riga."
+  },
+  "Leave out": {
+    "en": "Leave out",
+    "it": "Escludi"
+  },
+  "No account in this column.": {
+    "en": "No account in this column.",
+    "it": "Nessun conto in questa colonna."
+  },
+  "Other half of a transfer": {
+    "en": "Other half of a transfer",
+    "it": "Altra metà di un trasferimento"
+  },
+  "Other half of line %lld": {
+    "en": "Other half of line %lld",
+    "it": "Altra metà della riga %lld"
+  },
+  "Statement account": {
+    "en": "Account",
+    "it": "Conto"
+  },
+  "Statement accounts": {
+    "en": "Accounts",
+    "it": "Conti"
+  },
+  "The column marking the two halves of a move between two of your accounts.": {
+    "en": "The column marking the two halves of a move between two of your accounts.",
+    "it": "La colonna che segna le due metà di un movimento tra due tuoi conti."
+  },
+  "Transfer with no other half in this file": {
+    "en": "Transfer with no other half in this file",
+    "it": "Trasferimento senza l’altra metà nel file"
+  },
+  "Transfer within one wallet": {
+    "en": "Transfer within one wallet",
+    "it": "Trasferimento nello stesso wallet"
+  },
+  "Wallet (BudgetBakers)": {
+    "en": "Wallet (BudgetBakers)",
+    "it": "App Wallet (BudgetBakers)"
+  }
+}
