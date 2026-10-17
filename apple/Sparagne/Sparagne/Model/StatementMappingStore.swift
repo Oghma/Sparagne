@@ -56,13 +56,19 @@ struct StatementMappingStore {
     }
 
     /// Every wallet an import into `vaultId` was remembered going to,
-    /// whatever its header: the wallets statements go to.
+    /// whatever its header, the wallets its accounts went to included: the
+    /// wallets statements go to.
     func targetWallets(vaultId: Uuid) -> Set<Uuid> {
         let prefix = "\(vaultId)|"
-        return Set(stored(Self.targetsKey).compactMap { key, json -> Uuid? in
-            guard key.hasPrefix(prefix) else { return nil }
-            return (try? JSONDecoder().decode(StatementImportTarget.self, from: Data(json.utf8)))?.walletId
-        })
+        var wallets: Set<Uuid> = []
+        for (key, json) in stored(Self.targetsKey) where key.hasPrefix(prefix) {
+            guard let target = try? JSONDecoder().decode(StatementImportTarget.self, from: Data(json.utf8)) else {
+                continue
+            }
+            if let wallet = target.walletId { wallets.insert(wallet) }
+            wallets.formUnion(target.accounts.compactMap(\.walletId))
+        }
+        return wallets
     }
 
     /// Replaces the target remembered for `vaultId` and `headers`.
@@ -80,10 +86,11 @@ struct StatementMappingStore {
     }
 }
 
-/// Where a statement was imported: the wallet, the envelope and the start
-/// day. Every field may be missing from what was stored, and a field this
-/// version does not know is ignored, so a target written by another version
-/// of the app still reads.
+/// Where a statement was imported: the wallet, the envelope, the start day,
+/// and, for an export holding several accounts, where each account went
+/// other than the file's wallet. Every field may be missing from what was
+/// stored, and a field this version does not know is ignored, so a target
+/// written by another version of the app still reads.
 ///
 /// The wallets also searched for duplicates are not part of it on purpose:
 /// they serve the move from typing by hand into one wallet to importing the
@@ -95,11 +102,22 @@ nonisolated struct StatementImportTarget: Codable, Equatable, Sendable {
     var flowId: Uuid?
     /// `yyyy-MM-dd`; `nil` imports the whole file.
     var since: NaiveDate?
+    /// The accounts sent elsewhere than `walletId`, by name as the file
+    /// writes it; a `nil` wallet left the account out.
+    var accounts: [Account] = []
 
-    init(walletId: Uuid?, flowId: Uuid?, since: NaiveDate? = nil) {
+    /// Where one account of the file went.
+    struct Account: Codable, Equatable, Sendable {
+        var account: String
+        /// `nil`: left out.
+        var walletId: Uuid?
+    }
+
+    init(walletId: Uuid?, flowId: Uuid?, since: NaiveDate? = nil, accounts: [Account] = []) {
         self.walletId = walletId
         self.flowId = flowId
         self.since = since
+        self.accounts = accounts
     }
 
     init(from decoder: Decoder) throws {
@@ -107,5 +125,6 @@ nonisolated struct StatementImportTarget: Codable, Equatable, Sendable {
         walletId = try container.decodeIfPresent(Uuid.self, forKey: .walletId)
         flowId = try container.decodeIfPresent(Uuid.self, forKey: .flowId)
         since = try container.decodeIfPresent(NaiveDate.self, forKey: .since)
+        accounts = try container.decodeIfPresent([Account].self, forKey: .accounts) ?? []
     }
 }

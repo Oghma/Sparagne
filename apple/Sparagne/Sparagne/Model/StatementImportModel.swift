@@ -116,7 +116,32 @@ final class StatementImportModel {
             if mapping.dateColumn != oldValue.dateColumn || mapping.amountColumn != oldValue.amountColumn {
                 guessFormats()
             }
+            if mapping.accountColumn != oldValue.accountColumn || mapping.delimiter != oldValue.delimiter {
+                listAccounts()
+            }
         }
+    }
+    /// The accounts of an export holding several, as its account column
+    /// lists them with their rows, most rows first (`listAccounts()`). Empty
+    /// without an account column.
+    private(set) var accounts: [StatementColumnValue] = []
+    /// Where each account goes other than the file's wallet, by account as
+    /// the core compares them (trimmed, lowercased). Any change plans every
+    /// row again.
+    private(set) var accountChoices: [String: AccountChoice] = [:] {
+        didSet { if accountChoices != oldValue { forgetMatchChoices(); noteEdit() } }
+    }
+
+    /// Where the rows of one account go, other than the file's wallet.
+    enum AccountDestination: Hashable {
+        case wallet(Uuid)
+        case leftOut
+    }
+
+    /// An account as the file writes it, and where it goes.
+    struct AccountChoice: Equatable {
+        let account: String
+        let destination: AccountDestination
     }
     /// The wallet the statement belongs to. Required; preselected when the
     /// vault has a single wallet, or when the last file with this header
@@ -253,6 +278,10 @@ final class StatementImportModel {
     @ObservationIgnored private var guessGeneration = 0
     /// The guess of the formats on its way, which every preview waits for.
     @ObservationIgnored private var guessing: Task<Void, Never>?
+    /// Which listing of the accounts may set them.
+    @ObservationIgnored private var accountsGeneration = 0
+    /// The listing of the accounts on its way.
+    @ObservationIgnored private var listing: Task<Void, Never>?
 
     init(
         store: AppStore,
@@ -310,6 +339,7 @@ final class StatementImportModel {
             // with nothing remembered starts over, as a fresh sheet does,
             // rather than keep the last file's wallet, envelope and start.
             alsoCheckWallets = []
+            accountChoices = [:]
             if let vaultId, let target = mappings.target(vaultId: vaultId, headers: read.detection.headers) {
                 restore(target)
             } else {
@@ -320,6 +350,7 @@ final class StatementImportModel {
             let initial = initialMapping(for: read.detection)
             mapping = adopt(initial.mapping, headers: read.detection.headers, delimiter: read.detection.delimiter)
             source = initial.source
+            listAccounts()
             // Nothing to guess yet: a blank mapping has no column, and a
             // remembered one or a preset says already.
             forgetGuess()
@@ -368,17 +399,102 @@ final class StatementImportModel {
     /// still exists: a wallet archived or deleted since is not chosen (the
     /// one already chosen stays), and an envelope gone reads as Unallocated.
     func restore(_ target: StatementImportTarget) {
-        if let wallet = target.walletId, store.wallets.contains(where: { $0.id == wallet }) { walletId = wallet }
+        let active = Set(store.wallets.map(\.id))
+        if let wallet = target.walletId, active.contains(wallet) { walletId = wallet }
         flowId = target.flowId.flatMap { id in
             store.flows.contains { $0.id == id && !$0.isUnallocated } ? id : nil
         }
         since = target.since
+        // An account left out stays out; one whose wallet is gone since goes
+        // to the file's wallet again.
+        var choices: [String: AccountChoice] = [:]
+        for entry in target.accounts {
+            let destination: AccountDestination
+            switch entry.walletId {
+            case nil: destination = .leftOut
+            case let wallet? where active.contains(wallet) && wallet != walletId: destination = .wallet(wallet)
+            default: continue
+            }
+            choices[Self.accountKey(entry.account)] = AccountChoice(account: entry.account, destination: destination)
+        }
+        accountChoices = choices
     }
 
     /// Where the import goes, as `restore` puts it back next time: the
     /// wallets also searched for duplicates are left out.
     var target: StatementImportTarget {
-        StatementImportTarget(walletId: walletId, flowId: flowId, since: since)
+        StatementImportTarget(
+            walletId: walletId,
+            flowId: flowId,
+            since: since,
+            accounts: accountWallets.map { StatementImportTarget.Account(account: $0.account, walletId: $0.walletId) }
+        )
+    }
+
+    // MARK: - Accounts
+
+    /// An account as the core compares them: trimmed, whatever the case.
+    nonisolated static func accountKey(_ account: String) -> String {
+        account.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    /// Where an account's rows go; `nil` is the file's wallet.
+    func destination(ofAccount account: String) -> AccountDestination? {
+        accountChoices[Self.accountKey(account)]?.destination
+    }
+
+    /// Sends an account's rows to a wallet, leaves them out, or (`nil`, or
+    /// the file's own wallet) lets them go where the file goes.
+    func setDestination(_ destination: AccountDestination?, ofAccount account: String) {
+        let key = Self.accountKey(account)
+        if let destination, destination != .wallet(walletId ?? "") {
+            accountChoices[key] = AccountChoice(account: account, destination: destination)
+        } else {
+            accountChoices[key] = nil
+        }
+    }
+
+    /// The accounts sent elsewhere than the file's wallet, as the core takes
+    /// them (`StatementOptions.accountWallets`): a wallet still active and
+    /// not the file's, or none for an account left out; in a stable order.
+    var accountWallets: [StatementAccountWallet] {
+        guard mapping.accountColumn != nil else { return [] }
+        let active = Set(store.wallets.map(\.id))
+        return accountChoices.values.compactMap { choice -> StatementAccountWallet? in
+            switch choice.destination {
+            case .leftOut:
+                return StatementAccountWallet(account: choice.account, walletId: nil)
+            case .wallet(let wallet):
+                guard active.contains(wallet), wallet != walletId else { return nil }
+                return StatementAccountWallet(account: choice.account, walletId: wallet)
+            }
+        }
+        .sorted { Self.accountKey($0.account) < Self.accountKey($1.account) }
+    }
+
+    /// Lists the accounts of the file's account column, off the main actor;
+    /// a listing asked for before the column last changed, or for another
+    /// file, is dropped.
+    private func listAccounts() {
+        accountsGeneration += 1
+        let generation = accountsGeneration
+        guard let text, let column = mapping.accountColumn, !column.isEmpty else {
+            accounts = []
+            listing = nil
+            return
+        }
+        let delimiter = mapping.delimiter
+        let core = store.core
+        listing = Task { [weak self] in
+            let values = await core.statementColumnValues(text: text, delimiter: delimiter, column: column)
+            guard let self, generation == self.accountsGeneration else { return }
+            self.accounts = values
+        }
+    }
+
+    /// Waits for the accounts' listing on its way, if any.
+    func accountsListed() async {
+        await listing?.value
     }
 
     /// Remembered for this vault and header, else the preset the header
@@ -423,6 +539,8 @@ final class StatementImportModel {
         adopted.categoryColumn = column(mapping.categoryColumn)
         adopted.originalAmountColumn = column(mapping.originalAmountColumn)
         adopted.originalCurrencyColumn = column(mapping.originalCurrencyColumn)
+        adopted.accountColumn = column(mapping.accountColumn)
+        adopted.transferColumn = column(mapping.transferColumn)
         adopted.typeRules = mapping.typeRules.map { StatementTypeRule(value: $0.value, action: live($0.action)) }
         adopted.defaultAction = live(mapping.defaultAction)
         adopted.descriptionRules = mapping.descriptionRules.map { rule in
@@ -463,6 +581,7 @@ final class StatementImportModel {
     nonisolated static func presetName(_ preset: StatementPreset) -> String {
         switch preset.id {
         case "card-transactions": String(localized: "Card transactions")
+        case "budgetbakers-wallet": String(localized: "Wallet (BudgetBakers)")
         default: preset.name
         }
     }
@@ -733,7 +852,8 @@ final class StatementImportModel {
                 timezone: timezone,
                 alsoCheckWallets: checkedWallets,
                 since: since,
-                statementWallets: otherStatementWallets
+                statementWallets: otherStatementWallets,
+                accountWallets: accountWallets
             ),
             rowChoices: rowChoices
         )

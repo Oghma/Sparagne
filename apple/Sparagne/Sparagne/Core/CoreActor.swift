@@ -319,6 +319,16 @@ actor CoreActor {
         }
     }
 
+    /// The values a statement's column holds, with how many rows hold each,
+    /// most rows first: the accounts of an export holding several. A free
+    /// function run here, as the format guess is, so a long file is read
+    /// off the main actor.
+    func statementColumnValues(text: String, delimiter: String, column: String) async -> [StatementColumnValue] {
+        await visit { _ in
+            SparagneCore.statementColumnValues(text: text, delimiter: delimiter, column: column)
+        }
+    }
+
     /// What `MergeCategory` would refuse, without changing anything.
     func previewMerge(vaultId: Uuid, sourceId: Uuid, targetId: Uuid) async throws -> MergePreview {
         try await visit { try $0.previewMerge(vaultId: vaultId, sourceId: sourceId, targetId: targetId) }
