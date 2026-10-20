@@ -1,18 +1,9 @@
-//! UniFFI surface: custom scalar mappings, the handle object the app holds and
-//! the free functions that mint envelopes and parse text.
-//!
-//! The domain types are exported as they are, so there are no mirror DTOs: the
-//! derives live on the real `Command`, `Entry`, `TransactionView` and friends.
-//! Only three things are added here.
-//!
-//! 1. **Scalars.** `Uuid`, the two `DateTime` flavours and `NaiveDate` are not
-//!    UniFFI builtins, so they travel as strings. A malformed string surfaces
-//!    as a [`DomainError`] rather than a panic (see [`lift_failed`]).
-//! 2. **[`CoreHandle`].** [`Core::execute`] takes `&mut self`; UniFFI objects
-//!    are shared and only ever hand out `&self`, so the mutability lives behind
-//!    a `Mutex` here instead of changing the core.
-//! 3. **Free functions.** Ids are minted in Rust only: Swift never builds a
-//!    [`CommandEnvelope`] by hand.
+//! UniFFI surface. The domain types carry the derives themselves, so there are
+//! no mirror DTOs; this module adds the scalars that travel as strings (a
+//! malformed one is a [`DomainError`], not a panic: [`lift_failed`]), the
+//! [`CoreHandle`] that keeps the `&mut self` core behind a `Mutex` because
+//! UniFFI objects only hand out `&self`, and the free functions, which mint
+//! every id so that Swift never builds a [`CommandEnvelope`] by hand.
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -325,6 +316,8 @@ impl CoreHandle {
         self.lock()?.top_expenses(vault_id, from, to, person, limit)
     }
 
+    // -- Recurring and allocation -----------------------------------------
+
     pub fn list_recurring(
         &self,
         vault_id: Uuid,
@@ -446,7 +439,7 @@ impl CoreHandle {
         limit: u32,
     ) -> Result<String, DomainError> {
         self.lock()?
-            .serve_pull_json(vault_id, since, limit as usize)
+            .serve_pull_json(vault_id, since, to_usize(limit))
     }
 
     /// Rewrites the author of the outbox after a login, and every person or
@@ -521,6 +514,8 @@ impl CoreHandle {
         self.lock()?
             .import_statement(vault_id, &author, &text, &mapping, &options, &overrides)
     }
+
+    // -- Quick add ----------------------------------------------------------
 
     /// Resolves the wallet, flow and person names of a parsed quick-add line
     /// against the vault and `people` (who the app lets a row be for), and
@@ -661,7 +656,7 @@ fn to_usize(value: u32) -> usize {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[expect(clippy::unwrap_used, reason = "tests")]
 mod tests {
     use super::*;
     use crate::recurring::Frequency;
@@ -679,7 +674,7 @@ mod tests {
     fn occurrences_preview_is_capped() {
         let from = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
         let all = schedule_occurrences(open_ended_daily(), from, u32::MAX).unwrap();
-        assert_eq!(all.len(), MAX_OCCURRENCES_PREVIEW as usize);
+        assert_eq!(all.len(), to_usize(MAX_OCCURRENCES_PREVIEW));
         let few = schedule_occurrences(open_ended_daily(), from, 3).unwrap();
         assert_eq!(few.len(), 3);
     }
