@@ -1,16 +1,11 @@
-//! Sparagne v2 core.
-//!
-//! Domain rules, a per-vault command log and a SQLite projection of it.
-//! Every write goes through [`Core::execute`] as a [`Command`]; state tables
-//! are derived and can be rebuilt with [`replay`].
-//!
-//! Design rules:
-//! - amounts are `i64` minor units, one currency per vault;
-//! - the command id is the idempotency key, and every entity created by a
-//!   command gets an id derived from the command id (equal to it, or a UUID v5
-//!   of it), so replaying the log is deterministic;
-//! - domain checks (flow caps, non-negativity) run on create and update, never
-//!   on void.
+//! Sparagne v2 core: domain rules, a per-vault command log and a SQLite
+//! projection of it. Every write goes through [`Core::execute`] as a
+//! [`Command`]; state tables are derived and can be rebuilt with [`replay`].
+//! Amounts are `i64` minor units, one currency per vault; the command id is
+//! the idempotency key and every entity a command creates gets an id derived
+//! from it (equal to it, or a UUID v5 of it), so replaying the log is
+//! deterministic; domain checks (flow caps, non-negativity) run on create and
+//! update, never on void.
 
 pub mod allocation;
 mod analytics;
@@ -37,43 +32,43 @@ pub use allocation::{
     AllocationPreview, AllocationRule, AllocationRunView, LineStatus, PendingAllocation,
     PreviewLine, RunMove,
 };
-pub use analytics::{
-    BucketCategoryTotals, BucketPersonTotals, BucketTargetTotals, CategoryTotals, FlowPersonTotals,
-    TargetKind, TopExpense,
-};
-pub use category::{normalize_category_display, normalize_category_key, validate_category_name};
+pub use analytics::{BucketCategoryTotals, TargetKind};
 pub use command::{
     Command, CommandEnvelope, CommandRecord, Entry, Receipt, RecurringPatch, TransactionKind,
     TransactionPatch,
 };
 pub use currency::Currency;
-pub use engine::entities::{AliasView, MergeConflict, MergeConflictKind, MergePreview};
+pub use engine::entities::{AliasView, MergeConflictKind};
 pub use error::DomainError;
-pub use ffi::{
-    CoreHandle, create_vault_envelope, decode_statement_mapping, detect_statement,
-    encode_statement_mapping, guess_statement_formats, new_envelope, parse_money, parse_quick_add,
-    resolve_date_spec, statement_presets,
-};
-pub use flow::{Flow, FlowMode, UNALLOCATED_NAME, headroom};
-pub use money::Money;
+pub use flow::{FlowMode, headroom};
 pub use query::{
-    CategoryView, FlowBalanceRange, FlowView, LegTarget, LegView, Page, TransactionFilter,
+    CategoryView, FlowBalanceRange, FlowView, LegTarget, LegView, TransactionFilter,
     TransactionView, VaultSnapshot, WalletView, replay,
 };
-pub use recurring::{
-    Frequency, PendingRecurring, RecurringRunView, RecurringView, RunOutcome, Schedule,
-};
+pub use recurring::{Frequency, RecurringView, RunOutcome, Schedule};
 pub use statement::{
-    AmountSign, StatementAccountWallet, StatementAction, StatementColumnValue, StatementDateFormat,
-    StatementDescriptionRule, StatementDetection, StatementFormatGuess, StatementLookalike,
-    StatementMapping, StatementMatchChoice, StatementOptions, StatementPreset, StatementPreview,
-    StatementRejection, StatementReport, StatementRow, StatementRowOverride, StatementRowStatus,
+    AmountSign, StatementAction, StatementDateFormat, StatementDescriptionRule,
+    StatementFormatGuess, StatementMapping, StatementMatchChoice, StatementOptions,
+    StatementPreview, StatementReport, StatementRow, StatementRowOverride, StatementRowStatus,
     StatementTypeRule,
 };
 pub use store::Core;
 pub use suggest::CategorySuggestion;
-pub use sync::{RejectedCommand, SyncReport, SyncState};
-pub use usage::{PeriodTotals, RecentUsage, VaultView};
+pub use sync::{SyncReport, SyncState};
+
+// Imported through the crate root by the modules, never from outside.
+pub(crate) use analytics::{
+    BucketPersonTotals, BucketTargetTotals, CategoryTotals, FlowPersonTotals, TopExpense,
+};
+pub(crate) use category::normalize_category_key;
+pub(crate) use engine::entities::MergePreview;
+pub(crate) use flow::Flow;
+pub(crate) use money::Money;
+pub(crate) use query::Page;
+pub(crate) use recurring::{PendingRecurring, RecurringRunView};
+pub(crate) use statement::{StatementColumnValue, StatementDetection, StatementPreset};
+pub(crate) use sync::RejectedCommand;
+pub(crate) use usage::{PeriodTotals, RecentUsage, VaultView};
 
 /// Result alias used across the crate.
 pub type Result<T> = std::result::Result<T, DomainError>;

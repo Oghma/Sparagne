@@ -1,4 +1,4 @@
-//! Money parsing and formatting (integer minor units).
+//! Money parsing (integer minor units).
 
 use crate::{Currency, DomainError};
 
@@ -8,11 +8,6 @@ use crate::{Currency, DomainError};
 pub struct Money(i64);
 
 impl Money {
-    #[must_use]
-    pub const fn new(minor: i64) -> Self {
-        Self(minor)
-    }
-
     #[must_use]
     pub const fn minor(self) -> i64 {
         self.0
