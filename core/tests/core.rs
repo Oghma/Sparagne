@@ -65,13 +65,8 @@ fn income_expense_void_reverts_balances() {
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 1000);
     assert_eq!(flow_balance(&fx.core, fx.vault, fx.unallocated), 1000);
 
-    let tx_id = fx.id(Command::Expense(entry(
-        300,
-        None,
-        None,
-        Some("Food"),
-        T0 + 1,
-    )));
+    let cmd = Command::Expense(entry(300, None, None, Some("Food"), T0 + 1));
+    let tx_id = fx.id(cmd);
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 700);
     assert_eq!(flow_balance(&fx.core, fx.vault, fx.unallocated), 700);
 
@@ -366,20 +361,10 @@ fn names_are_trimmed_and_unique_case_insensitive() {
 fn category_free_text_resolves_and_blank_is_uncategorized() {
     let mut fx = setup();
     fx.run(Command::Income(entry(10, None, None, None, T0)));
-    let a = fx.id(Command::Expense(entry(
-        1,
-        None,
-        None,
-        Some("Spesa"),
-        T0 + 1,
-    )));
-    let b = fx.id(Command::Expense(entry(
-        1,
-        None,
-        None,
-        Some("  spesa!!! "),
-        T0 + 2,
-    )));
+    let cmd = Command::Expense(entry(1, None, None, Some("Spesa"), T0 + 1));
+    let a = fx.id(cmd);
+    let cmd = Command::Expense(entry(1, None, None, Some("  spesa!!! "), T0 + 2));
+    let b = fx.id(cmd);
     let c = fx.id(Command::Expense(entry(1, None, None, Some("   "), T0 + 3)));
     let rows = list(&fx.core, fx.vault, &all());
     let find = |id| rows.iter().find(|t| t.id == id).unwrap();
@@ -445,13 +430,8 @@ fn wallet_defaults_to_the_only_active_wallet() {
         .try_run(Command::Income(entry(10, None, None, None, T0)))
         .unwrap_err();
     assert!(matches!(err, DomainError::InvalidCommand(_)));
-    let missing = fx.try_run(Command::Income(entry(
-        10,
-        Some(Uuid::now_v7()),
-        None,
-        None,
-        T0,
-    )));
+    let cmd = Command::Income(entry(10, Some(Uuid::now_v7()), None, None, T0));
+    let missing = fx.try_run(cmd);
     assert_eq!(
         missing.unwrap_err(),
         DomainError::NotFound("wallet".to_string())
@@ -468,27 +448,12 @@ fn wallets_and_flows_always_balance_and_replay_rebuilds_the_projection() {
         false,
         1000,
     ));
-    fx.run(Command::Income(entry(
-        2000,
-        Some(fx.wallet),
-        None,
-        Some("Stipendio"),
-        T0 + 1,
-    )));
-    let e = fx.id(Command::Expense(entry(
-        300,
-        Some(bank),
-        Some(vacanze),
-        Some("Treno"),
-        T0 + 2,
-    )));
-    fx.run(Command::Refund(entry(
-        50,
-        Some(bank),
-        Some(vacanze),
-        Some("treno"),
-        T0 + 3,
-    )));
+    let e = entry(2000, Some(fx.wallet), None, Some("Stipendio"), T0 + 1);
+    fx.run(Command::Income(e));
+    let cmd = Command::Expense(entry(300, Some(bank), Some(vacanze), Some("Treno"), T0 + 2));
+    let e = fx.id(cmd);
+    let cmd = Command::Refund(entry(50, Some(bank), Some(vacanze), Some("treno"), T0 + 3));
+    fx.run(cmd);
     fx.run(Command::TransferWallet {
         amount: 700,
         from_wallet_id: bank,

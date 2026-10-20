@@ -112,29 +112,14 @@ fn recent_usage_orders_by_last_use_respects_limit_and_ignores_voided_and_transfe
     // Salary: Cash / Unallocated, oldest.
     fx.run(Command::Income(entry(1000, w, None, Some("Salary"), T0)));
     // Food: Cash / Fun.
-    fx.run(Command::Expense(entry(
-        10,
-        w,
-        Some(fun),
-        Some("Food"),
-        T0 + 1,
-    )));
+    let cmd = Command::Expense(entry(10, w, Some(fun), Some("Food"), T0 + 1));
+    fx.run(cmd);
     // Transport: Bank / Trips, most recent non-voided non-transfer use.
-    fx.run(Command::Expense(entry(
-        20,
-        Some(bank),
-        Some(trips),
-        Some("Transport"),
-        T0 + 2,
-    )));
+    let e = entry(20, Some(bank), Some(trips), Some("Transport"), T0 + 2);
+    fx.run(Command::Expense(e));
     // Old: Cash / Fun, newer than Food but voided, so must not count.
-    let old = fx.id(Command::Expense(entry(
-        5,
-        w,
-        Some(fun),
-        Some("Old"),
-        T0 + 3,
-    )));
+    let cmd = Command::Expense(entry(5, w, Some(fun), Some("Old"), T0 + 3));
+    let old = fx.id(cmd);
     fx.run(Command::VoidTransaction {
         transaction_id: old,
     });
@@ -177,23 +162,13 @@ fn recent_usage_excludes_system_category_even_when_most_recent() {
 #[test]
 fn text_search_matches_note_and_category_case_insensitively() {
     let mut fx = setup();
-    fx.run(Command::Expense(entry(
-        1,
-        None,
-        None,
-        Some("Groceries"),
-        T0,
-    )));
+    let cmd = Command::Expense(entry(1, None, None, Some("Groceries"), T0));
+    fx.run(cmd);
     let mut with_note = entry(2, None, None, Some("Food"), T0 + 1);
     with_note.note = Some("Pizza night".to_string());
     fx.run(Command::Expense(with_note));
-    fx.run(Command::Expense(entry(
-        3,
-        None,
-        None,
-        Some("Other"),
-        T0 + 2,
-    )));
+    let cmd = Command::Expense(entry(3, None, None, Some("Other"), T0 + 2));
+    fx.run(cmd);
 
     let by_category = list(
         &fx.core,
@@ -244,13 +219,8 @@ fn text_search_percent_in_query_is_literal() {
 fn text_search_combines_with_kinds_filter() {
     let mut fx = setup();
     fx.run(Command::Income(entry(1, None, None, Some("Coffee"), T0)));
-    fx.run(Command::Expense(entry(
-        2,
-        None,
-        None,
-        Some("Coffee"),
-        T0 + 1,
-    )));
+    let cmd = Command::Expense(entry(2, None, None, Some("Coffee"), T0 + 1));
+    fx.run(cmd);
 
     let hits = list(
         &fx.core,

@@ -123,13 +123,8 @@ fn update_transaction_updates_balances() {
     let w = Some(fx.wallet);
     let vacanze = flow(&mut fx, "Vacanze");
     fx.run(Command::Income(entry(1000, w, Some(vacanze), None, T0 + 1)));
-    let expense = fx.id(Command::Expense(entry(
-        100,
-        w,
-        Some(vacanze),
-        Some("food"),
-        T0 + 2,
-    )));
+    let cmd = Command::Expense(entry(100, w, Some(vacanze), Some("food"), T0 + 2));
+    let expense = fx.id(cmd);
 
     fx.run(
         patch(expense)
@@ -556,20 +551,10 @@ fn updates_replay_into_an_identical_projection() {
     let bank = fx.id(wallet_cmd("Bank", 0));
     let f1 = flow(&mut fx, "F1");
     let f2 = flow(&mut fx, "F2");
-    fx.run(Command::Income(entry(
-        1000,
-        Some(fx.wallet),
-        Some(f1),
-        Some("salary"),
-        T0 + 1,
-    )));
-    let expense = fx.id(Command::Expense(entry(
-        300,
-        Some(fx.wallet),
-        Some(f1),
-        Some("food"),
-        T0 + 2,
-    )));
+    let e = entry(1000, Some(fx.wallet), Some(f1), Some("salary"), T0 + 1);
+    fx.run(Command::Income(e));
+    let cmd = Command::Expense(entry(300, Some(fx.wallet), Some(f1), Some("food"), T0 + 2));
+    let expense = fx.id(cmd);
     let wallet_transfer = fx.id(Command::TransferWallet {
         amount: 200,
         from_wallet_id: fx.wallet,
@@ -584,13 +569,8 @@ fn updates_replay_into_an_identical_projection() {
         note: None,
         occurred_at: at(T0 + 4),
     });
-    let voided = fx.id(Command::Refund(entry(
-        50,
-        Some(bank),
-        Some(f2),
-        Some("food"),
-        T0 + 5,
-    )));
+    let cmd = Command::Refund(entry(50, Some(bank), Some(f2), Some("food"), T0 + 5));
+    let voided = fx.id(cmd);
     fx.run(Command::VoidTransaction {
         transaction_id: voided,
     });

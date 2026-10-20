@@ -32,26 +32,16 @@ fn shared_month() -> Shared {
     let varie = fx.id(flow_cmd("Varie", FlowMode::Unlimited, true, 0));
     let w = Some(fx.wallet);
 
-    fx.run_as(
-        "matteo",
-        Command::Income(entry(900, w, Some(cash), Some("Stipendio"), T0)),
-    );
-    fx.run_as(
-        "elisa",
-        Command::Expense(entry(30, w, Some(cash), Some("Spesa"), T0 + DAY)),
-    );
-    fx.run_as(
-        "matteo",
-        Command::Expense(entry(100, w, Some(cash), Some("Casa"), T0 + 2 * DAY)),
-    );
-    fx.run_as(
-        "matteo",
-        Command::Expense(entry(25, w, Some(varie), Some("Svago"), T0 + 3 * DAY)),
-    );
-    fx.run_as(
-        "matteo",
-        Command::Refund(entry(10, w, Some(cash), Some("Casa"), T0 + 4 * DAY)),
-    );
+    let cmd = Command::Income(entry(900, w, Some(cash), Some("Stipendio"), T0));
+    fx.run_as("matteo", cmd);
+    let cmd = Command::Expense(entry(30, w, Some(cash), Some("Spesa"), T0 + DAY));
+    fx.run_as("elisa", cmd);
+    let cmd = Command::Expense(entry(100, w, Some(cash), Some("Casa"), T0 + 2 * DAY));
+    fx.run_as("matteo", cmd);
+    let cmd = Command::Expense(entry(25, w, Some(varie), Some("Svago"), T0 + 3 * DAY));
+    fx.run_as("matteo", cmd);
+    let cmd = Command::Refund(entry(10, w, Some(cash), Some("Casa"), T0 + 4 * DAY));
+    fx.run_as("matteo", cmd);
 
     Shared { fx, cash, varie }
 }
@@ -124,10 +114,8 @@ fn flow_person_totals_ignores_transfers_and_voided_and_rows_outside_the_range() 
         occurred_at: at(T0 + 5 * DAY),
     });
     // A row well past the window.
-    s.fx.run_as(
-        "elisa",
-        Command::Expense(entry(777, w, Some(s.cash), Some("Fuori"), T0 + 90 * DAY)),
-    );
+    let cmd = Command::Expense(entry(777, w, Some(s.cash), Some("Fuori"), T0 + 90 * DAY));
+    s.fx.run_as("elisa", cmd);
 
     let rows = s.fx.core.flow_person_totals(vault, from, to).unwrap();
     assert_eq!(rows.len(), 3);
@@ -342,30 +330,20 @@ fn year_fx() -> YearFx {
     open_wallet(&mut fx, "alice", "Risparmi", 5_000, T0 - 5 * DAY);
 
     // First bucket.
-    fx.run_as(
-        "alice",
-        Command::Income(entry(900, w, Some(cash), Some("Stipendio"), T0 + DAY)),
-    );
-    fx.run_as(
-        "elisa",
-        Command::Expense(entry(100, w, Some(cash), Some("Spesa"), T0 + 2 * DAY)),
-    );
-    fx.run_as(
-        "elisa",
-        Command::Expense(entry(80, w, Some(fondo), Some("Casa"), T0 + 3 * DAY)),
-    );
-    fx.run_as(
-        "elisa",
-        Command::Refund(entry(30, w, Some(fondo), Some("Casa"), T0 + 4 * DAY)),
-    );
+    let cmd = Command::Income(entry(900, w, Some(cash), Some("Stipendio"), T0 + DAY));
+    fx.run_as("alice", cmd);
+    let cmd = Command::Expense(entry(100, w, Some(cash), Some("Spesa"), T0 + 2 * DAY));
+    fx.run_as("elisa", cmd);
+    let cmd = Command::Expense(entry(80, w, Some(fondo), Some("Casa"), T0 + 3 * DAY));
+    fx.run_as("elisa", cmd);
+    let cmd = Command::Refund(entry(30, w, Some(fondo), Some("Casa"), T0 + 4 * DAY));
+    fx.run_as("elisa", cmd);
     open_wallet(&mut fx, "alice", "Conto", 200, T0 + 5 * DAY);
     open_wallet(&mut fx, "alice", "Debito", -50, T0 + 6 * DAY);
 
     // Second bucket: elisa alone.
-    fx.run_as(
-        "elisa",
-        Command::Expense(entry(40, w, Some(cash), Some("Spesa"), T0 + 11 * DAY)),
-    );
+    let cmd = Command::Expense(entry(40, w, Some(cash), Some("Spesa"), T0 + 11 * DAY));
+    fx.run_as("elisa", cmd);
 
     YearFx { fx, fondo }
 }
@@ -412,10 +390,8 @@ fn year_breakdown_splits_expenses_by_cap_and_nets_refunds_inside_the_group() {
 
     // A refund alone floors its group at zero instead of going negative.
     let mut s = s;
-    s.fx.run_as(
-        "elisa",
-        Command::Refund(entry(70, w, Some(s.fondo), Some("Casa"), T0 + 12 * DAY)),
-    );
+    let cmd = Command::Refund(entry(70, w, Some(s.fondo), Some("Casa"), T0 + 12 * DAY));
+    s.fx.run_as("elisa", cmd);
     let rows = s.fx.core.year_breakdown(s.fx.vault, year_bounds()).unwrap();
     let late = rows
         .iter()
@@ -512,10 +488,8 @@ fn category_bucket_totals_net_refunds_inside_the_bucket_and_floor_at_zero() {
     );
 
     // A refund larger than what Svago spent floors it at zero, still counted.
-    s.fx.run_as(
-        "matteo",
-        Command::Refund(entry(40, w, Some(s.varie), Some("Svago"), T0 + 5 * DAY)),
-    );
+    let cmd = Command::Refund(entry(40, w, Some(s.varie), Some("Svago"), T0 + 5 * DAY));
+    s.fx.run_as("matteo", cmd);
     let rows =
         s.fx.core
             .category_bucket_totals(s.fx.vault, bounds, None)
@@ -531,21 +505,10 @@ fn category_bucket_totals_leave_voided_rows_out() {
     let mut s = shared_month();
     let vault = s.fx.vault;
     let w = Some(s.fx.wallet);
-    let trip =
-        s.fx.run_as(
-            "matteo",
-            Command::Expense(entry(500, w, Some(s.cash), Some("Viaggi"), T0 + 5 * DAY)),
-        )
-        .result_id
-        .unwrap();
-    let refund =
-        s.fx.run_as(
-            "matteo",
-            Command::Refund(entry(30, w, Some(s.cash), Some("Casa"), T0 + 5 * DAY)),
-        )
-        .result_id
-        .unwrap();
-    for id in [trip, refund] {
+    let trip = Command::Expense(entry(500, w, Some(s.cash), Some("Viaggi"), T0 + 5 * DAY));
+    let refund = Command::Refund(entry(30, w, Some(s.cash), Some("Casa"), T0 + 5 * DAY));
+    let ids = [trip, refund].map(|cmd| s.fx.run_as("matteo", cmd).result_id.unwrap());
+    for id in ids {
         s.fx.run(Command::VoidTransaction { transaction_id: id });
     }
 
@@ -586,14 +549,10 @@ fn category_bucket_totals_order_by_bucket_then_heaviest_then_name() {
     // Two more rows in bucket 1: Affitto would come first by name and comes
     // last by weight; bollette ties with Svago and goes first because the
     // name compares case-insensitively.
-    s.fx.run_as(
-        "matteo",
-        Command::Expense(entry(5, w, Some(s.varie), Some("Affitto"), T0 + 3 * DAY)),
-    );
-    s.fx.run_as(
-        "matteo",
-        Command::Expense(entry(25, w, Some(s.varie), Some("bollette"), T0 + 3 * DAY)),
-    );
+    let cmd = Command::Expense(entry(5, w, Some(s.varie), Some("Affitto"), T0 + 3 * DAY));
+    s.fx.run_as("matteo", cmd);
+    let cmd = Command::Expense(entry(25, w, Some(s.varie), Some("bollette"), T0 + 3 * DAY));
+    s.fx.run_as("matteo", cmd);
 
     let rows =
         s.fx.core
@@ -654,13 +613,8 @@ fn month_bounds() -> Vec<DateTime<Utc>> {
 fn balance_breakdown_moves_a_wallet_transfer_from_one_wallet_to_the_other() {
     let mut fx = setup();
     let conto = fx.id(wallet_cmd("Conto", 0));
-    fx.run(Command::Income(entry(
-        500,
-        Some(fx.wallet),
-        None,
-        Some("Stipendio"),
-        T0 + 2 * DAY,
-    )));
+    let e = entry(500, Some(fx.wallet), None, Some("Stipendio"), T0 + 2 * DAY);
+    fx.run(Command::Income(e));
     fx.run(Command::TransferWallet {
         amount: 200,
         from_wallet_id: fx.wallet,
@@ -702,20 +656,11 @@ fn balance_breakdown_puts_an_opening_before_the_first_month_in_bucket_zero() {
     let mut fx = setup();
     // Opened at T0, before the first month boundary at T0 + 1d.
     let risparmi = fx.id(wallet_cmd("Risparmi", 5_000));
-    fx.run(Command::Expense(entry(
-        300,
-        Some(risparmi),
-        None,
-        Some("Casa"),
-        T0 + 2 * DAY,
-    )));
-    fx.run(Command::Income(entry(
-        1_200,
-        Some(risparmi),
-        None,
-        Some("Stipendio"),
-        T0 + 40 * DAY,
-    )));
+    let r = Some(risparmi);
+    let cmd = Command::Expense(entry(300, r, None, Some("Casa"), T0 + 2 * DAY));
+    fx.run(cmd);
+    let cmd = Command::Income(entry(1_200, r, None, Some("Stipendio"), T0 + 40 * DAY));
+    fx.run(cmd);
 
     // The fixture's Cash wallet opened at zero, so it never moved.
     let wallets = deltas(&fx, month_bounds(), TargetKind::Wallet);
@@ -758,16 +703,12 @@ fn balance_breakdown_of_the_envelopes_matches_the_year_breakdown_bucket_by_bucke
 
     // Bucket 0: an opening and an expense before the first month.
     open_wallet(&mut fx, "alice", "Risparmi", 700, T0);
-    fx.run_as(
-        "elisa",
-        Command::Expense(entry(50, w, Some(spesa), Some("Spesa"), T0)),
-    );
+    let cmd = Command::Expense(entry(50, w, Some(spesa), Some("Spesa"), T0));
+    fx.run_as("elisa", cmd);
     // Bucket 1: income, a share of it moved to Spesa, expenses on both
     // envelopes, a refund on the capped one and another opening.
-    fx.run_as(
-        "alice",
-        Command::Income(entry(1_000, w, None, Some("Stipendio"), T0 + 2 * DAY)),
-    );
+    let cmd = Command::Income(entry(1_000, w, None, Some("Stipendio"), T0 + 2 * DAY));
+    fx.run_as("alice", cmd);
     let move_to = |from: Uuid, to: Uuid, amount: i64, secs: i64| Command::TransferFlow {
         amount,
         from_flow_id: from,
@@ -776,18 +717,12 @@ fn balance_breakdown_of_the_envelopes_matches_the_year_breakdown_bucket_by_bucke
         occurred_at: at(secs),
     };
     fx.run(move_to(fx.unallocated, spesa, 400, T0 + 3 * DAY));
-    fx.run_as(
-        "elisa",
-        Command::Expense(entry(150, w, Some(spesa), Some("Spesa"), T0 + 4 * DAY)),
-    );
-    fx.run_as(
-        "matteo",
-        Command::Expense(entry(80, w, Some(fondo), Some("Casa"), T0 + 5 * DAY)),
-    );
-    fx.run_as(
-        "matteo",
-        Command::Refund(entry(20, w, Some(fondo), Some("Casa"), T0 + 6 * DAY)),
-    );
+    let cmd = Command::Expense(entry(150, w, Some(spesa), Some("Spesa"), T0 + 4 * DAY));
+    fx.run_as("elisa", cmd);
+    let cmd = Command::Expense(entry(80, w, Some(fondo), Some("Casa"), T0 + 5 * DAY));
+    fx.run_as("matteo", cmd);
+    let cmd = Command::Refund(entry(20, w, Some(fondo), Some("Casa"), T0 + 6 * DAY));
+    fx.run_as("matteo", cmd);
     open_wallet(&mut fx, "alice", "Conto", 250, T0 + 7 * DAY);
     // Bucket 2: a transfer between envelopes and nothing else.
     fx.run(move_to(spesa, fondo, 30, T0 + 40 * DAY));
@@ -857,28 +792,13 @@ fn balance_breakdown_keeps_an_archived_wallet_with_movement_in_the_range() {
 fn balance_breakdown_leaves_voided_rows_and_rows_past_the_range_out() {
     let mut fx = setup();
     let w = Some(fx.wallet);
-    let income = fx.id(Command::Income(entry(
-        500,
-        w,
-        None,
-        Some("Stipendio"),
-        T0 + 2 * DAY,
-    )));
-    fx.run(Command::Expense(entry(
-        100,
-        w,
-        None,
-        Some("Spesa"),
-        T0 + 3 * DAY,
-    )));
+    let cmd = Command::Income(entry(500, w, None, Some("Stipendio"), T0 + 2 * DAY));
+    let income = fx.id(cmd);
+    let cmd = Command::Expense(entry(100, w, None, Some("Spesa"), T0 + 3 * DAY));
+    fx.run(cmd);
     // Past the last boundary.
-    fx.run(Command::Expense(entry(
-        70,
-        w,
-        None,
-        Some("Spesa"),
-        T0 + 90 * DAY,
-    )));
+    let cmd = Command::Expense(entry(70, w, None, Some("Spesa"), T0 + 90 * DAY));
+    fx.run(cmd);
     fx.run(Command::VoidTransaction {
         transaction_id: income,
     });
@@ -919,16 +839,9 @@ fn shared_month_with_openings() -> Shared {
     let mut s = shared_month();
     open_wallet(&mut s.fx, "matteo", "Conto", 10_000, T0 + 5 * DAY);
     open_wallet(&mut s.fx, "elisa", "Carta", -1_500, T0 + 6 * DAY);
-    s.fx.run_as(
-        "elisa",
-        Command::Expense(entry(
-            45,
-            Some(s.fx.wallet),
-            Some(s.cash),
-            Some("Spesa"),
-            T0 + 6 * DAY,
-        )),
-    );
+    let w = Some(s.fx.wallet);
+    let cmd = Command::Expense(entry(45, w, Some(s.cash), Some("Spesa"), T0 + 6 * DAY));
+    s.fx.run_as("elisa", cmd);
     s
 }
 

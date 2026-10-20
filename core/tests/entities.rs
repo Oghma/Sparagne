@@ -134,13 +134,8 @@ fn rename_category_updates_transactions() {
     let mut fx = setup();
     let food = create_category(&mut fx, "Food");
     fx.run(Command::Income(entry(1000, None, None, None, T0)));
-    fx.run(Command::Expense(entry(
-        40,
-        None,
-        None,
-        Some("Food"),
-        T0 + 1,
-    )));
+    let cmd = Command::Expense(entry(40, None, None, Some("Food"), T0 + 1));
+    fx.run(cmd);
 
     fx.run(rename_category(food, "  Groceries  "));
     let txs = list(&fx.core, fx.vault, &TransactionFilter::default());
@@ -246,13 +241,8 @@ fn merge_category_moves_transactions_and_aliases() {
     let spese = create_category(&mut fx, "Spese");
     fx.run(add_alias(spese, "spesa"));
     fx.run(Command::Income(entry(1000, None, None, None, T0)));
-    let expense = fx.id(Command::Expense(entry(
-        12,
-        None,
-        None,
-        Some("Food"),
-        T0 + 1,
-    )));
+    let cmd = Command::Expense(entry(12, None, None, Some("Food"), T0 + 1));
+    let expense = fx.id(cmd);
 
     assert!(fx.core.preview_merge(fx.vault, food, spese).unwrap().ok);
     fx.run(Command::MergeCategory {
@@ -711,13 +701,8 @@ fn replay_reproduces_merges_and_flow_updates() {
     let food = create_category(&mut fx, "Food");
     let spese = create_category(&mut fx, "Spese");
     fx.run(add_alias(spese, "spesa"));
-    fx.run(Command::Expense(entry(
-        120,
-        None,
-        None,
-        Some("Food"),
-        T0 + 1,
-    )));
+    let cmd = Command::Expense(entry(120, None, None, Some("Food"), T0 + 1));
+    fx.run(cmd);
     fx.run(Command::MergeCategory {
         source_id: food,
         target_id: spese,

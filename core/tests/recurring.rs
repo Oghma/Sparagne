@@ -287,13 +287,8 @@ fn pending_respects_end_date_disabled_and_archived() {
 #[test]
 fn execute_posts_the_transaction_and_records_the_run() {
     let mut fx = setup();
-    fx.run(Command::Income(entry(
-        10_000,
-        None,
-        None,
-        Some("Salary"),
-        T0,
-    )));
+    let cmd = Command::Income(entry(10_000, None, None, Some("Salary"), T0));
+    fx.run(cmd);
     let id = fx.id(rent_cmd());
 
     let tx_id = fx.id(execute(id, day(2026, 1, 1), T0 + 100));
@@ -445,13 +440,8 @@ fn runs_of_an_unknown_template_are_not_found() {
 #[test]
 fn replay_rebuilds_templates_runs_and_transactions() {
     let mut fx = setup();
-    fx.run(Command::Income(entry(
-        50_000,
-        None,
-        None,
-        Some("Salary"),
-        T0,
-    )));
+    let cmd = Command::Income(entry(50_000, None, None, Some("Salary"), T0));
+    fx.run(cmd);
     let id = fx.id(rent_cmd());
     fx.run(execute(id, day(2026, 1, 1), T0 + 100));
     fx.run(skip(id, day(2026, 2, 1)));
