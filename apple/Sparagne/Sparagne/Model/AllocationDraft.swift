@@ -242,87 +242,11 @@ enum AllocationPercent {
 }
 
 /// The plan's Quando in the inspector: Settimana / Mese / Anno, the
-/// interval, the day and the start. The fields of the other cadences are kept
-/// while the user tries them, as `RecurringDraft` does with the same
-/// `Cadence`. The end date has no field and goes through as it is.
-struct AllocationScheduleDraft: Equatable {
-    var cadence: RecurringDraft.Cadence = .monthly
-    var interval = 1
-    /// ISO: Monday = 1 ... Sunday = 7.
-    var weekday = 1
-    var monthDay = 1
-    var yearMonth = 1
-    var yearDay = 1
-    var startDate: NaiveDate
-    var endDate: NaiveDate?
+/// interval, the day and the start, the same draft as a template's. The end
+/// date has no field and goes through as it is.
+typealias AllocationScheduleDraft = ScheduleDraft
 
-    /// A new plan: monthly, on today's day, from today. Starting today makes
-    /// today the first period, and the incomes since then its total: a new
-    /// plan never opens with periods already behind it.
-    init(today: NaiveDate) {
-        startDate = today
-        if let parts = NaiveDay.components(today) {
-            weekday = parts.isoWeekday
-            monthDay = parts.day
-            yearMonth = parts.month
-            yearDay = parts.day
-        }
-    }
-
-    /// The fields of a saved schedule, as they are.
-    init(schedule: Schedule) {
-        self.init(today: schedule.startDate)
-        endDate = schedule.endDate
-        interval = Int(schedule.interval)
-        switch schedule.frequency {
-        case .daily:
-            cadence = .daily
-        case .weekly(let day):
-            cadence = .weekly
-            weekday = Int(day)
-        case .monthly(let day):
-            cadence = .monthly
-            monthDay = Int(day)
-        case .yearly(let month, let day):
-            cadence = .yearly
-            yearMonth = Int(month)
-            yearDay = Int(day)
-        }
-    }
-
-    var frequency: Frequency {
-        switch cadence {
-        case .daily: .daily
-        case .weekly: .weekly(weekday: UInt8(clamping: weekday))
-        case .monthly: .monthly(day: UInt8(clamping: monthDay))
-        case .yearly: .yearly(month: UInt8(clamping: yearMonth), day: UInt8(clamping: yearDay))
-        }
-    }
-
-    /// The schedule as typed. An interval of zero or a day 32 go through as
-    /// they are: `isValid` says no first.
-    var schedule: Schedule {
-        Schedule(
-            frequency: frequency,
-            interval: UInt32(clamping: max(interval, 0)),
-            startDate: startDate,
-            endDate: endDate
-        )
-    }
-
-    /// The rules of `Schedule::validate` in `core/src/recurring.rs`.
-    var isValid: Bool {
-        guard interval >= 1 else { return false }
-        switch cadence {
-        case .daily: break
-        case .weekly: guard (1...7).contains(weekday) else { return false }
-        case .monthly: guard (1...31).contains(monthDay) else { return false }
-        case .yearly: guard (1...12).contains(yearMonth), (1...31).contains(yearDay) else { return false }
-        }
-        if let endDate, endDate < startDate { return false }
-        return true
-    }
-
+extension ScheduleDraft {
     /// The schedule, when it is not `plan`'s; nothing otherwise.
     func patch(against plan: AllocationPlanView) -> AllocationPlanPatch {
         schedule == plan.schedule ? AllocationPlanPatch() : AllocationPlanPatch(schedule: schedule)

@@ -13,25 +13,6 @@ import SparagneCore
 /// Unallocated are offered only to a template that has none yet
 /// (`mayClearWallet`, `mayClearFlow`).
 struct RecurringDraft: Equatable {
-    /// `Frequency` as a flat choice, the segmented Giorno / Settimana / Mese
-    /// / Anno: the day fields of the other cadences are kept while the user
-    /// tries them, so switching back loses nothing.
-    enum Cadence: String, CaseIterable, Identifiable, Hashable {
-        case daily, weekly, monthly, yearly
-
-        var id: String { rawValue }
-
-        /// What the interval counts: "ogni 2 settimane".
-        var unit: ScheduleUnit {
-            switch self {
-            case .daily: .day
-            case .weekly: .week
-            case .monthly: .month
-            case .yearly: .year
-            }
-        }
-    }
-
     /// Only `.income` or `.expense`: a template is never a refund or a transfer.
     var kind: TransactionKind = .expense
     /// What the amount field holds, parsed by the core (`parseMoney`).
@@ -42,18 +23,8 @@ struct RecurringDraft: Equatable {
     var flowId: Uuid?
     var category = ""
     var note = ""
-    var cadence: Cadence = .monthly
-    var interval = 1
-    /// ISO: Monday = 1 ... Sunday = 7.
-    var weekday = 1
-    var monthDay = 1
-    var yearMonth = 1
-    var yearDay = 1
-    var startDate: NaiveDate
-    /// "Fine: Mai / Il giorno". The date is kept while the switch says Mai,
-    /// so turning it back on brings the same day back.
-    var hasEndDate = false
-    var endDate: NaiveDate
+    /// Quando: the cadence and its day, the interval, the start and the end.
+    var when: ScheduleDraft
     var enabled = true
     /// Whose template it is, the person every period it records is for: one
     /// of `AppStore.assignablePeople`. Blank is the author, as the core
@@ -66,14 +37,9 @@ struct RecurringDraft: Equatable {
     /// what "every month from today" says.
     init(today: NaiveDate, owner: String = "") {
         self.owner = owner
-        startDate = today
-        endDate = today
-        if let parts = NaiveDay.components(today) {
-            weekday = parts.isoWeekday
-            monthDay = parts.day
-            yearMonth = parts.month
-            yearDay = parts.day
-        }
+        when = ScheduleDraft(today: today)
+        // The End field offers today, wherever the start moves.
+        when.shownEndDate = today
     }
 
     /// The fields of a saved template, as they are.
@@ -88,34 +54,10 @@ struct RecurringDraft: Equatable {
         note = template.note ?? ""
         enabled = template.enabled
         owner = template.owner
-
-        let schedule = template.schedule
-        startDate = schedule.startDate
-        hasEndDate = schedule.endDate != nil
-        endDate = schedule.endDate ?? schedule.startDate
-        interval = Int(schedule.interval)
-        // The other cadences' days start from the start date, as a new
-        // template's do from today.
-        if let parts = NaiveDay.components(schedule.startDate) {
-            weekday = parts.isoWeekday
-            monthDay = parts.day
-            yearMonth = parts.month
-            yearDay = parts.day
-        }
-        switch schedule.frequency {
-        case .daily:
-            cadence = .daily
-        case .weekly(let day):
-            cadence = .weekly
-            weekday = Int(day)
-        case .monthly(let day):
-            cadence = .monthly
-            monthDay = Int(day)
-        case .yearly(let month, let day):
-            cadence = .yearly
-            yearMonth = Int(month)
-            yearDay = Int(day)
-        }
+        when = ScheduleDraft(schedule: template.schedule)
+        // The End field offers the saved end, or with none the saved start,
+        // wherever the start moves.
+        when.shownEndDate = template.schedule.endDate ?? template.schedule.startDate
     }
 
     /// A new template written from `template`: the same fields, its owner
@@ -125,39 +67,23 @@ struct RecurringDraft: Equatable {
     init(duplicating template: RecurringView, today: NaiveDate) {
         self.init(template: template)
         enabled = true
-        startDate = today
+        when.startDate = today
         if let parts = NaiveDay.components(today) {
-            weekday = cadence == .weekly ? weekday : parts.isoWeekday
-            monthDay = cadence == .monthly ? monthDay : parts.day
-            yearMonth = cadence == .yearly ? yearMonth : parts.month
-            yearDay = cadence == .yearly ? yearDay : parts.day
+            if when.cadence != .weekly { when.weekday = parts.isoWeekday }
+            if when.cadence != .monthly { when.monthDay = parts.day }
+            if when.cadence != .yearly {
+                when.yearMonth = parts.month
+                when.yearDay = parts.day
+            }
         }
-        if hasEndDate, endDate < today { hasEndDate = false }
-        endDate = hasEndDate ? endDate : today
+        if let end = when.endDate, end < today { when.hasEndDate = false }
+        if !when.hasEndDate { when.shownEndDate = today }
     }
 
     // MARK: - What the fields say
 
-    var frequency: Frequency {
-        switch cadence {
-        case .daily: .daily
-        case .weekly: .weekly(weekday: Self.byte(weekday))
-        case .monthly: .monthly(day: Self.byte(monthDay))
-        case .yearly: .yearly(month: Self.byte(yearMonth), day: Self.byte(yearDay))
-        }
-    }
-
-    /// The schedule as typed. Not checked here: an interval of zero or a
-    /// day 32 go through as they are, for the core to refuse
-    /// (`scheduleOccurrences`) and the inspector to say so.
-    var schedule: Schedule {
-        Schedule(
-            frequency: frequency,
-            interval: UInt32(clamping: max(interval, 0)),
-            startDate: startDate,
-            endDate: hasEndDate ? endDate : nil
-        )
-    }
+    /// The schedule as typed, not checked (`ScheduleDraft.schedule`).
+    var schedule: Schedule { when.schedule }
 
     /// The amount in minor units, or `nil` while the field does not hold one.
     func amount(currency: Currency) -> Int64? {
@@ -169,20 +95,11 @@ struct RecurringDraft: Equatable {
     private var trimmedOwner: String { owner.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     /// Whether Salva or Crea may go: an amount above zero, and a schedule the
-    /// core would take (the same rules as `Schedule::validate` in
-    /// `core/src/recurring.rs`). The inspector also asks the core itself,
-    /// through the preview of the next dates.
+    /// core would take (`ScheduleDraft.isValid`). The inspector also asks the
+    /// core itself, through the preview of the next dates.
     func isValid(currency: Currency) -> Bool {
         guard let amount = amount(currency: currency), amount > 0 else { return false }
-        guard interval >= 1 else { return false }
-        switch cadence {
-        case .daily: break
-        case .weekly: guard (1...7).contains(weekday) else { return false }
-        case .monthly: guard (1...31).contains(monthDay) else { return false }
-        case .yearly: guard (1...12).contains(yearMonth), (1...31).contains(yearDay) else { return false }
-        }
-        if hasEndDate, endDate < startDate { return false }
-        return kind == .expense || kind == .income
+        return when.isValid && (kind == .expense || kind == .income)
     }
 
     // MARK: - Editing a saved template
@@ -221,7 +138,7 @@ struct RecurringDraft: Equatable {
         // which is what an emptied field means.
         if trimmedCategory != (template.category ?? "") { patch.category = trimmedCategory }
         if trimmedNote != (template.note ?? "") { patch.note = trimmedNote }
-        if schedule != template.schedule { patch.schedule = schedule }
+        if when.schedule != template.schedule { patch.schedule = when.schedule }
         if enabled != template.enabled { patch.enabled = enabled }
         // Only a change: the patch's blank would mean "back to the author",
         // and nobody picked that.
@@ -250,7 +167,7 @@ struct RecurringDraft: Equatable {
             flowId: flowId,
             category: trimmedCategory.isEmpty ? nil : trimmedCategory,
             note: trimmedNote.isEmpty ? nil : trimmedNote,
-            schedule: schedule,
+            schedule: when.schedule,
             owner: trimmedOwner.isEmpty ? nil : trimmedOwner
         )
     }
@@ -267,9 +184,58 @@ struct RecurringDraft: Equatable {
         /// author as `nil`.
         let owner: String?
     }
+}
 
-    /// The day fields are small; anything out of range is caught by
-    /// `isValid` before it is sent, and clamping keeps the conversion from
-    /// trapping on the way.
-    private static func byte(_ value: Int) -> UInt8 { UInt8(clamping: value) }
+/// `when`'s fields where the inspector and the tests read them before it
+/// held them. They go away once Ricorrenze and Riparto share one Quando
+/// editor bound to `when`.
+extension RecurringDraft {
+    typealias Cadence = ScheduleDraft.Cadence
+
+    var cadence: Cadence {
+        get { when.cadence }
+        set { when.cadence = newValue }
+    }
+
+    var interval: Int {
+        get { when.interval }
+        set { when.interval = newValue }
+    }
+
+    var weekday: Int {
+        get { when.weekday }
+        set { when.weekday = newValue }
+    }
+
+    var monthDay: Int {
+        get { when.monthDay }
+        set { when.monthDay = newValue }
+    }
+
+    var yearMonth: Int {
+        get { when.yearMonth }
+        set { when.yearMonth = newValue }
+    }
+
+    var yearDay: Int {
+        get { when.yearDay }
+        set { when.yearDay = newValue }
+    }
+
+    var startDate: NaiveDate {
+        get { when.startDate }
+        set { when.startDate = newValue }
+    }
+
+    var hasEndDate: Bool {
+        get { when.hasEndDate }
+        set { when.hasEndDate = newValue }
+    }
+
+    /// The End field's day, on or off: `when.shownEndDate`, not the
+    /// schedule's `when.endDate`.
+    var endDate: NaiveDate {
+        get { when.shownEndDate }
+        set { when.shownEndDate = newValue }
+    }
 }
