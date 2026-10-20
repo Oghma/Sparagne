@@ -220,6 +220,12 @@ mod tests {
         assert_eq!(err.retry_after, Some(899));
         // Somebody else is not affected.
         assert!(limiter.begin_login(Some("bob"), HOME, t0 + secs(3)).is_ok());
+        // The last moment of the lock still says a whole second.
+        let last = t0 + secs(2) + WINDOW - Duration::from_millis(1);
+        let err = limiter
+            .begin_login(Some("alice"), HOME, last)
+            .expect_err("locked");
+        assert_eq!(err.retry_after, Some(1));
         // Past the lock the username starts over.
         assert!(
             limiter

@@ -85,11 +85,9 @@ impl ApiError {
         Self::new(StatusCode::CONFLICT, "already_exists", message)
     }
 
-    /// A rate limit tripped: `429` with `Retry-After`, never less than a
-    /// second.
+    /// A rate limit tripped: `429` with `Retry-After`.
     #[must_use]
     pub fn too_many_requests(retry_after: u64) -> Self {
-        let retry_after = retry_after.max(1);
         Self {
             retry_after: Some(retry_after),
             ..Self::new(
@@ -154,17 +152,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_forbidden_domain_error_is_403() {
-        let err = ApiError::from(DomainError::Forbidden("only the owner".into()));
-        assert_eq!(err.status, StatusCode::FORBIDDEN);
-        assert_eq!(err.code, "forbidden");
-    }
-
-    #[test]
-    fn other_domain_errors_keep_their_status() {
+    fn domain_errors_keep_their_status_and_code() {
         let cases = [
             (DomainError::NotFound("x".into()), StatusCode::NOT_FOUND),
             (DomainError::AlreadyExists("x".into()), StatusCode::CONFLICT),
+            (DomainError::Forbidden("x".into()), StatusCode::FORBIDDEN),
             (
                 DomainError::InvalidName("x".into()),
                 StatusCode::BAD_REQUEST,
@@ -175,7 +167,9 @@ mod tests {
             ),
         ];
         for (err, status) in cases {
-            assert_eq!(ApiError::from(err).status, status);
+            let code = err.code();
+            let api = ApiError::from(err);
+            assert_eq!((api.status, api.code), (status, code));
         }
     }
 
@@ -187,7 +181,6 @@ mod tests {
             response.headers().get(RETRY_AFTER),
             Some(&HeaderValue::from(42_u64))
         );
-        assert_eq!(ApiError::too_many_requests(0).retry_after, Some(1));
     }
 
     #[test]
