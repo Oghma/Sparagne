@@ -182,6 +182,9 @@ accounts that both went to Cash wrote nothing then, and read again it would
 become a transfer between the new wallets, dated back among rows that stayed
 in Cash: set the start day to the day the accounts get their own wallets.
 
+Every rule the import follows, with its thresholds, and its known limits are
+in [docs/STATEMENTS.md](docs/STATEMENTS.md).
+
 File › Export All Transactions… writes every transaction of the vault as CSV,
 voided rows and transfers included. File › Back Up Database… saves a
 consistent copy, `Sparagne <date>.sqlite`. To restore it, quit Sparagne,
