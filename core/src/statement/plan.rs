@@ -175,47 +175,32 @@ pub(super) fn claim_id(row_id: Uuid) -> Uuid {
     Uuid::new_v5(&row_id, b"claim")
 }
 
-/// What an import writes for a row once the new rows are in.
-pub(super) enum Afterwards {
-    /// Its match, typed into another wallet, moves into the statement's.
-    Move,
-    /// Its match stands for it.
-    Claim,
-}
-
-/// The move or the claim an import writes for a flagged row, with its id: a
-/// duplicate to move goes to `wallet`; one left in place, or the other side
-/// of a transfer, is claimed with an `UpdateTransaction` naming the wallet
-/// (or the transfer's side) it already has, which changes nothing but says,
-/// in the log, which row it stands for. Nothing for a row imported anyway.
-pub(super) fn afterwards(row: &StatementRow, wallet: Uuid) -> Option<(Afterwards, Uuid, Command)> {
+/// The move ([`move_id`]) or the claim an import writes for a flagged row,
+/// once the new rows are in: a duplicate to move goes to `wallet`; one left
+/// in place, or the other side of a transfer, is claimed with an
+/// `UpdateTransaction` naming the wallet (or the transfer's side) it already
+/// has, which changes nothing but says, in the log, which row it stands for.
+/// Nothing for a row imported anyway.
+pub(super) fn afterwards(row: &StatementRow, wallet: Uuid) -> Option<(Uuid, Command)> {
     let existing = row.existing.as_ref()?;
-    let patch = match (&row.status, row.match_choice?) {
+    let entry = |wallet_id| TransactionPatch {
+        wallet_id: Some(wallet_id),
+        ..TransactionPatch::default()
+    };
+    let (id, patch) = match (&row.status, row.match_choice?) {
         (StatementRowStatus::PossibleDuplicate, StatementMatchChoice::MoveExisting) => {
-            let patch = TransactionPatch {
-                wallet_id: Some(wallet),
-                ..TransactionPatch::default()
-            };
-            return Some((
-                Afterwards::Move,
-                move_id(row.command_id),
-                update(existing.id, patch),
-            ));
+            (move_id(row.command_id), entry(wallet))
         }
-        (StatementRowStatus::PossibleDuplicate, StatementMatchChoice::Skip) => TransactionPatch {
-            wallet_id: Some(existing.wallet_id?),
-            ..TransactionPatch::default()
-        },
-        (StatementRowStatus::MatchedTransfer, StatementMatchChoice::Skip) => {
-            side(existing.from_id == Some(wallet), wallet)
+        (StatementRowStatus::PossibleDuplicate, StatementMatchChoice::Skip) => {
+            (claim_id(row.command_id), entry(existing.wallet_id?))
         }
+        (StatementRowStatus::MatchedTransfer, StatementMatchChoice::Skip) => (
+            claim_id(row.command_id),
+            side(existing.from_id == Some(wallet), wallet),
+        ),
         _ => return None,
     };
-    Some((
-        Afterwards::Claim,
-        claim_id(row.command_id),
-        update(existing.id, patch),
-    ))
+    Some((id, update(existing.id, patch)))
 }
 
 /// The claim of the statement wallet's side of the transfer a new row

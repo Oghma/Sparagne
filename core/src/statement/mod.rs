@@ -1048,6 +1048,8 @@ impl Core {
         let mut report = StatementReport::default();
         // Each row goes to its own wallet: its account's, else the options'.
         let wallet_of = |row: &StatementRow| row.wallet_id.unwrap_or(options.wallet_id);
+        // Each new row's batch, with the claim of a lone transfer's own side
+        // to write once it is in.
         let mut new = Vec::new();
         let mut later = Vec::new();
         for plan::Planned {
@@ -1059,141 +1061,86 @@ impl Core {
         {
             match (&row.status, command) {
                 (StatementRowStatus::New, Some(command)) => {
-                    let written = paired_in.map_or(Written::Row, Written::Paired);
-                    new.push((row, command, written));
+                    let write = match paired_in {
+                        // A move between two accounts is written whole or not
+                        // at all: the transfer and the claims of both halves.
+                        Some(in_row) => (plan::paired(row.command_id, command, in_row), None),
+                        None => {
+                            let claim = plan::own_side(row.command_id, &command, wallet_of(&row));
+                            (vec![(row.command_id, command)], claim)
+                        }
+                    };
+                    new.push((row, write));
                 }
-                // Its transfer replaces the entry it matched.
+                // So is a replacement: the transfer, the void of the entry and
+                // their claims.
                 (StatementRowStatus::PossibleDuplicate, Some(command)) => {
                     report.possible_duplicates += 1;
-                    new.push((row, command, Written::Replacing(replaces_other_row)));
+                    let batch = plan::replacing(&row, command, wallet_of(&row), replaces_other_row);
+                    new.push((row, (batch, None)));
                 }
                 (StatementRowStatus::AlreadyImported, _) => report.deduplicated += 1,
-                (
-                    StatementRowStatus::PossibleDuplicate | StatementRowStatus::MatchedTransfer,
-                    _,
-                ) => {
-                    if row.status == StatementRowStatus::PossibleDuplicate {
-                        report.possible_duplicates += 1;
-                    } else {
-                        report.matched_transfers += 1;
-                    }
-                    if let Some(afterwards) = plan::afterwards(&row, wallet_of(&row)) {
-                        later.push((row, afterwards));
-                    }
+                (StatementRowStatus::PossibleDuplicate, None) => {
+                    report.possible_duplicates += 1;
+                    later.extend(plan::afterwards(&row, wallet_of(&row)).map(|then| (row, then)));
+                }
+                (StatementRowStatus::MatchedTransfer, _) => {
+                    report.matched_transfers += 1;
+                    later.extend(plan::afterwards(&row, wallet_of(&row)).map(|then| (row, then)));
                 }
                 _ => report.skipped += 1,
             }
         }
+        // `Some(deduplicated)` once the batch is in, `None` when the core
+        // refused it; only a storage error stops the import.
+        let mut write = |line, commands: Vec<(Uuid, Command)>, report: &mut StatementReport| {
+            let batch = commands
+                .into_iter()
+                .map(|(id, command)| CommandEnvelope::with_id(id, vault_id, author, command))
+                .collect();
+            match self.execute_batch(batch) {
+                Ok(receipts) => Ok(Some(receipts.first().is_some_and(|r| r.deduplicated))),
+                Err(err @ DomainError::Storage(_)) => Err(err),
+                Err(err) => {
+                    report.rejected.push(StatementRejection {
+                        line,
+                        code: err.code().to_string(),
+                        message: err.to_string(),
+                    });
+                    Ok(None)
+                }
+            }
+        };
         // Oldest first, so the log reads in the order things happened; the
         // rows typed by hand move, and the matches are claimed, once the new
         // rows are in.
-        new.sort_by_key(|(row, ..)| (row.occurred_at, row.line));
+        new.sort_by_key(|(row, _)| (row.occurred_at, row.line));
         later.sort_by_key(|(row, _)| (row.occurred_at, row.line));
-        for (row, command, written) in new {
-            let wallet = wallet_of(&row);
-            let batch = match written {
-                Written::Row => Err(command),
-                // A replacement is written whole or not at all: the
-                // transfer, the void of the entry and their claims.
-                Written::Replacing(other_row) => {
-                    Ok(plan::replacing(&row, command, wallet, other_row))
-                }
-                // So is a move between two accounts: the transfer and the
-                // claims of both its halves.
-                Written::Paired(in_row) => Ok(plan::paired(row.command_id, command, in_row)),
-            };
-            let command = match batch {
-                Err(command) => command,
-                Ok(batch) => {
-                    let batch = batch
-                        .into_iter()
-                        .map(|(id, command)| self::envelope(id, vault_id, author, command))
-                        .collect();
-                    match self.execute_batch(batch) {
-                        Ok(receipts) if receipts.first().is_some_and(|r| r.deduplicated) => {
-                            report.deduplicated += 1;
-                        }
-                        Ok(_) => {
-                            report.executed += 1;
-                            report.rounded += u32::from(row.rounded);
-                        }
-                        Err(DomainError::Storage(message)) => {
-                            return Err(DomainError::Storage(message));
-                        }
-                        Err(err) => report.rejected.push(rejection(&row, &err)),
-                    }
-                    continue;
-                }
-            };
-            let then = plan::own_side(row.command_id, &command, wallet);
-            match self.execute(self::envelope(row.command_id, vault_id, author, command)) {
-                Ok(receipt) if receipt.deduplicated => report.deduplicated += 1,
-                Ok(_) => {
+        for (row, (batch, claim)) in new {
+            match write(row.line, batch, &mut report)? {
+                Some(true) => report.deduplicated += 1,
+                Some(false) => {
                     report.executed += 1;
                     report.rounded += u32::from(row.rounded);
                 }
-                Err(DomainError::Storage(message)) => return Err(DomainError::Storage(message)),
-                Err(err) => {
-                    report.rejected.push(rejection(&row, &err));
-                    continue;
-                }
+                None => continue,
             }
-            // A transfer is claimed on this wallet's side as soon as it is in.
-            if let Some((id, command)) = then {
-                match self.execute(self::envelope(id, vault_id, author, command)) {
-                    Ok(_) => {}
-                    Err(DomainError::Storage(message)) => {
-                        return Err(DomainError::Storage(message));
-                    }
-                    Err(err) => report.rejected.push(rejection(&row, &err)),
-                }
+            if let Some(claim) = claim {
+                write(row.line, vec![claim], &mut report)?;
             }
         }
-        for (row, (afterwards, id, command)) in later {
-            match self.execute(self::envelope(id, vault_id, author, command)) {
-                Ok(receipt) => {
-                    if let plan::Afterwards::Move = afterwards {
-                        if receipt.deduplicated {
-                            report.deduplicated += 1;
-                        } else {
-                            report.moved += 1;
-                        }
-                    }
+        for (row, (id, command)) in later {
+            // A move counts; a claim changes nothing.
+            if let Some(deduplicated) = write(row.line, vec![(id, command)], &mut report)?
+                && id == plan::move_id(row.command_id)
+            {
+                if deduplicated {
+                    report.deduplicated += 1;
+                } else {
+                    report.moved += 1;
                 }
-                Err(DomainError::Storage(message)) => return Err(DomainError::Storage(message)),
-                Err(err) => report.rejected.push(rejection(&row, &err)),
             }
         }
         Ok(report)
-    }
-}
-
-/// How an import writes a row's command.
-enum Written {
-    /// On its own, a new transfer's own side claimed after it.
-    Row,
-    /// With the void of the entry it replaces and the claims, in one batch;
-    /// `true` when the entry stood for the other wallet's statement row.
-    Replacing(bool),
-    /// As the transfer of a move between two accounts of the file, with the
-    /// claims of both halves (the money-in half's id), in one batch.
-    Paired(Uuid),
-}
-
-fn envelope(id: Uuid, vault_id: Uuid, author: &str, command: Command) -> CommandEnvelope {
-    CommandEnvelope {
-        id,
-        vault_id,
-        author: author.to_string(),
-        command,
-    }
-}
-
-/// `err`, refusing a command written for `row`.
-fn rejection(row: &StatementRow, err: &DomainError) -> StatementRejection {
-    StatementRejection {
-        line: row.line,
-        code: err.code().to_string(),
-        message: err.to_string(),
     }
 }
