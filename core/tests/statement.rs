@@ -3279,168 +3279,82 @@ fn live_transfers(fx: &Fx) -> Vec<sparagne_core::TransactionView> {
     )
 }
 
+/// One bank's export imported without a rule writes its side of a bonifico
+/// as an entry (an income into Revolut, or an expense out of ING); the other
+/// bank's, with a transfer rule, replaces it, and both read as imported.
 #[test]
-fn a_transfer_whose_other_side_came_in_as_an_income_replaces_it() {
-    let mut fx = setup();
-    let (ing, revolut) = two_banks(&mut fx);
-    let income = row(
-        &preview_with(
-            &fx,
-            &bonifico_in(),
-            &bank_mapping(),
-            &options(revolut),
-            &no_overrides(),
-        ),
-        2,
-    )
-    .command_id;
-    import_with(
-        &mut fx,
-        &bonifico_in(),
-        &bank_mapping(),
-        &options(revolut),
-        &no_overrides(),
-    );
-    assert_eq!(live(&fx, TransactionKind::Income).len(), 1);
+fn a_transfer_whose_other_side_came_in_as_an_entry_replaces_it() {
+    for came_in in [true, false] {
+        let mut fx = setup();
+        let (ing, revolut) = two_banks(&mut fx);
+        let (entry_side, transfer_side, kind, entry_wallet) = if came_in {
+            let entry_side = (bonifico_in(), bank_mapping(), revolut);
+            let transfer_side = (bonifico_out(), to_revolut(revolut), ing);
+            (entry_side, transfer_side, TransactionKind::Income, revolut)
+        } else {
+            let entry_side = (bonifico_out(), bank_mapping(), ing);
+            let transfer_side = (bonifico_in(), from_ing(ing), revolut);
+            (entry_side, transfer_side, TransactionKind::Expense, ing)
+        };
+        let preview = |fx: &Fx, (text, mapping, wallet): &(String, StatementMapping, Uuid)| {
+            preview_with(fx, text, mapping, &options(*wallet), &no_overrides())
+        };
+        let import = |fx: &mut Fx, (text, mapping, wallet): &(String, StatementMapping, Uuid)| {
+            import_with(fx, text, mapping, &options(*wallet), &no_overrides())
+        };
+        let entry = row(&preview(&fx, &entry_side), 2).command_id;
+        import(&mut fx, &entry_side);
+        assert_eq!(live(&fx, kind).len(), 1, "{kind:?}");
 
-    let preview = preview_with(
-        &fx,
-        &bonifico_out(),
-        &to_revolut(revolut),
-        &options(ing),
-        &no_overrides(),
-    );
-    let bonifico = row(&preview, 2);
-    assert_eq!(bonifico.status, StatementRowStatus::PossibleDuplicate);
-    assert_eq!(bonifico.existing.as_ref().map(|tx| tx.id), Some(income));
-    assert_eq!(
-        bonifico.match_choice,
-        Some(StatementMatchChoice::ReplaceExisting)
-    );
-    assert_eq!(bonifico.kind, Some(TransactionKind::TransferWallet));
-    assert_eq!(bonifico.counter_wallet_id, Some(revolut));
-    assert_eq!((preview.new_rows, preview.possible_duplicates), (0, 1));
+        let previewed = preview(&fx, &transfer_side);
+        let bonifico = row(&previewed, 2);
+        assert_eq!(bonifico.status, StatementRowStatus::PossibleDuplicate);
+        assert_eq!(bonifico.existing.as_ref().map(|tx| tx.id), Some(entry));
+        assert_eq!(
+            bonifico.match_choice,
+            Some(StatementMatchChoice::ReplaceExisting)
+        );
+        assert_eq!(bonifico.kind, Some(TransactionKind::TransferWallet));
+        assert_eq!(bonifico.counter_wallet_id, Some(entry_wallet));
+        assert_eq!((previewed.new_rows, previewed.possible_duplicates), (0, 1));
 
-    let report = import_with(
-        &mut fx,
-        &bonifico_out(),
-        &to_revolut(revolut),
-        &options(ing),
-        &no_overrides(),
-    );
-    assert!(report.rejected.is_empty(), "{:?}", report.rejected);
-    assert_eq!((report.executed, report.possible_duplicates), (1, 1));
-    assert!(fx.core.transaction(fx.vault, income).unwrap().voided);
-    let transfer = fx.core.transaction(fx.vault, bonifico.command_id).unwrap();
-    assert_eq!(
-        (transfer.kind, transfer.from_id, transfer.to_id),
-        (TransactionKind::TransferWallet, Some(ing), Some(revolut))
-    );
-    assert_eq!(wallet_balance(&fx.core, fx.vault, ing), -20_000);
-    assert_eq!(wallet_balance(&fx.core, fx.vault, revolut), 20_000);
-    assert!(live(&fx, TransactionKind::Income).is_empty());
-    // The transfer stands for the second bank's row now, on its side.
-    assert_eq!(
-        logged(&fx, claim_of(income)),
-        Some(claim_cmd(
-            bonifico.command_id,
+        let report = import(&mut fx, &transfer_side);
+        assert!(report.rejected.is_empty(), "{:?}", report.rejected);
+        assert_eq!((report.executed, report.possible_duplicates), (1, 1));
+        assert!(fx.core.transaction(fx.vault, entry).unwrap().voided);
+        let transfer = fx.core.transaction(fx.vault, bonifico.command_id).unwrap();
+        assert_eq!(
+            (transfer.kind, transfer.from_id, transfer.to_id),
+            (TransactionKind::TransferWallet, Some(ing), Some(revolut))
+        );
+        assert_eq!(wallet_balance(&fx.core, fx.vault, ing), -20_000);
+        assert_eq!(wallet_balance(&fx.core, fx.vault, revolut), 20_000);
+        assert!(live(&fx, TransactionKind::Expense).is_empty());
+        assert!(live(&fx, TransactionKind::Income).is_empty());
+        // The transfer stands for the entry's row now, on its wallet's side.
+        let side = if came_in {
             sparagne_core::TransactionPatch {
                 to_id: Some(revolut),
                 ..Default::default()
             }
-        ))
-    );
-
-    let commands = command_count(&fx.core, fx.vault);
-    let again = import_with(
-        &mut fx,
-        &bonifico_out(),
-        &to_revolut(revolut),
-        &options(ing),
-        &no_overrides(),
-    );
-    assert_eq!((again.executed, again.deduplicated), (0, 1));
-    let other = import_with(
-        &mut fx,
-        &bonifico_in(),
-        &bank_mapping(),
-        &options(revolut),
-        &no_overrides(),
-    );
-    assert_eq!((other.executed, other.deduplicated), (0, 1));
-    assert_eq!(command_count(&fx.core, fx.vault), commands);
-}
-
-#[test]
-fn a_transfer_whose_other_side_went_out_as_an_expense_replaces_it() {
-    let mut fx = setup();
-    let (ing, revolut) = two_banks(&mut fx);
-    let expense = row(
-        &preview_with(
-            &fx,
-            &bonifico_out(),
-            &bank_mapping(),
-            &options(ing),
-            &no_overrides(),
-        ),
-        2,
-    )
-    .command_id;
-    import_with(
-        &mut fx,
-        &bonifico_out(),
-        &bank_mapping(),
-        &options(ing),
-        &no_overrides(),
-    );
-    let preview = preview_with(
-        &fx,
-        &bonifico_in(),
-        &from_ing(ing),
-        &options(revolut),
-        &no_overrides(),
-    );
-    let bonifico = row(&preview, 2);
-    assert_eq!(bonifico.status, StatementRowStatus::PossibleDuplicate);
-    assert_eq!(bonifico.existing.as_ref().map(|tx| tx.id), Some(expense));
-    assert_eq!(
-        bonifico.match_choice,
-        Some(StatementMatchChoice::ReplaceExisting)
-    );
-
-    let report = import_with(
-        &mut fx,
-        &bonifico_in(),
-        &from_ing(ing),
-        &options(revolut),
-        &no_overrides(),
-    );
-    assert_eq!((report.executed, report.possible_duplicates), (1, 1));
-    assert!(fx.core.transaction(fx.vault, expense).unwrap().voided);
-    assert_eq!(wallet_balance(&fx.core, fx.vault, ing), -20_000);
-    assert_eq!(wallet_balance(&fx.core, fx.vault, revolut), 20_000);
-    assert!(live(&fx, TransactionKind::Expense).is_empty());
-    assert!(live(&fx, TransactionKind::Income).is_empty());
-    assert_eq!(
-        logged(&fx, claim_of(expense)),
-        Some(claim_cmd(
-            bonifico.command_id,
+        } else {
             sparagne_core::TransactionPatch {
                 from_id: Some(ing),
                 ..Default::default()
             }
-        ))
-    );
+        };
+        assert_eq!(
+            logged(&fx, claim_of(entry)),
+            Some(claim_cmd(bonifico.command_id, side))
+        );
 
-    let commands = command_count(&fx.core, fx.vault);
-    for (text, mapping, wallet) in [
-        (bonifico_in(), from_ing(ing), revolut),
-        (bonifico_out(), bank_mapping(), ing),
-    ] {
-        let again = import_with(&mut fx, &text, &mapping, &options(wallet), &no_overrides());
-        assert_eq!(again.executed, 0);
+        let commands = command_count(&fx.core, fx.vault);
+        for again in [&transfer_side, &entry_side] {
+            let again = import(&mut fx, again);
+            assert_eq!((again.executed, again.deduplicated), (0, 1));
+        }
+        assert_eq!(command_count(&fx.core, fx.vault), commands);
     }
-    assert_eq!(command_count(&fx.core, fx.vault), commands);
 }
 
 #[test]
