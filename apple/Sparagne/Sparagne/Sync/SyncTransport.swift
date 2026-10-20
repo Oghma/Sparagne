@@ -6,17 +6,10 @@ import Foundation
 /// (`/vaults/<id>/pull?since=0&limit=500`). The body is opaque `Data`: the
 /// engine hands over JSON the core wrote and never inspects a command.
 nonisolated struct SyncRequest: Sendable, Equatable {
-    var method: String
+    var method = "GET"
     var path: String
     var bearer: String?
     var body: Data?
-
-    init(method: String = "GET", path: String, bearer: String? = nil, body: Data? = nil) {
-        self.method = method
-        self.path = path
-        self.bearer = bearer
-        self.body = body
-    }
 }
 
 /// The status line, the headers and the bytes; the API layer decides what
@@ -57,11 +50,6 @@ nonisolated protocol SyncTransport: Sendable {
 nonisolated struct URLSessionTransport: SyncTransport {
     let baseURL: URL
     var timeout: TimeInterval = 20
-
-    init(baseURL: URL, timeout: TimeInterval = 20) {
-        self.baseURL = baseURL
-        self.timeout = timeout
-    }
 
     func send(_ request: SyncRequest) async throws -> SyncResponse {
         var base = baseURL.absoluteString

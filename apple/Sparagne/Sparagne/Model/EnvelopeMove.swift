@@ -238,13 +238,6 @@ struct EnvelopeMoveCheck: Equatable {
     let sourceBalance: EnvelopeMoveBalance?
     let total: Int64
 
-    init(rows: [Row], source: FlowView?, sourceBalance: EnvelopeMoveBalance?, total: Int64) {
-        self.rows = rows
-        self.source = source
-        self.sourceBalance = sourceBalance
-        self.total = total
-    }
-
     /// The source's balance on the move's day once every line has left it.
     var sourceAfter: Int64? {
         sourceBalance.map { Self.subtracting($0.balance, total) }

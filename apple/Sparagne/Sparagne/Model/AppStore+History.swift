@@ -81,7 +81,7 @@ extension AppStore {
     /// What `UpdateTransaction` needs to file a row back where it was: the
     /// stored name, or blank for Uncategorized.
     static func storedCategory(_ view: TransactionView) -> String {
-        view.categoryIsSystem && view.category.lowercased() == "uncategorized" ? "" : view.category
+        TransactionRow.isUncategorized(view.category, isSystem: view.categoryIsSystem) ? "" : view.category
     }
 
     static func updates(_ patches: [RowPatch]) -> [Command] {

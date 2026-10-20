@@ -138,10 +138,6 @@ private nonisolated struct ErrorBody: Codable, Sendable {
 nonisolated struct ServerAPI: Sendable {
     let transport: SyncTransport
 
-    init(transport: SyncTransport) {
-        self.transport = transport
-    }
-
     // MARK: - Auth
 
     func register(username: String, password: String) async throws -> TokenResponse {

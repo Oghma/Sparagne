@@ -86,7 +86,7 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
         occurredAt = CoreDate.date(view.occurredAt) ?? Date()
         absoluteAmount = view.amount
         categoryId = view.categoryId
-        category = Self.categoryLabel(view)
+        category = Self.categoryLabel(view.category, isSystem: view.categoryIsSystem)
         note = view.note ?? ""
         person = view.person
         recordedBy = view.createdBy
@@ -148,13 +148,19 @@ nonisolated struct TransactionRow: Identifiable, Hashable, Sendable {
 
     /// System categories are named in English by the core (`Opening`,
     /// `Uncategorized`); the UI shows the localized term instead.
-    private static func categoryLabel(_ view: TransactionView) -> String {
-        guard view.categoryIsSystem else { return view.category }
-        switch view.category.lowercased() {
+    static func categoryLabel(_ name: String, isSystem: Bool) -> String {
+        guard isSystem else { return name }
+        switch name.lowercased() {
         case "opening": return String(localized: "Opening")
         case "uncategorized": return String(localized: "Uncategorized")
-        default: return view.category
+        default: return name
         }
+    }
+
+    /// Whether a category is the system Uncategorized, by its stored name:
+    /// the core keeps it in English whatever the window's language.
+    static func isUncategorized(_ name: String, isSystem: Bool) -> Bool {
+        isSystem && name.lowercased() == "uncategorized"
     }
 
     private static func arrow(_ from: String?, _ to: String?) -> String {

@@ -72,11 +72,6 @@ extension AppStore {
             from: CoreDate.utcString(MonthKey(year: month.year, month: 1).start()),
             to: month.bounds().to,
             kinds: [.income, .expense, .refund],
-            includeVoided: false,
-            includeTransfers: false,
-            walletId: nil,
-            flowId: nil,
-            text: nil,
             person: person,
             ascending: true
         )
@@ -89,7 +84,7 @@ extension AppStore {
                     limit: Self.pageSize,
                     cursor: cursor
                 )
-                if let row = page.items.first(where: Self.isUncategorized) {
+                if let row = page.items.first(where: { TransactionRow.isUncategorized($0.category, isSystem: $0.categoryIsSystem) }) {
                     reveal(
                         transactionId: row.id,
                         occurredAt: row.occurredAt,
@@ -104,11 +99,5 @@ extension AppStore {
             return
         }
         tab = .ledger
-    }
-
-    /// The system category's stored name, not its localized label: the core
-    /// keeps it in English whatever the window's language.
-    private static func isUncategorized(_ view: TransactionView) -> Bool {
-        view.categoryIsSystem && view.category.lowercased() == "uncategorized"
     }
 }

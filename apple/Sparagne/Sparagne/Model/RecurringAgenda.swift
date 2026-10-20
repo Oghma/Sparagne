@@ -69,10 +69,6 @@ struct RecurringAgenda: Equatable {
     /// Soonest first; on the same day, by the template's title.
     let tiles: [UpcomingPeriod]
 
-    init(tiles: [UpcomingPeriod]) {
-        self.tiles = tiles
-    }
-
     /// The expenses expected in the window, in minor units.
     var expenses: Int64 { total(of: .expense) }
     /// The income expected in the window, in minor units.

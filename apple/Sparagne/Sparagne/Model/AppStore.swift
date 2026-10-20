@@ -932,8 +932,6 @@ final class AppStore {
             kinds: kinds,
             includeVoided: showVoided,
             includeTransfers: showTransfers,
-            walletId: nil,
-            flowId: nil,
             text: text.isEmpty ? nil : text,
             person: person,
             ascending: true

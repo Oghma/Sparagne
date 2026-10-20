@@ -45,18 +45,7 @@ nonisolated enum VaultExporter {
         vaultId: Uuid,
         pageSize: UInt32 = defaultPageSize
     ) async throws -> [TransactionView] {
-        let filter = TransactionFilter(
-            from: nil,
-            to: nil,
-            kinds: nil,
-            includeVoided: true,
-            includeTransfers: true,
-            walletId: nil,
-            flowId: nil,
-            text: nil,
-            person: nil,
-            ascending: true
-        )
+        let filter = TransactionFilter(includeVoided: true, includeTransfers: true, ascending: true)
         var all: [TransactionView] = []
         var cursor: String?
         repeat {

@@ -56,10 +56,8 @@ enum SummaryTodo {
                 )
             )
         }
-        // The system category's name, not its localized label: the core
-        // keeps it in English whatever the window's language.
         let uncategorized = yearCategories
-            .filter { $0.isSystem && $0.name.lowercased() == "uncategorized" }
+            .filter { TransactionRow.isUncategorized($0.name, isSystem: $0.isSystem) }
             .reduce(0) { $0 + Int($1.count) }
         if uncategorized > 0 {
             items.append(SummaryTodoItem(kind: .uncategorized(count: uncategorized), tab: .ledger))
