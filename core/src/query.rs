@@ -1,13 +1,13 @@
 //! Read side: snapshot, categories, transaction pages, log access, replay.
 
 use chrono::{DateTime, FixedOffset, Offset, Utc};
-use rusqlite::{OptionalExtension, params, params_from_iter, types::Value};
+use rusqlite::{params, params_from_iter, types::Value};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     CommandEnvelope, CommandRecord, Core, Currency, DomainError, FlowMode, Result, TransactionKind,
-    VaultView,
+    engine::{FLOW_COLUMNS, flow_row},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
@@ -274,48 +274,10 @@ pub struct Page {
 }
 
 impl Core {
-    /// One vault by id, `None` when this database does not hold it. Saves a
-    /// caller with an id in hand from scanning [`Core::vaults`].
-    pub fn vault(&self, vault_id: Uuid) -> Result<Option<VaultView>> {
-        let row = self
-            .conn
-            .query_row(
-                "SELECT id, name, currency, owner_user_id, created_at FROM vaults WHERE id = ?1",
-                params![vault_id],
-                |r| {
-                    Ok((
-                        r.get::<_, Uuid>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, String>(2)?,
-                        r.get::<_, String>(3)?,
-                        r.get::<_, i64>(4)?,
-                    ))
-                },
-            )
-            .optional()?;
-        row.map(|(id, name, currency, owner, created_at)| {
-            Ok(VaultView {
-                id,
-                name,
-                currency: Currency::try_from(currency.as_str())?,
-                owner,
-                created_at,
-            })
-        })
-        .transpose()
-    }
-
     pub fn snapshot(&self, vault_id: Uuid) -> Result<VaultSnapshot> {
-        let (name, currency): (String, String) = self
-            .conn
-            .query_row(
-                "SELECT name, currency FROM vaults WHERE id = ?1",
-                params![vault_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()?
+        let vault = self
+            .vault(vault_id)?
             .ok_or_else(|| DomainError::NotFound("vault".to_string()))?;
-        let currency = Currency::try_from(currency.as_str())?;
 
         let mut stmt = self.conn.prepare(
             "SELECT id, name, balance, archived FROM wallets WHERE vault_id = ?1 ORDER BY lower(name)",
@@ -331,30 +293,22 @@ impl Core {
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
-        let mut stmt = self.conn.prepare(
-            "SELECT id, name, system_kind, balance, cap, income_total, allow_negative, archived
-             FROM flows WHERE vault_id = ?1
-             ORDER BY (system_kind IS NULL), lower(name)",
-        )?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {FLOW_COLUMNS} FROM flows WHERE vault_id = ?1
+             ORDER BY (system_kind IS NULL), lower(name)"
+        ))?;
         let flows = stmt
             .query_map(params![vault_id], |r| {
-                let cap: Option<i64> = r.get(4)?;
-                let income_total: Option<i64> = r.get(5)?;
-                let mode = match (cap, income_total) {
-                    (None, _) => FlowMode::Unlimited,
-                    (Some(cap), None) => FlowMode::NetCapped { cap },
-                    (Some(cap), Some(_)) => FlowMode::IncomeCapped { cap },
-                };
+                let flow = flow_row(r)?;
                 Ok(FlowView {
-                    id: r.get(0)?,
-                    name: r.get(1)?,
-                    is_unallocated: r.get::<_, Option<String>>(2)?.as_deref()
-                        == Some("unallocated"),
-                    balance: r.get(3)?,
-                    mode,
-                    income_total,
-                    allow_negative: r.get(6)?,
-                    archived: r.get(7)?,
+                    mode: flow.mode(),
+                    id: flow.id,
+                    name: flow.name,
+                    balance: flow.balance,
+                    income_total: flow.income_total,
+                    allow_negative: flow.allow_negative,
+                    archived: flow.archived,
+                    is_unallocated: flow.is_unallocated,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -366,8 +320,8 @@ impl Core {
 
         Ok(VaultSnapshot {
             id: vault_id,
-            name,
-            currency,
+            name: vault.name,
+            currency: vault.currency,
             wallets,
             flows,
             unallocated_flow_id,
@@ -491,10 +445,10 @@ impl Core {
             ));
         }
 
-        let mut sql = String::from(
-            "SELECT t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at, t.created_by, t.person
+        let mut sql = format!(
+            "SELECT {TRANSACTION_VIEW_COLUMNS}
              FROM transactions t JOIN categories c ON c.id = t.category_id
-             WHERE t.vault_id = ?",
+             WHERE t.vault_id = ?"
         );
         let mut args: Vec<Value> = vec![blob(vault_id)];
 
@@ -567,33 +521,10 @@ impl Core {
         ));
 
         let mut stmt = self.conn.prepare(&sql)?;
+        // The raw `occurred_at` goes into the cursor.
         let mut rows: Vec<(TransactionView, i64)> = stmt
             .query_map(params_from_iter(args.iter()), |r| {
-                let at: i64 = r.get(2)?;
-                let off: i32 = r.get(3)?;
-                let kind: String = r.get(1)?;
-                let voided_at: Option<i64> = r.get(9)?;
-                Ok((
-                    TransactionView {
-                        id: r.get(0)?,
-                        kind: TransactionKind::parse(&kind).unwrap_or(TransactionKind::Expense),
-                        occurred_at: to_fixed(at, off),
-                        amount: r.get(4)?,
-                        category_id: r.get(5)?,
-                        category: r.get(6)?,
-                        category_is_system: r.get(7)?,
-                        note: r.get(8)?,
-                        person: r.get(11)?,
-                        created_by: r.get(10)?,
-                        voided: voided_at.is_some(),
-                        wallet_id: None,
-                        flow_id: None,
-                        from_id: None,
-                        to_id: None,
-                        legs: Vec::new(),
-                    },
-                    at,
-                ))
+                Ok((transaction_view(r)?, r.get(2)?))
             })?
             .collect::<std::result::Result<_, _>>()?;
 
@@ -604,33 +535,8 @@ impl Core {
             None
         };
 
-        let mut legs_stmt = self.conn.prepare(
-            "SELECT target_kind, target_id, amount FROM legs WHERE transaction_id = ?1 ORDER BY ordinal",
-        )?;
-        let mut items = Vec::with_capacity(rows.len());
-        for (mut view, _) in rows {
-            view.legs = legs_stmt
-                .query_map(params![view.id], |r| {
-                    let kind: String = r.get(0)?;
-                    let id: Uuid = r.get(1)?;
-                    let target = if kind == "wallet" {
-                        LegTarget::Wallet { wallet_id: id }
-                    } else {
-                        LegTarget::Flow { flow_id: id }
-                    };
-                    Ok(LegView {
-                        target,
-                        amount: r.get(2)?,
-                    })
-                })?
-                .collect::<std::result::Result<_, _>>()?;
-            let (wallet_id, flow_id, from_id, to_id) = leg_shape(view.kind, &view.legs);
-            view.wallet_id = wallet_id;
-            view.flow_id = flow_id;
-            view.from_id = from_id;
-            view.to_id = to_id;
-            items.push(view);
-        }
+        let mut items: Vec<TransactionView> = rows.into_iter().map(|(view, _)| view).collect();
+        load_legs(&self.conn, &mut items)?;
         Ok(Page { items, next_cursor })
     }
 

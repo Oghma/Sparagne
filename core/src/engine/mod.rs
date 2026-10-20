@@ -1041,25 +1041,29 @@ fn resolve_category(
 // Row-level helpers
 // ---------------------------------------------------------------------------
 
+/// Columns of `flows` that [`flow_row`] reads, in its order.
+pub(crate) const FLOW_COLUMNS: &str =
+    "id, name, system_kind, balance, cap, income_total, allow_negative, archived";
+
+pub(crate) fn flow_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Flow> {
+    Ok(Flow {
+        id: r.get(0)?,
+        name: r.get(1)?,
+        is_unallocated: r.get::<_, Option<String>>(2)?.as_deref() == Some("unallocated"),
+        balance: r.get(3)?,
+        cap: r.get(4)?,
+        income_total: r.get(5)?,
+        allow_negative: r.get(6)?,
+        archived: r.get(7)?,
+    })
+}
+
 pub(crate) fn load_flow(tx: &Transaction<'_>, vault_id: Uuid, flow_id: Uuid) -> Result<Flow> {
     let flow = tx
         .query_row(
-            "SELECT id, name, system_kind, balance, cap, income_total, allow_negative, archived
-             FROM flows WHERE id = ?1 AND vault_id = ?2",
+            &format!("SELECT {FLOW_COLUMNS} FROM flows WHERE id = ?1 AND vault_id = ?2"),
             params![flow_id, vault_id],
-            |r| {
-                Ok(Flow {
-                    id: r.get(0)?,
-                    name: r.get(1)?,
-                    is_unallocated: r.get::<_, Option<String>>(2)?.as_deref()
-                        == Some("unallocated"),
-                    balance: r.get(3)?,
-                    cap: r.get(4)?,
-                    income_total: r.get(5)?,
-                    allow_negative: r.get(6)?,
-                    archived: r.get(7)?,
-                })
-            },
+            flow_row,
         )
         .optional()?
         .ok_or_else(|| DomainError::NotFound("flow".to_string()))?;
