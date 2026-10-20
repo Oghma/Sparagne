@@ -59,50 +59,10 @@ struct DateFormattingTests {
 
 // MARK: - Counts and schedules
 
-/// A string catalog built on disk for one language, holding the plural forms
-/// these tests need. The helpers read it through their `bundle` parameter, so
-/// these tests check the keys and the plural rules whatever the app's own
-/// catalog holds.
+/// The plural forms the counts and the schedules are read with.
 private enum TestCatalog {
-    static func bundle(
-        language: String,
-        plurals: [String: (one: String, other: String)],
-        strings: [String: String] = [:]
-    ) throws -> Bundle {
-        let root = FileManager.default.temporaryDirectory
-            .appending(path: "sparagne-catalog-\(UUID().uuidString).bundle", directoryHint: .isDirectory)
-        let contents = root.appending(path: "Contents", directoryHint: .isDirectory)
-        let lproj = contents.appending(path: "Resources/\(language).lproj", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: lproj, withIntermediateDirectories: true)
-        let info: [String: Any] = [
-            "CFBundleIdentifier": "it.oghma.sparagne.tests.catalog.\(language)",
-            "CFBundleDevelopmentRegion": language,
-            "CFBundlePackageType": "BNDL",
-        ]
-        try plist(info).write(to: contents.appending(path: "Info.plist"))
-        var rules: [String: Any] = [:]
-        for (key, forms) in plurals {
-            rules[key] = [
-                "NSStringLocalizedFormatKey": "%#@count@",
-                "count": [
-                    "NSStringFormatSpecTypeKey": "NSStringPluralRuleType",
-                    "NSStringFormatValueTypeKey": "lld",
-                    "one": forms.one,
-                    "other": forms.other,
-                ],
-            ]
-        }
-        try plist(rules).write(to: lproj.appending(path: "Localizable.stringsdict"))
-        try plist(strings).write(to: lproj.appending(path: "Localizable.strings"))
-        return try #require(Bundle(url: root))
-    }
-
-    private static func plist(_ value: Any) throws -> Data {
-        try PropertyListSerialization.data(fromPropertyList: value, format: .xml, options: 0)
-    }
-
     static func english() throws -> Bundle {
-        try bundle(language: "en", plurals: [
+        try CatalogBundle.make(language: "en", plurals: [
             "%lld to confirm": ("%lld to confirm", "%lld to confirm"),
             "%lld transactions deleted": ("Transaction deleted", "%lld transactions deleted"),
             "Every %lld days": ("Every day", "Every %lld days"),
@@ -113,7 +73,7 @@ private enum TestCatalog {
     }
 
     static func italian() throws -> Bundle {
-        try bundle(
+        try CatalogBundle.make(
             language: "it",
             plurals: [
                 "%lld to confirm": ("%lld da confermare", "%lld da confermare"),

@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import SparagneCore
 import Testing
@@ -8,28 +7,10 @@ import Testing
 /// `AppStore` driven end to end over an in-memory core: every assertion is
 /// about what the projection says after a real command was applied.
 struct AppStoreTests {
-    /// A store on a fresh in-memory database, with its own defaults so the
-    /// "last vault" key never leaks between tests.
-    private static func makeStore(
-        undoWindow: Duration = .seconds(60),
-        sleeper: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
-    ) throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.tests.\(UUID().uuidString)"))
-        return AppStore(
-            core: try CoreActor.inMemory(author: "tester"),
-            defaults: defaults,
-            undoWindow: undoWindow,
-            sleeper: sleeper
-        )
-    }
-
     /// A store that has been through onboarding: vault `Main`, wallet `Cash`
     /// holding 100.00.
     private static func onboarded() async throws -> AppStore {
-        let store = try makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
-        return store
+        try await TestStore.make(vault: "Main", wallet: "Cash", opening: 10_000, author: "tester", undoWindow: .seconds(60))
     }
 
     private static func pizzaRow(_ store: AppStore) throws -> TransactionRow {
@@ -38,7 +19,7 @@ struct AppStoreTests {
 
     @Test("An empty database asks for onboarding, which creates the vault and its wallet")
     func onboarding() async throws {
-        let store = try Self.makeStore()
+        let store = try TestStore.fresh(author: "tester", undoWindow: .seconds(60))
 
         await store.bootstrap()
         #expect(store.needsOnboarding)
@@ -108,9 +89,9 @@ struct AppStoreTests {
     @Test("Letting the undo window elapse voids the transaction for real")
     func elapsedUndoWindowVoids() async throws {
         // The window is driven by the injected sleeper, so the test never waits.
-        let store = try Self.makeStore(undoWindow: .zero, sleeper: { _ in })
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10000)
+        let store = try await TestStore.make(
+            vault: "Main", wallet: "Cash", opening: 10_000, author: "tester", undoWindow: .zero, sleeper: { _ in }
+        )
         await store.submit(quickAdd: "-12.50 pizza #food")
         let row = try Self.pizzaRow(store)
 
@@ -134,9 +115,7 @@ struct AppStoreTests {
 
     /// `Main` with a pizza waiting on the toast, and `Casa` beside it.
     private static func voidInMainBesideCasa() async throws -> (store: AppStore, main: VaultView, casa: VaultView) {
-        let store = try makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 5_000)
+        let store = try await TestStore.make(opening: 5_000, author: "tester", undoWindow: .seconds(60))
         let casa = try #require(store.currentVault)
         await store.createVault(name: "Main", walletName: "Cash", openingBalance: 10_000)
         let main = try #require(store.currentVault)
@@ -210,21 +189,15 @@ struct AppStoreTests {
         let store = try await Self.onboarded()
         await store.submit(quickAdd: "-12.50 pizza #food")
         await store.void(transactionId: try Self.pizzaRow(store).id)
-        let delegate = AppDelegate()
-        delegate.store = store
+        let quit = QuitHarness(store: store)
 
-        let replied = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-            delegate.replyToTermination = { continuation.resume(returning: $0) }
-            #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
-        }
-
-        #expect(replied)
+        #expect(await quit.deferredReply())
         #expect(store.presentedError == nil)
         #expect(store.pendingUndo == nil)
         #expect(store.wallets.first?.balance == 10_000)
 
         // Nothing waiting: the app quits straight away.
-        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
+        #expect(quit.answer() == .terminateNow)
     }
 
     @Test("Editing the amount re-applies the legs")

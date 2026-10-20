@@ -8,36 +8,10 @@ import Testing
 /// into (`LedgerCursor`): the lines are the stored rows, then the new line
 /// while the vault can be written to.
 struct LedgerCursorTests {
-    private static func row(
-        _ id: Uuid = UUID().uuidString,
-        kind: TransactionKind = .expense,
-        voided: Bool = false
-    ) -> TransactionRow {
-        let isTransfer = kind == .transferWallet || kind == .transferFlow
-        let view = TransactionView(
-            id: id,
-            kind: kind,
-            occurredAt: CoreDate.offset(Date()),
-            amount: 1_250,
-            categoryId: UUID().uuidString,
-            category: "Spesa",
-            categoryIsSystem: false,
-            note: nil,
-            person: "matteo",
-            createdBy: "matteo",
-            voided: voided,
-            walletId: isTransfer ? nil : UUID().uuidString,
-            flowId: isTransfer ? nil : UUID().uuidString,
-            fromId: isTransfer ? UUID().uuidString : nil,
-            toId: isTransfer ? UUID().uuidString : nil,
-            legs: []
-        )
-        return TransactionRow(view: view, names: NameBook(snapshot: nil))
-    }
-
     /// Rows `a`, `b` and `c`, top to bottom.
     private static func cursor(canWrite: Bool = true, showsWallet: Bool = false) -> LedgerCursor {
-        LedgerCursor(rows: [row("a"), row("b"), row("c")], canWrite: canWrite, showsWallet: showsWallet)
+        let rows = [TestRow.make("a"), TestRow.make("b"), TestRow.make("c")]
+        return LedgerCursor(rows: rows, canWrite: canWrite, showsWallet: showsWallet)
     }
 
     private static func cell(_ row: Uuid?, _ field: RowField) -> CellFocus {
@@ -186,7 +160,7 @@ struct LedgerCursorTests {
     @Test("A transfer's DATA, CATEGORIA, DESCRIZIONE and IMPORTO can be typed into, its two ends and its author not")
     func transferCells() {
         for kind in [TransactionKind.transferWallet, .transferFlow] {
-            let cursor = LedgerCursor(rows: [Self.row("t", kind: kind)], canWrite: true, showsWallet: true)
+            let cursor = LedgerCursor(rows: [TestRow.make("t", kind: kind)], canWrite: true, showsWallet: true)
             let editable = cursor.fields.filter { cursor.isEditable(Self.cell("t", $0)) }
             #expect(editable == [.date, .category, .note, .amount])
         }
@@ -194,7 +168,7 @@ struct LedgerCursorTests {
 
     @Test("Nothing can be typed into a deleted row, a vault only read, nor a row no longer on screen")
     func lockedCells() {
-        let voided = LedgerCursor(rows: [Self.row("v", voided: true)], canWrite: true, showsWallet: true)
+        let voided = LedgerCursor(rows: [TestRow.make("v", voided: true)], canWrite: true, showsWallet: true)
         #expect(voided.fields.allSatisfy { !voided.isEditable(Self.cell("v", $0)) })
         // The new line beside it still can.
         #expect(voided.isEditable(Self.cell(nil, .amount)))

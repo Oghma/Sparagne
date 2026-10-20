@@ -11,12 +11,7 @@ import Testing
 struct PeopleTests {
     /// Vault `Casa` with wallet `Conto`, written by matteo while logged out.
     private static func onboarded() async throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.people.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 10_000)
-        #expect(store.presentedError == nil)
-        return store
+        try await TestStore.make(opening: 10_000)
     }
 
     /// A monthly expense owned by `owner`, written straight to the core.
@@ -56,10 +51,7 @@ struct PeopleTests {
 
     @Test("A vault with no rows yet still offers its author")
     func emptyVaultOffersTheAuthor() async throws {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.people.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Vuoto", walletName: "", openingBalance: 0)
+        let store = try await TestStore.make(vault: "Vuoto", wallet: "", opening: 0)
         #expect(store.peopleInRows.isEmpty)
         #expect(store.assignablePeople == ["matteo"])
     }

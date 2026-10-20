@@ -8,17 +8,10 @@ import Testing
 /// person filters, the aggregates behind the summary panel, and the writes the
 /// grid makes.
 struct LedgerStoreTests {
-    private static func makeStore(author: String = "matteo") throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.ledger.\(UUID().uuidString)"))
-        return AppStore(core: try CoreActor.inMemory(author: author), defaults: defaults)
-    }
-
     /// A vault with one wallet, one envelope beside Unallocated, and rows in
     /// the current month written by two people.
     private static func household() async throws -> (store: AppStore, envelope: FlowView) {
-        let store = try makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make()
         await store.createEnvelope(name: "Cash", mode: .unlimited, allowNegative: true, openingAllocation: 0)
         let envelope = try #require(store.flows.first { $0.name == "Cash" })
 
@@ -84,9 +77,7 @@ struct LedgerStoreTests {
 
     @Test("Rows come back oldest first, the reading order of a ledger")
     func rowsAreAscending() async throws {
-        let store = try Self.makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 0)
+        let store = try await TestStore.make(opening: 0)
         let calendar = Calendar.current
         let month = store.month
         for day in [12, 3, 27] {
@@ -101,9 +92,7 @@ struct LedgerStoreTests {
 
     @Test("A month longer than a page is loaded page by page, and loadAll reads every one")
     func loadAllReadsEveryPage() async throws {
-        let store = try Self.makeStore()
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make()
         let vault = try #require(store.currentVault)
         // 1100 expenses of a cent each, written in one visit.
         let now = CoreDate.offset(Date())
@@ -426,16 +415,15 @@ struct LedgerStoreTests {
 
     @Test("The wallet column is off until it is asked for, and the choice is remembered")
     func walletColumnIsRememberedOff() throws {
-        let suite = "sparagne.wallet.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
+        let defaults = try TestStore.defaults()
+        let store = try TestStore.fresh(defaults: defaults)
         #expect(store.showWalletColumn == false)
 
         store.showWalletColumn = true
 
         // A later launch reads the preference back, the same key the View
         // menu's toggle writes.
-        let relaunched = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
+        let relaunched = try TestStore.fresh(defaults: defaults)
         #expect(relaunched.showWalletColumn)
         #expect(defaults.bool(forKey: AppStore.walletColumnKey))
     }

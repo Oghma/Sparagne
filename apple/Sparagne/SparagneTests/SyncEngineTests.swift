@@ -370,9 +370,9 @@ private struct Peer {
     let defaults: UserDefaults
 
     init(server: FakeServerTransport) async throws {
-        defaults = try #require(UserDefaults(suiteName: "sparagne.sync.\(UUID().uuidString)"))
+        defaults = try TestStore.defaults()
         core = try CoreActor.inMemory(author: "local")
-        store = AppStore(core: core, defaults: defaults, undoWindow: .seconds(60))
+        store = try TestStore.fresh(on: core, defaults: defaults, undoWindow: .seconds(60))
         account = AccountStore(defaults: defaults, tokens: MemoryTokenStore())
         account.serverURLText = "http://fake.test"
         engine = SyncEngine(

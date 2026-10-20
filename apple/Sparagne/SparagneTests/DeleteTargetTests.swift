@@ -7,43 +7,16 @@ import Testing
 /// What ⌫ and ⌦ delete while no cell has the caret (`DeleteTarget`): the
 /// rows picked, else the row under the pointer, else nothing.
 struct DeleteTargetTests {
-    private static func row(
-        _ id: Uuid = UUID().uuidString,
-        kind: TransactionKind = .expense,
-        voided: Bool = false
-    ) -> TransactionRow {
-        let isTransfer = kind == .transferWallet || kind == .transferFlow
-        let view = TransactionView(
-            id: id,
-            kind: kind,
-            occurredAt: CoreDate.offset(Date()),
-            amount: 1_250,
-            categoryId: UUID().uuidString,
-            category: "Spesa",
-            categoryIsSystem: false,
-            note: nil,
-            person: "matteo",
-            createdBy: "matteo",
-            voided: voided,
-            walletId: isTransfer ? nil : UUID().uuidString,
-            flowId: isTransfer ? nil : UUID().uuidString,
-            fromId: isTransfer ? UUID().uuidString : nil,
-            toId: isTransfer ? UUID().uuidString : nil,
-            legs: []
-        )
-        return TransactionRow(view: view, names: NameBook(snapshot: nil))
-    }
-
     @Test("With rows picked, ⌫ deletes them, whatever row is under the pointer")
     func selectionComesFirst() {
-        let hovered = Self.row("c")
+        let hovered = TestRow.make("c")
         let target = DeleteTarget.resolve(selection: ["a", "b"], hovered: hovered, editing: false, canWrite: true)
         #expect(target == .selection(["a", "b"]))
     }
 
     @Test("With nothing picked, ⌫ deletes the row under the pointer, and only it")
     func hoveredRowAlone() {
-        let hovered = Self.row("c")
+        let hovered = TestRow.make("c")
         #expect(DeleteTarget.resolve(selection: [], hovered: hovered, editing: false, canWrite: true) == .row("c"))
     }
 
@@ -54,21 +27,21 @@ struct DeleteTargetTests {
 
     @Test("While a row is open or a cell has the caret, the keys edit the text")
     func editingKeepsTheKeys() {
-        let hovered = Self.row("c")
+        let hovered = TestRow.make("c")
         #expect(DeleteTarget.resolve(selection: [], hovered: hovered, editing: true, canWrite: true) == .none)
         #expect(DeleteTarget.resolve(selection: ["a"], hovered: hovered, editing: true, canWrite: true) == .none)
     }
 
     @Test("A vault this account only reads deletes nothing, picked or pointed at")
     func readOnlyDeletesNothing() {
-        let hovered = Self.row("c")
+        let hovered = TestRow.make("c")
         #expect(DeleteTarget.resolve(selection: [], hovered: hovered, editing: false, canWrite: false) == .none)
         #expect(DeleteTarget.resolve(selection: ["a"], hovered: hovered, editing: false, canWrite: false) == .none)
     }
 
     @Test("A row deleted already is not deleted again from under the pointer")
     func deletedRowIsPassedOver() {
-        let hovered = Self.row("c", voided: true)
+        let hovered = TestRow.make("c", voided: true)
         #expect(!DeleteTarget.isDeletable(hovered))
         #expect(DeleteTarget.resolve(selection: [], hovered: hovered, editing: false, canWrite: true) == .none)
     }
@@ -77,7 +50,7 @@ struct DeleteTargetTests {
 
     @Test("⌘⌫ deletes the rows picked, whatever row the cursor is on")
     func commandDeleteTakesTheSelectionFirst() {
-        let cursorRow = Self.row("c")
+        let cursorRow = TestRow.make("c")
         let target = DeleteTarget.resolveCommandDelete(
             selection: ["a", "b"],
             cursorRow: cursorRow,
@@ -89,18 +62,18 @@ struct DeleteTargetTests {
 
     @Test("⌘⌫ with nothing picked deletes the row the cursor is on")
     func commandDeleteTakesTheCursorRow() {
-        let cursorRow = Self.row("c")
+        let cursorRow = TestRow.make("c")
         #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: cursorRow, editing: false, canWrite: true) == .row("c"))
-        let transfer = Self.row("t", kind: .transferFlow)
+        let transfer = TestRow.make("t", kind: .transferFlow)
         #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: transfer, editing: false, canWrite: true) == .row("t"))
     }
 
     @Test("⌘⌫ deletes nothing on the new line, on a deleted row, while a cell is typed into, or on a vault only read")
     func commandDeleteDeletesNothing() {
-        let cursorRow = Self.row("c")
+        let cursorRow = TestRow.make("c")
         // The new line: no row under the cursor.
         #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: nil, editing: false, canWrite: true) == .none)
-        let voided = Self.row("v", voided: true)
+        let voided = TestRow.make("v", voided: true)
         #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: voided, editing: false, canWrite: true) == .none)
         #expect(DeleteTarget.resolveCommandDelete(selection: [], cursorRow: cursorRow, editing: true, canWrite: true) == .none)
         #expect(DeleteTarget.resolveCommandDelete(selection: ["a"], cursorRow: cursorRow, editing: true, canWrite: true) == .none)
@@ -111,7 +84,7 @@ struct DeleteTargetTests {
     @Test("A transfer under the pointer is deleted alone, as its context menu deletes it")
     func transferAloneIsDeletable() {
         for kind in [TransactionKind.transferWallet, .transferFlow] {
-            let hovered = Self.row("t", kind: kind)
+            let hovered = TestRow.make("t", kind: kind)
             #expect(DeleteTarget.isDeletable(hovered))
             #expect(DeleteTarget.resolve(selection: [], hovered: hovered, editing: false, canWrite: true) == .row("t"))
         }

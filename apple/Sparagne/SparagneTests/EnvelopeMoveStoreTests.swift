@@ -13,10 +13,7 @@ struct EnvelopeMoveStoreTests {
     /// envelopes `Affitto` with no cap and `Vacanze` capped at 500,00 on its
     /// balance. Transfers shown, so the month's list has them.
     private static func vault() async throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.move.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "matteo"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Conto", openingBalance: 100_000)
+        let store = try await TestStore.make()
         await store.createEnvelope(name: "Affitto", mode: .unlimited, allowNegative: false, openingAllocation: 0)
         await store.createEnvelope(name: "Vacanze", mode: .netCapped(cap: 50_000), allowNegative: false, openingAllocation: 0)
         store.showTransfers = true

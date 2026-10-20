@@ -10,12 +10,7 @@ import Testing
 struct VaultExporterTests {
     /// A store through onboarding: vault `Casa`, wallet `Cash` with 10,000.00.
     private static func onboarded() async throws -> AppStore {
-        let defaults = try #require(UserDefaults(suiteName: "sparagne.tests.\(UUID().uuidString)"))
-        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: defaults)
-        await store.bootstrap()
-        await store.createVault(name: "Casa", walletName: "Cash", openingBalance: 1_000_000)
-        #expect(store.presentedError == nil)
-        return store
+        try await TestStore.make(wallet: "Cash", opening: 1_000_000, author: "tester")
     }
 
     /// A fresh folder in the temporary directory, removed by the caller.

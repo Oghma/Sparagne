@@ -32,23 +32,12 @@ struct StatementAccountsTests {
         "payment_type", "note", "date", "transfer", "payee", "labels",
     ]
 
-    private static func defaults() throws -> UserDefaults {
-        try #require(UserDefaults(suiteName: "sparagne.tests.\(UUID().uuidString)"))
-    }
-
     /// Vault `Main` with `Cash`, where everything has gone so far, and the
     /// empty `Revolut` and `BBVA`.
     private static func vault() async throws -> (store: AppStore, cash: Uuid, revolut: Uuid, bbva: Uuid) {
-        let store = AppStore(core: try CoreActor.inMemory(author: "tester"), defaults: try defaults())
-        await store.bootstrap()
-        await store.createVault(name: "Main", walletName: "Cash", openingBalance: 0)
-        await store.createWallet(name: "Revolut", openingBalance: 0)
-        await store.createWallet(name: "BBVA", openingBalance: 0)
-        #expect(store.presentedError == nil)
-        let cash = try #require(store.wallets.first { $0.name == "Cash" }).id
-        let revolut = try #require(store.wallets.first { $0.name == "Revolut" }).id
-        let bbva = try #require(store.wallets.first { $0.name == "BBVA" }).id
-        return (store, cash, revolut, bbva)
+        let store = try await StatementFixture.vault(wallet: "Cash", wallets: ["Revolut": 0, "BBVA": 0])
+        let wallet = { try StatementFixture.wallet($0, in: store) }
+        return (store, try wallet("Cash"), try wallet("Revolut"), try wallet("BBVA"))
     }
 
     /// The export read with its preset, aimed at Cash, its accounts listed.
@@ -62,20 +51,6 @@ struct StatementAccountsTests {
         return model
     }
 
-    private static func row(_ model: StatementImportModel, line: UInt32) throws -> StatementRow {
-        try #require(model.preview?.rows.first { $0.line == line })
-    }
-
-    private static func transactions(_ store: AppStore) async throws -> [TransactionView] {
-        let vaultId = try #require(store.currentVault?.id)
-        let filter = TransactionFilter(includeVoided: false, includeTransfers: true, ascending: true)
-        return try await store.core.transactions(vaultId: vaultId, filter: filter, limit: 500, cursor: nil).items
-    }
-
-    private static func balance(_ store: AppStore, _ wallet: Uuid) -> Int64? {
-        store.wallets.first { $0.id == wallet }?.balance
-    }
-
     private static func code(_ row: StatementRow) -> String? {
         if case .skipped(let code, _) = row.status { return code }
         return nil
@@ -86,7 +61,7 @@ struct StatementAccountsTests {
     @Test("The accounts are listed with their rows, and those sent elsewhere than the file's wallet become the core's account wallets")
     func accountChoices() async throws {
         let (store, cash, revolut, _) = try await Self.vault()
-        let model = try await Self.model(store, cash: cash, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        let model = try await Self.model(store, cash: cash, mappings: try StatementFixture.mappings())
 
         #expect(model.mapping.accountColumn == "account")
         #expect(model.mapping.transferColumn == "transfer")
@@ -116,7 +91,7 @@ struct StatementAccountsTests {
         let (store, cash, revolut, bbva) = try await Self.vault()
         await store.createWallet(name: "Old", openingBalance: 0)
         let old = try #require(store.wallets.first { $0.name == "Old" }).id
-        let mappings = StatementMappingStore(defaults: try Self.defaults())
+        let mappings = try StatementFixture.mappings()
         let vaultId = try #require(store.currentVault?.id)
 
         let model = try await Self.model(store, cash: cash, mappings: mappings)
@@ -155,7 +130,7 @@ struct StatementAccountsTests {
     @Test("Every account into Cash: the Wallet preset is recognised, both halves of each move are a transfer within one wallet, and a half without its other is imported")
     func everythingIntoCash() async throws {
         let (store, cash, _, _) = try await Self.vault()
-        let model = try await Self.model(store, cash: cash, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        let model = try await Self.model(store, cash: cash, mappings: try StatementFixture.mappings())
         #expect(model.source == .preset(StatementImportModel.presetName(
             try #require(statementPresets().first { $0.id == "budgetbakers-wallet" })
         )))
@@ -163,18 +138,18 @@ struct StatementAccountsTests {
         #expect(model.previewProblem == nil)
 
         for line: UInt32 in [3, 4, 7, 8] {
-            let half = try Self.row(model, line: line)
+            let half = try StatementFixture.row(model, line: line)
             #expect(Self.code(half) == "internal_transfer", "line \(line)")
             #expect(half.transferLeg)
             #expect(half.pairedLine != nil)
         }
-        #expect(try Self.row(model, line: 3).pairedLine == 4)
-        let friend = try Self.row(model, line: 9)
+        #expect(try StatementFixture.row(model, line: 3).pairedLine == 4)
+        let friend = try StatementFixture.row(model, line: 9)
         #expect(friend.status == .new)
         #expect(friend.transferLeg)
         #expect(friend.pairedLine == nil)
         #expect(friend.kind == .income)
-        let groceries = try Self.row(model, line: 2)
+        let groceries = try StatementFixture.row(model, line: 2)
         #expect(groceries.account == "Revolut")
         #expect(groceries.walletId == cash)
         #expect(model.counts.new == 5)
@@ -182,37 +157,37 @@ struct StatementAccountsTests {
         await model.runImport()
 
         #expect(model.report?.executed == 5)
-        let all = try await Self.transactions(store)
+        let all = try await StatementFixture.transactions(store, voided: false)
         #expect(!all.contains { $0.kind == .transferWallet })
         // 1850.00 + 75.00 in, 23.40 + 35.00 + 100.79 out.
-        #expect(Self.balance(store, cash) == 176_581)
+        #expect(StatementFixture.balance(store, cash) == 176_581)
     }
 
     @Test("Revolut and BBVA into their wallets and Conto Arancio left out: one transfer, a half whose other was left out imported, and both balances right")
     func accountsIntoWallets() async throws {
         let (store, cash, revolut, bbva) = try await Self.vault()
-        let model = try await Self.model(store, cash: cash, mappings: StatementMappingStore(defaults: try Self.defaults()))
+        let model = try await Self.model(store, cash: cash, mappings: try StatementFixture.mappings())
         model.setDestination(.wallet(revolut), ofAccount: "Revolut")
         model.setDestination(.wallet(bbva), ofAccount: "BBVA")
         model.setDestination(.leftOut, ofAccount: "Conto Arancio")
         await model.refreshPreview()
         #expect(model.previewProblem == nil)
 
-        let out = try Self.row(model, line: 3)
+        let out = try StatementFixture.row(model, line: 3)
         #expect(out.status == .new)
         #expect(out.kind == .transferWallet)
         #expect(out.walletId == revolut)
         #expect(out.pairedLine == 4)
-        let into = try Self.row(model, line: 4)
+        let into = try StatementFixture.row(model, line: 4)
         #expect(Self.code(into) == "transfer_pair")
         #expect(into.pairedLine == 3)
         #expect(into.walletId == bbva)
         #expect(StatementText.otherHalf(of: 3) != StatementText.skipped("transfer_pair"))
         for line: UInt32 in [6, 7] {
-            #expect(Self.code(try Self.row(model, line: line)) == "skipped_account", "line \(line)")
+            #expect(Self.code(try StatementFixture.row(model, line: line)) == "skipped_account", "line \(line)")
         }
         // Its other half's account left out, Revolut's 200.00 is an income.
-        let lonely = try Self.row(model, line: 8)
+        let lonely = try StatementFixture.row(model, line: 8)
         #expect(lonely.status == .new)
         #expect(lonely.kind == .income)
         #expect(lonely.pairedLine == nil)
@@ -221,16 +196,16 @@ struct StatementAccountsTests {
         await model.runImport()
 
         #expect(model.report?.executed == 6)
-        let transfers = try await Self.transactions(store).filter { $0.kind == .transferWallet }
+        let transfers = try await StatementFixture.transactions(store, voided: false).filter { $0.kind == .transferWallet }
         #expect(transfers.count == 1)
         #expect(transfers.first?.fromId == revolut)
         #expect(transfers.first?.toId == bbva)
         #expect(transfers.first?.amount == 50_000)
         // Revolut: 200.00 + 75.00 in, 23.40 + 500.00 + 100.79 out.
-        #expect(Self.balance(store, revolut) == -34_919)
+        #expect(StatementFixture.balance(store, revolut) == -34_919)
         // BBVA: 500.00 in, 35.00 out.
-        #expect(Self.balance(store, bbva) == 46_500)
-        #expect(Self.balance(store, cash) == 0)
+        #expect(StatementFixture.balance(store, bbva) == 46_500)
+        #expect(StatementFixture.balance(store, cash) == 0)
     }
 
     // MARK: - Words
