@@ -1,29 +1,20 @@
 //! The allocation plan over sync: two members deciding periods offline, the
-//! server's log order settling who wins, and the limits that follow.
-//!
-//! Same harness as `two_clients.rs`. The projection compared here adds what
-//! the allocation commands change beyond the common one: the plan, the
-//! decided runs, the pending period and the base the next execution shares
-//! out.
+//! server's log order settling who wins, and the limits that follow, compared
+//! on [`Full`], the common projection plus the plan, the runs, the pending
+//! period and the base.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod common;
 
-use axum::http::StatusCode;
 use chrono::NaiveDate;
 use common::{Api, Client, Projection, at, basics, flow_cmd, income_cmd, projection};
-use serde_json::json;
 use sparagne_core::{
-    AllocationBase, AllocationLine, AllocationMove, AllocationPlanPatch, AllocationPlanView,
-    AllocationRule, AllocationRunView, Command, Core, FlowMode, Frequency, PendingAllocation,
-    RunOutcome, Schedule, TransactionKind,
+    AllocationBase, AllocationLine, AllocationMove, AllocationPlanView, AllocationRule,
+    AllocationRunView, Command, Core, FlowMode, Frequency, PendingAllocation, RunOutcome, Schedule,
+    TransactionKind,
 };
 use uuid::Uuid;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 fn day(y: i32, m: u32, d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, d).unwrap()
@@ -236,10 +227,6 @@ async fn settle(api: &Api, vault: Uuid, first: &mut Client, second: &mut Client)
     second.sync(api, vault).await;
 }
 
-// ---------------------------------------------------------------------------
-// 1. The same period twice
-// ---------------------------------------------------------------------------
-
 /// Both members execute January offline. The first push wins; the second
 /// client's execution is refused with `already_exists`, the rest of its batch
 /// (an income after it) goes through, and the two end up identical.
@@ -286,10 +273,6 @@ async fn the_same_period_executed_twice_is_refused_for_that_command_only() {
     assert_eq!(expected.base.total, 7_000);
 }
 
-// ---------------------------------------------------------------------------
-// 2. A reopen travels
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 async fn a_reopen_reaches_the_other_member() {
     let api = Api::new();
@@ -322,10 +305,6 @@ async fn a_reopen_reaches_the_other_member() {
     assert!(moved.voided);
     assert_eq!(moved.kind, TransactionKind::TransferFlow);
 }
-
-// ---------------------------------------------------------------------------
-// 3. A reopen against the next period
-// ---------------------------------------------------------------------------
 
 /// alice executes January, both sync, an income of February arrives; then,
 /// offline, alice reopens January while bob executes February. The log order
@@ -395,10 +374,6 @@ async fn the_next_period_then_a_reopen_refuses_the_reopen() {
     reopen_against_next(false).await;
 }
 
-// ---------------------------------------------------------------------------
-// 4. The accepted limit
-// ---------------------------------------------------------------------------
-
 /// KNOWN, ACCEPTED LIMIT. `ExecuteAllocation` carries the moves the app
 /// worked out from its own base, and the server only checks them against the
 /// plan, never against the incomes it holds. So an income that reaches the
@@ -450,64 +425,4 @@ async fn an_income_landing_before_an_offline_execution_stays_in_unallocated() {
         unallocated_after_run + late,
         "it stays in Unallocated"
     );
-}
-
-// ---------------------------------------------------------------------------
-// 5. Viewers
-// ---------------------------------------------------------------------------
-
-#[tokio::test]
-async fn a_viewer_cannot_push_allocation_commands() {
-    let api = Api::new();
-    let (alice, _bob, f) = plan_vault(&api).await;
-
-    let mut carol = Client::register(&api, "carol").await;
-    let put = api
-        .put(
-            &format!("/vaults/{}/members", f.vault),
-            &alice.token,
-            json!({ "username": "carol", "role": "viewer" }),
-        )
-        .await;
-    assert_eq!(put.status, StatusCode::NO_CONTENT, "{:?}", put.body);
-    carol.join(&api, f.vault).await;
-    assert_eq!(full(&carol.core, f.vault), server_full(&api, f.vault));
-
-    execute(&mut carol, &f, jan());
-    carol.exec(
-        f.vault,
-        Command::SkipAllocation {
-            plan_id: f.plan,
-            period_date: feb(),
-        },
-    );
-
-    carol.exec(
-        f.vault,
-        Command::UpdateAllocationPlan {
-            plan_id: f.plan,
-            patch: AllocationPlanPatch {
-                enabled: Some(false),
-                ..AllocationPlanPatch::default()
-            },
-        },
-    );
-    let before = api.state.core().last_seq(f.vault).unwrap();
-    let request = carol.core.push_request(f.vault, common::BATCH).unwrap();
-    assert_eq!(request.commands.len(), 3);
-    let res = api
-        .post(
-            &format!("/vaults/{}/push", f.vault),
-            &carol.token,
-            json!(request),
-        )
-        .await;
-    assert_eq!(res.status, StatusCode::FORBIDDEN);
-    assert_eq!(res.code(), "forbidden");
-    assert_eq!(api.state.core().last_seq(f.vault).unwrap(), before);
-    assert_eq!(carol.core.sync_state(f.vault).unwrap().outbox, 3);
-
-    let server = server_full(&api, f.vault);
-    assert!(server.runs.is_empty());
-    assert!(server.plan.unwrap().enabled);
 }

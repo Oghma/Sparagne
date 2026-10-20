@@ -23,22 +23,7 @@ use sparagne_server::{
 };
 use uuid::Uuid;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const WRONG: &str = "not my password";
-
-/// `POST /auth/register` with any credentials, whatever the outcome.
-async fn register_as(api: &Api, username: &str, password: &str) -> Res {
-    api.call(
-        Method::POST,
-        "/auth/register",
-        None,
-        Some(json!({ "username": username, "password": password })),
-    )
-    .await
-}
 
 /// Where a request claims to come from: the TCP peer axum records when
 /// serving for real, and an `X-Forwarded-For` header.
@@ -99,10 +84,6 @@ fn assert_limited(res: &Res, max: u64) {
     assert!((1..=max).contains(&seconds), "{seconds}");
 }
 
-// ---------------------------------------------------------------------------
-// Usernames
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 async fn usernames_are_trimmed_and_lowercased() {
     let api = Api::new();
@@ -116,10 +97,10 @@ async fn usernames_are_trimmed_and_lowercased() {
 
     // Registering is normalized the same way: " Bob" is bob, and "BOB" is
     // the same account again.
-    let bob = register_as(&api, " Bob", PASSWORD).await;
+    let bob = api.register_as(" Bob", PASSWORD).await;
     assert_eq!(bob.status, StatusCode::CREATED, "{:?}", bob.body);
     assert_eq!(bob.json::<TokenResponse>().username, "bob");
-    let again = register_as(&api, "BOB", PASSWORD).await;
+    let again = api.register_as("BOB", PASSWORD).await;
     assert_eq!(again.status, StatusCode::CONFLICT);
     assert_eq!(again.code(), "already_exists");
 }
@@ -129,9 +110,10 @@ async fn an_unknown_user_gets_the_same_401_as_a_wrong_password() {
     let api = Api::new();
     api.register("alice").await;
 
-    let wrong = api.login("alice", "not my password").await;
-    let unknown = api.login("nobody", "not my password").await;
+    let wrong = api.login("alice", WRONG).await;
+    let unknown = api.login("nobody", WRONG).await;
     assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(wrong.code(), "unauthorized");
     assert_eq!(unknown.status, StatusCode::UNAUTHORIZED);
     assert_eq!(wrong.body, unknown.body);
 
@@ -158,14 +140,7 @@ async fn members_are_named_case_insensitively() {
     alice.sync(&api, vault).await;
     let uri = format!("/vaults/{vault}/members");
 
-    let set = api
-        .put(
-            &uri,
-            &alice.token,
-            json!({ "username": "Bob", "role": "viewer" }),
-        )
-        .await;
-    assert_eq!(set.status, StatusCode::NO_CONTENT, "{:?}", set.body);
+    api.add_member(&alice.token, vault, "Bob", "viewer").await;
     let members: Vec<MemberEntry> = api.get(&uri, &alice.token).await.json();
     assert_eq!(members.len(), 2);
     assert_eq!(members[1].username, "bob");
@@ -175,10 +150,6 @@ async fn members_are_named_case_insensitively() {
     let members: Vec<MemberEntry> = api.get(&uri, &alice.token).await.json();
     assert_eq!(members.len(), 1);
 }
-
-// ---------------------------------------------------------------------------
-// Changing the password
-// ---------------------------------------------------------------------------
 
 const NEW_PASSWORD: &str = "a much longer passphrase";
 
@@ -192,11 +163,7 @@ async fn changing_the_password_needs_the_current_one() {
     let token = api.register("alice").await;
 
     let res = api
-        .post(
-            "/auth/password",
-            &token,
-            change("not my password", NEW_PASSWORD),
-        )
+        .post("/auth/password", &token, change(WRONG, NEW_PASSWORD))
         .await;
     assert_eq!(res.status, StatusCode::UNAUTHORIZED);
     assert_eq!(res.code(), "unauthorized");
@@ -271,10 +238,6 @@ async fn changing_the_password_revokes_the_other_tokens_and_keeps_this_one() {
         StatusCode::OK
     );
 }
-
-// ---------------------------------------------------------------------------
-// Rate limits
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn failed_logins_lock_the_username_with_retry_after() {
@@ -406,12 +369,12 @@ async fn registration_is_limited_per_address() {
     let api = Api::new();
     // Ten attempts an hour, valid or not.
     for i in 0..9 {
-        let res = register_as(&api, &format!("user{i}"), PASSWORD).await;
+        let res = api.register_as(&format!("user{i}"), PASSWORD).await;
         assert_eq!(res.status, StatusCode::CREATED, "{:?}", res.body);
     }
-    let invalid = register_as(&api, "x", PASSWORD).await;
+    let invalid = api.register_as("x", PASSWORD).await;
     assert_eq!(invalid.status, StatusCode::BAD_REQUEST);
-    assert_limited(&register_as(&api, "user10", PASSWORD).await, 3_600);
+    assert_limited(&api.register_as("user10", PASSWORD).await, 3_600);
 
     let elsewhere = Origin::peer("192.0.2.20:50000");
     let body = json!({ "username": "user10", "password": PASSWORD });
@@ -419,24 +382,13 @@ async fn registration_is_limited_per_address() {
     assert_eq!(res.status, StatusCode::CREATED, "{:?}", res.body);
 }
 
-// ---------------------------------------------------------------------------
-// Leaving a vault
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 async fn an_editor_or_a_viewer_can_leave_a_vault() {
     let api = Api::new();
     let (alice, bob, vault, _) = common::basics(&api).await;
     let carol = api.register("carol").await;
     let uri = format!("/vaults/{vault}/members");
-    let set = api
-        .put(
-            &uri,
-            &alice.token,
-            json!({ "username": "carol", "role": "viewer" }),
-        )
-        .await;
-    assert_eq!(set.status, StatusCode::NO_CONTENT);
+    api.add_member(&alice.token, vault, "carol", "viewer").await;
 
     // bob (editor) leaves, carol (viewer) leaves by a differently spelled name.
     let left = api.delete(&format!("{uri}/bob"), &bob.token).await;
@@ -476,12 +428,7 @@ async fn a_member_cannot_remove_another_member() {
     let (alice, bob, vault, _) = common::basics(&api).await;
     api.register("carol").await;
     let uri = format!("/vaults/{vault}/members");
-    api.put(
-        &uri,
-        &alice.token,
-        json!({ "username": "carol", "role": "viewer" }),
-    )
-    .await;
+    api.add_member(&alice.token, vault, "carol", "viewer").await;
 
     for target in ["carol", "alice"] {
         let res = api.delete(&format!("{uri}/{target}"), &bob.token).await;
@@ -491,10 +438,6 @@ async fn a_member_cannot_remove_another_member() {
     let members: Vec<MemberEntry> = api.get(&uri, &alice.token).await.json();
     assert_eq!(members.len(), 3);
 }
-
-// ---------------------------------------------------------------------------
-// Admin CLI
-// ---------------------------------------------------------------------------
 
 /// A data directory of the test's own, removed afterwards.
 struct DataDir(PathBuf);
@@ -533,7 +476,7 @@ async fn the_cli_manages_the_accounts_of_a_running_server() {
         state,
     };
     assert_eq!(
-        register_as(&api, "alice", PASSWORD).await.status,
+        api.register_as("alice", PASSWORD).await.status,
         StatusCode::FORBIDDEN
     );
 
