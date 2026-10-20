@@ -166,7 +166,7 @@ final class LedgerEditor {
             stopEditing()
             return
         }
-        if at.row == nil, let store { blankNewLine(in: store) }
+        if at.row == nil, store != nil { blankNewLine() }
         place(at: nil)
     }
 
@@ -185,8 +185,7 @@ final class LedgerEditor {
     /// open belongs to rows no longer on screen. No cursor, a blank new line.
     func reset() {
         place(at: nil)
-        newLine = store.map { RowDraft.blank(in: $0) } ?? RowDraft()
-        holdsUntouchedCopy = false
+        blankNewLine()
     }
 
     /// ⌘D and the context menu: `row` copied into the new line, the caret in
@@ -381,8 +380,8 @@ final class LedgerEditor {
         return next
     }
 
-    private func blankNewLine(in store: AppStore) {
-        newLine = RowDraft.blank(in: store)
+    private func blankNewLine() {
+        newLine = store.map { RowDraft.blank(in: $0) } ?? RowDraft()
         holdsUntouchedCopy = false
     }
 

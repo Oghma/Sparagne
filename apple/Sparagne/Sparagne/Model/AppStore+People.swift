@@ -44,16 +44,10 @@ extension AppStore {
         if let exact = assignablePeople.first(where: { $0 == trimmed }) { return exact }
         let people = Self.folded(assignablePeople)
         if let same = people.first(where: { $0.lowercased() == needle }) { return same }
-        for matches in [
-            people.filter { $0.lowercased().hasPrefix(needle) },
-            people.filter { $0.lowercased().contains(needle) },
-        ] {
-            if matches.count == 1 { return matches[0] }
-            if matches.count > 1 {
-                throw DomainError.InvalidCommand(
-                    message: String(localized: "More than one person matches \u{201C}\(trimmed)\u{201D}")
-                )
-            }
+        if let match = try Self.uniqueMatch(needle, in: people, by: { $0.lowercased() }, ambiguous: {
+            DomainError.InvalidCommand(message: String(localized: "More than one person matches \u{201C}\(trimmed)\u{201D}"))
+        }) {
+            return match
         }
         // The headline the quick-add line gives the same name, and who may
         // be named instead.

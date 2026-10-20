@@ -558,8 +558,8 @@ struct AppStoreTests {
         )
         #expect(store.presentedError == nil)
         #expect(store.fixedCosts?.monthly == 50_000)
-        #expect(store.dueRecurringCount > 0)
-        #expect(store.summaryTodo.first?.kind == .dueRecurring(count: store.dueRecurringCount))
+        #expect(!store.duePeriods.isEmpty)
+        #expect(store.summaryTodo.first?.kind == .dueRecurring(count: store.duePeriods.count))
         #expect(store.summaryTodo.first?.tab == .recurring)
 
         // A click on that chip opens the Ricorrenze tab, nothing else moves.
@@ -820,7 +820,7 @@ struct AppStoreTests {
         #expect(store.summaryTodo.map(\.kind) == [.uncategorized(count: 1)])
         // The plan's period and the recurring ones are still there to see.
         #expect(store.pendingAllocation != nil)
-        #expect(store.dueRecurringCount > 0)
+        #expect(!store.duePeriods.isEmpty)
     }
 }
 

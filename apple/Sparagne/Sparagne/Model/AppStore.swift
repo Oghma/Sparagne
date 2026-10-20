@@ -1528,26 +1528,33 @@ final class AppStore {
     func resolveWallet(named text: String) throws -> Uuid? {
         let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return nil }
-        let candidates = wallets.map { (id: $0.id, name: $0.name.lowercased()) }
-        if let exact = candidates.first(where: { $0.name == needle }) { return exact.id }
-        for matches in [
-            candidates.filter { $0.name.hasPrefix(needle) },
-            candidates.filter { $0.name.contains(needle) },
-        ] {
-            if matches.count == 1 { return matches[0].id }
-            if matches.count > 1 {
-                throw DomainError.InvalidCommand(
-                    message: String(localized: "More than one wallet matches \u{201C}\(text)\u{201D}")
-                )
-            }
+        if let exact = wallets.first(where: { $0.name.lowercased() == needle }) { return exact.id }
+        let match = try Self.uniqueMatch(needle, in: wallets, by: { $0.name.lowercased() }) {
+            DomainError.InvalidCommand(message: String(localized: "More than one wallet matches \u{201C}\(text)\u{201D}"))
         }
-        throw DomainError.NotFound(message: String(localized: "No wallet named \u{201C}\(text)\u{201D}"))
+        guard let match else {
+            throw DomainError.NotFound(message: String(localized: "No wallet named \u{201C}\(text)\u{201D}"))
+        }
+        return match.id
     }
 
-    /// Surfaces a validation failure from the grid through the same alert the
-    /// core's errors use, so a bad cell reads like a refused command.
-    func report(_ error: Error) {
-        present(error)
+    /// The one candidate whose `name` starts with `needle`, else the one
+    /// that contains it; `nil` when none does, `ambiguous()` thrown when
+    /// several tie. The quick-add resolver's precedence past an exact match.
+    static func uniqueMatch<Candidate>(
+        _ needle: String,
+        in candidates: [Candidate],
+        by name: (Candidate) -> String,
+        ambiguous: () -> Error
+    ) throws -> Candidate? {
+        for matches in [
+            candidates.filter { name($0).hasPrefix(needle) },
+            candidates.filter { name($0).contains(needle) },
+        ] {
+            if matches.count == 1 { return matches[0] }
+            if matches.count > 1 { throw ambiguous() }
+        }
+        return nil
     }
 
     // MARK: - Quick add
@@ -1795,11 +1802,13 @@ final class AppStore {
         do {
             try await work()
         } catch {
-            present(error)
+            report(error)
         }
     }
 
-    private func present(_ error: Error) {
+    /// Puts `error` on the alert: what the core refused, and what a cell or
+    /// a sheet found wrong itself, so a bad cell reads like a refused command.
+    func report(_ error: Error) {
         switch error {
         case let error as AppError: presentedError = error
         case let error as DomainError: presentedError = AppError(error)

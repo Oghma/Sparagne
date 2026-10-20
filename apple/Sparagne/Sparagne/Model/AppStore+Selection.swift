@@ -60,16 +60,11 @@ extension AppStore {
     /// One undo step puts every row back where it was. The rows stay selected,
     /// so the next action can follow on the same ones.
     func setSelectionCategory(_ name: String) async {
-        guard let vault = currentVault else { return }
         let category = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let forward = bulkTargets.map { RowPatch(id: $0.id, patch: TransactionPatch(category: category)) }
-        guard !forward.isEmpty else { return }
-        // Read before the write: undo puts back what is stored now.
-        let inverse = forward.compactMap { change in
-            storedInverse(of: change.patch, for: change.id).map { RowPatch(id: change.id, patch: $0) }
-        }
-        guard await apply(Self.updates(forward), in: vault.id) else { return }
-        recordPatches(forward, inverse: inverse, vaultId: vault.id, name: String(localized: "Category Change"))
+        await patchTargets(
+            bulkTargets.map { RowPatch(id: $0.id, patch: TransactionPatch(category: category)) },
+            step: String(localized: "Category Change")
+        )
     }
 
     /// "Set Envelope…": every target moved to `flowId` in one batch, all or
@@ -81,17 +76,21 @@ extension AppStore {
     /// One undo step puts every row back on its own envelope. The rows stay
     /// selected, so the next action can follow on the same ones.
     func setSelectionEnvelope(_ flowId: Uuid) async {
-        guard let vault = currentVault else { return }
-        let forward = bulkTargets
-            .filter { $0.flowId != flowId }
-            .map { RowPatch(id: $0.id, patch: TransactionPatch(flowId: flowId)) }
-        guard !forward.isEmpty else { return }
+        await patchTargets(
+            bulkTargets.filter { $0.flowId != flowId }.map { RowPatch(id: $0.id, patch: TransactionPatch(flowId: flowId)) },
+            step: String(localized: "Envelope Change")
+        )
+    }
+
+    /// `forward` as one batch and one undo step named `step`.
+    private func patchTargets(_ forward: [RowPatch], step: String) async {
+        guard let vault = currentVault, !forward.isEmpty else { return }
         // Read before the write: undo puts back what is stored now.
         let inverse = forward.compactMap { change in
             storedInverse(of: change.patch, for: change.id).map { RowPatch(id: change.id, patch: $0) }
         }
         guard await apply(Self.updates(forward), in: vault.id) else { return }
-        recordPatches(forward, inverse: inverse, vaultId: vault.id, name: String(localized: "Envelope Change"))
+        recordPatches(forward, inverse: inverse, vaultId: vault.id, name: step)
     }
 
     /// The envelope every target is on, when they all share one: the list of
