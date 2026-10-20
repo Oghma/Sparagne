@@ -14,8 +14,7 @@ use thiserror::Error;
 /// Result of anything that can answer with an [`ErrorBody`].
 pub type ApiResult<T> = Result<T, ApiError>;
 
-/// One request-level failure: an HTTP status plus the stable code clients
-/// match on.
+/// A request-level failure: an HTTP status and the stable code clients match on.
 #[derive(Clone, Debug, Error)]
 #[error("{code}: {message}")]
 pub struct ApiError {

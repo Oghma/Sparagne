@@ -1,11 +1,10 @@
-//! The address a request comes from: the key of the per-client limits in
-//! [`crate::ratelimit`].
-//!
-//! Without a proxy it is the TCP peer, which `main.rs` asks axum to record as
-//! [`ConnectInfo`]. Behind Caddy the peer is always the proxy, so with
-//! `SPARAGNE_TRUST_PROXY=true` the rightmost `X-Forwarded-For` entry is used
-//! instead: the one the proxy appended itself, which a client cannot forge.
-//! Without that setting the header is ignored, since anyone can send it.
+//! The address a request comes from, the key of the per-client limits in
+//! [`crate::ratelimit`]. Without a proxy it is the TCP peer, which `main.rs`
+//! asks axum to record as [`ConnectInfo`]. Behind Caddy the peer is always the
+//! proxy, so with `SPARAGNE_TRUST_PROXY=true` the rightmost `X-Forwarded-For`
+//! entry is used instead: the one the proxy appended itself, which a client
+//! cannot forge. Without that setting the header is ignored, since anyone can
+//! send it.
 
 use std::{
     convert::Infallible,

@@ -11,7 +11,6 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use crate::error::ApiError;
 
-/// JSON body.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Json<T>(pub T);
 
@@ -36,7 +35,6 @@ impl<T: Serialize> IntoResponse for Json<T> {
     }
 }
 
-/// Path parameters.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Path<T>(pub T);
 
@@ -55,7 +53,6 @@ where
     }
 }
 
-/// Query string.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Query<T>(pub T);
 

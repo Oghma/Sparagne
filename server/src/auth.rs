@@ -1,9 +1,7 @@
-//! Accounts, password hashing and bearer tokens.
-//!
-//! Passwords are argon2id PHC strings; a token is 32 random bytes shown once
-//! as base64url and stored as its sha256 digest. Neither is ever logged.
-//! Every password check and every registration first goes through
-//! [`crate::ratelimit`].
+//! Accounts, password hashing and bearer tokens. Passwords are argon2id PHC
+//! strings; a token is 32 random bytes shown once as base64url and stored as
+//! its sha256 digest. Neither is ever logged. Every password check and every
+//! registration first goes through [`crate::ratelimit`].
 
 use std::{net::IpAddr, time::Instant};
 

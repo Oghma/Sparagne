@@ -25,8 +25,7 @@ use uuid::Uuid;
 
 const WRONG: &str = "not my password";
 
-/// Where a request claims to come from: the TCP peer axum records when
-/// serving for real, and an `X-Forwarded-For` header.
+/// Where a request claims to come from: a TCP peer and an `X-Forwarded-For`.
 #[derive(Clone, Copy, Default)]
 struct Origin {
     peer: Option<&'static str>,

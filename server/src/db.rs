@@ -1,7 +1,6 @@
-//! `server.sqlite`: accounts, tokens and vault memberships.
-//!
-//! The vault log and its projection live in the other database, opened as a
-//! [`sparagne_core::Core`]; this one only knows who may touch them.
+//! `server.sqlite`: accounts, tokens and vault memberships. The vault log and
+//! its projection live in the other database, a [`sparagne_core::Core`]; this
+//! one only knows who may touch them.
 
 use std::{path::Path, time::Duration};
 
@@ -111,7 +110,6 @@ impl ServerDb {
         })
     }
 
-    /// The account and its password hash, by username.
     pub fn user_with_hash(&self, username: &str) -> ApiResult<Option<(User, String)>> {
         let row = self
             .conn
@@ -124,7 +122,6 @@ impl ServerDb {
         Ok(row.map(|(id, username, hash)| (User { id, username }, hash)))
     }
 
-    /// The account id of a username, when it exists.
     pub fn user_by_username(&self, username: &str) -> ApiResult<Option<User>> {
         Ok(self.user_with_hash(username)?.map(|(user, _)| user))
     }
@@ -244,7 +241,6 @@ impl ServerDb {
         Ok(())
     }
 
-    /// Every vault an account is a member of, with its role.
     pub fn memberships_of_user(&self, user_id: Uuid) -> ApiResult<Vec<(Uuid, MemberRole)>> {
         self.rows(
             "SELECT vault_id, role FROM vault_memberships WHERE user_id = ?1",

@@ -1,10 +1,8 @@
 //! Shared state: the two databases, the configuration, the hasher and the
-//! rate limiter.
-//!
-//! SQLite has a single writer, so both handles sit behind a `Mutex` and every
-//! piece of work that touches them runs on a blocking task through
-//! [`AppState::run`]. When both locks are needed the core one is always taken
-//! first.
+//! rate limiter. SQLite has a single writer, so both handles sit behind a
+//! `Mutex` and every piece of work that touches them runs on a blocking task
+//! through [`AppState::run`]. When both locks are needed the core one is
+//! always taken first.
 
 use std::{
     path::Path,

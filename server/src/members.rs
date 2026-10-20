@@ -1,7 +1,6 @@
-//! Membership routes: who may read and write a vault.
-//!
-//! The owner's row is written when the vault is created and can never be
-//! changed or removed. Everyone else can leave on their own.
+//! Membership routes: who may read and write a vault. The owner's row is
+//! written when the vault is created and can never be changed or removed;
+//! everyone else can leave on their own.
 
 use axum::{extract::State, http::StatusCode};
 use chrono::Utc;
