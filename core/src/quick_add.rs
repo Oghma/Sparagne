@@ -1,23 +1,14 @@
-//! Quick-add: the one-line grammar for entering a transaction.
-//!
-//! Two stages: [`parse`] turns a line of text into a [`QuickAdd`] with no
-//! database access, then [`Core::resolve_quick_add`] resolves the wallet,
-//! flow and person names it carries against a vault's active entities and the
-//! people the app offers, and produces a [`ResolvedQuickAdd`]: the
-//! [`Command`] ready for [`crate::Core::execute`] and the ids its names
-//! resolved to.
-//!
-//! Grammar:
+//! Quick-add, the one-line grammar for entering a transaction, in two stages:
+//! [`parse`] turns a line into a [`QuickAdd`] with no database access, then
+//! [`Core::resolve_quick_add`] resolves the wallet, flow and person names it
+//! carries and produces a [`ResolvedQuickAdd`]. `!persona` names who the row
+//! is for when that is not the author (see `person_marker`).
 //!
 //! ```text
 //! [+|-|r] importo  [nota…]  [#categoria]  [@wallet]  [>busta]  [!persona]  [data]
 //! tw> importo @da @a [nota] [data]        transfer between wallets
 //! tf> importo >da >a [nota] [data]        transfer between flows
 //! ```
-//!
-//! `!persona` names who the row is for when that is not the author; a `!`
-//! not followed by a letter or a digit (`!`, `!!!`) is note text, so an
-//! exclamation in a note still reads as one.
 
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, NaiveDateTime, TimeZone};
 use thiserror::Error;
@@ -85,7 +76,6 @@ impl QuickAddError {
         }
     }
 
-    /// The line has nothing on it.
     #[must_use]
     pub fn empty_input() -> Self {
         Self::EmptyInput {
@@ -93,7 +83,6 @@ impl QuickAddError {
         }
     }
 
-    /// The amount is missing or is not the first token.
     #[must_use]
     pub fn missing_amount() -> Self {
         Self::MissingAmount {
@@ -108,7 +97,6 @@ impl QuickAddError {
         }
     }
 
-    /// The same marker appears twice on one line.
     #[must_use]
     pub fn duplicate_marker(marker: char) -> Self {
         Self::DuplicateMarker {
@@ -309,29 +297,17 @@ pub fn parse(input: &str, currency: Currency) -> Result<QuickAdd, QuickAddError>
     let mut note_tokens: Vec<&str> = Vec::new();
 
     for token in &tokens[note_start..] {
-        if let Some(rest) = token.strip_prefix('#') {
-            if rest.is_empty() {
+        if let Some((marker, slot, name)) =
+            [('#', &mut category), ('@', &mut wallet), ('>', &mut flow)]
+                .into_iter()
+                .find_map(|(marker, slot)| Some((marker, slot, token.strip_prefix(marker)?)))
+        {
+            if name.is_empty() {
                 note_tokens.push(token);
-            } else if category.is_some() {
-                return Err(QuickAddError::duplicate_marker('#'));
+            } else if slot.is_some() {
+                return Err(QuickAddError::duplicate_marker(marker));
             } else {
-                category = Some(rest.to_string());
-            }
-        } else if let Some(rest) = token.strip_prefix('@') {
-            if rest.is_empty() {
-                note_tokens.push(token);
-            } else if wallet.is_some() {
-                return Err(QuickAddError::duplicate_marker('@'));
-            } else {
-                wallet = Some(rest.to_string());
-            }
-        } else if let Some(rest) = token.strip_prefix('>') {
-            if rest.is_empty() {
-                note_tokens.push(token);
-            } else if flow.is_some() {
-                return Err(QuickAddError::duplicate_marker('>'));
-            } else {
-                flow = Some(rest.to_string());
+                *slot = Some(name.to_string());
             }
         } else if let Some(name) = person_marker(token) {
             if person.is_some() {
@@ -691,50 +667,50 @@ impl Core {
                 to,
                 note,
                 date,
-            } => {
-                let from_wallet_id = resolve_name(&wallets, from, "wallet")?;
-                let to_wallet_id = resolve_name(&wallets, to, "wallet")?;
-                if from_wallet_id == to_wallet_id {
-                    return Err(QuickAddError::same_target());
-                }
-                Ok(ResolvedQuickAdd {
-                    command: Command::TransferWallet {
-                        amount: *amount,
-                        from_wallet_id,
-                        to_wallet_id,
-                        note: note.clone(),
-                        occurred_at: resolve_occurred_at(date, now)?,
-                    },
-                    wallet_id: None,
-                    flow_id: None,
-                    from_id: Some(from_wallet_id),
-                    to_id: Some(to_wallet_id),
-                })
             }
-            QuickAdd::TransferFlow {
+            | QuickAdd::TransferFlow {
                 amount,
                 from,
                 to,
                 note,
                 date,
             } => {
-                let from_flow_id = resolve_name(&flows, from, "flow")?;
-                let to_flow_id = resolve_name(&flows, to, "flow")?;
-                if from_flow_id == to_flow_id {
+                let between_wallets = matches!(parsed, QuickAdd::TransferWallet { .. });
+                let (targets, kind) = if between_wallets {
+                    (&wallets, "wallet")
+                } else {
+                    (&flows, "flow")
+                };
+                let from_id = resolve_name(targets, from, kind)?;
+                let to_id = resolve_name(targets, to, kind)?;
+                if from_id == to_id {
                     return Err(QuickAddError::same_target());
                 }
+                let (amount, note) = (*amount, note.clone());
+                let occurred_at = resolve_occurred_at(date, now)?;
+                let command = if between_wallets {
+                    Command::TransferWallet {
+                        amount,
+                        from_wallet_id: from_id,
+                        to_wallet_id: to_id,
+                        note,
+                        occurred_at,
+                    }
+                } else {
+                    Command::TransferFlow {
+                        amount,
+                        from_flow_id: from_id,
+                        to_flow_id: to_id,
+                        note,
+                        occurred_at,
+                    }
+                };
                 Ok(ResolvedQuickAdd {
-                    command: Command::TransferFlow {
-                        amount: *amount,
-                        from_flow_id,
-                        to_flow_id,
-                        note: note.clone(),
-                        occurred_at: resolve_occurred_at(date, now)?,
-                    },
+                    command,
                     wallet_id: None,
                     flow_id: None,
-                    from_id: Some(from_flow_id),
-                    to_id: Some(to_flow_id),
+                    from_id: Some(from_id),
+                    to_id: Some(to_id),
                 })
             }
         }
@@ -852,113 +828,36 @@ mod tests {
         parse(input, eur()).expect_err(&format!("expected Err for {input:?}"))
     }
 
-    // -- sign forms -----------------------------------------------------
-
     #[test]
-    fn no_sign_is_expense() {
-        match parse_ok("12.50 bar") {
-            QuickAdd::Entry {
-                kind, amount, note, ..
-            } => {
-                assert_eq!(kind, TransactionKind::Expense);
-                assert_eq!(amount, 1250);
-                assert_eq!(note.as_deref(), Some("bar"));
+    fn sign_forms() {
+        for (line, sign, minor, words) in [
+            ("12.50 bar", TransactionKind::Expense, 1250, "bar"),
+            ("-12.50 bar", TransactionKind::Expense, 1250, "bar"),
+            ("- 12.50 bar", TransactionKind::Expense, 1250, "bar"),
+            (
+                "+1000 stipendio",
+                TransactionKind::Income,
+                100_000,
+                "stipendio",
+            ),
+            ("+ 5 gift", TransactionKind::Income, 500, "gift"),
+            ("r3,20 rimborso", TransactionKind::Refund, 320, "rimborso"),
+            ("r 3.20 rimborso", TransactionKind::Refund, 320, "rimborso"),
+            ("R 3.20 rimborso", TransactionKind::Refund, 320, "rimborso"),
+            ("R3.20 rimborso", TransactionKind::Refund, 320, "rimborso"),
+        ] {
+            match parse_ok(line) {
+                QuickAdd::Entry {
+                    kind, amount, note, ..
+                } => {
+                    assert_eq!(kind, sign, "{line}");
+                    assert_eq!(amount, minor, "{line}");
+                    assert_eq!(note.as_deref(), Some(words), "{line}");
+                }
+                other => panic!("unexpected {other:?}"),
             }
-            other => panic!("unexpected {other:?}"),
         }
     }
-
-    #[test]
-    fn glued_minus_is_expense() {
-        match parse_ok("-12.50 bar") {
-            QuickAdd::Entry { kind, amount, .. } => {
-                assert_eq!(kind, TransactionKind::Expense);
-                assert_eq!(amount, 1250);
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn separate_minus_is_expense() {
-        match parse_ok("- 12.50 bar") {
-            QuickAdd::Entry { kind, amount, .. } => {
-                assert_eq!(kind, TransactionKind::Expense);
-                assert_eq!(amount, 1250);
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn glued_plus_is_income() {
-        match parse_ok("+1000 stipendio") {
-            QuickAdd::Entry { kind, amount, .. } => {
-                assert_eq!(kind, TransactionKind::Income);
-                assert_eq!(amount, 100_000);
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn separate_plus_is_income() {
-        match parse_ok("+ 5 gift") {
-            QuickAdd::Entry { kind, amount, .. } => {
-                assert_eq!(kind, TransactionKind::Income);
-                assert_eq!(amount, 500);
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn glued_refund_with_comma_decimal() {
-        match parse_ok("r3,20 rimborso") {
-            QuickAdd::Entry {
-                kind, amount, note, ..
-            } => {
-                assert_eq!(kind, TransactionKind::Refund);
-                assert_eq!(amount, 320);
-                assert_eq!(note.as_deref(), Some("rimborso"));
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn separate_refund() {
-        match parse_ok("r 3.20 rimborso") {
-            QuickAdd::Entry { kind, amount, .. } => {
-                assert_eq!(kind, TransactionKind::Refund);
-                assert_eq!(amount, 320);
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn uppercase_refund_forms() {
-        match parse_ok("R 3.20 rimborso") {
-            QuickAdd::Entry { kind, .. } => assert_eq!(kind, TransactionKind::Refund),
-            other => panic!("unexpected {other:?}"),
-        }
-        match parse_ok("R3.20 rimborso") {
-            QuickAdd::Entry { kind, .. } => assert_eq!(kind, TransactionKind::Refund),
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn word_starting_with_r_that_is_not_a_valid_amount_is_an_error() {
-        // "rent" glued-refund-parses as amount "ent", which is not a number.
-        assert!(matches!(
-            parse_err("rent 50"),
-            QuickAddError::InvalidAmount { .. }
-        ));
-    }
-
-    // -- markers ----------------------------------------------------------
 
     #[test]
     fn markers_in_any_order_and_note_collected() {
@@ -1002,27 +901,14 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_category_marker_is_an_error() {
-        assert_eq!(
-            parse_err("15 pizza #food #snack"),
-            QuickAddError::duplicate_marker('#')
-        );
-    }
-
-    #[test]
-    fn duplicate_wallet_marker_is_an_error() {
-        assert_eq!(
-            parse_err("15 pizza @cash @card"),
-            QuickAddError::duplicate_marker('@')
-        );
-    }
-
-    #[test]
-    fn duplicate_flow_marker_is_an_error() {
-        assert_eq!(
-            parse_err("15 pizza >ufficio >casa"),
-            QuickAddError::duplicate_marker('>')
-        );
+    fn duplicate_markers_are_errors() {
+        for (line, marker) in [
+            ("15 pizza #food #snack", '#'),
+            ("15 pizza @cash @card", '@'),
+            ("15 pizza >ufficio >casa", '>'),
+        ] {
+            assert_eq!(parse_err(line), QuickAddError::duplicate_marker(marker));
+        }
     }
 
     #[test]
@@ -1074,8 +960,6 @@ mod tests {
         ));
     }
 
-    // -- transfers ----------------------------------------------------------
-
     #[test]
     fn transfer_wallet_basic() {
         match parse_ok("tw>50 @bank @cash spostamento") {
@@ -1123,43 +1007,25 @@ mod tests {
     }
 
     #[test]
-    fn transfer_wallet_requires_two_targets() {
-        assert_eq!(
-            parse_err("tw>50 @bank"),
-            QuickAddError::missing_transfer_target('@')
-        );
-    }
-
-    #[test]
-    fn transfer_flow_requires_two_targets() {
-        assert_eq!(
-            parse_err("tf>50 >food"),
-            QuickAddError::missing_transfer_target('>')
-        );
-    }
-
-    #[test]
-    fn transfer_rejects_category_marker() {
-        assert_eq!(
-            parse_err("tw>50 @bank @cash #food"),
-            QuickAddError::marker_not_allowed('#')
-        );
-    }
-
-    #[test]
-    fn transfer_wallet_rejects_flow_marker() {
-        assert_eq!(
-            parse_err("tw>50 @bank @cash >food"),
-            QuickAddError::marker_not_allowed('>')
-        );
-    }
-
-    #[test]
-    fn transfer_flow_rejects_wallet_marker() {
-        assert_eq!(
-            parse_err("tf>50 >food >savings @cash"),
-            QuickAddError::marker_not_allowed('@')
-        );
+    fn transfer_errors() {
+        for (line, error) in [
+            ("tw>50 @bank", QuickAddError::missing_transfer_target('@')),
+            ("tf>50 >food", QuickAddError::missing_transfer_target('>')),
+            (
+                "tw>50 @bank @cash #food",
+                QuickAddError::marker_not_allowed('#'),
+            ),
+            (
+                "tw>50 @bank @cash >food",
+                QuickAddError::marker_not_allowed('>'),
+            ),
+            (
+                "tf>50 >food >savings @cash",
+                QuickAddError::marker_not_allowed('@'),
+            ),
+        ] {
+            assert_eq!(parse_err(line), error, "{line}");
+        }
     }
 
     #[test]
@@ -1180,8 +1046,6 @@ mod tests {
         }
     }
 
-    // -- date tokens ----------------------------------------------------------
-
     #[test]
     fn date_today_and_yesterday_it_and_en() {
         for token in ["oggi", "today", "OGGI"] {
@@ -1199,67 +1063,32 @@ mod tests {
     }
 
     #[test]
-    fn date_days_ago() {
-        match parse_ok("10 lunch -3d") {
-            QuickAdd::Entry { date, .. } => assert_eq!(date, Some(DateSpec::DaysAgo(3))),
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn date_days_ago_zero_is_invalid() {
-        assert!(matches!(
-            parse_err("10 lunch -0d"),
-            QuickAddError::InvalidDate { .. }
-        ));
-    }
-
-    #[test]
-    fn date_day_month_current_year() {
-        match parse_ok("10 lunch 12/03") {
-            QuickAdd::Entry { date, .. } => {
-                assert_eq!(date, Some(DateSpec::DayMonth { day: 12, month: 3 }));
+    fn date_forms() {
+        let march_12 = DateSpec::Date(NaiveDate::from_ymd_opt(2024, 3, 12).unwrap());
+        for (token, spec) in [
+            ("-3d", DateSpec::DaysAgo(3)),
+            ("12/03", DateSpec::DayMonth { day: 12, month: 3 }),
+            ("12/03/2024", march_12),
+            ("2024-03-12", march_12),
+        ] {
+            match parse_ok(&format!("10 lunch {token}")) {
+                QuickAdd::Entry { date, .. } => assert_eq!(date, Some(spec), "{token}"),
+                other => panic!("unexpected {other:?}"),
             }
-            other => panic!("unexpected {other:?}"),
         }
     }
 
     #[test]
-    fn date_full_slash_form() {
-        match parse_ok("10 lunch 12/03/2024") {
-            QuickAdd::Entry { date, .. } => {
-                assert_eq!(
-                    date,
-                    Some(DateSpec::Date(
-                        NaiveDate::from_ymd_opt(2024, 3, 12).unwrap()
-                    ))
-                );
-            }
-            other => panic!("unexpected {other:?}"),
+    fn invalid_dates_are_errors() {
+        for token in ["-0d", "31/02/2024"] {
+            assert!(
+                matches!(
+                    parse_err(&format!("10 lunch {token}")),
+                    QuickAddError::InvalidDate { .. }
+                ),
+                "{token}"
+            );
         }
-    }
-
-    #[test]
-    fn date_iso_form() {
-        match parse_ok("10 lunch 2024-03-12") {
-            QuickAdd::Entry { date, .. } => {
-                assert_eq!(
-                    date,
-                    Some(DateSpec::Date(
-                        NaiveDate::from_ymd_opt(2024, 3, 12).unwrap()
-                    ))
-                );
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn date_invalid_calendar_date_is_an_error() {
-        assert!(matches!(
-            parse_err("10 lunch 31/02/2024"),
-            QuickAddError::InvalidDate { .. }
-        ));
     }
 
     #[test]
@@ -1281,8 +1110,6 @@ mod tests {
         }
     }
 
-    // -- note formatting --------------------------------------------------
-
     #[test]
     fn note_collapses_extra_whitespace() {
         match parse_ok("10   lunch    with   friends") {
@@ -1301,16 +1128,6 @@ mod tests {
         }
     }
 
-    // -- edge cases ---------------------------------------------------------
-
-    #[test]
-    fn too_many_decimals_is_invalid() {
-        assert!(matches!(
-            parse_err("12.345 x"),
-            QuickAddError::InvalidAmount { .. }
-        ));
-    }
-
     #[test]
     fn empty_input_is_an_error() {
         assert_eq!(parse_err(""), QuickAddError::empty_input());
@@ -1325,18 +1142,13 @@ mod tests {
     }
 
     #[test]
-    fn negative_zero_is_invalid() {
-        assert!(matches!(
-            parse_err("-0.00 x"),
-            QuickAddError::InvalidAmount { .. }
-        ));
-    }
-
-    #[test]
-    fn huge_amount_is_invalid() {
-        assert!(matches!(
-            parse_err("99999999999999999999 x"),
-            QuickAddError::InvalidAmount { .. }
-        ));
+    fn invalid_amounts_are_errors() {
+        // "rent" glued-refund-parses as amount "ent", which is not a number.
+        for line in ["rent 50", "12.345 x", "-0.00 x", "99999999999999999999 x"] {
+            assert!(
+                matches!(parse_err(line), QuickAddError::InvalidAmount { .. }),
+                "{line}"
+            );
+        }
     }
 }
