@@ -292,3 +292,16 @@ const fn hex_digit(nibble: u8) -> char {
         _ => (b'a' + nibble - 10) as char,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_token_is_stored_as_its_lowercase_hex_sha256() {
+        assert_eq!(
+            digest("rQ7-xY_0"),
+            "da6347c9cf335c6dc4426118fb3fa8e598570818861710c0edaf78c3b0cd3fbb"
+        );
+    }
+}
