@@ -200,7 +200,7 @@ struct RowDraft {
     // MARK: - One cell at a time
 
     /// What `field` says when it is typed into from what it holds: the
-    /// bare day number for DATA, as `DayCell` starts from, and nothing for
+    /// bare day number for DATA, as the date cell starts from, and nothing for
     /// ENVELOPE, whose text only narrows its list (the pick is `flowId`).
     func text(of field: RowField, calendar: Calendar = .current) -> String {
         switch field {

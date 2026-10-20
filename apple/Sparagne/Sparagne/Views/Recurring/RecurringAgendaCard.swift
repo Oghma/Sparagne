@@ -43,7 +43,7 @@ struct RecurringAgendaCard: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func tile(_ period: UpcomingPeriod) -> some View {
+    private func tile(_ period: DuePeriod) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(RecurringDayText.weekday(period.date))
                 .font(Face.footnote)

@@ -50,12 +50,7 @@ enum SummaryText {
     /// is "Other".
     static func categoryName(_ name: String, isSystem: Bool, isOther: Bool = false) -> String {
         if isOther { return String(localized: "Other") }
-        guard isSystem else { return name }
-        switch name.lowercased() {
-        case "uncategorized": return String(localized: "Uncategorized")
-        case "opening": return String(localized: "Opening")
-        default: return name
-        }
+        return TransactionRow.categoryLabel(name, isSystem: isSystem)
     }
 
     // MARK: - Things to do

@@ -721,12 +721,12 @@ struct PendingRowView: View {
                     .layoutPriority(1)
                     Spacer(minLength: 6)
                     if !store.isReadOnly {
-                        Button(String(localized: "Skip")) { run { await store.skipRecurring(template.id, periodDate: period.date) } }
+                        Button(String(localized: "Skip")) { $working.run { await store.skipRecurring(template.id, periodDate: period.date) } }
                             .buttonStyle(RowButtonStyle(tone: .ghost))
                         // Off while the owner is someone who left the vault:
                         // the server would refuse the row. The row's style
                         // does not dim by itself, as the chrome's does.
-                        Button(String(localized: "Record")) { run { await store.executeRecurring(template.id, periodDate: period.date) } }
+                        Button(String(localized: "Record")) { $working.run { await store.executeRecurring(template.id, periodDate: period.date) } }
                             .buttonStyle(RowButtonStyle(tone: .accent))
                             .disabled(ownerLeft)
                             .opacity(ownerLeft ? 0.4 : 1)
@@ -760,9 +760,9 @@ struct PendingRowView: View {
         .accessibilityActions {
             if !store.isReadOnly, !working {
                 if !ownerLeft {
-                    Button(String(localized: "Record")) { run { await store.executeRecurring(template.id, periodDate: period.date) } }
+                    Button(String(localized: "Record")) { $working.run { await store.executeRecurring(template.id, periodDate: period.date) } }
                 }
-                Button(String(localized: "Skip")) { run { await store.skipRecurring(template.id, periodDate: period.date) } }
+                Button(String(localized: "Skip")) { $working.run { await store.skipRecurring(template.id, periodDate: period.date) } }
             }
         }
     }
@@ -783,14 +783,6 @@ struct PendingRowView: View {
     private var category: String {
         guard let category = template.category, !category.isEmpty else { return String(localized: "Uncategorized") }
         return category
-    }
-
-    private func run(_ work: @escaping @MainActor () async -> Void) {
-        working = true
-        Task {
-            await work()
-            working = false
-        }
     }
 }
 

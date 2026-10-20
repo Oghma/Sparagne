@@ -9,7 +9,7 @@ struct FundGauge: Identifiable, Hashable, Sendable {
     /// The balance for a net cap, the cumulative income for an income cap.
     let filled: Int64
     /// What the cap is measured on, named in the card's tag.
-    var kind = Kind.balance
+    let kind: Kind
 
     /// `FlowMode` without its amount, for the modes that have a cap.
     enum Kind: Hashable, Sendable {

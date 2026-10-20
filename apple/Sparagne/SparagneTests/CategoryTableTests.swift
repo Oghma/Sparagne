@@ -111,12 +111,12 @@ struct CategoryTableTests {
         let store = try await Self.vault()
         let system = try #require(store.windowCategories.first { $0.isSystem })
         #expect(!CategoryDraft.isEditable(system))
-        #expect(!CategoryDraft.label(system).isEmpty)
+        #expect(!TransactionRow.categoryLabel(system.name, isSystem: system.isSystem).isEmpty)
 
         await store.createCategory(name: "Spesa")
         let own = try #require(store.windowCategories.first { $0.name == "Spesa" })
         #expect(CategoryDraft.isEditable(own))
-        #expect(CategoryDraft.label(own) == "Spesa")
+        #expect(TransactionRow.categoryLabel(own.name, isSystem: own.isSystem) == "Spesa")
 
         // An archived row is restored from the menu, not retyped.
         await store.archiveCategory(own.id)

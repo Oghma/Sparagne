@@ -101,7 +101,7 @@ struct TopBar: View {
     private var background: some View {
         ZStack {
             Ink.bg
-            WindowChrome(barHeight: Metrics.topBar, buttonsLeading: 14) { full in
+            WindowChrome { full in
                 // Not during the view update that may have called this.
                 Task { isFullScreen = full }
             }

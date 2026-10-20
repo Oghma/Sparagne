@@ -16,9 +16,6 @@ final class SyncEngine {
         case error(String)
     }
 
-    /// The name the rejections sheet knows a refused command by.
-    typealias RejectedChange = RejectedEntry
-
     static let pullLimit = 500
     /// How many commands go up in one `POST /push`. The core hands out the
     /// outbox in slices of this size.
@@ -58,7 +55,7 @@ final class SyncEngine {
     /// Commands applied locally and not yet confirmed, over every vault.
     private(set) var pendingCount = 0
     /// Everything the core is still holding as rejected, newest sync first.
-    private(set) var rejected: [RejectedChange] = []
+    private(set) var rejected: [RejectedEntry] = []
     /// The vault list from the last `GET /vaults` of this session. The roles
     /// in it outlive the session in `AccountStore.vaultRoles`.
     private(set) var serverVaults: [VaultSummary] = []
@@ -464,7 +461,7 @@ final class SyncEngine {
         publishMembers()
     }
 
-    func dismiss(_ change: RejectedChange) async {
+    func dismiss(_ change: RejectedEntry) async {
         await core.dismissAllRejected([change])
         await refreshLocalState()
     }

@@ -50,7 +50,7 @@ struct RejectedChangesSheet: View {
 
 /// One refused change: what it was, the server's reason, and where.
 private struct RejectedRow: View {
-    let change: SyncEngine.RejectedChange
+    let change: RejectedEntry
     let dismiss: () -> Void
 
     var body: some View {

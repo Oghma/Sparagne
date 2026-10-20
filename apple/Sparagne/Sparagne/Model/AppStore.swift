@@ -112,9 +112,6 @@ struct DuePeriod: Identifiable, Hashable, Sendable {
     var id: String { "\(template.id)/\(date)" }
 }
 
-/// A period still ahead, which the agenda lists and nothing executes before it falls due.
-typealias UpcomingPeriod = DuePeriod
-
 extension TransactionPatch {
     /// A patch that carries no field changes nothing, so it is never sent
     /// (`UpdateTransaction` refuses it).
@@ -279,7 +276,7 @@ final class AppStore {
     /// The periods of the next days, soonest first, for the Ricorrenze tab's
     /// agenda. Written only by that tab's loader (`AppStore+Recurring.swift`),
     /// hence not `private(set)`: an extension in another file has to set it.
-    var upcomingRecurring: [UpcomingPeriod] = []
+    var upcomingRecurring: [DuePeriod] = []
 
     // MARK: Allocation
 
@@ -1177,10 +1174,6 @@ final class AppStore {
     }
 
     // MARK: - Recurring
-
-    /// Nothing to do: every `reload()` brings the templates, archived ones
-    /// included. Kept for the Ricorrenze tab, which still calls it.
-    func loadRecurringTemplates() async {}
 
     /// Returns the new template's id, from the core's receipt, or `nil` when
     /// it was refused: the inspector selects what it created by that id, not

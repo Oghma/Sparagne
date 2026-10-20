@@ -52,7 +52,7 @@ enum NaiveDay {
 /// "Prossimi 30 giorni": the running templates' periods from tomorrow, today being due's.
 struct RecurringAgenda: Equatable {
     /// Soonest first; on the same day, by the template's title.
-    let tiles: [UpcomingPeriod]
+    let tiles: [DuePeriod]
 
     /// The expenses expected in the window, in minor units.
     var expenses: Int64 { total(of: .expense) }
@@ -82,11 +82,11 @@ struct RecurringAgenda: Equatable {
         // One more than the days in the window would ever need: a daily
         // template has at most `days` dates in it.
         let limit = UInt32(days + 1)
-        var tiles: [UpcomingPeriod] = []
+        var tiles: [DuePeriod] = []
         for template in templates where template.enabled && !template.archived {
             guard let dates = try? occurrences(template.schedule, first, limit) else { continue }
             for date in dates where date >= first && date <= last {
-                tiles.append(UpcomingPeriod(template: template, date: date))
+                tiles.append(DuePeriod(template: template, date: date))
             }
         }
         tiles.sort { lhs, rhs in

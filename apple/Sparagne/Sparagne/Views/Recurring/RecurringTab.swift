@@ -43,7 +43,6 @@ struct RecurringTab: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task(id: store.currentVault?.id) {
             refreshToday()
-            await store.loadRecurringTemplates()
         }
         // The agenda and the table's next dates are worked out again
         // whenever the templates, the due list or the day change: a save, a

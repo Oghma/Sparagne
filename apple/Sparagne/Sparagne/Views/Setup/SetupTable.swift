@@ -323,16 +323,7 @@ extension View {
 enum EnvelopeCapFill {
     /// 0...1, or `nil` for an envelope with no cap (no bar at all).
     static func fraction(mode: FlowMode, balance: Int64, incomeTotal: Int64?) -> Double? {
-        let gauge: FundGauge
-        switch mode {
-        case .unlimited:
-            return nil
-        case .netCapped(let cap):
-            gauge = FundGauge(id: "", name: "", cap: cap, filled: balance)
-        case .incomeCapped(let cap):
-            gauge = FundGauge(id: "", name: "", cap: cap, filled: incomeTotal ?? balance)
-        }
-        return gauge.fraction
+        FundGauge(id: "", name: "", mode: mode, balance: balance, incomeTotal: incomeTotal)?.fraction
     }
 }
 

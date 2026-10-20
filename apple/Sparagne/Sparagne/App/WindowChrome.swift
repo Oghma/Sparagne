@@ -6,10 +6,6 @@ struct WindowChrome: NSViewRepresentable {
     // Put behind the bar as its background: the bar's controls keep their clicks, and a
     // label that should drag needs `.allowsHitTesting(false)`.
 
-    /// The bar's height, from the top edge of the window.
-    var barHeight: CGFloat = Metrics.topBar
-    /// From the window's leading edge to the close button.
-    var buttonsLeading: CGFloat = 14
     /// Called when the window goes in or out of full screen. The traffic
     /// lights are hidden there, so the bar needs no room for them.
     var onFullScreenChange: (Bool) -> Void = { _ in }
@@ -26,16 +22,16 @@ struct WindowChrome: NSViewRepresentable {
     }
 
     private func update(_ view: WindowChromeView) {
-        view.barHeight = barHeight
-        view.buttonsLeading = buttonsLeading
         view.onFullScreenChange = onFullScreenChange
     }
 }
 
 /// See `WindowChrome`.
 final class WindowChromeView: NSView {
-    var barHeight: CGFloat = Metrics.topBar
-    var buttonsLeading: CGFloat = 14
+    /// The bar's height from the top edge of the window, and the close
+    /// button's distance from the leading edge.
+    let barHeight: CGFloat = Metrics.topBar
+    let buttonsLeading: CGFloat = 14
     var onFullScreenChange: (Bool) -> Void = { _ in }
 
     private weak var observedWindow: NSWindow?

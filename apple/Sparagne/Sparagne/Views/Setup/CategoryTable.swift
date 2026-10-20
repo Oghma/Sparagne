@@ -293,7 +293,7 @@ private struct CategoryRowView: View {
     /// column already says why it is down here.
     private var nameCell: some View {
         HStack(spacing: 6) {
-            Text(CategoryDraft.label(category))
+            Text(TransactionRow.categoryLabel(category.name, isSystem: category.isSystem))
                 .font(Face.row)
                 .foregroundStyle(tint)
                 .lineLimit(1)
@@ -387,18 +387,6 @@ struct CategoryDraft: Equatable {
     /// from the menu, not retyped.
     static func isEditable(_ category: CategoryView) -> Bool {
         !category.isSystem && !category.archived
-    }
-
-    /// System categories are named in English by the core (`Opening`,
-    /// `Uncategorized`); the table shows the localized term, as
-    /// `TransactionRow.categoryLabel` does.
-    static func label(_ category: CategoryView) -> String {
-        guard category.isSystem else { return category.name }
-        switch category.name.lowercased() {
-        case "opening": return String(localized: "Opening")
-        case "uncategorized": return String(localized: "Uncategorized")
-        default: return category.name
-        }
     }
 
     /// The name the empty line would create, or nil when it is blank: ↩ on an
