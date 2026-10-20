@@ -168,9 +168,7 @@ pub(crate) fn leg_shape(
 pub(crate) const TRANSACTION_VIEW_COLUMNS: &str = "t.id, t.kind, t.occurred_at, t.occurred_offset, t.amount, t.category_id, c.name, c.is_system, t.note, t.voided_at, t.created_by, t.person";
 
 /// A [`TransactionView`] from a row that starts with
-/// [`TRANSACTION_VIEW_COLUMNS`], read as [`Core::list_transactions`] reads
-/// its rows. The legs are left for [`load_legs`], which loads a whole list
-/// of views in one go.
+/// [`TRANSACTION_VIEW_COLUMNS`]; the legs are left to [`load_legs`].
 pub(crate) fn transaction_view(r: &rusqlite::Row<'_>) -> rusqlite::Result<TransactionView> {
     let kind: String = r.get(1)?;
     let at: i64 = r.get(2)?;

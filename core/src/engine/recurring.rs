@@ -1,9 +1,8 @@
-//! Engine: recurring template commands and the pending-periods query.
-//!
-//! A template is a plan, not a transaction: it is materialized one period at a
-//! time by `ExecuteRecurring` (or dismissed by `SkipRecurring`). A period is
-//! pending while it has no row in `recurring_runs`, so periods missed while the
-//! app was closed are backfilled for free.
+//! Recurring template commands and the pending-periods query. A template is a
+//! plan, not a transaction: it is materialized one period at a time by
+//! `ExecuteRecurring` (or dismissed by `SkipRecurring`). A period is pending
+//! while it has no row in `recurring_runs`, so periods missed while the app was
+//! closed are backfilled for free.
 
 use std::collections::HashSet;
 
@@ -33,11 +32,6 @@ pub(super) struct RecurringSpec<'a> {
     pub owner: &'a str,
 }
 
-// ---------------------------------------------------------------------------
-// Commands
-// ---------------------------------------------------------------------------
-
-/// Returns the template id (the command id).
 pub(super) fn create_recurring(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -187,10 +181,8 @@ pub(super) fn restore_recurring(
     Ok(())
 }
 
-/// Posts the template as the entry the command would be, then records the
-/// run. Returns the id of the created transaction (the command id). `person`
-/// is the command's, never the template's owner (see
-/// `Command::ExecuteRecurring`).
+/// Posts the template as an entry, then records the run. `person` is the
+/// command's, never the template's owner (see `Command::ExecuteRecurring`).
 pub(super) fn execute_recurring(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -241,10 +233,6 @@ pub(super) fn skip_recurring(
         now,
     )
 }
-
-// ---------------------------------------------------------------------------
-// Read side
-// ---------------------------------------------------------------------------
 
 impl Core {
     /// Templates of a vault, oldest first.
@@ -328,10 +316,6 @@ impl Core {
             .collect()
     }
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const TEMPLATE_COLUMNS: &str =
     "id, kind, amount, wallet_id, flow_id, category, note, schedule, enabled, archived_at, owner";
@@ -480,7 +464,6 @@ fn check_kind(kind: TransactionKind) -> Result<()> {
     }
 }
 
-/// A wallet given on a template must exist in the vault and be active.
 fn check_wallet(tx: &Transaction<'_>, vault_id: Uuid, wallet_id: Option<Uuid>) -> Result<()> {
     if wallet_id.is_some() {
         super::resolve_wallet(tx, vault_id, wallet_id)?;
@@ -488,7 +471,6 @@ fn check_wallet(tx: &Transaction<'_>, vault_id: Uuid, wallet_id: Option<Uuid>) -
     Ok(())
 }
 
-/// A flow given on a template must exist in the vault and be active.
 fn check_flow(tx: &Transaction<'_>, vault_id: Uuid, flow_id: Option<Uuid>) -> Result<()> {
     match flow_id {
         Some(id) => require_active_flow(tx, vault_id, id),

@@ -1,15 +1,14 @@
-//! Engine: partial update of an existing transaction.
-//!
-//! The kind never changes; only the fields the patch carries do. The legs are
-//! rebuilt from scratch and the balance of every target they touch, old or
-//! new, moves from its old leg to its new one through
+//! Partial update of an existing transaction, and the legs every writer
+//! shares. The kind never changes; only the fields the patch carries do. The
+//! legs are rebuilt from scratch and every target they touch, old or new,
+//! moves from its old leg to its new one through
 //! [`Flow::apply_leg_change`](crate::Flow::apply_leg_change), so caps and
 //! non-negativity are re-checked exactly as on create.
 
 use rusqlite::{OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
-use super::{check_amount, require_active_flow};
+use super::{check_amount, invalid, require_active_flow};
 
 use crate::{
     CommandEnvelope, DomainError, Result, TargetKind, TransactionKind, TransactionPatch,
@@ -25,12 +24,10 @@ pub(super) fn update_transaction(
     super::require_vault(tx, env.vault_id)?;
     let row = load_transaction(tx, env.vault_id, transaction_id)?;
     if row.voided {
-        return Err(DomainError::InvalidCommand(
-            "transaction is voided".to_string(),
-        ));
+        return Err(invalid("transaction is voided"));
     }
     if patch.is_empty() {
-        return Err(DomainError::InvalidCommand("nothing to update".to_string()));
+        return Err(invalid("nothing to update"));
     }
     let amount = patch.amount.unwrap_or(row.amount);
     check_amount(amount)?;
@@ -86,12 +83,7 @@ pub(super) fn update_transaction(
     super::insert_legs(tx, transaction_id, &new_legs)
 }
 
-// ---------------------------------------------------------------------------
-// Legs of the updated transaction
-// ---------------------------------------------------------------------------
-
-/// Wallet leg (ordinal 0) and flow leg (ordinal 1) of an income, expense or
-/// refund, plus the resulting category.
+/// The new legs of an income, expense or refund, and its category.
 fn entry_legs(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -101,9 +93,7 @@ fn entry_legs(
     amount: i64,
 ) -> Result<([Leg; 2], Uuid)> {
     if patch.from_id.is_some() || patch.to_id.is_some() {
-        return Err(DomainError::InvalidCommand(
-            "from and to are only valid on transfers".to_string(),
-        ));
+        return Err(invalid("from and to are only valid on transfers"));
     }
     let wallet_id = match patch.wallet_id {
         Some(id) => id,
@@ -127,8 +117,7 @@ fn entry_legs(
     Ok((Leg::entry(wallet_id, flow_id, signed), category_id))
 }
 
-/// Source leg (ordinal 0) and destination leg (ordinal 1) of a transfer. The
-/// category of a transfer never changes.
+/// The new legs of a transfer, whose category never changes.
 fn transfer_legs(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -139,24 +128,20 @@ fn transfer_legs(
     amount: i64,
 ) -> Result<([Leg; 2], Uuid)> {
     if patch.category.is_some() || patch.wallet_id.is_some() || patch.flow_id.is_some() {
-        return Err(DomainError::InvalidCommand(
-            "category, wallet and flow are only valid on entries".to_string(),
+        return Err(invalid(
+            "category, wallet and flow are only valid on entries",
         ));
     }
     // A transfer moves money between two of the household's own pots: it is
     // nobody's in particular, so it stays on whoever recorded it.
     if patch.person.is_some() {
-        return Err(DomainError::InvalidCommand(
-            "person is only valid on entries".to_string(),
-        ));
+        return Err(invalid("person is only valid on entries"));
     }
     let (old_from, old_to) = endpoints(old_legs, kind)?;
     let from = patch.from_id.unwrap_or(old_from);
     let to = patch.to_id.unwrap_or(old_to);
     if from == to {
-        return Err(DomainError::InvalidCommand(
-            "from and to must differ".to_string(),
-        ));
+        return Err(invalid("from and to must differ"));
     }
     for id in [from, to] {
         match kind {
@@ -168,10 +153,6 @@ fn transfer_legs(
     }
     Ok((Leg::transfer(kind, from, to, amount), row.category_id))
 }
-
-// ---------------------------------------------------------------------------
-// Balances
-// ---------------------------------------------------------------------------
 
 /// Move every target of the old and new legs from its old amount to its new
 /// one. Keyed by target, so swapping the endpoints of a transfer nets out
@@ -205,10 +186,6 @@ fn amount_on(legs: &[Leg], kind: TargetKind, id: Uuid) -> i64 {
         .sum()
 }
 
-// ---------------------------------------------------------------------------
-// Rows
-// ---------------------------------------------------------------------------
-
 impl TargetKind {
     /// `legs.target_kind` of this side.
     pub(crate) const fn as_str(self) -> &'static str {
@@ -238,8 +215,7 @@ pub(super) struct Leg {
 }
 
 impl Leg {
-    /// An entry's wallet leg (ordinal 0) and flow leg (1), the same signed
-    /// amount on both.
+    /// Wallet leg (ordinal 0), then flow leg, the same signed amount on both.
     pub(super) const fn entry(wallet_id: Uuid, flow_id: Uuid, signed: i64) -> [Self; 2] {
         [
             Self {
@@ -255,7 +231,7 @@ impl Leg {
         ]
     }
 
-    /// A transfer's source leg (ordinal 0) and destination leg (1).
+    /// Source leg (ordinal 0), then destination leg.
     pub(super) const fn transfer(kind: TargetKind, from: Uuid, to: Uuid, amount: i64) -> [Self; 2] {
         [
             Self {

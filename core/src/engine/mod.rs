@@ -1,7 +1,6 @@
-//! Applying commands to the projection and appending them to the log.
-//!
-//! Every command runs inside one SQLite transaction: validation, state
-//! changes and the log row commit together or not at all.
+//! Applying commands to the projection and appending them to the log. Every
+//! command runs inside one SQLite transaction: validation, state changes and
+//! the log row commit together or not at all.
 
 mod allocation;
 pub(crate) mod entities;
@@ -105,7 +104,6 @@ pub(crate) fn existing_receipt(conn: &Connection, command_id: Uuid) -> Result<Op
     }))
 }
 
-/// An amount posted by a command must be positive.
 pub(crate) fn check_amount(amount: i64) -> Result<()> {
     if amount > 0 {
         Ok(())
@@ -114,14 +112,13 @@ pub(crate) fn check_amount(amount: i64) -> Result<()> {
     }
 }
 
-/// A flow a command names must be active.
 pub(crate) fn require_active_flow(
     tx: &Transaction<'_>,
     vault_id: Uuid,
     flow_id: Uuid,
 ) -> Result<()> {
     if load_flow(tx, vault_id, flow_id)?.archived {
-        return Err(DomainError::InvalidCommand("flow is archived".to_string()));
+        return Err(invalid("flow is archived"));
     }
     Ok(())
 }
@@ -130,7 +127,6 @@ fn encode_schedule(schedule: &Schedule) -> Result<String> {
     Ok(serde_json::to_string(schedule)?)
 }
 
-/// A run's `period_date` as stored.
 fn parse_date(value: &str) -> Result<NaiveDate> {
     value
         .parse()
@@ -190,15 +186,13 @@ pub(crate) fn try_apply_envelope(
     }
 }
 
-/// What a log row records: a command that went through, or one the server (or
-/// a rebase) refused, kept for the UI.
+/// A command that went through, or one the server or a rebase refused, kept for the UI.
 pub(crate) enum LogRow {
     Applied(Option<Uuid>),
     /// `<code>: <message>`.
     Rejected(String),
 }
 
-/// Writes one row of the log.
 pub(crate) fn log_row(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -444,10 +438,6 @@ fn apply(tx: &Transaction<'_>, env: &CommandEnvelope, now: i64) -> Result<Option
     }
 }
 
-// ---------------------------------------------------------------------------
-// Vault, wallet, flow, category
-// ---------------------------------------------------------------------------
-
 /// The name is a label: any non-blank one will do, even one the author
 /// already gave another vault. Nothing here may depend on the other vaults in
 /// the database, because a rebase replays this command next to whatever
@@ -460,9 +450,7 @@ fn create_vault(
     now: i64,
 ) -> Result<Uuid> {
     if env.vault_id != env.id {
-        return Err(DomainError::InvalidCommand(
-            "create_vault: vault_id must equal the command id".to_string(),
-        ));
+        return Err(invalid("create_vault: vault_id must equal the command id"));
     }
     let name = normalize_name(name, "vault")?;
     tx.execute(
@@ -623,10 +611,6 @@ fn create_category(tx: &Transaction<'_>, env: &CommandEnvelope, name: &str) -> R
     Ok(env.id)
 }
 
-// ---------------------------------------------------------------------------
-// Transactions
-// ---------------------------------------------------------------------------
-
 fn entry(
     tx: &Transaction<'_>,
     env: &CommandEnvelope,
@@ -662,7 +646,8 @@ fn entry(
     Ok(env.id)
 }
 
-/// What both transfers check first, in this order.
+/// The checks both transfers start with; their order decides which error a
+/// bad transfer gets.
 fn check_transfer(
     tx: &Transaction<'_>,
     vault_id: Uuid,
@@ -673,9 +658,7 @@ fn check_transfer(
     require_vault(tx, vault_id)?;
     check_amount(amount)?;
     if from == to {
-        return Err(DomainError::InvalidCommand(
-            "from and to must differ".to_string(),
-        ));
+        return Err(invalid("from and to must differ"));
     }
     Ok(())
 }
@@ -795,9 +778,7 @@ fn void_transaction(
         .optional()?
         .ok_or_else(|| DomainError::NotFound("transaction".to_string()))?;
     if voided_at.is_some() {
-        return Err(DomainError::InvalidCommand(
-            "transaction already voided".to_string(),
-        ));
+        return Err(invalid("transaction already voided"));
     }
     void_live_transaction(tx, env, transaction_id, now)
 }
@@ -828,10 +809,6 @@ fn void_live_transaction(
     )?;
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Resolution helpers
-// ---------------------------------------------------------------------------
 
 /// Ids of entities created inside a command are derived from the command id,
 /// so replaying the log yields the same ids.
@@ -887,8 +864,6 @@ fn vault_owner(tx: &Transaction<'_>, vault_id: Uuid) -> Result<String> {
     .ok_or_else(|| DomainError::NotFound("vault".to_string()))
 }
 
-/// Whether a wallet or flow (`table`) of the vault other than `except`
-/// already has the name, case aside.
 fn name_taken(
     tx: &Transaction<'_>,
     table: &str,
@@ -903,8 +878,6 @@ fn name_taken(
     Ok(tx.query_row(&sql, params![vault_id, name, except], |r| r.get(0))?)
 }
 
-/// Whether a category other than `except` holds the key, as its name or as
-/// an alias.
 fn category_key_taken(
     tx: &Transaction<'_>,
     vault_id: Uuid,
@@ -968,9 +941,7 @@ fn resolve_wallet(tx: &Transaction<'_>, vault_id: Uuid, wallet_id: Option<Uuid>)
                 .optional()?
                 .ok_or_else(|| DomainError::NotFound("wallet".to_string()))?;
             if archived {
-                return Err(DomainError::InvalidCommand(
-                    "wallet is archived".to_string(),
-                ));
+                return Err(invalid("wallet is archived"));
             }
             Ok(id)
         }
@@ -983,8 +954,8 @@ fn resolve_wallet(tx: &Transaction<'_>, vault_id: Uuid, wallet_id: Option<Uuid>)
             match ids.as_slice() {
                 [only] => Ok(*only),
                 [] => Err(DomainError::NotFound("wallet".to_string())),
-                _ => Err(DomainError::InvalidCommand(
-                    "wallet_id is required when more than one wallet exists".to_string(),
+                _ => Err(invalid(
+                    "wallet_id is required when more than one wallet exists",
                 )),
             }
         }
@@ -1036,10 +1007,6 @@ fn resolve_category(
     insert_category(tx, vault_id, id, &display, &key, false)?;
     Ok(id)
 }
-
-// ---------------------------------------------------------------------------
-// Row-level helpers
-// ---------------------------------------------------------------------------
 
 /// Columns of `flows` that [`flow_row`] reads, in its order.
 pub(crate) const FLOW_COLUMNS: &str =
