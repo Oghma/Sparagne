@@ -530,10 +530,11 @@ pub enum AmountSign {
 }
 
 /// What a statement row becomes.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StatementAction {
     /// Expense when money goes out, income when it comes in.
+    #[default]
     BySign,
     Expense,
     Income,
@@ -643,8 +644,9 @@ pub struct StatementRowOverride {
 }
 
 /// What would happen to a previewed row.
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Enum)]
 pub enum StatementRowStatus {
+    #[default]
     New,
     AlreadyImported,
     /// An entry already in the vault looks like this row: the money moving
@@ -696,7 +698,7 @@ pub enum StatementRowStatus {
 }
 
 /// One row of a [`StatementPreview`].
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct StatementRow {
     /// 1-based line in the file, header included.
     pub line: u32,
@@ -785,7 +787,7 @@ pub struct StatementLookalike {
 }
 
 /// Every row of a statement with what would happen to it, plus counts.
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct StatementPreview {
     pub rows: Vec<StatementRow>,
     pub new_rows: u32,
@@ -811,7 +813,7 @@ pub struct StatementPreview {
 }
 
 /// Outcome of [`Core::import_statement`].
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct StatementReport {
     /// Rows written, the transfer of a row replacing its match included.
     pub executed: u32,
@@ -859,7 +861,7 @@ pub struct StatementDetection {
 
 /// How a statement's date and amount columns are written, as far as their
 /// values tell ([`guess_formats`]).
-#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, uniffi::Record)]
 pub struct StatementFormatGuess {
     /// The first of UTC (only when every value says so), ISO date-time, ISO
     /// date, day-first and month-first that reads every value.
@@ -1003,15 +1005,8 @@ impl Core {
         } = plan::plan(self, vault_id, text, mapping, options, overrides)?;
         let mut preview = StatementPreview {
             rows: Vec::with_capacity(planned.len()),
-            new_rows: 0,
-            already_imported: 0,
-            skipped: 0,
-            invalid: 0,
-            rounded: 0,
-            possible_duplicates: 0,
-            matched_transfers: 0,
-            moves: 0,
             lookalikes,
+            ..StatementPreview::default()
         };
         for plan::Planned { row, .. } in planned {
             match row.status {
@@ -1050,16 +1045,7 @@ impl Core {
         overrides: &[StatementRowOverride],
     ) -> Result<StatementReport> {
         let planned = plan::plan(self, vault_id, text, mapping, options, overrides)?.rows;
-        let mut report = StatementReport {
-            executed: 0,
-            deduplicated: 0,
-            skipped: 0,
-            rounded: 0,
-            rejected: Vec::new(),
-            possible_duplicates: 0,
-            matched_transfers: 0,
-            moved: 0,
-        };
+        let mut report = StatementReport::default();
         // Each row goes to its own wallet: its account's, else the options'.
         let wallet_of = |row: &StatementRow| row.wallet_id.unwrap_or(options.wallet_id);
         let mut new = Vec::new();

@@ -23,16 +23,12 @@ pub(super) fn guess(
     date_column: Option<&str>,
     amount_column: Option<&str>,
 ) -> StatementFormatGuess {
-    let nothing = StatementFormatGuess {
-        date_format: None,
-        decimal_comma: None,
-    };
     let Ok(delimiter) = plan::delimiter(delimiter) else {
-        return nothing;
+        return StatementFormatGuess::default();
     };
     let mut records = csv::records(text, delimiter);
     let Some(header) = records.next() else {
-        return nothing;
+        return StatementFormatGuess::default();
     };
     let index = |name: Option<&str>| {
         let wanted = name?.trim().to_lowercase();
@@ -46,7 +42,7 @@ pub(super) fn guess(
     };
     let (date, amount) = (index(date_column), index(amount_column));
     if date.is_none() && amount.is_none() {
-        return nothing;
+        return StatementFormatGuess::default();
     }
     let rows: Vec<Vec<String>> = records
         .take(GUESS_ROWS)

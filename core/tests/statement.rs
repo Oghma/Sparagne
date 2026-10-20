@@ -1255,10 +1255,7 @@ fn the_decimal_mark_is_the_one_that_reads_every_amount() {
 
 #[test]
 fn a_column_empty_missing_or_not_named_guesses_nothing() {
-    let nothing = StatementFormatGuess {
-        date_format: None,
-        decimal_comma: None,
-    };
+    let nothing = StatementFormatGuess::default();
     let header = "Data;Importo;Note";
     let rows = ["16/09/2026;;bar", ";;", "17/09/2026;  ;pane"];
     // Empty values are skipped, so the dates still guess.
