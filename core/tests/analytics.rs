@@ -80,10 +80,8 @@ fn people_are_distinct_and_sorted_and_skip_voided_rows() {
 #[test]
 fn flow_person_totals_splits_by_envelope_and_person_with_net_expense() {
     let s = shared_month();
-    let rows =
-        s.fx.core
-            .flow_person_totals(s.fx.vault, utc(T0 - DAY), utc(T0 + 30 * DAY))
-            .unwrap();
+    let (from, to) = month_range();
+    let rows = s.fx.core.flow_person_totals(s.fx.vault, from, to).unwrap();
 
     let find = |flow: Uuid, person: &str| {
         rows.iter()
@@ -113,6 +111,7 @@ fn flow_person_totals_splits_by_envelope_and_person_with_net_expense() {
 #[test]
 fn flow_person_totals_ignores_transfers_and_voided_and_rows_outside_the_range() {
     let mut s = shared_month();
+    let (from, to) = month_range();
     let w = Some(s.fx.wallet);
     let vault = s.fx.vault;
 
@@ -130,10 +129,7 @@ fn flow_person_totals_ignores_transfers_and_voided_and_rows_outside_the_range() 
         Command::Expense(entry(777, w, Some(s.cash), Some("Fuori"), T0 + 90 * DAY)),
     );
 
-    let rows =
-        s.fx.core
-            .flow_person_totals(vault, utc(T0 - DAY), utc(T0 + 30 * DAY))
-            .unwrap();
+    let rows = s.fx.core.flow_person_totals(vault, from, to).unwrap();
     assert_eq!(rows.len(), 3);
     let elisa = rows
         .iter()
@@ -161,7 +157,7 @@ fn every_aggregation_follows_the_person_not_who_recorded_the_row() {
     let mut dinner = entry(40, w, Some(s.varie), Some("Ristoranti"), T0 + 5 * DAY);
     dinner.person = Some("elisa".to_string());
     s.fx.run_as("matteo", Command::Expense(dinner));
-    let (from, to) = (utc(T0 - DAY), utc(T0 + 30 * DAY));
+    let (from, to) = month_range();
     let elisa = || Some("elisa".to_string());
     let core = &s.fx.core;
 
@@ -214,9 +210,10 @@ fn every_aggregation_follows_the_person_not_who_recorded_the_row() {
 #[test]
 fn category_totals_are_sorted_by_net_expense_and_can_be_filtered_by_person() {
     let s = shared_month();
+    let (from, to) = month_range();
     let all =
         s.fx.core
-            .category_totals(s.fx.vault, utc(T0 - DAY), utc(T0 + 30 * DAY), None)
+            .category_totals(s.fx.vault, from, to, None)
             .unwrap();
 
     // Casa: 100 spent, 10 refunded -> 90 net, heavier than Svago's 25 and
@@ -234,12 +231,7 @@ fn category_totals_are_sorted_by_net_expense_and_can_be_filtered_by_person() {
 
     let elisa =
         s.fx.core
-            .category_totals(
-                s.fx.vault,
-                utc(T0 - DAY),
-                utc(T0 + 30 * DAY),
-                Some("elisa".to_string()),
-            )
+            .category_totals(s.fx.vault, from, to, Some("elisa".to_string()))
             .unwrap();
     assert_eq!(elisa.len(), 1);
     assert_eq!(elisa[0].name, "Spesa");
@@ -292,9 +284,10 @@ fn bucket_totals_can_be_filtered_by_person_and_reject_bad_boundaries() {
 #[test]
 fn top_expenses_are_largest_first_limited_and_filterable() {
     let s = shared_month();
+    let (from, to) = month_range();
     let top =
         s.fx.core
-            .top_expenses(s.fx.vault, utc(T0 - DAY), utc(T0 + 30 * DAY), None, 2)
+            .top_expenses(s.fx.vault, from, to, None, 2)
             .unwrap();
     assert_eq!(top.len(), 2);
     assert_eq!((top[0].amount, top[0].category.as_str()), (100, "Casa"));
@@ -303,13 +296,7 @@ fn top_expenses_are_largest_first_limited_and_filterable() {
 
     let elisa =
         s.fx.core
-            .top_expenses(
-                s.fx.vault,
-                utc(T0 - DAY),
-                utc(T0 + 30 * DAY),
-                Some("elisa".to_string()),
-                10,
-            )
+            .top_expenses(s.fx.vault, from, to, Some("elisa".to_string()), 10)
             .unwrap();
     assert_eq!(elisa.len(), 1);
     assert_eq!(elisa[0].amount, 30);
