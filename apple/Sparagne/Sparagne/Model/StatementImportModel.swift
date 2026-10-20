@@ -58,10 +58,9 @@ final class StatementImportModel {
 
     /// What a sync round asked for by the import came to.
     enum SyncResult: Equatable, Sendable {
-        /// The vault is as the server holds it.
+        /// The vault is as the server holds it, or this Mac's alone (no
+        /// account), with nothing to bring in.
         case synced
-        /// The vault is this Mac's alone (no account): nothing to bring in.
-        case notSynced
         /// Offline, or the server refused: the plan reads this Mac's copy.
         case failed
     }
@@ -399,7 +398,7 @@ final class StatementImportModel {
     /// still exists: a wallet archived or deleted since is not chosen (the
     /// one already chosen stays), and an envelope gone reads as Unallocated.
     func restore(_ target: StatementImportTarget) {
-        let active = Set(store.wallets.map(\.id))
+        let active = activeWallets
         if let wallet = target.walletId, active.contains(wallet) { walletId = wallet }
         flowId = target.flowId.flatMap { id in
             store.flows.contains { $0.id == id && !$0.isUnallocated } ? id : nil
@@ -459,7 +458,7 @@ final class StatementImportModel {
     /// not the file's, or none for an account left out; in a stable order.
     var accountWallets: [StatementAccountWallet] {
         guard mapping.accountColumn != nil else { return [] }
-        let active = Set(store.wallets.map(\.id))
+        let active = activeWallets
         return accountChoices.values.compactMap { choice -> StatementAccountWallet? in
             switch choice.destination {
             case .leftOut:
@@ -521,14 +520,13 @@ final class StatementImportModel {
             }
             return headers.first { $0.trimmingCharacters(in: .whitespaces).lowercased() == wanted }
         }
-        let active = Set(store.wallets.map(\.id))
-        func live(_ action: StatementAction) -> StatementAction {
+        let active = activeWallets
+        var adopted = mapping.mappingActions { action in
             guard let wallet = action.counterWalletId, !active.contains(wallet) || wallet == walletId else {
                 return action
             }
             return action.withCounterWallet(nil)
         }
-        var adopted = mapping
         adopted.delimiter = delimiter
         adopted.dateColumn = column(mapping.dateColumn) ?? ""
         adopted.amountColumn = column(mapping.amountColumn) ?? ""
@@ -541,13 +539,6 @@ final class StatementImportModel {
         adopted.originalCurrencyColumn = column(mapping.originalCurrencyColumn)
         adopted.accountColumn = column(mapping.accountColumn)
         adopted.transferColumn = column(mapping.transferColumn)
-        adopted.typeRules = mapping.typeRules.map { StatementTypeRule(value: $0.value, action: live($0.action)) }
-        adopted.defaultAction = live(mapping.defaultAction)
-        adopted.descriptionRules = mapping.descriptionRules.map { rule in
-            var adoptedRule = rule
-            adoptedRule.action = rule.action.map(live)
-            return adoptedRule
-        }
         return adopted
     }
 
@@ -720,16 +711,8 @@ final class StatementImportModel {
         func released(_ action: StatementAction) -> StatementAction {
             action.counterWalletId == target ? action.withCounterWallet(nil) : action
         }
-        let rules = mapping.typeRules.map { StatementTypeRule(value: $0.value, action: released($0.action)) }
-        if rules != mapping.typeRules { mapping.typeRules = rules }
-        let fallback = released(mapping.defaultAction)
-        if fallback != mapping.defaultAction { mapping.defaultAction = fallback }
-        let described = mapping.descriptionRules.map { rule in
-            var releasedRule = rule
-            releasedRule.action = rule.action.map(released)
-            return releasedRule
-        }
-        if described != mapping.descriptionRules { mapping.descriptionRules = described }
+        let releasedMapping = mapping.mappingActions(released)
+        if releasedMapping != mapping { mapping = releasedMapping }
         let edited = editedActions.mapValues(released)
         if edited != editedActions { editedActions = edited }
     }
@@ -822,22 +805,22 @@ final class StatementImportModel {
         return wallets
     }
 
-    /// The other wallets statements go to, as the core takes them
-    /// (`StatementOptions.statementWallets`): active ones only, in a stable
-    /// order. The core never advises searching them, and takes an entry
-    /// another statement imported into one of them, up to four days from a
-    /// transfer row, for that transfer's other side, replaced by default.
-    private var otherStatementWallets: [Uuid] {
-        let active = Set(store.wallets.map(\.id))
-        return statementWallets.filter { active.contains($0) && $0 != walletId }.sorted()
+    /// The other wallets statements go to (`StatementOptions.statementWallets`).
+    /// The core never advises searching them, and takes an entry another
+    /// statement imported into one of them, up to four days from a transfer
+    /// row, for that transfer's other side, replaced by default.
+    private var otherStatementWallets: [Uuid] { asOption(statementWallets) }
+
+    private var checkedWallets: [Uuid] { asOption(alsoCheckWallets) }
+
+    /// `wallets` as the core takes them: active ones but the target, in a
+    /// stable order, so the same choice is the same preview input.
+    private func asOption(_ wallets: Set<Uuid>) -> [Uuid] {
+        let active = activeWallets
+        return wallets.filter { active.contains($0) && $0 != walletId }.sorted()
     }
 
-    /// `alsoCheckWallets` as the core takes them: active ones only, in a
-    /// stable order, so the same choice is the same preview input.
-    private var checkedWallets: [Uuid] {
-        let active = Set(store.wallets.map(\.id))
-        return alsoCheckWallets.filter { active.contains($0) && $0 != walletId }.sorted()
-    }
+    private var activeWallets: Set<Uuid> { Set(store.wallets.map(\.id)) }
 
     // MARK: - Preview
 
@@ -1389,7 +1372,7 @@ extension StatementImportModel {
     /// failed and the import goes on with what this Mac has.
     static func syncRound(on engine: SyncEngine) -> SyncRound {
         { [weak engine] in
-            guard let engine, engine.isLoggedIn else { return .notSynced }
+            guard let engine, engine.isLoggedIn else { return .synced }
             let deadline = ContinuousClock.now + syncPatience
             repeat {
                 while engine.status == .syncing, ContinuousClock.now < deadline {
@@ -1487,6 +1470,22 @@ enum StatementActionChoice: String, CaseIterable, Identifiable {
     }
 
     var isTransfer: Bool { self == .transferIn || self == .transferOut }
+}
+
+extension StatementMapping {
+    /// The mapping with `transform` applied to every action it names: the
+    /// type rules', the fallback and the description rules'.
+    func mappingActions(_ transform: (StatementAction) -> StatementAction) -> StatementMapping {
+        var mapped = self
+        mapped.typeRules = typeRules.map { StatementTypeRule(value: $0.value, action: transform($0.action)) }
+        mapped.defaultAction = transform(defaultAction)
+        mapped.descriptionRules = descriptionRules.map { rule in
+            var mappedRule = rule
+            mappedRule.action = rule.action.map(transform)
+            return mappedRule
+        }
+        return mapped
+    }
 }
 
 extension StatementAction {
