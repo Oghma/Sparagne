@@ -30,10 +30,6 @@ enum CategoryCompletion {
     /// Enough to choose from without turning the cell into a menu.
     static let limit = 8
 
-    static func fold(_ text: String) -> String {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
-    }
-
     /// `recent` is `RecentUsage.categories`: ids, most recent first. System
     /// categories are never offered (blank already means Uncategorized) and
     /// neither are archived ones, which the core would refuse.
@@ -44,17 +40,17 @@ enum CategoryCompletion {
         recent: [Uuid],
         limit: Int = limit
     ) -> [CategoryCandidate] {
-        let needle = fold(query.trimmingCharacters(in: .whitespaces))
+        let needle = FloatingList.fold(query.trimmingCharacters(in: .whitespaces))
         guard !needle.isEmpty else { return [] }
         let recency = Dictionary(recent.enumerated().map { ($1, $0) }, uniquingKeysWith: min)
         let aliasesByCategory = Dictionary(grouping: aliases, by: \.categoryId)
 
         var ranked: [(tier: Int, candidate: CategoryCandidate)] = []
         for category in categories where !category.isSystem && !category.archived {
-            let name = fold(category.name)
+            let name = FloatingList.fold(category.name)
             let own = aliasesByCategory[category.id, default: []].sorted { $0.alias < $1.alias }
-            let prefixAlias = own.first { fold($0.alias).hasPrefix(needle) }
-            let innerAlias = own.first { fold($0.alias).contains(needle) }
+            let prefixAlias = own.first { FloatingList.fold($0.alias).hasPrefix(needle) }
+            let innerAlias = own.first { FloatingList.fold($0.alias).contains(needle) }
             let match: (tier: Int, alias: String?)? =
                 if name.hasPrefix(needle) { (0, nil) }
                 else if let prefixAlias { (1, prefixAlias.alias) }
@@ -83,32 +79,16 @@ enum CategoryCompletion {
     }
 }
 
-/// The list's state while a CATEGORY cell is being typed into: what it
-/// offers, which entry the arrows are on, and the cell it belongs to.
-///
-/// One per grid, shared by its rows, since only one cell has the caret at a
-/// time; the grid draws the list over everything else (`LedgerGrid`), so it is
-/// never clipped by the rows under it. Free of views, so the ranking and the
-/// arrows can be tested without a window.
-@Observable
+/// The list under a CATEGORY cell or field. One per grid or form, shared by
+/// its fields; whatever holds them draws it (`hangingCategoryList`), so the
+/// rows under it never clip it.
 final class CategoryCompletionModel {
-    private(set) var candidates: [CategoryCandidate] = []
-    /// Index into `candidates`.
-    private(set) var selection = 0
-    /// The cell the list is open for; `nil` while it is closed.
-    private(set) var owner: AnyHashable?
+    let list = FloatingListModel<CategoryCandidate>()
+    /// The name just picked: the field changes to it, and that change must
+    /// not open the list again on its own name.
+    private var picked: String?
 
-    /// Writes the picked name into the cell that opened the list.
-    @ObservationIgnored private var write: ((String) -> Void)?
-    /// The name just picked: the cell changes to it, and that change must not
-    /// open the list again on its own name.
-    @ObservationIgnored private var picked: String?
-
-    var isOpen: Bool { !candidates.isEmpty }
-
-    var selected: CategoryCandidate? {
-        candidates.indices.contains(selection) ? candidates[selection] : nil
-    }
+    var isOpen: Bool { list.isOpen }
 
     /// The text of `owner` changed: offer what matches it now.
     func textChanged(
@@ -128,51 +108,23 @@ final class CategoryCompletionModel {
             aliases: store.categoryAliases,
             recent: store.recentCategoryIds
         )
+        guard let best = ranked.first else { return list.close() }
         // Drawn in two groups, names then aliases (`CategoryCompletionList`),
         // and the arrows walk them in that order; the highlight still starts
         // on the best match, wherever its group put it.
-        candidates = ranked.filter { $0.alias == nil } + ranked.filter { $0.alias != nil }
-        selection = ranked.first.flatMap { best in candidates.firstIndex(of: best) } ?? 0
-        self.owner = candidates.isEmpty ? nil : owner
-        self.write = candidates.isEmpty ? nil : write
-    }
-
-    /// ↓ is `move(by: 1)`, ↑ is `move(by: -1)`; both wrap, as the palette's do.
-    func move(by delta: Int) {
-        guard !candidates.isEmpty else { return }
-        selection = ((selection + delta) % candidates.count + candidates.count) % candidates.count
-    }
-
-    /// The pointer on an entry.
-    func highlight(_ index: Int) {
-        guard candidates.indices.contains(index) else { return }
-        selection = index
-    }
-
-    /// ↩, ⇥ or a click: the highlighted entry goes into the cell and the list
-    /// closes. `false` when nothing was open to pick from.
-    @discardableResult
-    func pick() -> Bool {
-        guard let chosen = selected, let write else { return false }
-        picked = chosen.name
-        close()
-        write(chosen.name)
-        return true
-    }
-
-    /// esc, or the cell losing the caret.
-    func close() {
-        candidates = []
-        selection = 0
-        owner = nil
-        write = nil
+        let candidates = ranked.filter { $0.alias == nil } + ranked.filter { $0.alias != nil }
+        list.open(for: owner) { [unowned self] chosen in
+            picked = chosen.name
+            write(chosen.name)
+        }
+        list.show(candidates, selection: candidates.firstIndex(of: best) ?? 0)
     }
 
     /// Whether ↩ should pick rather than commit: an entry that says exactly
     /// what is typed already has nothing to add, and the key saves the row.
     func picksOnReturn(over text: String) -> Bool {
-        guard let chosen = selected else { return false }
-        return CategoryCompletion.fold(chosen.name) != CategoryCompletion.fold(text.trimmingCharacters(in: .whitespaces))
+        guard let chosen = list.selected else { return false }
+        return FloatingList.fold(chosen.name) != FloatingList.fold(text.trimmingCharacters(in: .whitespaces))
     }
 }
 
@@ -229,13 +181,13 @@ struct CategoryCell: View {
                 completion.textChanged(edited.text.wrappedValue, owner: key, store: store) { edited.text.wrappedValue = $0 }
             }
             .onDisappear {
-                if completion.owner == AnyHashable(key) { completion.close() }
+                if completion.list.owner == AnyHashable(key) { completion.list.close() }
             }
             // The whole row's height, so the grid can hang the list from the
             // row's bottom edge rather than from the text's.
             .frame(height: Metrics.rowHeight)
             .anchorPreference(key: CategoryCompletionAnchor.self, value: .bounds) {
-                completion.owner == AnyHashable(key) ? $0 : nil
+                completion.list.owner == AnyHashable(key) ? $0 : nil
             }
     }
 }
@@ -258,35 +210,12 @@ extension View {
         completion: CategoryCompletionModel,
         afterTab: @escaping () -> Void = {}
     ) -> some View {
-        onKeyPress(.upArrow) {
-            guard completion.owner == owner else { return .ignored }
-            completion.move(by: -1)
-            return .handled
-        }
-        .onKeyPress(.downArrow) {
-            guard completion.owner == owner else { return .ignored }
-            completion.move(by: 1)
-            return .handled
-        }
-        .onKeyPress(.return) {
-            guard completion.owner == owner else { return .ignored }
-            guard completion.picksOnReturn(over: text.wrappedValue) else {
-                completion.close()
-                return .ignored
-            }
-            completion.pick()
-            return .handled
-        }
-        .onKeyPress(.tab) {
-            guard completion.owner == owner, completion.pick() else { return .ignored }
-            afterTab()
-            return .handled
-        }
-        .onKeyPress(.escape) {
-            guard completion.owner == owner else { return .ignored }
-            completion.close()
-            return .handled
-        }
+        floatingListKeys(
+            completion.list,
+            owner: owner,
+            picksOnReturn: { completion.picksOnReturn(over: text.wrappedValue) },
+            afterTab: afterTab
+        )
         .onChange(of: text.wrappedValue) { _, new in
             guard isFocused else { return }
             completion.textChanged(new, owner: owner, store: store) { text.wrappedValue = $0 }
@@ -350,52 +279,30 @@ extension View {
         onChange(of: isFocused) { _, now in
             if now {
                 Task { await store.loadCategoryCompletion() }
-            } else if completion.owner == owner {
-                completion.close()
+            } else if completion.list.owner == owner {
+                completion.list.close()
             }
         }
         .anchorPreference(key: CategoryCompletionAnchor.self, value: .bounds) {
-            completion.owner == owner ? $0 : nil
+            completion.list.owner == owner ? $0 : nil
         }
     }
 
-    /// The CATEGORY list hung from the field that opened it, over everything
-    /// else in this view: from the field's bottom edge, or from its top when
-    /// there is no room below. For the view that holds the grid, the form or
-    /// the table, outside any scroll view, so the list is never clipped by
-    /// one, no later row covers it, and a click on it is not a click on what
-    /// is under it (in the grid, one that would save the cell). `inset`
-    /// moves the list along the field's edge: a grid cell's starts three
-    /// points in from the cell's edge rather than from its padded text.
-    ///
-    /// `placed` hears where the list is, in this view's coordinates, and
-    /// `nil` once it is gone: the grid lets a click there through to the list
-    /// rather than saving the cell the list belongs to (`LedgerGrid`).
+    /// The CATEGORY list hung from the field that opened it (`hangingList`),
+    /// for the view that holds the grid, the form or the table.
     func hangingCategoryList(
         _ completion: CategoryCompletionModel,
         inset: CGFloat = 0,
         placed: @escaping (CGRect?) -> Void = { _ in }
     ) -> some View {
-        overlayPreferenceValue(CategoryCompletionAnchor.self) { anchor in
-            if let anchor, completion.isOpen {
-                GeometryReader { proxy in
-                    let field = proxy[anchor]
-                    let height = CategoryCompletionList.height(for: completion.candidates)
-                    let fitsBelow = field.maxY + height <= proxy.size.height
-                    // One point up into the field, as the canvas hangs it
-                    // (`.ac`).
-                    let frame = CGRect(
-                        x: field.minX + inset,
-                        y: fitsBelow ? field.maxY - 1 : field.minY - height + 1,
-                        width: FloatingList.width,
-                        height: height
-                    )
-                    CategoryCompletionList(completion: completion)
-                        .offset(x: frame.minX, y: frame.minY)
-                        .onChange(of: frame, initial: true) { _, new in placed(new) }
-                        .onDisappear { placed(nil) }
-                }
-            }
+        hangingList(
+            completion.list,
+            anchor: CategoryCompletionAnchor.self,
+            height: { CategoryCompletionList.height(for: $0) },
+            inset: inset,
+            placed: placed
+        ) {
+            CategoryCompletionList(completion: completion)
         }
     }
 }
@@ -419,18 +326,18 @@ struct CategoryCompletionList: View {
     }
 
     var body: some View {
-        let entries = Array(completion.candidates.enumerated())
+        let entries = Array(completion.list.items.enumerated())
         let names = entries.filter { $0.element.alias == nil }
         let aliases = entries.filter { $0.element.alias != nil }
         VStack(alignment: .leading, spacing: 0) {
             if !names.isEmpty {
-                group(String(localized: "Categories"))
+                FloatingListGroup(title: String(localized: "Categories"))
                 ForEach(names, id: \.element.id) { index, candidate in
                     row(index: index, candidate: candidate)
                 }
             }
             if !aliases.isEmpty {
-                group(String(localized: "Aliases"))
+                FloatingListGroup(title: String(localized: "Aliases"))
                 ForEach(aliases, id: \.element.id) { index, candidate in
                     row(index: index, candidate: candidate)
                 }
@@ -440,17 +347,12 @@ struct CategoryCompletionList: View {
         .floatingList()
     }
 
-    private func group(_ title: String) -> some View {
-        FloatingListGroup(title: title)
-    }
-
     private func row(index: Int, candidate: CategoryCandidate) -> some View {
-        let active = index == completion.selection
-        return HStack(spacing: 8) {
+        HStack(spacing: 8) {
             if let alias = candidate.alias {
                 Text(alias).foregroundStyle(Ink.text3)
                 Spacer(minLength: 0)
-                Text("\u{2192} \(candidate.name)")
+                Text(verbatim: "\u{2192} \(candidate.name)")
                     .font(Face.small)
                     .foregroundStyle(Ink.text3)
             } else {
@@ -463,24 +365,11 @@ struct CategoryCompletionList: View {
                 }
             }
         }
-        .floatingListRow(active: active)
-        .onHover { inside in
-            if inside { completion.highlight(index) }
-        }
-        .onTapGesture { choose(index) }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(candidate.alias.map { "\($0) \u{2192} \(candidate.name)" } ?? candidate.name)
-        .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
-        // A tap gesture is not an action VoiceOver can press: the row says it
-        // is a button, so it has to act like one.
-        .accessibilityAction { choose(index) }
-    }
-
-    /// A click on a row, or VoiceOver pressing it: that candidate goes into
-    /// the cell and the list closes (`CategoryCompletionModel.pick`).
-    private func choose(_ index: Int) {
-        completion.highlight(index)
-        completion.pick()
+        .floatingListEntry(
+            completion.list,
+            at: index,
+            label: candidate.alias.map { "\($0) \u{2192} \(candidate.name)" } ?? candidate.name
+        )
     }
 }
 

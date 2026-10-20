@@ -115,12 +115,12 @@ struct QuickAddOverlay: View {
             // caret gets them back as soon as the `>` is gone.
             .onKeyPress(.upArrow) {
                 guard isCommand else { return .ignored }
-                palette.move(by: -1)
+                palette.list.move(by: -1)
                 return .handled
             }
             .onKeyPress(.downArrow) {
                 guard isCommand else { return .ignored }
-                palette.move(by: 1)
+                palette.list.move(by: 1)
                 return .handled
             }
             // ⇥ takes the hint into the line, where the chips show it; without

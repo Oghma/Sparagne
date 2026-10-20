@@ -95,7 +95,7 @@ struct CommandPaletteTests {
         let model = CommandPaletteModel(actions: Self.sample())
         model.query = "zzz"
         #expect(model.results.isEmpty)
-        #expect(model.selected == nil)
+        #expect(model.list.selected == nil)
         #expect(await model.run() == false)
     }
 
@@ -104,24 +104,24 @@ struct CommandPaletteTests {
     @Test("The arrows wrap at both ends of the list")
     func selectionWraps() {
         let model = CommandPaletteModel(actions: Self.sample())
-        #expect(model.selection == 0)
-        model.move(by: 1)
-        model.move(by: 1)
-        #expect(model.selection == 2)
-        model.move(by: 1)
-        #expect(model.selection == 0)
-        model.move(by: -1)
-        #expect(model.selection == 2)
+        #expect(model.list.selection == 0)
+        model.list.move(by: 1)
+        model.list.move(by: 1)
+        #expect(model.list.selection == 2)
+        model.list.move(by: 1)
+        #expect(model.list.selection == 0)
+        model.list.move(by: -1)
+        #expect(model.list.selection == 2)
     }
 
     @Test("Typing puts the selection back on the first result")
     func typingResetsSelection() {
         let model = CommandPaletteModel(actions: Self.sample())
-        model.move(by: 2)
-        #expect(model.selection == 2)
+        model.list.move(by: 2)
+        #expect(model.list.selection == 2)
         model.query = "month"
-        #expect(model.selection == 0)
-        #expect(model.selected?.id == "a")
+        #expect(model.list.selection == 0)
+        #expect(model.list.selected?.id == "a")
     }
 
     @Test("↩ runs the highlighted action, not the first one")
@@ -129,7 +129,7 @@ struct CommandPaletteTests {
         let box = Box()
         let model = CommandPaletteModel(actions: Self.sample(box))
         model.query = "month"
-        model.move(by: 1)
+        model.list.move(by: 1)
         #expect(await model.run())
         #expect(box.value == "b")
     }

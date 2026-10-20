@@ -129,27 +129,27 @@ struct BulkEnvelopePopover: View {
                 .background(Ink.bg, in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Ink.line2, lineWidth: 1))
                 .onKeyPress(.upArrow) {
-                    choices.move(by: -1)
+                    choices.list.move(by: -1)
                     return .handled
                 }
                 .onKeyPress(.downArrow) {
-                    choices.move(by: 1)
+                    choices.list.move(by: 1)
                     return .handled
                 }
                 .onKeyPress(.tab) {
-                    choices.pick()
+                    choices.list.pick()
                     return .handled
                 }
-                .onSubmit { choices.pick() }
+                .onSubmit { choices.list.pick() }
                 .onChange(of: query) { _, new in choices.filter(new) }
-            if choices.isOpen {
+            if choices.list.isOpen {
                 EnvelopeChoiceList(choices: choices)
             }
             HStack {
                 Spacer()
                 Button(String(localized: "Cancel"), role: .cancel) { isPresented = false }
-                Button(String(localized: "Set Envelope")) { choices.pick() }
-                    .disabled(choices.selected == nil)
+                Button(String(localized: "Set Envelope")) { choices.list.pick() }
+                    .disabled(choices.list.selected == nil)
             }
         }
         .padding(14)

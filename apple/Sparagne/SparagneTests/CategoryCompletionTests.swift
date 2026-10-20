@@ -93,32 +93,32 @@ struct CategoryCompletionTests {
 
         model.textChanged("ca", owner: "cell", store: store) { written = $0 }
         // The newest row's category first.
-        #expect(model.candidates.map(\.name) == ["Cassa comune", "Casa", "Carburante"])
-        #expect(model.owner == AnyHashable("cell"))
+        #expect(model.list.items.map(\.name) == ["Cassa comune", "Casa", "Carburante"])
+        #expect(model.list.owner == AnyHashable("cell"))
 
-        model.move(by: -1)
-        #expect(model.selected?.name == "Carburante")
-        model.move(by: 1)
-        #expect(model.selected?.name == "Cassa comune")
-        model.move(by: 1)
+        model.list.move(by: -1)
+        #expect(model.list.selected?.name == "Carburante")
+        model.list.move(by: 1)
+        #expect(model.list.selected?.name == "Cassa comune")
+        model.list.move(by: 1)
         #expect(model.picksOnReturn(over: "ca"))
-        #expect(model.pick())
+        #expect(model.list.pick())
         #expect(written == "Casa")
-        #expect(!model.isOpen)
+        #expect(!model.list.isOpen)
 
         // The cell changing to the picked name does not open the list again.
         model.textChanged("Casa", owner: "cell", store: store) { written = $0 }
-        #expect(!model.isOpen)
+        #expect(!model.list.isOpen)
 
         // Typing on does, and an entry equal to the text lets ↩ save the row.
         model.textChanged("casa", owner: "cell", store: store) { written = $0 }
-        #expect(model.selected?.name == "Casa")
+        #expect(model.list.selected?.name == "Casa")
         #expect(!model.picksOnReturn(over: "casa"))
 
         // An alias leads to its category, and the cell gets the category.
         model.textChanged("boll", owner: "cell", store: store) { written = $0 }
-        #expect(model.candidates.first?.alias == "bollette")
-        model.pick()
+        #expect(model.list.items.first?.alias == "bollette")
+        model.list.pick()
         #expect(written == "Casa")
     }
 }

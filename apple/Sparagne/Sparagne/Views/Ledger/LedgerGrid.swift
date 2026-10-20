@@ -66,7 +66,7 @@ struct LedgerGrid: View {
     /// grid, drawn over it rather than inside a row (`hangingCategoryList`).
     @State private var completion = CategoryCompletionModel()
     /// The list under the ENVELOPE cell being typed into, drawn the same way
-    /// (`envelopeList`).
+    /// (`hangingList`).
     @State private var envelopes = EnvelopeChoiceModel()
 
     /// The grid's own coordinates, which the click watcher measures in.
@@ -117,8 +117,14 @@ struct LedgerGrid: View {
         }
         // Three points in from the cell's edge, as the canvas hangs it (`.ac`).
         .hangingCategoryList(completion, inset: 3 - GridColumn.padding) { frames.categoryList = $0 }
-        .overlayPreferenceValue(EnvelopeChoiceAnchor.self) { anchor in
-            envelopeList(at: anchor)
+        .hangingList(
+            envelopes.list,
+            anchor: EnvelopeChoiceAnchor.self,
+            height: { EnvelopeChoiceList.height(for: $0.count) },
+            inset: 3 - GridColumn.padding,
+            placed: { frames.envelopeList = $0 }
+        ) {
+            EnvelopeChoiceList(choices: envelopes)
         }
         .background(Ink.sheet)
         .background {
@@ -705,34 +711,6 @@ struct LedgerGrid: View {
             showsWallet: store.showWalletColumn,
             onClick: { field in click(CellFocus(row: nil, field: field)) }
         )
-    }
-
-    // MARK: - The envelope list
-
-    /// The ENVELOPE cell's list, hung from the bottom of its row, or from the
-    /// top when there is no room below (the empty line, a row at the bottom
-    /// of the window), as the CATEGORY cell's is (`hangingCategoryList`) and
-    /// for the same reasons: drawn over the whole grid, outside the scroll
-    /// view, so no later row covers it and the scroll view does not clip it.
-    @ViewBuilder
-    private func envelopeList(at anchor: Anchor<CGRect>?) -> some View {
-        if let anchor, envelopes.isOpen {
-            GeometryReader { proxy in
-                let cell = proxy[anchor]
-                let height = EnvelopeChoiceList.height(for: envelopes.choices.count)
-                let fitsBelow = cell.maxY + height <= proxy.size.height
-                let frame = CGRect(
-                    x: cell.minX - GridColumn.padding + 3,
-                    y: fitsBelow ? cell.maxY - 1 : cell.minY - height + 1,
-                    width: FloatingList.width,
-                    height: height
-                )
-                EnvelopeChoiceList(choices: envelopes)
-                    .offset(x: frame.minX, y: frame.minY)
-                    .onChange(of: frame, initial: true) { _, new in frames.envelopeList = new }
-                    .onDisappear { frames.envelopeList = nil }
-            }
-        }
     }
 
     // MARK: - Actions

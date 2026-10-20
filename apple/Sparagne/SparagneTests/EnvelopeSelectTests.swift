@@ -33,23 +33,23 @@ struct EnvelopeSelectTests {
         var written: Uuid?
 
         model.open(owner: "cell", envelopes: envelopes, current: "id-Spesa") { written = $0 }
-        #expect(model.isOpen)
-        #expect(model.owner == AnyHashable("cell"))
-        #expect(model.choices == envelopes)
-        #expect(model.selected?.name == "Spesa")
+        #expect(model.list.isOpen)
+        #expect(model.list.owner == AnyHashable("cell"))
+        #expect(model.list.items == envelopes)
+        #expect(model.list.selected?.name == "Spesa")
         // Already the row's envelope: ↩ saves the row instead.
         #expect(!model.picksOnReturn)
 
-        model.move(by: 1)
-        #expect(model.selected?.name == "Non allocato")
-        model.move(by: -1)
-        #expect(model.selected?.name == "Spesa")
-        model.move(by: -1)
+        model.list.move(by: 1)
+        #expect(model.list.selected?.name == "Non allocato")
+        model.list.move(by: -1)
+        #expect(model.list.selected?.name == "Spesa")
+        model.list.move(by: -1)
         #expect(model.picksOnReturn)
-        #expect(model.pick())
+        #expect(model.list.pick())
         #expect(written == "id-Casa")
-        #expect(!model.isOpen)
-        #expect(model.choices.isEmpty)
+        #expect(!model.list.isOpen)
+        #expect(model.list.items.isEmpty)
     }
 
     @Test("Typing narrows the list and highlights the best match; nothing matching leaves nothing to pick")
@@ -60,29 +60,29 @@ struct EnvelopeSelectTests {
         model.open(owner: "cell", envelopes: envelopes, current: "id-Casa") { written = $0 }
 
         model.filter("sp")
-        #expect(model.choices.map(\.name) == ["Spesa"])
-        #expect(model.selected?.name == "Spesa")
+        #expect(model.list.items.map(\.name) == ["Spesa"])
+        #expect(model.list.selected?.name == "Spesa")
 
         model.filter("ferie")
-        #expect(model.isOpen)
-        #expect(model.choices.isEmpty)
+        #expect(model.list.isOpen)
+        #expect(model.list.items.isEmpty)
         #expect(model.query == "ferie")
         #expect(!model.picksOnReturn)
-        #expect(!model.pick())
+        #expect(!model.list.pick())
         #expect(written == nil)
 
         // Emptied again: all of them, back on the row's envelope.
         model.filter("")
-        #expect(model.choices == envelopes)
-        #expect(model.selected?.name == "Casa")
+        #expect(model.list.items == envelopes)
+        #expect(model.list.selected?.name == "Casa")
     }
 
     @Test("A closed list ignores the text of a cell it is not open for")
     func closedIgnoresText() {
         let model = EnvelopeChoiceModel()
         model.filter("casa")
-        #expect(!model.isOpen)
-        #expect(model.choices.isEmpty)
+        #expect(!model.list.isOpen)
+        #expect(model.list.items.isEmpty)
     }
 
     // MARK: - Over a store

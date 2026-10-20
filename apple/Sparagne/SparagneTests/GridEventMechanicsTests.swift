@@ -231,10 +231,10 @@ struct GridEventMechanicsTests {
         // The ENVELOPE cell opens its list as it becomes a field, and there
         // ⇥ picks; esc closes it, and then ⇥ is the grid's again.
         probe.focus = CellFocus(row: nil, field: .flow)
-        await host.settle { probe.envelopes.isOpen }
-        #expect(probe.envelopes.isOpen)
+        await host.settle { probe.envelopes.list.isOpen }
+        #expect(probe.envelopes.list.isOpen)
         host.post(.escape)
-        await host.settle { !probe.envelopes.isOpen }
+        await host.settle { !probe.envelopes.list.isOpen }
         host.post(.tab)
         await host.settle { probe.moves.count == 3 }
         host.post(.backTab)

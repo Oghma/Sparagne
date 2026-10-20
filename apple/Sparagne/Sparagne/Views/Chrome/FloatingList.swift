@@ -126,6 +126,12 @@ extension FloatingList {
     static func wrapped(_ index: Int, by delta: Int, count: Int) -> Int {
         ((index + delta) % count + count) % count
     }
+
+    /// What every list matches on: case and accents never count, so `citta`
+    /// finds "Città".
+    static func fold(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    }
 }
 
 extension View {
@@ -146,5 +152,74 @@ extension View {
             }
             .onKeyPress(.tab) { list.handle(.tab, from: owner, afterTab: afterTab) }
             .onKeyPress(.escape) { list.handle(.escape, from: owner, afterClose: afterClose) }
+    }
+
+    /// Entry `index` of `list`: the pointer highlights it, a click or
+    /// VoiceOver's press picks it. `selected` marks it for VoiceOver besides
+    /// the highlight.
+    func floatingListEntry<Item>(
+        _ list: FloatingListModel<Item>,
+        at index: Int,
+        label: String,
+        selected: Bool = false
+    ) -> some View {
+        let active = index == list.selection
+        let choose: () -> Void = {
+            list.highlight(index)
+            list.pick()
+        }
+        return floatingListRow(active: active)
+            .onHover { inside in
+                if inside { list.highlight(index) }
+            }
+            .onTapGesture(perform: choose)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityAddTraits(active || selected ? [.isButton, .isSelected] : .isButton)
+            // A tap gesture is not an action VoiceOver can press: the row
+            // says it is a button, so it has to act like one.
+            .accessibilityAction { choose() }
+    }
+
+    /// `content`, `list` drawn `height(list.items)` tall, hung over this view
+    /// from the field `key` anchors while the list is open: from the field's
+    /// bottom edge, or from its top when there is no room below, one point
+    /// into the field as the canvas hangs it (`.ac`). For a view outside any
+    /// scroll view, so the list is never clipped by one, no later row covers
+    /// it, and a click on it is not a click on what is under it (in the
+    /// grid, one that would save the cell). `inset` moves the list along the
+    /// field's edge: a grid cell's starts three points in from the cell's
+    /// edge rather than from its padded text.
+    ///
+    /// `placed` hears where the list is, in this view's coordinates, and
+    /// `nil` once it is gone: the grid lets a click there through to the list
+    /// rather than saving the cell the list belongs to (`LedgerGrid`).
+    func hangingList<Key: PreferenceKey, Item, Content: View>(
+        _ list: FloatingListModel<Item>,
+        anchor key: Key.Type,
+        height: @escaping ([Item]) -> CGFloat,
+        inset: CGFloat,
+        placed: @escaping (CGRect?) -> Void,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View where Key.Value == Anchor<CGRect>? {
+        overlayPreferenceValue(key) { anchor in
+            if let anchor, list.isOpen {
+                GeometryReader { proxy in
+                    let field = proxy[anchor]
+                    let height = height(list.items)
+                    let fitsBelow = field.maxY + height <= proxy.size.height
+                    let frame = CGRect(
+                        x: field.minX + inset,
+                        y: fitsBelow ? field.maxY - 1 : field.minY - height + 1,
+                        width: FloatingList.width,
+                        height: height
+                    )
+                    content()
+                        .offset(x: frame.minX, y: frame.minY)
+                        .onChange(of: frame, initial: true) { _, new in placed(new) }
+                        .onDisappear { placed(nil) }
+                }
+            }
+        }
     }
 }

@@ -18,18 +18,11 @@ struct EnvelopeChoice: Identifiable, Equatable, Sendable {
 /// the names from their start first, then the names that hold it anywhere,
 /// case and accents aside, as the CATEGORY cell's list matches.
 ///
-/// One per grid, shared by its rows, as `CategoryCompletionModel` is: only one
-/// cell has the caret at a time, and the grid draws the list over everything
-/// else. Free of views, so the filter and the arrows can be tested without a
-/// window.
+/// One per grid, shared by its rows, as `CategoryCompletionModel` is. The
+/// list is open even with nothing to show: it then says nothing matches.
 @Observable
 final class EnvelopeChoiceModel {
-    /// What the list shows now: every envelope, or those matching the text.
-    private(set) var choices: [EnvelopeChoice] = []
-    /// Index into `choices`.
-    private(set) var selection = 0
-    /// The cell the list is open for; `nil` while it is closed.
-    private(set) var owner: AnyHashable?
+    let list = FloatingListModel<EnvelopeChoice>()
     /// The envelope the open cell is on: the list ticks it, and highlights
     /// it while nothing is typed.
     private(set) var current: Uuid?
@@ -38,15 +31,6 @@ final class EnvelopeChoiceModel {
     private(set) var query = ""
 
     @ObservationIgnored private var envelopes: [EnvelopeChoice] = []
-    /// Writes the picked envelope into the cell that opened the list.
-    @ObservationIgnored private var write: ((Uuid) -> Void)?
-
-    /// Open even with nothing to show: the list then says nothing matches.
-    var isOpen: Bool { owner != nil }
-
-    var selected: EnvelopeChoice? {
-        choices.indices.contains(selection) ? choices[selection] : nil
-    }
 
     /// The vault's active envelopes as the list names them.
     static func envelopes(in store: AppStore) -> [EnvelopeChoice] {
@@ -57,9 +41,9 @@ final class EnvelopeChoiceModel {
     /// anywhere in it, each group in the vault's order. Blank text is all of
     /// them.
     static func choices(for query: String, among envelopes: [EnvelopeChoice]) -> [EnvelopeChoice] {
-        let needle = CategoryCompletion.fold(query.trimmingCharacters(in: .whitespaces))
+        let needle = FloatingList.fold(query.trimmingCharacters(in: .whitespaces))
         guard !needle.isEmpty else { return envelopes }
-        let folded = envelopes.map { (choice: $0, name: CategoryCompletion.fold($0.name)) }
+        let folded = envelopes.map { (choice: $0, name: FloatingList.fold($0.name)) }
         let fromStart = folded.filter { $0.name.hasPrefix(needle) }
         let inside = folded.filter { !$0.name.hasPrefix(needle) && $0.name.contains(needle) }
         return (fromStart + inside).map(\.choice)
@@ -72,10 +56,9 @@ final class EnvelopeChoiceModel {
         current: Uuid?,
         write: @escaping (Uuid) -> Void
     ) {
-        self.owner = owner
         self.envelopes = envelopes
         self.current = current
-        self.write = write
+        list.open(for: owner) { write($0.id) }
         filter("")
     }
 
@@ -83,48 +66,16 @@ final class EnvelopeChoiceModel {
     /// highlight starts on the best match, or on the envelope the row is on
     /// while nothing is typed.
     func filter(_ text: String) {
-        guard isOpen else { return }
+        guard list.isOpen else { return }
         query = text.trimmingCharacters(in: .whitespaces)
-        choices = Self.choices(for: query, among: envelopes)
-        selection = query.isEmpty ? (choices.firstIndex { $0.id == current } ?? 0) : 0
-    }
-
-    /// ↓ is `move(by: 1)`, ↑ is `move(by: -1)`; both wrap, as the palette's do.
-    func move(by delta: Int) {
-        guard !choices.isEmpty else { return }
-        selection = ((selection + delta) % choices.count + choices.count) % choices.count
-    }
-
-    /// The pointer on an entry.
-    func highlight(_ index: Int) {
-        guard choices.indices.contains(index) else { return }
-        selection = index
-    }
-
-    /// ↩, ⇥ or a click: the highlighted envelope goes into the cell and the
-    /// list closes. `false` when there was nothing to pick.
-    @discardableResult
-    func pick() -> Bool {
-        guard let chosen = selected, let write else { return false }
-        close()
-        write(chosen.id)
-        return true
-    }
-
-    /// esc, a pick, or the cell losing the caret.
-    func close() {
-        choices = []
-        selection = 0
-        owner = nil
-        current = nil
-        query = ""
-        write = nil
+        let choices = Self.choices(for: query, among: envelopes)
+        list.show(choices, selection: query.isEmpty ? (choices.firstIndex { $0.id == current } ?? 0) : 0)
     }
 
     /// Whether ↩ should pick rather than save the row: only when the pick
     /// would move the row to another envelope.
     var picksOnReturn: Bool {
-        guard let selected else { return false }
+        guard let selected = list.selected else { return false }
         return selected.id != current
     }
 }
@@ -182,7 +133,7 @@ struct EnvelopeSelectCell: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if isOwner {
-                        choices.close()
+                        choices.list.close()
                         query.wrappedValue = ""
                     } else {
                         open()
@@ -191,39 +142,22 @@ struct EnvelopeSelectCell: View {
                 .accessibilityHidden(true)
         }
         .cellFocusRing(true)
-        .onKeyPress(.upArrow) { arrow(-1) }
-        .onKeyPress(.downArrow) { arrow(1) }
-        .onKeyPress(.return) {
-            guard isOwner else { return .ignored }
-            guard choices.picksOnReturn else {
-                // Nothing to change: the key saves the cell.
-                choices.close()
-                query.wrappedValue = ""
-                return .ignored
-            }
-            choices.pick()
-            return .handled
-        }
-        .onKeyPress(.tab) {
-            guard isOwner, choices.pick() else { return .ignored }
+        .floatingListKeys(
+            choices.list,
+            owner: key,
+            picksOnReturn: { choices.picksOnReturn },
             // On to the next cell, as ⇥ would have gone: the pick is already
             // in the editor, which the move saves.
-            edited.editor.move(.tab)
-            return .handled
-        }
-        .onKeyPress(.escape) {
-            guard isOwner else { return .ignored }
-            choices.close()
-            query.wrappedValue = ""
-            return .handled
-        }
+            afterTab: { edited.editor.move(.tab) },
+            afterClose: { query.wrappedValue = "" }
+        )
         // A cell typed into from a letter opens the list narrowed to it.
         .onAppear {
             open()
             choices.filter(query.wrappedValue)
         }
         .onDisappear {
-            if isOwner { choices.close() }
+            if isOwner { choices.list.close() }
         }
         .onChange(of: query.wrappedValue) { _, new in
             // A letter typed after esc or a pick opens the list again; the
@@ -240,7 +174,7 @@ struct EnvelopeSelectCell: View {
         .anchorPreference(key: EnvelopeChoiceAnchor.self, value: .bounds) { isOwner ? $0 : nil }
     }
 
-    private var isOwner: Bool { choices.owner == AnyHashable(key) }
+    private var isOwner: Bool { choices.list.owner == AnyHashable(key) }
 
     /// The envelope's name; an archived one still has it.
     private var name: String? {
@@ -256,13 +190,6 @@ struct EnvelopeSelectCell: View {
             edited.flowId.wrappedValue = picked
             query.wrappedValue = ""
         }
-    }
-
-    /// ↑ ↓ belong to the list while it is open; closed, they move the cursor.
-    private func arrow(_ delta: Int) -> KeyPress.Result {
-        guard isOwner else { return .ignored }
-        choices.move(by: delta)
-        return .handled
     }
 }
 
@@ -289,20 +216,20 @@ struct EnvelopeChoiceList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             FloatingListGroup(title: String(localized: "Envelopes"))
-            if choices.choices.isEmpty {
+            if list.items.isEmpty {
                 Text(String(localized: "No envelope matches \u{201C}\(choices.query)\u{201D}"))
                     .foregroundStyle(Ink.text3)
                     .floatingListRow(active: false)
-            } else if choices.choices.count > Self.visibleRows {
+            } else if list.items.count > Self.visibleRows {
                 ScrollViewReader { proxy in
                     ScrollView {
                         entries
                     }
                     .scrollIndicators(.never)
                     .frame(height: CGFloat(Self.visibleRows) * FloatingList.rowHeight)
-                    .onChange(of: choices.selection, initial: true) { _, index in
-                        guard choices.choices.indices.contains(index) else { return }
-                        proxy.scrollTo(choices.choices[index].id)
+                    .onChange(of: list.selection, initial: true) { _, index in
+                        guard list.items.indices.contains(index) else { return }
+                        proxy.scrollTo(list.items[index].id)
                     }
                 }
             } else {
@@ -313,9 +240,11 @@ struct EnvelopeChoiceList: View {
         .floatingList()
     }
 
+    private var list: FloatingListModel<EnvelopeChoice> { choices.list }
+
     private var entries: some View {
         VStack(spacing: 0) {
-            ForEach(Array(choices.choices.enumerated()), id: \.element.id) { index, choice in
+            ForEach(Array(list.items.enumerated()), id: \.element.id) { index, choice in
                 row(index: index, choice: choice)
                     .id(choice.id)
             }
@@ -323,7 +252,6 @@ struct EnvelopeChoiceList: View {
     }
 
     private func row(index: Int, choice: EnvelopeChoice) -> some View {
-        let active = index == choices.selection
         let current = choice.id == choices.current
         return HStack(spacing: 8) {
             Text(choice.name).foregroundStyle(Ink.text)
@@ -334,23 +262,6 @@ struct EnvelopeChoiceList: View {
                     .foregroundStyle(Ink.accent)
             }
         }
-        .floatingListRow(active: active)
-        .onHover { inside in
-            if inside { choices.highlight(index) }
-        }
-        .onTapGesture { choose(index) }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(choice.name)
-        .accessibilityAddTraits(active || current ? [.isButton, .isSelected] : .isButton)
-        // A tap gesture is not an action VoiceOver can press: the row says it
-        // is a button, so it has to act like one.
-        .accessibilityAction { choose(index) }
-    }
-
-    /// A click on a row, or VoiceOver pressing it: that envelope goes into
-    /// the cell and the list closes (`EnvelopeChoiceModel.pick`).
-    private func choose(_ index: Int) {
-        choices.highlight(index)
-        choices.pick()
+        .floatingListEntry(list, at: index, label: choice.name, selected: current)
     }
 }
