@@ -6,16 +6,11 @@
 
 mod common;
 
-use chrono::{DateTime, TimeZone, Utc};
 use common::*;
 use sparagne_core::{Command, FlowBalanceRange, FlowMode};
 use uuid::Uuid;
 
 const DAY: i64 = 86_400;
-
-fn utc(secs: i64) -> DateTime<Utc> {
-    Utc.timestamp_opt(secs, 0).unwrap()
-}
 
 fn range(fx: &Fx, flow: Uuid, from: i64) -> FlowBalanceRange {
     fx.core

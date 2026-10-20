@@ -5,37 +5,13 @@
 
 mod common;
 
-use chrono::NaiveDate;
 use common::{
-    T0, all, entry, flow_cmd, replayed, run, setup,
-    sync::{create_vault, exec, rename, vault_of},
+    T0, all, create_vault, entry, flow_cmd, rent_cmd, replayed, run, setup,
+    sync::{exec, rename, vault_of},
     try_run, wallet_cmd,
 };
-use sparagne_core::{
-    Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, Frequency, Schedule,
-    TransactionKind, replay,
-};
+use sparagne_core::{Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, replay};
 use uuid::Uuid;
-
-/// A monthly expense template, so the cascade has a `recurring_templates`
-/// row (and a run) to take with it.
-fn rent_cmd() -> Command {
-    Command::CreateRecurring {
-        transaction_kind: TransactionKind::Expense,
-        amount: 2_500,
-        wallet_id: None,
-        flow_id: None,
-        category: Some("Rent".to_string()),
-        note: None,
-        schedule: Schedule {
-            frequency: Frequency::Monthly { day: 1 },
-            interval: 1,
-            start_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
-            end_date: None,
-        },
-        owner: None,
-    }
-}
 
 #[test]
 fn rename_vault_trims_and_shows_everywhere() {

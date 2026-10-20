@@ -10,8 +10,8 @@
 mod common;
 
 use common::{
-    T0, all, at, entry, flow_cmd,
-    sync::{ALL, create_vault, exec, projection, pull, rename, spend, sync, vault_of},
+    T0, all, at, create_vault, entry, flow_cmd,
+    sync::{ALL, exec, projection, pull, rename, spend, sync, vault_of},
     wallet_cmd,
 };
 use sparagne_core::{

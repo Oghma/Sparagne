@@ -5,22 +5,15 @@
 use chrono::NaiveDate;
 use sparagne_core::{
     AliasView, AllocationBase, AllocationRunView, CategoryView, Command, CommandEnvelope, Core,
-    Currency, FlowMode, PendingAllocation, RecurringView, SyncReport, TransactionView,
-    VaultSnapshot, sync::PullResponse,
+    FlowMode, PendingAllocation, RecurringView, SyncReport, TransactionView, VaultSnapshot,
+    sync::PullResponse,
 };
 use uuid::Uuid;
 
-use super::{Fx, all, entry, flow_cmd, noon, run, wallet_cmd};
+use super::{Fx, all, create_vault, entry, flow_cmd, noon, run, wallet_cmd};
 
 /// A push or pull limit that is no limit.
 pub const ALL: usize = usize::MAX;
-
-pub fn create_vault(core: &mut Core, author: &str, name: &str) -> Uuid {
-    core.execute(CommandEnvelope::create_vault(author, name, Currency::Eur))
-        .unwrap()
-        .result_id
-        .unwrap()
-}
 
 /// A fresh in-memory core holding one vault.
 pub fn vault_of(author: &str, name: &str) -> (Core, Uuid) {

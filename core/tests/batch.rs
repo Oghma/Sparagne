@@ -6,8 +6,8 @@
 mod common;
 
 use common::{
-    T0, all, entry, flow_cmd, list, setup,
-    sync::{ALL, category, create_vault, exec, projection, pull, spend, sync, vault_of},
+    T0, all, create_vault, entry, flow_cmd, list, setup,
+    sync::{ALL, category, exec, projection, pull, spend, sync, vault_of},
     wallet_cmd,
 };
 use sparagne_core::{

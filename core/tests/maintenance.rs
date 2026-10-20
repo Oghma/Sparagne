@@ -5,38 +5,15 @@
 
 mod common;
 
-use std::path::{Path, PathBuf};
-
 use common::{
-    T0, all, entry,
-    sync::{ALL, category, create_vault, exec, projection, pull, sync, vault_of},
+    T0, TempDb, all, create_vault, entry,
+    sync::{ALL, category, exec, projection, pull, sync, vault_of},
     wallet_cmd,
 };
 use sparagne_core::{
     Command, CommandEnvelope, Core, DomainError, SyncReport, SyncState, sync::PushRequest,
 };
 use uuid::Uuid;
-
-/// A database path in the temp directory, removed with its WAL files on drop.
-struct TempDb(PathBuf);
-
-impl TempDb {
-    fn new(label: &str) -> Self {
-        Self(std::env::temp_dir().join(format!("sparagne-{label}-{}.sqlite", Uuid::now_v7())))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        for suffix in ["", "-wal", "-shm"] {
-            let _ = std::fs::remove_file(format!("{}{suffix}", self.0.display()));
-        }
-    }
-}
 
 fn spend(amount: i64, wallet: Uuid, category: &str, secs: i64) -> Command {
     Command::Expense(entry(amount, Some(wallet), None, Some(category), secs))
