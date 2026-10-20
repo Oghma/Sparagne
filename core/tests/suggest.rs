@@ -4,8 +4,7 @@
 
 mod common;
 
-use chrono::{DateTime, Utc};
-use common::{Fx, T0, at, setup};
+use common::{Fx, T0, at, category_id, setup, utc};
 use sparagne_core::{CategorySuggestion, Command, Entry};
 use uuid::Uuid;
 
@@ -33,29 +32,15 @@ fn file_as(
     fx.id(command)
 }
 
-fn since(secs: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp(secs, 0).unwrap()
-}
-
 fn suggest(fx: &Fx, notes: &[&str]) -> Vec<Option<CategorySuggestion>> {
     let notes: Vec<String> = notes.iter().map(|n| (*n).to_string()).collect();
     fx.core
-        .suggest_categories(fx.vault, &notes, since(0))
+        .suggest_categories(fx.vault, &notes, utc(0))
         .unwrap()
 }
 
 fn one(fx: &Fx, note: &str) -> Option<CategorySuggestion> {
     suggest(fx, &[note]).pop().unwrap()
-}
-
-fn category_id(fx: &Fx, name: &str) -> Uuid {
-    fx.core
-        .categories(fx.vault, true)
-        .unwrap()
-        .into_iter()
-        .find(|c| c.name == name)
-        .unwrap()
-        .id
 }
 
 /// `(name, uses, exact)` of a suggestion, for compact asserts.
@@ -195,7 +180,7 @@ fn voided_and_old_transactions_are_left_out() {
     let notes = vec!["cinema".to_string()];
     assert_eq!(
         fx.core
-            .suggest_categories(fx.vault, &notes, since(T0 - 999))
+            .suggest_categories(fx.vault, &notes, utc(T0 - 999))
             .unwrap(),
         vec![None]
     );
@@ -254,7 +239,7 @@ fn an_unknown_vault_suggests_nothing() {
     let notes = vec!["pizza".to_string()];
     assert_eq!(
         fx.core
-            .suggest_categories(Uuid::now_v7(), &notes, since(0))
+            .suggest_categories(Uuid::now_v7(), &notes, utc(0))
             .unwrap(),
         vec![None]
     );

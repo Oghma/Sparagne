@@ -280,3 +280,70 @@ pub fn envelope(fx: &mut Fx, name: &str, mode: FlowMode) -> Uuid {
         .result_id
         .unwrap()
 }
+
+impl Fx {
+    /// [`Fx::run`] as `author`.
+    pub fn run_as(&mut self, author: &str, cmd: Command) -> Receipt {
+        self.core
+            .execute(CommandEnvelope::new(self.vault, author, cmd))
+            .unwrap()
+    }
+}
+
+pub fn utc(secs: i64) -> DateTime<Utc> {
+    Utc.timestamp_opt(secs, 0).unwrap()
+}
+
+pub fn create_vault(core: &mut Core, author: &str, name: &str) -> Uuid {
+    core.execute(CommandEnvelope::create_vault(author, name, Currency::Eur))
+        .unwrap()
+        .result_id
+        .unwrap()
+}
+
+/// Id of the category named `name`, archived included.
+pub fn category_id(fx: &Fx, name: &str) -> Uuid {
+    fx.core
+        .categories(fx.vault, true)
+        .unwrap()
+        .into_iter()
+        .find(|c| c.name == name)
+        .unwrap_or_else(|| panic!("no category named '{name}'"))
+        .id
+}
+
+/// A 25.00 Rent expense on the 1st of every month from 2026-01-01, on the
+/// only wallet.
+pub fn rent_cmd() -> Command {
+    Command::CreateRecurring {
+        transaction_kind: sparagne_core::TransactionKind::Expense,
+        amount: 2_500,
+        wallet_id: None,
+        flow_id: None,
+        category: Some("Rent".to_string()),
+        note: None,
+        schedule: monthly_from(1, day(2026, 1, 1)),
+        owner: None,
+    }
+}
+
+/// A database path in the temp directory, removed with its WAL files on drop.
+pub struct TempDb(std::path::PathBuf);
+
+impl TempDb {
+    pub fn new(label: &str) -> Self {
+        Self(std::env::temp_dir().join(format!("sparagne-{label}-{}.sqlite", Uuid::now_v7())))
+    }
+
+    pub fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDb {
+    fn drop(&mut self) {
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", self.0.display()));
+        }
+    }
+}

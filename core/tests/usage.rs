@@ -1,31 +1,19 @@
 //! Tests for the app-facing read queries in `usage.rs`: vault listing,
-//! single-transaction lookup, recent picker usage, period totals and text
-//! search.
+//! single-transaction lookup, recent picker usage and text search.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod common;
 
-use chrono::{DateTime, TimeZone, Utc};
 use common::*;
-use sparagne_core::{
-    Command, CommandEnvelope, Currency, DomainError, FlowMode, TransactionFilter, TransactionKind,
-};
+use sparagne_core::{Command, Currency, DomainError, FlowMode, TransactionFilter, TransactionKind};
 use uuid::Uuid;
-
-fn since_utc(secs: i64) -> DateTime<Utc> {
-    Utc.timestamp_opt(secs, 0).unwrap()
-}
-
-// -- vaults -------------------------------------------------------------
 
 #[test]
 fn vaults_lists_two_vaults_sorted_by_name_with_currency_and_owner() {
     let mut core = sparagne_core::Core::open_in_memory().unwrap();
-    core.execute(CommandEnvelope::create_vault("alice", "Zoo", Currency::Eur))
-        .unwrap();
-    core.execute(CommandEnvelope::create_vault("bob", "Alpha", Currency::Eur))
-        .unwrap();
+    create_vault(&mut core, "alice", "Zoo");
+    create_vault(&mut core, "bob", "Alpha");
 
     let vaults = core.vaults().unwrap();
     assert_eq!(vaults.len(), 2);
@@ -35,8 +23,6 @@ fn vaults_lists_two_vaults_sorted_by_name_with_currency_and_owner() {
     assert_eq!(vaults[1].name, "Zoo");
     assert_eq!(vaults[1].owner, "alice");
 }
-
-// -- transaction ----------------------------------------------------------
 
 #[test]
 fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vault() {
@@ -67,12 +53,7 @@ fn transaction_returns_legs_and_voided_flag_and_notfound_on_missing_or_wrong_vau
         DomainError::NotFound("transaction".to_string())
     );
 
-    let other_vault = fx
-        .core
-        .execute(CommandEnvelope::create_vault("bob", "Other", Currency::Eur))
-        .unwrap()
-        .result_id
-        .unwrap();
+    let other_vault = create_vault(&mut fx.core, "bob", "Other");
     let wrong_vault = fx.core.transaction(other_vault, income);
     assert_eq!(
         wrong_vault.unwrap_err(),
@@ -125,8 +106,6 @@ fn listed_rows_carry_their_shape() {
     assert_eq!(opening.category, "Opening");
 }
 
-// -- recent_usage -----------------------------------------------------------
-
 #[test]
 fn recent_usage_orders_by_last_use_respects_limit_and_ignores_voided_and_transfers() {
     let mut fx = setup();
@@ -178,23 +157,18 @@ fn recent_usage_orders_by_last_use_respects_limit_and_ignores_voided_and_transfe
         occurred_at: at(T0 + 4),
     });
 
-    let cats = fx.core.categories(fx.vault, false).unwrap();
-    let cat_id = |name: &str| cats.iter().find(|c| c.name == name).unwrap().id;
-
-    let usage = fx.core.recent_usage(fx.vault, since_utc(T0), 10).unwrap();
+    let cat_id = |name: &str| category_id(&fx, name);
+    let usage = fx.core.recent_usage(fx.vault, utc(T0), 10).unwrap();
     assert_eq!(
         usage.categories,
         vec![cat_id("Transport"), cat_id("Food"), cat_id("Salary")]
     );
 
-    let limited = fx.core.recent_usage(fx.vault, since_utc(T0), 1).unwrap();
+    let limited = fx.core.recent_usage(fx.vault, utc(T0), 1).unwrap();
     assert_eq!(limited.categories, vec![cat_id("Transport")]);
 
     // `since` cuts off everything before Transport's occurrence.
-    let filtered = fx
-        .core
-        .recent_usage(fx.vault, since_utc(T0 + 2), 10)
-        .unwrap();
+    let filtered = fx.core.recent_usage(fx.vault, utc(T0 + 2), 10).unwrap();
     assert_eq!(filtered.categories, vec![cat_id("Transport")]);
 }
 
@@ -217,14 +191,9 @@ fn recent_usage_excludes_system_category_even_when_most_recent() {
         T0 + 1,
     )));
 
-    let cats = fx.core.categories(fx.vault, false).unwrap();
-    let food_id = cats.iter().find(|c| c.name == "Food").unwrap().id;
-
-    let usage = fx.core.recent_usage(fx.vault, since_utc(T0), 10).unwrap();
-    assert_eq!(usage.categories, vec![food_id]);
+    let usage = fx.core.recent_usage(fx.vault, utc(T0), 10).unwrap();
+    assert_eq!(usage.categories, vec![category_id(&fx, "Food")]);
 }
-
-// -- text search --------------------------------------------------------
 
 #[test]
 fn text_search_matches_note_and_category_case_insensitively() {

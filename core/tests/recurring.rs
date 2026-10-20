@@ -8,18 +8,10 @@ mod common;
 use chrono::NaiveDate;
 use common::*;
 use sparagne_core::{
-    Command, Core, DomainError, FlowMode, Frequency, RecurringPatch, RunOutcome, Schedule,
-    TransactionKind, replay,
+    Command, DomainError, FlowMode, Frequency, RecurringPatch, RunOutcome, Schedule,
+    TransactionKind,
 };
 use uuid::Uuid;
-
-// ---------------------------------------------------------------------------
-// Local helpers
-// ---------------------------------------------------------------------------
-
-fn date(y: i32, m: u32, d: u32) -> NaiveDate {
-    NaiveDate::from_ymd_opt(y, m, d).unwrap()
-}
 
 fn monthly(day: u8, start: NaiveDate, end: Option<NaiveDate>) -> Schedule {
     Schedule {
@@ -49,28 +41,29 @@ fn recurring_cmd(
     }
 }
 
-/// An expense template of 2500 on the 1st of every month from 2026-01-01.
-fn rent_cmd() -> Command {
-    recurring_cmd(
-        TransactionKind::Expense,
-        2500,
-        None,
-        Some("Rent"),
-        monthly(1, date(2026, 1, 1), None),
-    )
+fn execute(recurring_id: Uuid, period_date: NaiveDate, secs: i64) -> Command {
+    Command::ExecuteRecurring {
+        recurring_id,
+        period_date,
+        occurred_at: at(secs),
+        person: None,
+    }
 }
 
-fn due_dates(core: &Core, vault: Uuid, today: NaiveDate) -> Vec<(Uuid, Vec<NaiveDate>)> {
-    core.pending_recurring(vault, today)
-        .unwrap()
+fn skip(recurring_id: Uuid, period_date: NaiveDate) -> Command {
+    Command::SkipRecurring {
+        recurring_id,
+        period_date,
+    }
+}
+
+fn due_dates(fx: &Fx, today: NaiveDate) -> Vec<(Uuid, Vec<NaiveDate>)> {
+    let pending = fx.core.pending_recurring(fx.vault, today).unwrap();
+    pending
         .into_iter()
         .map(|p| (p.template.id, p.due))
         .collect()
 }
-
-// ---------------------------------------------------------------------------
-// Create, list, update, archive
-// ---------------------------------------------------------------------------
 
 #[test]
 fn create_lists_the_template_with_its_schedule() {
@@ -87,7 +80,7 @@ fn create_lists_the_template_with_its_schedule() {
     assert_eq!(t.flow_id, None);
     assert_eq!(t.category.as_deref(), Some("Rent"));
     assert_eq!(t.note, None);
-    assert_eq!(t.schedule, monthly(1, date(2026, 1, 1), None));
+    assert_eq!(t.schedule, monthly(1, day(2026, 1, 1), None));
     assert!(t.enabled);
     assert!(!t.archived);
 
@@ -106,7 +99,7 @@ fn create_lists_the_template_with_its_schedule() {
 #[test]
 fn create_rejects_bad_kind_amount_schedule_and_targets() {
     let mut fx = setup();
-    let good = monthly(1, date(2026, 1, 1), None);
+    let good = monthly(1, day(2026, 1, 1), None);
 
     assert!(matches!(
         fx.try_run(recurring_cmd(
@@ -177,14 +170,11 @@ fn update_changes_the_schedule_and_what_is_pending() {
     let mut fx = setup();
     let id = fx.id(rent_cmd());
     assert_eq!(
-        due_dates(&fx.core, fx.vault, date(2026, 3, 15)),
-        vec![(
-            id,
-            vec![date(2026, 1, 1), date(2026, 2, 1), date(2026, 3, 1)]
-        )]
+        due_dates(&fx, day(2026, 3, 15)),
+        vec![(id, vec![day(2026, 1, 1), day(2026, 2, 1), day(2026, 3, 1)])]
     );
 
-    let moved = monthly(20, date(2026, 2, 1), None);
+    let moved = monthly(20, day(2026, 2, 1), None);
     fx.run(Command::UpdateRecurring {
         recurring_id: id,
         patch: RecurringPatch {
@@ -202,8 +192,8 @@ fn update_changes_the_schedule_and_what_is_pending() {
     assert_eq!(t.note.as_deref(), Some("monthly rent"));
     assert_eq!(t.schedule, moved);
     assert_eq!(
-        due_dates(&fx.core, fx.vault, date(2026, 3, 15)),
-        vec![(id, vec![date(2026, 2, 20)])]
+        due_dates(&fx, day(2026, 3, 15)),
+        vec![(id, vec![day(2026, 2, 20)])]
     );
 }
 
@@ -267,29 +257,25 @@ fn restore_reactivates_an_archived_template() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Pending
-// ---------------------------------------------------------------------------
-
 #[test]
 fn pending_backfills_missed_periods_and_stops_at_today() {
     let mut fx = setup();
     let id = fx.id(rent_cmd());
 
-    assert!(due_dates(&fx.core, fx.vault, date(2025, 12, 31)).is_empty());
+    assert!(due_dates(&fx, day(2025, 12, 31)).is_empty());
     assert_eq!(
-        due_dates(&fx.core, fx.vault, date(2026, 1, 1)),
-        vec![(id, vec![date(2026, 1, 1)])]
+        due_dates(&fx, day(2026, 1, 1)),
+        vec![(id, vec![day(2026, 1, 1)])]
     );
     assert_eq!(
-        due_dates(&fx.core, fx.vault, date(2026, 4, 30)),
+        due_dates(&fx, day(2026, 4, 30)),
         vec![(
             id,
             vec![
-                date(2026, 1, 1),
-                date(2026, 2, 1),
-                date(2026, 3, 1),
-                date(2026, 4, 1)
+                day(2026, 1, 1),
+                day(2026, 2, 1),
+                day(2026, 3, 1),
+                day(2026, 4, 1)
             ]
         )]
     );
@@ -303,7 +289,7 @@ fn pending_respects_end_date_disabled_and_archived() {
         100,
         None,
         None,
-        monthly(1, date(2026, 1, 1), Some(date(2026, 2, 15))),
+        monthly(1, day(2026, 1, 1), Some(day(2026, 2, 15))),
     ));
     let off = fx.id(rent_cmd());
     let gone = fx.id(rent_cmd());
@@ -318,8 +304,8 @@ fn pending_respects_end_date_disabled_and_archived() {
     fx.run(Command::ArchiveRecurring { recurring_id: gone });
 
     assert_eq!(
-        due_dates(&fx.core, fx.vault, date(2026, 6, 1)),
-        vec![(bounded, vec![date(2026, 1, 1), date(2026, 2, 1)])]
+        due_dates(&fx, day(2026, 6, 1)),
+        vec![(bounded, vec![day(2026, 1, 1), day(2026, 2, 1)])]
     );
     assert_eq!(fx.core.list_recurring(fx.vault, false).unwrap().len(), 2);
     assert_eq!(fx.core.list_recurring(fx.vault, true).unwrap().len(), 3);
@@ -327,20 +313,11 @@ fn pending_respects_end_date_disabled_and_archived() {
     // A disabled or archived template cannot be executed either.
     for id in [off, gone] {
         assert!(matches!(
-            fx.try_run(Command::ExecuteRecurring {
-                recurring_id: id,
-                period_date: date(2026, 1, 1),
-                occurred_at: at(T0),
-                person: None,
-            }),
+            fx.try_run(execute(id, day(2026, 1, 1), T0)),
             Err(DomainError::InvalidCommand(_))
         ));
     }
 }
-
-// ---------------------------------------------------------------------------
-// Execute and skip
-// ---------------------------------------------------------------------------
 
 #[test]
 fn execute_posts_the_transaction_and_records_the_run() {
@@ -354,12 +331,7 @@ fn execute_posts_the_transaction_and_records_the_run() {
     )));
     let id = fx.id(rent_cmd());
 
-    let tx_id = fx.id(Command::ExecuteRecurring {
-        recurring_id: id,
-        period_date: date(2026, 1, 1),
-        occurred_at: at(T0 + 100),
-        person: None,
-    });
+    let tx_id = fx.id(execute(id, day(2026, 1, 1), T0 + 100));
 
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 7500);
     assert_eq!(flow_balance(&fx.core, fx.vault, fx.unallocated), 7500);
@@ -377,14 +349,14 @@ fn execute_posts_the_transaction_and_records_the_run() {
 
     let runs = fx.core.recurring_runs(fx.vault, id).unwrap();
     assert_eq!(runs.len(), 1);
-    assert_eq!(runs[0].period_date, date(2026, 1, 1));
+    assert_eq!(runs[0].period_date, day(2026, 1, 1));
     assert_eq!(runs[0].outcome, RunOutcome::Executed);
     assert_eq!(runs[0].transaction_id, Some(tx_id));
 
     // The executed period is no longer pending; the next one still is.
     assert_eq!(
-        due_dates(&fx.core, fx.vault, date(2026, 2, 5)),
-        vec![(id, vec![date(2026, 2, 1)])]
+        due_dates(&fx, day(2026, 2, 5)),
+        vec![(id, vec![day(2026, 2, 1)])]
     );
 }
 
@@ -393,34 +365,26 @@ fn a_period_can_be_handled_only_once_and_only_when_due() {
     let mut fx = setup();
     fx.run(Command::Income(entry(10_000, None, None, None, T0)));
     let id = fx.id(rent_cmd());
-    let execute = |period: NaiveDate| Command::ExecuteRecurring {
-        recurring_id: id,
-        period_date: period,
-        occurred_at: at(T0 + 100),
-        person: None,
-    };
+    let on = |period: NaiveDate| execute(id, period, T0 + 100);
 
     // Not an occurrence of the schedule.
     assert!(matches!(
-        fx.try_run(execute(date(2026, 1, 2))),
+        fx.try_run(on(day(2026, 1, 2))),
         Err(DomainError::InvalidCommand(_))
     ));
     // Before start_date, even though it is a 1st of the month.
     assert!(matches!(
-        fx.try_run(execute(date(2025, 12, 1))),
+        fx.try_run(on(day(2025, 12, 1))),
         Err(DomainError::InvalidCommand(_))
     ));
 
-    fx.run(execute(date(2026, 1, 1)));
+    fx.run(on(day(2026, 1, 1)));
     assert_eq!(
-        fx.try_run(execute(date(2026, 1, 1))).unwrap_err(),
+        fx.try_run(on(day(2026, 1, 1))).unwrap_err(),
         DomainError::AlreadyExists("run for 2026-01-01".to_string())
     );
     assert!(matches!(
-        fx.try_run(Command::SkipRecurring {
-            recurring_id: id,
-            period_date: date(2026, 1, 1),
-        }),
+        fx.try_run(skip(id, day(2026, 1, 1))),
         Err(DomainError::AlreadyExists(_))
     ));
     assert_eq!(fx.core.recurring_runs(fx.vault, id).unwrap().len(), 1);
@@ -432,10 +396,7 @@ fn skip_handles_the_period_without_a_transaction() {
     let mut fx = setup();
     let id = fx.id(rent_cmd());
 
-    let receipt = fx.run(Command::SkipRecurring {
-        recurring_id: id,
-        period_date: date(2026, 1, 1),
-    });
+    let receipt = fx.run(skip(id, day(2026, 1, 1)));
     assert_eq!(receipt.result_id, None);
     assert!(list(&fx.core, fx.vault, &all()).is_empty());
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 0);
@@ -445,8 +406,8 @@ fn skip_handles_the_period_without_a_transaction() {
     assert_eq!(runs[0].outcome, RunOutcome::Skipped);
     assert_eq!(runs[0].transaction_id, None);
     assert_eq!(
-        due_dates(&fx.core, fx.vault, date(2026, 2, 5)),
-        vec![(id, vec![date(2026, 2, 1)])]
+        due_dates(&fx, day(2026, 2, 5)),
+        vec![(id, vec![day(2026, 2, 1)])]
     );
 }
 
@@ -460,18 +421,13 @@ fn a_refused_execution_leaves_no_run_and_no_transaction() {
         5000,
         Some(capped),
         Some("Bonus"),
-        monthly(1, date(2026, 1, 1), None),
+        monthly(1, day(2026, 1, 1), None),
     ));
 
     let before = balances(&fx.core, fx.vault);
     assert_eq!(
-        fx.try_run(Command::ExecuteRecurring {
-            recurring_id: id,
-            period_date: date(2026, 1, 1),
-            occurred_at: at(T0 + 100),
-            person: None,
-        })
-        .unwrap_err(),
+        fx.try_run(execute(id, day(2026, 1, 1), T0 + 100))
+            .unwrap_err(),
         DomainError::MaxBalanceReached("Fun".to_string())
     );
 
@@ -479,8 +435,8 @@ fn a_refused_execution_leaves_no_run_and_no_transaction() {
     assert!(fx.core.recurring_runs(fx.vault, id).unwrap().is_empty());
     assert_eq!(list(&fx.core, fx.vault, &all()).len(), 1);
     assert_eq!(
-        due_dates(&fx.core, fx.vault, date(2026, 1, 31)),
-        vec![(id, vec![date(2026, 1, 1)])]
+        due_dates(&fx, day(2026, 1, 31)),
+        vec![(id, vec![day(2026, 1, 1)])]
     );
 }
 
@@ -489,12 +445,7 @@ fn wallet_none_resolves_to_the_only_active_wallet() {
     let mut fx = setup();
     fx.run(Command::Income(entry(10_000, None, None, None, T0)));
     let id = fx.id(rent_cmd());
-    let tx_id = fx.id(Command::ExecuteRecurring {
-        recurring_id: id,
-        period_date: date(2026, 1, 1),
-        occurred_at: at(T0 + 100),
-        person: None,
-    });
+    let tx_id = fx.id(execute(id, day(2026, 1, 1), T0 + 100));
     assert_eq!(
         list(&fx.core, fx.vault, &all())
             .into_iter()
@@ -509,12 +460,7 @@ fn wallet_none_resolves_to_the_only_active_wallet() {
     // With a second active wallet the template no longer knows where to post.
     fx.run(wallet_cmd("Bank", 0));
     assert!(matches!(
-        fx.try_run(Command::ExecuteRecurring {
-            recurring_id: id,
-            period_date: date(2026, 2, 1),
-            occurred_at: at(T0 + 200),
-            person: None,
-        }),
+        fx.try_run(execute(id, day(2026, 2, 1), T0 + 200)),
         Err(DomainError::InvalidCommand(_))
     ));
     assert_eq!(fx.core.recurring_runs(fx.vault, id).unwrap().len(), 1);
@@ -531,10 +477,6 @@ fn runs_of_an_unknown_template_are_not_found() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Replay
-// ---------------------------------------------------------------------------
-
 #[test]
 fn replay_rebuilds_templates_runs_and_transactions() {
     let mut fx = setup();
@@ -546,45 +488,25 @@ fn replay_rebuilds_templates_runs_and_transactions() {
         T0,
     )));
     let id = fx.id(rent_cmd());
-    fx.run(Command::ExecuteRecurring {
-        recurring_id: id,
-        period_date: date(2026, 1, 1),
-        occurred_at: at(T0 + 100),
-        person: None,
-    });
-    fx.run(Command::SkipRecurring {
-        recurring_id: id,
-        period_date: date(2026, 2, 1),
-    });
+    fx.run(execute(id, day(2026, 1, 1), T0 + 100));
+    fx.run(skip(id, day(2026, 2, 1)));
     fx.run(Command::UpdateRecurring {
         recurring_id: id,
         patch: RecurringPatch {
             amount: Some(2600),
             wallet_id: Some(fx.wallet),
             note: Some("rent".to_string()),
-            schedule: Some(monthly(3, date(2026, 1, 1), Some(date(2026, 12, 31)))),
+            schedule: Some(monthly(3, day(2026, 1, 1), Some(day(2026, 12, 31)))),
             ..RecurringPatch::default()
         },
     });
-    fx.run(Command::ExecuteRecurring {
-        recurring_id: id,
-        period_date: date(2026, 3, 3),
-        occurred_at: at(T0 + 300),
-        person: None,
-    });
+    fx.run(execute(id, day(2026, 3, 3), T0 + 300));
     let archived = fx.id(rent_cmd());
     fx.run(Command::ArchiveRecurring {
         recurring_id: archived,
     });
 
-    let log = fx.core.commands_since(fx.vault, 0).unwrap();
-    let mut fresh = Core::open_in_memory().unwrap();
-    replay(&log, &mut fresh).unwrap();
-
-    assert_eq!(
-        fresh.snapshot(fx.vault).unwrap(),
-        fx.core.snapshot(fx.vault).unwrap()
-    );
+    let fresh = replayed(&fx.core, fx.vault);
     assert_eq!(
         fresh.list_recurring(fx.vault, true).unwrap(),
         fx.core.list_recurring(fx.vault, true).unwrap()
@@ -594,21 +516,13 @@ fn replay_rebuilds_templates_runs_and_transactions() {
         fx.core.recurring_runs(fx.vault, id).unwrap()
     );
     assert_eq!(
-        list(&fresh, fx.vault, &all()),
-        list(&fx.core, fx.vault, &all())
-    );
-    assert_eq!(
-        fresh.pending_recurring(fx.vault, date(2026, 6, 1)).unwrap(),
+        fresh.pending_recurring(fx.vault, day(2026, 6, 1)).unwrap(),
         fx.core
-            .pending_recurring(fx.vault, date(2026, 6, 1))
+            .pending_recurring(fx.vault, day(2026, 6, 1))
             .unwrap()
     );
     assert_eq!(fx.core.recurring_runs(fx.vault, id).unwrap().len(), 3);
 }
-
-// ---------------------------------------------------------------------------
-// Schedule previews
-// ---------------------------------------------------------------------------
 
 fn schedule(frequency: Frequency, interval: u32, start: NaiveDate) -> Schedule {
     Schedule {
@@ -621,89 +535,89 @@ fn schedule(frequency: Frequency, interval: u32, start: NaiveDate) -> Schedule {
 
 #[test]
 fn preview_monthly_31st_across_february() {
-    let s = monthly(31, date(2027, 1, 1), None);
+    let s = monthly(31, day(2027, 1, 1), None);
     assert_eq!(
-        s.occurrences_from(date(2027, 1, 1), 4).unwrap(),
+        s.occurrences_from(day(2027, 1, 1), 4).unwrap(),
         [
-            date(2027, 1, 31),
-            date(2027, 2, 28),
-            date(2027, 3, 31),
-            date(2027, 4, 30)
+            day(2027, 1, 31),
+            day(2027, 2, 28),
+            day(2027, 3, 31),
+            day(2027, 4, 30)
         ]
     );
-    let leap = monthly(31, date(2028, 1, 1), None);
+    let leap = monthly(31, day(2028, 1, 1), None);
     assert_eq!(
-        leap.occurrences_from(date(2028, 1, 1), 3).unwrap(),
-        [date(2028, 1, 31), date(2028, 2, 29), date(2028, 3, 31)]
+        leap.occurrences_from(day(2028, 1, 1), 3).unwrap(),
+        [day(2028, 1, 31), day(2028, 2, 29), day(2028, 3, 31)]
     );
 }
 
 #[test]
 fn preview_end_date_cuts_the_list() {
-    let s = monthly(15, date(2026, 1, 1), Some(date(2026, 3, 20)));
+    let s = monthly(15, day(2026, 1, 1), Some(day(2026, 3, 20)));
     assert_eq!(
-        s.occurrences_from(date(2026, 1, 1), 10).unwrap(),
-        [date(2026, 1, 15), date(2026, 2, 15), date(2026, 3, 15)]
+        s.occurrences_from(day(2026, 1, 1), 10).unwrap(),
+        [day(2026, 1, 15), day(2026, 2, 15), day(2026, 3, 15)]
     );
 }
 
 #[test]
 fn preview_weekly_every_two_weeks() {
     // 2026-03-02 is a Monday.
-    let s = schedule(Frequency::Weekly { weekday: 1 }, 2, date(2026, 3, 2));
+    let s = schedule(Frequency::Weekly { weekday: 1 }, 2, day(2026, 3, 2));
     assert_eq!(
-        s.occurrences_from(date(2026, 3, 2), 3).unwrap(),
-        [date(2026, 3, 2), date(2026, 3, 16), date(2026, 3, 30)]
+        s.occurrences_from(day(2026, 3, 2), 3).unwrap(),
+        [day(2026, 3, 2), day(2026, 3, 16), day(2026, 3, 30)]
     );
 }
 
 #[test]
 fn preview_yearly_feb_29() {
-    let s = schedule(Frequency::Yearly { month: 2, day: 29 }, 1, date(2027, 1, 1));
+    let s = schedule(Frequency::Yearly { month: 2, day: 29 }, 1, day(2027, 1, 1));
     assert_eq!(
-        s.occurrences_from(date(2027, 1, 1), 3).unwrap(),
-        [date(2027, 2, 28), date(2028, 2, 29), date(2029, 2, 28)]
+        s.occurrences_from(day(2027, 1, 1), 3).unwrap(),
+        [day(2027, 2, 28), day(2028, 2, 29), day(2029, 2, 28)]
     );
 }
 
 #[test]
 fn preview_from_before_start_begins_at_first_occurrence() {
-    let s = monthly(10, date(2026, 5, 20), None);
+    let s = monthly(10, day(2026, 5, 20), None);
     assert_eq!(
-        s.occurrences_from(date(2020, 1, 1), 2).unwrap(),
-        [date(2026, 6, 10), date(2026, 7, 10)]
+        s.occurrences_from(day(2020, 1, 1), 2).unwrap(),
+        [day(2026, 6, 10), day(2026, 7, 10)]
     );
 }
 
 #[test]
 fn preview_from_on_an_occurrence_includes_it() {
-    let s = monthly(10, date(2026, 1, 1), None);
+    let s = monthly(10, day(2026, 1, 1), None);
     assert_eq!(
-        s.occurrences_from(date(2026, 4, 10), 2).unwrap(),
-        [date(2026, 4, 10), date(2026, 5, 10)]
+        s.occurrences_from(day(2026, 4, 10), 2).unwrap(),
+        [day(2026, 4, 10), day(2026, 5, 10)]
     );
     assert_eq!(
-        s.occurrences_from(date(2026, 4, 11), 1).unwrap(),
-        [date(2026, 5, 10)]
+        s.occurrences_from(day(2026, 4, 11), 1).unwrap(),
+        [day(2026, 5, 10)]
     );
 }
 
 #[test]
 fn preview_limit_zero_is_empty() {
-    let s = monthly(10, date(2026, 1, 1), None);
-    assert!(s.occurrences_from(date(2026, 1, 1), 0).unwrap().is_empty());
+    let s = monthly(10, day(2026, 1, 1), None);
+    assert!(s.occurrences_from(day(2026, 1, 1), 0).unwrap().is_empty());
 }
 
 #[test]
 fn preview_rejects_invalid_schedules() {
-    let from = date(2026, 1, 1);
-    let start = date(2026, 1, 1);
+    let from = day(2026, 1, 1);
+    let start = day(2026, 1, 1);
     for bad in [
         schedule(Frequency::Daily, 0, start),
         monthly(0, start, None),
         monthly(32, start, None),
         schedule(Frequency::Weekly { weekday: 8 }, 1, start),
-        monthly(5, start, Some(date(2025, 1, 1))),
+        monthly(5, start, Some(day(2025, 1, 1))),
     ] {
         assert!(matches!(
             bad.occurrences_from(from, 3),

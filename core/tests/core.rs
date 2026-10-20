@@ -1,14 +1,13 @@
-//! Acceptance tests for the v2 core, ported from the v1 engine suite.
+//! Acceptance tests for the engine: entries, transfers, caps, listing and replay.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod common;
 
-use chrono::{TimeZone, Utc};
 use common::*;
 use sparagne_core::{
     Command, CommandEnvelope, Core, Currency, DomainError, FlowMode, TransactionFilter,
-    TransactionKind, replay,
+    TransactionKind,
 };
 use uuid::Uuid;
 
@@ -66,7 +65,7 @@ fn income_expense_void_reverts_balances() {
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 1000);
     assert_eq!(flow_balance(&fx.core, fx.vault, fx.unallocated), 1000);
 
-    let expense = fx.run(Command::Expense(entry(
+    let tx_id = fx.id(Command::Expense(entry(
         300,
         None,
         None,
@@ -76,7 +75,6 @@ fn income_expense_void_reverts_balances() {
     assert_eq!(wallet_balance(&fx.core, fx.vault, fx.wallet), 700);
     assert_eq!(flow_balance(&fx.core, fx.vault, fx.unallocated), 700);
 
-    let tx_id = expense.result_id.unwrap();
     fx.run(Command::VoidTransaction {
         transaction_id: tx_id,
     });
@@ -288,8 +286,8 @@ fn list_defaults_filters_and_cursor_pagination() {
     assert_eq!(list(&fx.core, fx.vault, &all()).len(), 6);
 
     let range = TransactionFilter {
-        from: Some(Utc.timestamp_opt(T0 + 1, 0).unwrap()),
-        to: Some(Utc.timestamp_opt(T0 + 3, 0).unwrap()),
+        from: Some(utc(T0 + 1)),
+        to: Some(utc(T0 + 3)),
         include_voided: true,
         ..Default::default()
     };
@@ -524,53 +522,18 @@ fn wallets_and_flows_always_balance_and_replay_rebuilds_the_projection() {
         log.iter().map(|r| r.seq).collect::<Vec<_>>(),
         (1..=10).collect::<Vec<_>>()
     );
-
-    let mut fresh = Core::open_in_memory().unwrap();
-    replay(&log, &mut fresh).unwrap();
-    assert_eq!(
-        fresh.snapshot(fx.vault).unwrap(),
-        fx.core.snapshot(fx.vault).unwrap()
-    );
-    assert_eq!(
-        list(&fresh, fx.vault, &all()),
-        list(&fx.core, fx.vault, &all())
-    );
-    assert_eq!(
-        fresh.categories(fx.vault, true).unwrap(),
-        fx.core.categories(fx.vault, true).unwrap()
-    );
-    let replayed = fresh.commands_since(fx.vault, 0).unwrap();
-    assert_eq!(
-        replayed
-            .iter()
-            .map(|r| (r.seq, r.envelope.id, r.result_id))
-            .collect::<Vec<_>>(),
-        log.iter()
-            .map(|r| (r.seq, r.envelope.id, r.result_id))
-            .collect::<Vec<_>>()
-    );
+    replayed(&fx.core, fx.vault);
 }
 
 #[test]
 fn database_file_survives_reopen() {
-    let dir = std::env::temp_dir().join(format!("sparagne-core-{}", Uuid::now_v7()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("test.sqlite3");
+    let db = TempDb::new("core");
     let vault = {
-        let mut core = Core::open(&path).unwrap();
-        let vault = core
-            .execute(CommandEnvelope::create_vault(
-                "alice",
-                "Main",
-                Currency::Eur,
-            ))
-            .unwrap()
-            .result_id
-            .unwrap();
+        let mut core = Core::open(db.path()).unwrap();
+        let vault = create_vault(&mut core, "alice", "Main");
         run(&mut core, vault, wallet_cmd("Cash", 700));
         vault
     };
-    let core = Core::open(&path).unwrap();
+    let core = Core::open(db.path()).unwrap();
     assert_eq!(core.snapshot(vault).unwrap().wallets[0].balance, 700);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
