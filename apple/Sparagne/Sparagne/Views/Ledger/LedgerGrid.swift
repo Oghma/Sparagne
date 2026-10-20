@@ -495,7 +495,7 @@ struct LedgerGrid: View {
         // The next turn of the run loop: on the first appearance the lazy
         // stack has not laid its rows out yet, and the scroll would land
         // nowhere.
-        Task { @MainActor in
+        Task {
             proxy.scrollTo(target, anchor: .center)
             if store.revealedRow == id { store.revealedRow = nil }
         }

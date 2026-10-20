@@ -23,8 +23,6 @@ struct QuickAddOverlay: View {
     @State private var hint: NoteSuggestion?
 
     static let width: CGFloat = 600
-    /// `#17171B`: a step above the cards, so the panel floats over the sheet.
-    private static let ground = Color(hex: 0x17171B)
 
     /// An account that only reads the vault cannot add a row, so for it the
     /// panel is the palette and nothing else: the list shows from the start,
@@ -58,7 +56,7 @@ struct QuickAddOverlay: View {
             footer
         }
         .frame(width: Self.width, alignment: .leading)
-        .background(Self.ground)
+        .background(Ink.float)
         .clipShape(shape)
         .overlay(shape.strokeBorder(Ink.line2, lineWidth: 1))
         .shadow(color: .black.opacity(0.65), radius: 30, y: 24)
@@ -183,7 +181,7 @@ struct QuickAddOverlay: View {
             .accessibilityElement(children: .combine)
         case .failure(let error):
             Text(error.message)
-                .font(Face.ui(12))
+                .font(Face.row)
                 .foregroundStyle(Ink.negative)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -299,7 +297,7 @@ private struct TokenChip: View {
             }
             Text(token.value).foregroundStyle(token.isDefault ? Ink.text3 : Ink.text)
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .lineLimit(1)
         .padding(.horizontal, 9)
         .frame(height: 24)
@@ -317,7 +315,7 @@ private struct HintChip: View {
             KeyCap(text: "\u{21E5}")
             Text(category).foregroundStyle(Ink.accent)
         }
-        .font(Face.ui(12))
+        .font(Face.row)
         .lineLimit(1)
         .padding(.leading, 4)
         .padding(.trailing, 9)

@@ -47,7 +47,7 @@ struct InspectorShell<Accessory: View, Content: View, Footer: View>: View {
                 accessory
             }
             Text(subtitle)
-                .font(Face.ui(12))
+                .font(Face.row)
                 .foregroundStyle(Ink.text2)
                 .lineLimit(2)
         }
@@ -106,7 +106,7 @@ struct InspectorSwitch: View {
         FormSwitch(label: label, isOn: isOn, set: set)
             .disabled(disabled)
         Text(label)
-            .font(Face.ui(12))
+            .font(Face.row)
             .foregroundStyle(Ink.text2)
             .accessibilityHidden(true)
     }

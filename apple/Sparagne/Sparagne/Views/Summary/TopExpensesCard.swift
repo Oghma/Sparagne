@@ -25,9 +25,7 @@ struct TopExpensesCard: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "Heaviest expenses \u{00B7} year"))
-                    .font(Face.label)
-                    .foregroundStyle(Ink.text2)
+                SectionLabel(text: String(localized: "Heaviest expenses \u{00B7} year"), tint: Ink.text2)
                     .accessibilityAddTraits(.isHeader)
                 if expenses.isEmpty {
                     Text(String(localized: "No expenses this year"))

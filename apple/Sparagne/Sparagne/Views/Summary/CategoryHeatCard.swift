@@ -16,9 +16,7 @@ struct CategoryHeatCard: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "Months \u{00D7} categories"))
-                    .font(Face.label)
-                    .foregroundStyle(Ink.text2)
+                SectionLabel(text: String(localized: "Months \u{00D7} categories"), tint: Ink.text2)
                     .accessibilityAddTraits(.isHeader)
                 FittedTable { grid(flexible: $0) }
             }
@@ -90,7 +88,7 @@ struct CategoryHeatCard: View {
                     .padding(.vertical, 1)
             }
         }
-        .font(Face.ui(11))
+        .font(Face.footnote)
         .lineLimit(1)
     }
 

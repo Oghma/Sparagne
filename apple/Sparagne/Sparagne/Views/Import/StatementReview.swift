@@ -543,7 +543,7 @@ private struct StatementReviewRow: View {
                 .padding(.bottom, 2)
             }
         }
-        .font(Face.ui(11))
+        .font(Face.footnote)
         .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
     }
 
@@ -561,7 +561,7 @@ private struct StatementReviewRow: View {
             }
             Color.clear.frame(width: ReviewColumn.choice + ReviewColumn.trail + 2 * GridColumn.padding, height: 1)
         }
-        .font(Face.ui(11))
+        .font(Face.footnote)
         .frame(height: 18)
         .overlay(alignment: .bottom) { Rectangle().fill(Ink.rowLine).frame(height: 1) }
     }
@@ -656,7 +656,7 @@ private struct IncludeBox: View {
                 if isOn {
                     Image(systemName: "checkmark")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Color(hex: 0x140A00))
+                        .foregroundStyle(Ink.onAccent)
                 }
             }
             .frame(width: 13, height: 13)

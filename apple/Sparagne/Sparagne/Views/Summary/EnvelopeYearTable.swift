@@ -24,9 +24,7 @@ struct EnvelopeYearTable: View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(String(localized: "Envelopes"))
-                        .font(Face.label)
-                        .foregroundStyle(Ink.text2)
+                    SectionLabel(text: String(localized: "Envelopes"), tint: Ink.text2)
                         .accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
                     Text(String(localized: "balance at month end \u{00B7} income and expenses of the year"))

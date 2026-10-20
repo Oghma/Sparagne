@@ -26,6 +26,9 @@ enum Ink {
     static let rowLine = Color(hex: 0x18181C)
     /// The faint track under a category's share bar.
     static let track = Color(hex: 0x222228)
+    /// A panel floating over the window, ⌘K's and the sync popover's: a
+    /// step above the cards.
+    static let float = Color(hex: 0x17171B)
     static let text = Color(hex: 0xEDEDEF)
     /// Secondary text: values that support a heading.
     static let text2 = Color(hex: 0xA3A3AB)
@@ -34,6 +37,8 @@ enum Ink {
     /// Amber: interaction, selection, focus and active states only. Expenses
     /// and errors have their own colors, so amber never means "bad".
     static let accent = Color(hex: 0xFF9A2E)
+    /// Text and marks on the amber: white on it fails contrast.
+    static let onAccent = Color(hex: 0x140A00)
     static let positive = Color(hex: 0x3ECF8E)
     /// Errors and negative balances. Deliberately not the accent.
     static let negative = Color(hex: 0xFF6B6B)

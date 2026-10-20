@@ -9,9 +9,7 @@ struct CategoryYearCard: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "Expenses by category \u{00B7} year"))
-                    .font(Face.label)
-                    .foregroundStyle(Ink.text2)
+                SectionLabel(text: String(localized: "Expenses by category \u{00B7} year"), tint: Ink.text2)
                     .accessibilityAddTraits(.isHeader)
                 if categories.isEmpty {
                     Text(String(localized: "Nothing spent this year"))
@@ -44,7 +42,7 @@ struct CategoryYearCard: View {
                 Text(LedgerMoney.bare(category.amount))
                     .foregroundStyle(tint)
                 Text(share)
-                    .font(Face.ui(11))
+                    .font(Face.footnote)
                     .foregroundStyle(Ink.text3)
                     .frame(width: 32, alignment: .trailing)
             }

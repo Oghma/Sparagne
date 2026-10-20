@@ -34,11 +34,10 @@ struct StatementImportSheet: View {
 
     /// `engine` syncs the vault before a file is planned and before it is
     /// imported (`StatementImportModel.syncRound`); `nil` for a database that
-    /// never syncs. `model` is for previews, which open the sheet on a file
-    /// already read.
-    init(store: AppStore, engine: SyncEngine? = nil, model: StatementImportModel? = nil) {
+    /// never syncs.
+    init(store: AppStore, engine: SyncEngine? = nil) {
         self.store = store
-        _model = State(initialValue: model ?? StatementImportModel(
+        _model = State(initialValue: StatementImportModel(
             store: store,
             sync: engine.map { StatementImportModel.syncRound(on: $0) }
         ))

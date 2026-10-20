@@ -116,9 +116,7 @@ struct FundCards: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(String(localized: "Funds"))
-                    .font(Face.label)
-                    .foregroundStyle(Ink.text2)
+                SectionLabel(text: String(localized: "Funds"), tint: Ink.text2)
                 Text(String(localized: "envelopes with a cap"))
                     .font(Face.label)
                     .foregroundStyle(Ink.text3)

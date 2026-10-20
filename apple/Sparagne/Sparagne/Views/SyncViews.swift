@@ -63,8 +63,8 @@ private struct RejectedRow: View {
                     .font(Face.ui(11.5))
                     .foregroundStyle(Ink.text2)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(change.vaultName) · \(change.kindName)")
-                    .font(Face.ui(11))
+                Text(verbatim: "\(change.vaultName) · \(change.kindName)")
+                    .font(Face.footnote)
                     .foregroundStyle(Ink.text3)
             }
             Spacer(minLength: 8)
@@ -163,7 +163,7 @@ struct ShareVaultSheet: View {
             members = try await engine.members(ofVault: vault.id)
             message = nil
         } catch {
-            message = Self.describe(error)
+            message = ErrorMessages.line(for: error)
         }
     }
 
@@ -176,16 +176,11 @@ struct ShareVaultSheet: View {
                 try await work()
                 message = nil
             } catch {
-                message = Self.describe(error)
+                message = ErrorMessages.line(for: error)
             }
             await load()
             busy = false
         }
-    }
-
-    private static func describe(_ error: some Error) -> String {
-        guard let server = error as? ServerError else { return error.localizedDescription }
-        return server.detail.map { "\(server.summary): \($0)" } ?? server.summary
     }
 }
 

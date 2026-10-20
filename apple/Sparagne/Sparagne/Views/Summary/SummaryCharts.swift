@@ -71,9 +71,7 @@ private struct CashFlowCard: View {
         Panel {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(String(localized: "Cash flow"))
-                        .font(Face.label)
-                        .foregroundStyle(Ink.text2)
+                    SectionLabel(text: String(localized: "Cash flow"), tint: Ink.text2)
                     Spacer(minLength: 8)
                     ChartLegend(entries: series.map { ($0.name, $0.tint) })
                 }
@@ -173,7 +171,7 @@ private struct CashFlowCard: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .frame(minWidth: 150)
-        .background(Color(hex: 0x1E1E23), in: RoundedRectangle(cornerRadius: 8))
+        .background(Ink.line, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Ink.line2, lineWidth: 1))
     }
 
@@ -219,9 +217,13 @@ private struct CashFundCard: View {
         [Point(id: 0, total: year.initial)] + year.elapsed.map { Point(id: $0.month.month, total: $0.total) }
     }
 
-    /// The months where TOTALE went down on the one before.
+    /// The months where TOTALE went down on the one before, as the month
+    /// table marks them.
     private var drops: [Point] {
-        zip(points, points.dropFirst()).filter { $0.1.total < $0.0.total }.map(\.1)
+        year.tableRows.compactMap { row in
+            guard case .month(let month) = row.kind, !row.isFuture, !row.trendUp, let total = row.total else { return nil }
+            return Point(id: month.month, total: total)
+        }
     }
 
     /// None under the PERSONA filter, where the one line would be the
@@ -294,9 +296,7 @@ private struct CashFundCard: View {
     }
 
     private var title: some View {
-        Text(String(localized: "Cash fund \u{00B7} total at month end"))
-            .font(Face.label)
-            .foregroundStyle(Ink.text2)
+        SectionLabel(text: String(localized: "Cash fund \u{00B7} total at month end"), tint: Ink.text2)
             .lineLimit(1)
     }
 
@@ -387,7 +387,7 @@ private struct CashFundCard: View {
                     .foregroundStyle(Ink.chartIncome)
                     .annotation(position: .top, alignment: .trailing, spacing: 4, overflowResolution: inside) {
                         Text(LedgerMoney.bare(end.total))
-                            .font(Face.ui(11, .medium))
+                            .font(Face.label)
                             .foregroundStyle(Ink.text2)
                             .fixedSize()
                     }

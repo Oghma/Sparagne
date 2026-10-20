@@ -386,9 +386,9 @@ enum FloatingList {
     /// The border, the padding and the footer: what a list measures beyond
     /// its groups and rows.
     static let chrome: CGFloat = 2 + 8 + footerHeight
-    /// `#18181C`: a step above the raised ground of the focused cell it
-    /// hangs from, so the list reads as floating over the grid.
-    static let ground = Color(hex: 0x18181C)
+    /// `#18181C`, the rows' hairline: between the card's ground and the
+    /// raised one, so the list reads as floating over the grid.
+    static let ground = Ink.rowLine
 }
 
 extension View {

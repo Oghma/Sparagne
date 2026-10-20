@@ -338,7 +338,7 @@ struct FormSwitch: View {
             ZStack(alignment: isOn ? .trailing : .leading) {
                 Capsule().fill(isOn ? Ink.accent : Ink.line2)
                 Circle()
-                    .fill(isOn ? Color(hex: 0x140A00) : Ink.text3)
+                    .fill(isOn ? Ink.onAccent : Ink.text3)
                     .frame(width: 10, height: 10)
                     .padding(2)
             }

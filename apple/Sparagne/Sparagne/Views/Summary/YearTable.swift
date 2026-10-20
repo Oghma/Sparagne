@@ -27,9 +27,7 @@ struct YearTable: View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(String(localized: "Month by month"))
-                        .font(Face.label)
-                        .foregroundStyle(Ink.text2)
+                    SectionLabel(text: String(localized: "Month by month"), tint: Ink.text2)
                     Spacer(minLength: 8)
                     Text(String(localized: "Total = savings + cash fund \u{2212} fund expenses"))
                         .font(Face.label)

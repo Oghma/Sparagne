@@ -59,9 +59,7 @@ struct PersonYearCard: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "By person"))
-                    .font(Face.label)
-                    .foregroundStyle(Ink.text2)
+                SectionLabel(text: String(localized: "By person"), tint: Ink.text2)
                     .accessibilityAddTraits(.isHeader)
                 VStack(spacing: 0) {
                     header

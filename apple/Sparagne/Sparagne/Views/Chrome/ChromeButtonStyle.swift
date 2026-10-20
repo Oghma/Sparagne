@@ -42,8 +42,7 @@ private struct ChromeButtonBody: View {
         switch kind {
         case .bordered: Ink.text
         case .ghost: Ink.text2
-        // Dark text on the amber: white on it fails contrast.
-        case .primary: Color(hex: 0x140A00)
+        case .primary: Ink.onAccent
         case .warning: Ink.warning
         }
     }

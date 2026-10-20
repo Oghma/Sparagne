@@ -238,7 +238,7 @@ struct RowButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Face.ui(11, .medium))
+            .font(Face.label)
             .foregroundStyle(tone == .accent ? Ink.accent : Ink.text2)
             .lineLimit(1)
             .fixedSize()
