@@ -472,10 +472,7 @@ final class AppStore {
     private(set) var lastWalletId: Uuid?
     private(set) var lastFlowId: Uuid?
 
-    /// The queued reload, if any, and a counter that says whether a new one
-    /// was queued while the last was running (`settle`).
-    @ObservationIgnored private var queuedLoad: Task<Void, Never>?
-    @ObservationIgnored private var queuedGeneration = 0
+    @ObservationIgnored private let loads = SerialQueue()
     /// Which reload may write the state: a slower one that started earlier
     /// must not overwrite a newer month with what it found. Readable, with
     /// the one whose rows are on screen, so the Mastro's editor can tell a
@@ -583,12 +580,7 @@ final class AppStore {
     /// Not private: `reveal` queues one when only the search changed, which
     /// reloads nothing by itself (the window debounces it).
     func scheduleReload() {
-        queuedGeneration += 1
-        let previous = queuedLoad
-        queuedLoad = Task { [weak self] in
-            await previous?.value
-            await self?.reload()
-        }
+        loads.enqueue { [weak self] in await self?.reload() }
     }
 
     /// Waits until every queued reload has finished, including any a reload
@@ -599,14 +591,7 @@ final class AppStore {
     func settle() async {
         await ledgerEditor.settle()
         await history.settle()
-        while queuedLoad != nil {
-            let generation = queuedGeneration
-            await queuedLoad?.value
-            if generation == queuedGeneration {
-                queuedLoad = nil
-                return
-            }
-        }
+        await loads.settle()
     }
 
     // MARK: - Lifecycle

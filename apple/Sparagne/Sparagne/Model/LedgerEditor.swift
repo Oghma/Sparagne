@@ -30,10 +30,8 @@ import SparagneCore
 final class LedgerEditor {
     @ObservationIgnored private weak var store: AppStore?
     /// The writes sent and not landed yet, one after the other in the order
-    /// the cells were left, and a counter that says whether one was queued
-    /// while the last was running (`settle`).
-    @ObservationIgnored private var writes: Task<Void, Never>?
-    @ObservationIgnored private var queued = 0
+    /// the cells were left.
+    @ObservationIgnored private let writes = SerialQueue()
     @ObservationIgnored private var inFlight = 0
     /// The new line holds a copy made by `duplicate` that no cell has
     /// changed yet: leaving it keeps it as it is, only ↩ registers it.
@@ -215,14 +213,7 @@ final class LedgerEditor {
     /// Waits for the writes the editor has sent: `AppStore.settle` and
     /// quitting do.
     func settle() async {
-        while let writes {
-            let generation = queued
-            await writes.value
-            if generation == queued {
-                self.writes = nil
-                return
-            }
-        }
+        await writes.settle()
     }
 
     // MARK: - What the store tells the editor
@@ -446,11 +437,8 @@ final class LedgerEditor {
         _ work: @escaping @MainActor (AppStore) async -> Void
     ) {
         guard let store, let vaultId = store.currentVault?.id else { return }
-        queued += 1
         inFlight += 1
-        let previous = writes
-        writes = Task { [weak self] in
-            await previous?.value
+        writes.enqueue { [weak self] in
             if store.currentVault?.id == vaultId { await work(store) }
             self?.inFlight -= 1
             if let cell { self?.landed(cell) }

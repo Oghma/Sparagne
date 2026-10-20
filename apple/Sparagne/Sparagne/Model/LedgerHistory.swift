@@ -56,10 +56,8 @@ final class LedgerHistory {
     /// The void waiting on the toast, if it was recorded: ⌘Z cancels it.
     private var pendingVoid: Target?
 
-    /// The queue of undo and redo writes, and a counter that says whether a
-    /// new one was queued while the last was running (`settle`).
-    private var tail: Task<Void, Never>?
-    private var queued = 0
+    /// The undo and redo writes, in the order the keys were pressed.
+    private let writes = SerialQueue()
 
     /// Hands over the window's manager. A different one (another window, or
     /// the first after none) starts from an empty history.
@@ -86,7 +84,7 @@ final class LedgerHistory {
                 // Registered while the manager is undoing, the reversed step
                 // goes on the redo stack; while redoing, back on the undo one.
                 self?.register(step.reversed, on: target)
-                self?.enqueue(step.undo)
+                self?.writes.enqueue(step.undo)
             }
         }
     }
@@ -149,28 +147,10 @@ final class LedgerHistory {
         targets = []
     }
 
-    // MARK: - The queue
-
-    private func enqueue(_ work: @escaping @MainActor @Sendable () async -> Void) {
-        queued += 1
-        let previous = tail
-        tail = Task {
-            await previous?.value
-            await work()
-        }
-    }
-
     /// Waits until every queued undo and redo has been written. The window
     /// never needs this; a test that presses ⌘Z and reads the store does.
     func settle() async {
-        while let tail {
-            let generation = queued
-            await tail.value
-            if generation == queued {
-                self.tail = nil
-                return
-            }
-        }
+        await writes.settle()
     }
 }
 
