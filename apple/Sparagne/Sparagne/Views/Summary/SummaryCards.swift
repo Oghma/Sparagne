@@ -153,7 +153,7 @@ private struct FundCard: View {
                         .font(Face.row)
                         .foregroundStyle(Ink.text3)
                 }
-                bar
+                MeterBar(fraction: fund.fraction, tint: Ink.chartIncome, height: 5, rounded: true)
             }
         }
         // The bar is a drawn shape with no text of its own: the fund's name
@@ -172,18 +172,6 @@ private struct FundCard: View {
     private var percent: String {
         LedgerMoney.percent(fund.filled, of: fund.cap, decimals: 0) ?? TransactionRow.placeholder
     }
-
-    private var bar: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Ink.line)
-                Capsule()
-                    .fill(Ink.chartIncome)
-                    .frame(width: geometry.size.width * fund.fraction)
-            }
-        }
-        .frame(height: 5)
-    }
 }
 
 /// What a fund's cap is measured on, the small tag after its name: on a
@@ -193,13 +181,7 @@ struct CapTag: View {
     let kind: FundGauge.Kind
 
     var body: some View {
-        Text(Self.text(kind))
-            .font(Face.ui(10, .semibold))
-            .foregroundStyle(Ink.text3)
-            .lineLimit(1)
-            .padding(.horizontal, 5)
-            .frame(height: 16)
-            .background(Ink.raised, in: RoundedRectangle(cornerRadius: 4))
+        SetupTag(text: Self.text(kind), fixed: false)
     }
 
     static func text(_ kind: FundGauge.Kind) -> String {

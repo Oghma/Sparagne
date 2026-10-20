@@ -49,7 +49,7 @@ struct CategoryYearCard: View {
                     .frame(width: 32, alignment: .trailing)
             }
             .font(Face.row)
-            ShareBar(fraction: fraction(category))
+            MeterBar(fraction: fraction(category), track: Ink.track, height: 4, rounded: true)
         }
         // The bar is decoration for the same figure, not a second one: one
         // stop, "Casa: €4,800.00", 22%.
@@ -65,24 +65,5 @@ struct CategoryYearCard: View {
         let heaviest = categories.map(\.amount).max() ?? 0
         guard heaviest > 0 else { return 0 }
         return Double(category.amount) / Double(heaviest)
-    }
-}
-
-/// A 4-point bar with rounded ends on a faint track, the Mastro's category
-/// bar.
-private struct ShareBar: View {
-    let fraction: Double
-
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color(hex: 0x222228))
-                Capsule()
-                    .fill(Ink.chartExpense)
-                    .frame(width: geometry.size.width * min(max(fraction, 0), 1))
-            }
-        }
-        .frame(height: 4)
-        .accessibilityHidden(true)
     }
 }

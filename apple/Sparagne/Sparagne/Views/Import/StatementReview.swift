@@ -667,14 +667,7 @@ private struct OutcomeTag: View {
                 .padding(.horizontal, 5)
                 .frame(height: 16)
                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Ink.warning.opacity(0.7), lineWidth: 1))
-        case .quiet:
-            Text(text)
-                .font(Face.ui(10, .semibold))
-                .foregroundStyle(Ink.text3)
-                .lineLimit(1)
-                .padding(.horizontal, 5)
-                .frame(height: 16)
-                .background(Ink.raised, in: RoundedRectangle(cornerRadius: 4))
+        case .quiet: SetupTag(text: text, fixed: false)
         case .invalid: RowTag(text: text, tint: Ink.negative)
         }
     }

@@ -42,13 +42,7 @@ struct SummaryTodoStrip: View {
             .contentShape(RoundedRectangle(cornerRadius: 4))
         }
         .buttonStyle(.plain)
-        .onHover { inside in
-            if inside {
-                hovered = item.id
-            } else if hovered == item.id {
-                hovered = nil
-            }
-        }
+        .hoverId($hovered, item.id)
         // One button per chip: the dot is decoration, the label says it all.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)

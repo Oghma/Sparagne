@@ -24,6 +24,8 @@ enum Ink {
     static let line2 = Color(hex: 0x2B2B32)
     /// The hairline between table rows, fainter than `line`.
     static let rowLine = Color(hex: 0x18181C)
+    /// The faint track under a category's share bar.
+    static let track = Color(hex: 0x222228)
     static let text = Color(hex: 0xEDEDEF)
     /// Secondary text: values that support a heading.
     static let text2 = Color(hex: 0xA3A3AB)

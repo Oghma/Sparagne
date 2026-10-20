@@ -600,13 +600,7 @@ struct LedgerGrid: View {
             onDelete: trashAction(for: row, editing: isEditing)
         )
         .background(background(selected: isSelected, hovered: hovered == row.id))
-        .onHover { inside in
-            if inside {
-                hovered = row.id
-            } else if hovered == row.id {
-                hovered = nil
-            }
-        }
+        .hoverId($hovered, row.id)
         // VoiceOver reads a row as one sentence; while one of its cells is
         // typed into, as the cells, that one a field with its column's name.
         .accessibilityElement(children: isEditing ? .contain : .ignore)

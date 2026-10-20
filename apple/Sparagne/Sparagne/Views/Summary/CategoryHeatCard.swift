@@ -20,13 +20,7 @@ struct CategoryHeatCard: View {
                     .font(Face.label)
                     .foregroundStyle(Ink.text2)
                     .accessibilityAddTraits(.isHeader)
-                // Wide enough, the months share the card; too narrow, they
-                // keep their widths and scroll, as the month table does.
-                ViewThatFits(in: .horizontal) {
-                    grid(flexible: true)
-                    ScrollView(.horizontal) { grid(flexible: false) }
-                        .scrollBounceBehavior(.basedOnSize)
-                }
+                FittedTable { grid(flexible: $0) }
             }
         }
     }
@@ -42,22 +36,14 @@ struct CategoryHeatCard: View {
     }
 
     private func header(flexible: Bool) -> some View {
-        HStack(spacing: 0) {
+        SetupHeaderRow {
             Text(String(localized: "Category"))
-                .lineLimit(1)
-                .padding(.horizontal, Metrics.cellPad)
-                .frame(width: Self.nameWidth + 2 * Metrics.cellPad, alignment: .leading)
+                .tableCell(width: Self.nameWidth + 2 * Metrics.cellPad)
             ForEach(1...12, id: \.self) { month in
                 Text(LedgerDate.shortMonth(month))
-                    .lineLimit(1)
-                    .padding(.horizontal, Metrics.cellPad)
-                    .modifier(MonthColumn(flexible: flexible))
+                    .fittedCell(Self.cellWidth, flexible: flexible, alignment: .trailing)
             }
         }
-        .font(Face.ui(11, .medium))
-        .foregroundStyle(Ink.text3)
-        .frame(height: Metrics.headerHeight)
-        .overlay(alignment: .bottom) { Rectangle().fill(Ink.line2).frame(height: 1) }
         .accessibilityHidden(true)
     }
 
@@ -65,15 +51,12 @@ struct CategoryHeatCard: View {
         let name = SummaryText.categoryName(row.name, isSystem: row.isSystem, isOther: row.isOther)
         return HStack(spacing: 0) {
             Text(name)
-                .font(Face.ui(12))
+                .font(Face.row)
                 .foregroundStyle(row.isOther ? Ink.text2 : Ink.text)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .padding(.horizontal, Metrics.cellPad)
-                .frame(width: Self.nameWidth + 2 * Metrics.cellPad, alignment: .leading)
+                .tableCell(width: Self.nameWidth + 2 * Metrics.cellPad)
             ForEach(1...12, id: \.self) { month in
                 cell(row.cells.indices.contains(month - 1) ? row.cells[month - 1] : 0, month: month)
-                    .modifier(MonthColumn(flexible: flexible))
+                    .fittedCell(Self.cellWidth, flexible: flexible, alignment: .trailing, padding: 0)
             }
         }
         .frame(height: Metrics.rowHeight)
@@ -117,19 +100,5 @@ struct CategoryHeatCard: View {
             return (SummaryText.monthName(month), LedgerMoney.amount(row.cells[month - 1]))
         }
         return AccessibilityText.monthRow(month: name, figures: figures)
-    }
-
-    /// A month's column: a share of what the names leave when the grid fits
-    /// the card, its own width when it scrolls.
-    private struct MonthColumn: ViewModifier {
-        let flexible: Bool
-
-        func body(content: Content) -> some View {
-            content.frame(
-                minWidth: CategoryHeatCard.cellWidth,
-                maxWidth: flexible ? .infinity : CategoryHeatCard.cellWidth,
-                alignment: .trailing
-            )
-        }
     }
 }

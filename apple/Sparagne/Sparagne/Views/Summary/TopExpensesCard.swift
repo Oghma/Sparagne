@@ -87,13 +87,7 @@ struct TopExpensesCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { inside in
-            if inside {
-                hovered = expense.transactionId
-            } else if hovered == expense.transactionId {
-                hovered = nil
-            }
-        }
+        .hoverId($hovered, expense.transactionId)
         .help(String(localized: "Show in the ledger"))
         // One button per line, read in the order the eye scans it:
         // "12 mar, Dentista, Salute, €480.00".

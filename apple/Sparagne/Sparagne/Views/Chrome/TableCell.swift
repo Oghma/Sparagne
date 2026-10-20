@@ -16,6 +16,33 @@ extension View {
             TableCell(width: width, minWidth: minWidth, alignment: alignment, padding: padding, hitTestable: hitTestable)
         )
     }
+
+    /// A `tableCell` of a `FittedTable`: at least `width`, and a share of
+    /// what the table has left while its columns are `flexible`; `width`
+    /// exactly once they scroll.
+    func fittedCell(
+        _ width: CGFloat,
+        flexible: Bool,
+        alignment: Alignment = .leading,
+        padding: CGFloat = Metrics.cellPad
+    ) -> some View {
+        tableCell(width: flexible ? nil : width, minWidth: width, alignment: alignment, padding: padding)
+    }
+}
+
+/// A table whose columns share the width it is offered when they fit
+/// (`table(true)`), and that keeps their own widths and scrolls sideways
+/// when they do not (`table(false)`).
+struct FittedTable<Table: View>: View {
+    @ViewBuilder let table: (_ flexible: Bool) -> Table
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            table(true)
+            ScrollView(.horizontal) { table(false) }
+                .scrollBounceBehavior(.basedOnSize)
+        }
+    }
 }
 
 private struct TableCell: ViewModifier {

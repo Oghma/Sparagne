@@ -91,12 +91,7 @@ struct SavingsHero: View {
             VStack(alignment: .leading, spacing: 0) {
                 CardHeader(title: String(localized: "Savings in \(PanelMoney.monthName(summary.month))")) {
                     if isCurrent {
-                        Text(String(localized: "in progress"))
-                            .font(Face.ui(10, .semibold))
-                            .foregroundStyle(Ink.text3)
-                            .padding(.horizontal, 5)
-                            .frame(height: 16)
-                            .background(Ink.raised, in: RoundedRectangle(cornerRadius: 4))
+                        SetupTag(text: String(localized: "in progress"))
                     }
                 }
 
@@ -346,7 +341,7 @@ struct CategoryBreakdown: View {
                     .frame(width: 32, alignment: .trailing)
             }
             .font(Face.row)
-            CategoryBar(fraction: fraction(category))
+            MeterBar(fraction: fraction(category), track: Ink.track, height: 4, rounded: true)
         }
         // The bar is decoration for the same figure, not a second one: one
         // stop, "Casa: €480,00".
@@ -370,24 +365,6 @@ struct CategoryBreakdown: View {
         case "opening": return String(localized: "Opening")
         default: return category.name
         }
-    }
-}
-
-/// A 4-point bar with rounded ends on a faint track (`.bar`).
-private struct CategoryBar: View {
-    let fraction: Double
-
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color(hex: 0x222228))
-                Capsule()
-                    .fill(Ink.chartExpense)
-                    .frame(width: geometry.size.width * min(max(fraction, 0), 1))
-            }
-        }
-        .frame(height: 4)
-        .accessibilityHidden(true)
     }
 }
 
