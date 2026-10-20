@@ -23,8 +23,8 @@ enum AllocationRuleKind: String, CaseIterable, Identifiable, Hashable {
     var takesValue: Bool { self != .fillToCap }
 }
 
-/// The cell of an open row that refused what was typed: the table puts the
-/// focus back there and reports `underlying`.
+/// The cell at fault in a refused line. The table reports `underlying` and
+/// puts the focus back on the line's value, whichever cell it was.
 enum AllocationField: Hashable {
     case envelope
     case value
@@ -135,6 +135,20 @@ struct AllocationLineDraft: Equatable {
 
     func isValid(currency: Currency) -> Bool {
         (try? line(currency: currency)) != nil
+    }
+
+    /// What the Busta menu of the line that had envelope `key` offers, `nil`
+    /// for the empty line: the active envelopes but Unallocated, less those
+    /// another line already has.
+    static func offered(_ flows: [FlowView], lines: [AllocationLine], keeping key: Uuid?) -> [FlowView] {
+        let taken = Set(lines.map(\.flowId)).subtracting([key].compactMap { $0 })
+        return flows.filter { !$0.isUnallocated && !taken.contains($0.id) }
+    }
+
+    /// The cap of the envelope picked, which an Al tetto line fills up to;
+    /// `nil` with no envelope, or one without a cap.
+    func cap(in flows: [FlowView]) -> Int64? {
+        flowId.flatMap { id in flows.first { $0.id == id } }.flatMap { EnvelopeCapKind.cap(of: $0.mode) }
     }
 
     /// `lines` with this draft written in: in place of the line of envelope

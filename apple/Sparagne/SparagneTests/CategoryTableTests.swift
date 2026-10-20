@@ -60,6 +60,19 @@ struct CategoryTableTests {
         #expect(changes.added.isEmpty)
     }
 
+    @Test("Each category's aliases come grouped and in alphabetical order, case aside")
+    func aliasesByCategory() {
+        let aliases = SetupFigures.aliases([
+            AliasView(id: "1", categoryId: "casa", alias: "mutuo"),
+            AliasView(id: "2", categoryId: "spesa", alias: "super"),
+            AliasView(id: "3", categoryId: "casa", alias: "Affitto"),
+            AliasView(id: "4", categoryId: "casa", alias: "bolletta"),
+        ])
+        #expect(aliases["casa"] == ["Affitto", "bolletta", "mutuo"])
+        #expect(aliases["spesa"] == ["super"])
+        #expect(aliases["pizza"] == nil)
+    }
+
     // MARK: - The name cell
 
     @Test("The name cell renames only when it says something new")

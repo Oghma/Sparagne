@@ -81,6 +81,16 @@ struct WalletTableTests {
         #expect(unallocated.balance == 100_000 - 25_000)
     }
 
+    @Test("The total row adds up every wallet, a card in debt taking its share off")
+    func total() {
+        let wallets = [
+            WalletView(id: "conto", name: "Conto", balance: 100_000, archived: false),
+            WalletView(id: "carta", name: "Carta", balance: -25_000, archived: false),
+        ]
+        #expect(SetupFigures.total(of: wallets) == 75_000)
+        #expect(SetupFigures.total(of: []) == 0)
+    }
+
     @Test("The rename reaches the core")
     func renameReachesTheStore() async throws {
         let store = try await TestStore.make()
