@@ -8,20 +8,19 @@
 mod common;
 
 use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
-use common::*;
+use common::{
+    sync::{base_of, income_ids, other_vault, pending_on, runs_of, secs},
+    *,
+};
 use sparagne_core::{
     AllocationBase, AllocationLine, AllocationPlanPatch, AllocationPlanView, AllocationPreview,
-    AllocationRule, AllocationRunView, Command, CommandEnvelope, Core, Currency, DomainError,
-    FlowMode, FlowView, LineStatus, PendingAllocation, PreviewLine, RunOutcome, TransactionFilter,
+    AllocationRule, AllocationRunView, Command, CommandEnvelope, Core, DomainError, FlowMode,
+    FlowView, LineStatus, PendingAllocation, PreviewLine, RunOutcome, TransactionFilter,
     TransactionKind, TransactionPatch, TransactionView, VaultSnapshot,
     allocation::{FULL_PERCENT_BP, resolve},
-    headroom, replay,
+    headroom,
 };
 use uuid::Uuid;
-
-// ---------------------------------------------------------------------------
-// Generator
-// ---------------------------------------------------------------------------
 
 /// xorshift64*, seeded once per test: the cases are the same on every run.
 struct Gen(u64);
@@ -85,10 +84,6 @@ impl Gen {
         parts
     }
 }
-
-// ---------------------------------------------------------------------------
-// Synthetic envelopes for the resolver
-// ---------------------------------------------------------------------------
 
 fn view(
     id: Uuid,
@@ -206,10 +201,6 @@ fn room_of(flow: &FlowView) -> Option<i64> {
     headroom(flow.mode, flow.balance, flow.income_total)
 }
 
-// ---------------------------------------------------------------------------
-// The cascade, written again from the spec
-// ---------------------------------------------------------------------------
-
 /// `remaining` starts at the total; every line takes
 /// `min(wanted, room, remaining)`, with `wanted` the fixed amount, the
 /// percent of the whole total rounded down, or the headroom. A line that
@@ -323,10 +314,6 @@ fn prefix_sums(preview: &AllocationPreview) -> Vec<i64> {
         })
         .collect()
 }
-
-// ---------------------------------------------------------------------------
-// Resolver
-// ---------------------------------------------------------------------------
 
 #[test]
 fn every_line_stays_within_its_wanted_its_room_and_what_is_left_of_the_total() {
@@ -928,16 +915,8 @@ fn extreme_totals_balances_and_caps_never_make_the_resolver_panic() {
     assert_eq!(roomy.unallocated_after, 0);
 }
 
-// ---------------------------------------------------------------------------
-// Engine fixtures
-// ---------------------------------------------------------------------------
-
 fn start() -> NaiveDate {
     day(2026, 1, 1)
-}
-
-fn secs(date: NaiveDate) -> i64 {
-    noon(date).timestamp()
 }
 
 fn income_on(fx: &mut Fx, amount: i64, date: NaiveDate) -> Uuid {
@@ -951,33 +930,7 @@ fn fund(fx: &mut Fx) {
 }
 
 fn plan_from_start(fx: &mut Fx, lines: Vec<AllocationLine>) -> Uuid {
-    run(
-        &mut fx.core,
-        fx.vault,
-        plan_cmd(monthly_from(1, start()), lines),
-    )
-    .result_id
-    .unwrap()
-}
-
-fn base_of(fx: &Fx) -> AllocationBase {
-    fx.core.allocation_base(fx.vault).unwrap()
-}
-
-fn income_ids(base: &AllocationBase) -> Vec<Uuid> {
-    base.incomes.iter().map(|t| t.id).collect()
-}
-
-fn runs_of(fx: &Fx) -> Vec<AllocationRunView> {
-    fx.core.allocation_runs(fx.vault, 100).unwrap()
-}
-
-fn pending_on(fx: &Fx, today: NaiveDate) -> Option<PendingAllocation> {
-    fx.core.pending_allocation(fx.vault, today).unwrap()
-}
-
-fn balance_of(fx: &Fx, flow: Uuid) -> i64 {
-    flow_balance(&fx.core, fx.vault, flow)
+    fx.id(plan_cmd(monthly_from(1, start()), lines))
 }
 
 fn transfers_of(fx: &Fx) -> Vec<TransactionView> {
@@ -988,35 +941,18 @@ fn transfers_of(fx: &Fx) -> Vec<TransactionView> {
 }
 
 fn void(fx: &mut Fx, transaction_id: Uuid) {
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::VoidTransaction { transaction_id },
-    );
+    fx.run(Command::VoidTransaction { transaction_id });
 }
 
 fn expense_from(fx: &mut Fx, flow: Uuid, amount: i64) {
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(
-            amount,
-            None,
-            Some(flow),
-            None,
-            secs(day(2025, 12, 22)),
-        )),
-    );
+    let spent = entry(amount, None, Some(flow), None, secs(day(2025, 12, 22)));
+    fx.run(Command::Expense(spent));
 }
 
 fn archived_envelope(fx: &mut Fx, name: &str) -> Uuid {
     let id = envelope(fx, name, FlowMode::Unlimited);
-    run(&mut fx.core, fx.vault, Command::ArchiveFlow { flow_id: id });
+    fx.run(Command::ArchiveFlow { flow_id: id });
     id
-}
-
-fn execute_at(plan: Uuid, period: NaiveDate, total: i64, moves: &[(Uuid, i64)]) -> Command {
-    execute_cmd(plan, period, total, moves)
 }
 
 /// Everything the allocation can touch, read back from the core.
@@ -1052,7 +988,7 @@ fn projection(core: &Core, vault: Uuid) -> Projection {
 /// log row, no transaction, no run, no balance.
 fn refused(fx: &mut Fx, what: &str, cmd: Command) -> DomainError {
     let before = projection(&fx.core, fx.vault);
-    let err = try_run(&mut fx.core, fx.vault, cmd).expect_err(what);
+    let err = fx.try_run(cmd).expect_err(what);
     assert_eq!(
         projection(&fx.core, fx.vault),
         before,
@@ -1076,13 +1012,8 @@ fn shaped_envelope(g: &mut Gen, fx: &mut Fx, index: usize) -> Uuid {
     match g.below(3) {
         0 => {
             let opening = g.range(0, 20_000);
-            let id = run(
-                &mut fx.core,
-                fx.vault,
-                flow_cmd(&name, FlowMode::Unlimited, allow_negative, opening),
-            )
-            .result_id
-            .unwrap();
+            let mode = FlowMode::Unlimited;
+            let id = fx.id(flow_cmd(&name, mode, allow_negative, opening));
             if g.chance(50) {
                 let max = if allow_negative {
                     opening + 5_000
@@ -1098,13 +1029,8 @@ fn shaped_envelope(g: &mut Gen, fx: &mut Fx, index: usize) -> Uuid {
         1 => {
             let cap = g.range(100, 50_000);
             let opening = g.range(0, cap);
-            let id = run(
-                &mut fx.core,
-                fx.vault,
-                flow_cmd(&name, FlowMode::NetCapped { cap }, allow_negative, opening),
-            )
-            .result_id
-            .unwrap();
+            let mode = FlowMode::NetCapped { cap };
+            let id = fx.id(flow_cmd(&name, mode, allow_negative, opening));
             if g.chance(50) {
                 let max = if allow_negative {
                     opening + cap
@@ -1119,20 +1045,12 @@ fn shaped_envelope(g: &mut Gen, fx: &mut Fx, index: usize) -> Uuid {
         }
         _ => {
             let cap = g.range(100, 50_000);
-            let id = run(
-                &mut fx.core,
-                fx.vault,
-                flow_cmd(&name, FlowMode::IncomeCapped { cap }, allow_negative, 0),
-            )
-            .result_id
-            .unwrap();
+            let mode = FlowMode::IncomeCapped { cap };
+            let id = fx.id(flow_cmd(&name, mode, allow_negative, 0));
             let income = g.range(0, cap);
             if income > 0 {
-                run(
-                    &mut fx.core,
-                    fx.vault,
-                    Command::Income(entry(income, None, Some(id), None, secs(day(2025, 12, 21)))),
-                );
+                let earned = entry(income, None, Some(id), None, secs(day(2025, 12, 21)));
+                fx.run(Command::Income(earned));
             }
             if g.chance(50) {
                 let max = if allow_negative { income + cap } else { income };
@@ -1179,10 +1097,6 @@ fn sum(moves: &[(Uuid, i64)]) -> i64 {
     moves.iter().map(|m| m.1).sum()
 }
 
-// ---------------------------------------------------------------------------
-// Engine: conservation
-// ---------------------------------------------------------------------------
-
 #[test]
 fn an_execution_moves_exactly_the_amounts_out_of_unallocated_and_touches_no_wallet() {
     let mut g = Gen::new(21);
@@ -1210,11 +1124,7 @@ fn an_execution_moves_exactly_the_amounts_out_of_unallocated_and_touches_no_wall
 
         let before = projection(&fx.core, fx.vault);
         let (wallets_before, flows_before) = balances(&fx.core, fx.vault);
-        run(
-            &mut fx.core,
-            fx.vault,
-            execute_at(plan, start(), total, &moves),
-        );
+        fx.run(execute_cmd(plan, start(), total, &moves));
         let (wallets_after, flows_after) = balances(&fx.core, fx.vault);
 
         assert_eq!(wallets_after, wallets_before, "case {case}: wallets");
@@ -1288,10 +1198,6 @@ fn an_execution_moves_exactly_the_amounts_out_of_unallocated_and_touches_no_wall
     assert!(executed >= 6, "only {executed} cases had a move");
 }
 
-// ---------------------------------------------------------------------------
-// Engine: once, in order
-// ---------------------------------------------------------------------------
-
 #[test]
 fn deciding_the_same_period_twice_is_refused_and_changes_nothing() {
     let mut fx = setup();
@@ -1299,28 +1205,24 @@ fn deciding_the_same_period_twice_is_refused_and_changes_nothing() {
     let a = envelope(&mut fx, "A", FlowMode::NetCapped { cap: 5_000 });
     let plan = plan_from_start(&mut fx, vec![fixed(a, 800)]);
     income_on(&mut fx, 20_000, day(2026, 1, 5));
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, start(), 20_000, &[(a, 800)]),
-    );
+    fx.run(execute_cmd(plan, start(), 20_000, &[(a, 800)]));
 
     let err = refused(
         &mut fx,
         "executed twice",
-        execute_at(plan, start(), 20_000, &[(a, 100)]),
+        execute_cmd(plan, start(), 20_000, &[(a, 100)]),
     );
     assert!(matches!(err, DomainError::AlreadyExists(_)), "{err}");
     let err = refused(&mut fx, "skipped after executed", skip_cmd(plan, start()));
     assert!(matches!(err, DomainError::AlreadyExists(_)), "{err}");
 
-    run(&mut fx.core, fx.vault, skip_cmd(plan, day(2026, 2, 1)));
+    fx.run(skip_cmd(plan, day(2026, 2, 1)));
     let err = refused(&mut fx, "skipped twice", skip_cmd(plan, day(2026, 2, 1)));
     assert!(matches!(err, DomainError::AlreadyExists(_)), "{err}");
     let err = refused(
         &mut fx,
         "executed after skipped",
-        execute_at(plan, day(2026, 2, 1), 100, &[(a, 1)]),
+        execute_cmd(plan, day(2026, 2, 1), 100, &[(a, 1)]),
     );
     assert!(matches!(err, DomainError::AlreadyExists(_)), "{err}");
     assert_eq!(runs_of(&fx).len(), 2);
@@ -1357,11 +1259,7 @@ fn deciding_the_latest_due_period_closes_the_missed_ones_and_an_earlier_one_is_r
     assert_eq!(income_ids(&base), vec![i1, i2, i3]);
     assert_eq!(base.total, 6_000);
 
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, day(2026, 3, 1), 6_000, &[(a, 800)]),
-    );
+    fx.run(execute_cmd(plan, day(2026, 3, 1), 6_000, &[(a, 800)]));
     assert_eq!(pending_on(&fx, day(2026, 3, 15)), None);
     assert_eq!(
         pending_on(&fx, day(2026, 4, 1)),
@@ -1385,23 +1283,19 @@ fn deciding_the_latest_due_period_closes_the_missed_ones_and_an_earlier_one_is_r
     for (what, cmd) in [
         (
             "execute a missed period",
-            execute_at(plan, day(2026, 2, 1), 100, &[(a, 1)]),
+            execute_cmd(plan, day(2026, 2, 1), 100, &[(a, 1)]),
         ),
         ("skip a missed period", skip_cmd(plan, start())),
         (
             "execute the first period",
-            execute_at(plan, start(), 100, &[(a, 1)]),
+            execute_cmd(plan, start(), 100, &[(a, 1)]),
         ),
     ] {
         refused_as(&mut fx, what, "invalid_command", cmd);
     }
 
     // The total is the user's number: nothing in the base is no refusal.
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, day(2026, 4, 1), 100, &[(a, 100)]),
-    );
+    fx.run(execute_cmd(plan, day(2026, 4, 1), 100, &[(a, 100)]));
     let periods: Vec<NaiveDate> = runs_of(&fx).iter().map(|r| r.period_date).collect();
     assert_eq!(periods, vec![day(2026, 4, 1), day(2026, 3, 1)]);
 }
@@ -1413,13 +1307,7 @@ fn nothing_is_pending_before_the_start_after_the_end_or_on_a_disabled_plan() {
     let a = envelope(&mut fx, "A", FlowMode::Unlimited);
     let mut schedule = monthly_from(1, start());
     schedule.end_date = Some(day(2026, 2, 15));
-    let plan = run(
-        &mut fx.core,
-        fx.vault,
-        plan_cmd(schedule, vec![fixed(a, 10)]),
-    )
-    .result_id
-    .unwrap();
+    let plan = fx.id(plan_cmd(schedule, vec![fixed(a, 10)]));
 
     assert_eq!(pending_on(&fx, day(2025, 12, 31)), None);
     assert_eq!(
@@ -1434,13 +1322,13 @@ fn nothing_is_pending_before_the_start_after_the_end_or_on_a_disabled_plan() {
         &mut fx,
         "a day that is no period",
         "invalid_command",
-        execute_at(plan, day(2026, 1, 2), 100, &[(a, 1)]),
+        execute_cmd(plan, day(2026, 1, 2), 100, &[(a, 1)]),
     );
     refused_as(
         &mut fx,
         "a period after the end",
         "invalid_command",
-        execute_at(plan, day(2026, 3, 1), 100, &[(a, 1)]),
+        execute_cmd(plan, day(2026, 3, 1), 100, &[(a, 1)]),
     );
 
     let disable = |enabled| {
@@ -1452,14 +1340,14 @@ fn nothing_is_pending_before_the_start_after_the_end_or_on_a_disabled_plan() {
             },
         )
     };
-    run(&mut fx.core, fx.vault, disable(false));
+    fx.run(disable(false));
     assert_eq!(pending_on(&fx, day(2026, 6, 1)), None);
     assert!(!fx.core.allocation_plan(fx.vault).unwrap().unwrap().enabled);
     refused_as(
         &mut fx,
         "a disabled plan",
         "invalid_command",
-        execute_at(plan, day(2026, 2, 1), 100, &[(a, 1)]),
+        execute_cmd(plan, day(2026, 2, 1), 100, &[(a, 1)]),
     );
     refused_as(
         &mut fx,
@@ -1467,20 +1355,16 @@ fn nothing_is_pending_before_the_start_after_the_end_or_on_a_disabled_plan() {
         "invalid_command",
         skip_cmd(plan, day(2026, 2, 1)),
     );
-    run(&mut fx.core, fx.vault, disable(true));
+    fx.run(disable(true));
     assert_eq!(
         pending_on(&fx, day(2026, 6, 1)).map(|p| p.period_date),
         Some(day(2026, 2, 1))
     );
 
-    run(&mut fx.core, fx.vault, skip_cmd(plan, day(2026, 2, 1)));
+    fx.run(skip_cmd(plan, day(2026, 2, 1)));
     assert_eq!(pending_on(&fx, day(2026, 6, 1)), None);
     assert_eq!(pending_on(&fx, day(2030, 1, 1)), None);
 }
-
-// ---------------------------------------------------------------------------
-// Engine: atomicity
-// ---------------------------------------------------------------------------
 
 #[test]
 fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() {
@@ -1497,7 +1381,7 @@ fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() 
     let err = refused(
         &mut fx,
         "a move over the cap",
-        execute_at(plan, start(), total, &[(open, 10), (capped, 1_001)]),
+        execute_cmd(plan, start(), total, &[(open, 10), (capped, 1_001)]),
     );
     assert_eq!(err, DomainError::MaxBalanceReached("Capped".to_string()));
 
@@ -1506,57 +1390,57 @@ fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() 
         (
             "the same envelope twice",
             "invalid_command",
-            execute_at(plan, start(), total, &[(open, 100), (open, 200)]),
+            execute_cmd(plan, start(), total, &[(open, 100), (open, 200)]),
         ),
         (
             "an archived envelope",
             "invalid_command",
-            execute_at(plan, start(), total, &[(open, 100), (gone, 100)]),
+            execute_cmd(plan, start(), total, &[(open, 100), (gone, 100)]),
         ),
         (
             "Unallocated as a target",
             "invalid_flow",
-            execute_at(plan, start(), total, &[(fx.unallocated, 100)]),
+            execute_cmd(plan, start(), total, &[(fx.unallocated, 100)]),
         ),
         (
             "moves above the total",
             "invalid_amount",
-            execute_at(plan, start(), 100, &[(open, 60), (capped, 50)]),
+            execute_cmd(plan, start(), 100, &[(open, 60), (capped, 50)]),
         ),
         (
             "a zero amount",
             "invalid_amount",
-            execute_at(plan, start(), total, &[(open, 100), (capped, 0)]),
+            execute_cmd(plan, start(), total, &[(open, 100), (capped, 0)]),
         ),
         (
             "a negative amount",
             "invalid_amount",
-            execute_at(plan, start(), total, &[(open, -5)]),
+            execute_cmd(plan, start(), total, &[(open, -5)]),
         ),
         (
             "no moves",
             "invalid_command",
-            execute_at(plan, start(), total, &[]),
+            execute_cmd(plan, start(), total, &[]),
         ),
         (
             "a negative total",
             "invalid_amount",
-            execute_at(plan, start(), -1, &[(open, 1)]),
+            execute_cmd(plan, start(), -1, &[(open, 1)]),
         ),
         (
             "an unknown envelope",
             "not_found",
-            execute_at(plan, start(), total, &[(unknown, 100)]),
+            execute_cmd(plan, start(), total, &[(unknown, 100)]),
         ),
         (
             "an unknown plan",
             "not_found",
-            execute_at(unknown, start(), total, &[(open, 100)]),
+            execute_cmd(unknown, start(), total, &[(open, 100)]),
         ),
         (
             "moves whose sum overflows",
             "invalid_amount",
-            execute_at(
+            execute_cmd(
                 plan,
                 start(),
                 i64::MAX,
@@ -1573,11 +1457,13 @@ fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() 
         "not_found",
         skip_cmd(unknown, start()),
     );
-    refused_as(
-        &mut fx,
-        "reopen of an unknown plan",
-        "not_found",
-        reopen_cmd(unknown, start()),
+    assert_eq!(
+        refused(
+            &mut fx,
+            "reopen of an unknown plan",
+            reopen_cmd(unknown, start())
+        ),
+        DomainError::NotFound("allocation plan".to_string())
     );
     refused_as(
         &mut fx,
@@ -1587,14 +1473,14 @@ fn every_refused_execution_leaves_no_transaction_no_run_and_no_balance_change() 
     );
 
     // The vault is intact: a sound execution goes through.
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, start(), total, &[(capped, 1_000), (open, 500)]),
+    let moves = [(capped, 1_000), (open, 500)];
+    fx.run(execute_cmd(plan, start(), total, &moves));
+    assert_eq!(flow_balance(&fx.core, fx.vault, capped), 1_000);
+    assert_eq!(flow_balance(&fx.core, fx.vault, open), 500);
+    assert_eq!(
+        flow_balance(&fx.core, fx.vault, fx.unallocated),
+        1_000_000 + 10_000 - 1_500
     );
-    assert_eq!(balance_of(&fx, capped), 1_000);
-    assert_eq!(balance_of(&fx, open), 500);
-    assert_eq!(balance_of(&fx, fx.unallocated), 1_000_000 + 10_000 - 1_500);
     assert_eq!(runs_of(&fx).len(), 1);
 }
 
@@ -1654,11 +1540,7 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
         assert_eq!(fx.core.allocation_plan(fx.vault).unwrap(), None, "{what}");
     }
 
-    let receipt = run(
-        &mut fx.core,
-        fx.vault,
-        plan_cmd(schedule, vec![fixed(a, 10), fill(b)]),
-    );
+    let receipt = fx.run(plan_cmd(schedule, vec![fixed(a, 10), fill(b)]));
     let plan = fx.core.allocation_plan(fx.vault).unwrap().unwrap();
     assert_eq!(Some(plan.id), receipt.result_id);
     assert_eq!(plan.id, receipt.command_id, "the plan id is the command id");
@@ -1729,48 +1611,29 @@ fn a_refused_plan_leaves_the_vault_without_one_and_a_second_plan_is_refused() {
         ),
     );
 
-    run(
-        &mut fx.core,
-        fx.vault,
-        update_plan_cmd(
-            plan.id,
-            AllocationPlanPatch {
-                lines: Some(vec![percent(b, 2_500)]),
-                ..AllocationPlanPatch::default()
-            },
-        ),
-    );
+    fx.run(update_plan_cmd(
+        plan.id,
+        AllocationPlanPatch {
+            lines: Some(vec![percent(b, 2_500)]),
+            ..AllocationPlanPatch::default()
+        },
+    ));
     let updated = fx.core.allocation_plan(fx.vault).unwrap().unwrap();
     assert_eq!(updated.lines, vec![percent(b, 2_500)]);
     assert_eq!(updated.schedule, schedule);
     assert_eq!(updated.id, plan.id);
 }
 
-// ---------------------------------------------------------------------------
-// Engine: replay
-// ---------------------------------------------------------------------------
-
 #[test]
 fn replaying_the_log_into_a_fresh_core_reproduces_the_plan_its_runs_and_its_base() {
     let mut fx = setup();
     fund(&mut fx);
-    let a = envelope(&mut fx, "A", FlowMode::NetCapped { cap: 5_000 });
-    let b = envelope(&mut fx, "B", FlowMode::Unlimited);
-    let c = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("C", FlowMode::IncomeCapped { cap: 3_000 }, true, 0),
-    )
-    .result_id
-    .unwrap();
+    let (a, b, c) = three_envelopes(&mut fx);
     let plan = plan_from_start(&mut fx, vec![fixed(a, 800), percent(b, 1_000), fill(c)]);
     income_on(&mut fx, 20_000, day(2026, 1, 3));
     income_on(&mut fx, 5_000, day(2026, 1, 10));
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, start(), 25_000, &[(a, 800), (b, 2_500), (c, 3_000)]),
-    );
+    let january = [(a, 800), (b, 2_500), (c, 3_000)];
+    fx.run(execute_cmd(plan, start(), 25_000, &january));
     let b_move = runs_of(&fx)[0]
         .moves
         .iter()
@@ -1779,43 +1642,34 @@ fn replaying_the_log_into_a_fresh_core_reproduces_the_plan_its_runs_and_its_base
         .transaction_id;
     void(&mut fx, b_move);
     income_on(&mut fx, 7_000, day(2026, 2, 2));
-    run(&mut fx.core, fx.vault, skip_cmd(plan, day(2026, 2, 1)));
+    fx.run(skip_cmd(plan, day(2026, 2, 1)));
     income_on(&mut fx, 3_000, day(2026, 3, 1));
-    run(&mut fx.core, fx.vault, reopen_cmd(plan, day(2026, 2, 1)));
-    run(
-        &mut fx.core,
-        fx.vault,
-        update_plan_cmd(
-            plan,
-            AllocationPlanPatch {
-                schedule: Some(monthly_from(15, start())),
-                lines: Some(vec![percent(a, 2_500), fixed(b, 100)]),
-                enabled: None,
-            },
-        ),
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, day(2026, 3, 15), 10_000, &[(a, 2_500), (b, 100)]),
-    );
+    fx.run(reopen_cmd(plan, day(2026, 2, 1)));
+    fx.run(update_plan_cmd(
+        plan,
+        AllocationPlanPatch {
+            schedule: Some(monthly_from(15, start())),
+            lines: Some(vec![percent(a, 2_500), fixed(b, 100)]),
+            enabled: None,
+        },
+    ));
+    let march = [(a, 2_500), (b, 100)];
+    fx.run(execute_cmd(plan, day(2026, 3, 15), 10_000, &march));
+    fx.run(reopen_cmd(plan, day(2026, 3, 15)));
+    fx.run(execute_cmd(plan, day(2026, 3, 15), 10_000, &march));
     let a_move = runs_of(&fx)[0]
         .moves
         .iter()
         .find(|m| m.flow_id == a)
         .unwrap()
         .transaction_id;
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::UpdateTransaction {
-            transaction_id: a_move,
-            patch: TransactionPatch {
-                amount: Some(1_000),
-                ..TransactionPatch::default()
-            },
+    fx.run(Command::UpdateTransaction {
+        transaction_id: a_move,
+        patch: TransactionPatch {
+            amount: Some(1_000),
+            ..TransactionPatch::default()
         },
-    );
+    });
     income_on(&mut fx, 900, day(2026, 3, 20));
 
     let original = projection(&fx.core, fx.vault);
@@ -1826,9 +1680,7 @@ fn replaying_the_log_into_a_fresh_core_reproduces_the_plan_its_runs_and_its_base
     );
     assert_eq!(income_ids(&original.base).len(), 1);
 
-    let log = fx.core.commands_since(fx.vault, 0).unwrap();
-    let mut fresh = Core::open_in_memory().unwrap();
-    replay(&log, &mut fresh).unwrap();
+    let fresh = replayed(&fx.core, fx.vault);
     assert_eq!(projection(&fresh, fx.vault), original);
     assert_eq!(
         fresh
@@ -1840,35 +1692,20 @@ fn replaying_the_log_into_a_fresh_core_reproduces_the_plan_its_runs_and_its_base
     );
 }
 
-// ---------------------------------------------------------------------------
-// Engine: the base
-// ---------------------------------------------------------------------------
-
 #[test]
 fn the_base_counts_only_live_incomes_into_unallocated_dated_from_the_plans_start() {
     let mut fx = setup();
     let e = envelope(&mut fx, "E", FlowMode::Unlimited);
     // A second wallet: from here on every entry names its wallet.
-    let bank = run(
-        &mut fx.core,
-        fx.vault,
-        Command::CreateWallet {
-            name: "Bank".to_string(),
-            opening_balance: 5_000,
-            occurred_at: noon(day(2026, 1, 8)),
-        },
-    )
-    .result_id
-    .unwrap();
+    let bank = fx.id(Command::CreateWallet {
+        name: "Bank".to_string(),
+        opening_balance: 5_000,
+        occurred_at: noon(day(2026, 1, 8)),
+    });
     let cash = fx.wallet;
     let income_via = |fx: &mut Fx, wallet: Uuid, amount: i64, date: NaiveDate| {
-        run(
-            &mut fx.core,
-            fx.vault,
-            Command::Income(entry(amount, Some(wallet), None, None, secs(date))),
-        )
-        .result_id
-        .unwrap()
+        let income = entry(amount, Some(wallet), None, None, secs(date));
+        fx.id(Command::Income(income))
     };
     income_via(&mut fx, cash, 1_000, day(2025, 12, 30));
     let before_plan = income_via(&mut fx, cash, 1_200, day(2026, 1, 2));
@@ -1878,67 +1715,36 @@ fn the_base_counts_only_live_incomes_into_unallocated_dated_from_the_plans_start
     let plain = income_via(&mut fx, cash, 2_000, day(2026, 1, 5));
     let voided = income_via(&mut fx, cash, 3_000, day(2026, 1, 6));
     void(&mut fx, voided);
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Refund(entry(400, Some(bank), None, None, secs(day(2026, 1, 9)))),
+    let refund = entry(400, Some(bank), None, None, secs(day(2026, 1, 9)));
+    fx.run(Command::Refund(refund));
+    let into_e = entry(600, Some(cash), Some(e), None, secs(day(2026, 1, 10)));
+    fx.run(Command::Income(into_e));
+    fx.run(Command::TransferFlow {
+        amount: 50,
+        from_flow_id: e,
+        to_flow_id: fx.unallocated,
+        note: None,
+        occurred_at: noon(day(2026, 1, 11)),
+    });
+    let spent = entry(70, Some(cash), None, None, secs(day(2026, 1, 12)));
+    fx.run(Command::Expense(spent));
+    fx.run(Command::TransferWallet {
+        amount: 30,
+        from_wallet_id: bank,
+        to_wallet_id: fx.wallet,
+        note: None,
+        occurred_at: noon(day(2026, 1, 12)),
+    });
+    let salary = entry(
+        700,
+        Some(bank),
+        None,
+        Some("Salary"),
+        secs(day(2026, 1, 13)),
     );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(
-            600,
-            Some(cash),
-            Some(e),
-            None,
-            secs(day(2026, 1, 10)),
-        )),
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::TransferFlow {
-            amount: 50,
-            from_flow_id: e,
-            to_flow_id: fx.unallocated,
-            note: None,
-            occurred_at: noon(day(2026, 1, 11)),
-        },
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::Expense(entry(70, Some(cash), None, None, secs(day(2026, 1, 12)))),
-    );
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::TransferWallet {
-            amount: 30,
-            from_wallet_id: bank,
-            to_wallet_id: fx.wallet,
-            note: None,
-            occurred_at: noon(day(2026, 1, 12)),
-        },
-    );
-    let on_the_bank = run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(
-            700,
-            Some(bank),
-            None,
-            Some("Salary"),
-            secs(day(2026, 1, 13)),
-        )),
-    )
-    .result_id
-    .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("Late", FlowMode::NetCapped { cap: 200 }, false, 150),
-    );
+    let on_the_bank = fx.id(Command::Income(salary));
+    let late = FlowMode::NetCapped { cap: 200 };
+    fx.run(flow_cmd("Late", late, false, 150));
 
     let base = base_of(&fx);
     assert_eq!(
@@ -1964,34 +1770,22 @@ fn the_base_counts_recurring_executions_batched_incomes_and_edited_amounts() {
     let e = envelope(&mut fx, "E", FlowMode::Unlimited);
     plan_from_start(&mut fx, vec![fixed(e, 10)]);
 
-    let template = run(
-        &mut fx.core,
-        fx.vault,
-        Command::CreateRecurring {
-            transaction_kind: TransactionKind::Income,
-            amount: 2_500,
-            wallet_id: None,
-            flow_id: None,
-            category: Some("Salary".to_string()),
-            note: None,
-            schedule: monthly_from(1, start()),
-            owner: None,
-        },
-    )
-    .result_id
-    .unwrap();
-    let recurring = run(
-        &mut fx.core,
-        fx.vault,
-        Command::ExecuteRecurring {
-            recurring_id: template,
-            period_date: start(),
-            occurred_at: noon(start()),
-            person: None,
-        },
-    )
-    .result_id
-    .unwrap();
+    let template = fx.id(Command::CreateRecurring {
+        transaction_kind: TransactionKind::Income,
+        amount: 2_500,
+        wallet_id: None,
+        flow_id: None,
+        category: Some("Salary".to_string()),
+        note: None,
+        schedule: monthly_from(1, start()),
+        owner: None,
+    });
+    let recurring = fx.id(Command::ExecuteRecurring {
+        recurring_id: template,
+        period_date: start(),
+        occurred_at: noon(start()),
+        person: None,
+    });
 
     let batch: Vec<CommandEnvelope> = [(10, 3), (20, 4), (30, 5)]
         .into_iter()
@@ -2012,47 +1806,30 @@ fn the_base_counts_recurring_executions_batched_incomes_and_edited_amounts() {
         .collect();
 
     let edited = income_on(&mut fx, 1_000, day(2026, 1, 6));
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::UpdateTransaction {
-            transaction_id: edited,
-            patch: TransactionPatch {
-                amount: Some(1_500),
-                ..TransactionPatch::default()
-            },
+    fx.run(Command::UpdateTransaction {
+        transaction_id: edited,
+        patch: TransactionPatch {
+            amount: Some(1_500),
+            ..TransactionPatch::default()
         },
-    );
+    });
     let moved_out = income_on(&mut fx, 500, day(2026, 1, 7));
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::UpdateTransaction {
-            transaction_id: moved_out,
-            patch: TransactionPatch {
-                flow_id: Some(e),
-                ..TransactionPatch::default()
-            },
+    fx.run(Command::UpdateTransaction {
+        transaction_id: moved_out,
+        patch: TransactionPatch {
+            flow_id: Some(e),
+            ..TransactionPatch::default()
         },
-    );
-    let moved_in = run(
-        &mut fx.core,
-        fx.vault,
-        Command::Income(entry(800, None, Some(e), None, secs(day(2026, 1, 8)))),
-    )
-    .result_id
-    .unwrap();
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::UpdateTransaction {
-            transaction_id: moved_in,
-            patch: TransactionPatch {
-                flow_id: Some(fx.unallocated),
-                ..TransactionPatch::default()
-            },
+    });
+    let into_e = entry(800, None, Some(e), None, secs(day(2026, 1, 8)));
+    let moved_in = fx.id(Command::Income(into_e));
+    fx.run(Command::UpdateTransaction {
+        transaction_id: moved_in,
+        patch: TransactionPatch {
+            flow_id: Some(fx.unallocated),
+            ..TransactionPatch::default()
         },
-    );
+    });
 
     let base = base_of(&fx);
     let mut expected = vec![recurring];
@@ -2079,11 +1856,7 @@ fn each_income_is_counted_exactly_once_across_consecutive_decisions() {
     let first = base_of(&fx);
     assert_eq!(income_ids(&first), vec![i1, i2]);
     assert_eq!(first.total, 3_000);
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, start(), 3_000, &[(e, 500)]),
-    );
+    fx.run(execute_cmd(plan, start(), 3_000, &[(e, 500)]));
     assert_eq!(base_of(&fx), empty, "nothing left after the decision");
 
     // Recorded after the run, dated before it: what counts is when it was
@@ -2096,12 +1869,12 @@ fn each_income_is_counted_exactly_once_across_consecutive_decisions() {
     assert_eq!(income_ids(&second), vec![i3, i4]);
     assert_eq!(second.total, 4_300);
 
-    run(&mut fx.core, fx.vault, skip_cmd(plan, day(2026, 2, 1)));
+    fx.run(skip_cmd(plan, day(2026, 2, 1)));
     assert_eq!(base_of(&fx), empty, "a skip closes its incomes too");
     let i5 = income_on(&mut fx, 500, day(2026, 2, 20));
     assert_eq!(income_ids(&base_of(&fx)), vec![i5]);
 
-    run(&mut fx.core, fx.vault, reopen_cmd(plan, day(2026, 2, 1)));
+    fx.run(reopen_cmd(plan, day(2026, 2, 1)));
     let reopened = base_of(&fx);
     assert_eq!(
         income_ids(&reopened),
@@ -2109,11 +1882,7 @@ fn each_income_is_counted_exactly_once_across_consecutive_decisions() {
         "a reopen gives the incomes back to the base, the newer ones included"
     );
     assert_eq!(reopened.total, 4_800);
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, day(2026, 2, 1), 4_800, &[(e, 500)]),
-    );
+    fx.run(execute_cmd(plan, day(2026, 2, 1), 4_800, &[(e, 500)]));
     assert_eq!(base_of(&fx), empty);
     let i6 = income_on(&mut fx, 60, day(2026, 3, 3));
     assert_eq!(income_ids(&base_of(&fx)), vec![i6]);
@@ -2136,9 +1905,7 @@ fn the_start_of_the_plan_is_read_in_the_incomes_own_offset() {
     let income_at = |fx: &mut Fx, amount: i64, at: DateTime<FixedOffset>| {
         let mut income = entry(amount, None, None, None, 0);
         income.occurred_at = at;
-        run(&mut fx.core, fx.vault, Command::Income(income))
-            .result_id
-            .unwrap()
+        fx.id(Command::Income(income))
     };
     let rome = FixedOffset::east_opt(2 * 3600).unwrap();
     let new_york = FixedOffset::west_opt(5 * 3600).unwrap();
@@ -2203,21 +1970,11 @@ fn incomes_on_the_same_instant_keep_the_ledgers_order() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Engine: reopen
-// ---------------------------------------------------------------------------
-
 fn three_envelopes(fx: &mut Fx) -> (Uuid, Uuid, Uuid) {
     let a = envelope(fx, "A", FlowMode::NetCapped { cap: 5_000 });
     let b = envelope(fx, "B", FlowMode::Unlimited);
-    let c = run(
-        &mut fx.core,
-        fx.vault,
-        flow_cmd("C", FlowMode::IncomeCapped { cap: 3_000 }, true, 0),
-    )
-    .result_id
-    .unwrap();
-    (a, b, c)
+    let capped = FlowMode::IncomeCapped { cap: 3_000 };
+    (a, b, fx.id(flow_cmd("C", capped, true, 0)))
 }
 
 #[test]
@@ -2226,15 +1983,12 @@ fn reopening_the_latest_period_restores_every_balance_and_makes_it_due_again() {
     fund(&mut fx);
     let (a, b, c) = three_envelopes(&mut fx);
     let plan = plan_from_start(&mut fx, vec![fixed(a, 800), fixed(b, 1_000), fill(c)]);
+    let moves = [(a, 800), (b, 1_000), (c, 500)];
     income_on(&mut fx, 20_000, day(2026, 1, 3));
     income_on(&mut fx, 5_000, day(2026, 1, 10));
     let before = projection(&fx.core, fx.vault);
 
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, start(), 25_000, &[(a, 800), (b, 1_000), (c, 500)]),
-    );
+    fx.run(execute_cmd(plan, start(), 25_000, &moves));
     assert_ne!(fx.core.snapshot(fx.vault).unwrap(), before.snapshot);
     let moved: Vec<Uuid> = runs_of(&fx)[0]
         .moves
@@ -2243,7 +1997,7 @@ fn reopening_the_latest_period_restores_every_balance_and_makes_it_due_again() {
         .collect();
     assert_eq!(moved.len(), 3);
 
-    run(&mut fx.core, fx.vault, reopen_cmd(plan, start()));
+    fx.run(reopen_cmd(plan, start()));
     let after = projection(&fx.core, fx.vault);
     assert_eq!(
         after.snapshot, before.snapshot,
@@ -2269,15 +2023,11 @@ fn reopening_the_latest_period_restores_every_balance_and_makes_it_due_again() {
     assert_eq!(after.log.len(), before.log.len() + 2);
 
     // The period can be decided again, from the same base.
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, start(), 25_000, &[(a, 800), (b, 1_000), (c, 500)]),
-    );
+    fx.run(execute_cmd(plan, start(), 25_000, &moves));
     assert_eq!(runs_of(&fx).len(), 1);
-    assert_eq!(balance_of(&fx, a), 800);
-    assert_eq!(balance_of(&fx, b), 1_000);
-    assert_eq!(balance_of(&fx, c), 500);
+    assert_eq!(flow_balance(&fx.core, fx.vault, a), 800);
+    assert_eq!(flow_balance(&fx.core, fx.vault, b), 1_000);
+    assert_eq!(flow_balance(&fx.core, fx.vault, c), 500);
     assert_eq!(transfers_of(&fx).len(), 6);
 }
 
@@ -2287,14 +2037,11 @@ fn reopen_tolerates_a_move_voided_or_edited_in_the_meantime() {
     fund(&mut fx);
     let (a, b, c) = three_envelopes(&mut fx);
     let plan = plan_from_start(&mut fx, vec![fixed(a, 800), fixed(b, 1_000), fill(c)]);
+    let moves = [(a, 800), (b, 1_000), (c, 500)];
     income_on(&mut fx, 20_000, day(2026, 1, 3));
     let before = projection(&fx.core, fx.vault);
 
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, start(), 20_000, &[(a, 800), (b, 1_000), (c, 500)]),
-    );
+    fx.run(execute_cmd(plan, start(), 20_000, &moves));
     let moves = runs_of(&fx)[0].moves.clone();
     let of = |flow: Uuid| {
         moves
@@ -2304,19 +2051,15 @@ fn reopen_tolerates_a_move_voided_or_edited_in_the_meantime() {
             .transaction_id
     };
     void(&mut fx, of(b));
-    run(
-        &mut fx.core,
-        fx.vault,
-        Command::UpdateTransaction {
-            transaction_id: of(a),
-            patch: TransactionPatch {
-                amount: Some(300),
-                ..TransactionPatch::default()
-            },
+    fx.run(Command::UpdateTransaction {
+        transaction_id: of(a),
+        patch: TransactionPatch {
+            amount: Some(300),
+            ..TransactionPatch::default()
         },
-    );
-    assert_eq!(balance_of(&fx, a), 300);
-    assert_eq!(balance_of(&fx, b), 0);
+    });
+    assert_eq!(flow_balance(&fx.core, fx.vault, a), 300);
+    assert_eq!(flow_balance(&fx.core, fx.vault, b), 0);
     let run_view = runs_of(&fx).remove(0);
     let as_now: Vec<(i64, bool)> = [a, b, c]
         .iter()
@@ -2331,7 +2074,7 @@ fn reopen_tolerates_a_move_voided_or_edited_in_the_meantime() {
         "the run shows its moves as they are now"
     );
 
-    run(&mut fx.core, fx.vault, reopen_cmd(plan, start()));
+    fx.run(reopen_cmd(plan, start()));
     let after = projection(&fx.core, fx.vault);
     assert_eq!(after.snapshot, before.snapshot);
     assert_eq!(after.base, before.base);
@@ -2346,24 +2089,24 @@ fn reopen_is_refused_on_a_period_that_is_not_the_latest_decided_one() {
     let a = envelope(&mut fx, "A", FlowMode::Unlimited);
     let plan = plan_from_start(&mut fx, vec![fixed(a, 100)]);
     income_on(&mut fx, 1_000, day(2026, 1, 3));
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, start(), 1_000, &[(a, 100)]),
-    );
-    run(&mut fx.core, fx.vault, skip_cmd(plan, day(2026, 2, 1)));
+    fx.run(execute_cmd(plan, start(), 1_000, &[(a, 100)]));
+    fx.run(skip_cmd(plan, day(2026, 2, 1)));
 
-    refused_as(
-        &mut fx,
-        "an older decided period",
-        "invalid_command",
-        reopen_cmd(plan, start()),
+    assert_eq!(
+        refused(
+            &mut fx,
+            "an older decided period",
+            reopen_cmd(plan, start())
+        ),
+        DomainError::InvalidCommand("only the latest decided period can be reopened".to_string())
     );
-    refused_as(
-        &mut fx,
-        "a period never decided",
-        "not_found",
-        reopen_cmd(plan, day(2026, 3, 1)),
+    assert_eq!(
+        refused(
+            &mut fx,
+            "a period never decided",
+            reopen_cmd(plan, day(2026, 3, 1))
+        ),
+        DomainError::NotFound("run for 2026-03-01".to_string())
     );
     refused_as(
         &mut fx,
@@ -2373,7 +2116,7 @@ fn reopen_is_refused_on_a_period_that_is_not_the_latest_decided_one() {
     );
 
     let transactions = list(&fx.core, fx.vault, &all());
-    run(&mut fx.core, fx.vault, reopen_cmd(plan, day(2026, 2, 1)));
+    fx.run(reopen_cmd(plan, day(2026, 2, 1)));
     assert_eq!(
         list(&fx.core, fx.vault, &all()),
         transactions,
@@ -2381,11 +2124,11 @@ fn reopen_is_refused_on_a_period_that_is_not_the_latest_decided_one() {
     );
     let periods: Vec<NaiveDate> = runs_of(&fx).iter().map(|r| r.period_date).collect();
     assert_eq!(periods, vec![start()]);
-    assert_eq!(balance_of(&fx, a), 100);
+    assert_eq!(flow_balance(&fx.core, fx.vault, a), 100);
 
-    run(&mut fx.core, fx.vault, reopen_cmd(plan, start()));
+    fx.run(reopen_cmd(plan, start()));
     assert!(runs_of(&fx).is_empty());
-    assert_eq!(balance_of(&fx, a), 0);
+    assert_eq!(flow_balance(&fx.core, fx.vault, a), 0);
     refused_as(
         &mut fx,
         "nothing decided any more",
@@ -2402,35 +2145,27 @@ fn reopen_never_consults_the_schedule_or_the_switch() {
     let plan = plan_from_start(&mut fx, vec![fixed(a, 100)]);
     income_on(&mut fx, 1_000, day(2026, 1, 3));
     let before = projection(&fx.core, fx.vault);
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, start(), 1_000, &[(a, 100)]),
-    );
+    fx.run(execute_cmd(plan, start(), 1_000, &[(a, 100)]));
 
     // The 1st is no period of the plan any more, and the plan is off.
-    run(
-        &mut fx.core,
-        fx.vault,
-        update_plan_cmd(
-            plan,
-            AllocationPlanPatch {
-                schedule: Some(monthly_from(15, start())),
-                lines: None,
-                enabled: Some(false),
-            },
-        ),
-    );
+    fx.run(update_plan_cmd(
+        plan,
+        AllocationPlanPatch {
+            schedule: Some(monthly_from(15, start())),
+            lines: None,
+            enabled: Some(false),
+        },
+    ));
     let schedule = fx.core.allocation_plan(fx.vault).unwrap().unwrap().schedule;
     assert!(!schedule.is_occurrence(start()));
     refused_as(
         &mut fx,
         "a period of a plan switched off",
         "invalid_command",
-        execute_at(plan, day(2026, 1, 15), 100, &[(a, 1)]),
+        execute_cmd(plan, day(2026, 1, 15), 100, &[(a, 1)]),
     );
 
-    run(&mut fx.core, fx.vault, reopen_cmd(plan, start()));
+    fx.run(reopen_cmd(plan, start()));
     let after = projection(&fx.core, fx.vault);
     assert_eq!(
         after.snapshot, before.snapshot,
@@ -2441,17 +2176,13 @@ fn reopen_never_consults_the_schedule_or_the_switch() {
     assert!(transfers_of(&fx).iter().all(|t| t.voided));
 
     // Switched back on, the first period of the new schedule is due.
-    run(
-        &mut fx.core,
-        fx.vault,
-        update_plan_cmd(
-            plan,
-            AllocationPlanPatch {
-                enabled: Some(true),
-                ..AllocationPlanPatch::default()
-            },
-        ),
-    );
+    fx.run(update_plan_cmd(
+        plan,
+        AllocationPlanPatch {
+            enabled: Some(true),
+            ..AllocationPlanPatch::default()
+        },
+    ));
     assert_eq!(
         pending_on(&fx, day(2026, 1, 20)),
         Some(PendingAllocation {
@@ -2472,11 +2203,7 @@ fn a_future_occurrence_can_be_decided_and_closes_what_lies_before_it() {
 
     // The engine knows no today: any period of the schedule can be decided,
     // and the app only ever offers the one due.
-    run(
-        &mut fx.core,
-        fx.vault,
-        execute_at(plan, day(2026, 6, 1), 1_000, &[(a, 100)]),
-    );
+    fx.run(execute_cmd(plan, day(2026, 6, 1), 1_000, &[(a, 100)]));
     assert_eq!(pending_on(&fx, day(2026, 3, 15)), None);
     assert_eq!(pending_on(&fx, day(2026, 6, 30)), None);
     assert_eq!(
@@ -2491,15 +2218,11 @@ fn a_future_occurrence_can_be_decided_and_closes_what_lies_before_it() {
         &mut fx,
         "a period before the one decided",
         "invalid_command",
-        execute_at(plan, day(2026, 3, 1), 100, &[(a, 1)]),
+        execute_cmd(plan, day(2026, 3, 1), 100, &[(a, 1)]),
     );
     assert_eq!(runs_of(&fx).len(), 1);
     assert_eq!(base_of(&fx).incomes.len(), 0);
 }
-
-// ---------------------------------------------------------------------------
-// Engine: two vaults
-// ---------------------------------------------------------------------------
 
 #[test]
 fn a_plan_of_another_vault_is_refused_on_every_command() {
@@ -2509,35 +2232,18 @@ fn a_plan_of_another_vault_is_refused_on_every_command() {
     let plan = plan_from_start(&mut fx, vec![fixed(a, 100)]);
     income_on(&mut fx, 1_000, day(2026, 1, 3));
 
-    let other = fx
-        .core
-        .execute(CommandEnvelope::create_vault(
-            "alice",
-            "Other",
-            Currency::Eur,
-        ))
-        .unwrap()
-        .result_id
-        .unwrap();
-    run(&mut fx.core, other, wallet_cmd("Cash", 0));
-    let theirs = run(
-        &mut fx.core,
-        other,
-        flow_cmd("Theirs", FlowMode::Unlimited, false, 0),
-    )
-    .result_id
-    .unwrap();
+    let (other, theirs) = other_vault(&mut fx.core);
 
     let mine = projection(&fx.core, fx.vault);
     let not_mine = projection(&fx.core, other);
     let cases = [
         (
             "execute",
-            execute_at(plan, start(), 1_000, &[(theirs, 100)]),
+            execute_cmd(plan, start(), 1_000, &[(theirs, 100)]),
         ),
         (
             "execute from their vault with my envelope",
-            execute_at(plan, start(), 1_000, &[(a, 100)]),
+            execute_cmd(plan, start(), 1_000, &[(a, 100)]),
         ),
         ("skip", skip_cmd(plan, start())),
         ("reopen", reopen_cmd(plan, start())),
@@ -2554,7 +2260,11 @@ fn a_plan_of_another_vault_is_refused_on_every_command() {
     ];
     for (what, cmd) in cases {
         let err = try_run(&mut fx.core, other, cmd).expect_err(what);
-        assert!(matches!(err, DomainError::NotFound(_)), "{what}: {err}");
+        assert_eq!(
+            err,
+            DomainError::NotFound("allocation plan".to_string()),
+            "{what}"
+        );
         assert_eq!(projection(&fx.core, fx.vault), mine, "{what}");
         assert_eq!(projection(&fx.core, other), not_mine, "{what}");
     }
@@ -2569,7 +2279,7 @@ fn a_plan_of_another_vault_is_refused_on_every_command() {
         &mut fx,
         "their envelope as a target",
         "not_found",
-        execute_at(plan, start(), 1_000, &[(a, 50), (theirs, 50)]),
+        execute_cmd(plan, start(), 1_000, &[(a, 50), (theirs, 50)]),
     );
     assert_eq!(projection(&fx.core, other), not_mine);
 
@@ -2582,10 +2292,6 @@ fn a_plan_of_another_vault_is_refused_on_every_command() {
     assert_eq!(projection(&fx.core, fx.vault), mine);
     assert!(fx.core.allocation_plan(other).unwrap().is_some());
 }
-
-// ---------------------------------------------------------------------------
-// Engine: headroom agreement
-// ---------------------------------------------------------------------------
 
 #[test]
 fn the_amounts_of_a_preview_executed_as_moves_are_never_refused_for_a_cap() {
@@ -2620,7 +2326,7 @@ fn the_amounts_of_a_preview_executed_as_moves_are_never_refused_for_a_cap() {
                 total,
                 &lines,
                 &snapshot.flows,
-                balance_of(&fx, fx.unallocated)
+                flow_balance(&fx.core, fx.vault, fx.unallocated)
             ),
             "case {case}: the preview reads the projection"
         );
@@ -2634,11 +2340,7 @@ fn the_amounts_of_a_preview_executed_as_moves_are_never_refused_for_a_cap() {
             continue;
         }
         executed += 1;
-        let result = try_run(
-            &mut fx.core,
-            fx.vault,
-            execute_at(plan, start(), total, &moves),
-        );
+        let result = fx.try_run(execute_cmd(plan, start(), total, &moves));
         assert!(
             result.is_ok(),
             "case {case}: {moves:?} refused with {:?}",
@@ -2647,14 +2349,14 @@ fn the_amounts_of_a_preview_executed_as_moves_are_never_refused_for_a_cap() {
         for line in &preview.lines {
             if line.status != LineStatus::Archived {
                 assert_eq!(
-                    balance_of(&fx, line.flow_id),
+                    flow_balance(&fx.core, fx.vault, line.flow_id),
                     line.balance_after,
                     "case {case}: balance after"
                 );
             }
         }
         assert_eq!(
-            balance_of(&fx, fx.unallocated),
+            flow_balance(&fx.core, fx.vault, fx.unallocated),
             preview.unallocated_after,
             "case {case}: Unallocated after"
         );
