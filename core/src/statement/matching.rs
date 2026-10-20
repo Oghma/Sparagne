@@ -913,32 +913,18 @@ fn claimed_by(id: Uuid, command: &Command) -> Option<(Uuid, Claimed)> {
     else {
         return None;
     };
-    let only = |expected: TransactionPatch| expected == *patch;
+    let wallets = TransactionPatch {
+        wallet_id: patch.wallet_id,
+        from_id: patch.from_id,
+        to_id: patch.to_id,
+        ..TransactionPatch::default()
+    };
+    if wallets != *patch {
+        return None;
+    }
     let claimed = match (patch.wallet_id, patch.from_id, patch.to_id) {
-        (Some(wallet_id), None, None)
-            if only(TransactionPatch {
-                wallet_id: Some(wallet_id),
-                ..TransactionPatch::default()
-            }) =>
-        {
-            Claimed::Entry(wallet_id)
-        }
-        (None, Some(from_id), None)
-            if only(TransactionPatch {
-                from_id: Some(from_id),
-                ..TransactionPatch::default()
-            }) =>
-        {
-            Claimed::Side(from_id)
-        }
-        (None, None, Some(to_id))
-            if only(TransactionPatch {
-                to_id: Some(to_id),
-                ..TransactionPatch::default()
-            }) =>
-        {
-            Claimed::Side(to_id)
-        }
+        (Some(wallet), None, None) => Claimed::Entry(wallet),
+        (None, Some(wallet), None) | (None, None, Some(wallet)) => Claimed::Side(wallet),
         _ => return None,
     };
     Some((*transaction_id, claimed))
@@ -1073,5 +1059,49 @@ mod tests {
         // 8th (1): both rows pair, though the 10th is closer to the 11th.
         let edges = vec![vec![edge(0, 1), edge(1, 2)], vec![edge(0, 2)]];
         assert_eq!(txs_of(&pair(&edges, 2)), [Some(1), Some(0)]);
+    }
+
+    #[test]
+    fn a_claim_is_one_wallet_patched_alone_under_a_v5_id() {
+        let (tx, wallet) = (Uuid::now_v7(), Uuid::now_v7());
+        let claim = Uuid::new_v5(&tx, b"claim");
+        let read = |id, patch| {
+            let command = Command::UpdateTransaction {
+                transaction_id: tx,
+                patch,
+            };
+            match claimed_by(id, &command)? {
+                (of, Claimed::Entry(wallet)) => Some((of, "entry", wallet)),
+                (of, Claimed::Side(wallet)) => Some((of, "side", wallet)),
+            }
+        };
+        let patch = |wallet_id, from_id, to_id| TransactionPatch {
+            wallet_id,
+            from_id,
+            to_id,
+            ..TransactionPatch::default()
+        };
+        let one = Some(wallet);
+        assert_eq!(
+            read(claim, patch(one, None, None)),
+            Some((tx, "entry", wallet))
+        );
+        assert_eq!(
+            read(claim, patch(None, one, None)),
+            Some((tx, "side", wallet))
+        );
+        assert_eq!(
+            read(claim, patch(None, None, one)),
+            Some((tx, "side", wallet))
+        );
+        // The app's own id, two wallets, another field or none: an edit.
+        assert_eq!(read(Uuid::now_v7(), patch(one, None, None)), None);
+        assert_eq!(read(claim, patch(None, one, one)), None);
+        let relabel = TransactionPatch {
+            category: Some("Bar".to_string()),
+            ..patch(one, None, None)
+        };
+        assert_eq!(read(claim, relabel), None);
+        assert_eq!(read(claim, TransactionPatch::default()), None);
     }
 }
