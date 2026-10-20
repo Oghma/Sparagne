@@ -23,13 +23,7 @@ pub(super) fn rename_wallet(
 ) -> Result<()> {
     load_wallet(tx, env.vault_id, wallet_id)?;
     let name = super::normalize_name(name, "wallet")?;
-    let taken: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM wallets
-         WHERE vault_id = ?1 AND lower(name) = lower(?2) AND id <> ?3)",
-        params![env.vault_id, name, wallet_id],
-        |r| r.get(0),
-    )?;
-    if taken {
+    if super::name_taken(tx, "wallets", env.vault_id, &name, Some(wallet_id))? {
         return Err(DomainError::AlreadyExists(name));
     }
     tx.execute(
@@ -108,13 +102,7 @@ pub(super) fn update_flow(
                     "flow name is reserved".to_string(),
                 ));
             }
-            let taken: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM flows
-                 WHERE vault_id = ?1 AND lower(name) = lower(?2) AND id <> ?3)",
-                params![env.vault_id, candidate, flow_id],
-                |r| r.get(0),
-            )?;
-            if taken {
+            if super::name_taken(tx, "flows", env.vault_id, &candidate, Some(flow_id))? {
                 return Err(DomainError::AlreadyExists(candidate));
             }
             candidate
@@ -211,20 +199,9 @@ pub(super) fn rename_category(
     category_id: Uuid,
     name: &str,
 ) -> Result<()> {
-    let category = load_category(tx, env.vault_id, category_id)?;
-    if category.is_system {
-        return Err(DomainError::InvalidName("system category".to_string()));
-    }
+    user_category(tx, env.vault_id, category_id)?;
     let (display, key) = validate_category_name(name)?;
-    let taken: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM categories
-                       WHERE vault_id = ?1 AND name_norm = ?2 AND id <> ?3)
-             OR EXISTS(SELECT 1 FROM category_aliases
-                       WHERE vault_id = ?1 AND alias_norm = ?2 AND category_id <> ?3)",
-        params![env.vault_id, key, category_id],
-        |r| r.get(0),
-    )?;
-    if taken {
+    if super::category_key_taken(tx, env.vault_id, &key, Some(category_id))? {
         return Err(DomainError::AlreadyExists(display));
     }
     // The new name may be one of this category's own aliases; the alias then
@@ -246,10 +223,7 @@ pub(super) fn set_category_archived(
     category_id: Uuid,
     archived: bool,
 ) -> Result<()> {
-    let category = load_category(tx, env.vault_id, category_id)?;
-    if category.is_system {
-        return Err(DomainError::InvalidName("system category".to_string()));
-    }
+    let category = user_category(tx, env.vault_id, category_id)?;
     if category.archived == archived {
         return Err(already_in_state("category", archived));
     }
@@ -267,16 +241,12 @@ pub(super) fn add_alias(
     category_id: Uuid,
     alias: &str,
 ) -> Result<Uuid> {
-    let category = load_category(tx, env.vault_id, category_id)?;
-    if category.is_system {
-        return Err(DomainError::InvalidName("system category".to_string()));
-    }
-    if category.archived {
+    if user_category(tx, env.vault_id, category_id)?.archived {
         return Err(DomainError::InvalidName("category is archived".to_string()));
     }
     let display = normalize_category_display(alias)?;
     let key = normalize_category_key(&display)?;
-    if super::category_key_taken(tx, env.vault_id, &key)? {
+    if super::category_key_taken(tx, env.vault_id, &key, None)? {
         return Err(DomainError::AlreadyExists(display));
     }
     tx.execute(
@@ -376,6 +346,15 @@ fn load_category(conn: &Connection, vault_id: Uuid, category_id: Uuid) -> Result
     )
     .optional()?
     .ok_or_else(|| DomainError::NotFound("category".to_string()))
+}
+
+/// A category a command may change: system ones are refused.
+fn user_category(conn: &Connection, vault_id: Uuid, category_id: Uuid) -> Result<CategoryRow> {
+    let category = load_category(conn, vault_id, category_id)?;
+    if category.is_system {
+        return Err(DomainError::InvalidName("system category".to_string()));
+    }
+    Ok(category)
 }
 
 // ---------------------------------------------------------------------------

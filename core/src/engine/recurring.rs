@@ -307,14 +307,7 @@ impl Core {
         vault_id: Uuid,
         recurring_id: Uuid,
     ) -> Result<Vec<RecurringRunView>> {
-        let exists: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM recurring_templates WHERE id = ?1 AND vault_id = ?2)",
-            params![recurring_id, vault_id],
-            |r| r.get(0),
-        )?;
-        if !exists {
-            return Err(DomainError::NotFound("recurring".to_string()));
-        }
+        load_template(&self.conn, vault_id, recurring_id)?;
         let mut stmt = self.conn.prepare(
             "SELECT period_date, outcome, transaction_id FROM recurring_runs
              WHERE recurring_id = ?1 ORDER BY period_date",

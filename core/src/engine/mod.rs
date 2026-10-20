@@ -474,19 +474,21 @@ fn create_vault(
          VALUES (?1, ?2, ?3, 'unallocated', 0, NULL, NULL, 1, 0, ?4)",
         params![derived_id(env.id, "unallocated"), env.id, UNALLOCATED_NAME, now],
     )?;
-    insert_system_category(
+    insert_category(
         tx,
         env.id,
         derived_id(env.id, "uncategorized"),
         "Uncategorized",
         UNCATEGORIZED_KEY,
+        true,
     )?;
-    insert_system_category(
+    insert_category(
         tx,
         env.id,
         derived_id(env.id, "opening"),
         "Opening",
         OPENING_KEY,
+        true,
     )?;
     Ok(env.id)
 }
@@ -530,7 +532,7 @@ fn create_wallet(
 ) -> Result<Uuid> {
     require_vault(tx, env.vault_id)?;
     let name = normalize_name(name, "wallet")?;
-    if name_taken(tx, "wallets", env.vault_id, &name)? {
+    if name_taken(tx, "wallets", env.vault_id, &name, None)? {
         return Err(DomainError::AlreadyExists(name));
     }
     tx.execute(
@@ -576,7 +578,7 @@ fn create_flow(
             "flow name is reserved".to_string(),
         ));
     }
-    if name_taken(tx, "flows", env.vault_id, &name)? {
+    if name_taken(tx, "flows", env.vault_id, &name, None)? {
         return Err(DomainError::AlreadyExists(name));
     }
     mode.validate()?;
@@ -614,13 +616,10 @@ fn create_flow(
 fn create_category(tx: &Transaction<'_>, env: &CommandEnvelope, name: &str) -> Result<Uuid> {
     require_vault(tx, env.vault_id)?;
     let (display, key) = validate_category_name(name)?;
-    if category_key_taken(tx, env.vault_id, &key)? {
+    if category_key_taken(tx, env.vault_id, &key, None)? {
         return Err(DomainError::AlreadyExists(display));
     }
-    tx.execute(
-        "INSERT INTO categories (id, vault_id, name, name_norm, is_system, archived) VALUES (?1, ?2, ?3, ?4, 0, 0)",
-        params![env.id, env.vault_id, display, key],
-    )?;
+    insert_category(tx, env.vault_id, env.id, &display, &key, false)?;
     Ok(env.id)
 }
 
@@ -888,32 +887,51 @@ fn vault_owner(tx: &Transaction<'_>, vault_id: Uuid) -> Result<String> {
     .ok_or_else(|| DomainError::NotFound("vault".to_string()))
 }
 
-fn name_taken(tx: &Transaction<'_>, table: &str, vault_id: Uuid, name: &str) -> Result<bool> {
+/// Whether a wallet or flow (`table`) of the vault other than `except`
+/// already has the name, case aside.
+fn name_taken(
+    tx: &Transaction<'_>,
+    table: &str,
+    vault_id: Uuid,
+    name: &str,
+    except: Option<Uuid>,
+) -> Result<bool> {
     let sql = format!(
-        "SELECT EXISTS(SELECT 1 FROM {table} WHERE vault_id = ?1 AND lower(name) = lower(?2))"
+        "SELECT EXISTS(SELECT 1 FROM {table}
+         WHERE vault_id = ?1 AND lower(name) = lower(?2) AND id IS NOT ?3)"
     );
-    Ok(tx.query_row(&sql, params![vault_id, name], |r| r.get(0))?)
+    Ok(tx.query_row(&sql, params![vault_id, name, except], |r| r.get(0))?)
 }
 
-fn category_key_taken(tx: &Transaction<'_>, vault_id: Uuid, key: &str) -> Result<bool> {
+/// Whether a category other than `except` holds the key, as its name or as
+/// an alias.
+fn category_key_taken(
+    tx: &Transaction<'_>,
+    vault_id: Uuid,
+    key: &str,
+    except: Option<Uuid>,
+) -> Result<bool> {
     Ok(tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM categories WHERE vault_id = ?1 AND name_norm = ?2)
-             OR EXISTS(SELECT 1 FROM category_aliases WHERE vault_id = ?1 AND alias_norm = ?2)",
-        params![vault_id, key],
+        "SELECT EXISTS(SELECT 1 FROM categories
+                       WHERE vault_id = ?1 AND name_norm = ?2 AND id IS NOT ?3)
+             OR EXISTS(SELECT 1 FROM category_aliases
+                       WHERE vault_id = ?1 AND alias_norm = ?2 AND category_id IS NOT ?3)",
+        params![vault_id, key, except],
         |r| r.get(0),
     )?)
 }
 
-fn insert_system_category(
+fn insert_category(
     tx: &Transaction<'_>,
     vault_id: Uuid,
     id: Uuid,
     name: &str,
     key: &str,
+    is_system: bool,
 ) -> Result<()> {
     tx.execute(
-        "INSERT INTO categories (id, vault_id, name, name_norm, is_system, archived) VALUES (?1, ?2, ?3, ?4, 1, 0)",
-        params![id, vault_id, name, key],
+        "INSERT INTO categories (id, vault_id, name, name_norm, is_system, archived) VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+        params![id, vault_id, name, key, is_system],
     )?;
     Ok(())
 }
@@ -1015,10 +1033,7 @@ fn resolve_category(
     }
     let (display, key) = validate_category_name(raw)?;
     let id = derived_id(env.id, "category");
-    tx.execute(
-        "INSERT INTO categories (id, vault_id, name, name_norm, is_system, archived) VALUES (?1, ?2, ?3, ?4, 0, 0)",
-        params![id, vault_id, display, key],
-    )?;
+    insert_category(tx, vault_id, id, &display, &key, false)?;
     Ok(id)
 }
 
