@@ -239,8 +239,8 @@ struct LedgerGrid: View {
     /// that puts the caret back after it can come a moment after the next
     /// key: until the caret is there (`caretLanded`), a typed key is added to
     /// the editor's text here rather than given to the field to replace what
-    /// it has selected (`GridEventMechanicsTests`). Any other key, ← or ⌫,
-    /// is the field's, and from then on so is every key.
+    /// it has selected (`LedgerGridKeyTests.dayTypedFast`). Any other key, ←
+    /// or ⌫, is the field's, and from then on so is every key.
     private func fieldKey(_ press: KeyPress) -> KeyPress.Result {
         if let move = GridKey.move(for: press), move != .left, move != .right {
             editor.move(move)
@@ -773,8 +773,6 @@ struct LedgerGrid: View {
         duplicate(last)
     }
 }
-
-// MARK: - A row as shown
 
 /// Hands `content` the row as the sheet shows it (`LedgerEditor.shown`). A
 /// view of its own, so that a save redraws the row it was saved into, and

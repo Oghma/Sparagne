@@ -263,8 +263,6 @@ struct QuickAddOverlay: View {
     }
 }
 
-// MARK: - Closing on a save
-
 /// The store's last save and the panel's line, watched together: the panel
 /// closes when a save took its line, and on no other save.
 ///
