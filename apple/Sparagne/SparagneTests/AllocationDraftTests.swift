@@ -209,45 +209,8 @@ struct AllocationDraftTests {
 
     // MARK: - The schedule
 
-    @Test("A new plan is monthly, on today's day, from today")
-    func newSchedule() {
-        let draft = AllocationScheduleDraft(today: "2026-10-10")
-        #expect(draft.schedule == RecurringFixture.schedule(.monthly(day: 10), from: "2026-10-10"))
-        #expect(draft.isValid)
-        // Saturday, for a switch to weekly.
-        #expect(draft.weekday == 6)
-    }
-
-    @Test("Every cadence survives the round trip, its end date with it")
-    func scheduleRoundTrip() {
-        let schedules = [
-            RecurringFixture.schedule(.daily, every: 3),
-            RecurringFixture.schedule(.weekly(weekday: 5), every: 2),
-            RecurringFixture.schedule(.monthly(day: 27), from: "2026-06-27"),
-            RecurringFixture.schedule(.yearly(month: 3, day: 15), until: "2030-12-31"),
-        ]
-        for schedule in schedules {
-            #expect(AllocationScheduleDraft(schedule: schedule).schedule == schedule)
-        }
-    }
-
-    @Test("An interval of zero, a day out of range or an end before the start are not a schedule")
-    func scheduleValidity() {
-        var draft = AllocationScheduleDraft(today: "2026-10-10")
-        draft.interval = 0
-        #expect(!draft.isValid)
-        draft.interval = 2
-        draft.monthDay = 32
-        #expect(!draft.isValid)
-        draft.monthDay = 31
-        #expect(draft.isValid)
-        draft.cadence = .weekly
-        draft.weekday = 8
-        #expect(!draft.isValid)
-        draft.weekday = 7
-        draft.endDate = "2026-10-01"
-        #expect(!draft.isValid)
-    }
+    // What a new schedule is, the round trip and validity are
+    // `ScheduleDraftTests`: the plan's schedule is that draft.
 
     @Test("The inspector sends the schedule only when it changed")
     func schedulePatch() {

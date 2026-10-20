@@ -310,6 +310,19 @@ struct RecurringDraftTests {
         #expect(draft.creation(currency: .eur) == nil)
     }
 
+    @Test("The End field offers today, or a saved template's end or start, wherever the start moves")
+    func endFieldStaysPut() {
+        var draft = RecurringDraft(today: "2026-10-07")
+        draft.startDate = "2026-11-01"
+        #expect(draft.endDate == "2026-10-07")
+        draft.hasEndDate = true
+        #expect(draft.schedule.endDate == "2026-10-07")
+
+        var saved = RecurringDraft(template: Self.rent)
+        saved.startDate = "2026-01-01"
+        #expect(saved.endDate == "2025-11-01")
+    }
+
     @Test("Creating sends what was typed, blank category and note as none")
     func creation() {
         var draft = RecurringDraft(today: "2026-10-07")
