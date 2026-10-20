@@ -6,10 +6,9 @@ use axum::extract::State;
 use chrono::Utc;
 use serde::Deserialize;
 use sparagne_core::{
-    Command, CommandEnvelope, DomainError,
+    Command, CommandEnvelope,
     sync::{
-        MemberRole, PullResponse, PushOutcome, PushRequest, PushResponse, PushResult, SyncRecord,
-        VaultSummary,
+        MemberRole, PullResponse, PushOutcome, PushRequest, PushResponse, PushResult, VaultSummary,
     },
 };
 use uuid::Uuid;
@@ -60,17 +59,9 @@ pub async fn list(
     Ok(Json(summaries))
 }
 
-/// `POST /vaults/{vault_id}/push`.
-///
-/// A vault the server has never heard of is created by this very push, when
-/// its first command is the `CreateVault` that mints it: the vault and the
-/// caller's `owner` membership appear together. Any
-/// other first command for an unknown vault is a blind 404, exactly like a
-/// vault the caller is not a member of.
-///
-/// A command that puts a row or a template on somebody who is not a member
-/// of the vault is refused on its own as `not_a_member`, and the rest of the
-/// batch goes on (see [`stranger`]).
+/// `POST /vaults/{vault_id}/push`. The first push of a vault the server has
+/// never seen creates it ([`claim`]); a command naming somebody outside the
+/// vault is refused on its own ([`stranger`]).
 pub async fn push(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -121,20 +112,7 @@ pub async fn push(
                 };
                 let outcome = match stray {
                     Some(name) => not_a_member(&name),
-                    None => match core.execute(envelope) {
-                        Ok(receipt) => PushOutcome::Applied {
-                            seq: receipt.seq,
-                            result_id: receipt.result_id,
-                        },
-                        Err(DomainError::Storage(detail)) => {
-                            return Err(ApiError::internal(detail));
-                        }
-                        Err(err) => PushOutcome::Rejected {
-                            code: err.code().to_string(),
-                            message: err.to_string(),
-                            detail: None,
-                        },
-                    },
+                    None => PushOutcome::of(core.execute(envelope))?,
                 };
                 results.push(PushResult {
                     command_id,
@@ -235,31 +213,14 @@ pub async fn pull(
     Query(params): Query<PullParams>,
 ) -> ApiResult<Json<PullResponse>> {
     let since = params.since.unwrap_or(0).max(0);
-    let limit = usize::try_from(
-        params
-            .limit
-            .unwrap_or(DEFAULT_PULL_LIMIT)
-            .clamp(1, MAX_PULL_LIMIT),
-    )
-    .unwrap_or(1);
+    let limit = params
+        .limit
+        .unwrap_or(DEFAULT_PULL_LIMIT)
+        .clamp(1, MAX_PULL_LIMIT) as usize;
     let response = state
         .run(move |state| {
             membership(&state.db(), vault_id, user.id)?;
-            let core = state.core();
-            let mut records = core.commands_since(vault_id, since)?;
-            records.truncate(limit);
-            Ok(PullResponse {
-                commands: records
-                    .into_iter()
-                    .map(|record| SyncRecord {
-                        envelope: record.envelope,
-                        seq: record.seq,
-                        result_id: record.result_id,
-                        created_at: record.created_at,
-                    })
-                    .collect(),
-                last_seq: core.last_seq(vault_id)?,
-            })
+            Ok(state.core().serve_pull(vault_id, since, limit)?)
         })
         .await?;
     Ok(Json(response))
