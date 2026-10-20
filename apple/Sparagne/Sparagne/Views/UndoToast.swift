@@ -1,16 +1,13 @@
 import SwiftUI
 
-/// The 5-second undo window after a void, which the window calls a delete:
-/// the row is already gone, a bar counts down, and Undo ("Ripristina")
-/// puts it back without ever touching the core.
-///
-/// ⌘Z does the same through Edit ▸ Undo, where the store registers the void
-/// (`LedgerHistory.recordPendingVoid`). The button has no shortcut of its own:
-/// one would take ⌘Z away from a cell being typed into while the toast is up.
+/// The undo window after a void, which the window calls a delete: Undo puts the rows back.
 struct UndoToast: View {
     let pending: PendingUndo
     let undo: () -> Void
 
+    /// No shortcut on Undo: ⌘Z does the same through Edit ▸ Undo
+    /// (`LedgerHistory.recordPendingVoid`), and one here would take ⌘Z from
+    /// a cell being typed into while the toast is up.
     var body: some View {
         CountdownToast(
             text: CountText.voided(pending.ids.count),

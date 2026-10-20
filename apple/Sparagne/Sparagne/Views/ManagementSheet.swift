@@ -1,13 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The vault on screen and its life cycle, in one sheet (⌘⇧M): switch to
-/// another vault, start a new one, rename, share, leave or delete this one,
-/// and remove the copies of vaults no longer shared.
-///
-/// Wallets, envelopes and categories live on the Setup tab, the recurring
-/// templates on the Ricorrenze tab; the sheet
-/// links to both instead of keeping a second, smaller copy of either.
+/// The vault on screen and its life cycle, in one sheet (⌘⇧M).
 struct ManagementSheet: View {
     let store: AppStore
     /// Says what the account may do to this vault on the server — share,

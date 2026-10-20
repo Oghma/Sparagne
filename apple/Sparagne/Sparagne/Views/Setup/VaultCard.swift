@@ -1,10 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The vault's own card at the top of SETUP's left column:
-/// its name, its currency and who it is shared with.
-/// The name and the currency are facts here; renaming goes through the
-/// Vault menu, and a vault's currency never changes.
+/// The vault's name, currency and members, read only: renaming is in the Vault menu.
 struct VaultCard: View {
     let store: AppStore
     /// `nil` before the database is open and in a demo database.

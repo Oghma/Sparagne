@@ -1,17 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// "Da confermare": every period waiting for a
-/// decision, oldest first, with Salta and Registra for each and Registra
-/// tutte for the lot. A template never writes a transaction by itself; this
-/// card is where the user does it.
-///
-/// Registra tutte sends every period listed as one batch
-/// (`AppStore.executeAllDueRecurring`), so a backlog lands whole or not at
-/// all. A vault the account only reads shows its periods without the
-/// buttons: nothing there can be recorded or skipped. A period whose
-/// template's owner left the vault can be skipped only, and Registra tutte
-/// leaves it out and says so (`AppStore.ownerHasLeft`).
+/// "Da confermare": every period waiting for a decision, oldest first, with Salta and Registra.
 struct DueRecurringCard: View {
     let store: AppStore
     let today: NaiveDate

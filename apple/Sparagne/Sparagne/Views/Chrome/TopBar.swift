@@ -1,11 +1,6 @@
 import SwiftUI
 
-/// The window's own top bar, in place of the system title bar and toolbar:
-/// the vault, the month, then on the trailing side the
-/// search, what is due, what the tab adds and the sync state. The scene hides
-/// the title bar (`.windowStyle(.hiddenTitleBar)`); the traffic lights sit at
-/// the bar's leading end, centred by `WindowChrome`, which also makes the
-/// bar's empty areas drag the window.
+/// The window's own top bar, in place of the system title bar and toolbar.
 struct TopBar: View {
     @Bindable var store: AppStore
     let engine: SyncEngine?
@@ -116,9 +111,7 @@ struct TopBar: View {
 
 // MARK: - The month
 
-/// ‹ month › in one bordered group, and Today when the month on screen is
-/// another. ⌥← and ⌥→ step it too, from the Ledger
-/// menu.
+/// ‹ month › in one bordered group, and Today when the month on screen is another.
 struct MonthStepper: View {
     let store: AppStore
 
@@ -172,11 +165,7 @@ struct MonthStepper: View {
 
 // MARK: - Search
 
-/// The search of the tabs that have one, in the bar so it stays put while
-/// the filters below change. On the Mastro it is
-/// bound to `store.searchText`, which the window debounces into a reload; on
-/// the Ricorrenze and the Setup, to `store.tabFilter`, which filters their
-/// tables as it is typed. esc clears it and gives the focus back.
+/// The tab's search, in the bar so it stays put while the filters below change; esc clears it.
 struct SearchField: View {
     @Binding var text: String
     let prompt: String
@@ -220,10 +209,7 @@ struct SearchField: View {
 
 // MARK: - Due and add
 
-/// "3 da confermare": the recurring periods waiting for a decision,
-/// the same count the Ricorrenze tab shows. Nothing
-/// when none is due, or when the account only reads the vault and could not
-/// confirm one anyway. Opens the Ricorrenze tab, where they are decided.
+/// "3 da confermare", for an account that may confirm them: it opens the Ricorrenze tab.
 struct DuePill: View {
     let store: AppStore
 

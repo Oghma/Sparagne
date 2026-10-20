@@ -10,10 +10,7 @@ private enum HistoryColumn {
     static let action: CGFloat = 92
 }
 
-/// "Storico": the plan's decided periods, the most recent first
-/// (`AppStore.allocationRuns`). Annulla is on the latest one only, the one
-/// the core lets go back to waiting: its transfers are deleted and its
-/// incomes return to the total. It asks first.
+/// "Storico": decided periods, newest first; only the latest, which the core can reopen, has Annulla.
 struct AllocationHistory: View {
     let store: AppStore
 

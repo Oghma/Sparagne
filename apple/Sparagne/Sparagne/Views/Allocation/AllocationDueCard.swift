@@ -1,16 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// "Da distribuire": the plan's period waiting for a decision, with the
-/// total to share out (the incomes that reached Unallocated since the last
-/// decision, editable), the incomes that make it up, what the plan gives out
-/// of it, and Salta and Distribuisci. What each line gets is in the plan's
-/// table under it, worked out on the same total.
-///
-/// Distribuisci sends the amounts the plan gives on the total on screen as
-/// one command (`AppStore.executeAllocation`). With no period due the card
-/// says when the next one is, or that there is no plan yet. A vault the
-/// account only reads shows the period without the buttons.
+/// "Da distribuire": the period waiting for a decision, with Salta and Distribuisci.
 struct AllocationDueCard: View {
     let store: AppStore
     let today: NaiveDate

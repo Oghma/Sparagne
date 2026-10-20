@@ -155,12 +155,12 @@ extension ScheduleEditor where Notes == EmptyView {
     }
 }
 
-/// The 44 × 22 number box of "ogni [n] mesi, il giorno [n]". It keeps its own
-/// text while it is typed in, so emptying it to type another number does not
-/// snap back to a zero; the number goes out as soon as it reads as one.
+/// The 44 × 22 number box of "ogni [n] mesi, il giorno [n]".
 struct MiniNumberField: View {
     let label: String
     @Binding var value: Int
+    /// Its own, so emptying the box to type another number does not snap
+    /// back to a zero; the number goes out as soon as it reads as one.
     @State private var text = ""
 
     var body: some View {
@@ -256,9 +256,7 @@ private struct AccentOutlineBody: View {
     }
 }
 
-/// Amounts as the tab writes them: the ledger's fixed `780,00`, income with
-/// its plus, and in the agenda expenses with their minus, as money going
-/// out.
+/// Amounts as the tab writes them: income with its plus, and in the agenda expenses with their minus.
 enum RecurringAmount {
     /// The table and "Da confermare": an expense bare, an income `+`.
     static func text(_ template: RecurringView) -> String {

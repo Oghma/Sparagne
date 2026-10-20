@@ -1,17 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// The fields of the Ricorrenze inspector, for a new
-/// template or one being edited. A plain struct with no view in it, so what
-/// gets saved can be tested on its own.
-///
-/// Editing sends only what changed (`patch(against:currency:)`), the
-/// convention `RecurringPatch` shares with `TransactionPatch`.
-/// The patch has no `kind`, and cannot set a wallet
-/// or an envelope back to none (`nil` means "unchanged"), so the draft never
-/// tries to: the kind is fixed once the template exists, and "any wallet" or
-/// Unallocated are offered only to a template that has none yet
-/// (`mayClearWallet`, `mayClearFlow`).
+/// The Ricorrenze inspector's fields, for a new template or one being edited.
 struct RecurringDraft: Equatable {
     /// Only `.income` or `.expense`: a template is never a refund or a transfer.
     var kind: TransactionKind = .expense
@@ -124,9 +114,9 @@ struct RecurringDraft: Equatable {
     }
 
     /// The fields that differ from `template`, and nothing else. Never the
-    /// kind, and never a wallet or envelope set back to none. An amount that
-    /// does not parse, or is not above zero, is left out: Salva is off then
-    /// anyway (`isValid`).
+    /// kind, and never a wallet or envelope set back to none: a patch's `nil`
+    /// means "unchanged". An amount that does not parse, or is not above
+    /// zero, is left out: Salva is off then anyway (`isValid`).
     func patch(against template: RecurringView, currency: Currency) -> RecurringPatch {
         var patch = RecurringPatch()
         if let amount = amount(currency: currency), amount > 0, amount != template.amount {

@@ -7,16 +7,15 @@ struct RecurringPreview {
     let lines: [RecurringNext.Preview]
     let moreDue: Int
 
-    /// What the dates are worked out from, as one value for `.onChange`: the
-    /// schedule on screen, saved or not; the saved due periods while it is
-    /// the saved one, `nil` otherwise; the periods already handled; and
-    /// whether the template runs, which makes its past periods due and
-    /// today, when not among them, decided (`RecurringNext.of`).
+    /// What the dates are worked out from, as one value for `.onChange`.
     struct Inputs: Equatable {
         let schedule: Schedule
+        /// `nil` while the schedule on screen is not the saved one.
         let savedDue: [NaiveDate]?
         let handled: Set<NaiveDate>
         let today: NaiveDate
+        /// A running template's past periods are due, and today's, when not
+        /// among them, decided (`RecurringNext.of`).
         let running: Bool
 
         /// The inputs of `template`'s inspector, or of a new template's,

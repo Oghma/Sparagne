@@ -1,18 +1,13 @@
 import SwiftUI
 import SparagneCore
 
-/// Column geometry, fixed so the header, the rows and the empty line agree
-/// without a layout pass: the canvas's 140 for
-/// NOME, 80 for the usage and 36 for the action. ALIAS takes what is left.
+/// Column widths, fixed so the header, the rows and the empty line agree without a layout pass.
 private enum CategoryColumn {
     static let name: CGFloat = 140
     static let usage: CGFloat = 80
 }
 
-/// The cells a category row is typed into.
-///
-/// Nothing here drives the traversal: ⇥ walks the focusable views in layout
-/// order, and the order of the cases is only the order the cells are drawn in.
+/// The cells a category row is typed into; ⇥ follows the layout, not this order.
 enum CategoryField: Hashable {
     case name
     case aliases
@@ -20,14 +15,7 @@ enum CategoryField: Hashable {
 
 private typealias CategoryCellFocus = SetupFocus<CategoryField>
 
-/// The categories of the vault as an editable table:
-/// the last line adds one, names and aliases edit in place.
-///
-/// Editing is per row, like the ledger's grid: clicking a cell opens the whole
-/// row with the caret there, ↩ commits what changed, esc throws the draft away
-/// and leaving the row commits it the way a spreadsheet does (`editsRows`). A
-/// refusal from the core keeps the row open on the cell that caused it, so the
-/// text can be fixed instead of retyped.
+/// The vault's categories as a table edited by rows (`editsRows`); the last line adds one.
 struct CategoryTable: View {
     @Bindable var store: AppStore
 
@@ -383,9 +371,7 @@ private struct CategoryRowView: View {
 
 // MARK: - The draft behind an edited row
 
-/// The text in the cells of the category row being edited, and the diff it
-/// implies. Plain strings and plain functions, so the rules of the CATEGORIE
-/// table can be tested without a view.
+/// The text in the cells of the category row being edited, and the diff it implies.
 struct CategoryDraft: Equatable {
     var name: String = ""
     /// The aliases as one comma-separated line, which is how the column reads.

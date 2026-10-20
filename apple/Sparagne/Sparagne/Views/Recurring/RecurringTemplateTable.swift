@@ -8,11 +8,7 @@ enum RecurringSelection: Hashable {
     case new
 }
 
-/// Column geometry of "Modelli", shared by the heading and the rows. The
-/// three text columns take what is left, down to their minimums, which fit
-/// the window's narrowest width beside the inspector: 1176 less the
-/// inspector's 340 and the margins leaves about 800 points, and the widths
-/// below add up to 794. A wider column has to be paid for by another.
+/// Column widths of "Modelli": beside the inspector the narrowest window leaves about 800 points, these 794.
 private enum TemplateColumn {
     /// Wide enough for "Enabled", which is longer than the canvas's
     /// "Attiva".
@@ -38,10 +34,7 @@ private enum TemplateColumn {
     static let categoryMinimum: CGFloat = 74
 }
 
-/// "Modelli": every template as a 26-point row,
-/// archived ones at the bottom, dimmed, with Ripristina. A click selects a
-/// row and the inspector edits it; the switch pauses or resumes it in place;
-/// the last row starts a new one.
+/// "Modelli": every template as a row the inspector edits; the last row starts a new one.
 struct RecurringTemplateTable: View {
     let store: AppStore
     let today: NaiveDate

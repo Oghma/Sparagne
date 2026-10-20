@@ -55,24 +55,23 @@ extension SetupCard where Accessory == EmptyView {
     }
 }
 
-/// The rows of a card's table, pulled 8 pt past the card's padding so the
-/// rows' own padding lines their text up with the card's title and a
-/// hovered row's rounded background sits 4 pt from the border.
+/// The rows of a card's table.
 struct SetupTableBody<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
+        // Past the card's padding: the rows' own lines their text up with the
+        // title, and a hovered row's background sits 4 pt from the border.
         VStack(spacing: 0) { content }
             .padding(.horizontal, -Metrics.cellPad)
     }
 }
 
-/// The column headings: 11 pt, medium, `text3`, over a `line2` rule.
-/// `horizontalPadding` insets them as a table's rows are inset;
-/// `accessibilityHeader` reads them to VoiceOver as one heading, for a
-/// table whose card does not already have one.
+/// The column headings, in `text3` over a `line2` rule.
 struct SetupHeaderRow<Content: View>: View {
+    /// As the table's rows are inset.
     var horizontalPadding: CGFloat = 0
+    /// One heading for VoiceOver, for a table whose card has none.
     var accessibilityHeader = false
     @ViewBuilder var content: Content
 
@@ -93,9 +92,7 @@ struct SetupHeaderRow<Content: View>: View {
     }
 }
 
-/// One 24 pt row. `highlighted` (the pointer is over it, or it is open)
-/// paints `raised` with a 4 pt radius and takes the hairline away, as the
-/// canvas does; `editing` adds the amber bar at the left edge.
+/// One 24 pt row: raised and without its hairline when `highlighted`, the amber bar when `editing`.
 struct SetupRow<Content: View>: View {
     var highlighted = false
     var editing = false
@@ -129,9 +126,7 @@ struct SetupRow<Content: View>: View {
     }
 }
 
-/// A small label in a `raised` pill: "system", "archived". With `fixed`
-/// off it takes the width it is offered, and shortens with "…" in a narrow
-/// cell.
+/// A small label in a `raised` pill, "system" or "archived"; not `fixed`, it shortens with "…".
 struct SetupTag: View {
     let text: String
     var fixed = true
@@ -189,9 +184,7 @@ struct SetupIconButton: View {
     }
 }
 
-/// The last column's icon, only on the row under the pointer of a vault
-/// that may change (`shown`): archive, or restore for an archived row. The
-/// command is the one the row's menu sends.
+/// The last column's archive or restore icon, `shown` on the row under the pointer of a vault that may change.
 struct SetupArchiveCell: View {
     let name: String
     var archived = false
@@ -326,10 +319,7 @@ extension View {
     }
 }
 
-/// How full a capped envelope is, as the 2 pt bar under its balance.
-/// The RIEPILOGO's gauges answer the same question,
-/// so this asks `FundGauge` rather than redoing its arithmetic: the balance
-/// against a net cap, the cumulative income against an income cap.
+/// How full a capped envelope is, asked of `FundGauge` as the summary's gauges are.
 enum EnvelopeCapFill {
     /// 0...1, or `nil` for an envelope with no cap (no bar at all).
     static func fraction(mode: FlowMode, balance: Int64, incomeTotal: Int64?) -> Double? {

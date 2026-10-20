@@ -1,16 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The Ricorrenze tab's inspector: one template's
-/// fields, edited in place, or a new template written from scratch. The
-/// fields are a `RecurringDraft`; Salva sends only what changed, Annulla
-/// puts the saved values back, and the next four dates follow every
-/// keystroke, asked of the core.
-///
-/// What `RecurringPatch` cannot say is not offered: the kind is fixed once a
-/// template exists, and "any wallet" or Unallocated are greyed out once it
-/// has a wallet or an envelope. A vault the account only reads shows the
-/// fields without letting them change.
+/// The Ricorrenze tab's inspector: a template's fields edited in place, or a new template's.
 struct RecurringInspector: View {
     let store: AppStore
     /// `nil` = a new template.

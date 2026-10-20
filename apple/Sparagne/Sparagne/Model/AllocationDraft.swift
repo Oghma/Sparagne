@@ -1,9 +1,7 @@
 import Foundation
 import SparagneCore
 
-/// `AllocationRule` as a flat choice, the segmented Fisso / % / Al tetto of
-/// an open row of the plan: the amount and the percentage are kept apart
-/// while the user tries the kinds, so switching back loses nothing.
+/// `AllocationRule` as a flat choice, the segmented Fisso / % / Al tetto.
 enum AllocationRuleKind: String, CaseIterable, Identifiable, Hashable {
     case fixed
     case percent
@@ -35,16 +33,14 @@ struct AllocationDraftError: Error {
     let underlying: Error
 }
 
-/// The cells of the plan's line being edited, or of the empty line: an
-/// envelope, a kind and the text of its value. Everything stays a string
-/// until it commits, so a half-typed amount never has to be a number. A plain
-/// struct with no view in it, so the parsing and the list it commits into
-/// can be tested on their own.
+/// The cells of the plan's line being edited, or of the empty line.
 struct AllocationLineDraft: Equatable {
     /// `nil` on the empty line until an envelope is picked.
     var flowId: Uuid?
     var kind: AllocationRuleKind = .fixed
-    /// A fixed line's amount, as typed.
+    /// A fixed line's amount, as typed: a half-typed amount never has to be
+    /// a number. Kept apart from `percent` while the user tries the kinds,
+    /// so switching back loses nothing.
     var amount = ""
     /// A percent line's share, as typed: `"12,5"`.
     var percent = ""
@@ -174,12 +170,13 @@ struct AllocationLineDraft: Equatable {
     }
 }
 
-/// Money as the plan's cells take it: the window writes `4.250,00`, with a
-/// dot between thousands that the core's `parseMoney` does not read, so the
-/// dots before a decimal comma are dropped first. Without a comma, dots that
-/// each start a group of exactly three digits (`1.400`, `12.500.000`) are
-/// thousands too; any other dot is the decimal point (`4250.5`).
+/// Money as the plan's cells take it.
 enum AllocationMoney {
+    /// The window writes `4.250,00`, with a dot between thousands that the
+    /// core's `parseMoney` does not read, so the dots before a decimal comma
+    /// are dropped first. Without a comma, dots that each start a group of
+    /// exactly three digits (`1.400`, `12.500.000`) are thousands too; any
+    /// other dot is the decimal point (`4250.5`).
     static func parse(_ text: String, currency: Currency) throws -> Int64 {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let comma = trimmed.lastIndex(of: ","), trimmed[..<comma].contains(".") {
@@ -255,9 +252,7 @@ enum AllocationPercent {
     }
 }
 
-/// The plan's Quando in the inspector: Settimana / Mese / Anno, the
-/// interval, the day and the start, the same draft as a template's. The end
-/// date has no field and goes through as it is.
+/// The plan's Quando in the inspector, the same draft as a template's.
 typealias AllocationScheduleDraft = ScheduleDraft
 
 extension ScheduleDraft {

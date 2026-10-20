@@ -1,9 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// "Prossimi 30 giorni": one tile per period ahead,
-/// from tomorrow, with what the window adds up to on each side. Read only:
-/// a period can be recorded once it is due, never before.
+/// "Prossimi 30 giorni": a tile per period ahead, read only until it falls due.
 struct RecurringAgendaCard: View {
     let store: AppStore
 

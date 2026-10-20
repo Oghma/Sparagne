@@ -1,9 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// Column geometry of the envelope table, as the canvas has it:
-/// fixed widths so the header, the rows and the empty
-/// line agree without a layout pass. NOME takes what is left.
+/// Column widths, fixed so the header, the rows and the empty line agree without a layout pass.
 private enum EnvelopeColumn {
     static let nameMinimum: CGFloat = 100
     static let type: CGFloat = 104
@@ -12,13 +10,7 @@ private enum EnvelopeColumn {
     static let balance: CGFloat = 120
 }
 
-/// The envelopes of the vault as an editable table:
-/// the last line adds one, every cell edits in place.
-///
-/// Editing is per row, exactly as in the ledger (`Views/Ledger/LedgerGrid`):
-/// clicking a cell opens the whole row on a draft, ↩ commits the diff as one
-/// `UpdateFlow` with only the changed fields, esc throws the draft away and
-/// leaving the row saves it the way a spreadsheet does (`editsRows`).
+/// The vault's envelopes as a table edited by rows (`editsRows`); the last line adds one.
 struct EnvelopeTable: View {
     @Bindable var store: AppStore
 
@@ -320,7 +312,6 @@ struct EnvelopeTable: View {
         focus = nil
     }
 
-    /// ↩ in whichever line holds the caret.
     private func commitFocusedLine() {
         if let row = focus?.row {
             if commit(row) { focus = nil }
@@ -415,10 +406,7 @@ enum EnvelopeField: Hashable, CaseIterable {
 
 // MARK: - The three kinds of cap
 
-/// `FlowMode` as a flat choice, the way the TIPO column reads
-/// (nessuno / netto / entrate). The mode is data, not a
-/// type, so this is a lossless split into
-/// "which kind" plus "how much".
+/// `FlowMode` as the TIPO column reads it: which kind of cap, with the amount apart.
 enum EnvelopeCapKind: String, CaseIterable, Identifiable {
     case none
     case net
@@ -434,7 +422,6 @@ enum EnvelopeCapKind: String, CaseIterable, Identifiable {
         }
     }
 
-    /// True when the kind needs an amount beside it.
     var isCapped: Bool { self != .none }
 
     init(_ mode: FlowMode) {
@@ -479,10 +466,7 @@ struct EnvelopePatch: Equatable {
     var isEmpty: Bool { name == nil && mode == nil && allowNegative == nil }
 }
 
-/// The text and the choices in the cells of the line being edited. Everything
-/// stays a string until it commits, so a half-typed cap never has to be a
-/// number. A plain struct with no view in it, so the diff and the parsing are
-/// testable on their own.
+/// The text and the choices in the cells of the line being edited, strings until it commits.
 struct EnvelopeDraft: Equatable {
     var name = ""
     var kind: EnvelopeCapKind = .none

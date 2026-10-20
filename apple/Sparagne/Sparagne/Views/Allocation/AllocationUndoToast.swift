@@ -1,9 +1,6 @@
 import SwiftUI
 
-/// The toast after Distribuisci: "Distribuiti 4.250,00 · Annulla". Unlike the
-/// void's `UndoToast`, nothing is held back: the transfers are written
-/// already, and Annulla sends `ReopenAllocation`, as the history's Annulla
-/// does. The window elapsing only closes the toast.
+/// The toast after Distribuisci, whose Annulla reopens the period: its transfers are already written.
 struct AllocationUndoToast: View {
     let undo: AllocationUndo
     let store: AppStore

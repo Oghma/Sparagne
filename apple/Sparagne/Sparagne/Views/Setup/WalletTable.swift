@@ -8,13 +8,7 @@ private enum WalletColumn {
     static let balance: CGFloat = 140
 }
 
-/// The wallets of the vault as an editable table. The
-/// wallets say where the money is and the envelopes below say what it is for.
-/// NOME edits in place (`RenameWallet`). SALDO comes from the transactions, so
-/// it is only typed on the empty line, where it is the opening balance.
-///
-/// Editing works as in `EnvelopeTable`: clicking a row opens it, ↩ commits,
-/// esc throws the draft away and leaving the row saves it (`editsRows`).
+/// The vault's wallets as a table edited by rows (`editsRows`); SALDO is typed only as an opening balance.
 struct WalletTable: View {
     @Bindable var store: AppStore
 
@@ -251,8 +245,7 @@ enum WalletField: Hashable {
 
 // MARK: - The draft behind an edited line
 
-/// The text in the cells of the line being edited. A plain struct with no view
-/// in it, so the diff and the parsing are testable on their own.
+/// The text in the cells of the wallet line being edited.
 struct WalletDraft: Equatable {
     var name = ""
     /// Only the empty line has one: the opening balance.

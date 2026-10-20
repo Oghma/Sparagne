@@ -12,30 +12,17 @@ private enum MoveColumn {
     static let rowHeight: CGFloat = 30
 }
 
-/// "Move between envelopes": money out of one envelope into several in one
-/// go, once, outside the allocation plan. Da, Data and Nota hold for every
-/// line; each line is an envelope the money goes to, with what it holds, the
-/// room under its cap, the amount and what it will hold. Under the table the
-/// total and what the source is left with.
-///
-/// A line over its cap, an amount that is not one, or a source that would go
-/// below zero when it may not keeps Sposta greyed out, and the footer says
-/// which line to fix. Unallocated below zero is only pointed out, as the
-/// Riparto's preview does. The rules are `EnvelopeMoveCheck`'s; the store
-/// sends the lines as one batch (`AppStore.moveBetweenEnvelopes`).
-///
-/// Every figure is the envelope's on the day chosen, not today's: a move
-/// dated in the past can only use what the source held then and still holds
-/// at its lowest afterwards, and the totals name that day when it comes
-/// later.
+/// "Move between envelopes": money out of one envelope into several at once, outside the plan.
 struct EnvelopeMoveSheet: View {
     let store: AppStore
 
     @Environment(\.dismiss) private var dismiss
     @State private var draft: EnvelopeMoveDraft
     /// The envelopes from the draft's day on, read again when the day or a
-    /// balance changes. Empty until the first answer: the envelopes as they
-    /// are now stand in, which is what a move dated today sees.
+    /// balance changes: a move dated in the past can only use what the
+    /// source held then and still holds at its lowest afterwards. Empty
+    /// until the first answer: the envelopes as they are now stand in, which
+    /// is what a move dated today sees.
     @State private var balances: [Uuid: EnvelopeMoveBalance] = [:]
     @State private var moving = false
     @State private var hovered: Uuid?

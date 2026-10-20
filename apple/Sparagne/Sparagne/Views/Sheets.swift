@@ -183,9 +183,7 @@ private struct DuplicateNameWarning: View {
     }
 }
 
-/// The body of a sheet that confirms something it cannot take back: the
-/// question in full-strength text, then what goes with it in `text2`.
-/// Leaving a vault says it the same way.
+/// The body of a sheet that confirms what it cannot take back: the question, then what goes with it.
 struct ConfirmationText: View {
     let question: String
     let consequences: String

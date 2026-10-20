@@ -1,8 +1,6 @@
 import SwiftUI
 
-/// A card's title line (`.ch`): the title in `text2` with an accent count
-/// beside it, and at the right a hint in `text3` and whatever else the card
-/// puts there.
+/// A card's title line (`.ch`): the title, an accent count, and at the right a hint and the card's controls.
 struct CardHeading<Trailing: View>: View {
     let title: String
     var count: Int?

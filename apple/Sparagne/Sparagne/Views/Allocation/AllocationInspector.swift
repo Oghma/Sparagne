@@ -1,17 +1,11 @@
 import SwiftUI
 import SparagneCore
 
-/// The Riparto tab's inspector: when the plan shares out (Quando, Inizio),
-/// what its lines ask for ("Il piano in cifre"), what deserves a second look
-/// (Avvisi) and the Attivo switch.
-///
-/// The schedule is a draft owned by the tab, since a new plan is created
-/// with it when its first line is committed; once there is a plan, Salva
-/// sends it and Annulla puts the saved one back, as in the Ricorrenze
-/// inspector. A vault the account only reads shows the fields without
-/// letting them change.
+/// The Riparto tab's inspector: Quando, the plan in figures, Avvisi and the Attivo switch.
 struct AllocationInspector: View {
     let store: AppStore
+    /// The tab's: a new plan is created on it when its first line is
+    /// committed.
     @Binding var draft: AllocationScheduleDraft
     let lines: [AllocationLine]
     let preview: AllocationPreview?

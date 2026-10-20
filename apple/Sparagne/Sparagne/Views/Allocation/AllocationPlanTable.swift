@@ -1,10 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// Column geometry of the plan's table, shared by the heading, the rows and
-/// the totals. Busta takes what is left. At the window's narrowest width the
-/// card has about 800 points beside the inspector; the widths below add up
-/// to 794 with Busta at its minimum.
+/// Column widths of the plan's table: at the narrowest window the card has about 800 points, these 794.
 private enum PlanColumn {
     static let order: CGFloat = 28
     static let envelopeMinimum: CGFloat = 120
@@ -17,17 +14,7 @@ private enum PlanColumn {
     static let move: CGFloat = 52
 }
 
-/// "Piano di riparto": the plan's lines in their order, which is their
-/// priority, with what each would get. The preview is the table: Spazio,
-/// Riceve, Saldo dopo and Stato are the plan worked out on the period's total
-/// while one is due, on what has come in so far otherwise.
-///
-/// Editing is per row, as in the Setup tables (`editsRows`): a click opens
-/// the row on a draft, ↩ commits, esc throws the draft away and leaving the
-/// row saves it. Every change sends the whole list
-/// (`UpdateAllocationPlan` replaces it); the first line typed in the empty
-/// row creates the plan. ↑ and ↓ at the end of a row, ⌥↑ and ⌥↓ on the open
-/// row and the row's menu move it.
+/// "Piano di riparto": the plan's lines in their priority order, with what each would get.
 struct AllocationPlanTable: View {
     let store: AppStore
     let lines: [AllocationLine]
@@ -488,10 +475,7 @@ struct AllocationPlanTable: View {
     }
 }
 
-/// What holds the focus in the table: the value of a line, by the envelope
-/// it had when it was opened, or of the empty row. Segments and the envelope
-/// menu take the focus from it while the pointer is over the row, which is
-/// not leaving it (`editsRows`).
+/// What holds the focus: the value of a line, by the envelope it had when opened, or of the empty row.
 private nonisolated enum PlanFocus: RowFocus {
     case line(Uuid)
     case newLine

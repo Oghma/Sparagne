@@ -1,14 +1,7 @@
 import SwiftUI
 import SparagneCore
 
-/// The Riparto tab: the allocation plan, the period waiting to be shared out
-/// of Unallocated and the periods already decided. On the left the card of
-/// the period due ("Da distribuire"), the plan as an editable table, whose
-/// columns are the preview of what each line gets, and the history; on the
-/// right the inspector of the plan's schedule.
-///
-/// Nothing is ever moved by itself: the card is where a period is shared out
-/// (Distribuisci) or skipped (Salta).
+/// The Riparto tab: the period due, the plan, its history and the inspector of its schedule.
 struct AllocationTab: View {
     let store: AppStore
 
@@ -175,9 +168,7 @@ struct AllocationTab: View {
     }
 }
 
-/// What the preview is worked out from, as one value for `.task(id:)`. The
-/// envelopes are in it for their balances: a sync that moves one changes
-/// what the lines can get.
+/// What the preview is worked out from; the envelopes are there for their balances, which a sync moves.
 private struct PreviewInputs: Equatable {
     let vaultId: Uuid?
     let lines: [AllocationLine]
@@ -185,9 +176,7 @@ private struct PreviewInputs: Equatable {
     let flows: [FlowView]
 }
 
-/// When the history is loaded again: whenever the vault does, since a
-/// decision, a reopen or a transfer of a run voided by a sync all come with a
-/// reload.
+/// When the history is loaded again: with every reload, which each decision, reopen or voided run brings.
 private struct RunsKey: Equatable {
     let vaultId: Uuid?
     let planId: Uuid?
