@@ -259,33 +259,6 @@ mod tests {
     }
 
     #[test]
-    fn a_version_1_database_gains_the_server_seq_column() {
-        let path = temp_database();
-        drop(Core::open(&path).unwrap());
-        {
-            let conn = Connection::open(&path).unwrap();
-            conn.execute_batch(
-                "DROP INDEX ux_commands_vault_server_seq;
-                 ALTER TABLE commands DROP COLUMN server_seq;
-                 ALTER TABLE transactions DROP COLUMN person;
-                 ALTER TABLE recurring_templates DROP COLUMN owner;
-                 DROP TABLE allocation_runs;
-                 DROP TABLE allocation_plans;
-                 DROP INDEX ix_transactions_command;
-                 PRAGMA user_version = 1;",
-            )
-            .unwrap();
-            assert!(!has_column(&conn, "commands", "server_seq"));
-        }
-        let core = Core::open(&path).unwrap();
-        assert!(has_column(&core.conn, "commands", "server_seq"));
-        assert_eq!(user_version(&core.conn), SCHEMA_VERSION);
-        assert!(has_index(&core.conn, "ux_commands_vault_server_seq"));
-        drop(core);
-        remove_database(&path);
-    }
-
-    #[test]
     fn a_version_1_database_migrates_to_the_current_version() {
         migrates_from(1);
     }
